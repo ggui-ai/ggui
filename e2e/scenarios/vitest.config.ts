@@ -2,16 +2,23 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
-// Load .env.local from the workspace root BEFORE workers fork so
+// Load .env.local from the repo root BEFORE workers fork so
 // module-level `HAS_KEY = !!process.env.ANTHROPIC_API_KEY` evaluates
 // correctly in each test file. Inheritance handles the rest.
 //
 // Hand-rolled to keep the package dep-free (no dotenv).
+//
+// The repo-root depth is layout-dependent — `scenarios/` sits at
+// `oss/e2e/scenarios/` in the monorepo (root is 3 up) and at
+// `e2e/scenarios/` in the OSS-standalone checkout (root is 2 up). Both
+// candidates are tried, monorepo-first. Kept in lockstep with the twin
+// loader in `fixtures/global-setup.ts` — the two MUST resolve the same
+// file or `HAS_KEY` disagrees between config-eval and globalSetup.
 function loadDotenvLocal(): void {
   const here = resolve(import.meta.dirname);
   const candidates = [
+    resolve(here, '..', '..', '..', '.env.local'),
     resolve(here, '..', '..', '.env.local'),
-    resolve(here, '..', '.env.local'),
   ];
   for (const path of candidates) {
     try {
