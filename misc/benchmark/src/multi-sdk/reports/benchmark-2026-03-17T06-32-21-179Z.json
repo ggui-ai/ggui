@@ -1,0 +1,397 @@
+{
+  "meta": {
+    "timestamp": "2026-03-17T06:32:21.178Z",
+    "totalDurationMs": 229088,
+    "totalVariants": 1,
+    "totalPrompts": 2,
+    "totalRuns": 2,
+    "successCount": 2,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature"
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage"
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed"
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as r,jsxs as e}from\"react/jsx-runtime\";import{Card as v,Stack as n,Row as h,Text as o}from\"@ggui-ai/design/primitives\";const f=t=>{const i=t.toLowerCase();return i.includes(\"sunny\")||i.includes(\"clear\")?\"\\u2600\\uFE0F\":i.includes(\"cloudy\")||i.includes(\"cloud\")?\"\\u2601\\uFE0F\":i.includes(\"rainy\")||i.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":i.includes(\"snow\")?\"\\u2744\\uFE0F\":i.includes(\"storm\")||i.includes(\"thunder\")?\"\\u26C8\\uFE0F\":i.includes(\"wind\")?\"\\u{1F4A8}\":i.includes(\"fog\")||i.includes(\"mist\")?\"\\u{1F32B}\\uFE0F\":\"\\u{1F324}\\uFE0F\"},m=(t,i)=>i||\"Day \"+(t+1);function x({city:t=\"San Francisco\",temperature:i=72,condition:g=\"Sunny\",humidity:l=65,windSpeed:u=12,unit:d=\"\\xB0F\",forecast:s=[{day:\"Mon\",icon:\"\\u2600\\uFE0F\",high:75,low:62},{day:\"Tue\",icon:\"\\u2601\\uFE0F\",high:68,low:58},{day:\"Wed\",icon:\"\\u{1F327}\\uFE0F\",high:62,low:52},{day:\"Thu\",icon:\"\\u2601\\uFE0F\",high:70,low:55},{day:\"Fri\",icon:\"\\u2600\\uFE0F\",high:78,low:65}]}){const p=f(g);return r(v,{padding:24,shadow:\"md\",border:!0,style:{backgroundColor:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",maxWidth:\"500px\",margin:\"0 auto\"},children:e(n,{direction:\"vertical\",gap:24,children:[r(o,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"bold\",children:t}),e(n,{direction:\"vertical\",gap:16,align:\"center\",children:[e(\"div\",{style:{display:\"flex\",alignItems:\"baseline\",gap:\"var(--ggui-spacing-2, 8px)\"},children:[r(o,{variant:\"h1\",color:\"var(--ggui-color-primary-600, #0284c7)\",weight:\"bold\",style:{fontSize:\"var(--ggui-font-size-4xl, 36px)\"},children:i}),r(o,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",children:d})]}),e(n,{direction:\"horizontal\",gap:12,align:\"center\",justify:\"center\",children:[r(\"div\",{style:{fontSize:\"48px\",lineHeight:\"1\"},children:p}),r(o,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",children:g})]})]}),r(\"div\",{style:{height:\"1px\",backgroundColor:\"var(--ggui-color-outline, #d4d4d8)\"}}),e(n,{direction:\"horizontal\",gap:16,justify:\"center\",wrap:!0,children:[e(\"div\",{style:{textAlign:\"center\",flex:\"1 1 auto\"},children:[r(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:\"Humidity\"}),e(o,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",style:{marginTop:\"var(--ggui-spacing-1, 4px)\"},children:[l,\"%\"]})]}),e(\"div\",{style:{textAlign:\"center\",flex:\"1 1 auto\"},children:[r(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:\"Wind Speed\"}),e(o,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",style:{marginTop:\"var(--ggui-spacing-1, 4px)\"},children:[u,\" mph\"]})]})]}),r(\"div\",{style:{height:\"1px\",backgroundColor:\"var(--ggui-color-outline, #d4d4d8)\"}}),e(n,{direction:\"vertical\",gap:12,children:[r(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"semibold\",children:\"5-Day Forecast\"}),r(h,{gap:8,wrap:!0,justify:\"between\",children:s.map((a,c)=>e(\"div\",{style:{flex:\"1 1 calc(20% - 6px)\",minWidth:\"70px\",padding:\"var(--ggui-spacing-2, 8px)\",backgroundColor:\"var(--ggui-color-surface, #fafafa)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\",border:\"1px solid var(--ggui-color-outline, #d4d4d8)\",textAlign:\"center\",display:\"flex\",flexDirection:\"column\",alignItems:\"center\",gap:\"var(--ggui-spacing-2, 8px)\"},children:[r(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:m(c,a.day)}),r(\"div\",{style:{fontSize:\"28px\",lineHeight:\"1\"},children:a.icon||\"\\u{1F324}\\uFE0F\"}),e(\"div\",{style:{display:\"flex\",gap:\"var(--ggui-spacing-1, 4px)\",alignItems:\"center\"},children:[a.high!==void 0&&e(o,{variant:\"caption\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",children:[a.high,\"\\xB0\"]}),a.low!==void 0&&e(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"normal\",children:[a.low,\"\\xB0\"]})]})]},c))})]})]})})}export{x as default};\n",
+        "sourceCode": "\nimport { Card, Stack, Row, Text } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  /** City name */\n  city: string;\n  /** Current temperature */\n  temperature: number;\n  /** Weather condition (Sunny, Cloudy, Rainy, etc.) */\n  condition: string;\n  /** Humidity percentage */\n  humidity: number;\n  /** Wind speed */\n  windSpeed: number;\n  /** Temperature unit (C or F) */\n  unit?: string;\n  /** 5-day forecast array */\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>;\n}\n\n// Map weather conditions to emoji icons\nconst getWeatherEmoji = (condition: string): string => {\n  const normalized = condition.toLowerCase();\n  if (normalized.includes('sunny') || normalized.includes('clear')) return '☀️';\n  if (normalized.includes('cloudy') || normalized.includes('cloud')) return '☁️';\n  if (normalized.includes('rainy') || normalized.includes('rain')) return '🌧️';\n  if (normalized.includes('snow')) return '❄️';\n  if (normalized.includes('storm') || normalized.includes('thunder')) return '⛈️';\n  if (normalized.includes('wind')) return '💨';\n  if (normalized.includes('fog') || normalized.includes('mist')) return '🌫️';\n  return '🌤️'; // default\n};\n\nconst getDayLabel = (index: number, dayName?: string): string => {\n  return dayName || 'Day ' + (index + 1);\n};\n\nexport default function GeneratedComponent({\n  city = 'San Francisco',\n  temperature = 72,\n  condition = 'Sunny',\n  humidity = 65,\n  windSpeed = 12,\n  unit = '°F',\n  forecast = [\n    { day: 'Mon', icon: '☀️', high: 75, low: 62 },\n    { day: 'Tue', icon: '☁️', high: 68, low: 58 },\n    { day: 'Wed', icon: '🌧️', high: 62, low: 52 },\n    { day: 'Thu', icon: '☁️', high: 70, low: 55 },\n    { day: 'Fri', icon: '☀️', high: 78, low: 65 },\n  ],\n}: Props) {\n  const weatherEmoji = getWeatherEmoji(condition);\n\n  return (\n    <Card\n      padding={24}\n      shadow=\"md\"\n      border={true}\n      style={{\n        backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n        maxWidth: '500px',\n        margin: '0 auto',\n      }}\n    >\n      <Stack direction=\"vertical\" gap={24}>\n        {/* Header with City */}\n        <Text\n          variant=\"h3\"\n          color=\"var(--ggui-color-onSurface, #18181b)\"\n          weight=\"bold\"\n        >\n          {city}\n        </Text>\n\n        {/* Current Weather Section */}\n        <Stack direction=\"vertical\" gap={16} align=\"center\">\n          {/* Large Temperature Display */}\n          <div\n            style={{\n              display: 'flex',\n              alignItems: 'baseline',\n              gap: 'var(--ggui-spacing-2, 8px)',\n            }}\n          >\n            <Text\n              variant=\"h1\"\n              color=\"var(--ggui-color-primary-600, #0284c7)\"\n              weight=\"bold\"\n              style={{\n                fontSize: 'var(--ggui-font-size-4xl, 36px)',\n              }}\n            >\n              {temperature}\n            </Text>\n            <Text\n              variant=\"h3\"\n              color=\"var(--ggui-color-onSurface, #18181b)\"\n              weight=\"semibold\"\n            >\n              {unit}\n            </Text>\n          </div>\n\n          {/* Weather Condition with Emoji */}\n          <Stack direction=\"horizontal\" gap={12} align=\"center\" justify=\"center\">\n            <div\n              style={{\n                fontSize: '48px',\n                lineHeight: '1',\n              }}\n            >\n              {weatherEmoji}\n            </div>\n            <Text\n              variant=\"h3\"\n              color=\"var(--ggui-color-onSurface, #18181b)\"\n              weight=\"semibold\"\n            >\n              {condition}\n            </Text>\n          </Stack>\n        </Stack>\n\n        {/* Divider */}\n        <div\n          style={{\n            height: '1px',\n            backgroundColor: 'var(--ggui-color-outline, #d4d4d8)',\n          }}\n        />\n\n        {/* Current Conditions Details */}\n        <Stack direction=\"horizontal\" gap={16} justify=\"center\" wrap={true}>\n          {/* Humidity */}\n          <div style={{ textAlign: 'center', flex: '1 1 auto' }}>\n            <Text\n              variant=\"caption\"\n              color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n              weight=\"medium\"\n            >\n              Humidity\n            </Text>\n            <Text\n              variant=\"h3\"\n              color=\"var(--ggui-color-onSurface, #18181b)\"\n              weight=\"semibold\"\n              style={{ marginTop: 'var(--ggui-spacing-1, 4px)' }}\n            >\n              {humidity}%\n            </Text>\n          </div>\n\n          {/* Wind Speed */}\n          <div style={{ textAlign: 'center', flex: '1 1 auto' }}>\n            <Text\n              variant=\"caption\"\n              color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n              weight=\"medium\"\n            >\n              Wind Speed\n            </Text>\n            <Text\n              variant=\"h3\"\n              color=\"var(--ggui-color-onSurface, #18181b)\"\n              weight=\"semibold\"\n              style={{ marginTop: 'var(--ggui-spacing-1, 4px)' }}\n            >\n              {windSpeed} mph\n            </Text>\n          </div>\n        </Stack>\n\n        {/* Divider */}\n        <div\n          style={{\n            height: '1px',\n            backgroundColor: 'var(--ggui-color-outline, #d4d4d8)',\n          }}\n        />\n\n        {/* 5-Day Forecast */}\n        <Stack direction=\"vertical\" gap={12}>\n          <Text\n            variant=\"label\"\n            color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n            weight=\"semibold\"\n          >\n            5-Day Forecast\n          </Text>\n\n          <Row gap={8} wrap={true} justify=\"between\">\n            {forecast.map((day, index) => (\n              <div\n                key={index}\n                style={{\n                  flex: '1 1 calc(20% - 6px)',\n                  minWidth: '70px',\n                  padding: 'var(--ggui-spacing-2, 8px)',\n                  backgroundColor: 'var(--ggui-color-surface, #fafafa)',\n                  borderRadius: 'var(--ggui-shape-radius-md, 8px)',\n                  border: '1px solid var(--ggui-color-outline, #d4d4d8)',\n                  textAlign: 'center',\n                  display: 'flex',\n                  flexDirection: 'column',\n                  alignItems: 'center',\n                  gap: 'var(--ggui-spacing-2, 8px)',\n                }}\n              >\n                {/* Day Name */}\n                <Text\n                  variant=\"caption\"\n                  color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                  weight=\"medium\"\n                >\n                  {getDayLabel(index, day.day)}\n                </Text>\n\n                {/* Weather Icon */}\n                <div\n                  style={{\n                    fontSize: '28px',\n                    lineHeight: '1',\n                  }}\n                >\n                  {day.icon || '🌤️'}\n                </div>\n\n                {/* High/Low Temps */}\n                <div style={{ display: 'flex', gap: 'var(--ggui-spacing-1, 4px)', alignItems: 'center' }}>\n                  {day.high !== undefined && (\n                    <Text\n                      variant=\"caption\"\n                      color=\"var(--ggui-color-onSurface, #18181b)\"\n                      weight=\"semibold\"\n                    >\n                      {day.high}°\n                    </Text>\n                  )}\n                  {day.low !== undefined && (\n                    <Text\n                      variant=\"caption\"\n                      color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                      weight=\"normal\"\n                    >\n                      {day.low}°\n                    </Text>\n                  )}\n                </div>\n              </div>\n            ))}\n          </Row>\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}\n",
+        "tokens": {
+          "input": 75920,
+          "output": 7690,
+          "total": 83610
+        },
+        "generationTimeMs": 58721,
+        "turnsUsed": 4
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.11437,
+      "timestamp": "2026-03-17T06:29:30.816Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3958,
+        "sourceCodeBytes": 7815,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- All initial tasks come from props as an array with column assignment\n- Call props.onTaskUpdate when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate"
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]"
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as i,jsxs as a}from\"react/jsx-runtime\";import{useState as s}from\"react\";import{Container as H,Card as m,Stack as o,Row as d,Text as n,Input as D,Button as c,Badge as I,Select as A,Icon as K}from\"@ggui-ai/design/primitives\";function q({tasks:E=[],columns:w=[],onTaskUpdate:p}){const[v,f]=s(E),[R,h]=s(null),[b,T]=s(\"\"),[C,y]=s(\"medium\"),[L,g]=s(null),[x,u]=s(\"\"),S=w.length>0?w:[{id:\"todo\",name:\"To Do\"},{id:\"in-progress\",name:\"In Progress\"},{id:\"done\",name:\"Done\"}],z=e=>v.filter(t=>t.column===e),k=()=>v.length,B=()=>v.filter(e=>e.column===\"done\").length,P=e=>{if(!b.trim())return;const t=\"task-\"+Date.now().toString(),l={id:t,title:b,priority:C,assignee:\"\",column:e,dueDate:\"\"};f(r=>[...r,l]),p?.({action:\"create\",taskId:t,data:l}),T(\"\"),y(\"medium\"),h(null)},V=(e,t)=>{f(l=>l.map(r=>r.id===e?{...r,column:t}:r)),p?.({action:\"move\",taskId:e,data:{column:t}})},W=(e,t)=>{t.trim()&&(f(l=>l.map(r=>r.id===e?{...r,title:t}:r)),p?.({action:\"edit\",taskId:e,data:{title:t}}),g(null),u(\"\"))},j=e=>{switch(e){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}},M=({task:e})=>a(o,{direction:\"vertical\",gap:8,children:[i(n,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Edit Title\"}),i(D,{label:\"Edit Title\",value:x,onChange:u,placeholder:\"Enter task title\"}),a(d,{gap:8,justify:\"end\",children:[i(c,{size:\"xs\",variant:\"primary\",onClick:()=>W(e.id||\"\",x),children:\"Save\"}),i(c,{size:\"xs\",variant:\"outline\",onClick:()=>g(null),children:\"Cancel\"})]})]}),N=({task:e})=>i(m,{padding:12,shadow:\"sm\",border:!0,style:{backgroundColor:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderColor:\"var(--ggui-color-outline, #d4d4d8)\",cursor:\"pointer\",transition:\"all 200ms ease-out\"},children:a(o,{direction:\"vertical\",gap:8,children:[L===e.id?i(M,{task:e}):a(o,{direction:\"horizontal\",gap:8,align:\"start\",justify:\"between\",children:[i(n,{variant:\"body\",weight:\"medium\",style:{flex:1,wordBreak:\"break-word\",cursor:\"pointer\"},onDoubleClick:()=>{g(e.id||null),u(e.title||\"\")},children:e.title}),i(c,{size:\"xs\",variant:\"ghost\",onClick:()=>{g(e.id||null),u(e.title||\"\")},children:\"Edit\"})]}),e.priority&&i(I,{variant:j(e.priority),size:\"sm\",children:e.priority.charAt(0).toUpperCase()+e.priority.slice(1)}),a(d,{gap:8,align:\"center\",justify:\"between\",children:[e.assignee&&i(\"div\",{style:{width:28,height:28,borderRadius:\"var(--ggui-shape-radius-full, 9999px)\",backgroundColor:\"var(--ggui-color-primary-200, #bae6fd)\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",display:\"flex\",alignItems:\"center\",justifyContent:\"center\",fontSize:\"var(--ggui-font-size-xs, 12px)\",fontWeight:600},children:e.assignee}),e.dueDate&&i(n,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:new Date(e.dueDate).toLocaleDateString()})]}),i(A,{label:\"Move\",value:e.column||\"todo\",onChange:t=>V(e.id||\"\",t),options:S.map(t=>({value:t.id||\"\",label:t.name||\"\"}))})]})}),F=({columnId:e})=>i(m,{padding:12,shadow:\"sm\",border:!0,children:a(o,{direction:\"vertical\",gap:8,children:[i(n,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"New Task\"}),i(D,{label:\"Title\",placeholder:\"Enter task title\",value:b,onChange:T}),i(A,{label:\"Priority\",value:C,onChange:r=>y(r),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),a(d,{gap:8,children:[i(c,{size:\"sm\",variant:\"primary\",fullWidth:!0,onClick:()=>P(e),children:\"Add\"}),i(c,{size:\"sm\",variant:\"outline\",fullWidth:!0,onClick:()=>{h(null),T(\"\"),y(\"medium\")},children:\"Cancel\"})]})]})});return i(H,{maxWidth:\"xl\",padding:24,children:a(o,{direction:\"vertical\",gap:24,children:[i(m,{padding:16,shadow:\"sm\",children:a(d,{justify:\"between\",align:\"center\",children:[a(o,{direction:\"horizontal\",gap:32,children:[a(o,{direction:\"vertical\",gap:4,children:[i(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Total Tasks\"}),i(n,{variant:\"h2\",color:\"var(--ggui-color-onSurface, #18181b)\",children:k()})]}),a(o,{direction:\"vertical\",gap:4,children:[i(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Completed\"}),i(n,{variant:\"h2\",color:\"var(--ggui-color-success-600, #16a34a)\",children:B()})]})]}),a(n,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Progress: \",k()>0?Math.round(B()/k()*100):0,\"%\"]})]})}),i(d,{gap:20,align:\"start\",wrap:!1,children:S.map(e=>a(\"div\",{style:{flex:\"1 1 0\",minWidth:320,display:\"flex\",flexDirection:\"column\",gap:\"var(--ggui-spacing-4, 16px)\"},children:[i(m,{padding:12,shadow:\"none\",border:!0,style:{backgroundColor:\"var(--ggui-color-primary-50, #f0f9ff)\",borderColor:\"var(--ggui-color-primary-200, #bae6fd)\"},children:a(d,{justify:\"between\",align:\"center\",children:[i(o,{direction:\"vertical\",gap:4,children:i(n,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",children:e.name})}),i(I,{variant:\"primary\",size:\"sm\",children:z(e.id||\"\").length})]})}),i(o,{direction:\"vertical\",gap:12,children:z(e.id||\"\").map(t=>i(N,{task:t},t.id))}),R===e.id?i(F,{columnId:e.id||\"\"}):i(c,{variant:\"outline\",size:\"sm\",fullWidth:!0,leftIcon:i(K,{name:\"plus\",size:16}),onClick:()=>h(e.id||\"\"),children:\"Add Task\"})]},e.id))})]})})}export{q as default};\n",
+        "sourceCode": "import { useState } from 'react';\nimport { Container, Card, Stack, Row, Text, Input, Button, Badge, Select, Icon } from '@ggui-ai/design/primitives';\n\ninterface Task {\n  id?: string;\n  title?: string;\n  priority?: 'low' | 'medium' | 'high';\n  assignee?: string;\n  column?: string;\n  dueDate?: string;\n}\n\ninterface Column {\n  id?: string;\n  name?: string;\n}\n\ninterface Props {\n  tasks?: Array<Task>;\n  columns?: Array<Column>;\n  onTaskUpdate?: (payload: { action: string; taskId?: string; data?: Record<string, unknown> }) => void;\n}\n\nexport default function KanbanBoard({ \n  tasks = [], \n  columns = [],\n  onTaskUpdate \n}: Props) {\n  const [allTasks, setAllTasks] = useState<Task[]>(tasks);\n  const [addingInColumn, setAddingInColumn] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editingTitle, setEditingTitle] = useState('');\n\n  const defaultColumns = columns.length > 0 ? columns : [\n    { id: 'todo', name: 'To Do' },\n    { id: 'in-progress', name: 'In Progress' },\n    { id: 'done', name: 'Done' }\n  ];\n\n  const getTasksForColumn = (columnId: string) => \n    allTasks.filter(task => task.column === columnId);\n\n  const getTotalTasks = () => allTasks.length;\n  const getCompletedTasks = () => \n    allTasks.filter(task => task.column === 'done').length;\n\n  const handleAddTask = (columnId: string) => {\n    if (!newTaskTitle.trim()) return;\n\n    const taskId = 'task-' + Date.now().toString();\n    const newTask: Task = {\n      id: taskId,\n      title: newTaskTitle,\n      priority: newTaskPriority,\n      assignee: '',\n      column: columnId,\n      dueDate: ''\n    };\n\n    setAllTasks(prev => [...prev, newTask]);\n    onTaskUpdate?.({ action: 'create', taskId, data: newTask });\n    \n    setNewTaskTitle('');\n    setNewTaskPriority('medium');\n    setAddingInColumn(null);\n  };\n\n  const handleMoveTask = (taskId: string, targetColumnId: string) => {\n    setAllTasks(prev => \n      prev.map(task => \n        task.id === taskId ? { ...task, column: targetColumnId } : task\n      )\n    );\n    onTaskUpdate?.({ action: 'move', taskId, data: { column: targetColumnId } });\n  };\n\n  const handleEditTask = (taskId: string, newTitle: string) => {\n    if (!newTitle.trim()) return;\n    setAllTasks(prev =>\n      prev.map(task =>\n        task.id === taskId ? { ...task, title: newTitle } : task\n      )\n    );\n    onTaskUpdate?.({ action: 'edit', taskId, data: { title: newTitle } });\n    setEditingTaskId(null);\n    setEditingTitle('');\n  };\n\n  const getPriorityColor = (priority?: string) => {\n    switch (priority) {\n      case 'high':\n        return 'error';\n      case 'medium':\n        return 'warning';\n      case 'low':\n        return 'success';\n      default:\n        return 'default';\n    }\n  };\n\n  const EditTaskView = ({ task }: { task: Task }) => {\n    const editTitleLabel = 'Edit Title';\n    return (\n      <Stack direction=\"vertical\" gap={8}>\n        <Text variant=\"label\" color=\"var(--ggui-color-onSurface, #18181b)\">Edit Title</Text>\n        <Input label={editTitleLabel} value={editingTitle} onChange={setEditingTitle} placeholder=\"Enter task title\" />\n        <Row gap={8} justify=\"end\">\n          <Button size=\"xs\" variant=\"primary\" onClick={() => handleEditTask(task.id || '', editingTitle)}>\n            Save\n          </Button>\n          <Button size=\"xs\" variant=\"outline\" onClick={() => setEditingTaskId(null)}>\n            Cancel\n          </Button>\n        </Row>\n      </Stack>\n    );\n  };\n\n  const TaskCard = ({ task }: { task: Task }) => (\n    <Card\n      padding={12}\n      shadow=\"sm\"\n      border={true}\n      style={{\n        backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n        borderColor: 'var(--ggui-color-outline, #d4d4d8)',\n        cursor: 'pointer',\n        transition: 'all 200ms ease-out',\n      }}\n    >\n      <Stack direction=\"vertical\" gap={8}>\n        {editingTaskId === task.id ? (\n          <EditTaskView task={task} />\n        ) : (\n          <Stack direction=\"horizontal\" gap={8} align=\"start\" justify=\"between\">\n            <Text\n              variant=\"body\"\n              weight=\"medium\"\n              style={{\n                flex: 1,\n                wordBreak: 'break-word',\n                cursor: 'pointer',\n              }}\n              onDoubleClick={() => {\n                setEditingTaskId(task.id || null);\n                setEditingTitle(task.title || '');\n              }}\n            >\n              {task.title}\n            </Text>\n            <Button\n              size=\"xs\"\n              variant=\"ghost\"\n              onClick={() => {\n                setEditingTaskId(task.id || null);\n                setEditingTitle(task.title || '');\n              }}\n            >\n              Edit\n            </Button>\n          </Stack>\n        )}\n\n        {task.priority && (\n          <Badge variant={getPriorityColor(task.priority)} size=\"sm\">\n            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}\n          </Badge>\n        )}\n\n        <Row gap={8} align=\"center\" justify=\"between\">\n          {task.assignee && (\n            <div\n              style={{\n                width: 28,\n                height: 28,\n                borderRadius: 'var(--ggui-shape-radius-full, 9999px)',\n                backgroundColor: 'var(--ggui-color-primary-200, #bae6fd)',\n                color: 'var(--ggui-color-primary-900, #0c4a6e)',\n                display: 'flex',\n                alignItems: 'center',\n                justifyContent: 'center',\n                fontSize: 'var(--ggui-font-size-xs, 12px)',\n                fontWeight: 600,\n              }}\n            >\n              {task.assignee}\n            </div>\n          )}\n          {task.dueDate && (\n            <Text\n              variant=\"caption\"\n              color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n            >\n              {new Date(task.dueDate).toLocaleDateString()}\n            </Text>\n          )}\n        </Row>\n\n        <Select\n          label=\"Move\"\n          value={task.column || 'todo'}\n          onChange={(value) => handleMoveTask(task.id || '', value)}\n          options={defaultColumns.map(col => ({\n            value: col.id || '',\n            label: col.name || ''\n          }))}\n        />\n      </Stack>\n    </Card>\n  );\n\n  const AddTaskForm = ({ columnId }: { columnId: string }) => {\n    const titleLabel = 'Title';\n    const priorityLabel = 'Priority';\n    return (\n      <Card padding={12} shadow=\"sm\" border={true}>\n        <Stack direction=\"vertical\" gap={8}>\n          <Text variant=\"label\" color=\"var(--ggui-color-onSurface, #18181b)\">New Task</Text>\n          <Input label={titleLabel} placeholder=\"Enter task title\" value={newTaskTitle} onChange={setNewTaskTitle} />\n          <Select label={priorityLabel} value={newTaskPriority} onChange={(value) => setNewTaskPriority(value as 'low' | 'medium' | 'high')} options={[\n            { value: 'low', label: 'Low' },\n            { value: 'medium', label: 'Medium' },\n            { value: 'high', label: 'High' }\n          ]} />\n          <Row gap={8}>\n            <Button size=\"sm\" variant=\"primary\" fullWidth onClick={() => handleAddTask(columnId)}>\n              Add\n            </Button>\n            <Button\n              size=\"sm\"\n              variant=\"outline\"\n              fullWidth\n              onClick={() => {\n                setAddingInColumn(null);\n                setNewTaskTitle('');\n                setNewTaskPriority('medium');\n              }}\n            >\n              Cancel\n            </Button>\n          </Row>\n        </Stack>\n      </Card>\n    );\n  };\n\n  return (\n    <Container maxWidth=\"xl\" padding={24}>\n      <Stack direction=\"vertical\" gap={24}>\n        {/* Summary Bar */}\n        <Card padding={16} shadow=\"sm\">\n          <Row justify=\"between\" align=\"center\">\n            <Stack direction=\"horizontal\" gap={32}>\n              <Stack direction=\"vertical\" gap={4}>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                  Total Tasks\n                </Text>\n                <Text variant=\"h2\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                  {getTotalTasks()}\n                </Text>\n              </Stack>\n              <Stack direction=\"vertical\" gap={4}>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                  Completed\n                </Text>\n                <Text\n                  variant=\"h2\"\n                  color=\"var(--ggui-color-success-600, #16a34a)\"\n                >\n                  {getCompletedTasks()}\n                </Text>\n              </Stack>\n            </Stack>\n            <Text\n              variant=\"body\"\n              color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n            >\n              Progress: {getTotalTasks() > 0 ? Math.round((getCompletedTasks() / getTotalTasks()) * 100) : 0}%\n            </Text>\n          </Row>\n        </Card>\n\n        {/* Kanban Columns */}\n        <Row gap={20} align=\"start\" wrap={false}>\n          {defaultColumns.map(column => (\n            <div\n              key={column.id}\n              style={{\n                flex: '1 1 0',\n                minWidth: 320,\n                display: 'flex',\n                flexDirection: 'column',\n                gap: 'var(--ggui-spacing-4, 16px)',\n              }}\n            >\n              {/* Column Header */}\n              <Card\n                padding={12}\n                shadow=\"none\"\n                border={true}\n                style={{\n                  backgroundColor: 'var(--ggui-color-primary-50, #f0f9ff)',\n                  borderColor: 'var(--ggui-color-primary-200, #bae6fd)',\n                }}\n              >\n                <Row justify=\"between\" align=\"center\">\n                  <Stack direction=\"vertical\" gap={4}>\n                    <Text\n                      variant=\"label\"\n                      weight=\"semibold\"\n                      color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n                    >\n                      {column.name}\n                    </Text>\n                  </Stack>\n                  <Badge variant=\"primary\" size=\"sm\">\n                    {getTasksForColumn(column.id || '').length}\n                  </Badge>\n                </Row>\n              </Card>\n\n              {/* Tasks List */}\n              <Stack direction=\"vertical\" gap={12}>\n                {getTasksForColumn(column.id || '').map(task => (\n                  <TaskCard key={task.id} task={task} />\n                ))}\n              </Stack>\n\n              {/* Add Task Section */}\n              {addingInColumn === column.id ? (\n                <AddTaskForm columnId={column.id || ''} />\n              ) : (\n                <Button\n                  variant=\"outline\"\n                  size=\"sm\"\n                  fullWidth\n                  leftIcon={<Icon name=\"plus\" size={16} />}\n                  onClick={() => setAddingInColumn(column.id || '')}\n                >\n                  Add Task\n                </Button>\n              )}\n            </div>\n          ))}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 412699,
+          "output": 37803,
+          "total": 450502
+        },
+        "generationTimeMs": 229082,
+        "turnsUsed": 12
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.601714,
+      "timestamp": "2026-03-17T06:32:21.177Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5252,
+        "sourceCodeBytes": 11291,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-raw-single-pass-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 143901.5,
+      "avgCostUsd": 0.35804199999999997,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    }
+  ],
+  "promptSummaries": [
+    {
+      "promptId": "weather-card",
+      "promptName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    },
+    {
+      "promptId": "kanban-board",
+      "promptName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": -1,
+        "avgTimeMs": 143901.5,
+        "avgCostUsd": 0.35804199999999997,
+        "successRate": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "ContactForm",
+  "level": "composite",
+  "category": "forms",
+  "description": "A contact form with name, email, and message fields for collecting user inquiries",
+  "visual": {
+    "description": "Card with vertical layout. Name and email fields side by side on larger screens, message textarea below, submit button at bottom. Uses subtle borders and proper spacing.",
+    "layout": "vertical stack with responsive row for name/email",
+    "tokens": [
+      "color.primary.600",
+      "color.neutral.200",
+      "color.success.500",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Form title",
+        "defaultValue": "Contact Us"
+      },
+      {
+        "name": "submitLabel",
+        "type": "string",
+        "required": false,
+        "description": "Submit button text",
+        "defaultValue": "Send Message"
+      },
+      {
+        "name": "showSubject",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show subject field",
+        "defaultValue": false
+      }
+    ],
+    "callbacks": ["onSubmit"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "contact form", "match": 0.95 },
+    { "prompt": "inquiry form", "match": 0.85 },
+    { "prompt": "message form with name and email", "match": 0.9 },
+    { "prompt": "feedback form", "match": 0.8 }
+  ],
+  "tags": ["contact", "form", "message", "inquiry", "feedback"]
+}

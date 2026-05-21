@@ -1,0 +1,13 @@
+{
+  "name": "gate-no-gadgets-accept",
+  "description": "A contract that declares no `clientCapabilities.gadgets` at all. The gate has nothing to check — a contract that uses no gadgets references no registry membership — so it MUST accept unconditionally, even against a non-empty app catalog. Guards against a gate that over-fires on the common gadget-free contract.",
+  "contract": {},
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "2.3.1",
+      "exports": [{ "hook": "useLeafletMap" }]
+    }
+  ],
+  "expect": { "outcome": "accept" }
+}

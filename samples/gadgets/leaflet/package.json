@@ -1,0 +1,26 @@
+{
+  "name": "@ggui-samples/gadget-leaflet",
+  "version": "0.0.1",
+  "description": "Reference ggui COMPONENT gadget around Leaflet (https://leafletjs.com). Demonstrates the defineGadgetPackage SDK with a 3rd-party JS library: bundles Leaflet at build time, exposes a single `LeafletMap` component to ggui-generated UIs, and ships the registry descriptor inline (`leafletGadget`). Not published — sample only.",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@ggui-ai/gadgets": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.0",
+    "@types/react": "^18.0.0",
+    "react": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

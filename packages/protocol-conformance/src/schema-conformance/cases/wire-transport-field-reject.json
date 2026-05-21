@@ -1,0 +1,15 @@
+{
+  "name": "wire-transport-field-reject",
+  "description": "An export entry carrying a transport field (`bundleUrl`). Transport metadata — `bundleUrl`, `bundleHost`, `bundleSri`, `styleUrl`, `connect`, `requires`, `typesUrl`, `typesSri` — lives once on the registered `GadgetDescriptor`, never on the wire. `gadgetExportUseSchema` is `.strict()`, so a transport field MUST be rejected at parse time.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": {
+        "useLeafletMap": {
+          "bundleUrl": "https://cdn.example.com/bundles/leaflet/bundle.js"
+        }
+      }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "transport metadata is descriptor-side (App.gadgets), not a wire field; gadgetExportUseSchema is .strict()."
+}

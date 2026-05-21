@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="Local operator surface for a self-hosted ggui serve instance. Same origin, no account, no hosted surface." />
+    <meta name="theme-color" content="#f4f3ed" />
+    <!--
+      Same-origin operator landing page served by `@ggui-ai/mcp-server`.
+      NOT Portal, NOT an MCP Apps shell — single-origin convenience only.
+      Brand identity follows `docs/brand/ggui-internal-brand-kit/v1.0.html`.
+      See docs/plans/2026-04-20-core-server-devtool-mvp.md.
+    -->
+    <title>ggui · server</title>
+    <!--
+      Favicon: just the first "g" glyph from the canonical wordmark
+      (`packages/iframe-runtime/src/system-cards/NoCredentialsCard.tsx`'s
+      `GguiWordmark` — see `docs/brand/ggui-internal-brand-kit/v1.0.html`).
+      Single-letter mark reads cleanly at 16px tab size.
+    -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Cpath d='M 0 0 H 50 V 25 H 25 V 50 H 0 Z' fill='%23292929'/%3E%3Crect x='33' y='33' width='17' height='17' fill='%23f4f3ed'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

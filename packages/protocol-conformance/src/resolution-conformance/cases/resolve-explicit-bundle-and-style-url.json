@@ -1,0 +1,14 @@
+{
+  "name": "resolve-explicit-bundle-and-style-url",
+  "description": "Both `bundleUrl` and `styleUrl` declared explicitly. Each is a full-URL escape hatch and MUST be used verbatim — no hostname computation, no path assembly.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper",
+    "version": "2.3.1",
+    "bundleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/bundle.js",
+    "styleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/style.css"
+  },
+  "expect": {
+    "bundleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/bundle.js",
+    "styleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/style.css"
+  }
+}

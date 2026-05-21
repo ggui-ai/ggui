@@ -1,0 +1,485 @@
+{
+  "meta": {
+    "timestamp": "2026-03-17T06:49:56.380Z",
+    "totalDurationMs": 273368,
+    "totalVariants": 1,
+    "totalPrompts": 3,
+    "totalRuns": 3,
+    "successCount": 3,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "interaction": "display",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature"
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage"
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed"
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as r,jsxs as e}from\"react/jsx-runtime\";import{Card as b,Stack as o,Row as x,Text as t}from\"@ggui-ai/design/primitives\";function w(a){const i=(a||\"\").toLowerCase();return i.includes(\"sunny\")||i.includes(\"clear\")?\"\\u2600\\uFE0F\":i.includes(\"cloudy\")||i.includes(\"overcast\")?\"\\u2601\\uFE0F\":i.includes(\"rainy\")||i.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":i.includes(\"snowy\")||i.includes(\"snow\")?\"\\u2744\\uFE0F\":i.includes(\"stormy\")||i.includes(\"thunder\")?\"\\u26C8\\uFE0F\":i.includes(\"windy\")?\"\\u{1F4A8}\":i.includes(\"foggy\")||i.includes(\"fog\")?\"\\u{1F32B}\\uFE0F\":\"\\u{1F324}\\uFE0F\"}function S(a,i){return a||\"Day \"+(i+1)}function T({city:a=\"San Francisco\",temperature:i=72,condition:l=\"Sunny\",humidity:u=65,windSpeed:d=12,unit:s=\"F\",forecast:v=[{day:\"Mon\",icon:\"\\u2600\\uFE0F\",high:75,low:62},{day:\"Tue\",icon:\"\\u2601\\uFE0F\",high:68,low:58},{day:\"Wed\",icon:\"\\u{1F327}\\uFE0F\",high:65,low:55},{day:\"Thu\",icon:\"\\u2600\\uFE0F\",high:70,low:60},{day:\"Fri\",icon:\"\\u2600\\uFE0F\",high:76,low:63}]}){const p=w(l);return r(\"div\",{style:{backgroundColor:\"var(--ggui-color-surface, #fafafa)\",padding:\"var(--ggui-spacing-6, 24px)\",minHeight:\"100vh\"},children:r(\"div\",{style:{maxWidth:\"600px\",margin:\"0 auto\"},children:r(b,{shadow:\"md\",padding:\"24\",children:e(o,{direction:\"vertical\",gap:24,children:[r(\"div\",{children:r(t,{variant:\"h2\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"bold\",children:a})}),e(o,{direction:\"vertical\",gap:16,align:\"center\",children:[e(o,{direction:\"horizontal\",gap:12,align:\"center\",justify:\"center\",children:[r(\"div\",{style:{fontSize:\"64px\",lineHeight:\"1\",display:\"flex\",alignItems:\"center\"},children:p}),r(\"div\",{children:r(t,{variant:\"h3\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:l})})]}),r(\"div\",{style:{textAlign:\"center\"},children:e(t,{variant:\"h1\",color:\"var(--ggui-color-primary-600, #0284c7)\",weight:\"bold\",style:{fontSize:\"var(--ggui-font-size-4xl, 36px)\",lineHeight:\"1.1\"},children:[i,\"\\xB0\",s||\"F\"]})})]}),r(\"div\",{style:{height:\"1px\",backgroundColor:\"var(--ggui-color-outline, #d4d4d8)\"}}),e(o,{direction:\"horizontal\",gap:24,justify:\"between\",children:[e(o,{direction:\"vertical\",gap:8,align:\"center\",children:[r(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:\"Humidity\"}),e(t,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",children:[u,\"%\"]})]}),e(o,{direction:\"vertical\",gap:8,align:\"center\",children:[r(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"medium\",children:\"Wind Speed\"}),e(t,{variant:\"h3\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"semibold\",children:[d,\" mph\"]})]})]}),r(\"div\",{style:{height:\"1px\",backgroundColor:\"var(--ggui-color-outline, #d4d4d8)\"}}),e(o,{direction:\"vertical\",gap:12,children:[r(t,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",weight:\"semibold\",children:\"5-Day Forecast\"}),r(x,{gap:8,wrap:!0,children:v.map((c,g)=>{const f=S(c.day,g),m=c.icon||\"\\u{1F324}\\uFE0F\",h=c.high??\"--\",y=c.low??\"--\";return e(\"div\",{style:{flex:\"1 1 calc(20% - 8px)\",minWidth:\"80px\",padding:\"var(--ggui-spacing-3, 12px)\",backgroundColor:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\",textAlign:\"center\",border:\"1px solid var(--ggui-color-outlineVariant, #e4e4e7)\",transition:\"all 200ms ease-out\",cursor:\"default\"},onMouseEnter:n=>{n.currentTarget.style.backgroundColor=\"var(--ggui-color-primary-50, #f0f9ff)\",n.currentTarget.style.borderColor=\"var(--ggui-color-primary-200, #bae6fd)\"},onMouseLeave:n=>{n.currentTarget.style.backgroundColor=\"var(--ggui-color-surfaceVariant, #f4f4f5)\",n.currentTarget.style.borderColor=\"var(--ggui-color-outlineVariant, #e4e4e7)\"},children:[r(t,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",weight:\"medium\",style:{display:\"block\",marginBottom:\"4px\"},children:f}),r(\"div\",{style:{fontSize:\"28px\",lineHeight:\"1\",textAlign:\"center\",marginBottom:\"6px\"},children:m}),r(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",style:{display:\"block\",marginBottom:\"2px\"},children:e(\"span\",{style:{fontWeight:\"var(--ggui-font-weight-semibold, 600)\"},children:[h,\"\\xB0\"]})}),e(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[y,\"\\xB0\"]})]},g)})})]})]})})})})}export{T as default};\n",
+        "sourceCode": "import { useState } from 'react';\nimport { Card, Stack, Row, Text, Spacer } from '@ggui-ai/design/primitives';\n\ninterface WeatherForecastDay {\n  day?: string;\n  icon?: string;\n  high?: number;\n  low?: number;\n}\n\ninterface Props {\n  /** City name */\n  city: string;\n  /** Current temperature */\n  temperature: number;\n  /** Weather condition (Sunny, Cloudy, Rainy, etc.) */\n  condition: string;\n  /** Humidity percentage */\n  humidity: number;\n  /** Wind speed */\n  windSpeed: number;\n  /** Temperature unit (C or F) */\n  unit?: string;\n  /** 5-day forecast array */\n  forecast: WeatherForecastDay[];\n}\n\n// Helper function to get emoji based on condition\nfunction getWeatherEmoji(condition: string): string {\n  const lowerCondition = (condition || '').toLowerCase();\n  if (lowerCondition.includes('sunny') || lowerCondition.includes('clear')) return '☀️';\n  if (lowerCondition.includes('cloudy') || lowerCondition.includes('overcast')) return '☁️';\n  if (lowerCondition.includes('rainy') || lowerCondition.includes('rain')) return '🌧️';\n  if (lowerCondition.includes('snowy') || lowerCondition.includes('snow')) return '❄️';\n  if (lowerCondition.includes('stormy') || lowerCondition.includes('thunder')) return '⛈️';\n  if (lowerCondition.includes('windy')) return '💨';\n  if (lowerCondition.includes('foggy') || lowerCondition.includes('fog')) return '🌫️';\n  return '🌤️'; // Default fallback\n}\n\nfunction getDayLabel(day: string | undefined, index: number): string {\n  if (day) return day;\n  const dayNumber = index + 1;\n  return 'Day ' + dayNumber;\n}\n\nexport default function GeneratedComponent({\n  city = 'San Francisco',\n  temperature = 72,\n  condition = 'Sunny',\n  humidity = 65,\n  windSpeed = 12,\n  unit = 'F',\n  forecast = [\n    { day: 'Mon', icon: '☀️', high: 75, low: 62 },\n    { day: 'Tue', icon: '☁️', high: 68, low: 58 },\n    { day: 'Wed', icon: '🌧️', high: 65, low: 55 },\n    { day: 'Thu', icon: '☀️', high: 70, low: 60 },\n    { day: 'Fri', icon: '☀️', high: 76, low: 63 },\n  ],\n}: Props) {\n  const weatherEmoji = getWeatherEmoji(condition);\n  const tempUnit = unit || 'F';\n\n  return (\n    <div\n      style={{\n        backgroundColor: 'var(--ggui-color-surface, #fafafa)',\n        padding: 'var(--ggui-spacing-6, 24px)',\n        minHeight: '100vh',\n      }}\n    >\n      <div style={{ maxWidth: '600px', margin: '0 auto' }}>\n        {/* Main Weather Card */}\n        <Card shadow=\"md\" padding=\"24\">\n          <Stack direction=\"vertical\" gap={24}>\n            {/* Header with City */}\n            <div>\n              <Text\n                variant=\"h2\"\n                color=\"var(--ggui-color-onSurface, #18181b)\"\n                weight=\"bold\"\n              >\n                {city}\n              </Text>\n            </div>\n\n            {/* Current Temperature Section */}\n            <Stack direction=\"vertical\" gap={16} align=\"center\">\n              {/* Weather Icon and Condition */}\n              <Stack direction=\"horizontal\" gap={12} align=\"center\" justify=\"center\">\n                <div\n                  style={{\n                    fontSize: '64px',\n                    lineHeight: '1',\n                    display: 'flex',\n                    alignItems: 'center',\n                  }}\n                >\n                  {weatherEmoji}\n                </div>\n                <div>\n                  <Text\n                    variant=\"h3\"\n                    color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                    weight=\"medium\"\n                  >\n                    {condition}\n                  </Text>\n                </div>\n              </Stack>\n\n              {/* Large Temperature Display */}\n              <div style={{ textAlign: 'center' }}>\n                <Text\n                  variant=\"h1\"\n                  color=\"var(--ggui-color-primary-600, #0284c7)\"\n                  weight=\"bold\"\n                  style={{\n                    fontSize: 'var(--ggui-font-size-4xl, 36px)',\n                    lineHeight: '1.1',\n                  }}\n                >\n                  {temperature}°{tempUnit}\n                </Text>\n              </div>\n            </Stack>\n\n            {/* Divider */}\n            <div\n              style={{\n                height: '1px',\n                backgroundColor: 'var(--ggui-color-outline, #d4d4d8)',\n              }}\n            />\n\n            {/* Current Conditions Details */}\n            <Stack direction=\"horizontal\" gap={24} justify=\"between\">\n              {/* Humidity */}\n              <Stack direction=\"vertical\" gap={8} align=\"center\">\n                <Text\n                  variant=\"caption\"\n                  color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                  weight=\"medium\"\n                >\n                  Humidity\n                </Text>\n                <Text\n                  variant=\"h3\"\n                  color=\"var(--ggui-color-onSurface, #18181b)\"\n                  weight=\"semibold\"\n                >\n                  {humidity}%\n                </Text>\n              </Stack>\n\n              {/* Wind Speed */}\n              <Stack direction=\"vertical\" gap={8} align=\"center\">\n                <Text\n                  variant=\"caption\"\n                  color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                  weight=\"medium\"\n                >\n                  Wind Speed\n                </Text>\n                <Text\n                  variant=\"h3\"\n                  color=\"var(--ggui-color-onSurface, #18181b)\"\n                  weight=\"semibold\"\n                >\n                  {windSpeed} mph\n                </Text>\n              </Stack>\n            </Stack>\n\n            {/* Divider */}\n            <div\n              style={{\n                height: '1px',\n                backgroundColor: 'var(--ggui-color-outline, #d4d4d8)',\n              }}\n            />\n\n            {/* 5-Day Forecast */}\n            <Stack direction=\"vertical\" gap={12}>\n              <Text\n                variant=\"label\"\n                color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                weight=\"semibold\"\n              >\n                5-Day Forecast\n              </Text>\n\n              {/* Forecast Strip */}\n              <Row gap={8} wrap>\n                {forecast.map((day, index) => {\n                  const displayDay = getDayLabel(day.day, index);\n                  const displayIcon = day.icon || '🌤️';\n                  const displayHigh = day.high ?? '--';\n                  const displayLow = day.low ?? '--';\n\n                  return (\n                    <div\n                      key={index}\n                      style={{\n                        flex: '1 1 calc(20% - 8px)',\n                        minWidth: '80px',\n                        padding: 'var(--ggui-spacing-3, 12px)',\n                        backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n                        borderRadius: 'var(--ggui-shape-radius-md, 8px)',\n                        textAlign: 'center',\n                        border: '1px solid var(--ggui-color-outlineVariant, #e4e4e7)',\n                        transition: 'all 200ms ease-out',\n                        cursor: 'default',\n                      }}\n                      onMouseEnter={(e) => {\n                        (e.currentTarget as HTMLElement).style.backgroundColor =\n                          'var(--ggui-color-primary-50, #f0f9ff)';\n                        (e.currentTarget as HTMLElement).style.borderColor =\n                          'var(--ggui-color-primary-200, #bae6fd)';\n                      }}\n                      onMouseLeave={(e) => {\n                        (e.currentTarget as HTMLElement).style.backgroundColor =\n                          'var(--ggui-color-surfaceVariant, #f4f4f5)';\n                        (e.currentTarget as HTMLElement).style.borderColor =\n                          'var(--ggui-color-outlineVariant, #e4e4e7)';\n                      }}\n                    >\n                      {/* Day Name */}\n                      <Text\n                        variant=\"label\"\n                        color=\"var(--ggui-color-onSurface, #18181b)\"\n                        weight=\"medium\"\n                        style={{ display: 'block', marginBottom: '4px' }}\n                      >\n                        {displayDay}\n                      </Text>\n\n                      {/* Weather Icon */}\n                      <div\n                        style={{\n                          fontSize: '28px',\n                          lineHeight: '1',\n                          textAlign: 'center',\n                          marginBottom: '6px',\n                        }}\n                      >\n                        {displayIcon}\n                      </div>\n\n                      {/* High/Low Temps */}\n                      <Text\n                        variant=\"caption\"\n                        color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                        style={{ display: 'block', marginBottom: '2px' }}\n                      >\n                        <span style={{ fontWeight: 'var(--ggui-font-weight-semibold, 600)' }}>\n                          {displayHigh}°\n                        </span>\n                      </Text>\n                      <Text\n                        variant=\"caption\"\n                        color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                      >\n                        {displayLow}°\n                      </Text>\n                    </div>\n                  );\n                })}\n              </Row>\n            </Stack>\n          </Stack>\n        </Card>\n      </div>\n    </div>\n  );\n}\n",
+        "tokens": {
+          "input": 54743,
+          "output": 5962,
+          "total": 60705
+        },
+        "generationTimeMs": 37925,
+        "turnsUsed": 3
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.084553,
+      "timestamp": "2026-03-17T06:46:00.943Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4330,
+        "sourceCodeBytes": 9623,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Live stock prices updated via ggui:agent-data stream",
+        "complexity": "simple",
+        "interaction": "broadcast",
+        "expectedMinScore": 65,
+        "prompt": "Build a stock ticker dashboard that displays live stock prices. Layout:\n- Header with \"Market Watch\" title and current time\n- Grid of stock cards (3-4 per row on desktop, 1 per row on mobile)\n- Each card shows: ticker symbol (large), company name, current price, change amount, change percentage with color coding (green for positive, red for negative)\n- A \"Last Updated\" timestamp at the bottom\n\nThe component receives live price updates via the ggui:agent-data window event.\nWhen a stream event arrives with type \"price-update\", update the matching stock card.\n\nAll initial stock data comes from props. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent"
+              }
+            }
+          },
+          "stream": {
+            "events": {
+              "price-update": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "change": {
+                      "type": "number"
+                    },
+                    "changePercent": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "description": "Live price update for a single stock"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as r,jsxs as g}from\"react/jsx-runtime\";import{useState as s,useEffect as d,useRef as P}from\"react\";import{Container as E,Card as V,Stack as v,Row as b,Text as t}from\"@ggui-ai/design/primitives\";function k({stocks:i=[]}){const[y,p]=s(i),[h,m]=s(new Date().toLocaleTimeString()),[S,T]=s(new Date().toLocaleTimeString()),f=P(null);d(()=>{const e=setInterval(()=>{T(new Date().toLocaleTimeString())},1e3);return()=>clearInterval(e)},[]),d(()=>(f.current=e=>{if(e.type===\"price-update\"&&e.symbol){const{symbol:a,price:o,change:l,changePercent:c}=e;p(u=>u.map(n=>n.symbol===a?{...n,price:o,change:l,changePercent:c}:n)),m(new Date().toLocaleTimeString())}},globalThis.__ggui_price_update=f.current,()=>{delete globalThis.__ggui_price_update}),[]),d(()=>{p(i),i.length>0&&m(new Date().toLocaleTimeString())},[i]);const x=e=>e==null?\"var(--ggui-color-onSurface)\":e>=0?\"var(--ggui-color-success-600)\":\"var(--ggui-color-error-600)\",C=e=>e==null?\"transparent\":e>=0?\"var(--ggui-color-success-50, #f0fdf4)\":\"var(--ggui-color-error-50, #fef2f2)\",w=e=>e==null?\"0.00\":e.toFixed(2),D=e=>e==null?\"0.00\":e.toFixed(2),_=e=>e==null?\"0.00\":e.toFixed(2);return r(E,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:g(v,{direction:\"vertical\",gap:24,children:[g(b,{justify:\"between\",align:\"center\",children:[r(t,{variant:\"h1\",weight:\"bold\",style:{color:\"var(--ggui-color-onSurface)\"},children:\"Market Watch\"}),r(t,{variant:\"body\",style:{color:\"var(--ggui-color-onSurfaceVariant)\"},children:S})]}),r(\"div\",{style:{display:\"grid\",gridTemplateColumns:\"repeat(auto-fit, minmax(280px, 1fr))\",gap:\"var(--ggui-spacing-4)\"},children:y.map(e=>{const a=e.changePercent,o=x(a),l=C(a),c=w(e.price),u=D(e.change),n=_(a),L=e.change&&e.change>=0?\"+\":\"\",R=a&&a>=0?\"+\":\"\";return r(V,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",style:{backgroundColor:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"var(--ggui-shape-radius-lg)\",transition:\"all 200ms ease-out\"},children:g(v,{direction:\"vertical\",gap:12,children:[r(t,{variant:\"h2\",weight:\"bold\",style:{color:\"var(--ggui-color-onSurface)\"},children:e.symbol||\"N/A\"}),r(t,{variant:\"body\",style:{color:\"var(--ggui-color-onSurfaceVariant)\"},children:e.name||\"Company Name\"}),r(\"div\",{style:{marginTop:\"var(--ggui-spacing-2)\"},children:r(t,{variant:\"h3\",weight:\"semibold\",style:{color:\"var(--ggui-color-primary-600)\"},children:\"$\"+c})}),r(b,{gap:12,children:g(\"div\",{style:{backgroundColor:l,padding:\"var(--ggui-spacing-2) var(--ggui-spacing-4)\",borderRadius:\"var(--ggui-shape-radius-md)\",display:\"flex\",alignItems:\"center\",gap:\"var(--ggui-spacing-2)\"},children:[r(t,{variant:\"label\",weight:\"semibold\",style:{color:o},children:L+u}),r(t,{variant:\"label\",weight:\"semibold\",style:{color:o},children:\"(\"+R+n+\"%)\"})]})})]})},e.symbol)})}),r(\"div\",{style:{display:\"flex\",justifyContent:\"flex-end\",paddingTop:\"var(--ggui-spacing-4)\",borderTop:\"1px solid var(--ggui-color-outline)\"},children:r(t,{variant:\"caption\",style:{color:\"var(--ggui-color-onSurfaceVariant)\"},children:\"Last Updated: \"+h})})]})})}export{k as default};\n",
+        "sourceCode": "import { useState, useEffect, useRef } from 'react';\nimport { Container, Card, Stack, Row, Text } from '@ggui-ai/design/primitives';\n\ninterface Stock {\n  symbol?: string;\n  name?: string;\n  price?: number;\n  change?: number;\n  changePercent?: number;\n}\n\ninterface StreamEvent {\n  type: string;\n  symbol?: string;\n  price?: number;\n  change?: number;\n  changePercent?: number;\n}\n\ninterface Props {\n  stocks?: Stock[];\n}\n\n/**\n * Stock Ticker Dashboard Component\n * \n * Displays live market data with real-time price updates\n * \n * __GGUI_STREAM_SPEC__\n * {\n *   \"events\": {\n *     \"price-update\": {\n *       \"schema\": {\n *         \"type\": \"object\",\n *         \"properties\": {\n *           \"type\": { \"type\": \"string\", \"const\": \"price-update\" },\n *           \"symbol\": { \"type\": \"string\" },\n *           \"price\": { \"type\": \"number\" },\n *           \"change\": { \"type\": \"number\" },\n *           \"changePercent\": { \"type\": \"number\" }\n *         },\n *         \"required\": [\"type\", \"symbol\"]\n *       },\n *       \"description\": \"Live price update for a single stock\"\n *     }\n *   }\n * }\n * __GGUI_STREAM_SPEC_END__\n */\nexport default function StockTickerDashboard({ stocks = [] }: Props) {\n  const [stockData, setStockData] = useState<Stock[]>(stocks);\n  const [lastUpdated, setLastUpdated] = useState<string>(new Date().toLocaleTimeString());\n  const [currentTime, setCurrentTime] = useState<string>(new Date().toLocaleTimeString());\n  const updateHandlerRef = useRef<((event: StreamEvent) => void) | null>(null);\n\n  // Update clock every second\n  useEffect(() => {\n    const timer = setInterval(() => {\n      setCurrentTime(new Date().toLocaleTimeString());\n    }, 1000);\n    return () => clearInterval(timer);\n  }, []);\n\n  // Set up stream event handler via ref\n  useEffect(() => {\n    updateHandlerRef.current = (event: StreamEvent) => {\n      if (event.type === 'price-update' && event.symbol) {\n        const { symbol, price, change, changePercent } = event;\n        setStockData((prevData) =>\n          prevData.map((stock) =>\n            stock.symbol === symbol\n              ? { ...stock, price, change, changePercent }\n              : stock\n          )\n        );\n        setLastUpdated(new Date().toLocaleTimeString());\n      }\n    };\n\n    // Expose handler for ggui:agent-data event binding\n    (globalThis as any).__ggui_price_update = updateHandlerRef.current;\n\n    return () => {\n      delete (globalThis as any).__ggui_price_update;\n    };\n  }, []);\n\n  // Update stock data when initial props change\n  useEffect(() => {\n    setStockData(stocks);\n    if (stocks.length > 0) {\n      setLastUpdated(new Date().toLocaleTimeString());\n    }\n  }, [stocks]);\n\n  const getChangeColor = (changePercent?: number): string => {\n    if (changePercent === undefined || changePercent === null) {\n      return 'var(--ggui-color-onSurface)';\n    }\n    return changePercent >= 0\n      ? 'var(--ggui-color-success-600)'\n      : 'var(--ggui-color-error-600)';\n  };\n\n  const getChangeBgColor = (changePercent?: number): string => {\n    if (changePercent === undefined || changePercent === null) {\n      return 'transparent';\n    }\n    return changePercent >= 0\n      ? 'var(--ggui-color-success-50, #f0fdf4)'\n      : 'var(--ggui-color-error-50, #fef2f2)';\n  };\n\n  const formatPrice = (price?: number): string => {\n    if (price === undefined || price === null) {\n      return '0.00';\n    }\n    return price.toFixed(2);\n  };\n\n  const formatChange = (change?: number): string => {\n    if (change === undefined || change === null) {\n      return '0.00';\n    }\n    return change.toFixed(2);\n  };\n\n  const formatPercent = (percent?: number): string => {\n    if (percent === undefined || percent === null) {\n      return '0.00';\n    }\n    return percent.toFixed(2);\n  };\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack direction=\"vertical\" gap={24}>\n        {/* Header */}\n        <Row justify=\"between\" align=\"center\">\n          <Text variant=\"h1\" weight=\"bold\" style={{ color: 'var(--ggui-color-onSurface)' }}>\n            Market Watch\n          </Text>\n          <Text variant=\"body\" style={{ color: 'var(--ggui-color-onSurfaceVariant)' }}>\n            {currentTime}\n          </Text>\n        </Row>\n\n        {/* Stock Cards Grid */}\n        <div\n          style={{\n            display: 'grid',\n            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',\n            gap: 'var(--ggui-spacing-4)',\n          }}\n        >\n          {stockData.map((stock) => {\n            const changePercent = stock.changePercent;\n            const changeColor = getChangeColor(changePercent);\n            const changeBgColor = getChangeBgColor(changePercent);\n            const priceStr = formatPrice(stock.price);\n            const changeStr = formatChange(stock.change);\n            const percentStr = formatPercent(changePercent);\n            const prefix = stock.change && stock.change >= 0 ? '+' : '';\n            const percentPrefix = changePercent && changePercent >= 0 ? '+' : '';\n\n            return (\n              <Card\n                key={stock.symbol}\n                padding=\"var(--ggui-spacing-4)\"\n                shadow=\"sm\"\n                style={{\n                  backgroundColor: 'var(--ggui-color-surfaceVariant)',\n                  borderRadius: 'var(--ggui-shape-radius-lg)',\n                  transition: 'all 200ms ease-out',\n                }}\n              >\n                <Stack direction=\"vertical\" gap={12}>\n                  {/* Ticker Symbol */}\n                  <Text\n                    variant=\"h2\"\n                    weight=\"bold\"\n                    style={{ color: 'var(--ggui-color-onSurface)' }}\n                  >\n                    {stock.symbol || 'N/A'}\n                  </Text>\n\n                  {/* Company Name */}\n                  <Text\n                    variant=\"body\"\n                    style={{ color: 'var(--ggui-color-onSurfaceVariant)' }}\n                  >\n                    {stock.name || 'Company Name'}\n                  </Text>\n\n                  {/* Current Price */}\n                  <div style={{ marginTop: 'var(--ggui-spacing-2)' }}>\n                    <Text\n                      variant=\"h3\"\n                      weight=\"semibold\"\n                      style={{ color: 'var(--ggui-color-primary-600)' }}\n                    >\n                      {'$' + priceStr}\n                    </Text>\n                  </div>\n\n                  {/* Change and Change Percent */}\n                  <Row gap={12}>\n                    <div\n                      style={{\n                        backgroundColor: changeBgColor,\n                        padding: 'var(--ggui-spacing-2) var(--ggui-spacing-4)',\n                        borderRadius: 'var(--ggui-shape-radius-md)',\n                        display: 'flex',\n                        alignItems: 'center',\n                        gap: 'var(--ggui-spacing-2)',\n                      }}\n                    >\n                      <Text\n                        variant=\"label\"\n                        weight=\"semibold\"\n                        style={{ color: changeColor }}\n                      >\n                        {prefix + changeStr}\n                      </Text>\n                      <Text\n                        variant=\"label\"\n                        weight=\"semibold\"\n                        style={{ color: changeColor }}\n                      >\n                        {'(' + percentPrefix + percentStr + '%' + ')'}\n                      </Text>\n                    </div>\n                  </Row>\n                </Stack>\n              </Card>\n            );\n          })}\n        </div>\n\n        {/* Last Updated Footer */}\n        <div\n          style={{\n            display: 'flex',\n            justifyContent: 'flex-end',\n            paddingTop: 'var(--ggui-spacing-4)',\n            borderTop: '1px solid var(--ggui-color-outline)',\n          }}\n        >\n          <Text\n            variant=\"caption\"\n            style={{ color: 'var(--ggui-color-onSurfaceVariant)' }}\n          >\n            {'Last Updated: ' + lastUpdated}\n          </Text>\n        </div>\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 370141,
+          "output": 26423,
+          "total": 396564
+        },
+        "generationTimeMs": 161424,
+        "turnsUsed": 13
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.502256,
+      "timestamp": "2026-03-17T06:48:04.443Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3039,
+        "sourceCodeBytes": 8169,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "interaction": "flow",
+        "expectedMinScore": 60,
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)"
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from"
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown"
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as e,jsxs as a}from\"react/jsx-runtime\";import{useState as h}from\"react\";import{Container as O,Card as S,Stack as o,Row as c,Text as i,Input as x,Select as q,Button as f,Checkbox as B,Divider as u,Icon as w}from\"@ggui-ai/design/primitives\";function I({initialProfile:g={},avatarOptions:b=[\"\\u{1F60A}\",\"\\u{1F913}\",\"\\u{1F3A8}\",\"\\u{1F680}\"],roleOptions:C=[\"Developer\",\"Designer\",\"Manager\",\"Other\"],onComplete:R=()=>{}}){const[n,y]=h(0),[t,T]=h({name:g?.name||\"\",email:g?.email||\"\",avatar:g?.avatar||b[0],role:g?.role||\"\",emailNotifications:g?.emailNotifications??!0,theme:g?.theme||\"light\"}),[m,v]=h({}),d=[\"Profile Setup\",\"Preferences\",\"Review & Confirm\"],N=r=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(r),D=r=>{const l={};return r===0&&(t.name.trim()||(l.name=\"Name is required\"),t.email.trim()?N(t.email)||(l.email=\"Please enter a valid email address\"):l.email=\"Email is required\"),r===1&&!t.role&&(l.role=\"Role selection is required\"),v(l),Object.keys(l).length===0},V=()=>{D(n)&&n<d.length-1&&y(n+1)},z=()=>{n>0&&(y(n-1),v({}))},E=()=>{R(t)},s=(r,l)=>{T(p=>({...p,[r]:l})),m[r]&&v(p=>{const k={...p};return delete k[r],k})},P=String(Math.round((n+1)/d.length*100))+\"%\";return a(O,{maxWidth:\"md\",padding:32,children:[e(S,{padding:32,shadow:\"md\",border:!0,children:a(o,{direction:\"vertical\",gap:32,children:[a(o,{direction:\"vertical\",gap:12,children:[a(c,{justify:\"between\",align:\"center\",children:[a(i,{variant:\"label\",weight:\"semibold\",children:[\"Step \",n+1,\" of \",d.length]}),e(i,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:d[n]})]}),e(\"div\",{style:{width:\"100%\",height:4,backgroundColor:\"var(--ggui-color-outline)\",borderRadius:\"var(--ggui-shape-radius-full)\",overflow:\"hidden\"},children:e(\"div\",{style:{height:\"100%\",width:P,backgroundColor:\"var(--ggui-color-primary-600)\",transition:\"width 300ms ease-out\"}})})]}),e(u,{}),a(\"div\",{style:{animation:\"fadeIn 300ms ease-out\"},children:[n===0&&a(o,{direction:\"vertical\",gap:20,children:[a(o,{direction:\"vertical\",gap:4,children:[e(i,{variant:\"h3\",children:\"Create Your Profile\"}),e(i,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Let's start with the basics\"})]}),e(o,{direction:\"vertical\",gap:8,children:e(x,{label:\"Full Name\",placeholder:\"Enter your full name\",value:t.name,onChange:r=>s(\"name\",r),required:!0,error:m.name})}),e(o,{direction:\"vertical\",gap:8,children:e(x,{label:\"Email Address\",type:\"email\",placeholder:\"you@example.com\",value:t.email,onChange:r=>s(\"email\",r),required:!0,error:m.email})}),a(o,{direction:\"vertical\",gap:12,children:[e(i,{variant:\"label\",weight:\"semibold\",children:\"Choose Your Avatar\"}),e(c,{gap:12,wrap:!0,children:b.map(r=>e(\"button\",{onClick:()=>s(\"avatar\",r),style:{width:56,height:56,borderRadius:\"var(--ggui-shape-radius-md)\",border:t.avatar===r?\"2px solid var(--ggui-color-primary-600)\":\"2px solid var(--ggui-color-outline)\",backgroundColor:t.avatar===r?\"var(--ggui-color-primary-50)\":\"var(--ggui-color-surfaceVariant)\",fontSize:28,cursor:\"pointer\",display:\"flex\",alignItems:\"center\",justifyContent:\"center\",transition:\"all 200ms ease-out\"},children:r},r))})]})]}),n===1&&a(o,{direction:\"vertical\",gap:20,children:[a(o,{direction:\"vertical\",gap:4,children:[e(i,{variant:\"h3\",children:\"Set Your Preferences\"}),e(i,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Customize your experience\"})]}),e(q,{label:\"Professional Role\",value:t.role,onChange:r=>s(\"role\",r),options:C.map(r=>({value:r,label:r})),placeholder:\"Select your role\",required:!0,error:m.role}),e(u,{}),e(B,{label:\"Email Notifications\",checked:t.emailNotifications,onChange:r=>s(\"emailNotifications\",r),description:\"Receive email updates about your activity and important announcements\"}),e(u,{}),a(o,{direction:\"vertical\",gap:12,children:[e(i,{variant:\"label\",weight:\"semibold\",children:\"Theme Preference\"}),a(c,{gap:12,children:[e(\"button\",{onClick:()=>s(\"theme\",\"light\"),style:{flex:1,padding:\"var(--ggui-spacing-4)\",borderRadius:\"var(--ggui-shape-radius-md)\",border:t.theme===\"light\"?\"2px solid var(--ggui-color-primary-600)\":\"2px solid var(--ggui-color-outline)\",backgroundColor:t.theme===\"light\"?\"var(--ggui-color-primary-50)\":\"var(--ggui-color-surfaceVariant)\",cursor:\"pointer\",textAlign:\"center\",fontWeight:500,fontSize:\"var(--ggui-font-size-sm)\",transition:\"all 200ms ease-out\"},children:\"\\u2600\\uFE0F Light\"}),e(\"button\",{onClick:()=>s(\"theme\",\"dark\"),style:{flex:1,padding:\"var(--ggui-spacing-4)\",borderRadius:\"var(--ggui-shape-radius-md)\",border:t.theme===\"dark\"?\"2px solid var(--ggui-color-primary-600)\":\"2px solid var(--ggui-color-outline)\",backgroundColor:t.theme===\"dark\"?\"var(--ggui-color-primary-50)\":\"var(--ggui-color-surfaceVariant)\",cursor:\"pointer\",textAlign:\"center\",fontWeight:500,fontSize:\"var(--ggui-font-size-sm)\",transition:\"all 200ms ease-out\"},children:\"\\u{1F319} Dark\"})]})]})]}),n===2&&a(o,{direction:\"vertical\",gap:20,children:[a(o,{direction:\"vertical\",gap:4,children:[e(i,{variant:\"h3\",children:\"Review Your Setup\"}),e(i,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Make sure everything looks good before completing\"})]}),e(S,{padding:16,shadow:\"sm\",border:!0,style:{backgroundColor:\"var(--ggui-color-surfaceVariant)\"},children:a(o,{direction:\"vertical\",gap:16,children:[a(o,{direction:\"vertical\",gap:8,children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Profile\"}),a(c,{gap:12,align:\"center\",children:[e(\"div\",{style:{fontSize:32,width:48,height:48,display:\"flex\",alignItems:\"center\",justifyContent:\"center\",borderRadius:\"var(--ggui-shape-radius-md)\",backgroundColor:\"var(--ggui-color-primary-100)\"},children:t.avatar}),a(o,{direction:\"vertical\",gap:2,children:[e(i,{variant:\"body\",weight:\"semibold\",children:t.name}),e(i,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:t.email})]})]})]}),e(u,{}),a(o,{direction:\"vertical\",gap:8,children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Preferences\"}),a(o,{direction:\"vertical\",gap:6,children:[a(c,{justify:\"between\",children:[e(i,{variant:\"body\",children:\"Role\"}),e(i,{variant:\"body\",weight:\"medium\",children:t.role})]}),a(c,{justify:\"between\",children:[e(i,{variant:\"body\",children:\"Email Notifications\"}),e(i,{variant:\"body\",weight:\"medium\",color:t.emailNotifications?\"var(--ggui-color-success-600)\":\"var(--ggui-color-onSurfaceVariant)\",children:t.emailNotifications?\"\\u2713 Enabled\":\"\\u2717 Disabled\"})]}),a(c,{justify:\"between\",children:[e(i,{variant:\"body\",children:\"Theme\"}),e(i,{variant:\"body\",weight:\"medium\",children:t.theme===\"light\"?\"\\u2600\\uFE0F Light\":\"\\u{1F319} Dark\"})]})]})]})]})})]})]}),e(u,{}),a(c,{gap:12,justify:n===0?\"end\":\"between\",children:[n>0&&e(f,{variant:\"outline\",onClick:z,children:\"Go Back\"}),n<d.length-1?a(f,{variant:\"primary\",onClick:V,children:[\"Next\",e(w,{name:\"chevron-right\",size:16})]}):a(f,{variant:\"primary\",onClick:E,children:[e(w,{name:\"check\",size:16}),\"Complete Setup\"]})]})]})}),e(\"style\",{children:\"@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }\"})]})}export{I as default};\n",
+        "sourceCode": "import { useState } from 'react';\nimport { Container, Card, Stack, Row, Text, Input, Select, Button, Checkbox, Divider, Icon } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  initialProfile?: Record<string, unknown>;\n  avatarOptions: string[];\n  roleOptions: string[];\n  onComplete?: (data: { name: string; email: string; avatar: string; role: string; emailNotifications: boolean; theme: string }) => void;\n}\n\ninterface OnboardingData {\n  name: string;\n  email: string;\n  avatar: string;\n  role: string;\n  emailNotifications: boolean;\n  theme: string;\n}\n\nexport default function GeneratedComponent({\n  initialProfile = {},\n  avatarOptions = ['😊', '🤓', '🎨', '🚀'],\n  roleOptions = ['Developer', 'Designer', 'Manager', 'Other'],\n  onComplete = () => {},\n}: Props) {\n  const [currentStep, setCurrentStep] = useState(0);\n  const [data, setData] = useState<OnboardingData>({\n    name: (initialProfile as any)?.name || '',\n    email: (initialProfile as any)?.email || '',\n    avatar: (initialProfile as any)?.avatar || avatarOptions[0],\n    role: (initialProfile as any)?.role || '',\n    emailNotifications: (initialProfile as any)?.emailNotifications ?? true,\n    theme: (initialProfile as any)?.theme || 'light',\n  });\n  const [errors, setErrors] = useState<Record<string, string>>({});\n  const steps = ['Profile Setup', 'Preferences', 'Review & Confirm'];\n\n  const validateEmail = (email: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\n  \n  const validateStep = (step: number): boolean => {\n    const newErrors: Record<string, string> = {};\n    if (step === 0) {\n      if (!data.name.trim()) newErrors.name = 'Name is required';\n      if (!data.email.trim()) newErrors.email = 'Email is required';\n      else if (!validateEmail(data.email)) newErrors.email = 'Please enter a valid email address';\n    }\n    if (step === 1 && !data.role) newErrors.role = 'Role selection is required';\n    setErrors(newErrors);\n    return Object.keys(newErrors).length === 0;\n  };\n\n  const handleNext = () => {\n    if (validateStep(currentStep) && currentStep < steps.length - 1) setCurrentStep(currentStep + 1);\n  };\n\n  const handleBack = () => {\n    if (currentStep > 0) {\n      setCurrentStep(currentStep - 1);\n      setErrors({});\n    }\n  };\n\n  const handleComplete = () => {\n    onComplete(data);\n  };\n\n  const updateData = <K extends keyof OnboardingData>(key: K, value: OnboardingData[K]) => {\n    setData((prev) => ({ ...prev, [key]: value }));\n    if (errors[key]) setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });\n  };\n\n  const progressPercent = String(Math.round(((currentStep + 1) / steps.length) * 100)) + '%';\n\n  return (\n    <Container maxWidth=\"md\" padding={32}>\n      <Card padding={32} shadow=\"md\" border>\n        <Stack direction=\"vertical\" gap={32}>\n          <Stack direction=\"vertical\" gap={12}>\n            <Row justify=\"between\" align=\"center\">\n              <Text variant=\"label\" weight=\"semibold\">Step {currentStep + 1} of {steps.length}</Text>\n              <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{steps[currentStep]}</Text>\n            </Row>\n            <div style={{ width: '100%', height: 4, backgroundColor: 'var(--ggui-color-outline)', borderRadius: 'var(--ggui-shape-radius-full)', overflow: 'hidden' }}>\n              <div style={{ height: '100%', width: progressPercent, backgroundColor: 'var(--ggui-color-primary-600)', transition: 'width 300ms ease-out' }} />\n            </div>\n          </Stack>\n\n          <Divider />\n\n          <div style={{ animation: 'fadeIn 300ms ease-out' }}>\n            {currentStep === 0 && (\n              <Stack direction=\"vertical\" gap={20}>\n                <Stack direction=\"vertical\" gap={4}>\n                  <Text variant=\"h3\">Create Your Profile</Text>\n                  <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">Let's start with the basics</Text>\n                </Stack>\n                <Stack direction=\"vertical\" gap={8}>\n                  <Input label=\"Full Name\" placeholder=\"Enter your full name\" value={data.name} onChange={(v) => updateData('name', v)} required error={errors.name} />\n                </Stack>\n                <Stack direction=\"vertical\" gap={8}>\n                  <Input label=\"Email Address\" type=\"email\" placeholder=\"you@example.com\" value={data.email} onChange={(v) => updateData('email', v)} required error={errors.email} />\n                </Stack>\n                <Stack direction=\"vertical\" gap={12}>\n                  <Text variant=\"label\" weight=\"semibold\">Choose Your Avatar</Text>\n                  <Row gap={12} wrap>\n                    {avatarOptions.map((emoji) => (\n                      <button key={emoji} onClick={() => updateData('avatar', emoji)} style={{ width: 56, height: 56, borderRadius: 'var(--ggui-shape-radius-md)', border: data.avatar === emoji ? '2px solid var(--ggui-color-primary-600)' : '2px solid var(--ggui-color-outline)', backgroundColor: data.avatar === emoji ? 'var(--ggui-color-primary-50)' : 'var(--ggui-color-surfaceVariant)', fontSize: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms ease-out' }}>\n                        {emoji}\n                      </button>\n                    ))}\n                  </Row>\n                </Stack>\n              </Stack>\n            )}\n\n            {currentStep === 1 && (\n              <Stack direction=\"vertical\" gap={20}>\n                <Stack direction=\"vertical\" gap={4}>\n                  <Text variant=\"h3\">Set Your Preferences</Text>\n                  <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">Customize your experience</Text>\n                </Stack>\n                <Select label=\"Professional Role\" value={data.role} onChange={(v) => updateData('role', v)} options={roleOptions.map((r) => ({ value: r, label: r }))} placeholder=\"Select your role\" required error={errors.role} />\n                <Divider />\n                <Checkbox label=\"Email Notifications\" checked={data.emailNotifications} onChange={(v) => updateData('emailNotifications', v)} description=\"Receive email updates about your activity and important announcements\" />\n                <Divider />\n                <Stack direction=\"vertical\" gap={12}>\n                  <Text variant=\"label\" weight=\"semibold\">Theme Preference</Text>\n                  <Row gap={12}>\n                    <button onClick={() => updateData('theme', 'light')} style={{ flex: 1, padding: 'var(--ggui-spacing-4)', borderRadius: 'var(--ggui-shape-radius-md)', border: data.theme === 'light' ? '2px solid var(--ggui-color-primary-600)' : '2px solid var(--ggui-color-outline)', backgroundColor: data.theme === 'light' ? 'var(--ggui-color-primary-50)' : 'var(--ggui-color-surfaceVariant)', cursor: 'pointer', textAlign: 'center', fontWeight: 500, fontSize: 'var(--ggui-font-size-sm)', transition: 'all 200ms ease-out' }}>☀️ Light</button>\n                    <button onClick={() => updateData('theme', 'dark')} style={{ flex: 1, padding: 'var(--ggui-spacing-4)', borderRadius: 'var(--ggui-shape-radius-md)', border: data.theme === 'dark' ? '2px solid var(--ggui-color-primary-600)' : '2px solid var(--ggui-color-outline)', backgroundColor: data.theme === 'dark' ? 'var(--ggui-color-primary-50)' : 'var(--ggui-color-surfaceVariant)', cursor: 'pointer', textAlign: 'center', fontWeight: 500, fontSize: 'var(--ggui-font-size-sm)', transition: 'all 200ms ease-out' }}>🌙 Dark</button>\n                  </Row>\n                </Stack>\n              </Stack>\n            )}\n\n            {currentStep === 2 && (\n              <Stack direction=\"vertical\" gap={20}>\n                <Stack direction=\"vertical\" gap={4}>\n                  <Text variant=\"h3\">Review Your Setup</Text>\n                  <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">Make sure everything looks good before completing</Text>\n                </Stack>\n                <Card padding={16} shadow=\"sm\" border style={{ backgroundColor: 'var(--ggui-color-surfaceVariant)' }}>\n                  <Stack direction=\"vertical\" gap={16}>\n                    <Stack direction=\"vertical\" gap={8}>\n                      <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Profile</Text>\n                      <Row gap={12} align=\"center\">\n                        <div style={{ fontSize: 32, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--ggui-shape-radius-md)', backgroundColor: 'var(--ggui-color-primary-100)' }}>{data.avatar}</div>\n                        <Stack direction=\"vertical\" gap={2}>\n                          <Text variant=\"body\" weight=\"semibold\">{data.name}</Text>\n                          <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{data.email}</Text>\n                        </Stack>\n                      </Row>\n                    </Stack>\n                    <Divider />\n                    <Stack direction=\"vertical\" gap={8}>\n                      <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Preferences</Text>\n                      <Stack direction=\"vertical\" gap={6}>\n                        <Row justify=\"between\">\n                          <Text variant=\"body\">Role</Text>\n                          <Text variant=\"body\" weight=\"medium\">{data.role}</Text>\n                        </Row>\n                        <Row justify=\"between\">\n                          <Text variant=\"body\">Email Notifications</Text>\n                          <Text variant=\"body\" weight=\"medium\" color={data.emailNotifications ? 'var(--ggui-color-success-600)' : 'var(--ggui-color-onSurfaceVariant)'}>{data.emailNotifications ? '✓ Enabled' : '✗ Disabled'}</Text>\n                        </Row>\n                        <Row justify=\"between\">\n                          <Text variant=\"body\">Theme</Text>\n                          <Text variant=\"body\" weight=\"medium\">{data.theme === 'light' ? '☀️ Light' : '🌙 Dark'}</Text>\n                        </Row>\n                      </Stack>\n                    </Stack>\n                  </Stack>\n                </Card>\n              </Stack>\n            )}\n          </div>\n\n          <Divider />\n\n          <Row gap={12} justify={currentStep === 0 ? 'end' : 'between'}>\n            {currentStep > 0 && <Button variant=\"outline\" onClick={handleBack}>Go Back</Button>}\n            {currentStep < steps.length - 1 ? (\n              <Button variant=\"primary\" onClick={handleNext}>\n                Next\n                <Icon name=\"chevron-right\" size={16} />\n              </Button>\n            ) : (\n              <Button variant=\"primary\" onClick={handleComplete}>\n                <Icon name=\"check\" size={16} />\n                Complete Setup\n              </Button>\n            )}\n          </Row>\n        </Stack>\n      </Card>\n\n      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 510019,
+          "output": 45551,
+          "total": 555570
+        },
+        "generationTimeMs": 273361,
+        "turnsUsed": 13
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.737774,
+      "timestamp": "2026-03-17T06:49:56.380Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 7111,
+        "sourceCodeBytes": 11021,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"Developer\" found — should be a prop default",
+            "Hardcoded string \"Designer\" found — should be a prop default",
+            "Hardcoded string \"Manager\" found — should be a prop default",
+            "Hardcoded string \"Other\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-raw-single-pass-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 157570,
+      "avgCostUsd": 0.4415276666666667,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    }
+  ],
+  "promptSummaries": [
+    {
+      "promptId": "weather-card",
+      "promptName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    },
+    {
+      "promptId": "stock-ticker",
+      "promptName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    },
+    {
+      "promptId": "onboarding-wizard",
+      "promptName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": -1,
+        "avgTimeMs": 157570,
+        "avgCostUsd": 0.4415276666666667,
+        "successRate": 1
+      }
+    }
+  }
+}

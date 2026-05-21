@@ -1,0 +1,534 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T16:42:59.538Z",
+    "totalDurationMs": 60348,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var E=Object.defineProperty;var g=(t,r)=>E(t,\"name\",{value:r,configurable:!0});import{jsx as a,jsxs as n}from\"react/jsx-runtime\";import{useState as v,useMemo as R,useEffect as M}from\"react\";import{Container as H,Card as x,Stack as m,Row as h,Box as U,Divider as z,Spacer as j,Text as y,Heading as S,Button as k,Input as B,Select as F,Badge as A,Avatar as V,Progress as L,Icon as I}from\"@ggui-ai/design/primitives\";import{Dropdown as N}from\"@ggui-ai/design/components\";import{Clickable as W}from\"@ggui-ai/design/interact\";import{useAction as G,useStream as K}from\"@ggui-ai/wire\";function $(t){switch(t){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}}g($,\"getPriorityVariant\");function Wa(t){return t?t.split(\" \").map(r=>r[0]).join(\"\").toUpperCase().slice(0,2):\"?\"}g(Wa,\"getInitials\");function q({task:t,onEdit:r,onMove:p}){const[d,s]=v(!1),[w,f]=v(t.title||\"\"),c=g(()=>{r({...t,title:w}),s(!1)},\"handleSave\");return a(x,{padding:\"var(--ggui-spacing-3)\",shadow:\"sm\",radius:\"md\",border:!0,children:n(m,{gap:\"var(--ggui-spacing-2)\",align:\"stretch\",children:[d?a(B,{label:\"Task title\",value:w,onChange:f,size:\"sm\"}):a(y,{variant:\"body\",weight:\"medium\",as:W,onClick:()=>s(!0),\"aria-label\":\"Double-click to edit task title\",style:{cursor:\"pointer\",padding:\"var(--ggui-spacing-1)\"},children:t.title||\"Untitled\"}),n(h,{gap:\"var(--ggui-spacing-2)\",align:\"center\",justify:\"between\",children:[t.priority&&a(A,{variant:$(t.priority),size:\"sm\",children:t.priority}),t.assignee&&a(V,{name:t.assignee,size:24,shape:\"circle\"})]}),t.dueDate&&n(y,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[\"Due: \",new Date(t.dueDate).toLocaleDateString()]}),d?n(h,{gap:\"var(--ggui-spacing-1)\",justify:\"end\",children:[a(k,{variant:\"ghost\",size:\"xs\",onClick:()=>s(!1),children:\"Cancel\"}),a(k,{variant:\"primary\",size:\"xs\",onClick:c,children:\"Save\"})]}):n(h,{gap:\"var(--ggui-spacing-1)\",justify:\"end\",children:[a(k,{variant:\"ghost\",size:\"xs\",\"aria-label\":`Edit task: ${t.title}`,leftIcon:a(I,{name:\"edit\",size:14}),onClick:()=>s(!0),children:\"Edit\"}),a(N,{trigger:a(k,{variant:\"ghost\",size:\"xs\",children:a(I,{name:\"move\",size:14})}),options:[{value:\"move-to-todo\",label:\"To Do\",disabled:t.column===\"todo\"},{value:\"move-to-progress\",label:\"In Progress\",disabled:t.column===\"in-progress\"},{value:\"move-to-done\",label:\"Done\",disabled:t.column===\"done\"}],value:\"\",onChange:u=>{const T=u.replace(\"move-to-\",\"\");p(t.id||\"\",T)},placement:\"bottom-end\"})]})]})})}g(q,\"TaskCard\");function J({column:t,tasks:r,onEditTask:p,onMoveTask:d,onAddTask:s}){const[w,f]=v(!1),[c,u]=v(\"\"),[T,b]=v(\"medium\"),P=g(()=>{c.trim()&&(s(c,t.id||\"\",T),u(\"\"),b(\"medium\"),f(!1))},\"handleAddTask\");return a(x,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",radius:\"lg\",border:!0,children:n(m,{gap:\"var(--ggui-spacing-4)\",align:\"stretch\",children:[n(h,{align:\"center\",justify:\"between\",children:[a(S,{level:4,children:t.name}),a(A,{variant:\"secondary\",size:\"sm\",children:r.length})]}),a(z,{orientation:\"horizontal\",margin:\"var(--ggui-spacing-2)\"}),a(m,{gap:\"var(--ggui-spacing-3)\",align:\"stretch\",children:r.map(C=>a(q,{task:C,onEdit:p,onMove:d},C.id))}),w?n(m,{gap:\"var(--ggui-spacing-2)\",align:\"stretch\",children:[a(B,{label:\"Task title\",placeholder:\"Enter task title...\",value:c,onChange:u,size:\"sm\"}),a(F,{label:\"Priority\",value:T,onChange:C=>b(C),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}],size:\"sm\"}),n(h,{gap:\"var(--ggui-spacing-2)\",justify:\"end\",children:[a(k,{variant:\"ghost\",size:\"sm\",onClick:()=>{f(!1),u(\"\"),b(\"medium\")},children:\"Cancel\"}),a(k,{variant:\"primary\",size:\"sm\",onClick:P,children:\"Add Task\"})]})]}):a(k,{variant:\"outline\",size:\"sm\",fullWidth:!0,onClick:()=>f(!0),children:\"+ Add Task\"})]})})}g(J,\"KanbanColumn\");function O(t){const r=G(\"taskUpdate\"),p=K(\"taskChanged\"),[d,s]=v(t.tasks),[w,f]=v(null);M(()=>{if(p.latest){const{action:e,task:i}=p.latest;if(!i)return;s(o=>e===\"create\"?[...o,i]:e===\"move\"||e===\"edit\"?o.map(l=>l.id===i.id?i:l):e===\"delete\"?o.filter(l=>l.id!==i.id):o)}},[p.latest]);const c=d.length,u=d.filter(e=>e.column===\"done\").length,T=g(e=>{s(i=>i.map(o=>o.id===e.id?e:o)),e.id&&r({action:\"edit\",taskId:e.id,data:{column:e.column||\"todo\",title:e.title}})},\"handleEditTask\"),b=g((e,i)=>{s(o=>o.map(l=>l.id===e?{...l,column:i}:l)),r({action:\"move\",taskId:e,data:{column:i}})},\"handleMoveTask\"),P=g((e,i,o=\"medium\")=>{const l={id:`task-${Date.now()}`,title:e,column:\"todo\",priority:o};s(D=>[...D,l]),r({action:\"create\",taskId:l.id||\"\",data:{column:\"todo\",title:e}})},\"handleAddTask\"),C=R(()=>{const e={};return t.columns.forEach(i=>{e[i.id||\"\"]=d.filter(o=>o.column===i.id)}),e},[d,t.columns]);return a(H,{maxWidth:\"2xl\",padding:\"var(--ggui-spacing-6)\",children:n(m,{gap:\"var(--ggui-spacing-6)\",align:\"stretch\",children:[n(m,{gap:\"var(--ggui-spacing-2)\",align:\"stretch\",children:[a(S,{level:1,children:\"Kanban Board\"}),a(y,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Manage your tasks across columns\"})]}),a(x,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",radius:\"lg\",border:!0,background:\"var(--ggui-color-surfaceVariant)\",children:n(h,{gap:\"var(--ggui-spacing-6)\",align:\"center\",justify:\"start\",children:[n(m,{gap:\"var(--ggui-spacing-1)\",align:\"start\",children:[a(y,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Total Tasks\"}),a(S,{level:3,color:\"var(--ggui-color-onSurface)\",children:c})]}),a(z,{orientation:\"vertical\",margin:\"0\"}),n(m,{gap:\"var(--ggui-spacing-1)\",align:\"start\",children:[a(y,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Completed\"}),a(S,{level:3,color:\"var(--ggui-color-success-600)\",children:u})]}),a(j,{size:\"flex\"}),a(L,{value:c>0?u/c*100:0,variant:\"success\",showLabel:!0})]})}),a(h,{gap:\"var(--ggui-spacing-4)\",align:\"start\",justify:\"start\",wrap:!0,children:t.columns.map(e=>a(U,{style:{flex:\"0 1 calc(33.333% - var(--ggui-spacing-3))\",minWidth:\"280px\"},children:a(J,{column:e,tasks:C[e.id||\"\"],onEditTask:T,onMoveTask:b,onAddTask:P})},e.id))})]})})}g(O,\"Component\");export{O as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column?: string; title?: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\n// Helper: Get priority badge color\nfunction getPriorityVariant(priority?: string) {\n  switch (priority) {\n    case 'high': return 'error';\n    case 'medium': return 'warning';\n    case 'low': return 'success';\n    default: return 'default';\n  }\n}\n\n// Helper: Extract initials from assignee\nfunction getInitials(assignee?: string) {\n  if (!assignee) return '?';\n  return assignee.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);\n}\n\n// Task card component\nfunction TaskCard({\n  task,\n  onEdit,\n  onMove,\n}: {\n  task: Props['tasks'][0];\n  onEdit: (task: Props['tasks'][0]) => void;\n  onMove: (taskId: string, targetColumn: string) => void;\n}) {\n  const [isEditing, setIsEditing] = useState(false);\n  const [editTitle, setEditTitle] = useState(task.title || '');\n\n  const handleSave = () => {\n    onEdit({ ...task, title: editTitle });\n    setIsEditing(false);\n  };\n\n  return (\n    <Card padding=\"var(--ggui-spacing-3)\" shadow=\"sm\" radius=\"md\" border>\n      <Stack gap=\"var(--ggui-spacing-2)\" align=\"stretch\">\n        {isEditing ? (\n          <Input\n            label=\"Task title\"\n            value={editTitle}\n            onChange={setEditTitle}\n            size=\"sm\"\n          />\n        ) : (\n          <Text\n            variant=\"body\"\n            weight=\"medium\"\n            as={Clickable}\n            onClick={() => setIsEditing(true)}\n            aria-label=\"Double-click to edit task title\"\n            style={{ cursor: 'pointer', padding: 'var(--ggui-spacing-1)' }}\n          >\n            {task.title || 'Untitled'}\n          </Text>\n        )}\n        \n        <Row gap=\"var(--ggui-spacing-2)\" align=\"center\" justify=\"between\">\n          {task.priority && (\n            <Badge variant={getPriorityVariant(task.priority)} size=\"sm\">\n              {task.priority}\n            </Badge>\n          )}\n          {task.assignee && (\n            <Avatar name={task.assignee} size={24} shape=\"circle\" />\n          )}\n        </Row>\n        \n        {task.dueDate && (\n          <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n            Due: {new Date(task.dueDate).toLocaleDateString()}\n          </Text>\n        )}\n        \n        {isEditing ? (\n          <Row gap=\"var(--ggui-spacing-1)\" justify=\"end\">\n            <Button\n              variant=\"ghost\"\n              size=\"xs\"\n              onClick={() => setIsEditing(false)}\n            >\n              Cancel\n            </Button>\n            <Button\n              variant=\"primary\"\n              size=\"xs\"\n              onClick={handleSave}\n            >\n              Save\n            </Button>\n          </Row>\n        ) : (\n          <Row gap=\"var(--ggui-spacing-1)\" justify=\"end\">\n            <Button\n              variant=\"ghost\"\n              size=\"xs\"\n              aria-label={`Edit task: ${task.title}`}\n              leftIcon={<Icon name=\"edit\" size={14} />}\n              onClick={() => setIsEditing(true)}\n            >\n              Edit\n            </Button>\n            <Dropdown\n              trigger={<Button variant=\"ghost\" size=\"xs\"><Icon name=\"move\" size={14} /></Button>}\n              options={[\n                { value: 'move-to-todo', label: 'To Do', disabled: task.column === 'todo' },\n                { value: 'move-to-progress', label: 'In Progress', disabled: task.column === 'in-progress' },\n                { value: 'move-to-done', label: 'Done', disabled: task.column === 'done' },\n              ]}\n              value=\"\"\n              onChange={(value) => {\n                const targetColumn = value.replace('move-to-', '');\n                onMove(task.id || '', targetColumn);\n              }}\n              placement=\"bottom-end\"\n            />\n          </Row>\n        )}\n      </Stack>\n    </Card>\n  );\n}\n\n// Column component\nfunction KanbanColumn({\n  column,\n  tasks,\n  onEditTask,\n  onMoveTask,\n  onAddTask,\n}: {\n  column: Props['columns'][0];\n  tasks: Props['tasks'];\n  onEditTask: (task: Props['tasks'][0]) => void;\n  onMoveTask: (taskId: string, targetColumn: string) => void;\n  onAddTask: (title: string, columnId: string, priority: 'low' | 'medium' | 'high') => void;\n}) {\n  const [showForm, setShowForm] = useState(false);\n  const [newTitle, setNewTitle] = useState('');\n  const [newPriority, setNewPriority] = useState<'low' | 'medium' | 'high'>('medium');\n\n  const handleAddTask = () => {\n    if (newTitle.trim()) {\n      onAddTask(newTitle, column.id || '', newPriority);\n      setNewTitle('');\n      setNewPriority('medium');\n      setShowForm(false);\n    }\n  };\n\n  return (\n    <Card padding=\"var(--ggui-spacing-4)\" shadow=\"sm\" radius=\"lg\" border>\n      <Stack gap=\"var(--ggui-spacing-4)\" align=\"stretch\">\n        <Row align=\"center\" justify=\"between\">\n          <Heading level={4}>{column.name}</Heading>\n          <Badge variant=\"secondary\" size=\"sm\">{tasks.length}</Badge>\n        </Row>\n        \n        <Divider orientation=\"horizontal\" margin=\"var(--ggui-spacing-2)\" />\n        \n        <Stack gap=\"var(--ggui-spacing-3)\" align=\"stretch\">\n          {tasks.map((task) => (\n            <TaskCard\n              key={task.id}\n              task={task}\n              onEdit={onEditTask}\n              onMove={onMoveTask}\n            />\n          ))}\n        </Stack>\n        \n        {showForm ? (\n          <Stack gap=\"var(--ggui-spacing-2)\" align=\"stretch\">\n            <Input\n              label=\"Task title\"\n              placeholder=\"Enter task title...\"\n              value={newTitle}\n              onChange={setNewTitle}\n              size=\"sm\"\n            />\n            <Select\n              label=\"Priority\"\n              value={newPriority}\n              onChange={(v) => setNewPriority(v as 'low' | 'medium' | 'high')}\n              options={[\n                { value: 'low', label: 'Low' },\n                { value: 'medium', label: 'Medium' },\n                { value: 'high', label: 'High' },\n              ]}\n              size=\"sm\"\n            />\n            <Row gap=\"var(--ggui-spacing-2)\" justify=\"end\">\n              <Button\n                variant=\"ghost\"\n                size=\"sm\"\n                onClick={() => {\n                  setShowForm(false);\n                  setNewTitle('');\n                  setNewPriority('medium');\n                }}\n              >\n                Cancel\n              </Button>\n              <Button\n                variant=\"primary\"\n                size=\"sm\"\n                onClick={handleAddTask}\n              >\n                Add Task\n              </Button>\n            </Row>\n          </Stack>\n        ) : (\n          <Button\n            variant=\"outline\"\n            size=\"sm\"\n            fullWidth\n            onClick={() => setShowForm(true)}\n          >\n            + Add Task\n          </Button>\n        )}\n      </Stack>\n    </Card>\n  );\n}\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  // Actions — fire-and-forget to agent\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate'); // Called when a task is moved, edited, or created. Payload: { action, taskId, data }\n\n  // Streams — real-time from agent (.latest, .all)\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged'); // A task was moved, edited, or created by another user — update it in the board\n\n  // State\n  const [tasks, setTasks] = useState<Props['tasks']>(props.tasks);\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n\n  // Sync stream updates\n  useEffect(() => {\n    if (taskChanged.latest) {\n      const { action, task } = taskChanged.latest;\n      if (!task) return;\n\n      setTasks((prev) => {\n        if (action === 'create') {\n          return [...prev, task];\n        } else if (action === 'move' || action === 'edit') {\n          return prev.map((t) => (t.id === task.id ? task : t));\n        } else if (action === 'delete') {\n          return prev.filter((t) => t.id !== task.id);\n        }\n        return prev;\n      });\n    }\n  }, [taskChanged.latest]);\n\n  // Compute totals\n  const totalTasks = tasks.length;\n  const completedTasks = tasks.filter((t) => t.column === 'done').length;\n\n  // Handlers\n  const handleEditTask = (updatedTask: Props['tasks'][0]) => {\n    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));\n    if (updatedTask.id) {\n      taskUpdate({\n        action: 'edit',\n        taskId: updatedTask.id,\n        data: { column: updatedTask.column || 'todo', title: updatedTask.title },\n      });\n    }\n  };\n\n  const handleMoveTask = (taskId: string, targetColumn: string) => {\n    setTasks((prev) =>\n      prev.map((t) => (t.id === taskId ? { ...t, column: targetColumn } : t))\n    );\n    taskUpdate({\n      action: 'move',\n      taskId,\n      data: { column: targetColumn },\n    });\n  };\n\n  const handleAddTask = (title: string, columnId: string, priority: 'low' | 'medium' | 'high' = 'medium') => {\n    const newTask: Props['tasks'][0] = {\n      id: `task-${Date.now()}`,\n      title,\n      column: columnId === 'todo' ? 'todo' : 'todo',\n      priority,\n    };\n    setTasks((prev) => [...prev, newTask]);\n    taskUpdate({\n      action: 'create',\n      taskId: newTask.id || '',\n      data: { column: 'todo', title },\n    });\n  };\n\n  // Group tasks by column\n  const tasksByColumn = useMemo(() => {\n    const grouped: Record<string, Props['tasks']> = {};\n    props.columns.forEach((col) => {\n      grouped[col.id || ''] = tasks.filter((t) => t.column === col.id);\n    });\n    return grouped;\n  }, [tasks, props.columns]);\n\n  return (\n    <Container maxWidth=\"2xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\" align=\"stretch\">\n        {/* Header */}\n        <Stack gap=\"var(--ggui-spacing-2)\" align=\"stretch\">\n          <Heading level={1}>Kanban Board</Heading>\n          <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">\n            Manage your tasks across columns\n          </Text>\n        </Stack>\n\n        {/* Summary bar */}\n        <Card padding=\"var(--ggui-spacing-4)\" shadow=\"sm\" radius=\"lg\" border background=\"var(--ggui-color-surfaceVariant)\">\n          <Row gap=\"var(--ggui-spacing-6)\" align=\"center\" justify=\"start\">\n            <Stack gap=\"var(--ggui-spacing-1)\" align=\"start\">\n              <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                Total Tasks\n              </Text>\n              <Heading level={3} color=\"var(--ggui-color-onSurface)\">{totalTasks}</Heading>\n            </Stack>\n            <Divider orientation=\"vertical\" margin=\"0\" />\n            <Stack gap=\"var(--ggui-spacing-1)\" align=\"start\">\n              <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                Completed\n              </Text>\n              <Heading level={3} color=\"var(--ggui-color-success-600)\">{completedTasks}</Heading>\n            </Stack>\n            <Spacer size=\"flex\" />\n            <Progress value={totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0} variant=\"success\" showLabel />\n          </Row>\n        </Card>\n\n        {/* Kanban columns */}\n        <Row gap=\"var(--ggui-spacing-4)\" align=\"start\" justify=\"start\" wrap>\n          {props.columns.map((column) => (\n            <Box\n              key={column.id}\n              style={{\n                flex: '0 1 calc(33.333% - var(--ggui-spacing-3))',\n                minWidth: '280px',\n              }}\n            >\n              <KanbanColumn\n                column={column}\n                tasks={tasksByColumn[column.id || '']}\n                onEditTask={handleEditTask}\n                onMoveTask={handleMoveTask}\n                onAddTask={handleAddTask}\n              />\n            </Box>\n          ))}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 204744,
+          "output": 8512,
+          "total": 213256
+        },
+        "generationTimeMs": 53307,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "New tasks added via 'Add Task' form are always placed in 'To Do' column regardless of which column the button is clicked in (line 325: `column: columnId === 'todo' ? 'todo' : 'todo'` — both branches return 'todo', breaking the requirement that new tasks should be added to the column where the Add Task button was clicked)",
+              "fix": "New tasks added via 'Add Task' form are always placed in 'To Do' column regardless of which column the button is clicked in (line 325: `column: columnId === 'todo' ? 'todo' : 'todo'` — both branches return 'todo', breaking the requirement that new tasks should be added to the column where the Add Task button was clicked)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move button (line 139) lacks aria-label — screen reader users cannot understand its purpose",
+              "fix": "Move button (line 139) lacks aria-label — screen reader users cannot understand its purpose"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Dropdown trigger button (line 139) displays only an icon with no accessible text or aria-label for the move action",
+              "fix": "Dropdown trigger button (line 139) displays only an icon with no accessible text or aria-label for the move action"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task title clickable text (line 81-90) uses aria-label 'Double-click to edit' but does not have keyboard support (Enter/Space) — keyboard-only users cannot activate edit mode",
+              "fix": "Task title clickable text (line 81-90) uses aria-label 'Double-click to edit' but does not have keyboard support (Enter/Space) — keyboard-only users cannot activate edit mode"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Column header (line 190) is a Heading level 4 but lacks semantic relationship to the task count badge — consider grouping with aria-describedby",
+              "fix": "Column header (line 190) is a Heading level 4 but lacks semantic relationship to the task count badge — consider grouping with aria-describedby"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Avatar component (line 100) displays assignee name but may not have sufficient alt text for screen readers if relying solely on 'name' prop — verify Avatar component's accessibility implementation",
+              "fix": "Avatar component (line 100) displays assignee name but may not have sufficient alt text for screen readers if relying solely on 'name' prop — verify Avatar component's accessibility implementation"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 87: style object with inline padding uses var(--ggui-spacing-1) correctly, but mixing inline styles with design system props is inconsistent — consider using padding prop on a wrapper component instead",
+              "fix": "Line 87: style object with inline padding uses var(--ggui-spacing-1) correctly, but mixing inline styles with design system props is inconsistent — consider using padding prop on a wrapper component instead"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 100: Avatar size={24} uses numeric pixel value instead of design system size token (should use size=\"sm\" or \"md\" variant)",
+              "fix": "Line 100: Avatar size={24} uses numeric pixel value instead of design system size token (should use size=\"sm\" or \"md\" variant)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 382-385: inline style object with calc() and minWidth hardcodes 280px instead of using design system spacing tokens — should use var(--ggui-spacing-*) for responsive sizing",
+              "fix": "Line 382-385: inline style object with calc() and minWidth hardcodes 280px instead of using design system spacing tokens — should use var(--ggui-spacing-*) for responsive sizing"
+            }
+          ],
+          "pass": ["crash", "interactivity", "layout", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 53270,
+          "evalMs": 0,
+          "totalMs": 53307
+        }
+      },
+      "evaluation": null,
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "New tasks added via 'Add Task' form are always placed in 'To Do' column regardless of which column the button is clicked in (line 325: `column: columnId === 'todo' ? 'todo' : 'todo'` — both branches return 'todo', breaking the requirement that new tasks should be added to the column where the Add Task button was clicked)",
+            "fix": "New tasks added via 'Add Task' form are always placed in 'To Do' column regardless of which column the button is clicked in (line 325: `column: columnId === 'todo' ? 'todo' : 'todo'` — both branches return 'todo', breaking the requirement that new tasks should be added to the column where the Add Task button was clicked)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move button (line 139) lacks aria-label — screen reader users cannot understand its purpose",
+            "fix": "Move button (line 139) lacks aria-label — screen reader users cannot understand its purpose"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Dropdown trigger button (line 139) displays only an icon with no accessible text or aria-label for the move action",
+            "fix": "Dropdown trigger button (line 139) displays only an icon with no accessible text or aria-label for the move action"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task title clickable text (line 81-90) uses aria-label 'Double-click to edit' but does not have keyboard support (Enter/Space) — keyboard-only users cannot activate edit mode",
+            "fix": "Task title clickable text (line 81-90) uses aria-label 'Double-click to edit' but does not have keyboard support (Enter/Space) — keyboard-only users cannot activate edit mode"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Column header (line 190) is a Heading level 4 but lacks semantic relationship to the task count badge — consider grouping with aria-describedby",
+            "fix": "Column header (line 190) is a Heading level 4 but lacks semantic relationship to the task count badge — consider grouping with aria-describedby"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Avatar component (line 100) displays assignee name but may not have sufficient alt text for screen readers if relying solely on 'name' prop — verify Avatar component's accessibility implementation",
+            "fix": "Avatar component (line 100) displays assignee name but may not have sufficient alt text for screen readers if relying solely on 'name' prop — verify Avatar component's accessibility implementation"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 87: style object with inline padding uses var(--ggui-spacing-1) correctly, but mixing inline styles with design system props is inconsistent — consider using padding prop on a wrapper component instead",
+            "fix": "Line 87: style object with inline padding uses var(--ggui-spacing-1) correctly, but mixing inline styles with design system props is inconsistent — consider using padding prop on a wrapper component instead"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 100: Avatar size={24} uses numeric pixel value instead of design system size token (should use size=\"sm\" or \"md\" variant)",
+            "fix": "Line 100: Avatar size={24} uses numeric pixel value instead of design system size token (should use size=\"sm\" or \"md\" variant)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 382-385: inline style object with calc() and minWidth hardcodes 280px instead of using design system spacing tokens — should use var(--ggui-spacing-*) for responsive sizing",
+            "fix": "Line 382-385: inline style object with calc() and minWidth hardcodes 280px instead of using design system spacing tokens — should use var(--ggui-spacing-*) for responsive sizing"
+          }
+        ],
+        "pass": ["crash", "interactivity", "layout", "loading"]
+      },
+      "estimatedCostUsd": 0.24730400000000002,
+      "timestamp": "2026-03-22T16:42:59.537Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6097,
+        "sourceCodeBytes": 14544,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 53307,
+      "avgCostUsd": 0.24730400000000002,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": -1,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": -1,
+        "avgTimeMs": 53307,
+        "avgCostUsd": 0.24730400000000002,
+        "successRate": 1
+      }
+    }
+  }
+}

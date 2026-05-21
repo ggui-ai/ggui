@@ -1,0 +1,25 @@
+{
+  "kind": "gadget",
+  "scope": "@ggui-samples",
+  "name": "gadget-mapbox",
+  "version": "0.0.1",
+  "bundle": "src/index.ts",
+  "visibility": "public",
+  "description": "Render an interactive Mapbox GL map with style, pan/zoom controls, and marker support.",
+  "exports": [
+    {
+      "hook": "useMapbox",
+      "description": "Render an interactive Mapbox GL map with style, pan/zoom controls, and marker support. Returns a container ref to attach to a <div>.",
+      "usage": "Mount when the intent names a rendered map and the operator has stamped a Mapbox access token on App.publicEnv. Pass `center: [lng, lat]` (Mapbox uses lng-first order, opposite of Leaflet) + `zoom: 2..22`. Default style is `mapbox://styles/mapbox/streets-v12`; declare a custom `styleUrl` to use a different style (and add its origin to the wrapper registration's `connect[]`).",
+      "example": {
+        "call": "const map = useMapbox({ center: [-122.4194, 37.7749], zoom: 12 });",
+        "returns": { "status": "completed", "value": { "containerRef": "<DOM ref callback>" } },
+        "componentSnippet": "function MapView() { const map = useMapbox({ center: [-122.4194, 37.7749], zoom: 12 }); return <div ref={map.value?.containerRef} style={{ height: 400 }} />; }"
+      },
+      "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` in Mapbox (opposite of Leaflet's `[lat, lng]`). The container ref MUST be stable across renders — don't recreate the callback or Mapbox will re-initialize on every render. Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can push (the push gate enforces this)."
+    }
+  ],
+  "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"],
+  "connect": ["https://api.mapbox.com", "https://*.tiles.mapbox.com"],
+  "tags": ["map", "geo", "mapbox"]
+}

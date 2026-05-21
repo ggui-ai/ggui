@@ -1,0 +1,22 @@
+{
+  "name": "host-context-observed-persists",
+  "description": "Client iframe echoes the `McpUiHostContext` it received from `ui/initialize` via `host_context_observed` WS message (Client→Server). Server projects to `HostContextProjection` and persists on `Session.hostContext`. Persisted projection is observable via subsequent `ggui_handshake` and `ggui_consume` output. Field shape: `availableDisplayModes`, `displayMode`, `theme` — sourced verbatim from the spec-compliant host's `_meta.ui.host` projection. Stale-snapshot guard: a later `host_context_observed` overwrites earlier values.",
+  "skipReason": null,
+  "setup": [{ "type": "create-session", "sessionId": "ck-host-context-observed-1" }],
+  "inputEnvelope": {
+    "type": "host_context_observed",
+    "payload": {
+      "sessionId": "ck-host-context-observed-1",
+      "hostContext": {
+        "availableDisplayModes": ["inline", "pip", "fullscreen"],
+        "displayMode": "inline",
+        "theme": "light"
+      }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "no-op",
+    "reason": "host_context_observed has no synchronous response — the side effect is `Session.hostContext` mutation observable via subsequent ggui_consume / handshake output."
+  },
+  "teardown": [{ "type": "close-session", "sessionId": "ck-host-context-observed-1" }]
+}

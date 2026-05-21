@@ -1,0 +1,5 @@
+{
+  "schema": "1",
+  "import": "./ui/primitives/index.js",
+  "primitives": [{ "name": "FixtureBrandTag" }]
+}

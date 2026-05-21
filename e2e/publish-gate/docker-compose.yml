@@ -1,0 +1,53 @@
+# ggui publish gate — verifies every @ggui-ai/* package works when
+# installed from a registry, exactly as an external npm consumer gets
+# them. Run it with:
+#
+#   make test-publish-gate
+#
+# Two services:
+#   verdaccio    — throwaway local npm registry (storage in an anonymous
+#                  volume, dropped by `docker compose down -v`)
+#   gate-runner  — builds + publishes all 38 packages, then installs
+#                  them into a clean-room consumer and runs the smokes
+name: ggui-publish-gate
+
+services:
+  verdaccio:
+    image: verdaccio/verdaccio:5
+    volumes:
+      - ./verdaccio/config.yaml:/verdaccio/conf/config.yaml:ro
+    healthcheck:
+      # node, not wget — the verdaccio image always ships node (it IS a
+      # node app); its `wget` does not reliably handle `--spider` on
+      # `/-/ping`, which silently flapped the container to `unhealthy`.
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:4873/-/ping',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  gate-runner:
+    build:
+      # Context is the oss/ workspace root; the Dockerfile lives under
+      # e2e/publish-gate/ (relative to that context).
+      context: ../../
+      dockerfile: e2e/publish-gate/Dockerfile
+      args:
+        # Default --frozen-lockfile; override during active refactoring:
+        #   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-publish-gate
+        PNPM_INSTALL_FLAGS: ${PNPM_INSTALL_FLAGS:---frozen-lockfile}
+    depends_on:
+      verdaccio:
+        condition: service_healthy
+    environment:
+      VERDACCIO_URL: http://verdaccio:4873
+    volumes:
+      # Gate logic is bind-mounted (not baked) so it iterates without
+      # an image rebuild. None of this is the consumer's node_modules —
+      # that is created fresh inside the container from Verdaccio.
+      - ./scripts:/gate/scripts:ro
+      - ./consumer:/gate/consumer-template:ro

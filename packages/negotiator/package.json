@@ -1,0 +1,57 @@
+{
+  "name": "@ggui-ai/negotiator",
+  "version": "0.1.0-rc.1",
+  "description": "UI decision engine for ggui. Given an agent's signal and the current session state, decides which UI to render (create / update / compose / replace) and synthesizes the data contract. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "generative-ui",
+    "ai-agents",
+    "decision-engine"
+  ],
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/negotiator",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/negotiator"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "probe-rerank": "tsx src/rerank-eval/run-probe-cli.ts",
+    "bench-synth": "tsx src/synth-bench/run-bench-cli.ts"
+  },
+  "dependencies": {
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  }
+}

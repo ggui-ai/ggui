@@ -1,0 +1,10 @@
+# Copied to the clean-room consumer as `.npmrc` by run-gate.sh.
+#
+# Every install — @ggui-ai/* AND their transitive npm dependencies —
+# resolves through Verdaccio. Verdaccio serves @ggui-ai/* from its
+# local storage (freshly published this run) and proxies everything
+# else from npmjs via its uplink.
+registry=http://verdaccio:4873/
+//verdaccio:4873/:_authToken=publish-gate-token
+audit=false
+fund=false

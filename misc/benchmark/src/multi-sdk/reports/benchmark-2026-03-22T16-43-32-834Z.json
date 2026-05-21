@@ -1,0 +1,527 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T16:43:32.833Z",
+    "totalDurationMs": 31632,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var U=Object.defineProperty;var w=(e,s)=>U(e,\"name\",{value:s,configurable:!0});import{Fragment as J,jsx as i,jsxs as o}from\"react/jsx-runtime\";import{useState as p,useCallback as x,useMemo as F,useEffect as P}from\"react\";import{Container as H,Card as R,Stack as v,Row as u,Box as B,Divider as I,Text as k,Heading as N,Button as h,Input as z,Select as W,Badge as D,Avatar as j}from\"@ggui-ai/design/primitives\";import{Dropdown as V}from\"@ggui-ai/design/components\";import{Clickable as L}from\"@ggui-ai/design/interact\";import{useAction as G,useStream as Y}from\"@ggui-ai/wire\";function $({task:e,columns:s,onMove:y,onEdit:l}){const[g,f]=p(!1),[m,d]=p(e.title||\"\"),[C,b]=p(!1),T=w(()=>{m.trim()&&e.id&&(l(e.id,m),f(!1))},\"handleEditSave\"),A=w(()=>{switch(e.priority){case\"high\":return\"var(--ggui-color-error-500)\";case\"medium\":return\"var(--ggui-color-warning-500)\";case\"low\":return\"var(--ggui-color-success-500)\";default:return\"var(--ggui-color-outline)\"}},\"getPriorityColor\"),S=w(()=>{switch(e.priority){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}},\"getPriorityVariant\");return i(R,{shadow:\"sm\",padding:\"var(--ggui-spacing-3)\",radius:\"md\",children:i(v,{gap:\"var(--ggui-spacing-2)\",children:g?o(v,{gap:\"var(--ggui-spacing-2)\",children:[i(z,{label:\"Edit task\",value:m,onChange:d,size:\"sm\"}),o(u,{gap:\"var(--ggui-spacing-1)\",justify:\"end\",children:[i(h,{size:\"xs\",variant:\"ghost\",onClick:()=>f(!1),children:\"Cancel\"}),i(h,{size:\"xs\",variant:\"primary\",onClick:T,children:\"Save\"})]})]}):o(J,{children:[o(u,{gap:\"var(--ggui-spacing-2)\",align:\"center\",justify:\"between\",children:[i(k,{variant:\"body\",weight:\"medium\",truncate:!0,as:L,onClick:()=>{d(e.title||\"\"),f(!0)},style:{flex:1,cursor:\"pointer\"},children:e.title||\"Untitled\"}),i(h,{size:\"xs\",variant:\"ghost\",onClick:()=>{d(e.title||\"\"),f(!0)},children:\"Edit\"})]}),e.priority&&i(D,{variant:S(),size:\"sm\",children:e.priority.charAt(0).toUpperCase()+e.priority.slice(1)}),o(u,{gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[e.assignee&&i(j,{name:e.assignee,size:\"sm\",shape:\"circle\"}),e.dueDate&&i(k,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(e.dueDate).toLocaleDateString()})]}),i(B,{position:\"relative\",children:i(V,{trigger:i(h,{size:\"xs\",variant:\"outline\",children:\"Move\"}),options:s.filter(c=>c.id!==e.column).map(c=>({value:c.id||\"\",label:c.name||\"\"})),value:e.column||\"\",onChange:c=>{e.id&&y(e.id,c)},placement:\"bottom-end\"})})]})})})}w($,\"TaskCard\");function q(e){const s=G(\"taskUpdate\"),y=Y(\"taskChanged\"),[l,g]=p(e.tasks),[f,m]=p(null),[d,C]=p(\"\"),[b,T]=p(\"medium\");P(()=>{g(e.tasks)},[e.tasks]),P(()=>{if(y.latest){const{action:t,task:a}=y.latest;t===\"create\"&&a?g(r=>[...r,a]):t===\"move\"&&a?g(r=>r.map(n=>n.id===a.id?{...n,column:a.column}:n)):t===\"edit\"&&a?g(r=>r.map(n=>n.id===a.id?{...n,...a}:n)):t===\"delete\"&&a&&g(r=>r.filter(n=>n.id!==a.id))}},[y.latest]);const A=x((t,a)=>{g(r=>r.map(n=>n.id===t?{...n,column:a}:n)),s({action:\"move\",taskId:t,data:{column:a}})},[s]),S=x((t,a)=>{g(r=>r.map(n=>n.id===t?{...n,title:a}:n)),s({action:\"edit\",taskId:t,data:{column:l.find(r=>r.id===t)?.column||\"todo\"}})},[l,s]),c=x(t=>{if(!d.trim())return;const a={id:`task-${Date.now()}`,title:d,priority:b,column:t};g(r=>[...r,a]),s({action:\"create\",taskId:a.id,data:{column:t}}),C(\"\"),T(\"medium\"),m(null)},[d,b,s]),M=F(()=>{const t=e.columns.find(a=>a.id===\"done\");return l.filter(a=>a.column===t?.id).length},[l,e.columns]),E=x(t=>l.filter(a=>a.column===t),[l]);return i(H,{maxWidth:\"2xl\",padding:\"var(--ggui-spacing-6)\",children:o(v,{gap:\"var(--ggui-spacing-6)\",children:[i(B,{background:\"var(--ggui-color-primary-50)\",padding:\"var(--ggui-spacing-4)\",borderRadius:\"var(--ggui-shape-radius-lg)\",children:i(u,{gap:\"var(--ggui-spacing-4)\",justify:\"between\",align:\"center\",children:o(v,{gap:\"var(--ggui-spacing-1)\",children:[i(k,{variant:\"label\",color:\"var(--ggui-color-primary-700)\",children:\"Task Summary\"}),o(u,{gap:\"var(--ggui-spacing-3)\",children:[o(k,{variant:\"body\",weight:\"semibold\",color:\"var(--ggui-color-onSurface)\",children:[\"Total: \",l.length]}),i(I,{orientation:\"vertical\",margin:\"var(--ggui-spacing-1)\"}),o(k,{variant:\"body\",weight:\"semibold\",color:\"var(--ggui-color-success-600)\",children:[\"Completed: \",M]})]})]})})}),i(u,{gap:\"var(--ggui-spacing-4)\",align:\"start\",wrap:!0,children:e.columns.map(t=>{const a=E(t.id);return i(B,{padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"var(--ggui-shape-radius-lg)\",style:{minWidth:\"320px\",maxWidth:\"400px\",flex:\"1 1 320px\",minHeight:\"600px\",display:\"flex\",flexDirection:\"column\"},children:o(v,{gap:\"var(--ggui-spacing-4)\",style:{flex:1},children:[o(u,{gap:\"var(--ggui-spacing-2)\",justify:\"between\",align:\"center\",children:[i(N,{level:4,color:\"var(--ggui-color-onSurface)\",children:t.name}),i(D,{variant:\"default\",size:\"sm\",children:a.length})]}),i(v,{gap:\"var(--ggui-spacing-2)\",style:{flex:1,overflowY:\"auto\",paddingRight:\"var(--ggui-spacing-1)\"},children:a.length>0?a.map(r=>i($,{task:r,columns:e.columns,onMove:A,onEdit:S},r.id)):i(k,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",align:\"center\",children:\"No tasks\"})}),f===t.id?i(R,{shadow:\"sm\",padding:\"var(--ggui-spacing-3)\",radius:\"md\",background:\"var(--ggui-color-surface)\",children:o(v,{gap:\"var(--ggui-spacing-2)\",children:[i(z,{label:\"Task title\",value:d,onChange:C,placeholder:\"Enter task title\",size:\"sm\"}),i(W,{label:\"Priority\",value:b,onChange:r=>T(r),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}],size:\"sm\"}),o(u,{gap:\"var(--ggui-spacing-1)\",justify:\"end\",children:[i(h,{size:\"xs\",variant:\"ghost\",onClick:()=>{m(null),C(\"\"),T(\"medium\")},children:\"Cancel\"}),i(h,{size:\"xs\",variant:\"primary\",onClick:()=>c(t.id||\"todo\"),children:\"Add\"})]})]})}):i(h,{variant:\"ghost\",size:\"sm\",onClick:()=>m(t.id||null),fullWidth:!0,children:\"+ Add Task\"})]})},t.id)})})]})})}w(q,\"Component\");export{q as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\n// Task card sub-component\ninterface TaskCardProps {\n  task: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string };\n  columns: Array<{ id?: string; name?: string }>;\n  onMove: (taskId: string, targetColumn: string) => void;\n  onEdit: (taskId: string, title: string) => void;\n}\n\nfunction TaskCard({ task, columns, onMove, onEdit }: TaskCardProps) {\n  const [isEditing, setIsEditing] = useState(false);\n  const [editTitle, setEditTitle] = useState(task.title || '');\n  const [showMoveMenu, setShowMoveMenu] = useState(false);\n\n  const handleEditSave = () => {\n    if (editTitle.trim() && task.id) {\n      onEdit(task.id, editTitle);\n      setIsEditing(false);\n    }\n  };\n\n  const getPriorityColor = (): string => {\n    switch (task.priority) {\n      case 'high': return 'var(--ggui-color-error-500)';\n      case 'medium': return 'var(--ggui-color-warning-500)';\n      case 'low': return 'var(--ggui-color-success-500)';\n      default: return 'var(--ggui-color-outline)';\n    }\n  };\n\n  const getPriorityVariant = (): 'error' | 'warning' | 'success' | 'default' => {\n    switch (task.priority) {\n      case 'high': return 'error';\n      case 'medium': return 'warning';\n      case 'low': return 'success';\n      default: return 'default';\n    }\n  };\n\n  return (\n    <Card shadow=\"sm\" padding=\"var(--ggui-spacing-3)\" radius=\"md\">\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        {isEditing ? (\n          <Stack gap=\"var(--ggui-spacing-2)\">\n            <Input\n              label=\"Edit task\"\n              value={editTitle}\n              onChange={setEditTitle}\n              size=\"sm\"\n            />\n            <Row gap=\"var(--ggui-spacing-1)\" justify=\"end\">\n              <Button\n                size=\"xs\"\n                variant=\"ghost\"\n                onClick={() => setIsEditing(false)}\n              >\n                Cancel\n              </Button>\n              <Button\n                size=\"xs\"\n                variant=\"primary\"\n                onClick={handleEditSave}\n              >\n                Save\n              </Button>\n            </Row>\n          </Stack>\n        ) : (\n          <>\n            <Row gap=\"var(--ggui-spacing-2)\" align=\"center\" justify=\"between\">\n              <Text\n                variant=\"body\"\n                weight=\"medium\"\n                truncate\n                as={Clickable}\n                onClick={() => {\n                  setEditTitle(task.title || '');\n                  setIsEditing(true);\n                }}\n                style={{ flex: 1, cursor: 'pointer' }}\n              >\n                {task.title || 'Untitled'}\n              </Text>\n              <Button\n                size=\"xs\"\n                variant=\"ghost\"\n                onClick={() => {\n                  setEditTitle(task.title || '');\n                  setIsEditing(true);\n                }}\n              >\n                Edit\n              </Button>\n            </Row>\n\n            {task.priority && (\n              <Badge variant={getPriorityVariant()} size=\"sm\">\n                {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}\n              </Badge>\n            )}\n\n            <Row gap=\"var(--ggui-spacing-2)\" align=\"center\">\n              {task.assignee && (\n                <Avatar name={task.assignee} size=\"sm\" shape=\"circle\" />\n              )}\n              {task.dueDate && (\n                <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                  {new Date(task.dueDate).toLocaleDateString()}\n                </Text>\n              )}\n            </Row>\n\n            <Box position=\"relative\">\n              <Dropdown\n                trigger={<Button size=\"xs\" variant=\"outline\">Move</Button>}\n                options={columns\n                  .filter(c => c.id !== task.column)\n                  .map(c => ({ value: c.id || '', label: c.name || '' }))}\n                value={task.column || ''}\n                onChange={(targetColumn) => {\n                  if (task.id) onMove(task.id, targetColumn);\n                }}\n                placement=\"bottom-end\"\n              />\n            </Box>\n          </>\n        )}\n      </Stack>\n    </Card>\n  );\n}\n\nexport default function Component(props: Props) {\n  // Actions — fire-and-forget to agent\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate');\n\n  // Streams — real-time from agent\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged');\n\n  // Local state\n  const [tasks, setTasks] = useState(props.tasks);\n  const [showAddForm, setShowAddForm] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n\n  // Sync tasks from props and stream\n  useEffect(() => {\n    setTasks(props.tasks);\n  }, [props.tasks]);\n\n  useEffect(() => {\n    if (taskChanged.latest) {\n      const { action, task } = taskChanged.latest;\n      if (action === 'create' && task) {\n        setTasks(prev => [...prev, task]);\n      } else if (action === 'move' && task) {\n        setTasks(prev =>\n          prev.map(t => t.id === task.id ? { ...t, column: task.column } : t)\n        );\n      } else if (action === 'edit' && task) {\n        setTasks(prev =>\n          prev.map(t => t.id === task.id ? { ...t, ...task } : t)\n        );\n      } else if (action === 'delete' && task) {\n        setTasks(prev => prev.filter(t => t.id !== task.id));\n      }\n    }\n  }, [taskChanged.latest]);\n\n  const handleMoveTask = useCallback((taskId: string, targetColumn: string) => {\n    setTasks(prev =>\n      prev.map(t => t.id === taskId ? { ...t, column: targetColumn } : t)\n    );\n    taskUpdate({ action: 'move', taskId, data: { column: targetColumn } });\n  }, [taskUpdate]);\n\n  const handleEditTask = useCallback((taskId: string, title: string) => {\n    setTasks(prev =>\n      prev.map(t => t.id === taskId ? { ...t, title } : t)\n    );\n    taskUpdate({ action: 'edit', taskId, data: { column: tasks.find(t => t.id === taskId)?.column || 'todo' } });\n  }, [tasks, taskUpdate]);\n\n  const handleAddTask = useCallback((columnId: string) => {\n    if (!newTaskTitle.trim()) return;\n    const newTask = {\n      id: `task-${Date.now()}`,\n      title: newTaskTitle,\n      priority: newTaskPriority as 'low' | 'medium' | 'high',\n      column: columnId,\n    };\n    setTasks(prev => [...prev, newTask]);\n    taskUpdate({ action: 'create', taskId: newTask.id, data: { column: columnId } });\n    setNewTaskTitle('');\n    setNewTaskPriority('medium');\n    setShowAddForm(null);\n  }, [newTaskTitle, newTaskPriority, taskUpdate]);\n\n  const completedCount = useMemo(() => {\n    const doneColumn = props.columns.find(c => c.id === 'done');\n    return tasks.filter(t => t.column === doneColumn?.id).length;\n  }, [tasks, props.columns]);\n\n  const getTasksByColumn = useCallback((columnId?: string) => {\n    return tasks.filter(t => t.column === columnId);\n  }, [tasks]);\n\n  return (\n    <Container maxWidth=\"2xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Summary bar */}\n        <Box background=\"var(--ggui-color-primary-50)\" padding=\"var(--ggui-spacing-4)\" borderRadius=\"var(--ggui-shape-radius-lg)\">\n          <Row gap=\"var(--ggui-spacing-4)\" justify=\"between\" align=\"center\">\n            <Stack gap=\"var(--ggui-spacing-1)\">\n              <Text variant=\"label\" color=\"var(--ggui-color-primary-700)\">Task Summary</Text>\n              <Row gap=\"var(--ggui-spacing-3)\">\n                <Text variant=\"body\" weight=\"semibold\" color=\"var(--ggui-color-onSurface)\">\n                  Total: {tasks.length}\n                </Text>\n                <Divider orientation=\"vertical\" margin=\"var(--ggui-spacing-1)\" />\n                <Text variant=\"body\" weight=\"semibold\" color=\"var(--ggui-color-success-600)\">\n                  Completed: {completedCount}\n                </Text>\n              </Row>\n            </Stack>\n          </Row>\n        </Box>\n\n        {/* Kanban columns */}\n        <Row gap=\"var(--ggui-spacing-4)\" align=\"start\" wrap>\n          {props.columns.map(column => {\n            const columnTasks = getTasksByColumn(column.id);\n            return (\n              <Box\n                key={column.id}\n                padding=\"var(--ggui-spacing-4)\"\n                background=\"var(--ggui-color-surfaceVariant)\"\n                borderRadius=\"var(--ggui-shape-radius-lg)\"\n                style={{ minWidth: '320px', maxWidth: '400px', flex: '1 1 320px', minHeight: '600px', display: 'flex', flexDirection: 'column' }}\n              >\n                <Stack gap=\"var(--ggui-spacing-4)\" style={{ flex: 1 }}>\n                  {/* Column header */}\n                  <Row gap=\"var(--ggui-spacing-2)\" justify=\"between\" align=\"center\">\n                    <Heading level={4} color=\"var(--ggui-color-onSurface)\">\n                      {column.name}\n                    </Heading>\n                    <Badge variant=\"default\" size=\"sm\">\n                      {columnTasks.length}\n                    </Badge>\n                  </Row>\n\n                  {/* Task list */}\n                  <Stack\n                    gap=\"var(--ggui-spacing-2)\"\n                    style={{\n                      flex: 1,\n                      overflowY: 'auto',\n                      paddingRight: 'var(--ggui-spacing-1)',\n                    }}\n                  >\n                    {columnTasks.length > 0 ? (\n                      columnTasks.map(task => (\n                        <TaskCard\n                          key={task.id}\n                          task={task}\n                          columns={props.columns}\n                          onMove={handleMoveTask}\n                          onEdit={handleEditTask}\n                        />\n                      ))\n                    ) : (\n                      <Text\n                        variant=\"caption\"\n                        color=\"var(--ggui-color-onSurfaceVariant)\"\n                        align=\"center\"\n                      >\n                        No tasks\n                      </Text>\n                    )}\n                  </Stack>\n\n                  {/* Add task button/form */}\n                  {showAddForm === column.id ? (\n                    <Card shadow=\"sm\" padding=\"var(--ggui-spacing-3)\" radius=\"md\" background=\"var(--ggui-color-surface)\">\n                      <Stack gap=\"var(--ggui-spacing-2)\">\n                        <Input\n                          label=\"Task title\"\n                          value={newTaskTitle}\n                          onChange={setNewTaskTitle}\n                          placeholder=\"Enter task title\"\n                          size=\"sm\"\n                        />\n                        <Select\n                          label=\"Priority\"\n                          value={newTaskPriority}\n                          onChange={(val) => setNewTaskPriority(val as 'low' | 'medium' | 'high')}\n                          options={[\n                            { value: 'low', label: 'Low' },\n                            { value: 'medium', label: 'Medium' },\n                            { value: 'high', label: 'High' },\n                          ]}\n                          size=\"sm\"\n                        />\n                        <Row gap=\"var(--ggui-spacing-1)\" justify=\"end\">\n                          <Button\n                            size=\"xs\"\n                            variant=\"ghost\"\n                            onClick={() => {\n                              setShowAddForm(null);\n                              setNewTaskTitle('');\n                              setNewTaskPriority('medium');\n                            }}\n                          >\n                            Cancel\n                          </Button>\n                          <Button\n                            size=\"xs\"\n                            variant=\"primary\"\n                            onClick={() => handleAddTask(column.id || 'todo')}\n                          >\n                            Add\n                          </Button>\n                        </Row>\n                      </Stack>\n                    </Card>\n                  ) : (\n                    <Button\n                      variant=\"ghost\"\n                      size=\"sm\"\n                      onClick={() => setShowAddForm(column.id || null)}\n                      fullWidth\n                    >\n                      + Add Task\n                    </Button>\n                  )}\n                </Stack>\n              </Box>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 63250,
+          "output": 5402,
+          "total": 68652
+        },
+        "generationTimeMs": 28979,
+        "turnsUsed": 1,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task title on line 105-117 is clickable text (as={Clickable}) without keyboard navigation support — add tabIndex and keyboard event handler (Enter/Space) to trigger edit mode",
+              "fix": "Task title on line 105-117 is clickable text (as={Clickable}) without keyboard navigation support — add tabIndex and keyboard event handler (Enter/Space) to trigger edit mode"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move button dropdown (line 148-158) filters out the current column but provides no visual indication of which column the task is currently in — add aria-label or title to indicate current location",
+              "fix": "Move button dropdown (line 148-158) filters out the current column but provides no visual indication of which column the task is currently in — add aria-label or title to indicate current location"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Edit button (line 118-127) and clickable title (line 105-117) both trigger the same edit action — consider consolidating to reduce redundancy and clarify keyboard focus target",
+              "fix": "Edit button (line 118-127) and clickable title (line 105-117) both trigger the same edit action — consider consolidating to reduce redundancy and clarify keyboard focus target"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Summary bar (line 246) uses descriptive text but 'Task Summary' should be a semantic heading (h2 or h3) instead of a label for screen reader users to properly navigate landmarks",
+              "fix": "Summary bar (line 246) uses descriptive text but 'Task Summary' should be a semantic heading (h2 or h3) instead of a label for screen reader users to properly navigate landmarks"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 114: style={{ flex: 1, cursor: 'pointer' }} uses inline style object bypassing design system. Consider using a utility class or component variant.",
+              "fix": "Line 114: style={{ flex: 1, cursor: 'pointer' }} uses inline style object bypassing design system. Consider using a utility class or component variant."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 273: style={{ minWidth: '320px', maxWidth: '400px', flex: '1 1 320px', minHeight: '600px', display: 'flex', flexDirection: 'column' }} uses hardcoded pixel values (320px, 400px, 600px) instead of design system spacing/sizing tokens. Should use var(--ggui-spacing-*) or design system size tokens.",
+              "fix": "Line 273: style={{ minWidth: '320px', maxWidth: '400px', flex: '1 1 320px', minHeight: '600px', display: 'flex', flexDirection: 'column' }} uses hardcoded pixel values (320px, 400px, 600px) instead of design system spacing/sizing tokens. Should use var(--ggui-spacing-*) or design system size tokens."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 289-293: style={{ flex: 1, overflowY: 'auto', paddingRight: 'var(--ggui-spacing-1)' }} mixes inline styles; while paddingRight correctly uses a token, flex and overflowY should be handled through component props or design system utilities.",
+              "fix": "Line 289-293: style={{ flex: 1, overflowY: 'auto', paddingRight: 'var(--ggui-spacing-1)' }} mixes inline styles; while paddingRight correctly uses a token, flex and overflowY should be handled through component props or design system utilities."
+            }
+          ],
+          "pass": ["functionality", "crash", "interactivity", "layout", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 28943,
+          "evalMs": 0,
+          "totalMs": 28979
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 77.4,
+        "finalScore": 77.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 78,
+          "designTokens": 82,
+          "hierarchy": 75,
+          "polish": 72,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 77,
+          "interactivity": 72,
+          "accessibility": 77,
+          "codeQuality": 82
+        },
+        "critique": "The component demonstrates solid use of design tokens and proper layout structure with Kanban columns, but lacks visual separation between columns, has incomplete stream handling logic (cut off), and missing hover/focus polish on interactive elements. The edit mode and move dropdown work well, but the overall polish for drag-and-drop indication and loading states could be stronger.",
+        "evalTimeMs": 2458
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task title on line 105-117 is clickable text (as={Clickable}) without keyboard navigation support — add tabIndex and keyboard event handler (Enter/Space) to trigger edit mode",
+            "fix": "Task title on line 105-117 is clickable text (as={Clickable}) without keyboard navigation support — add tabIndex and keyboard event handler (Enter/Space) to trigger edit mode"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move button dropdown (line 148-158) filters out the current column but provides no visual indication of which column the task is currently in — add aria-label or title to indicate current location",
+            "fix": "Move button dropdown (line 148-158) filters out the current column but provides no visual indication of which column the task is currently in — add aria-label or title to indicate current location"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Edit button (line 118-127) and clickable title (line 105-117) both trigger the same edit action — consider consolidating to reduce redundancy and clarify keyboard focus target",
+            "fix": "Edit button (line 118-127) and clickable title (line 105-117) both trigger the same edit action — consider consolidating to reduce redundancy and clarify keyboard focus target"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Summary bar (line 246) uses descriptive text but 'Task Summary' should be a semantic heading (h2 or h3) instead of a label for screen reader users to properly navigate landmarks",
+            "fix": "Summary bar (line 246) uses descriptive text but 'Task Summary' should be a semantic heading (h2 or h3) instead of a label for screen reader users to properly navigate landmarks"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 114: style={{ flex: 1, cursor: 'pointer' }} uses inline style object bypassing design system. Consider using a utility class or component variant.",
+            "fix": "Line 114: style={{ flex: 1, cursor: 'pointer' }} uses inline style object bypassing design system. Consider using a utility class or component variant."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 273: style={{ minWidth: '320px', maxWidth: '400px', flex: '1 1 320px', minHeight: '600px', display: 'flex', flexDirection: 'column' }} uses hardcoded pixel values (320px, 400px, 600px) instead of design system spacing/sizing tokens. Should use var(--ggui-spacing-*) or design system size tokens.",
+            "fix": "Line 273: style={{ minWidth: '320px', maxWidth: '400px', flex: '1 1 320px', minHeight: '600px', display: 'flex', flexDirection: 'column' }} uses hardcoded pixel values (320px, 400px, 600px) instead of design system spacing/sizing tokens. Should use var(--ggui-spacing-*) or design system size tokens."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 289-293: style={{ flex: 1, overflowY: 'auto', paddingRight: 'var(--ggui-spacing-1)' }} mixes inline styles; while paddingRight correctly uses a token, flex and overflowY should be handled through component props or design system utilities.",
+            "fix": "Line 289-293: style={{ flex: 1, overflowY: 'auto', paddingRight: 'var(--ggui-spacing-1)' }} mixes inline styles; while paddingRight correctly uses a token, flex and overflowY should be handled through component props or design system utilities."
+          }
+        ],
+        "pass": ["functionality", "crash", "interactivity", "layout", "loading"]
+      },
+      "estimatedCostUsd": 0.09026,
+      "timestamp": "2026-03-22T16:43:32.833Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5968,
+        "sourceCodeBytes": 15455,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 77.4,
+      "avgTimeMs": 28979,
+      "avgCostUsd": 0.09026,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 80,
+        "visualPolish": 77,
+        "interactivity": 72,
+        "accessibility": 77,
+        "codeQuality": 82
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 77.4,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 77.4,
+        "avgTimeMs": 28979,
+        "avgCostUsd": 0.09026,
+        "successRate": 1
+      }
+    }
+  }
+}

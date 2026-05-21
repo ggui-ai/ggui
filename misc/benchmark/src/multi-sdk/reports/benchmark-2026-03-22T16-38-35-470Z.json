@@ -1,0 +1,465 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T16:38:35.469Z",
+    "totalDurationMs": 36434,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var F=Object.defineProperty;var h=(t,s)=>F(t,\"name\",{value:s,configurable:!0});import{Fragment as z,jsx as e,jsxs as o}from\"react/jsx-runtime\";import{useState as k,useCallback as b,useMemo as U,useEffect as H}from\"react\";import{Container as I,Card as A,Stack as f,Row as w,Box as D,Divider as V,Text as m,Heading as E,Button as T,Input as R,Select as K,Badge as M,Avatar as W,Progress as N}from\"@ggui-ai/design/primitives\";import{Dropdown as j}from\"@ggui-ai/design/components\";import{Clickable as G}from\"@ggui-ai/design/interact\";import{useAction as L,useStream as X}from\"@ggui-ai/wire\";function $({task:t,columns:s,onMove:g,onEdit:l,onDelete:u}){const[p,d]=k(!1),[y,C]=k(t.title||\"\"),[P,x]=k(!1),v=h(()=>{y.trim()&&(l(t.id||\"\",y),d(!1))},\"handleSaveEdit\"),S=h(a=>{switch(a){case\"high\":return\"var(--ggui-color-error-500)\";case\"medium\":return\"var(--ggui-color-warning-500)\";case\"low\":return\"var(--ggui-color-success-500)\";default:return\"var(--ggui-color-outline)\"}},\"getPriorityColor\"),B=h(a=>{switch(a){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}},\"getPriorityVariant\");return e(A,{padding:\"var(--ggui-spacing-3)\",shadow:\"sm\",radius:\"md\",style:{cursor:\"grab\",position:\"relative\"},children:o(f,{gap:\"var(--ggui-spacing-2)\",align:\"start\",children:[p?e(R,{label:\"Task title\",value:y,onChange:C,onKeyDown:a=>{a.key===\"Enter\"&&v(),a.key===\"Escape\"&&d(!1)},autoFocus:!0}):e(m,{variant:\"body\",weight:\"semibold\",as:G,onClick:()=>d(!0),style:{cursor:\"pointer\",width:\"100%\"},children:t.title||\"Untitled\"}),t.priority&&e(M,{variant:B(t.priority),size:\"sm\",style:{textTransform:\"capitalize\"},children:t.priority}),t.assignee&&o(w,{gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[e(W,{name:t.assignee,size:\"sm\",shape:\"circle\"}),e(m,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:t.assignee})]}),t.dueDate&&o(m,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[\"\\u{1F4C5} \",t.dueDate]}),e(w,{gap:\"var(--ggui-spacing-1)\",justify:\"between\",style:{width:\"100%\",marginTop:\"var(--ggui-spacing-2)\"},children:p?o(z,{children:[e(T,{size:\"xs\",variant:\"primary\",onClick:v,children:\"Save\"}),e(T,{size:\"xs\",variant:\"ghost\",onClick:()=>d(!1),children:\"Cancel\"})]}):o(z,{children:[e(j,{trigger:e(T,{size:\"xs\",variant:\"ghost\",children:\"Move\"}),options:s.filter(a=>a.id!==t.column).map(a=>({value:a.id||\"\",label:a.name||\"Unknown\"})),value:\"\",onChange:a=>{g(t.id||\"\",a),x(!1)}}),e(T,{size:\"xs\",variant:\"ghost\",onClick:()=>u(t.id||\"\"),children:\"Delete\"})]})})]})})}h($,\"TaskCard\");function q(t){const s=L(\"taskUpdate\"),g=X(\"taskChanged\"),[l,u]=k(t.tasks||[]),[p,d]=k({});H(()=>{g.latest?.task&&u(a=>{const n=g.latest?.task?.id,r=g.latest?.action;if(r===\"delete\")return a.filter(i=>i.id!==n);if(r===\"create\"||r===\"move\"||r===\"edit\"){const i=a.findIndex(c=>c.id===n);if(i>=0){const c=[...a];return c[i]=g.latest.task,c}else return[...a,g.latest.task]}return a})},[g.latest]);const y=b((a,n)=>{u(r=>r.map(i=>i.id===a?{...i,column:n}:i)),s({action:\"move\",taskId:a,data:{column:n}})},[s]),C=b((a,n)=>{u(r=>r.map(i=>i.id===a?{...i,title:n}:i)),s({action:\"edit\",taskId:a,data:{column:l.find(r=>r.id===a)?.column||\"todo\"}})},[s,l]),P=b(a=>{u(n=>n.filter(r=>r.id!==a)),s({action:\"delete\",taskId:a,data:{column:\"\"}})},[s]),x=b(a=>{const n=p[a];if(n?.title?.trim()){const r={id:`task-${Date.now()}`,title:n.title,priority:n.priority,column:a,assignee:\"\",dueDate:\"\"};u(i=>[...i,r]),s({action:\"create\",taskId:r.id,data:{column:a}}),d(i=>({...i,[a]:{title:\"\",priority:\"low\"}}))}},[p,s]),v=l.length,S=l.filter(a=>a.column===\"done\").length,B=U(()=>{const a={};return t.columns?.forEach(n=>{a[n.id||\"\"]=l.filter(r=>r.column===n.id)}),a},[l,t.columns]);return e(I,{maxWidth:\"2xl\",padding:\"var(--ggui-spacing-6)\",children:o(f,{gap:\"var(--ggui-spacing-6)\",children:[o(f,{gap:\"var(--ggui-spacing-3)\",children:[e(E,{level:1,children:\"Kanban Board\"}),e(D,{padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-primary-50)\",borderRadius:\"var(--ggui-shape-radius-md)\",children:o(w,{gap:\"var(--ggui-spacing-4)\",justify:\"between\",align:\"center\",children:[o(m,{variant:\"body\",color:\"var(--ggui-color-primary-900)\",children:[e(m,{variant:\"label\",weight:\"bold\",is:\"span\",color:\"var(--ggui-color-primary-900)\",children:v}),\" \",\"total tasks\"]}),o(m,{variant:\"body\",color:\"var(--ggui-color-success-700)\",children:[e(m,{variant:\"label\",weight:\"bold\",is:\"span\",color:\"var(--ggui-color-success-700)\",children:S}),\" \",\"completed\"]}),e(N,{value:v>0?S/v*100:0,max:100,variant:\"success\",size:\"sm\"})]})})]}),e(w,{gap:\"var(--ggui-spacing-4)\",align:\"start\",style:{overflowX:\"auto\"},children:t.columns?.map(a=>{const n=B[a.id||\"\"]||[],r=p[a.id||\"\"]||{title:\"\",priority:\"low\"};return e(A,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",radius:\"lg\",style:{minWidth:\"300px\",flexShrink:0,background:\"var(--ggui-color-surfaceVariant)\"},children:o(f,{gap:\"var(--ggui-spacing-3)\",children:[e(D,{children:o(w,{gap:\"var(--ggui-spacing-2)\",justify:\"between\",align:\"center\",children:[e(E,{level:3,color:\"var(--ggui-color-onSurfaceVariant)\",children:a.name}),e(M,{variant:\"default\",size:\"sm\",children:n.length})]})}),e(V,{orientation:\"horizontal\",margin:\"var(--ggui-spacing-2)\"}),e(f,{gap:\"var(--ggui-spacing-3)\",align:\"stretch\",children:n.map(i=>e($,{task:i,columns:t.columns||[],onMove:y,onEdit:C,onDelete:P},i.id))}),e(D,{padding:\"var(--ggui-spacing-3)\",background:\"var(--ggui-color-surface)\",borderRadius:\"var(--ggui-shape-radius-md)\",style:{marginTop:\"var(--ggui-spacing-2)\"},children:o(f,{gap:\"var(--ggui-spacing-2)\",children:[e(R,{label:\"Task title\",placeholder:\"Add a new task...\",value:r.title,onChange:i=>d(c=>({...c,[a.id||\"\"]:{...r,title:i}}))}),e(K,{label:\"Priority\",value:r.priority,onChange:i=>d(c=>({...c,[a.id||\"\"]:{...r,priority:i}})),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),e(T,{variant:\"primary\",size:\"sm\",fullWidth:!0,onClick:()=>x(a.id||\"\"),children:\"Add Task\"})]})})]})},a.id)})})]})})}h(q,\"Component\");export{q as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\n// Sub-component: TaskCard for individual task display and editing\ninterface TaskCardProps {\n  task: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string };\n  columns: Array<{ id?: string; name?: string }>;\n  onMove: (taskId: string, targetColumn: string) => void;\n  onEdit: (taskId: string, newTitle: string) => void;\n  onDelete: (taskId: string) => void;\n}\n\nfunction TaskCard({ task, columns, onMove, onEdit, onDelete }: TaskCardProps) {\n  const [isEditing, setIsEditing] = useState(false);\n  const [editTitle, setEditTitle] = useState(task.title || '');\n  const [showMoveMenu, setShowMoveMenu] = useState(false);\n\n  const handleSaveEdit = () => {\n    if (editTitle.trim()) {\n      onEdit(task.id || '', editTitle);\n      setIsEditing(false);\n    }\n  };\n\n  const getPriorityColor = (priority?: string) => {\n    switch (priority) {\n      case 'high':\n        return 'var(--ggui-color-error-500)';\n      case 'medium':\n        return 'var(--ggui-color-warning-500)';\n      case 'low':\n        return 'var(--ggui-color-success-500)';\n      default:\n        return 'var(--ggui-color-outline)';\n    }\n  };\n\n  const getPriorityVariant = (priority?: string) => {\n    switch (priority) {\n      case 'high':\n        return 'error';\n      case 'medium':\n        return 'warning';\n      case 'low':\n        return 'success';\n      default:\n        return 'default';\n    }\n  };\n\n  return (\n    <Card padding=\"var(--ggui-spacing-3)\" shadow=\"sm\" radius=\"md\" style={{ cursor: 'grab', position: 'relative' }}>\n      <Stack gap=\"var(--ggui-spacing-2)\" align=\"start\">\n        {/* Task Title */}\n        {isEditing ? (\n          <Input\n            label=\"Task title\"\n            value={editTitle}\n            onChange={setEditTitle}\n            onKeyDown={(e) => {\n              if ((e as React.KeyboardEvent).key === 'Enter') handleSaveEdit();\n              if ((e as React.KeyboardEvent).key === 'Escape') setIsEditing(false);\n            }}\n            autoFocus\n          />\n        ) : (\n          <Text\n            variant=\"body\"\n            weight=\"semibold\"\n            as={Clickable}\n            onClick={() => setIsEditing(true)}\n            style={{ cursor: 'pointer', width: '100%' }}\n          >\n            {task.title || 'Untitled'}\n          </Text>\n        )}\n\n        {/* Priority Badge */}\n        {task.priority && (\n          <Badge\n            variant={getPriorityVariant(task.priority)}\n            size=\"sm\"\n            style={{ textTransform: 'capitalize' }}\n          >\n            {task.priority}\n          </Badge>\n        )}\n\n        {/* Assignee Avatar */}\n        {task.assignee && (\n          <Row gap=\"var(--ggui-spacing-2)\" align=\"center\">\n            <Avatar\n              name={task.assignee}\n              size=\"sm\"\n              shape=\"circle\"\n            />\n            <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n              {task.assignee}\n            </Text>\n          </Row>\n        )}\n\n        {/* Due Date */}\n        {task.dueDate && (\n          <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n            📅 {task.dueDate}\n          </Text>\n        )}\n\n        {/* Action Buttons */}\n        <Row gap=\"var(--ggui-spacing-1)\" justify=\"between\" style={{ width: '100%', marginTop: 'var(--ggui-spacing-2)' }}>\n          {isEditing ? (\n            <>\n              <Button\n                size=\"xs\"\n                variant=\"primary\"\n                onClick={handleSaveEdit}\n              >\n                Save\n              </Button>\n              <Button\n                size=\"xs\"\n                variant=\"ghost\"\n                onClick={() => setIsEditing(false)}\n              >\n                Cancel\n              </Button>\n            </>\n          ) : (\n            <>\n              <Dropdown\n                trigger={\n                  <Button size=\"xs\" variant=\"ghost\">\n                    Move\n                  </Button>\n                }\n                options={columns\n                  .filter((col) => col.id !== task.column)\n                  .map((col) => ({\n                    value: col.id || '',\n                    label: col.name || 'Unknown',\n                  }))}\n                value=\"\"\n                onChange={(targetColumn) => {\n                  onMove(task.id || '', targetColumn);\n                  setShowMoveMenu(false);\n                }}\n              />\n              <Button\n                size=\"xs\"\n                variant=\"ghost\"\n                onClick={() => onDelete(task.id || '')}\n              >\n                Delete\n              </Button>\n            </>\n          )}\n        </Row>\n      </Stack>\n    </Card>\n  );\n}\n\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  // Actions — fire-and-forget to agent\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate'); // Called when a task is moved, edited, or created. Payload: { action, taskId, data }\n\n  // Streams — real-time from agent (.latest, .all)\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged'); // A task was moved, edited, or created by another user — update it in the board\n\n  // Local state for tasks and new task form\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [newTaskForm, setNewTaskForm] = useState<{ [key: string]: { title: string; priority: 'low' | 'medium' | 'high' } }>({});\n\n  // Update local tasks when props change or stream updates arrive\n  useEffect(() => {\n    if (taskChanged.latest?.task) {\n      setTasks((prevTasks) => {\n        const taskId = taskChanged.latest?.task?.id;\n        const action = taskChanged.latest?.action;\n\n        if (action === 'delete') {\n          return prevTasks.filter((t) => t.id !== taskId);\n        } else if (action === 'create' || action === 'move' || action === 'edit') {\n          const existingIndex = prevTasks.findIndex((t) => t.id === taskId);\n          if (existingIndex >= 0) {\n            const updated = [...prevTasks];\n            updated[existingIndex] = taskChanged.latest.task;\n            return updated;\n          } else {\n            return [...prevTasks, taskChanged.latest.task];\n          }\n        }\n        return prevTasks;\n      });\n    }\n  }, [taskChanged.latest]);\n\n  // Handle task move between columns\n  const handleMoveTask = useCallback(\n    (taskId: string, targetColumn: string) => {\n      setTasks((prevTasks) =>\n        prevTasks.map((t) =>\n          t.id === taskId ? { ...t, column: targetColumn } : t\n        )\n      );\n      taskUpdate({ action: 'move', taskId, data: { column: targetColumn } });\n    },\n    [taskUpdate]\n  );\n\n  // Handle task edit (title change)\n  const handleEditTask = useCallback(\n    (taskId: string, newTitle: string) => {\n      setTasks((prevTasks) =>\n        prevTasks.map((t) =>\n          t.id === taskId ? { ...t, title: newTitle } : t\n        )\n      );\n      taskUpdate({ action: 'edit', taskId, data: { column: tasks.find((t) => t.id === taskId)?.column || 'todo' } });\n    },\n    [taskUpdate, tasks]\n  );\n\n  // Handle task delete\n  const handleDeleteTask = useCallback(\n    (taskId: string) => {\n      setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));\n      taskUpdate({ action: 'delete', taskId, data: { column: '' } });\n    },\n    [taskUpdate]\n  );\n\n  // Handle create new task\n  const handleCreateTask = useCallback(\n    (columnId: string) => {\n      const form = newTaskForm[columnId];\n      if (form?.title?.trim()) {\n        const newTask = {\n          id: `task-${Date.now()}`,\n          title: form.title,\n          priority: form.priority,\n          column: columnId,\n          assignee: '',\n          dueDate: '',\n        };\n        setTasks((prevTasks) => [...prevTasks, newTask]);\n        taskUpdate({ action: 'create', taskId: newTask.id, data: { column: columnId } });\n        setNewTaskForm((prev) => ({ ...prev, [columnId]: { title: '', priority: 'low' } }));\n      }\n    },\n    [newTaskForm, taskUpdate]\n  );\n\n  // Calculate summary stats\n  const totalTasks = tasks.length;\n  const completedTasks = tasks.filter((t) => t.column === 'done').length;\n\n  // Group tasks by column\n  const tasksByColumn = useMemo(() => {\n    const grouped: { [key: string]: typeof tasks } = {};\n    props.columns?.forEach((col) => {\n      grouped[col.id || ''] = tasks.filter((t) => t.column === col.id);\n    });\n    return grouped;\n  }, [tasks, props.columns]);\n\n  return (\n    <Container maxWidth=\"2xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Header with Summary */}\n        <Stack gap=\"var(--ggui-spacing-3)\">\n          <Heading level={1}>Kanban Board</Heading>\n          <Box padding=\"var(--ggui-spacing-4)\" background=\"var(--ggui-color-primary-50)\" borderRadius=\"var(--ggui-shape-radius-md)\">\n            <Row gap=\"var(--ggui-spacing-4)\" justify=\"between\" align=\"center\">\n              <Text variant=\"body\" color=\"var(--ggui-color-primary-900)\">\n                <Text variant=\"label\" weight=\"bold\" is=\"span\" color=\"var(--ggui-color-primary-900)\">\n                  {totalTasks}\n                </Text>{' '}\n                total tasks\n              </Text>\n              <Text variant=\"body\" color=\"var(--ggui-color-success-700)\">\n                <Text variant=\"label\" weight=\"bold\" is=\"span\" color=\"var(--ggui-color-success-700)\">\n                  {completedTasks}\n                </Text>{' '}\n                completed\n              </Text>\n              <Progress value={totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0} max={100} variant=\"success\" size=\"sm\" />\n            </Row>\n          </Box>\n        </Stack>\n\n        {/* Kanban Columns */}\n        <Row gap=\"var(--ggui-spacing-4)\" align=\"start\" style={{ overflowX: 'auto' }}>\n          {props.columns?.map((column) => {\n            const columnTasks = tasksByColumn[column.id || ''] || [];\n            const form = newTaskForm[column.id || ''] || { title: '', priority: 'low' };\n\n            return (\n              <Card\n                key={column.id}\n                padding=\"var(--ggui-spacing-4)\"\n                shadow=\"sm\"\n                radius=\"lg\"\n                style={{ minWidth: '300px', flexShrink: 0, background: 'var(--ggui-color-surfaceVariant)' }}\n              >\n                <Stack gap=\"var(--ggui-spacing-3)\">\n                  {/* Column Header */}\n                  <Box>\n                    <Row gap=\"var(--ggui-spacing-2)\" justify=\"between\" align=\"center\">\n                      <Heading level={3} color=\"var(--ggui-color-onSurfaceVariant)\">\n                        {column.name}\n                      </Heading>\n                      <Badge variant=\"default\" size=\"sm\">\n                        {columnTasks.length}\n                      </Badge>\n                    </Row>\n                  </Box>\n\n                  <Divider orientation=\"horizontal\" margin=\"var(--ggui-spacing-2)\" />\n\n                  {/* Task List */}\n                  <Stack gap=\"var(--ggui-spacing-3)\" align=\"stretch\">\n                    {columnTasks.map((task) => (\n                      <TaskCard\n                        key={task.id}\n                        task={task}\n                        columns={props.columns || []}\n                        onMove={handleMoveTask}\n                        onEdit={handleEditTask}\n                        onDelete={handleDeleteTask}\n                      />\n                    ))}\n                  </Stack>\n\n                  {/* Add Task Form */}\n                  <Box padding=\"var(--ggui-spacing-3)\" background=\"var(--ggui-color-surface)\" borderRadius=\"var(--ggui-shape-radius-md)\" style={{ marginTop: 'var(--ggui-spacing-2)' }}>\n                    <Stack gap=\"var(--ggui-spacing-2)\">\n                      <Input\n                        label=\"Task title\"\n                        placeholder=\"Add a new task...\"\n                        value={form.title}\n                        onChange={(value) =>\n                          setNewTaskForm((prev) => ({\n                            ...prev,\n                            [column.id || '']: { ...form, title: value },\n                          }))\n                        }\n                      />\n                      <Select\n                        label=\"Priority\"\n                        value={form.priority}\n                        onChange={(value) =>\n                          setNewTaskForm((prev) => ({\n                            ...prev,\n                            [column.id || '']: { ...form, priority: value as 'low' | 'medium' | 'high' },\n                          }))\n                        }\n                        options={[\n                          { value: 'low', label: 'Low' },\n                          { value: 'medium', label: 'Medium' },\n                          { value: 'high', label: 'High' },\n                        ]}\n                      />\n                      <Button\n                        variant=\"primary\"\n                        size=\"sm\"\n                        fullWidth\n                        onClick={() => handleCreateTask(column.id || '')}\n                      >\n                        Add Task\n                      </Button>\n                    </Stack>\n                  </Box>\n                </Stack>\n              </Card>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n\n",
+        "tokens": {
+          "input": 85139,
+          "output": 5829,
+          "total": 90968
+        },
+        "generationTimeMs": 33830,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 143: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap prop or padding instead of style objects",
+              "fix": "Line 143: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap prop or padding instead of style objects"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 339: inline style 'background: var(--ggui-color-surfaceVariant)' should be passed as a background prop if available, or use CSS variables consistently",
+              "fix": "Line 339: inline style 'background: var(--ggui-color-surfaceVariant)' should be passed as a background prop if available, or use CSS variables consistently"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 371: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap or margin token prop instead of style object",
+              "fix": "Line 371: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap or margin token prop instead of style object"
+            }
+          ],
+          "pass": ["functionality", "crash", "interactivity", "accessibility", "layout", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 33795,
+          "evalMs": 0,
+          "totalMs": 33830
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 75,
+        "finalScore": 75,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 85,
+          "hierarchy": 70,
+          "polish": 65,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 73,
+          "interactivity": 65,
+          "accessibility": 73,
+          "codeQuality": 85
+        },
+        "critique": "The component has solid design token usage and data handling, but the layout lacks a proper 3-column Kanban structure—it appears incomplete with no column rendering logic visible. Polish is hindered by missing hover/focus states on cards and incomplete action handling (taskUpdate/taskChanged streams are unused). The hierarchy is adequate but could benefit from better section separation and card elevation differentiation.",
+        "evalTimeMs": 2408
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 143: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap prop or padding instead of style objects",
+            "fix": "Line 143: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap prop or padding instead of style objects"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 339: inline style 'background: var(--ggui-color-surfaceVariant)' should be passed as a background prop if available, or use CSS variables consistently",
+            "fix": "Line 339: inline style 'background: var(--ggui-color-surfaceVariant)' should be passed as a background prop if available, or use CSS variables consistently"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 371: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap or margin token prop instead of style object",
+            "fix": "Line 371: inline style 'marginTop: var(--ggui-spacing-2)' should use a layout component's gap or margin token prop instead of style object"
+          }
+        ],
+        "pass": ["functionality", "crash", "interactivity", "accessibility", "layout", "loading"]
+      },
+      "estimatedCostUsd": 0.11428400000000001,
+      "timestamp": "2026-03-22T16:38:35.469Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6034,
+        "sourceCodeBytes": 16223,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 75,
+      "avgTimeMs": 33830,
+      "avgCostUsd": 0.11428400000000001,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 80,
+        "visualPolish": 73,
+        "interactivity": 65,
+        "accessibility": 73,
+        "codeQuality": 85
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 75,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 75,
+        "avgTimeMs": 33830,
+        "avgCostUsd": 0.11428400000000001,
+        "successRate": 1
+      }
+    }
+  }
+}

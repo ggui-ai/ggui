@@ -1,0 +1,77 @@
+{
+  "name": "FormWizardBlueprint",
+  "level": "blueprint",
+  "category": "forms",
+  "description": "A multi-step form wizard with progress indicator, step navigation, validation, and review before submission. Ideal for onboarding flows, checkout processes, and complex data entry.",
+  "visual": {
+    "description": "Centered card layout with progress bar at top showing numbered steps. Current step is highlighted. Form content area in the middle with back/next navigation buttons at bottom. Final step shows a review summary before submit.",
+    "layout": "centered card with progress bar, form content, and navigation buttons",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.600",
+      "color.neutral.100",
+      "color.neutral.300",
+      "color.neutral.500",
+      "color.success.500",
+      "spacing.4",
+      "spacing.6",
+      "spacing.8",
+      "borderRadius.lg",
+      "shadow.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "steps",
+        "type": "array",
+        "required": true,
+        "description": "Array of step objects with title, description, and optional validation function"
+      },
+      {
+        "name": "initialStep",
+        "type": "number",
+        "required": false,
+        "description": "Starting step index (0-based)",
+        "defaultValue": 0
+      },
+      {
+        "name": "showReview",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show a review step before final submission",
+        "defaultValue": true
+      },
+      {
+        "name": "submitButtonText",
+        "type": "string",
+        "required": false,
+        "description": "Text for the final submit button",
+        "defaultValue": "Submit"
+      }
+    ],
+    "callbacks": ["onStepChange", "onSubmit", "onCancel"],
+    "slots": ["stepContent", "reviewContent"]
+  },
+  "examples": [
+    { "prompt": "multi-step form", "match": 0.95 },
+    { "prompt": "form wizard", "match": 0.95 },
+    { "prompt": "wizard form", "match": 0.95 },
+    { "prompt": "step by step form", "match": 0.9 },
+    { "prompt": "onboarding wizard", "match": 0.9 },
+    { "prompt": "checkout flow", "match": 0.85 },
+    { "prompt": "registration wizard", "match": 0.85 },
+    { "prompt": "form with steps", "match": 0.9 },
+    { "prompt": "progressive form", "match": 0.8 }
+  ],
+  "tags": [
+    "form",
+    "wizard",
+    "steps",
+    "multi-step",
+    "onboarding",
+    "checkout",
+    "progress",
+    "blueprint"
+  ]
+}

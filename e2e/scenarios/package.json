@@ -1,0 +1,25 @@
+{
+  "name": "@ggui-ai/e2e-scenarios",
+  "version": "0.0.0",
+  "description": "Canonical e2e scenario suite for the ggui protocol. Vitest-driven full-stack journeys against @ggui-samples/ggui-default + @ggui-samples/mcp-todo (+ optional sample agent). Browser scenarios drive playwright-core directly (matches the ui-visual-tester pattern) — avoids the @playwright/test runner's hoist-vs-pnpm singleton issues across our hoisted workspace. Pins the wire's behavioral contract: submit_action happy path, PIPE_NOT_FOUND fallback, contextSnapshot bundle, CONTEXT_TOO_LARGE rejection, pure-display push, and sample-agent real-data round trip with the todo MCP.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ggui-ai/artifact-manifest": "workspace:*",
+    "@ggui-ai/gadget-signing": "workspace:*",
+    "@ggui-ai/registry-core": "workspace:*",
+    "@ggui-ai/registry-server": "workspace:*",
+    "playwright-core": "^1.58.0",
+    "vitest": "^3.2.4"
+  },
+  "devDependencies": {
+    "@ggui-ai/protocol": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}

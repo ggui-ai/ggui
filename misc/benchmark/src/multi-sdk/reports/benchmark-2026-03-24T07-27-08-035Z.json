@@ -1,0 +1,342 @@
+{
+  "meta": {
+    "timestamp": "2026-03-24T07:27:08.034Z",
+    "totalDurationMs": 29232,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "openai-default-0",
+        "sdkName": "openai",
+        "tier": "balanced",
+        "modelId": "openai/gpt-5.3-codex",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "openai/gpt-5.4-mini"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var H=Object.defineProperty;var w=(e,g)=>H(e,\"name\",{value:g,configurable:!0});import{jsx as r,jsxs as u}from\"react/jsx-runtime\";import{useCallback as b,useMemo as d}from\"react\";import{Container as R,Card as s,Stack as c,Row as m,Box as M,Divider as S,Text as o,Heading as f,Badge as h}from\"@ggui-ai/design/primitives\";import{Clickable as A}from\"@ggui-ai/design/interact\";function B(e){const g=d(()=>{const a=Array.isArray(e.forecast)?e.forecast.slice(0,5):[];return Array.from({length:5},(n,i)=>a[i]??{})},[e.forecast]),v=d(()=>e.condition||\"Unknown\",[e.condition]),y=e.unit?e.unit.toUpperCase():\"\\xB0\",t=v.toLowerCase(),T=d(()=>t.includes(\"thunder\")?\"\\u26C8\\uFE0F\":t.includes(\"snow\")||t.includes(\"sleet\")?\"\\u{1F328}\\uFE0F\":t.includes(\"rain\")||t.includes(\"drizzle\")?\"\\u{1F327}\\uFE0F\":t.includes(\"fog\")||t.includes(\"mist\")||t.includes(\"haze\")?\"\\u{1F32B}\\uFE0F\":t.includes(\"cloud\")?\"\\u2601\\uFE0F\":t.includes(\"wind\")?\"\\u{1F32C}\\uFE0F\":t.includes(\"clear\")||t.includes(\"sun\")?\"\\u2600\\uFE0F\":\"\\u{1F324}\\uFE0F\",[t]),C=d(()=>`${v} in ${e.city}`,[v,e.city]),$=d(()=>{if(!g.length)return e.temperature;const a=g.map(n=>typeof n.high==\"number\"?n.high:e.temperature);return a.reduce((n,i)=>Math.max(n,i),a[0])},[g,e.temperature]),x=d(()=>{if(!g.length)return e.temperature;const a=g.map(n=>typeof n.low==\"number\"?n.low:e.temperature);return a.reduce((n,i)=>Math.min(n,i),a[0])},[g,e.temperature]),l=b(a=>typeof a!=\"number\"||Number.isNaN(a)?\"\\u2014\":`${Math.round(a)}\\xB0${y}`,[y]),p=b((a,n)=>a&&a.trim()?a:typeof n==\"number\"?`Day ${n+1}`:\"\\u2014\",[]),k=b((a,n)=>{const i=`${a||\"\"} ${n||\"\"} ${t}`.toLowerCase();return i.includes(\"thunder\")?\"\\u26C8\\uFE0F\":i.includes(\"snow\")||i.includes(\"sleet\")?\"\\u{1F328}\\uFE0F\":i.includes(\"rain\")||i.includes(\"drizzle\")?\"\\u{1F327}\\uFE0F\":i.includes(\"fog\")||i.includes(\"mist\")||i.includes(\"haze\")?\"\\u{1F32B}\\uFE0F\":i.includes(\"cloud\")?\"\\u2601\\uFE0F\":i.includes(\"wind\")?\"\\u{1F32C}\\uFE0F\":i.includes(\"sun\")||i.includes(\"clear\")?\"\\u2600\\uFE0F\":a&&a.trim()?a:\"\\u{1F324}\\uFE0F\"},[t]);return r(R,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:r(s,{padding:\"var(--ggui-spacing-6)\",shadow:\"lg\",radius:\"xl\",border:!0,children:u(c,{gap:\"var(--ggui-spacing-6)\",children:[u(m,{gap:\"var(--ggui-spacing-4)\",align:\"center\",children:[r(M,{padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-primary-50)\",borderRadius:\"var(--ggui-shape-radius-xl)\",children:r(o,{variant:\"bodyLarge\",size:\"4xl\",is:\"span\",children:T})}),u(c,{gap:\"var(--ggui-spacing-1)\",children:[r(o,{variant:\"overline\",color:\"var(--ggui-color-primary-700)\",children:\"Current Weather\"}),r(f,{level:2,children:e.city}),r(o,{variant:\"bodyLarge\",color:\"var(--ggui-color-onSurfaceVariant)\",children:C})]})]}),u(m,{gap:\"var(--ggui-spacing-4)\",wrap:!0,align:\"stretch\",children:[r(s,{padding:\"var(--ggui-spacing-4)\",shadow:\"none\",radius:\"lg\",border:!0,children:u(c,{gap:\"var(--ggui-spacing-2)\",children:[r(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Temperature\"}),r(f,{level:1,color:\"var(--ggui-color-primary-600)\",children:l(e.temperature)}),r(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Feels prominent and current\"})]})}),r(s,{padding:\"var(--ggui-spacing-4)\",shadow:\"none\",radius:\"lg\",border:!0,children:u(c,{gap:\"var(--ggui-spacing-2)\",children:[r(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Humidity\"}),r(f,{level:3,children:`${Math.round(e.humidity)}%`})]})}),r(s,{padding:\"var(--ggui-spacing-4)\",shadow:\"none\",radius:\"lg\",border:!0,children:u(c,{gap:\"var(--ggui-spacing-2)\",children:[r(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Wind Speed\"}),r(f,{level:3,children:`${Math.round(e.windSpeed)} ${e.unit}`})]})})]}),r(S,{margin:\"var(--ggui-spacing-2)\"}),u(c,{gap:\"var(--ggui-spacing-3)\",children:[u(m,{justify:\"between\",align:\"center\",children:[r(f,{level:4,children:\"5-Day Forecast\"}),r(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"High / Low by day\"})]}),r(m,{gap:\"var(--ggui-spacing-3)\",wrap:!0,children:g.map((a,n)=>r(s,{as:A,padding:\"var(--ggui-spacing-4)\",shadow:\"none\",radius:\"lg\",border:!0,\"aria-label\":`Forecast for ${p(a.day,n)}`,children:u(c,{gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[r(o,{variant:\"label\",align:\"center\",children:p(a.day,n)}),r(o,{variant:\"bodyLarge\",is:\"span\",align:\"center\",children:k(a.icon,a.day)}),r(o,{variant:\"bodySmall\",align:\"center\",color:\"var(--ggui-color-onSurfaceVariant)\",children:`${l(a.high)} / ${l(a.low)}`})]})},`${p(a.day,n)}-${n}`))})]}),r(S,{margin:\"var(--ggui-spacing-2)\"}),u(m,{gap:\"var(--ggui-spacing-2)\",wrap:!0,children:[r(h,{variant:\"primary\",children:`${Math.round(e.humidity)}% Humidity`}),r(h,{variant:\"secondary\",children:`Wind ${Math.round(e.windSpeed)} ${e.unit}`}),r(h,{variant:\"info\",children:`Range ${l($)} / ${l(x)}`})]})]})})})}w(B,\"Component\");export{B as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>; // 5-day forecast array\n}\n\n\n\n\n\n// Place helper components here if needed\n\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  const forecastItems = useMemo(() => {\n    const items = Array.isArray(props.forecast) ? props.forecast.slice(0, 5) : [];\n    return Array.from({ length: 5 }, (_, index) => items[index] ?? {});\n  }, [props.forecast]);\n  const conditionText = useMemo(() => props.condition || 'Unknown', [props.condition]);\n  const unitLabel = props.unit ? props.unit.toUpperCase() : '°';\n  const normalizedCondition = conditionText.toLowerCase();\n  const weatherEmoji = useMemo(() => {\n    if (normalizedCondition.includes('thunder')) return '⛈️';\n    if (normalizedCondition.includes('snow') || normalizedCondition.includes('sleet')) return '🌨️';\n    if (normalizedCondition.includes('rain') || normalizedCondition.includes('drizzle')) return '🌧️';\n    if (normalizedCondition.includes('fog') || normalizedCondition.includes('mist') || normalizedCondition.includes('haze')) return '🌫️';\n    if (normalizedCondition.includes('cloud')) return '☁️';\n    if (normalizedCondition.includes('wind')) return '🌬️';\n    if (normalizedCondition.includes('clear') || normalizedCondition.includes('sun')) return '☀️';\n    return '🌤️';\n  }, [normalizedCondition]);\n  const weatherLabel = useMemo(() => `${conditionText} in ${props.city}`, [conditionText, props.city]);\n  const maxTemp = useMemo(() => {\n    if (!forecastItems.length) return props.temperature;\n    const values = forecastItems.map((item) => typeof item.high === 'number' ? item.high : props.temperature);\n    return values.reduce((highest, value) => Math.max(highest, value), values[0]);\n  }, [forecastItems, props.temperature]);\n  const minTemp = useMemo(() => {\n    if (!forecastItems.length) return props.temperature;\n    const values = forecastItems.map((item) => typeof item.low === 'number' ? item.low : props.temperature);\n    return values.reduce((lowest, value) => Math.min(lowest, value), values[0]);\n  }, [forecastItems, props.temperature]);\n  const formatTemp = useCallback((value?: number) => {\n    if (typeof value !== 'number' || Number.isNaN(value)) return '—';\n    return `${Math.round(value)}°${unitLabel}`;\n  }, [unitLabel]);\n  const formatDay = useCallback((day?: string, index?: number) => {\n    if (day && day.trim()) return day;\n    if (typeof index === 'number') return `Day ${index + 1}`;\n    return '—';\n  }, []);\n  const forecastIcon = useCallback((icon?: string, day?: string) => {\n    const source = `${icon || ''} ${day || ''} ${normalizedCondition}`.toLowerCase();\n    if (source.includes('thunder')) return '⛈️';\n    if (source.includes('snow') || source.includes('sleet')) return '🌨️';\n    if (source.includes('rain') || source.includes('drizzle')) return '🌧️';\n    if (source.includes('fog') || source.includes('mist') || source.includes('haze')) return '🌫️';\n    if (source.includes('cloud')) return '☁️';\n    if (source.includes('wind')) return '🌬️';\n    if (source.includes('sun') || source.includes('clear')) return '☀️';\n    return icon && icon.trim() ? icon : '🌤️';\n  }, [normalizedCondition]);\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Card\n        padding=\"var(--ggui-spacing-6)\"\n        shadow=\"lg\"\n        radius=\"xl\"\n        border\n      >\n        <Stack gap=\"var(--ggui-spacing-6)\">\n          <Row gap=\"var(--ggui-spacing-4)\" align=\"center\">\n            <Box\n              padding=\"var(--ggui-spacing-4)\"\n              background=\"var(--ggui-color-primary-50)\"\n              borderRadius=\"var(--ggui-shape-radius-xl)\"\n            >\n              <Text variant=\"bodyLarge\" size=\"4xl\" is=\"span\">{weatherEmoji}</Text>\n            </Box>\n            <Stack gap=\"var(--ggui-spacing-1)\">\n              <Text variant=\"overline\" color=\"var(--ggui-color-primary-700)\">Current Weather</Text>\n              <Heading level={2}>{props.city}</Heading>\n              <Text variant=\"bodyLarge\" color=\"var(--ggui-color-onSurfaceVariant)\">{weatherLabel}</Text>\n            </Stack>\n          </Row>\n\n          <Row gap=\"var(--ggui-spacing-4)\" wrap align=\"stretch\">\n            <Card padding=\"var(--ggui-spacing-4)\" shadow=\"none\" radius=\"lg\" border>\n              <Stack gap=\"var(--ggui-spacing-2)\">\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Temperature</Text>\n                <Heading level={1} color=\"var(--ggui-color-primary-600)\">{formatTemp(props.temperature)}</Heading>\n                <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">Feels prominent and current</Text>\n              </Stack>\n            </Card>\n            <Card padding=\"var(--ggui-spacing-4)\" shadow=\"none\" radius=\"lg\" border>\n              <Stack gap=\"var(--ggui-spacing-2)\">\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Humidity</Text>\n                <Heading level={3}>{`${Math.round(props.humidity)}%`}</Heading>\n              </Stack>\n            </Card>\n            <Card padding=\"var(--ggui-spacing-4)\" shadow=\"none\" radius=\"lg\" border>\n              <Stack gap=\"var(--ggui-spacing-2)\">\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Wind Speed</Text>\n                <Heading level={3}>{`${Math.round(props.windSpeed)} ${props.unit}`}</Heading>\n              </Stack>\n            </Card>\n          </Row>\n\n          <Divider margin=\"var(--ggui-spacing-2)\" />\n\n          <Stack gap=\"var(--ggui-spacing-3)\">\n            <Row justify=\"between\" align=\"center\">\n              <Heading level={4}>5-Day Forecast</Heading>\n              <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">High / Low by day</Text>\n            </Row>\n            <Row gap=\"var(--ggui-spacing-3)\" wrap>\n              {forecastItems.map((item, index) => (\n                <Card\n                  as={Clickable}\n                  key={`${formatDay(item.day, index)}-${index}`}\n                  padding=\"var(--ggui-spacing-4)\"\n                  shadow=\"none\"\n                  radius=\"lg\"\n                  border\n                  aria-label={`Forecast for ${formatDay(item.day, index)}`}\n                >\n                  <Stack gap=\"var(--ggui-spacing-2)\" align=\"center\">\n                    <Text variant=\"label\" align=\"center\">{formatDay(item.day, index)}</Text>\n                    <Text variant=\"bodyLarge\" is=\"span\" align=\"center\">{forecastIcon(item.icon, item.day)}</Text>\n                    <Text variant=\"bodySmall\" align=\"center\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                      {`${formatTemp(item.high)} / ${formatTemp(item.low)}`}\n                    </Text>\n                  </Stack>\n                </Card>\n              ))}\n            </Row>\n          </Stack>\n\n          <Divider margin=\"var(--ggui-spacing-2)\" />\n\n          <Row gap=\"var(--ggui-spacing-2)\" wrap>\n            <Badge variant=\"primary\">{`${Math.round(props.humidity)}% Humidity`}</Badge>\n            <Badge variant=\"secondary\">{`Wind ${Math.round(props.windSpeed)} ${props.unit}`}</Badge>\n            <Badge variant=\"info\">{`Range ${formatTemp(maxTemp)} / ${formatTemp(minTemp)}`}</Badge>\n          </Row>\n        </Stack>\n      </Card>\n    </Container>\n  );\n}\n\n",
+        "tokens": {
+          "input": 315015,
+          "output": 3239,
+          "total": 318254
+        },
+        "generationTimeMs": 26578,
+        "turnsUsed": 5,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The 5-day forecast cards are clickable but there is no selection, drill-in, or other interactive behavior wired to those clicks, so the list presents interaction affordance without a usable action.",
+              "fix": "The 5-day forecast cards are clickable but there is no selection, drill-in, or other interactive behavior wired to those clicks, so the list presents interaction affordance without a usable action."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "There are no hover/focus feedback styles or accessible state cues shown for the clickable forecast cards, so users cannot tell they are interactive or navigate them confidently.",
+              "fix": "There are no hover/focus feedback styles or accessible state cues shown for the clickable forecast cards, so users cannot tell they are interactive or navigate them confidently."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Forecast day cards are clickable via Clickable, but no keyboard interaction handlers or explicit role are provided; ensure the cards are rendered as real buttons or support keyboard activation (Enter/Space)",
+              "fix": "Forecast day cards are clickable via Clickable, but no keyboard interaction handlers or explicit role are provided; ensure the cards are rendered as real buttons or support keyboard activation (Enter/Space)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The clickable forecast cards rely on aria-label alone; add visible focus styling and keyboard semantics if they remain interactive",
+              "fix": "The clickable forecast cards rely on aria-label alone; add visible focus styling and keyboard semantics if they remain interactive"
+            }
+          ],
+          "pass": ["functionality", "crash", "layout", "loading", "visual"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 26542,
+          "evalMs": 0,
+          "totalMs": 26578
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 67,
+        "finalScore": 67,
+        "issues": [],
+        "dimensions": {
+          "layout": 65,
+          "designTokens": 75,
+          "hierarchy": 70,
+          "polish": 55,
+          "dataPresentation": 70,
+          "completeness": 70,
+          "visualPolish": 68,
+          "interactivity": 55,
+          "accessibility": 68,
+          "codeQuality": 75
+        },
+        "critique": "The component has a solid structure with proper use of design tokens and responsive layout, but suffers from incomplete code (abruptly cut off in the forecast rendering), missing hover/focus states on interactive elements, and a hardcoded caption 'Feels prominent and current' that should be dynamic. The forecast cards lack proper interactivity polish despite being marked as Clickable.",
+        "evalTimeMs": 2539
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The 5-day forecast cards are clickable but there is no selection, drill-in, or other interactive behavior wired to those clicks, so the list presents interaction affordance without a usable action.",
+            "fix": "The 5-day forecast cards are clickable but there is no selection, drill-in, or other interactive behavior wired to those clicks, so the list presents interaction affordance without a usable action."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "There are no hover/focus feedback styles or accessible state cues shown for the clickable forecast cards, so users cannot tell they are interactive or navigate them confidently.",
+            "fix": "There are no hover/focus feedback styles or accessible state cues shown for the clickable forecast cards, so users cannot tell they are interactive or navigate them confidently."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Forecast day cards are clickable via Clickable, but no keyboard interaction handlers or explicit role are provided; ensure the cards are rendered as real buttons or support keyboard activation (Enter/Space)",
+            "fix": "Forecast day cards are clickable via Clickable, but no keyboard interaction handlers or explicit role are provided; ensure the cards are rendered as real buttons or support keyboard activation (Enter/Space)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The clickable forecast cards rely on aria-label alone; add visible focus styling and keyboard semantics if they remain interactive",
+            "fix": "The clickable forecast cards rely on aria-label alone; add visible focus styling and keyboard semantics if they remain interactive"
+          }
+        ],
+        "pass": ["functionality", "crash", "layout", "loading", "visual"]
+      },
+      "estimatedCostUsd": 0.59662225,
+      "timestamp": "2026-03-24T07:27:08.034Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4875,
+        "sourceCodeBytes": 9309,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "openai-default-0",
+      "sdkName": "openai",
+      "tier": "balanced",
+      "modelId": "openai/gpt-5.3-codex",
+      "avgScore": 67,
+      "avgTimeMs": 26578,
+      "avgCostUsd": 0.59662225,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 70,
+        "visualPolish": 68,
+        "interactivity": 55,
+        "accessibility": 68,
+        "codeQuality": 75
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 67,
+      "bestVariantId": "openai-default-0",
+      "worstVariantId": "openai-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "openai": {
+      "balanced": {
+        "avgScore": 67,
+        "avgTimeMs": 26578,
+        "avgCostUsd": 0.59662225,
+        "successRate": 1
+      }
+    }
+  }
+}

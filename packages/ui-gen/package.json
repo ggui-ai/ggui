@@ -1,0 +1,319 @@
+{
+  "name": "@ggui-ai/ui-gen",
+  "version": "0.1.0-rc.1",
+  "description": "UI generation harness for ggui — the LLM system prompt, coding-agent loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "ui-generation",
+    "llm",
+    "code-generation",
+    "react",
+    "mcp",
+    "agent-interface"
+  ],
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/ui-gen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/ui-gen"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./classifier": {
+      "types": "./dist/classifier/index.d.ts",
+      "import": "./dist/classifier/index.js"
+    },
+    "./fragments": {
+      "types": "./dist/fragments/index.d.ts",
+      "import": "./dist/fragments/index.js"
+    },
+    "./compose": {
+      "types": "./dist/compose.d.ts",
+      "import": "./dist/compose.js"
+    },
+    "./hash": {
+      "types": "./dist/hash.d.ts",
+      "import": "./dist/hash.js"
+    },
+    "./evaluation": {
+      "types": "./dist/evaluation/index.d.ts",
+      "import": "./dist/evaluation/index.js"
+    },
+    "./evaluation/axis-checks": {
+      "types": "./dist/evaluation/axis-checks/index.d.ts",
+      "import": "./dist/evaluation/axis-checks/index.js"
+    },
+    "./evaluation/axis-checks/index": {
+      "types": "./dist/evaluation/axis-checks/index.d.ts",
+      "import": "./dist/evaluation/axis-checks/index.js"
+    },
+    "./evaluation/axis-checks/registry": {
+      "types": "./dist/evaluation/axis-checks/registry.d.ts",
+      "import": "./dist/evaluation/axis-checks/registry.js"
+    },
+    "./evaluation/mcp-server": {
+      "types": "./dist/evaluation/mcp-server.d.ts",
+      "import": "./dist/evaluation/mcp-server.js"
+    },
+    "./evaluation/prompts": {
+      "types": "./dist/evaluation/prompts.d.ts",
+      "import": "./dist/evaluation/prompts.js"
+    },
+    "./evaluation/types": {
+      "types": "./dist/evaluation/types.d.ts",
+      "import": "./dist/evaluation/types.js"
+    },
+    "./llm": {
+      "types": "./dist/llm.d.ts",
+      "import": "./dist/llm.js"
+    },
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "import": "./dist/policy.js"
+    },
+    "./harness": {
+      "types": "./dist/harness/index.d.ts",
+      "import": "./dist/harness/index.js"
+    },
+    "./harness/index": {
+      "types": "./dist/harness/index.d.ts",
+      "import": "./dist/harness/index.js"
+    },
+    "./harness/prompts": {
+      "types": "./dist/harness/prompts.d.ts",
+      "import": "./dist/harness/prompts.js"
+    },
+    "./harness/result-types": {
+      "types": "./dist/harness/result-types.d.ts",
+      "import": "./dist/harness/result-types.js"
+    },
+    "./harness/runtime": {
+      "types": "./dist/harness/runtime.d.ts",
+      "import": "./dist/harness/runtime.js"
+    },
+    "./harness/types": {
+      "types": "./dist/harness/types-public.d.ts",
+      "import": "./dist/harness/types-public.js"
+    },
+    "./harness/llm-trace-sink": {
+      "types": "./dist/harness/llm-trace-sink.d.ts",
+      "import": "./dist/harness/llm-trace-sink.js"
+    },
+    "./harness/validator-trace-sink": {
+      "types": "./dist/harness/validator-trace-sink.d.ts",
+      "import": "./dist/harness/validator-trace-sink.js"
+    },
+    "./harness/check/runtime-render": {
+      "types": "./dist/harness/check/runtime-render/index.d.ts",
+      "import": "./dist/harness/check/runtime-render/index.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js"
+    },
+    "./adapters/index": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js"
+    },
+    "./adapters/base": {
+      "types": "./dist/adapters/base.d.ts",
+      "import": "./dist/adapters/base.js"
+    },
+    "./adapters/types": {
+      "types": "./dist/adapters/types.d.ts",
+      "import": "./dist/adapters/types.js"
+    },
+    "./adapters/generation-dispatch": {
+      "types": "./dist/adapters/generation-dispatch.d.ts",
+      "import": "./dist/adapters/generation-dispatch.js"
+    },
+    "./adapters/provider-router": {
+      "types": "./dist/adapters/provider-router.d.ts",
+      "import": "./dist/adapters/provider-router.js"
+    },
+    "./blueprint-hint": {
+      "types": "./dist/blueprint-hint.d.ts",
+      "import": "./dist/blueprint-hint.js"
+    },
+    "./strategy": {
+      "types": "./dist/strategy.d.ts",
+      "import": "./dist/strategy.js"
+    },
+    "./user-request": {
+      "types": "./dist/user-request.d.ts",
+      "import": "./dist/user-request.js"
+    },
+    "./adapters/claude/raw": {
+      "types": "./dist/adapters/claude/raw.d.ts",
+      "import": "./dist/adapters/claude/raw.js"
+    },
+    "./adapters/openai/raw": {
+      "types": "./dist/adapters/openai/raw.d.ts",
+      "import": "./dist/adapters/openai/raw.js"
+    },
+    "./adapters/google/raw": {
+      "types": "./dist/adapters/google/raw.d.ts",
+      "import": "./dist/adapters/google/raw.js"
+    },
+    "./coding-agent": {
+      "types": "./dist/coding-agent/index.d.ts",
+      "import": "./dist/coding-agent/index.js"
+    },
+    "./coding-agent/boilerplate": {
+      "types": "./dist/coding-agent/boilerplate.d.ts",
+      "import": "./dist/coding-agent/boilerplate.js"
+    },
+    "./workflows": {
+      "types": "./dist/workflows.d.ts",
+      "import": "./dist/workflows.js"
+    },
+    "./patch": {
+      "types": "./dist/patch.d.ts",
+      "import": "./dist/patch.js"
+    },
+    "./tools": {
+      "types": "./dist/tools.d.ts",
+      "import": "./dist/tools.js"
+    },
+    "./boilerplate": {
+      "types": "./dist/boilerplate.d.ts",
+      "import": "./dist/boilerplate.js"
+    },
+    "./provider-adapter": {
+      "types": "./dist/provider-adapter.d.ts",
+      "import": "./dist/provider-adapter.js"
+    },
+    "./provider-adapter-mock": {
+      "types": "./dist/provider-adapter-mock.d.ts",
+      "import": "./dist/provider-adapter-mock.js"
+    },
+    "./provider-adapter-contract": {
+      "types": "./dist/provider-adapter-contract.d.ts",
+      "import": "./dist/provider-adapter-contract.js"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "import": "./dist/providers/index.js"
+    },
+    "./compile": {
+      "types": "./dist/compile.d.ts",
+      "import": "./dist/compile.js"
+    },
+    "./check": {
+      "types": "./dist/check/index.d.ts",
+      "import": "./dist/check/index.js"
+    },
+    "./validation": {
+      "types": "./dist/validation/index.d.ts",
+      "import": "./dist/validation/index.js"
+    },
+    "./validation/ui-compiler": {
+      "types": "./dist/validation/ui-compiler.d.ts",
+      "import": "./dist/validation/ui-compiler.js"
+    },
+    "./design-system-docs": {
+      "types": "./dist/design-system-docs.d.ts",
+      "import": "./dist/design-system-docs.js"
+    },
+    "./blueprint-validator": {
+      "types": "./dist/blueprint-validator.d.ts",
+      "import": "./dist/blueprint-validator.js"
+    },
+    "./tools/get-wire": {
+      "types": "./dist/tools/get-wire.d.ts",
+      "import": "./dist/tools/get-wire.js"
+    },
+    "./tools/get-primitives-ts": {
+      "types": "./dist/tools/get-primitives-ts.d.ts",
+      "import": "./dist/tools/get-primitives-ts.js"
+    },
+    "./tools/render-check": {
+      "types": "./dist/tools/render-check.d.ts",
+      "import": "./dist/tools/render-check.js"
+    },
+    "./advanced": {
+      "types": "./dist/advanced/index.d.ts",
+      "import": "./dist/advanced/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.29.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@anthropic-ai/sdk": "^0.91.1",
+    "@ggui-ai/gadgets": "workspace:*",
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/sandbox": "workspace:*",
+    "@ggui-ai/ui-visual-tester": "workspace:*",
+    "@ggui-ai/wire": "workspace:^",
+    "@google/genai": "^1.45.0",
+    "@huggingface/transformers": "^3.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "diff": "^8.0.3",
+    "esbuild": "^0.25.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "isomorphic-git": "^1.37.4",
+    "memfs": "^4.56.11",
+    "openai": "^6.29.0",
+    "typescript": "^5.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@google/adk": "^0.5.0",
+    "@openai/agents": "^0.7.1",
+    "@sparticuz/chromium": "^143.0.4",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "happy-dom": "^20.8.9",
+    "puppeteer-core": "^24.40.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.5.0",
+    "vitest": "^3.0.0"
+  }
+}

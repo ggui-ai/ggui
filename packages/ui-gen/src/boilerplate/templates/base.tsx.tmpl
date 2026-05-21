@@ -1,0 +1,31 @@
+// DO NOT EDIT imports — all available components are pre-imported.
+// prettier-ignore-start
+/* eslint-disable no-unused-vars */
+{{REACT_IMPORT}}
+// The ENTIRE design system is ONE import — no subpaths.
+// Layout: Container, Card, Stack, Row, Grid, Box, Divider, Spacer
+// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider
+// Display: Badge, Spinner, Skeleton, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion
+// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination, EmptyState, Stat
+// Compositions: Header, Sidebar, CardGrid, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero, …
+// Traits: use as={Clickable} on primitives for onClick, as={Hoverable}, as={Pressable}
+// Motion: MotionKeyframes (component), useMotion + useAnimationKey (hooks)
+import { {{ALL_DESIGN}} } from '@ggui-ai/design';
+{{WIRE_IMPORT}}/* eslint-enable no-unused-vars */
+// prettier-ignore-end
+
+// DO NOT EDIT Props — auto-generated from the data contract
+{{PROPS_INTERFACE}}
+{{ACTION_TYPES}}
+{{STREAM_TYPES}}
+{{WIRED_TOOL_TYPES}}
+{{CLIENT_TOOL_TYPES}}
+
+// Place helper components here if needed
+
+export default function Component(props: Props) {
+{{CONTEXT_HOOKS}}{{WIRE_HOOKS}}{{AXIS_SECTIONS}}
+  return (
+{{LAYOUT}}
+  );
+}

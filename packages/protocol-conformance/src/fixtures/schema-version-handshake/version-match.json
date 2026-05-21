@@ -1,0 +1,16 @@
+{
+  "name": "version-match",
+  "description": "Happy-path version handshake: server advertises a schemaVersion the client supports (same as current canonical). Renderer completes the handshake without emitting `ggui:upgrade-required`. Baseline for `version-mismatch`'s negative assertion — proves the handshake path itself is observable.",
+  "skipReason": null,
+  "setup": [{ "type": "create-session", "sessionId": "ck-version-match-1" }],
+  "inputEnvelope": {
+    "type": "handshake",
+    "sessionId": "ck-version-match-1",
+    "clientAccepts": ["1.1"]
+  },
+  "expectedBehavior": {
+    "kind": "bootstrap-success",
+    "observabilitySequence": []
+  },
+  "teardown": [{ "type": "close-session", "sessionId": "ck-version-match-1" }]
+}

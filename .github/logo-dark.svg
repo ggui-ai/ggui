@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 70" width="480" height="150" role="img" aria-label="ggui — generative graphical user interface">
+  <title>ggui — generative graphical user interface</title>
+  <!-- Brand-kit v1.0 wordmark. Dark variant: chrome=#5a5a5a + ink=#f4f3ed. -->
+  <!-- g1: chrome ⌐ + ink inner block -->
+  <path d="M 0 0 H 50 V 25 H 25 V 50 H 0 Z" fill="#5a5a5a" />
+  <rect x="33" y="33" width="17" height="17" fill="#f4f3ed" />
+  <!-- g2: ink ⌐ + chrome inner block -->
+  <path d="M 58 0 H 108 V 25 H 83 V 50 H 58 Z" fill="#f4f3ed" />
+  <rect x="91" y="33" width="17" height="17" fill="#5a5a5a" />
+  <!-- u: ink open-top, half-disc bottom -->
+  <path d="M 141 50 C 154.807 50 166 38.8071 166 25 V 0 H 116 V 25 C 116 38.8071 127.193 50 141 50 Z" fill="#f4f3ed" />
+  <!-- i: chrome square -->
+  <rect x="174" y="0" width="50" height="50" fill="#5a5a5a" />
+  <!-- long-form label, mono, g/g/u/i bolded to mirror four-letter structure -->
+  <text x="0" y="66" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;Liberation Mono&quot;, monospace" font-size="10.7" fill="#f4f3ed" textLength="224" lengthAdjust="spacingAndGlyphs" xml:space="preserve"><tspan font-weight="700">g</tspan><tspan font-weight="400">enerative </tspan><tspan font-weight="700">g</tspan><tspan font-weight="400">raphical </tspan><tspan font-weight="700">u</tspan><tspan font-weight="400">ser </tspan><tspan font-weight="700">i</tspan><tspan font-weight="400">nterface</tspan></text>
+</svg>

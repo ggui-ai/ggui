@@ -1,0 +1,58 @@
+{
+  "name": "SettingsPanel",
+  "level": "composite",
+  "category": "settings",
+  "description": "A compact settings panel with grouped toggle switches, select dropdowns, and text inputs. Designed to be embedded in dashboards, modals, or sidebars as a composable settings section.",
+  "visual": {
+    "description": "Card with grouped settings sections separated by dividers. Each setting has a label, optional description, and a control (toggle, select, or input) aligned to the right. Uses subtle borders and spacing between groups.",
+    "layout": "vertical stack with label-control rows",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.600",
+      "color.neutral.100",
+      "color.neutral.200",
+      "color.neutral.500",
+      "spacing.3",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Panel title",
+        "defaultValue": "Settings"
+      },
+      {
+        "name": "sections",
+        "type": "array",
+        "required": true,
+        "description": "Array of setting section objects with label and items array. Each item has: key, label, description, type ('toggle' | 'select' | 'input'), value, and options (for select type)"
+      },
+      {
+        "name": "showSaveButton",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show a save button at the bottom",
+        "defaultValue": true
+      }
+    ],
+    "callbacks": ["onChange", "onSave"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "settings panel", "match": 0.95 },
+    { "prompt": "settings with toggles", "match": 0.9 },
+    { "prompt": "configuration panel", "match": 0.9 },
+    { "prompt": "preferences panel", "match": 0.9 },
+    { "prompt": "settings form with switches", "match": 0.85 },
+    { "prompt": "app settings", "match": 0.85 },
+    { "prompt": "toggle settings", "match": 0.85 },
+    { "prompt": "notification settings", "match": 0.8 }
+  ],
+  "tags": ["settings", "panel", "toggles", "configuration", "preferences", "switches", "compact"]
+}

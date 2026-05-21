@@ -1,0 +1,2680 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T12:38:34.553Z",
+    "totalDurationMs": 252577,
+    "totalVariants": 1,
+    "totalCommits": 7,
+    "totalRuns": 7,
+    "successCount": 7,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as n,jsxs as t}from\"react/jsx-runtime\";import{Card as u,Stack as i,Divider as y}from\"@ggui-ai/design/primitives\";import{Text as a,Heading as h}from\"@ggui-ai/design/primitives\";function S(r){const{city:o=\"Unknown City\",temperature:d=0,condition:l=\"--\",humidity:c=0,windSpeed:g=0,unit:m=\"C\",forecast:p=[]}=r;return n(u,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:16,children:[t(i,{gap:4,children:[n(h,{level:3,children:o}),n(a,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:l})]}),t(a,{size:\"4xl\",weight:\"bold\",children:[d,\"\\xB0\",m]}),t(i,{direction:\"horizontal\",gap:16,children:[t(a,{variant:\"bodySmall\",children:[\"Humidity: \",t(\"span\",{style:{fontWeight:600},children:[c,\"%\"]})]}),t(a,{variant:\"bodySmall\",children:[\"Wind: \",t(\"span\",{style:{fontWeight:600},children:[g,\" km/h\"]})]})]}),n(y,{margin:8}),n(i,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:p.map((e,s)=>t(i,{align:\"center\",gap:4,children:[n(a,{variant:\"label\",children:e.day??\"Day\"}),n(a,{size:\"xl\",children:e.icon??\"?\"}),t(a,{variant:\"bodySmall\",children:[e.high??0,\"\\xB0/\",e.low??0,\"\\xB0\"]})]},s))})]})})}export{S as default};\n",
+        "sourceCode": "import React from 'react';\nimport { Card, Stack, Divider } from '@ggui-ai/design/primitives';\nimport { Text, Heading } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  /** City name */\n  city: string;\n  /** Current temperature */\n  temperature: number;\n  /** Weather condition (Sunny, Cloudy, Rainy, etc.) */\n  condition: string;\n  /** Humidity percentage */\n  humidity: number;\n  /** Wind speed */\n  windSpeed: number;\n  /** Temperature unit (C or F) */\n  unit?: string;\n  /** 5-day forecast array */\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const {\n    city = 'Unknown City',\n    temperature = 0,\n    condition = '--',\n    humidity = 0,\n    windSpeed = 0,\n    unit = 'C',\n    forecast = [],\n  } = props;\n\n  return (\n    <Card shadow=\"md\" padding={24} radius=\"lg\">\n      <Stack gap={16}>\n        <Stack gap={4}>\n          <Heading level={3}>{city}</Heading>\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n            {condition}\n          </Text>\n        </Stack>\n\n        <Text size=\"4xl\" weight=\"bold\">\n          {temperature}°{unit}\n        </Text>\n\n        <Stack direction=\"horizontal\" gap={16}>\n          <Text variant=\"bodySmall\">\n            Humidity: <span style={{ fontWeight: 600 }}>{humidity}%</span>\n          </Text>\n          <Text variant=\"bodySmall\">\n            Wind: <span style={{ fontWeight: 600 }}>{windSpeed} km/h</span>\n          </Text>\n        </Stack>\n\n        <Divider margin={8} />\n\n        <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n          {forecast.map((item, idx) => (\n            <Stack key={idx} align=\"center\" gap={4}>\n              <Text variant=\"label\">{item.day ?? 'Day'}</Text>\n              <Text size=\"xl\">{item.icon ?? '?'}</Text>\n              <Text variant=\"bodySmall\">\n                {item.high ?? 0}°/{item.low ?? 0}°\n              </Text>\n            </Stack>\n          ))}\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}",
+        "tokens": {
+          "input": 173377,
+          "output": 2101,
+          "total": 175478
+        },
+        "generationTimeMs": 17603,
+        "turnsUsed": 1,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 85,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The component lacks any hover effects or transitions for the interactive-looking elements.",
+                "fix": "Add basic hover state scaling or background color changes to the forecast items if they are meant to be actionable."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The forecast section lacks responsive behavior for mobile viewports, potentially causing overflow.",
+                "fix": "Add 'wrap' support to the horizontal Stack or implement a container query/media query to stack items on narrow screens."
+              }
+            ],
+            "critique": "The component is clean, well-structured, and correctly maps all props to the UI. It adheres strictly to the design system constraints, though it would benefit from more refined interactive feedback and mobile responsiveness.",
+            "inputTokens": 1314,
+            "outputTokens": 253
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 73,
+        "finalScore": 73,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 80,
+          "polish": 60,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 60,
+          "accessibility": 78,
+          "codeQuality": 65
+        },
+        "critique": "The component has good data handling and hierarchy, but inconsistently uses design tokens—some spacing uses hardcoded pixels (24, 16, 8, 4) instead of var(--ggui-spacing-*), and the temperature size uses an unclear '4xl' instead of a semantic token. Polish is limited by lack of hover states on forecast items and no responsive adjustments for mobile screens.",
+        "evalTimeMs": 2558
+      },
+      "estimatedCostUsd": 0.0929915,
+      "timestamp": "2026-03-19T12:34:42.240Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1159,
+        "sourceCodeBytes": 2041,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as e,jsxs as n}from\"react/jsx-runtime\";import{useState as u,useEffect as E}from\"react\";import{Container as N,Card as T,Stack as o,Heading as c,Text as g,Button as f,Divider as y,Progress as R,Box as H}from\"@ggui-ai/design/primitives\";import{Input as b,TextArea as L,RadioGroup as D,Checkbox as I,FormField as S}from\"@ggui-ai/design/components\";function q(m){const[s,v]=u(1),[h,p]=u(!1),[i,l]=u({name:\"\",email:\"\",satisfaction:-1,features:[],comments:\"\"}),[d,k]=u({name:\"\",email:\"\",satisfaction:\"\"});E(()=>{const a=t=>{console.log(\"Agent Data Received:\",t.detail)};return window.addEventListener(\"ggui:agent-data\",a),()=>window.removeEventListener(\"ggui:agent-data\",a)},[]);const x=a=>{let t=!0;const r={name:\"\",email:\"\",satisfaction:\"\"};return a===1?(i.name.trim()||(r.name=\"Name is required\",t=!1),/\\S+@\\S+\\.\\S+/.test(i.email)||(r.email=\"Valid email is required\",t=!1)):a===2&&i.satisfaction===-1&&(r.satisfaction=\"Please select a rating\",t=!1),k(r),t},C=()=>{x(s)&&v(a=>a+1)},F=()=>v(a=>Math.max(1,a-1)),w=()=>{p(!0),m.onSubmit?.(i),setTimeout(()=>p(!1),1e3)};return e(N,{maxWidth:\"sm\",padding:\"var(--ggui-spacing-6)\",children:e(T,{shadow:\"md\",padding:\"var(--ggui-spacing-6)\",radius:\"lg\",children:n(o,{gap:\"var(--ggui-spacing-6)\",children:[n(o,{gap:\"var(--ggui-spacing-2)\",children:[n(g,{variant:\"label\",children:[\"Step \",s,\" of 4\"]}),e(R,{value:s,max:4,variant:\"default\",size:\"md\"})]}),s===1&&n(o,{gap:\"var(--ggui-spacing-4)\",children:[e(c,{level:3,children:\"Your Information\"}),e(S,{label:\"Full Name\",error:d.name,required:!0,children:e(b,{label:\"Full Name\",value:i.name,onChange:a=>l(t=>({...t,name:a}))})}),e(S,{label:\"Email\",error:d.email,required:!0,children:e(b,{label:\"Email\",type:\"email\",value:i.email,onChange:a=>l(t=>({...t,email:a}))})})]}),s===2&&n(o,{gap:\"var(--ggui-spacing-4)\",children:[e(c,{level:3,children:\"Satisfaction Rating\"}),e(D,{label:\"How satisfied are you?\",value:i.satisfaction===-1?\"\":i.satisfaction.toString(),onChange:a=>l(t=>({...t,satisfaction:parseInt(a)})),options:m.satisfactionLabels.map((a,t)=>({value:t.toString(),label:a})),error:d.satisfaction})]}),s===3&&n(o,{gap:\"var(--ggui-spacing-4)\",children:[e(c,{level:3,children:\"Interests\"}),m.featureOptions.map(a=>e(I,{label:a,checked:i.features.includes(a),onChange:t=>l(r=>({...r,features:t?[...r.features,a]:r.features.filter(B=>B!==a)}))},a))]}),s===4&&n(o,{gap:\"var(--ggui-spacing-4)\",children:[e(c,{level:3,children:\"Final Review\"}),e(H,{background:\"var(--ggui-color-surfaceVariant)\",padding:\"var(--ggui-spacing-4)\",borderRadius:\"var(--ggui-shape-radius-md)\",children:n(o,{gap:\"var(--ggui-spacing-1)\",children:[n(g,{variant:\"label\",children:[\"Name: \",i.name]}),n(g,{variant:\"label\",children:[\"Email: \",i.email]}),n(g,{variant:\"label\",children:[\"Rating: \",m.satisfactionLabels[i.satisfaction]??\"N/A\"]}),n(g,{variant:\"label\",children:[\"Features: \",i.features.length>0?i.features.join(\", \"):\"None\"]})]})}),e(y,{}),e(L,{label:\"Comments\",value:i.comments,onChange:a=>l(t=>({...t,comments:a})),maxLength:500,showCount:!0})]}),n(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2)\",justify:\"between\",children:[e(f,{variant:\"secondary\",onClick:F,disabled:s===1,children:\"Back\"}),s<4?e(f,{onClick:C,children:\"Next\"}):e(f,{onClick:w,loading:h,children:\"Submit Survey\"})]})]})})})}export{q as default};\n",
+        "sourceCode": "import React, { useState, useEffect } from 'react';\nimport {\n  Container,\n  Card,\n  Stack,\n  Heading,\n  Text,\n  Button,\n  Divider,\n  Progress,\n  Box\n} from '@ggui-ai/design/primitives';\nimport {\n  Input,\n  TextArea,\n  RadioGroup,\n  Checkbox,\n  FormField\n} from '@ggui-ai/design/components';\n\ninterface Props {\n  featureOptions: string[];\n  satisfactionLabels: string[];\n  onSubmit?: (data: {\n    name: string;\n    email: string;\n    satisfaction: number;\n    features: string[];\n    comments: string;\n  }) => void;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const [step, setStep] = useState(1);\n  const [isSubmitting, setIsSubmitting] = useState(false);\n  const [formData, setFormData] = useState({\n    name: '',\n    email: '',\n    satisfaction: -1,\n    features: [] as string[],\n    comments: ''\n  });\n  const [errors, setErrors] = useState({ name: '', email: '', satisfaction: '' });\n\n  useEffect(() => {\n    const handleAgentData = (event: any) => {\n      console.log('Agent Data Received:', event.detail);\n    };\n    window.addEventListener('ggui:agent-data', handleAgentData);\n    return () => window.removeEventListener('ggui:agent-data', handleAgentData);\n  }, []);\n\n  const validateStep = (current: number): boolean => {\n    let isValid = true;\n    const newErrors = { name: '', email: '', satisfaction: '' };\n    \n    if (current === 1) {\n      if (!formData.name.trim()) {\n        newErrors.name = 'Name is required';\n        isValid = false;\n      }\n      if (!/\\S+@\\S+\\.\\S+/.test(formData.email)) {\n        newErrors.email = 'Valid email is required';\n        isValid = false;\n      }\n    } else if (current === 2) {\n      if (formData.satisfaction === -1) {\n        newErrors.satisfaction = 'Please select a rating';\n        isValid = false;\n      }\n    }\n    setErrors(newErrors);\n    return isValid;\n  };\n\n  const handleNext = () => { if (validateStep(step)) setStep((s) => s + 1); };\n  const handleBack = () => setStep((s) => Math.max(1, s - 1));\n\n  const submitForm = () => {\n    setIsSubmitting(true);\n    props.onSubmit?.(formData);\n    setTimeout(() => setIsSubmitting(false), 1000);\n  };\n\n  return (\n    <Container maxWidth=\"sm\" padding=\"var(--ggui-spacing-6)\">\n      <Card shadow=\"md\" padding=\"var(--ggui-spacing-6)\" radius=\"lg\">\n        <Stack gap=\"var(--ggui-spacing-6)\">\n          <Stack gap=\"var(--ggui-spacing-2)\">\n            <Text variant=\"label\">Step {step} of 4</Text>\n            <Progress value={step} max={4} variant=\"default\" size=\"md\" />\n          </Stack>\n\n          {step === 1 && (\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={3}>Your Information</Heading>\n              <FormField label=\"Full Name\" error={errors.name} required>\n                <Input label=\"Full Name\" value={formData.name} onChange={(v) => setFormData(p => ({ ...p, name: v }))} />\n              </FormField>\n              <FormField label=\"Email\" error={errors.email} required>\n                <Input label=\"Email\" type=\"email\" value={formData.email} onChange={(v) => setFormData(p => ({ ...p, email: v }))} />\n              </FormField>\n            </Stack>\n          )}\n\n          {step === 2 && (\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={3}>Satisfaction Rating</Heading>\n              <RadioGroup\n                label=\"How satisfied are you?\"\n                value={formData.satisfaction === -1 ? '' : formData.satisfaction.toString()}\n                onChange={(v) => setFormData(p => ({ ...p, satisfaction: parseInt(v) }))}\n                options={props.satisfactionLabels.map((l, i) => ({ value: i.toString(), label: l }))}\n                error={errors.satisfaction}\n              />\n            </Stack>\n          )}\n\n          {step === 3 && (\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={3}>Interests</Heading>\n              {props.featureOptions.map(f => (\n                <Checkbox\n                  key={f}\n                  label={f}\n                  checked={formData.features.includes(f)}\n                  onChange={(checked) => setFormData(p => ({ \n                    ...p, \n                    features: checked ? [...p.features, f] : p.features.filter(x => x !== f) \n                  }))}\n                />\n              ))}\n            </Stack>\n          )}\n\n          {step === 4 && (\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={3}>Final Review</Heading>\n              <Box background=\"var(--ggui-color-surfaceVariant)\" padding=\"var(--ggui-spacing-4)\" borderRadius=\"var(--ggui-shape-radius-md)\">\n                <Stack gap=\"var(--ggui-spacing-1)\">\n                  <Text variant=\"label\">Name: {formData.name}</Text>\n                  <Text variant=\"label\">Email: {formData.email}</Text>\n                  <Text variant=\"label\">Rating: {props.satisfactionLabels[formData.satisfaction] ?? 'N/A'}</Text>\n                  <Text variant=\"label\">Features: {formData.features.length > 0 ? formData.features.join(', ') : 'None'}</Text>\n                </Stack>\n              </Box>\n              <Divider />\n              <TextArea\n                label=\"Comments\"\n                value={formData.comments}\n                onChange={(v) => setFormData(p => ({ ...p, comments: v }))}\n                maxLength={500}\n                showCount\n              />\n            </Stack>\n          )}\n\n          <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-2)\" justify=\"between\">\n            <Button variant=\"secondary\" onClick={handleBack} disabled={step === 1}>Back</Button>\n            {step < 4 ? (\n              <Button onClick={handleNext}>Next</Button>\n            ) : (\n              <Button onClick={submitForm} loading={isSubmitting}>Submit Survey</Button>\n            )}\n          </Stack>\n        </Stack>\n      </Card>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 1405496,
+          "output": 25673,
+          "total": 1431169
+        },
+        "generationTimeMs": 123731,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 86,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The requirement for a '4-step' survey appears to be interpreted as 4 stages of content, but the final review is integrated into the 4th step rather than a dedicated review screen, and the step indicator doesn't account for the final review clearly.",
+                "fix": "Consider making the final review step 5, or clarifying the step progression if the design intent was strictly 4 steps."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The RadioGroup component lacks semantic fieldset/legend grouping context in the current implementation, and the progress bar doesn't explicitly communicate current status to screen readers (e.g., aria-valuetext).",
+                "fix": "Add aria-labels to the navigation container and ensure the progress component supports aria-valuenow attributes."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The Next button is enabled at all times, relying on validation after the click, rather than providing immediate visual feedback or disabling the button when invalid.",
+                "fix": "Add an 'isValid' derived state to conditionally disable the 'Next' button based on current form field values."
+              }
+            ],
+            "critique": "The component is well-structured, modular, and adheres to design system patterns effectively. The logic for multi-step state management is clean and readable. To reach 'production-ready', focus on enhancing accessibility labels and improving the feedback loop for button states to prevent unnecessary form submission attempts.",
+            "inputTokens": 2426,
+            "outputTokens": 421
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 81.6,
+        "finalScore": 81.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 78,
+          "designTokens": 85,
+          "hierarchy": 82,
+          "polish": 75,
+          "dataPresentation": 88,
+          "completeness": 88,
+          "visualPolish": 80,
+          "interactivity": 75,
+          "accessibility": 80,
+          "codeQuality": 85
+        },
+        "critique": "The component demonstrates solid use of design tokens and proper data handling from props, with a logical multi-step flow and good visual hierarchy. However, it lacks interactive polish (no input focus states, transitions between steps, or visual feedback), and the review step's display could better highlight the data summary with stronger visual distinction.",
+        "evalTimeMs": 2314
+      },
+      "estimatedCostUsd": 0.7797670000000001,
+      "timestamp": "2026-03-19T12:36:28.122Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3297,
+        "sourceCodeBytes": 5845,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- All initial tasks come from props as an array with column assignment\n- Call props.onTaskUpdate when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as e,jsxs as n}from\"react/jsx-runtime\";import{useState as v,useEffect as f}from\"react\";import{Container as S,Stack as r,Card as h,Text as u,Heading as w,Box as z,Divider as B,Button as k,Input as A,Select as y,Badge as D,Avatar as H}from\"@ggui-ai/design/primitives\";function P(g){const[c,l]=v(g.tasks??[]),[x,p]=v(null),[d,m]=v({title:\"\",priority:\"medium\"});f(()=>{l(g.tasks??[])},[g.tasks]),f(()=>{const i=o=>{const a=o.detail;a&&a.id&&l(t=>[...t,a])};return window.addEventListener(\"ggui:agent-data\",i),()=>window.removeEventListener(\"ggui:agent-data\",i)},[]);const T=(i,o,a)=>{if(i===\"create\"){const t={...a,id:Date.now().toString(),column:x};l(s=>[...s,t]),g.onTaskUpdate?.({action:i,taskId:t.id,data:t}),p(null),m({title:\"\",priority:\"medium\"})}else l(t=>t.map(s=>s.id===o?{...s,...a}:s)),g.onTaskUpdate?.({action:i,taskId:o,data:a})},C=i=>{switch(i){case\"high\":return\"error\";case\"medium\":return\"warning\";default:return\"info\"}},b=c.filter(i=>i.column===\"done\").length;return e(S,{maxWidth:\"full\",padding:\"var(--ggui-spacing-6, 24px)\",children:n(r,{gap:\"var(--ggui-spacing-4, 16px)\",children:[e(h,{padding:\"var(--ggui-spacing-6, 24px)\",border:!0,radius:\"md\",children:n(r,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:[e(w,{level:2,children:\"Project Task Board\"}),n(r,{direction:\"horizontal\",gap:\"var(--ggui-spacing-4, 16px)\",children:[n(u,{variant:\"label\",children:[\"Total Tasks: \",c.length]}),n(u,{variant:\"label\",color:\"var(--ggui-color-success, #16a34a)\",children:[\"Completed: \",b]})]})]})}),e(r,{direction:\"horizontal\",gap:\"var(--ggui-spacing-4, 16px)\",align:\"start\",wrap:!0,children:(g.columns??[]).map(i=>{const o=c.filter(a=>a.column===i.id);return e(z,{background:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",padding:\"var(--ggui-spacing-4, 16px)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\",style:{minWidth:\"300px\",flex:1},children:n(r,{gap:\"var(--ggui-spacing-4, 16px)\",children:[n(w,{level:4,children:[i.name,\" (\",o.length,\")\"]}),o.map(a=>e(h,{padding:\"var(--ggui-spacing-4, 16px)\",shadow:\"sm\",border:!0,radius:\"md\",children:n(r,{gap:\"var(--ggui-spacing-2, 8px)\",children:[e(u,{variant:\"label\",children:a.title}),n(r,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2, 8px)\",align:\"center\",children:[e(D,{variant:C(a.priority),size:\"sm\",children:a.priority??\"medium\"}),a.assignee&&e(H,{name:a.assignee,size:24}),a.dueDate&&e(u,{variant:\"caption\",children:a.dueDate})]}),e(B,{margin:\"var(--ggui-spacing-2, 8px)\"}),e(y,{label:\"Move to\",value:a.column??\"\",onChange:t=>T(\"move\",a.id,{column:t}),options:(g.columns??[]).map(t=>({value:t.id,label:t.name}))})]})},a.id)),x===i.id?e(h,{padding:\"var(--ggui-spacing-4, 16px)\",border:!0,shadow:\"md\",children:n(r,{gap:\"var(--ggui-spacing-2, 8px)\",children:[e(A,{label:\"Title\",value:d.title,onChange:a=>m({...d,title:a})}),e(y,{label:\"Priority\",value:d.priority,onChange:a=>m({...d,priority:a}),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),n(r,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2, 8px)\",children:[e(k,{size:\"sm\",onClick:()=>T(\"create\",\"\",d),children:\"Save\"}),e(k,{size:\"sm\",variant:\"ghost\",onClick:()=>p(null),children:\"Cancel\"})]})]})}):e(k,{variant:\"outline\",size:\"sm\",onClick:()=>p(i.id),children:\"+ Add Task\"})]})},i.id)})})]})})}export{P as default};\n",
+        "sourceCode": "import React, { useState, useEffect } from 'react';\nimport {\n  Container,\n  Stack,\n  Card,\n  Text,\n  Heading,\n  Box,\n  Divider,\n  Button,\n  Input,\n  Select,\n  Badge,\n  Avatar,\n  Spacer,\n} from '@ggui-ai/design/primitives';\n\ninterface Props {\n  tasks: Array<{\n    id?: string;\n    title?: string;\n    priority?: 'low' | 'medium' | 'high';\n    assignee?: string;\n    column?: string;\n    dueDate?: string;\n  }>;\n  columns: Array<{ id?: string; name?: string }>;\n  onTaskUpdate?: (payload: {\n    action: 'move' | 'edit' | 'create';\n    taskId: string;\n    data: any;\n  }) => void;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const [tasks, setTasks] = useState(props.tasks ?? []);\n  const [addingToColumn, setAddingToColumn] = useState<string | null>(null);\n  const [newTask, setNewTask] = useState({\n    title: '',\n    priority: 'medium' as 'low' | 'medium' | 'high',\n  });\n\n  useEffect(() => {\n    setTasks(props.tasks ?? []);\n  }, [props.tasks]);\n\n  useEffect(() => {\n    const handleAgentData = (event: any) => {\n      const detail = event.detail;\n      if (detail && detail.id) {\n        setTasks((prev) => [...prev, detail]);\n      }\n    };\n    window.addEventListener('ggui:agent-data', handleAgentData);\n    return () => window.removeEventListener('ggui:agent-data', handleAgentData);\n  }, []);\n\n  const handleTaskUpdate = (\n    action: 'move' | 'edit' | 'create',\n    taskId: string,\n    data: any\n  ) => {\n    if (action === 'create') {\n      const createdTask = {\n        ...data,\n        id: Date.now().toString(),\n        column: addingToColumn,\n      };\n      setTasks((prev) => [...prev, createdTask]);\n      props.onTaskUpdate?.({ action, taskId: createdTask.id, data: createdTask });\n      setAddingToColumn(null);\n      setNewTask({ title: '', priority: 'medium' });\n    } else {\n      setTasks((prev) =>\n        prev.map((t) => (t.id === taskId ? { ...t, ...data } : t))\n      );\n      props.onTaskUpdate?.({ action, taskId, data });\n    }\n  };\n\n  const getBadgeVariant = (priority?: string) => {\n    switch (priority) {\n      case 'high':\n        return 'error';\n      case 'medium':\n        return 'warning';\n      default:\n        return 'info';\n    }\n  };\n\n  const completedCount = tasks.filter((t) => t.column === 'done').length;\n\n  return (\n    <Container maxWidth=\"full\" padding=\"var(--ggui-spacing-6, 24px)\">\n      <Stack gap=\"var(--ggui-spacing-4, 16px)\">\n        <Card padding=\"var(--ggui-spacing-6, 24px)\" border={true} radius=\"md\">\n          <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n            <Heading level={2}>Project Task Board</Heading>\n            <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4, 16px)\">\n              <Text variant=\"label\">Total Tasks: {tasks.length}</Text>\n              <Text variant=\"label\" color=\"var(--ggui-color-success, #16a34a)\">\n                Completed: {completedCount}\n              </Text>\n            </Stack>\n          </Stack>\n        </Card>\n\n        <Stack\n          direction=\"horizontal\"\n          gap=\"var(--ggui-spacing-4, 16px)\"\n          align=\"start\"\n          wrap={true}\n        >\n          {(props.columns ?? []).map((col) => {\n            const colTasks = tasks.filter((t) => t.column === col.id);\n            return (\n              <Box\n                key={col.id}\n                background=\"var(--ggui-color-surfaceVariant, #f4f4f5)\"\n                padding=\"var(--ggui-spacing-4, 16px)\"\n                borderRadius=\"var(--ggui-shape-radius-md, 8px)\"\n                style={{ minWidth: '300px', flex: 1 }}\n              >\n                <Stack gap=\"var(--ggui-spacing-4, 16px)\">\n                  <Heading level={4}>\n                    {col.name} ({colTasks.length})\n                  </Heading>\n                  {colTasks.map((task) => (\n                    <Card\n                      key={task.id}\n                      padding=\"var(--ggui-spacing-4, 16px)\"\n                      shadow=\"sm\"\n                      border={true}\n                      radius=\"md\"\n                    >\n                      <Stack gap=\"var(--ggui-spacing-2, 8px)\">\n                        <Text variant=\"label\">{task.title}</Text>\n                        <Stack\n                          direction=\"horizontal\"\n                          gap=\"var(--ggui-spacing-2, 8px)\"\n                          align=\"center\"\n                        >\n                          <Badge\n                            variant={getBadgeVariant(task.priority)}\n                            size=\"sm\"\n                          >\n                            {task.priority ?? 'medium'}\n                          </Badge>\n                          {task.assignee && (\n                            <Avatar name={task.assignee} size={24} />\n                          )}\n                          {task.dueDate && (\n                            <Text variant=\"caption\">{task.dueDate}</Text>\n                          )}\n                        </Stack>\n                        <Divider margin=\"var(--ggui-spacing-2, 8px)\" />\n                        <Select\n                          label=\"Move to\"\n                          value={task.column ?? ''}\n                          onChange={(val) =>\n                            handleTaskUpdate('move', task.id!, { column: val })\n                          }\n                          options={(props.columns ?? []).map((c) => ({\n                            value: c.id!,\n                            label: c.name!,\n                          }))}\n                        />\n                      </Stack>\n                    </Card>\n                  ))}\n                  {addingToColumn === col.id ? (\n                    <Card\n                      padding=\"var(--ggui-spacing-4, 16px)\"\n                      border={true}\n                      shadow=\"md\"\n                    >\n                      <Stack gap=\"var(--ggui-spacing-2, 8px)\">\n                        <Input\n                          label=\"Title\"\n                          value={newTask.title}\n                          onChange={(val) =>\n                            setNewTask({ ...newTask, title: val })\n                          }\n                        />\n                        <Select\n                          label=\"Priority\"\n                          value={newTask.priority}\n                          onChange={(val) =>\n                            setNewTask({\n                              ...newTask,\n                              priority: val as 'low' | 'medium' | 'high',\n                            })\n                          }\n                          options={[\n                            { value: 'low', label: 'Low' },\n                            { value: 'medium', label: 'Medium' },\n                            { value: 'high', label: 'High' },\n                          ]}\n                        />\n                        <Stack\n                          direction=\"horizontal\"\n                          gap=\"var(--ggui-spacing-2, 8px)\"\n                        >\n                          <Button\n                            size=\"sm\"\n                            onClick={() =>\n                              handleTaskUpdate('create', '', newTask)\n                            }\n                          >\n                            Save\n                          </Button>\n                          <Button\n                            size=\"sm\"\n                            variant=\"ghost\"\n                            onClick={() => setAddingToColumn(null)}\n                          >\n                            Cancel\n                          </Button>\n                        </Stack>\n                      </Stack>\n                    </Card>\n                  ) : (\n                    <Button\n                      variant=\"outline\"\n                      size=\"sm\"\n                      onClick={() => setAddingToColumn(col.id!)}\n                    >\n                      + Add Task\n                    </Button>\n                  )}\n                </Stack>\n              </Box>\n            );\n          })}\n        </Stack>\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 1407964,
+          "output": 26346,
+          "total": 1434310
+        },
+        "generationTimeMs": 129888,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 79,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 75,
+              "accessibility": 70,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "major",
+                "description": "Task title is not editable as requested (neither double-click nor edit button implemented).",
+                "fix": "Add an edit mode state for individual tasks or a dedicated edit button that triggers an inline input field."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The Move 'Select' component is placed inside every card, taking up significant vertical space and cluttering the card UI.",
+                "fix": "Use a popover or a cleaner icon-based trigger for moving tasks to keep the card design concise."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The 'Add Task' buttons and form inputs lack distinct aria-labels or semantic descriptions.",
+                "fix": "Add aria-labels to buttons and ensure input fields are properly associated with labels using htmlFor/id attributes."
+              },
+              {
+                "dimension": "codeQuality",
+                "severity": "minor",
+                "description": "The component uses non-null assertion operators (!) on props like col.id, which may cause runtime errors if the input data is malformed.",
+                "fix": "Add optional chaining or default values to ensure the code handles undefined properties gracefully."
+              }
+            ],
+            "critique": "The component is well-structured and follows the requested design system patterns effectively. It covers the primary board logic well, but it misses the specific 'edit' requirement and could benefit from a more refined card UI for moving tasks. Overall, it's a solid foundation that is very close to production-ready.",
+            "inputTokens": 2772,
+            "outputTokens": 435
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 70,
+        "finalScore": 70,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 70,
+          "polish": 60,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 73,
+          "interactivity": 60,
+          "accessibility": 73,
+          "codeQuality": 65
+        },
+        "critique": "The component implements a functional Kanban board with proper flex layout and responsive structure, but has inconsistent design token usage (mixing var() with fallback values using commas instead of proper CSS syntax) and missing interactive polish like hover states, focus indicators, and transitions. Data presentation is solid, though the component lacks visual feedback for edit operations and state changes.",
+        "evalTimeMs": 6783
+      },
+      "estimatedCostUsd": 0.78302,
+      "timestamp": "2026-03-19T12:36:38.749Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3306,
+        "sourceCodeBytes": 8116,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "CSS Grid periodic table with category coloring, search, and detail panel",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements.\n\nLayout:\n- CSS Grid: 18 columns. Place each element using gridRow and gridColumn from its data.\n- Each cell: symbol (large, centered), atomic number (small, top-left)\n- Color-code by category using design tokens (e.g., noble-gas → one color, halogen → another)\n- Search input at top — filters by name or symbol (case-insensitive)\n- Click an element → detail panel below grid shows: name, symbol, atomicNumber, atomicWeight, category\n- Legend showing each category with its color\n\nAll element data comes from props.elements. Use design system CSS variables.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "elements": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "atomicNumber": {
+                        "type": "number"
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "atomicWeight": {
+                        "type": "number"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "row": {
+                        "type": "number"
+                      },
+                      "col": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Full periodic table element data",
+                "example": [
+                  {
+                    "atomicNumber": 1,
+                    "symbol": "H",
+                    "name": "Hydrogen",
+                    "atomicWeight": 1.008,
+                    "category": "nonmetal",
+                    "row": 1,
+                    "col": 1
+                  },
+                  {
+                    "atomicNumber": 2,
+                    "symbol": "He",
+                    "name": "Helium",
+                    "atomicWeight": 4.003,
+                    "category": "noble-gas",
+                    "row": 1,
+                    "col": 18
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 4,
+              "symbol": "Be",
+              "name": "Beryllium",
+              "atomicWeight": 9.012,
+              "category": "alkaline-earth",
+              "row": 2,
+              "col": 2
+            },
+            {
+              "atomicNumber": 5,
+              "symbol": "B",
+              "name": "Boron",
+              "atomicWeight": 10.81,
+              "category": "metalloid",
+              "row": 2,
+              "col": 13
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 7,
+              "symbol": "N",
+              "name": "Nitrogen",
+              "atomicWeight": 14.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 15
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 9,
+              "symbol": "F",
+              "name": "Fluorine",
+              "atomicWeight": 19,
+              "category": "halogen",
+              "row": 2,
+              "col": 17
+            },
+            {
+              "atomicNumber": 10,
+              "symbol": "Ne",
+              "name": "Neon",
+              "atomicWeight": 20.18,
+              "category": "noble-gas",
+              "row": 2,
+              "col": 18
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 12,
+              "symbol": "Mg",
+              "name": "Magnesium",
+              "atomicWeight": 24.31,
+              "category": "alkaline-earth",
+              "row": 3,
+              "col": 2
+            },
+            {
+              "atomicNumber": 13,
+              "symbol": "Al",
+              "name": "Aluminium",
+              "atomicWeight": 26.98,
+              "category": "post-transition-metal",
+              "row": 3,
+              "col": 13
+            },
+            {
+              "atomicNumber": 14,
+              "symbol": "Si",
+              "name": "Silicon",
+              "atomicWeight": 28.09,
+              "category": "metalloid",
+              "row": 3,
+              "col": 14
+            },
+            {
+              "atomicNumber": 15,
+              "symbol": "P",
+              "name": "Phosphorus",
+              "atomicWeight": 30.97,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 15
+            },
+            {
+              "atomicNumber": 16,
+              "symbol": "S",
+              "name": "Sulfur",
+              "atomicWeight": 32.07,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 16
+            },
+            {
+              "atomicNumber": 17,
+              "symbol": "Cl",
+              "name": "Chlorine",
+              "atomicWeight": 35.45,
+              "category": "halogen",
+              "row": 3,
+              "col": 17
+            },
+            {
+              "atomicNumber": 18,
+              "symbol": "Ar",
+              "name": "Argon",
+              "atomicWeight": 39.95,
+              "category": "noble-gas",
+              "row": 3,
+              "col": 18
+            },
+            {
+              "atomicNumber": 19,
+              "symbol": "K",
+              "name": "Potassium",
+              "atomicWeight": 39.1,
+              "category": "alkali-metal",
+              "row": 4,
+              "col": 1
+            },
+            {
+              "atomicNumber": 20,
+              "symbol": "Ca",
+              "name": "Calcium",
+              "atomicWeight": 40.08,
+              "category": "alkaline-earth",
+              "row": 4,
+              "col": 2
+            },
+            {
+              "atomicNumber": 21,
+              "symbol": "Sc",
+              "name": "Scandium",
+              "atomicWeight": 44.96,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 3
+            },
+            {
+              "atomicNumber": 22,
+              "symbol": "Ti",
+              "name": "Titanium",
+              "atomicWeight": 47.87,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 4
+            },
+            {
+              "atomicNumber": 23,
+              "symbol": "V",
+              "name": "Vanadium",
+              "atomicWeight": 50.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 5
+            },
+            {
+              "atomicNumber": 24,
+              "symbol": "Cr",
+              "name": "Chromium",
+              "atomicWeight": 52,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 6
+            },
+            {
+              "atomicNumber": 25,
+              "symbol": "Mn",
+              "name": "Manganese",
+              "atomicWeight": 54.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 7
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 27,
+              "symbol": "Co",
+              "name": "Cobalt",
+              "atomicWeight": 58.93,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 9
+            },
+            {
+              "atomicNumber": 28,
+              "symbol": "Ni",
+              "name": "Nickel",
+              "atomicWeight": 58.69,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 10
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 30,
+              "symbol": "Zn",
+              "name": "Zinc",
+              "atomicWeight": 65.38,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 12
+            },
+            {
+              "atomicNumber": 31,
+              "symbol": "Ga",
+              "name": "Gallium",
+              "atomicWeight": 69.72,
+              "category": "post-transition-metal",
+              "row": 4,
+              "col": 13
+            },
+            {
+              "atomicNumber": 32,
+              "symbol": "Ge",
+              "name": "Germanium",
+              "atomicWeight": 72.63,
+              "category": "metalloid",
+              "row": 4,
+              "col": 14
+            },
+            {
+              "atomicNumber": 33,
+              "symbol": "As",
+              "name": "Arsenic",
+              "atomicWeight": 74.92,
+              "category": "metalloid",
+              "row": 4,
+              "col": 15
+            },
+            {
+              "atomicNumber": 34,
+              "symbol": "Se",
+              "name": "Selenium",
+              "atomicWeight": 78.97,
+              "category": "nonmetal",
+              "row": 4,
+              "col": 16
+            },
+            {
+              "atomicNumber": 35,
+              "symbol": "Br",
+              "name": "Bromine",
+              "atomicWeight": 79.9,
+              "category": "halogen",
+              "row": 4,
+              "col": 17
+            },
+            {
+              "atomicNumber": 36,
+              "symbol": "Kr",
+              "name": "Krypton",
+              "atomicWeight": 83.8,
+              "category": "noble-gas",
+              "row": 4,
+              "col": 18
+            },
+            {
+              "atomicNumber": 37,
+              "symbol": "Rb",
+              "name": "Rubidium",
+              "atomicWeight": 85.47,
+              "category": "alkali-metal",
+              "row": 5,
+              "col": 1
+            },
+            {
+              "atomicNumber": 38,
+              "symbol": "Sr",
+              "name": "Strontium",
+              "atomicWeight": 87.62,
+              "category": "alkaline-earth",
+              "row": 5,
+              "col": 2
+            },
+            {
+              "atomicNumber": 39,
+              "symbol": "Y",
+              "name": "Yttrium",
+              "atomicWeight": 88.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 3
+            },
+            {
+              "atomicNumber": 40,
+              "symbol": "Zr",
+              "name": "Zirconium",
+              "atomicWeight": 91.22,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 4
+            },
+            {
+              "atomicNumber": 41,
+              "symbol": "Nb",
+              "name": "Niobium",
+              "atomicWeight": 92.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 5
+            },
+            {
+              "atomicNumber": 42,
+              "symbol": "Mo",
+              "name": "Molybdenum",
+              "atomicWeight": 95.95,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 6
+            },
+            {
+              "atomicNumber": 43,
+              "symbol": "Tc",
+              "name": "Technetium",
+              "atomicWeight": 98,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 7
+            },
+            {
+              "atomicNumber": 44,
+              "symbol": "Ru",
+              "name": "Ruthenium",
+              "atomicWeight": 101.07,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 8
+            },
+            {
+              "atomicNumber": 45,
+              "symbol": "Rh",
+              "name": "Rhodium",
+              "atomicWeight": 102.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 9
+            },
+            {
+              "atomicNumber": 46,
+              "symbol": "Pd",
+              "name": "Palladium",
+              "atomicWeight": 106.42,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 10
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 48,
+              "symbol": "Cd",
+              "name": "Cadmium",
+              "atomicWeight": 112.41,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 12
+            },
+            {
+              "atomicNumber": 49,
+              "symbol": "In",
+              "name": "Indium",
+              "atomicWeight": 114.82,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 13
+            },
+            {
+              "atomicNumber": 50,
+              "symbol": "Sn",
+              "name": "Tin",
+              "atomicWeight": 118.71,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 14
+            },
+            {
+              "atomicNumber": 51,
+              "symbol": "Sb",
+              "name": "Antimony",
+              "atomicWeight": 121.76,
+              "category": "metalloid",
+              "row": 5,
+              "col": 15
+            },
+            {
+              "atomicNumber": 52,
+              "symbol": "Te",
+              "name": "Tellurium",
+              "atomicWeight": 127.6,
+              "category": "metalloid",
+              "row": 5,
+              "col": 16
+            },
+            {
+              "atomicNumber": 53,
+              "symbol": "I",
+              "name": "Iodine",
+              "atomicWeight": 126.9,
+              "category": "halogen",
+              "row": 5,
+              "col": 17
+            },
+            {
+              "atomicNumber": 54,
+              "symbol": "Xe",
+              "name": "Xenon",
+              "atomicWeight": 131.29,
+              "category": "noble-gas",
+              "row": 5,
+              "col": 18
+            },
+            {
+              "atomicNumber": 55,
+              "symbol": "Cs",
+              "name": "Cesium",
+              "atomicWeight": 132.91,
+              "category": "alkali-metal",
+              "row": 6,
+              "col": 1
+            },
+            {
+              "atomicNumber": 56,
+              "symbol": "Ba",
+              "name": "Barium",
+              "atomicWeight": 137.33,
+              "category": "alkaline-earth",
+              "row": 6,
+              "col": 2
+            },
+            {
+              "atomicNumber": 72,
+              "symbol": "Hf",
+              "name": "Hafnium",
+              "atomicWeight": 178.49,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 4
+            },
+            {
+              "atomicNumber": 73,
+              "symbol": "Ta",
+              "name": "Tantalum",
+              "atomicWeight": 180.95,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 5
+            },
+            {
+              "atomicNumber": 74,
+              "symbol": "W",
+              "name": "Tungsten",
+              "atomicWeight": 183.84,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 6
+            },
+            {
+              "atomicNumber": 75,
+              "symbol": "Re",
+              "name": "Rhenium",
+              "atomicWeight": 186.21,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 7
+            },
+            {
+              "atomicNumber": 76,
+              "symbol": "Os",
+              "name": "Osmium",
+              "atomicWeight": 190.23,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 8
+            },
+            {
+              "atomicNumber": 77,
+              "symbol": "Ir",
+              "name": "Iridium",
+              "atomicWeight": 192.22,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 9
+            },
+            {
+              "atomicNumber": 78,
+              "symbol": "Pt",
+              "name": "Platinum",
+              "atomicWeight": 195.08,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 10
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 11
+            },
+            {
+              "atomicNumber": 80,
+              "symbol": "Hg",
+              "name": "Mercury",
+              "atomicWeight": 200.59,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 12
+            },
+            {
+              "atomicNumber": 81,
+              "symbol": "Tl",
+              "name": "Thallium",
+              "atomicWeight": 204.38,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 13
+            },
+            {
+              "atomicNumber": 82,
+              "symbol": "Pb",
+              "name": "Lead",
+              "atomicWeight": 207.2,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 14
+            },
+            {
+              "atomicNumber": 83,
+              "symbol": "Bi",
+              "name": "Bismuth",
+              "atomicWeight": 208.98,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 15
+            },
+            {
+              "atomicNumber": 84,
+              "symbol": "Po",
+              "name": "Polonium",
+              "atomicWeight": 209,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 16
+            },
+            {
+              "atomicNumber": 85,
+              "symbol": "At",
+              "name": "Astatine",
+              "atomicWeight": 210,
+              "category": "halogen",
+              "row": 6,
+              "col": 17
+            },
+            {
+              "atomicNumber": 86,
+              "symbol": "Rn",
+              "name": "Radon",
+              "atomicWeight": 222,
+              "category": "noble-gas",
+              "row": 6,
+              "col": 18
+            },
+            {
+              "atomicNumber": 87,
+              "symbol": "Fr",
+              "name": "Francium",
+              "atomicWeight": 223,
+              "category": "alkali-metal",
+              "row": 7,
+              "col": 1
+            },
+            {
+              "atomicNumber": 88,
+              "symbol": "Ra",
+              "name": "Radium",
+              "atomicWeight": 226,
+              "category": "alkaline-earth",
+              "row": 7,
+              "col": 2
+            },
+            {
+              "atomicNumber": 104,
+              "symbol": "Rf",
+              "name": "Rutherfordium",
+              "atomicWeight": 267,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 4
+            },
+            {
+              "atomicNumber": 105,
+              "symbol": "Db",
+              "name": "Dubnium",
+              "atomicWeight": 268,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 5
+            },
+            {
+              "atomicNumber": 106,
+              "symbol": "Sg",
+              "name": "Seaborgium",
+              "atomicWeight": 269,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 6
+            },
+            {
+              "atomicNumber": 107,
+              "symbol": "Bh",
+              "name": "Bohrium",
+              "atomicWeight": 270,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 7
+            },
+            {
+              "atomicNumber": 108,
+              "symbol": "Hs",
+              "name": "Hassium",
+              "atomicWeight": 277,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 8
+            },
+            {
+              "atomicNumber": 109,
+              "symbol": "Mt",
+              "name": "Meitnerium",
+              "atomicWeight": 278,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 9
+            },
+            {
+              "atomicNumber": 110,
+              "symbol": "Ds",
+              "name": "Darmstadtium",
+              "atomicWeight": 281,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 10
+            },
+            {
+              "atomicNumber": 111,
+              "symbol": "Rg",
+              "name": "Roentgenium",
+              "atomicWeight": 282,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 11
+            },
+            {
+              "atomicNumber": 112,
+              "symbol": "Cn",
+              "name": "Copernicium",
+              "atomicWeight": 285,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 12
+            },
+            {
+              "atomicNumber": 113,
+              "symbol": "Nh",
+              "name": "Nihonium",
+              "atomicWeight": 286,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 13
+            },
+            {
+              "atomicNumber": 114,
+              "symbol": "Fl",
+              "name": "Flerovium",
+              "atomicWeight": 289,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 14
+            },
+            {
+              "atomicNumber": 115,
+              "symbol": "Mc",
+              "name": "Moscovium",
+              "atomicWeight": 290,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 15
+            },
+            {
+              "atomicNumber": 116,
+              "symbol": "Lv",
+              "name": "Livermorium",
+              "atomicWeight": 293,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 16
+            },
+            {
+              "atomicNumber": 117,
+              "symbol": "Ts",
+              "name": "Tennessine",
+              "atomicWeight": 294,
+              "category": "halogen",
+              "row": 7,
+              "col": 17
+            },
+            {
+              "atomicNumber": 118,
+              "symbol": "Og",
+              "name": "Oganesson",
+              "atomicWeight": 294,
+              "category": "noble-gas",
+              "row": 7,
+              "col": 18
+            },
+            {
+              "atomicNumber": 57,
+              "symbol": "La",
+              "name": "Lanthanum",
+              "atomicWeight": 138.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 3
+            },
+            {
+              "atomicNumber": 58,
+              "symbol": "Ce",
+              "name": "Cerium",
+              "atomicWeight": 140.12,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 4
+            },
+            {
+              "atomicNumber": 59,
+              "symbol": "Pr",
+              "name": "Praseodymium",
+              "atomicWeight": 140.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 5
+            },
+            {
+              "atomicNumber": 60,
+              "symbol": "Nd",
+              "name": "Neodymium",
+              "atomicWeight": 144.24,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 6
+            },
+            {
+              "atomicNumber": 61,
+              "symbol": "Pm",
+              "name": "Promethium",
+              "atomicWeight": 145,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 7
+            },
+            {
+              "atomicNumber": 62,
+              "symbol": "Sm",
+              "name": "Samarium",
+              "atomicWeight": 150.36,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 8
+            },
+            {
+              "atomicNumber": 63,
+              "symbol": "Eu",
+              "name": "Europium",
+              "atomicWeight": 151.96,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 9
+            },
+            {
+              "atomicNumber": 64,
+              "symbol": "Gd",
+              "name": "Gadolinium",
+              "atomicWeight": 157.25,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 10
+            },
+            {
+              "atomicNumber": 65,
+              "symbol": "Tb",
+              "name": "Terbium",
+              "atomicWeight": 158.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 11
+            },
+            {
+              "atomicNumber": 66,
+              "symbol": "Dy",
+              "name": "Dysprosium",
+              "atomicWeight": 162.5,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 12
+            },
+            {
+              "atomicNumber": 67,
+              "symbol": "Ho",
+              "name": "Holmium",
+              "atomicWeight": 164.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 13
+            },
+            {
+              "atomicNumber": 68,
+              "symbol": "Er",
+              "name": "Erbium",
+              "atomicWeight": 167.26,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 14
+            },
+            {
+              "atomicNumber": 69,
+              "symbol": "Tm",
+              "name": "Thulium",
+              "atomicWeight": 168.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 15
+            },
+            {
+              "atomicNumber": 70,
+              "symbol": "Yb",
+              "name": "Ytterbium",
+              "atomicWeight": 173.05,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 16
+            },
+            {
+              "atomicNumber": 71,
+              "symbol": "Lu",
+              "name": "Lutetium",
+              "atomicWeight": 174.97,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 17
+            },
+            {
+              "atomicNumber": 89,
+              "symbol": "Ac",
+              "name": "Actinium",
+              "atomicWeight": 227,
+              "category": "actinide",
+              "row": 9,
+              "col": 3
+            },
+            {
+              "atomicNumber": 90,
+              "symbol": "Th",
+              "name": "Thorium",
+              "atomicWeight": 232.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 4
+            },
+            {
+              "atomicNumber": 91,
+              "symbol": "Pa",
+              "name": "Protactinium",
+              "atomicWeight": 231.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 5
+            },
+            {
+              "atomicNumber": 92,
+              "symbol": "U",
+              "name": "Uranium",
+              "atomicWeight": 238.03,
+              "category": "actinide",
+              "row": 9,
+              "col": 6
+            },
+            {
+              "atomicNumber": 93,
+              "symbol": "Np",
+              "name": "Neptunium",
+              "atomicWeight": 237,
+              "category": "actinide",
+              "row": 9,
+              "col": 7
+            },
+            {
+              "atomicNumber": 94,
+              "symbol": "Pu",
+              "name": "Plutonium",
+              "atomicWeight": 244,
+              "category": "actinide",
+              "row": 9,
+              "col": 8
+            },
+            {
+              "atomicNumber": 95,
+              "symbol": "Am",
+              "name": "Americium",
+              "atomicWeight": 243,
+              "category": "actinide",
+              "row": 9,
+              "col": 9
+            },
+            {
+              "atomicNumber": 96,
+              "symbol": "Cm",
+              "name": "Curium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 10
+            },
+            {
+              "atomicNumber": 97,
+              "symbol": "Bk",
+              "name": "Berkelium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 11
+            },
+            {
+              "atomicNumber": 98,
+              "symbol": "Cf",
+              "name": "Californium",
+              "atomicWeight": 251,
+              "category": "actinide",
+              "row": 9,
+              "col": 12
+            },
+            {
+              "atomicNumber": 99,
+              "symbol": "Es",
+              "name": "Einsteinium",
+              "atomicWeight": 252,
+              "category": "actinide",
+              "row": 9,
+              "col": 13
+            },
+            {
+              "atomicNumber": 100,
+              "symbol": "Fm",
+              "name": "Fermium",
+              "atomicWeight": 257,
+              "category": "actinide",
+              "row": 9,
+              "col": 14
+            },
+            {
+              "atomicNumber": 101,
+              "symbol": "Md",
+              "name": "Mendelevium",
+              "atomicWeight": 258,
+              "category": "actinide",
+              "row": 9,
+              "col": 15
+            },
+            {
+              "atomicNumber": 102,
+              "symbol": "No",
+              "name": "Nobelium",
+              "atomicWeight": 259,
+              "category": "actinide",
+              "row": 9,
+              "col": 16
+            },
+            {
+              "atomicNumber": 103,
+              "symbol": "Lr",
+              "name": "Lawrencium",
+              "atomicWeight": 266,
+              "category": "actinide",
+              "row": 9,
+              "col": 17
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as a,jsxs as r}from\"react/jsx-runtime\";import{useState as l,useMemo as v}from\"react\";import{Container as y,Stack as o,Box as s,Card as x,Text as t,Heading as m,Input as h}from\"@ggui-ai/design/primitives\";const u={\"noble-gas\":\"var(--ggui-color-info-100, #cffafe)\",halogen:\"var(--ggui-color-warning-100, #fef3c7)\",nonmetal:\"var(--ggui-color-success-100, #dcfce7)\",\"alkali-metal\":\"var(--ggui-color-primary-100, #e0f2fe)\"};function C(g){const[n,p]=l(\"\"),[i,d]=l(null),f=v(()=>{const e=n.toLowerCase();return g.elements.map(c=>({...c,isDimmed:n.length>0&&!(c.name?.toLowerCase().includes(e)||c.symbol?.toLowerCase().includes(e))}))},[g.elements,n]),b=Array.from(new Set(g.elements.map(e=>e.category||\"other\")));return a(y,{maxWidth:\"full\",padding:\"var(--ggui-spacing-8, 32px)\",children:r(o,{gap:\"var(--ggui-spacing-8, 32px)\",children:[r(o,{gap:\"var(--ggui-spacing-4, 16px)\",children:[a(m,{level:1,children:\"Periodic Table\"}),a(h,{label:\"Search Elements\",placeholder:\"Search by name or symbol...\",value:n,onChange:e=>p(e),type:\"search\"})]}),a(s,{style:{display:\"grid\",gridTemplateColumns:\"repeat(18, 1fr)\",gap:\"var(--ggui-spacing-1, 4px)\",role:\"grid\"},children:f.map(e=>r(s,{style:{gridColumnStart:e.col,gridRowStart:e.row,background:e.isDimmed?\"var(--ggui-color-surfaceVariant, #f4f4f5)\":u[e.category||\"\"]??\"var(--ggui-color-surfaceVariant, #f4f4f5)\",opacity:e.isDimmed?.3:1,cursor:\"pointer\",border:\"1px solid var(--ggui-color-outlineVariant, #e4e4e7)\",borderRadius:\"var(--ggui-shape-radius-sm, 4px)\",padding:\"var(--ggui-spacing-2, 8px)\",display:\"flex\",flexDirection:\"column\",justifyContent:\"space-between\",aspectRatio:\"1\",transition:\"opacity 200ms ease\"},onClick:()=>d(e),role:\"gridcell\",\"aria-label\":`${e.name}, atomic number ${e.atomicNumber}`,children:[a(t,{variant:\"caption\",children:e.atomicNumber}),a(t,{variant:\"bodyLarge\",weight:\"bold\",align:\"center\",children:e.symbol})]},e.atomicNumber))}),a(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-4, 16px)\",wrap:!0,children:b.map(e=>r(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2, 8px)\",align:\"center\",children:[a(s,{style:{width:\"var(--ggui-spacing-4, 16px)\",height:\"var(--ggui-spacing-4, 16px)\",background:u[e]??\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-sm, 4px)\"}}),a(t,{variant:\"caption\",children:e})]},e))}),i&&a(x,{padding:\"var(--ggui-spacing-6, 24px)\",radius:\"lg\",children:r(o,{gap:\"var(--ggui-spacing-2, 8px)\",children:[r(m,{level:3,children:[i.name,\" (\",i.symbol,\")\"]}),r(t,{variant:\"body\",children:[\"Atomic Number: \",i.atomicNumber]}),r(t,{variant:\"body\",children:[\"Atomic Weight: \",i.atomicWeight]}),r(t,{variant:\"label\",children:[\"Category: \",i.category]})]})})]})})}export{C as default};\n",
+        "sourceCode": "import React, { useState, useMemo } from 'react';\nimport { Container, Stack, Box, Card, Text, Heading, Input } from '@ggui-ai/design/primitives';\n\ninterface ElementData {\n  atomicNumber?: number;\n  symbol?: string;\n  name?: string;\n  atomicWeight?: number;\n  category?: string;\n  row?: number;\n  col?: number;\n}\n\ninterface Props {\n  elements: ElementData[];\n}\n\nconst CATEGORY_COLORS: Record<string, string> = {\n  'noble-gas': 'var(--ggui-color-info-100, #cffafe)',\n  'halogen': 'var(--ggui-color-warning-100, #fef3c7)',\n  'nonmetal': 'var(--ggui-color-success-100, #dcfce7)',\n  'alkali-metal': 'var(--ggui-color-primary-100, #e0f2fe)',\n};\n\nexport default function GeneratedComponent(props: Props) {\n  const [searchQuery, setSearchQuery] = useState('');\n  const [selectedElement, setSelectedElement] = useState<ElementData | null>(null);\n\n  const filteredElements = useMemo(() => {\n    const q = searchQuery.toLowerCase();\n    return props.elements.map((el) => ({\n      ...el,\n      isDimmed:\n        searchQuery.length > 0 &&\n        !(\n          el.name?.toLowerCase().includes(q) ||\n          el.symbol?.toLowerCase().includes(q)\n        ),\n    }));\n  }, [props.elements, searchQuery]);\n\n  const categories = Array.from(new Set(props.elements.map((e) => e.category || 'other')));\n\n  return (\n    <Container maxWidth=\"full\" padding=\"var(--ggui-spacing-8, 32px)\">\n      <Stack gap=\"var(--ggui-spacing-8, 32px)\">\n        <Stack gap=\"var(--ggui-spacing-4, 16px)\">\n          <Heading level={1}>Periodic Table</Heading>\n          <Input\n            label=\"Search Elements\"\n            placeholder=\"Search by name or symbol...\"\n            value={searchQuery}\n            onChange={(val) => setSearchQuery(val)}\n            type=\"search\"\n          />\n        </Stack>\n\n        <Box\n          style={{\n            display: 'grid',\n            gridTemplateColumns: 'repeat(18, 1fr)',\n            gap: 'var(--ggui-spacing-1, 4px)',\n            role: 'grid',\n          }}\n        >\n          {filteredElements.map((el) => (\n            <Box\n              key={el.atomicNumber}\n              style={{\n                gridColumnStart: el.col,\n                gridRowStart: el.row,\n                background: el.isDimmed\n                  ? 'var(--ggui-color-surfaceVariant, #f4f4f5)'\n                  : (CATEGORY_COLORS[el.category || ''] ?? 'var(--ggui-color-surfaceVariant, #f4f4f5)'),\n                opacity: el.isDimmed ? 0.3 : 1,\n                cursor: 'pointer',\n                border: '1px solid var(--ggui-color-outlineVariant, #e4e4e7)',\n                borderRadius: 'var(--ggui-shape-radius-sm, 4px)',\n                padding: 'var(--ggui-spacing-2, 8px)',\n                display: 'flex',\n                flexDirection: 'column',\n                justifyContent: 'space-between',\n                aspectRatio: '1',\n                transition: 'opacity 200ms ease',\n              }}\n              onClick={() => setSelectedElement(el)}\n              role=\"gridcell\"\n              aria-label={`${el.name}, atomic number ${el.atomicNumber}`}\n            >\n              <Text variant=\"caption\">{el.atomicNumber}</Text>\n              <Text variant=\"bodyLarge\" weight=\"bold\" align=\"center\">{el.symbol}</Text>\n            </Box>\n          ))}\n        </Box>\n\n        <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4, 16px)\" wrap>\n          {categories.map((cat) => (\n            <Stack key={cat} direction=\"horizontal\" gap=\"var(--ggui-spacing-2, 8px)\" align=\"center\">\n              <Box\n                style={{\n                  width: 'var(--ggui-spacing-4, 16px)',\n                  height: 'var(--ggui-spacing-4, 16px)',\n                  background: CATEGORY_COLORS[cat] ?? 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n                  borderRadius: 'var(--ggui-shape-radius-sm, 4px)',\n                }}\n              />\n              <Text variant=\"caption\">{cat}</Text>\n            </Stack>\n          ))}\n        </Stack>\n\n        {selectedElement && (\n          <Card padding=\"var(--ggui-spacing-6, 24px)\" radius=\"lg\">\n            <Stack gap=\"var(--ggui-spacing-2, 8px)\">\n              <Heading level={3}>\n                {selectedElement.name} ({selectedElement.symbol})\n              </Heading>\n              <Text variant=\"body\">Atomic Number: {selectedElement.atomicNumber}</Text>\n              <Text variant=\"body\">Atomic Weight: {selectedElement.atomicWeight}</Text>\n              <Text variant=\"label\">Category: {selectedElement.category}</Text>\n            </Stack>\n          </Card>\n        )}\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 1399909,
+          "output": 20212,
+          "total": 1420121
+        },
+        "generationTimeMs": 104692,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "Grid cells are focusable only by mouse click, making them inaccessible to keyboard users.",
+                "fix": "Add tabindex='0' to grid cells and handle 'keydown' events for 'Enter' and 'Space' keys to trigger selection."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The CSS grid layout relies on absolute row/column placement which might break if the grid container isn't wide enough, and it lacks responsive behavior for mobile devices.",
+                "fix": "Add a overflow-x auto wrapper for the grid to prevent layout breakage on smaller screens."
+              },
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "Missing hover states on the grid cells to visually indicate interactivity.",
+                "fix": "Add a pseudo-class or state change to trigger a subtle scale or shadow effect on hover."
+              }
+            ],
+            "critique": "The component is well-structured and implements the functional requirements accurately using the design system primitives. To reach production quality, it needs keyboard navigation support and improved responsiveness for the periodic table grid layout.",
+            "inputTokens": 2071,
+            "outputTokens": 336
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 77.6,
+        "finalScore": 77.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 78,
+          "designTokens": 82,
+          "hierarchy": 75,
+          "polish": 68,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 77,
+          "interactivity": 68,
+          "accessibility": 77,
+          "codeQuality": 82
+        },
+        "critique": "The component successfully implements a grid-based periodic table with proper use of design tokens and data rendering. Main weaknesses: the 18-column grid may cause overflow on smaller screens (no responsive breakpoints), and interactive polish is minimal—missing hover/focus states, click feedback, and a close button for the detail panel. The fallback hex values in CATEGORY_COLORS and default inline spacing are minor issues but acceptable given the design token usage.",
+        "evalTimeMs": 2932
+      },
+      "estimatedCostUsd": 0.7605905000000001,
+      "timestamp": "2026-03-19T12:36:29.868Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2710,
+        "sourceCodeBytes": 4556,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"halogen\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "chat-interface",
+        "name": "Chat Interface",
+        "description": "Chat UI with message list, input area, and send callback",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a chat interface component. Layout:\n\nHeader:\n- Chat title from props\n- Participant count badge\n\nMessage list:\n- Scrollable area showing all messages from props\n- Each message shows: sender name, message text, formatted timestamp\n- Messages from the current user (where sender matches props.currentUser) align right with primary color background\n- Messages from others align left with surfaceVariant background\n- Group consecutive messages from same sender\n\nInput area at the bottom:\n- Text input field for composing messages\n- Send button (disabled when input is empty)\n- Call props.onSend with { text, timestamp: new Date().toISOString() } on click or Enter\n\nRequirements:\n- All data from props — no hardcoded messages\n- Use design system CSS variables for all colors and spacing\n- Auto-scroll to bottom of message list on mount",
+        "contract": {
+          "interaction": "converse",
+          "props": {
+            "properties": {
+              "title": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Chat window title",
+                "example": "Team Chat"
+              },
+              "currentUser": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Current user name (for right-aligning own messages)",
+                "example": "You"
+              },
+              "participantCount": {
+                "schema": {
+                  "type": "number"
+                },
+                "description": "Number of participants",
+                "example": 3
+              },
+              "messages": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sender": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "timestamp": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of messages with sender name, text, and ISO timestamp",
+                "example": [
+                  {
+                    "sender": "Alice",
+                    "text": "Hey team, the design review is at 3pm",
+                    "timestamp": "2026-03-15T14:00:00Z"
+                  },
+                  {
+                    "sender": "You",
+                    "text": "Perfect, see you both there",
+                    "timestamp": "2026-03-15T14:03:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "sendMessage": {
+                "label": "Send Message",
+                "description": "Called when user sends a message. Payload: { text, timestamp }",
+                "example": {
+                  "text": "Sounds good!",
+                  "timestamp": "2026-03-15T14:10:00Z"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "title": "Team Chat",
+          "currentUser": "You",
+          "participantCount": 3,
+          "messages": [
+            {
+              "sender": "Alice",
+              "text": "Hey team, the design review is at 3pm",
+              "timestamp": "2026-03-15T14:00:00Z"
+            },
+            {
+              "sender": "Bob",
+              "text": "Got it, I will prepare the mockups",
+              "timestamp": "2026-03-15T14:02:00Z"
+            },
+            {
+              "sender": "You",
+              "text": "Perfect, see you both there",
+              "timestamp": "2026-03-15T14:03:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "Also, can someone review the color palette?",
+              "timestamp": "2026-03-15T14:05:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "I pushed the latest changes to the design branch",
+              "timestamp": "2026-03-15T14:05:30Z"
+            },
+            {
+              "sender": "You",
+              "text": "I will take a look after the meeting",
+              "timestamp": "2026-03-15T14:06:00Z"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as t,jsxs as r}from\"react/jsx-runtime\";import{useState as v,useEffect as m,useRef as S}from\"react\";import{Card as h,Stack as s,Box as y,Text as l,Heading as b,Input as k,Button as T,Badge as B}from\"@ggui-ai/design/primitives\";function C(i){const[o,c]=v(\"\"),[d,u]=v(i.messages),p=S(null);m(()=>{p.current?.scrollIntoView({behavior:\"smooth\"})},[d]),m(()=>{const e=a=>{const n=a.detail;n?.text&&u(g=>[...g,n])};return window.addEventListener(\"ggui:agent-data\",e),()=>window.removeEventListener(\"ggui:agent-data\",e)},[]);const f=()=>{if(!o.trim())return;const e=new Date().toISOString(),a={text:o,timestamp:e};i.onSendMessage?.(a),u(n=>[...n,{sender:i.currentUser,...a}]),c(\"\")},x=e=>{e.key===\"Enter\"&&f()};return r(h,{shadow:\"md\",radius:\"lg\",style:{width:\"100%\",height:\"600px\",display:\"flex\",flexDirection:\"column\",overflow:\"hidden\"},children:[r(s,{direction:\"horizontal\",align:\"center\",justify:\"between\",style:{padding:\"var(--ggui-spacing-4)\",borderBottom:\"1px solid var(--ggui-color-outlineVariant)\"},children:[t(b,{level:3,children:i.title}),i.participantCount!==void 0&&r(B,{variant:\"secondary\",pill:!0,children:[i.participantCount,\" participants\"]})]}),t(y,{style:{flex:1,overflowY:\"auto\",padding:\"var(--ggui-spacing-4)\"},children:r(s,{gap:16,\"aria-live\":\"polite\",children:[d.map((e,a)=>{const n=e.sender===i.currentUser,g=d[a-1],w=a===0||g.sender!==e.sender;return r(s,{align:n?\"end\":\"start\",gap:4,children:[w&&!n&&t(l,{variant:\"caption\",style:{paddingLeft:\"var(--ggui-spacing-1)\"},children:e.sender??\"Unknown\"}),t(y,{paddingX:12,paddingY:8,borderRadius:12,background:n?\"var(--ggui-color-primary-600)\":\"var(--ggui-color-surfaceVariant)\",children:t(l,{color:n?\"#ffffff\":\"var(--ggui-color-onSurface)\",children:e.text})}),e.timestamp&&t(l,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(e.timestamp).toLocaleTimeString([],{hour:\"2-digit\",minute:\"2-digit\"})})]},a)}),t(\"div\",{ref:p})]})}),r(s,{direction:\"horizontal\",gap:8,align:\"center\",style:{padding:\"var(--ggui-spacing-4)\",borderTop:\"1px solid var(--ggui-color-outlineVariant)\"},children:[t(\"div\",{style:{flex:1},children:t(k,{label:\"Message\",placeholder:\"Type a message...\",value:o,onChange:e=>c(e),onKeyDown:x})}),t(T,{variant:\"primary\",onClick:f,disabled:!o.trim(),\"aria-label\":\"Send message\",children:\"Send\"})]})]})}export{C as default};\n",
+        "sourceCode": "import React, { useState, useEffect, useRef } from 'react';\nimport { Card, Stack, Box, Text, Heading, Input, Button, Badge, Divider } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  /** Chat window title */\n  title: string;\n  /** Current user name (for right-aligning own messages) */\n  currentUser: string;\n  /** Number of participants */\n  participantCount?: number;\n  /** Array of messages with sender name, text, and ISO timestamp */\n  messages: Array<{ sender?: string; text?: string; timestamp?: string }>;\n  /** Callback for sending messages */\n  onSendMessage?: (payload: { text: string; timestamp: string }) => void;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const [inputText, setInputText] = useState('');\n  const [messages, setMessages] = useState(props.messages);\n  const scrollEndRef = useRef<HTMLDivElement>(null);\n\n  useEffect(() => {\n    scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });\n  }, [messages]);\n\n  useEffect(() => {\n    const handleIncoming = (event: any) => {\n      const data = event.detail;\n      if (data?.text) {\n        setMessages((prev) => [...prev, data]);\n      }\n    };\n    window.addEventListener('ggui:agent-data', handleIncoming);\n    return () => window.removeEventListener('ggui:agent-data', handleIncoming);\n  }, []);\n\n  const handleSend = () => {\n    if (!inputText.trim()) return;\n    const timestamp = new Date().toISOString();\n    const payload = { text: inputText, timestamp };\n    \n    props.onSendMessage?.(payload);\n    setMessages((prev) => [...prev, { sender: props.currentUser, ...payload }]);\n    setInputText('');\n  };\n\n  const handleKeyDown = (e: React.KeyboardEvent) => {\n    if (e.key === 'Enter') handleSend();\n  };\n\n  return (\n    <Card \n      shadow=\"md\" \n      radius=\"lg\"\n      style={{ \n        width: '100%', \n        height: '600px', \n        display: 'flex', \n        flexDirection: 'column', \n        overflow: 'hidden' \n      }}\n    >\n      <Stack \n        direction=\"horizontal\" \n        align=\"center\" \n        justify=\"between\"\n        style={{ \n          padding: 'var(--ggui-spacing-4)', \n          borderBottom: '1px solid var(--ggui-color-outlineVariant)' \n        }}\n      >\n        <Heading level={3}>{props.title}</Heading>\n        {props.participantCount !== undefined && (\n          <Badge variant=\"secondary\" pill={true}>{props.participantCount} participants</Badge>\n        )}\n      </Stack>\n\n      <Box style={{ flex: 1, overflowY: 'auto', padding: 'var(--ggui-spacing-4)' }}>\n        <Stack gap={16} aria-live=\"polite\">\n          {messages.map((msg, idx) => {\n            const isOwn = msg.sender === props.currentUser;\n            const prevMsg = messages[idx - 1];\n            const showSender = idx === 0 || prevMsg.sender !== msg.sender;\n\n            return (\n              <Stack key={idx} align={isOwn ? 'end' : 'start'} gap={4}>\n                {showSender && !isOwn && (\n                  <Text variant=\"caption\" style={{ paddingLeft: 'var(--ggui-spacing-1)' }}>\n                    {msg.sender ?? 'Unknown'}\n                  </Text>\n                )}\n                <Box\n                  paddingX={12}\n                  paddingY={8}\n                  borderRadius={12}\n                  background={isOwn ? 'var(--ggui-color-primary-600)' : 'var(--ggui-color-surfaceVariant)'}\n                >\n                  <Text color={isOwn ? '#ffffff' : 'var(--ggui-color-onSurface)'}>\n                    {msg.text}\n                  </Text>\n                </Box>\n                {msg.timestamp && (\n                  <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n                  </Text>\n                )}\n              </Stack>\n            );\n          })}\n          <div ref={scrollEndRef} />\n        </Stack>\n      </Box>\n\n      <Stack \n        direction=\"horizontal\" \n        gap={8} \n        align=\"center\"\n        style={{ \n          padding: 'var(--ggui-spacing-4)', \n          borderTop: '1px solid var(--ggui-color-outlineVariant)' \n        }}\n      >\n        <div style={{ flex: 1 }}>\n          <Input\n            label=\"Message\"\n            placeholder=\"Type a message...\"\n            value={inputText}\n            onChange={(val) => setInputText(val)}\n            onKeyDown={handleKeyDown}\n          />\n        </div>\n        <Button \n          variant=\"primary\" \n          onClick={handleSend} \n          disabled={!inputText.trim()}\n          aria-label=\"Send message\"\n        >\n          Send\n        </Button>\n      </Stack>\n    </Card>\n  );\n}",
+        "tokens": {
+          "input": 1398653,
+          "output": 19289,
+          "total": 1417942
+        },
+        "generationTimeMs": 102004,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 80,
+              "codeQuality": 85
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The message bubbles lack clear visual differentiation (e.g., tail indicators or specific corner radius logic) for grouped messages.",
+                "fix": "Implement custom border-radius logic: round all corners for single messages, and adjust corners based on position in a sequence (e.g., top-left/bottom-left for start/end of a cluster)."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The Input component uses a label property but it is not explicitly linked via HTML ID for screen readers if the primitive implementation doesn't auto-generate IDs.",
+                "fix": "Ensure the Input primitive correctly associates the label with the input field, or hide the label visually if not intended to be shown."
+              },
+              {
+                "dimension": "codeQuality",
+                "severity": "major",
+                "description": "Component listens to global 'ggui:agent-data' events, which is likely outside the scope of this component and causes side effects.",
+                "fix": "Remove the window event listener logic as it was not requested and introduces potential memory leaks and unpredictable state updates."
+              }
+            ],
+            "critique": "The component is highly functional and cleanly implemented, effectively handling message grouping and auto-scrolling logic. The use of design tokens is excellent; further refinement of message bubble styling and removing the undocumented event listener would bring this to production quality.",
+            "inputTokens": 2056,
+            "outputTokens": 391
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 75,
+        "finalScore": 75,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 80,
+          "polish": 70,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 70,
+          "accessibility": 78,
+          "codeQuality": 65
+        },
+        "critique": "The component has a solid overall structure with proper flex layout and scrolling behavior, but has inconsistent design token usage with hardcoded pixel values (12, 8, 16, 4) for spacing and a hardcoded white color (#ffffff) that breaks the design system. The polish could be improved with visual feedback during message sending and better disabled state styling.",
+        "evalTimeMs": 2547
+      },
+      "estimatedCostUsd": 0.7571935,
+      "timestamp": "2026-03-19T12:38:12.678Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2338,
+        "sourceCodeBytes": 4629,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "prompt": "Build a stock ticker dashboard that displays stock prices. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp from props\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n\nAll stock data comes from props. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              },
+              "lastUpdated": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "ISO timestamp of last price update",
+                "example": "2026-03-15T16:30:00Z"
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ],
+          "lastUpdated": "2026-03-15T16:30:00Z"
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as e,jsxs as n}from\"react/jsx-runtime\";import{useState as l,useEffect as S}from\"react\";import{Container as f,Stack as o,Box as x,Card as b,Text as i,Heading as m,Icon as k}from\"@ggui-ai/design/primitives\";import{CardGrid as w}from\"@ggui-ai/design/compositions\";function C(s){const[p,u]=l(s.stocks),[r,v]=l(s.lastUpdated);return S(()=>{const a=c=>{const t=c.detail??{};t.stocks&&u(t.stocks),t.lastUpdated&&v(t.lastUpdated)};return window.addEventListener(\"ggui:agent-data\",a),()=>window.removeEventListener(\"ggui:agent-data\",a)},[]),e(f,{maxWidth:\"xl\",padding:24,children:n(o,{gap:24,children:[e(x,{paddingY:16,children:n(o,{gap:8,children:[e(m,{level:1,children:\"Market Watch\"}),e(i,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",\"aria-label\":r?`Last updated at ${r}`:\"Connecting...\",children:r?`Last Updated: ${new Date(r).toLocaleTimeString()}`:\"Connecting...\"})]})}),e(\"div\",{\"aria-live\":\"polite\",children:e(w,{columns:{sm:1,md:3},gap:16,children:p.map((a,c)=>{const t=a.change??0,d=t>=0,g=d?\"var(--ggui-color-success)\":\"var(--ggui-color-error)\",h=d?\"chevron-up\":\"chevron-down\";return e(b,{shadow:\"sm\",radius:\"md\",border:!0,children:n(o,{gap:16,children:[n(o,{gap:4,children:[e(i,{weight:\"bold\",size:\"lg\",children:a.symbol??\"N/A\"}),e(i,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:a.name??\"Unknown\"})]}),n(m,{level:3,children:[\"$\",(a.price??0).toFixed(2)]}),n(o,{direction:\"horizontal\",gap:8,align:\"center\",children:[e(k,{name:h,size:16,color:g}),n(i,{weight:\"medium\",color:g,style:{transition:\"color 200ms ease\"},children:[d?\"\\u25B2\":\"\\u25BC\",\" \",Math.abs(t).toFixed(2),\" (\",a.changePercent?.toFixed(2),\"%)\"]})]})]})},a.symbol??c)})})})]})})}export{C as default};\n",
+        "sourceCode": "import React, { useState, useEffect } from 'react';\nimport { Container, Stack, Box, Card, Text, Heading, Icon } from '@ggui-ai/design/primitives';\nimport { CardGrid } from '@ggui-ai/design/compositions';\n\ninterface Props {\n  /** Array of stocks with symbol, name, price, change, changePercent */\n  stocks: Array<{ \n    symbol?: string; \n    name?: string; \n    price?: number; \n    change?: number; \n    changePercent?: number \n  }>;\n  /** ISO timestamp of last price update */\n  lastUpdated?: string;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const [liveStocks, setLiveStocks] = useState(props.stocks);\n  const [timestamp, setTimestamp] = useState(props.lastUpdated);\n\n  useEffect(() => {\n    const handleAgentData = (event: any) => {\n      const detail = event.detail ?? {};\n      if (detail.stocks) setLiveStocks(detail.stocks);\n      if (detail.lastUpdated) setTimestamp(detail.lastUpdated);\n    };\n\n    window.addEventListener('ggui:agent-data', handleAgentData);\n    return () => window.removeEventListener('ggui:agent-data', handleAgentData);\n  }, []);\n\n  return (\n    <Container maxWidth=\"xl\" padding={24}>\n      <Stack gap={24}>\n        <Box paddingY={16}>\n          <Stack gap={8}>\n            <Heading level={1}>Market Watch</Heading>\n            <Text \n              variant=\"caption\" \n              color=\"var(--ggui-color-onSurfaceVariant)\" \n              aria-label={timestamp ? `Last updated at ${timestamp}` : 'Connecting...'}\n            >\n              {timestamp ? `Last Updated: ${new Date(timestamp).toLocaleTimeString()}` : 'Connecting...'}\n            </Text>\n          </Stack>\n        </Box>\n\n        <div aria-live=\"polite\">\n          <CardGrid columns={{ sm: 1, md: 3 }} gap={16}>\n            {liveStocks.map((stock, index) => {\n              const changeVal = stock.change ?? 0;\n              const isPositive = changeVal >= 0;\n              const color = isPositive \n                ? 'var(--ggui-color-success)' \n                : 'var(--ggui-color-error)';\n              const icon = isPositive ? 'chevron-up' : 'chevron-down';\n\n              return (\n                <Card key={stock.symbol ?? index} shadow=\"sm\" radius=\"md\" border={true}>\n                  <Stack gap={16}>\n                    <Stack gap={4}>\n                      <Text weight=\"bold\" size=\"lg\">{stock.symbol ?? 'N/A'}</Text>\n                      <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                        {stock.name ?? 'Unknown'}\n                      </Text>\n                    </Stack>\n\n                    <Heading level={3}>\n                      ${(stock.price ?? 0).toFixed(2)}\n                    </Heading>\n\n                    <Stack direction=\"horizontal\" gap={8} align=\"center\">\n                      <Icon name={icon} size={16} color={color} />\n                      <Text \n                        weight=\"medium\" \n                        color={color} \n                        style={{ transition: 'color 200ms ease' }}\n                      >\n                        {isPositive ? '▲' : '▼'} {Math.abs(changeVal).toFixed(2)} ({stock.changePercent?.toFixed(2)}%)\n                      </Text>\n                    </Stack>\n                  </Stack>\n                </Card>\n              );\n            })}\n          </CardGrid>\n        </div>\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 1387073,
+          "output": 14126,
+          "total": 1401199
+        },
+        "generationTimeMs": 85577,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 92,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 90,
+              "interactivity": 85,
+              "accessibility": 95,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The card design is functional but lacks specific color-coded borders as requested in the prompt.",
+                "fix": "Apply a conditional style or border property to the Card component based on the isPositive boolean."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "While there is a transition on the text color, the component lacks hover states for the cards to provide better tactile feedback.",
+                "fix": "Add a subtle shadow or lift effect on hover for the Card components."
+              }
+            ],
+            "critique": "The component is well-structured, follows accessibility best practices with proper ARIA labeling, and effectively uses the provided design system primitives. It successfully meets all functional requirements, and the minor improvements in visual polish would make it truly production-ready.",
+            "inputTokens": 1629,
+            "outputTokens": 260
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 79,
+        "finalScore": 79,
+        "issues": [],
+        "dimensions": {
+          "layout": 85,
+          "designTokens": 75,
+          "hierarchy": 80,
+          "polish": 70,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 83,
+          "interactivity": 70,
+          "accessibility": 83,
+          "codeQuality": 75
+        },
+        "critique": "The layout is responsive and well-structured with proper grid usage, but there are design token inconsistencies: padding/gap values use raw pixels (24, 16, 8) instead of ggui spacing tokens, and the component mixes Icon components with hardcoded arrow symbols (▲/▼). The polish is adequate but lacks hover states on cards and could benefit from subtle transitions on the card shadow/border.",
+        "evalTimeMs": 2365
+      },
+      "estimatedCostUsd": 0.7359145,
+      "timestamp": "2026-03-19T12:37:57.812Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1722,
+        "sourceCodeBytes": 3356,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)",
+                "example": {}
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from",
+                "example": ["👤", "🧑‍💻", "🎨", "📊"]
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown",
+                "example": ["Developer", "Designer", "Manager", "Other"]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding",
+                "example": {
+                  "name": "Jane",
+                  "email": "jane@example.com",
+                  "avatar": "🧑‍💻",
+                  "role": "Developer",
+                  "emailNotifications": true,
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as i,jsxs as t}from\"react/jsx-runtime\";import{useState as c,useEffect as C}from\"react\";import{Container as k,Card as x,Stack as r,Heading as m,Text as d,Input as v,Select as P,Toggle as u,RadioGroup as N,Progress as E,Button as f,Divider as T,Box as w}from\"@ggui-ai/design/primitives\";function y(l){const[n,s]=c(1),[e,o]=c({name:l.initialProfile?.name??\"\",email:l.initialProfile?.email??\"\",avatar:l.initialProfile?.avatar??l.avatarOptions[0]??\"\",role:l.initialProfile?.role??\"\",emailNotifications:l.initialProfile?.emailNotifications??!1,theme:l.initialProfile?.theme??\"light\"});C(()=>{const a=g=>{g.detail&&o(S=>({...S,...g.detail}))};return window.addEventListener(\"ggui:agent-data\",a),()=>window.removeEventListener(\"ggui:agent-data\",a)},[]);const h=a=>/\\S+@\\S+\\.\\S+/.test(a),b=()=>n===1?e.name.trim()!==\"\"&&h(e.email):n===2?e.role!==\"\":!0,p=()=>{n<3?s(n+1):l.onComplete(e)};return i(k,{maxWidth:\"sm\",padding:24,children:i(x,{shadow:\"md\",padding:32,radius:\"lg\",border:!0,children:t(r,{gap:16,children:[t(r,{gap:8,children:[t(d,{variant:\"overline\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[\"Step \",n,\" of 3\"]}),i(E,{value:n/3*100,variant:\"default\",size:\"md\"})]}),t(\"div\",{style:{animation:\"ggui-fadeIn 200ms ease-out\",minHeight:\"320px\"},\"aria-live\":\"polite\",children:[n===1&&t(r,{gap:16,children:[i(m,{level:3,children:\"Profile Setup\"}),i(v,{label:\"Name\",value:e.name,onChange:a=>o({...e,name:a}),required:!0}),i(v,{label:\"Email\",type:\"email\",value:e.email,onChange:a=>o({...e,email:a}),required:!0}),i(N,{label:\"Choose your Avatar\",value:e.avatar,onChange:a=>o({...e,avatar:a}),direction:\"horizontal\",options:l.avatarOptions.map(a=>({value:a,label:a}))})]}),n===2&&t(r,{gap:16,children:[i(m,{level:3,children:\"Preferences\"}),i(P,{label:\"Role\",value:e.role,onChange:a=>o({...e,role:a}),options:l.roleOptions.map(a=>({value:a,label:a})),placeholder:\"Select a role\",required:!0}),i(u,{label:\"Email notifications\",checked:e.emailNotifications,onChange:a=>o({...e,emailNotifications:a})}),i(u,{label:\"Dark theme\",checked:e.theme===\"dark\",onChange:a=>o({...e,theme:a?\"dark\":\"light\"})})]}),n===3&&t(r,{gap:16,children:[i(m,{level:3,children:\"Review & Confirm\"}),i(w,{background:\"var(--ggui-color-surfaceVariant)\",padding:16,borderRadius:8,children:t(r,{gap:8,children:[t(d,{variant:\"label\",children:[\"Name: \",e.name]}),t(d,{variant:\"label\",children:[\"Email: \",e.email]}),t(d,{variant:\"label\",children:[\"Role: \",e.role]}),t(d,{variant:\"label\",children:[\"Avatar: \",e.avatar]}),t(d,{variant:\"label\",children:[\"Notifications: \",e.emailNotifications?\"Enabled\":\"Disabled\"]}),t(d,{variant:\"label\",children:[\"Theme: \",e.theme]})]})})]})]}),i(T,{margin:16}),t(r,{direction:\"horizontal\",gap:16,justify:\"between\",children:[i(f,{variant:\"ghost\",disabled:n===1,onClick:()=>s(n-1),children:\"Back\"}),i(f,{disabled:!b(),onClick:p,children:n===3?\"Complete Setup\":\"Next\"})]})]})})})}export{y as default};\n",
+        "sourceCode": "import React, { useState, useEffect } from 'react';\nimport {\n  Container,\n  Card,\n  Stack,\n  Heading,\n  Text,\n  Input,\n  Select,\n  Toggle,\n  RadioGroup,\n  Progress,\n  Button,\n  Divider,\n  Box,\n  Spacer\n} from '@ggui-ai/design/primitives';\n\ninterface Props {\n  initialProfile?: {\n    name?: string;\n    email?: string;\n    avatar?: string;\n    role?: string;\n    emailNotifications?: boolean;\n    theme?: string;\n  };\n  avatarOptions: string[];\n  roleOptions: string[];\n  onComplete: (data: any) => void;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const [step, setStep] = useState(1);\n  const [data, setData] = useState({\n    name: props.initialProfile?.name ?? \"\",\n    email: props.initialProfile?.email ?? \"\",\n    avatar: props.initialProfile?.avatar ?? props.avatarOptions[0] ?? \"\",\n    role: props.initialProfile?.role ?? \"\",\n    emailNotifications: props.initialProfile?.emailNotifications ?? false,\n    theme: props.initialProfile?.theme ?? \"light\",\n  });\n\n  useEffect(() => {\n    const handleAgentData = (e: any) => {\n      if (e.detail) setData((prev) => ({ ...prev, ...e.detail }));\n    };\n    window.addEventListener('ggui:agent-data', handleAgentData as EventListener);\n    return () => window.removeEventListener('ggui:agent-data', handleAgentData as EventListener);\n  }, []);\n\n  const isEmailValid = (email: string) => /\\S+@\\S+\\.\\S+/.test(email);\n\n  const isStepValid = () => {\n    if (step === 1) return data.name.trim() !== \"\" && isEmailValid(data.email);\n    if (step === 2) return data.role !== \"\";\n    return true;\n  };\n\n  const handleNext = () => {\n    if (step < 3) setStep(step + 1);\n    else props.onComplete(data);\n  };\n\n  return (\n    <Container maxWidth=\"sm\" padding={24}>\n      <Card shadow=\"md\" padding={32} radius=\"lg\" border={true}>\n        <Stack gap={16}>\n          <Stack gap={8}>\n            <Text variant=\"overline\" color=\"var(--ggui-color-onSurfaceVariant)\">Step {step} of 3</Text>\n            <Progress value={(step / 3) * 100} variant=\"default\" size=\"md\" />\n          </Stack>\n\n          <div style={{ animation: 'ggui-fadeIn 200ms ease-out', minHeight: '320px' }} aria-live=\"polite\">\n            {step === 1 && (\n              <Stack gap={16}>\n                <Heading level={3}>Profile Setup</Heading>\n                <Input label=\"Name\" value={data.name} onChange={(val) => setData({ ...data, name: val })} required />\n                <Input label=\"Email\" type=\"email\" value={data.email} onChange={(val) => setData({ ...data, email: val })} required />\n                <RadioGroup\n                  label=\"Choose your Avatar\"\n                  value={data.avatar}\n                  onChange={(val) => setData({ ...data, avatar: val })}\n                  direction=\"horizontal\"\n                  options={props.avatarOptions.map((a) => ({ value: a, label: a }))}\n                />\n              </Stack>\n            )}\n\n            {step === 2 && (\n              <Stack gap={16}>\n                <Heading level={3}>Preferences</Heading>\n                <Select\n                  label=\"Role\"\n                  value={data.role}\n                  onChange={(val) => setData({ ...data, role: val })}\n                  options={props.roleOptions.map((r) => ({ value: r, label: r }))}\n                  placeholder=\"Select a role\"\n                  required\n                />\n                <Toggle label=\"Email notifications\" checked={data.emailNotifications} onChange={(val) => setData({ ...data, emailNotifications: val })} />\n                <Toggle label=\"Dark theme\" checked={data.theme === 'dark'} onChange={(val) => setData({ ...data, theme: val ? 'dark' : 'light' })} />\n              </Stack>\n            )}\n\n            {step === 3 && (\n              <Stack gap={16}>\n                <Heading level={3}>Review & Confirm</Heading>\n                <Box background=\"var(--ggui-color-surfaceVariant)\" padding={16} borderRadius={8}>\n                  <Stack gap={8}>\n                    <Text variant=\"label\">Name: {data.name}</Text>\n                    <Text variant=\"label\">Email: {data.email}</Text>\n                    <Text variant=\"label\">Role: {data.role}</Text>\n                    <Text variant=\"label\">Avatar: {data.avatar}</Text>\n                    <Text variant=\"label\">Notifications: {data.emailNotifications ? 'Enabled' : 'Disabled'}</Text>\n                    <Text variant=\"label\">Theme: {data.theme}</Text>\n                  </Stack>\n                </Box>\n              </Stack>\n            )}\n          </div>\n\n          <Divider margin={16} />\n\n          <Stack direction=\"horizontal\" gap={16} justify=\"between\">\n            <Button variant=\"ghost\" disabled={step === 1} onClick={() => setStep(step - 1)}>\n              Back\n            </Button>\n            <Button disabled={!isStepValid()} onClick={handleNext}>\n              {step === 3 ? \"Complete Setup\" : \"Next\"}\n            </Button>\n          </Stack>\n        </Stack>\n      </Card>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 1400160,
+          "output": 21335,
+          "total": 1421495
+        },
+        "generationTimeMs": 112939,
+        "turnsUsed": 15,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Review & Confirm' summary block lacks visual separation between fields, making it slightly hard to scan.",
+                "fix": "Add a divider or increased padding between specific data rows in the summary."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "No visual feedback is provided when email validation fails in Step 1.",
+                "fix": "Add an error message text beneath the Input component if isEmailValid returns false."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The component does not programmatically announce step changes to screen readers.",
+                "fix": "Use a role='status' or aria-atomic attribute on the step container to ensure changes are announced."
+              }
+            ],
+            "critique": "The component is well-structured and implements the business logic cleanly using the provided primitives. It is highly functional and handles state correctly, though it would benefit from more explicit user feedback (error states) for form validation and improved accessibility announcements during step transitions.",
+            "inputTokens": 2178,
+            "outputTokens": 321
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 81.6,
+        "finalScore": 81.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 85,
+          "designTokens": 75,
+          "hierarchy": 82,
+          "polish": 78,
+          "dataPresentation": 88,
+          "completeness": 88,
+          "visualPolish": 84,
+          "interactivity": 78,
+          "accessibility": 84,
+          "codeQuality": 75
+        },
+        "critique": "The component has a solid layout with proper spacing and responsive container, good data handling, and clear hierarchy. However, it uses some hardcoded pixel values (padding={24}, padding={32}, gap={16}, minHeight='320px') instead of consistent ggui spacing tokens, and the inline animation style should use ggui tokens. The polish is good with validation and disabled states, but could benefit from more visual feedback like error messages for invalid email.",
+        "evalTimeMs": 2862
+      },
+      "estimatedCostUsd": 0.764085,
+      "timestamp": "2026-03-19T12:38:34.553Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2905,
+        "sourceCodeBytes": 4950,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-single-component-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 76.82857142857142,
+      "avgTimeMs": 96633.42857142857,
+      "avgCostUsd": 0.6676517142857143,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 85.14285714285714,
+        "visualPolish": 79,
+        "interactivity": 68.71428571428571,
+        "accessibility": 79,
+        "codeQuality": 73.14285714285714
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 73,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 81.6,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 70,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "periodic-table",
+      "commitName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": 77.6,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "chat-interface",
+      "commitName": "Chat Interface",
+      "complexity": "medium",
+      "avgScore": 75,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 79,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "onboarding-wizard",
+      "commitName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": 81.6,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 76.82857142857142,
+        "avgTimeMs": 96633.42857142857,
+        "avgCostUsd": 0.6676517142857143,
+        "successRate": 1
+      }
+    }
+  }
+}

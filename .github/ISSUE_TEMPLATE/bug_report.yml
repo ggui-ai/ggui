@@ -1,0 +1,37 @@
+name: Bug Report
+description: Report a bug in a ggui package
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - "@ggui-ai/protocol"
+        - "@ggui-ai/mcp-server"
+        - "@ggui-ai/server"
+        - "@ggui-ai/react"
+        - "@ggui-ai/react-native"
+        - "@ggui-ai/cli"
+        - "@ggui-ai/wire"
+        - "@ggui-ai/shared"
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      placeholder: Steps to reproduce or minimal code example
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.0.1"

@@ -1,0 +1,18 @@
+{
+  "kind": "gadget",
+  "scope": "@ggui-test",
+  "name": "probe-gadget",
+  "version": "0.0.1",
+  "bundle": "dist/index.js",
+  "visibility": "public",
+  "description": "Test gadget emitting a deterministic postMessage probe on first render.",
+  "exports": [
+    {
+      "hook": "useTestProbe",
+      "description": "Test gadget emitting a deterministic postMessage probe on first render.",
+      "usage": "Mount in an iframe and listen for window.message events of type 'GGUI_TEST_PROBE_FIRED' to confirm the gadget loaded + executed under CSP. Used by the Slice 4.5 marketplace lifecycle e2e.",
+      "example": { "probeValue": "OK" }
+    }
+  ],
+  "tags": ["test", "fixture"]
+}

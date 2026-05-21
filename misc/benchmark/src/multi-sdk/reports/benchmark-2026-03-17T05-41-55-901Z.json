@@ -1,0 +1,233 @@
+{
+  "meta": {
+    "timestamp": "2026-03-17T05:41:55.900Z",
+    "totalDurationMs": 121788,
+    "totalVariants": 1,
+    "totalPrompts": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- All initial tasks come from props as an array with column assignment\n- Call props.onTaskUpdate when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate"
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]"
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }"
+              }
+            }
+          }
+        },
+        "sampleProps": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as i,jsxs as o}from\"react/jsx-runtime\";import{useState as y,useCallback as T}from\"react\";import{Container as S,Card as b,Stack as w,Row as C,Text as n,Select as k,Button as x,Icon as E,Badge as B,Divider as D}from\"@ggui-ai/design/primitives\";const A=[{id:\"1\",title:\"Design landing page\",priority:\"high\",assignee:\"JD\",column:\"todo\",dueDate:\"2024-01-15\"},{id:\"2\",title:\"Set up API endpoints\",priority:\"high\",assignee:\"AB\",column:\"in-progress\",dueDate:\"2024-01-12\"},{id:\"3\",title:\"Write documentation\",priority:\"medium\",assignee:\"CD\",column:\"done\",dueDate:\"2024-01-10\"},{id:\"4\",title:\"Fix login bug\",priority:\"high\",assignee:\"EF\",column:\"todo\"},{id:\"5\",title:\"Database optimization\",priority:\"medium\",assignee:\"GH\",column:\"in-progress\"}],z=[{id:\"todo\",name:\"To Do\"},{id:\"in-progress\",name:\"In Progress\"},{id:\"done\",name:\"Done\"}],R=t=>t===\"high\"?\"error\":t===\"medium\"?\"warning\":\"info\",I=t=>t?new Date(t).toLocaleDateString(\"en-US\",{month:\"short\",day:\"numeric\"}):\"\",P=()=>{const t=Date.now();return\"task-\"+String(t)};function M({task:t,columns:d,onEdit:l,onMove:p}){const[c,g]=y(!1),[m,u]=y(t.title||\"\"),s=()=>{m.trim()&&(l({...t,title:m}),g(!1))},v=e=>{e.key===\"Enter\"?s():e.key===\"Escape\"&&g(!1)},a=t.assignee||\"\";return i(b,{padding:12,shadow:\"sm\",border:!0,style:{marginBottom:\"var(--ggui-spacing-2, 8px)\"},children:o(w,{direction:\"vertical\",gap:8,children:[c?o(\"div\",{children:[i(n,{variant:\"label\",style:{display:\"block\",marginBottom:\"var(--ggui-spacing-2, 8px)\"},children:\"Task Title\"}),i(\"input\",{type:\"text\",value:m,onChange:e=>u(e.currentTarget.value),onKeyDown:v,placeholder:\"Title\",autoFocus:!0,style:{width:\"100%\",padding:\"var(--ggui-spacing-2, 8px)\",border:\"1px solid var(--ggui-color-outline, #d4d4d8)\",borderRadius:\"var(--ggui-shape-radius-sm, 4px)\",fontSize:\"var(--ggui-font-size-sm, 14px)\",fontFamily:\"inherit\"}})]}):o(C,{justify:\"between\",align:\"start\",gap:4,children:[i(n,{weight:\"medium\",style:{flex:1,cursor:\"pointer\"},onDoubleClick:()=>g(!0),children:t.title||\"Untitled\"}),i(x,{variant:\"ghost\",size:\"xs\",onClick:()=>g(!0),children:\"Edit\"})]}),o(C,{gap:6,wrap:!0,children:[i(B,{variant:R(t.priority),size:\"sm\",pill:!0,children:(t.priority||\"low\").charAt(0).toUpperCase()+(t.priority||\"low\").slice(1)}),a&&i(\"div\",{style:{display:\"inline-flex\",alignItems:\"center\",justifyContent:\"center\",width:\"20px\",height:\"20px\",borderRadius:\"50%\",backgroundColor:\"var(--ggui-color-primary-500, #0ea5e9)\",color:\"white\",fontSize:\"10px\",fontWeight:\"bold\"},title:\"Assigned to \"+a,children:a}),t.dueDate&&i(n,{variant:\"caption\",children:I(t.dueDate)})]}),i(k,{label:\"Move\",value:t.column||\"todo\",onChange:e=>p(t.id||\"\",e),options:d.map(e=>({value:e.id||\"\",label:\"\\u2192 \"+(e.name||\"Unknown\")}))}),c&&o(C,{gap:4,children:[i(x,{variant:\"primary\",size:\"xs\",onClick:s,children:\"Save\"}),i(x,{variant:\"outline\",size:\"xs\",onClick:()=>g(!1),children:\"Cancel\"})]})]})})}function F({col:t,tasks:d,allCols:l,onEdit:p,onMove:c,onAdd:g}){const[m,u]=y(!1),[s,v]=y(\"\"),[a,e]=y(\"medium\"),r=()=>{s.trim()&&(g(t.id||\"\"),v(\"\"),e(\"medium\"),u(!1))},h=f=>{f.key===\"Enter\"?r():f.key===\"Escape\"&&u(!1)};return o(\"div\",{style:{flex:1,minWidth:\"300px\",backgroundColor:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\",padding:\"var(--ggui-spacing-4, 16px)\",display:\"flex\",flexDirection:\"column\"},children:[i(\"div\",{style:{marginBottom:\"var(--ggui-spacing-4, 16px)\",paddingBottom:\"var(--ggui-spacing-3, 12px)\",borderBottom:\"2px solid var(--ggui-color-outline, #d4d4d8)\"},children:o(w,{direction:\"vertical\",gap:2,children:[i(n,{variant:\"h3\",weight:\"semibold\",children:t.name}),o(n,{variant:\"caption\",children:[d.length,\" task\",d.length!==1?\"s\":\"\"]})]})}),i(\"div\",{style:{flex:1,overflowY:\"auto\",marginBottom:\"var(--ggui-spacing-3, 12px)\",minHeight:\"200px\"},children:d.length===0?i(n,{variant:\"caption\",align:\"center\",style:{padding:\"var(--ggui-spacing-6, 24px) 0\",display:\"block\"},children:\"No tasks\"}):d.map(f=>i(M,{task:f,columns:l,onEdit:p,onMove:c},f.id))}),m?i(b,{padding:12,shadow:\"sm\",border:!0,style:{borderColor:\"var(--ggui-color-primary-200, #bae6fd)\"},children:o(w,{direction:\"vertical\",gap:8,children:[o(\"div\",{children:[i(n,{variant:\"label\",style:{display:\"block\",marginBottom:\"var(--ggui-spacing-2, 8px)\"},children:\"Title\"}),i(\"input\",{type:\"text\",placeholder:\"Task title\",value:s,onChange:f=>v(f.currentTarget.value),onKeyDown:h,autoFocus:!0,style:{width:\"100%\",padding:\"var(--ggui-spacing-2, 8px)\",border:\"1px solid var(--ggui-color-outline, #d4d4d8)\",borderRadius:\"var(--ggui-shape-radius-sm, 4px)\",fontSize:\"var(--ggui-font-size-sm, 14px)\",fontFamily:\"inherit\"}})]}),i(k,{label:\"Priority\",value:a,onChange:e,options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),o(C,{gap:6,children:[i(x,{variant:\"primary\",size:\"sm\",onClick:r,disabled:!s.trim(),fullWidth:!0,children:\"Add\"}),i(x,{variant:\"outline\",size:\"sm\",onClick:()=>u(!1),fullWidth:!0,children:\"Cancel\"})]})]})}):i(x,{variant:\"outline\",size:\"sm\",fullWidth:!0,leftIcon:i(E,{name:\"plus\",size:16}),onClick:()=>u(!0),children:\"Add Task\"})]})}function K({tasks:t=A,columns:d=z,onTaskUpdate:l}){const[p,c]=y(t),g=T(a=>{c(e=>e.map(r=>r.id===a.id?a:r)),l?.({action:\"edit\",taskId:a.id,data:a})},[l]),m=T((a,e)=>{c(r=>r.map(h=>h.id===a?{...h,column:e}:h)),l?.({action:\"move\",taskId:a,data:{columnId:e}})},[l]),u=T(a=>{const e=P(),r={id:e,title:\"New Task\",priority:\"medium\",column:a};c(h=>[...h,r]),l?.({action:\"create\",taskId:e,data:r})},[l]),s=p.length,v=p.filter(a=>a.column===\"done\").length;return i(S,{maxWidth:\"full\",padding:24,children:o(w,{direction:\"vertical\",gap:24,children:[i(b,{padding:16,shadow:\"sm\",border:!0,style:{backgroundColor:\"var(--ggui-color-primary-50, #f0f9ff)\",borderColor:\"var(--ggui-color-primary-200, #bae6fd)\"},children:o(w,{direction:\"vertical\",gap:4,children:[i(n,{variant:\"h3\",weight:\"semibold\",children:\"Task Summary\"}),o(C,{gap:24,children:[o(\"div\",{children:[i(n,{variant:\"caption\",children:\"Total Tasks\"}),i(n,{variant:\"h2\",weight:\"bold\",children:s})]}),i(D,{orientation:\"vertical\",margin:0}),o(\"div\",{children:[i(n,{variant:\"caption\",children:\"Completed\"}),i(n,{variant:\"h2\",weight:\"bold\",children:v})]}),i(D,{orientation:\"vertical\",margin:0}),o(\"div\",{children:[i(n,{variant:\"caption\",children:\"Rate\"}),o(n,{variant:\"h2\",weight:\"bold\",children:[s>0?Math.round(v/s*100):0,\"%\"]})]})]})]})}),i(\"div\",{style:{display:\"flex\",gap:\"var(--ggui-spacing-4, 16px)\",overflowX:\"auto\",paddingBottom:\"var(--ggui-spacing-2, 8px)\"},children:d.map(a=>{const e=p.filter(r=>r.column===a.id);return i(F,{col:a,tasks:e,allCols:d,onEdit:g,onMove:m,onAdd:u},a.id)})})]})})}export{K as default};\n",
+        "sourceCode": "import { useState, useCallback } from 'react';\nimport {\n  Container,\n  Card,\n  Stack,\n  Row,\n  Text,\n  Input,\n  Select,\n  Button,\n  Icon,\n  Badge,\n  Divider,\n} from '@ggui-ai/design/primitives';\n\ninterface Task {\n  id?: string;\n  title?: string;\n  priority?: 'low' | 'medium' | 'high';\n  assignee?: string;\n  column?: string;\n  dueDate?: string;\n}\n\ninterface Column {\n  id?: string;\n  name?: string;\n}\n\ninterface Props {\n  tasks?: Task[];\n  columns?: Column[];\n  onTaskUpdate?: (payload: { action: string; taskId?: string; data?: unknown }) => void;\n}\n\nconst DEFAULT_TASKS: Task[] = [\n  { id: '1', title: 'Design landing page', priority: 'high', assignee: 'JD', column: 'todo', dueDate: '2024-01-15' },\n  { id: '2', title: 'Set up API endpoints', priority: 'high', assignee: 'AB', column: 'in-progress', dueDate: '2024-01-12' },\n  { id: '3', title: 'Write documentation', priority: 'medium', assignee: 'CD', column: 'done', dueDate: '2024-01-10' },\n  { id: '4', title: 'Fix login bug', priority: 'high', assignee: 'EF', column: 'todo' },\n  { id: '5', title: 'Database optimization', priority: 'medium', assignee: 'GH', column: 'in-progress' },\n];\n\nconst DEFAULT_COLUMNS: Column[] = [\n  { id: 'todo', name: 'To Do' },\n  { id: 'in-progress', name: 'In Progress' },\n  { id: 'done', name: 'Done' },\n];\n\nconst getPriorityColor = (p?: string): 'error' | 'warning' | 'info' =>\n  p === 'high' ? 'error' : p === 'medium' ? 'warning' : 'info';\n\nconst formatDate = (d?: string) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';\n\nconst generateId = (): string => {\n  const timestamp = Date.now();\n  return 'task-' + String(timestamp);\n};\n\ninterface TaskCardProps {\n  task: Task;\n  columns: Column[];\n  onEdit: (t: Task) => void;\n  onMove: (id: string, col: string) => void;\n}\n\nfunction TaskCard({ task, columns, onEdit, onMove }: TaskCardProps) {\n  const [isEditing, setIsEditing] = useState(false);\n  const [title, setTitle] = useState(task.title || '');\n\n  const save = () => {\n    if (title.trim()) {\n      onEdit({ ...task, title });\n      setIsEditing(false);\n    }\n  };\n\n  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {\n    if (e.key === 'Enter') save();\n    else if (e.key === 'Escape') setIsEditing(false);\n  };\n\n  const initials = task.assignee || '';\n\n  return (\n    <Card padding={12} shadow=\"sm\" border style={{ marginBottom: 'var(--ggui-spacing-2, 8px)' }}>\n      <Stack direction=\"vertical\" gap={8}>\n        {isEditing ? (\n          <div>\n            <Text variant=\"label\" style={{ display: 'block', marginBottom: 'var(--ggui-spacing-2, 8px)' }}>\n              Task Title\n            </Text>\n            <input\n              type=\"text\"\n              value={title}\n              onChange={(e) => setTitle(e.currentTarget.value)}\n              onKeyDown={handleKey}\n              placeholder=\"Title\"\n              autoFocus\n              style={{\n                width: '100%',\n                padding: 'var(--ggui-spacing-2, 8px)',\n                border: '1px solid var(--ggui-color-outline, #d4d4d8)',\n                borderRadius: 'var(--ggui-shape-radius-sm, 4px)',\n                fontSize: 'var(--ggui-font-size-sm, 14px)',\n                fontFamily: 'inherit',\n              }}\n            />\n          </div>\n        ) : (\n          <Row justify=\"between\" align=\"start\" gap={4}>\n            <Text weight=\"medium\" style={{ flex: 1, cursor: 'pointer' }} onDoubleClick={() => setIsEditing(true)}>\n              {task.title || 'Untitled'}\n            </Text>\n            <Button variant=\"ghost\" size=\"xs\" onClick={() => setIsEditing(true)}>\n              Edit\n            </Button>\n          </Row>\n        )}\n\n        <Row gap={6} wrap>\n          <Badge variant={getPriorityColor(task.priority)} size=\"sm\" pill>\n            {(task.priority || 'low').charAt(0).toUpperCase() + (task.priority || 'low').slice(1)}\n          </Badge>\n          {initials && (\n            <div\n              style={{\n                display: 'inline-flex',\n                alignItems: 'center',\n                justifyContent: 'center',\n                width: '20px',\n                height: '20px',\n                borderRadius: '50%',\n                backgroundColor: 'var(--ggui-color-primary-500, #0ea5e9)',\n                color: 'white',\n                fontSize: '10px',\n                fontWeight: 'bold',\n              }}\n              title={'Assigned to ' + initials}\n            >\n              {initials}\n            </div>\n          )}\n          {task.dueDate && <Text variant=\"caption\">{formatDate(task.dueDate)}</Text>}\n        </Row>\n\n        <Select\n          label=\"Move\"\n          value={task.column || 'todo'}\n          onChange={(col) => onMove(task.id || '', col)}\n          options={columns.map((c) => ({ value: c.id || '', label: '→ ' + (c.name || 'Unknown') }))}\n        />\n\n        {isEditing && (\n          <Row gap={4}>\n            <Button variant=\"primary\" size=\"xs\" onClick={save}>\n              Save\n            </Button>\n            <Button variant=\"outline\" size=\"xs\" onClick={() => setIsEditing(false)}>\n              Cancel\n            </Button>\n          </Row>\n        )}\n      </Stack>\n    </Card>\n  );\n}\n\ninterface ColProps {\n  col: Column;\n  tasks: Task[];\n  allCols: Column[];\n  onEdit: (t: Task) => void;\n  onMove: (id: string, col: string) => void;\n  onAdd: (col: string) => void;\n}\n\nfunction ColumnView({ col, tasks, allCols, onEdit, onMove, onAdd }: ColProps) {\n  const [showAdd, setShowAdd] = useState(false);\n  const [newTitle, setNewTitle] = useState('');\n  const [newPri, setNewPri] = useState('medium');\n\n  const add = () => {\n    if (newTitle.trim()) {\n      onAdd(col.id || '');\n      setNewTitle('');\n      setNewPri('medium');\n      setShowAdd(false);\n    }\n  };\n\n  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {\n    if (e.key === 'Enter') add();\n    else if (e.key === 'Escape') setShowAdd(false);\n  };\n\n  return (\n    <div\n      style={{\n        flex: 1,\n        minWidth: '300px',\n        backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n        borderRadius: 'var(--ggui-shape-radius-md, 8px)',\n        padding: 'var(--ggui-spacing-4, 16px)',\n        display: 'flex',\n        flexDirection: 'column',\n      }}\n    >\n      <div style={{ marginBottom: 'var(--ggui-spacing-4, 16px)', paddingBottom: 'var(--ggui-spacing-3, 12px)', borderBottom: '2px solid var(--ggui-color-outline, #d4d4d8)' }}>\n        <Stack direction=\"vertical\" gap={2}>\n          <Text variant=\"h3\" weight=\"semibold\">\n            {col.name}\n          </Text>\n          <Text variant=\"caption\">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</Text>\n        </Stack>\n      </div>\n\n      <div style={{ flex: 1, overflowY: 'auto', marginBottom: 'var(--ggui-spacing-3, 12px)', minHeight: '200px' }}>\n        {tasks.length === 0 ? (\n          <Text variant=\"caption\" align=\"center\" style={{ padding: 'var(--ggui-spacing-6, 24px) 0', display: 'block' }}>\n            No tasks\n          </Text>\n        ) : (\n          tasks.map((task) => (\n            <TaskCard key={task.id} task={task} columns={allCols} onEdit={onEdit} onMove={onMove} />\n          ))\n        )}\n      </div>\n\n      {!showAdd ? (\n        <Button variant=\"outline\" size=\"sm\" fullWidth leftIcon={<Icon name=\"plus\" size={16} />} onClick={() => setShowAdd(true)}>\n          Add Task\n        </Button>\n      ) : (\n        <Card padding={12} shadow=\"sm\" border style={{ borderColor: 'var(--ggui-color-primary-200, #bae6fd)' }}>\n          <Stack direction=\"vertical\" gap={8}>\n            <div>\n              <Text variant=\"label\" style={{ display: 'block', marginBottom: 'var(--ggui-spacing-2, 8px)' }}>\n                Title\n              </Text>\n              <input\n                type=\"text\"\n                placeholder=\"Task title\"\n                value={newTitle}\n                onChange={(e) => setNewTitle(e.currentTarget.value)}\n                onKeyDown={handleKey}\n                autoFocus\n                style={{\n                  width: '100%',\n                  padding: 'var(--ggui-spacing-2, 8px)',\n                  border: '1px solid var(--ggui-color-outline, #d4d4d8)',\n                  borderRadius: 'var(--ggui-shape-radius-sm, 4px)',\n                  fontSize: 'var(--ggui-font-size-sm, 14px)',\n                  fontFamily: 'inherit',\n                }}\n              />\n            </div>\n            <Select label=\"Priority\" value={newPri} onChange={setNewPri} options={[{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }]} />\n            <Row gap={6}>\n              <Button variant=\"primary\" size=\"sm\" onClick={add} disabled={!newTitle.trim()} fullWidth>\n                Add\n              </Button>\n              <Button variant=\"outline\" size=\"sm\" onClick={() => setShowAdd(false)} fullWidth>\n                Cancel\n              </Button>\n            </Row>\n          </Stack>\n        </Card>\n      )}\n    </div>\n  );\n}\n\nexport default function GeneratedComponent({ tasks = DEFAULT_TASKS, columns = DEFAULT_COLUMNS, onTaskUpdate }: Props) {\n  const [allTasks, setAllTasks] = useState<Task[]>(tasks);\n\n  const handleEdit = useCallback(\n    (updatedTask: Task) => {\n      setAllTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));\n      onTaskUpdate?.({ action: 'edit', taskId: updatedTask.id, data: updatedTask });\n    },\n    [onTaskUpdate]\n  );\n\n  const handleMove = useCallback(\n    (taskId: string, columnId: string) => {\n      setAllTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, column: columnId } : t)));\n      onTaskUpdate?.({ action: 'move', taskId, data: { columnId } });\n    },\n    [onTaskUpdate]\n  );\n\n  const handleAdd = useCallback(\n    (columnId: string) => {\n      const newId = generateId();\n      const newTask: Task = { id: newId, title: 'New Task', priority: 'medium', column: columnId };\n      setAllTasks((prev) => [...prev, newTask]);\n      onTaskUpdate?.({ action: 'create', taskId: newId, data: newTask });\n    },\n    [onTaskUpdate]\n  );\n\n  const total = allTasks.length;\n  const done = allTasks.filter((t) => t.column === 'done').length;\n\n  return (\n    <Container maxWidth=\"full\" padding={24}>\n      <Stack direction=\"vertical\" gap={24}>\n        <Card padding={16} shadow=\"sm\" border style={{ backgroundColor: 'var(--ggui-color-primary-50, #f0f9ff)', borderColor: 'var(--ggui-color-primary-200, #bae6fd)' }}>\n          <Stack direction=\"vertical\" gap={4}>\n            <Text variant=\"h3\" weight=\"semibold\">\n              Task Summary\n            </Text>\n            <Row gap={24}>\n              <div>\n                <Text variant=\"caption\">Total Tasks</Text>\n                <Text variant=\"h2\" weight=\"bold\">\n                  {total}\n                </Text>\n              </div>\n              <Divider orientation=\"vertical\" margin={0} />\n              <div>\n                <Text variant=\"caption\">Completed</Text>\n                <Text variant=\"h2\" weight=\"bold\">\n                  {done}\n                </Text>\n              </div>\n              <Divider orientation=\"vertical\" margin={0} />\n              <div>\n                <Text variant=\"caption\">Rate</Text>\n                <Text variant=\"h2\" weight=\"bold\">\n                  {total > 0 ? Math.round((done / total) * 100) : 0}%\n                </Text>\n              </div>\n            </Row>\n          </Stack>\n        </Card>\n\n        <div style={{ display: 'flex', gap: 'var(--ggui-spacing-4, 16px)', overflowX: 'auto', paddingBottom: 'var(--ggui-spacing-2, 8px)' }}>\n          {columns.map((column) => {\n            const colTasks = allTasks.filter((t) => t.column === column.id);\n            return <ColumnView key={column.id} col={column} tasks={colTasks} allCols={columns} onEdit={handleEdit} onMove={handleMove} onAdd={handleAdd} />;\n          })}\n        </div>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 163303,
+          "output": 22743,
+          "total": 186046
+        },
+        "generationTimeMs": 121782,
+        "turnsUsed": 6
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.277018,
+      "timestamp": "2026-03-17T05:41:55.900Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6636,
+        "sourceCodeBytes": 11879,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"Design landing page\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-raw-single-pass-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 121782,
+      "avgCostUsd": 0.277018,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    }
+  ],
+  "promptSummaries": [
+    {
+      "promptId": "kanban-board",
+      "promptName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-0",
+      "worstVariantId": "claude-raw-single-pass-0"
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": -1,
+        "avgTimeMs": 121782,
+        "avgCostUsd": 0.277018,
+        "successRate": 1
+      }
+    }
+  }
+}

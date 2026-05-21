@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "protocol": "1.1",
+  "app": {
+    "slug": "contacts-mount-via-serve",
+    "name": "Contacts Mount via ggui serve"
+  },
+  "blueprints": { "include": [] },
+  "primitives": { "packages": [], "local": [] },
+  "mcpMounts": ["./contacts-mount.mjs"]
+}

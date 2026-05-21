@@ -1,0 +1,50 @@
+{
+  "name": "@ggui-ai/sandbox",
+  "version": "0.1.0-rc.1",
+  "description": "Bounded process-isolation runner for untrusted Node subprocesses. Spawns a child with explicit cwd, env allowlist, wall-clock timeout, output caps, and (for Node children) a V8 heap cap. Honest scope — does NOT attempt network egress blocking, filesystem read boundaries, CPU limits, or syscall filtering (those need OS primitives: namespaces / seccomp / cgroups).",
+  "keywords": [
+    "ggui",
+    "sandbox",
+    "process-isolation",
+    "subprocess",
+    "spawn"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/sandbox",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/sandbox"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  }
+}

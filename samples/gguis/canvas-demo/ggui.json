@@ -1,0 +1,9 @@
+{
+  "schema": "1",
+  "protocol": "draft-2026-05-23",
+  "app": {
+    "slug": "sample-ggui-canvas-demo",
+    "name": "Sample ggui — canvas mode demo",
+    "defaultMcpAppsMode": "canvas"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "wire-bad-export-name-reject",
+  "description": "A package entry whose export-name KEY (`leafletmap`) is neither a `use`-prefixed hook (`HOOK_NAME_RE` — `/^use[A-Z][A-Za-z0-9]*$/`) nor a PascalCase component (`COMPONENT_NAME_RE` — `/^[A-Z][A-Za-z0-9]*$/`). The export name grammar is load-bearing — it is the only discriminator of hook vs component on the wire — so a key matching neither grammar MUST be rejected.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": { "leafletmap": {} }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "export-name key must match HOOK_NAME_RE (use-prefixed) or COMPONENT_NAME_RE (PascalCase); `leafletmap` matches neither."
+}

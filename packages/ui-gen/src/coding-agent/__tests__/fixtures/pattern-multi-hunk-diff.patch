@@ -1,0 +1,161 @@
+--- a/ui.tsx
++++ b/ui.tsx
+@@ -17,7 +17,27 @@
+ function useComponent(props: Props) {
+   const handleSendMessage = useCallback((data: Record<string, unknown>) => {
+     props.onSendMessage?.(data);
+   }, [props.onSendMessage]);
++
++  const [inputValue, setInputValue] = useState('');
++  const messageListRef = useRef<HTMLDivElement>(null);
++
++  // Group consecutive messages from same sender
++  const messageGroups = useMemo(() => {
++    const groups: Array<{ sender: string; messages: Array<{ text: string; timestamp: string }> }> = [];
++    for (const msg of props.messages) {
++      const sender = msg.sender || 'Unknown';
++      const text = msg.text || '';
++      const timestamp = msg.timestamp || new Date().toISOString();
++      if (groups.length === 0 || groups[groups.length - 1].sender !== sender) {
++        groups.push({ sender, messages: [{ text, timestamp }] });
++      } else {
++        groups[groups.length - 1].messages.push({ text, timestamp });
++      }
++    }
++    return groups;
++  }, [props.messages]);
+ 
+-  // TODO: add state and computed values
+-  return {};
++  const handleSend = useCallback(() => {
++    if (inputValue.trim()) {
++      handleSendMessage({ text: inputValue, timestamp: new Date().toISOString() });
++      setInputValue('');
++    }
++  }, [inputValue, handleSendMessage]);
++
++  useEffect(() => {
++    if (messageListRef.current) {
++      messageListRef.current.scrollIntoView({ behavior: 'smooth' });
++    }
++  }, [props.messages.length]);
++
++  return { inputValue, setInputValue, handleSend, messageGroups };
+ }
+ 
+@@ -25,5 +45,72 @@
+ export default function Component(props: Props) {
+   const state = useComponent(props);
+ 
+-  return (<></>); // TODO: implement the UI here
++  return (
++    <Container maxWidth="2xl" padding={0}>
++      <Stack direction="vertical" gap={0} style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
++        {/* Header */}
++        <Box paddingX={24} paddingY={16} background="var(--ggui-color-surface, #fafafa)" borderRadius={0} style={{ borderBottom: '1px solid var(--ggui-color-outlineVariant, #e4e4e7)' }}>
++          <Stack direction="horizontal" gap={16} justify="between" align="center">
++            <Heading level={3}>{props.title}</Heading>
++            <Badge variant="primary">{props.participantCount} participants</Badge>
++          </Stack>
++        </Box>
++
++        {/* Message List */}
++        <Stack 
++          direction="vertical" 
++          gap={16} 
++          style={{
++            flex: 1,
++            overflowY: 'auto',
++            padding: 'var(--ggui-spacing-4, 16px)',
++            backgroundColor: 'var(--ggui-color-surface, #fafafa)',
++          }}
++          role="log"
++          aria-label="Chat messages, newest first"
++          aria-live="polite"
++        >
++          {state.messageGroups.map((group, groupIdx) => {
++            const isCurrentUser = group.sender === props.currentUser;
++            return (
++              <Stack
++                key={`${groupIdx}-${group.sender}`}
++                direction="vertical"
++                gap={4}
++                align={isCurrentUser ? 'end' : 'start'}
++                style={{ maxWidth: '60%' }}
++              >
++                {!isCurrentUser && (
++                  <Text variant="label" size="sm" color="var(--ggui-color-onSurfaceVariant, #52525b)">
++                    {group.sender}
++                  </Text>
++                )}
++                <Stack direction="vertical" gap={2}>
++                  {group.messages.map((msg, msgIdx) => (
++                    <Card
++                      key={`${groupIdx}-${msgIdx}`}
++                      padding={12}
++                      shadow="sm"
++                      radius="lg"
++                      style={{
++                        background: isCurrentUser
++                          ? 'var(--ggui-color-primary-600, #0284c7)'
++                          : 'var(--ggui-color-surfaceVariant, #f4f4f5)',
++                      }}
++                    >
++                      <Stack direction="vertical" gap={4}>
++                        <Text
++                          variant="body"
++                          color={isCurrentUser ? '#ffffff' : 'var(--ggui-color-onSurface, #18181b)'}
++                        >
++                          {msg.text}
++                        </Text>
++                        <Text
++                          variant="caption"
++                          color={isCurrentUser ? 'rgba(255, 255, 255, 0.7)' : 'var(--ggui-color-onSurfaceVariant, #52525b)'}
++                        >
++                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
++                        </Text>
++                      </Stack>
++                    </Card>
++                  ))}
++                </Stack>
++              </Stack>
++            );
++          })}
++          <div ref={messageListRef} />
++        </Stack>
++
++        {/* Input Area */}
++        <Box
++          paddingX={24}
++          paddingY={16}
++          background="var(--ggui-color-surface, #fafafa)"
++          style={{ borderTop: '1px solid var(--ggui-color-outlineVariant, #e4e4e7)' }}
++        >
++          <Stack direction="horizontal" gap={12} align="end">
++            <Input
++              label="Message"
++              placeholder="Type your message..."
++              value={state.inputValue}
++              onChange={state.setInputValue}
++              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
++                if (e.key === 'Enter' && !e.shiftKey) {
++                  e.preventDefault();
++                  state.handleSend();
++                }
++              }}
++              style={{ flex: 1 }}
++            />
++            <Button
++              variant="primary"
++              onClick={state.handleSend}
++              disabled={!state.inputValue.trim()}
++              aria-label="Send message"
++            >
++              Send
++            </Button>
++          </Stack>
++        </Box>
++      </Stack>
++    </Container>
++  );
+ }

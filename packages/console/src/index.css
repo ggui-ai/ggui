@@ -1,0 +1,1223 @@
+/*
+ * devtool global stylesheet.
+ *
+ * Palette, type scale, layout rhythm, and component treatments are a
+ * fidelity port of `docs/brand/ggui-internal-brand-kit/v1.0.html`.
+ * The kit's README forbids file-level copies into `packages/*`; the
+ * tokens + classes here are a re-expression of that spec, not a copy.
+ *
+ * Type face policy: system-font stack. Widening the server's CSP
+ * `font-src 'self'` to self-host Inter / Geist Mono is a separate
+ * slice; brand identity here is carried by color, geometry, layout,
+ * and voice (per the kit's Premise section) — it does not depend on
+ * the concrete face.
+ */
+
+/* ── tokens ─────────────────────────────────────── */
+:root {
+  /* palette — calibrated to the brand kit's banner SVG */
+  --ggui-ink: #292929;
+  --ggui-ink-2: #3d3d3d;
+  --ggui-ink-3: #5a5a5a;
+  --ggui-ink-4: #8c8c93;
+  --ggui-chrome: #d9d9d9;
+  --ggui-chrome-2: #e4e4e2;
+  --ggui-paper: #f4f3ed;
+  --ggui-paper-2: #ebe9e1;
+  --ggui-line: #24242c;
+  --ggui-line-2: #d6d4cb;
+  --ggui-signal: #d93822;
+  --ggui-live: #1b7a37;
+  --ggui-draft: #a87b0e;
+
+  /* type — system stack; the brand kit calls for Inter + Geist Mono
+     but self-hosting those files is a future slice. `ss01`/`cv11`
+     feature settings are kept as a no-op for browsers that don't
+     honor them on the fallback face. */
+  --ggui-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --ggui-mono:
+    ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* ── reset ──────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ggui-paper);
+  color: var(--ggui-ink);
+  font-family: var(--ggui-sans);
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── utilities ──────────────────────────────────── */
+.ggui-mono {
+  font-family: var(--ggui-mono);
+}
+.ggui-mute {
+  color: var(--ggui-ink-4);
+  font-weight: 500;
+}
+.ggui-hr {
+  height: 1px;
+  border: 0;
+  background: var(--ggui-line-2);
+  margin: 0;
+}
+
+/* ── top nav ────────────────────────────────────── */
+.ggui-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(244, 243, 237, 0.92);
+  backdrop-filter: saturate(1.2) blur(8px);
+  -webkit-backdrop-filter: saturate(1.2) blur(8px);
+  border-bottom: 1px solid var(--ggui-line-2);
+}
+.ggui-nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px 32px;
+}
+.ggui-nav__left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.ggui-nav__brand {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-3);
+  padding: 4px 8px;
+  background: var(--ggui-ink);
+  color: var(--ggui-paper);
+  border-radius: 2px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ggui-nav__version {
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  color: var(--ggui-ink-4);
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border: 1px solid var(--ggui-line-2);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.ggui-nav__crumb {
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  color: var(--ggui-ink-3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ggui-nav__links {
+  display: flex;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ggui-nav__link {
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  color: var(--ggui-ink-3);
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+.ggui-nav__link:hover,
+.ggui-nav__link[aria-current='page'] {
+  color: var(--ggui-ink);
+}
+.ggui-nav__link[aria-current='page']::after {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--ggui-ink);
+  margin-top: 2px;
+}
+
+/* ── top-nav live-session pill (Slice 10) ───────── */
+.ggui-nav__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ggui-paper);
+  background: var(--ggui-ink);
+  border: 1px solid var(--ggui-ink);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.ggui-nav__pill:hover {
+  background: var(--ggui-ink-2);
+  border-color: var(--ggui-ink-2);
+}
+.ggui-nav__pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ggui-live);
+  box-shadow: 0 0 6px var(--ggui-live);
+  flex-shrink: 0;
+}
+.ggui-nav__pill-arrow {
+  font-size: 12px;
+  margin-left: -2px;
+}
+
+/* ── page shell ─────────────────────────────────── */
+.ggui-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ggui-paper);
+}
+.ggui-shell__main {
+  flex: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.ggui-shell__main--narrow {
+  max-width: 820px;
+}
+.ggui-shell__main--chat {
+  max-width: 820px;
+  padding: 0 32px 24px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── hero ───────────────────────────────────────── */
+.ggui-hero {
+  padding: 64px 0 48px;
+}
+.ggui-hero__eyebrow {
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-3);
+  margin: 0 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ggui-hero__eyebrow::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ggui-line-2);
+}
+.ggui-hero__wordmark {
+  display: block;
+  margin: 16px 0 32px;
+}
+.ggui-hero__tag {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ggui-ink-2);
+  max-width: 640px;
+  line-height: 1.35;
+}
+.ggui-hero__meta {
+  margin: 40px 0 0;
+  padding: 24px 0 0;
+  border-top: 1px solid var(--ggui-line-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 24px;
+}
+.ggui-hero__meta dt {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+  margin: 0 0 6px;
+}
+.ggui-hero__meta dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ggui-ink-2);
+  font-weight: 500;
+}
+
+/* ── section head ───────────────────────────────── */
+.ggui-section {
+  padding: 56px 0;
+  border-top: 1px solid var(--ggui-line-2);
+}
+.ggui-section:first-of-type {
+  border-top: 0;
+}
+.ggui-section__head {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+  align-items: start;
+}
+.ggui-section__num {
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ggui-ink-4);
+  text-transform: uppercase;
+  padding-top: 6px;
+}
+.ggui-section__title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.ggui-section__intro {
+  margin: 10px 0 0;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ggui-ink-2);
+  max-width: 620px;
+}
+
+/* collapse the left rail below narrow widths */
+@media (max-width: 620px) {
+  .ggui-section__head {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ggui-hero__meta {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── card ───────────────────────────────────────── */
+.ggui-card {
+  border: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ggui-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ggui-line-2);
+}
+.ggui-card__title {
+  margin: 0;
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-3);
+  font-weight: 500;
+}
+.ggui-card__num {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  color: var(--ggui-ink-4);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.ggui-card__body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ggui-card__body--stage {
+  padding: 28px 24px;
+  background: var(--ggui-paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 120px;
+}
+
+/* ── typography ─────────────────────────────────── */
+.ggui-h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.ggui-h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+.ggui-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ggui-ink-2);
+}
+.ggui-muted {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ggui-ink-3);
+}
+.ggui-code {
+  font-family: var(--ggui-mono);
+  font-size: 0.9em;
+  background: var(--ggui-paper-2);
+  border: 1px solid var(--ggui-line-2);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--ggui-ink);
+}
+
+/* label for form / eyebrow use */
+.ggui-label {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+  font-weight: 500;
+}
+
+/* ── pair-code block ───────────────────────────── */
+.ggui-codebox {
+  border: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper-2);
+  padding: 20px 22px;
+  text-align: center;
+}
+.ggui-codebox__value {
+  font-family: var(--ggui-mono);
+  font-size: 30px;
+  letter-spacing: 0.24em;
+  color: var(--ggui-ink);
+  font-weight: 500;
+}
+
+/* ── buttons ────────────────────────────────────── */
+.ggui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--ggui-ink);
+  color: var(--ggui-paper);
+  border: 1px solid var(--ggui-ink);
+  border-radius: 2px;
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.ggui-btn:hover:not(:disabled) {
+  background: var(--ggui-ink-2);
+  border-color: var(--ggui-ink-2);
+}
+.ggui-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ggui-btn__dot {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ggui-btn--ghost {
+  background: transparent;
+  color: var(--ggui-ink);
+}
+.ggui-btn--ghost:hover:not(:disabled) {
+  background: var(--ggui-paper-2);
+  color: var(--ggui-ink);
+}
+.ggui-btn--signal {
+  background: var(--ggui-signal);
+  border-color: var(--ggui-signal);
+}
+.ggui-btn--signal:hover:not(:disabled) {
+  background: #b92e1b;
+  border-color: #b92e1b;
+}
+
+/* ── inputs ─────────────────────────────────────── */
+.ggui-field {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--ggui-ink);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+}
+.ggui-field::before {
+  content: '';
+  width: 4px;
+  background: var(--ggui-ink);
+  flex-shrink: 0;
+}
+.ggui-field input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  font-family: var(--ggui-mono);
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+}
+.ggui-field input::placeholder {
+  color: var(--ggui-ink-4);
+}
+.ggui-field--focused,
+.ggui-field:focus-within {
+  box-shadow: inset 0 0 0 1px var(--ggui-ink);
+}
+
+/* compact inline form — label above field */
+.ggui-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ggui-form__row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.ggui-form__row .ggui-field {
+  flex: 1;
+}
+
+/* ── pane (brand-kit 08 / Pane) ─────────────────── */
+.ggui-pane {
+  border: 1px solid var(--ggui-ink);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ggui-pane__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--ggui-ink);
+  color: var(--ggui-paper);
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.ggui-pane__traffic {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.ggui-pane__traffic span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ggui-chrome-2);
+}
+.ggui-pane__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ggui-pane__meta {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ggui-chrome);
+  text-transform: none;
+  white-space: nowrap;
+}
+.ggui-pane__body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ggui-pane__body--flush {
+  padding: 0;
+}
+
+/* ── status pill (brand-kit state) ──────────────── */
+.ggui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+.ggui-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.ggui-status--live {
+  color: var(--ggui-live);
+}
+.ggui-status--draft {
+  color: var(--ggui-draft);
+}
+.ggui-status--signal {
+  color: var(--ggui-signal);
+}
+.ggui-status--ink {
+  color: var(--ggui-ink-3);
+}
+
+/* ── principle grid ─────────────────────────────── */
+.ggui-grid {
+  display: grid;
+  gap: 16px;
+}
+.ggui-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ggui-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 820px) {
+  .ggui-grid--3 {
+    grid-template-columns: 1fr;
+  }
+  .ggui-grid--2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── footer ─────────────────────────────────────── */
+.ggui-footer {
+  padding: 48px 32px 64px;
+  border-top: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper);
+}
+.ggui-footer__inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: end;
+}
+.ggui-footer__meta {
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ggui-ink-4);
+  line-height: 1.8;
+}
+.ggui-footer__meta strong {
+  color: var(--ggui-ink-2);
+  font-weight: 500;
+}
+@media (max-width: 620px) {
+  .ggui-footer__inner {
+    grid-template-columns: 1fr;
+  }
+  .ggui-footer__mark {
+    justify-self: start;
+  }
+}
+
+/* ── chat shell ─────────────────────────────────── */
+.ggui-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 16px;
+  padding-top: 16px;
+}
+.ggui-chat__thread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ggui-chat__status {
+  display: flex;
+  gap: 20px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper-2);
+  font-size: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ggui-chat__status-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ggui-chat__status-label {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+}
+.ggui-chat__list {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--ggui-paper);
+}
+.ggui-chat__empty {
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--ggui-paper);
+}
+.ggui-chat__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+}
+.ggui-chat__msg--user {
+  align-items: flex-end;
+}
+.ggui-chat__msg--agent {
+  align-items: flex-start;
+}
+.ggui-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-radius: 2px;
+}
+.ggui-bubble--user {
+  background: var(--ggui-ink);
+  color: var(--ggui-paper);
+}
+.ggui-bubble--agent {
+  background: var(--ggui-paper-2);
+  color: var(--ggui-ink);
+  border: 1px solid var(--ggui-line-2);
+}
+.ggui-chat__ui {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--ggui-paper);
+  border: 1px solid var(--ggui-line-2);
+  border-radius: 2px;
+}
+.ggui-chat__ui-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper-2);
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+}
+.ggui-chat__ui-head a {
+  color: var(--ggui-ink-3);
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.ggui-chat__ui-head a:hover {
+  color: var(--ggui-ink);
+}
+.ggui-chat__ui-inspect {
+  background: none;
+  border: 1px solid var(--ggui-line-2);
+  padding: 3px 10px;
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-2);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 120ms ease-out, border-color 120ms ease-out,
+    color 120ms ease-out;
+}
+.ggui-chat__ui-inspect:hover {
+  background: var(--ggui-ink);
+  border-color: var(--ggui-ink);
+  color: var(--ggui-paper);
+}
+.ggui-chat__ui-body {
+  padding: 14px 16px;
+}
+.ggui-chat__composer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--ggui-paper-2);
+  border-top: 1px solid var(--ggui-line-2);
+}
+.ggui-chat__composer .ggui-field {
+  flex: 1;
+}
+.ggui-chat__error {
+  margin: 12px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--ggui-signal);
+  color: var(--ggui-signal);
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  border-radius: 2px;
+}
+
+/* ── stack surface (session viewer) ─────────────── */
+.ggui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ggui-stack__entry {
+  border: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ggui-stack__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper-2);
+}
+.ggui-stack__label {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+}
+.ggui-stack__num {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  color: var(--ggui-ink-4);
+  letter-spacing: 0.1em;
+}
+.ggui-stack__body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ggui-stack__body--flush {
+  padding: 0;
+}
+.ggui-stack__count {
+  margin-left: auto;
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ggui-ink-4);
+}
+.ggui-stack__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ggui-stack__list > li {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ggui-line-1);
+}
+.ggui-stack__list > li:last-child {
+  border-bottom: 0;
+}
+.ggui-stack__entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ggui-stack__entry-num {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ggui-ink-4);
+}
+.ggui-stack__entry-title {
+  font-weight: 500;
+  color: var(--ggui-ink);
+}
+.ggui-stack__entry-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ggui-ink-4);
+}
+
+/* ── registry two-column grid ───────────────────── */
+.ggui-registry-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .ggui-registry-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── config viewer grid (settings.json-style) ─── */
+.ggui-config-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 200px minmax(0, 1fr);
+  margin-top: 16px;
+}
+@media (max-width: 720px) {
+  .ggui-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ggui-config-rail {
+  border: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+.ggui-config-rail__btn {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ggui-line-1);
+  font: inherit;
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  color: var(--ggui-ink);
+  cursor: pointer;
+}
+.ggui-config-rail__btn:hover {
+  background: var(--ggui-paper-2);
+}
+.ggui-config-rail__btn.is-active {
+  background: var(--ggui-ink);
+  color: var(--ggui-paper);
+}
+.ggui-config-panel {
+  border: 1px solid var(--ggui-line-2);
+  background: var(--ggui-paper);
+  border-radius: 2px;
+  padding: 20px 22px;
+}
+
+/* Horizontal tab-strip variant of the section nav. Used by
+ * `/admin/config` so the inner section nav doesn't double-stack
+ * the AdminShell's outer left rail (two parallel left rails was
+ * the legacy shape; tabs across the top read cleaner). Brand-kit
+ * geometry: rectangular, monospace labels, hairline bottom border,
+ * active tab gets a 2px ink underline + paper-2 fill. */
+.ggui-config-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+  min-width: 0;
+}
+.ggui-config-tabs {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  border-bottom: 1px solid var(--ggui-line-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ggui-config-tabs__btn {
+  display: inline-block;
+  padding: 8px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  color: var(--ggui-ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ggui-config-tabs__btn:hover {
+  color: var(--ggui-ink);
+  background: var(--ggui-paper-2);
+}
+.ggui-config-tabs__btn.is-active {
+  color: var(--ggui-ink);
+  border-bottom-color: var(--ggui-ink);
+  background: var(--ggui-paper-2);
+}
+
+/* ── admin sub-shell pane ─── */
+/* `AdminShell` reuses `ggui-config-grid` for the layout; this pane is
+ * the right column. No border/background of its own — admin pages
+ * carry their own cards/sections, and a wrapping border would
+ * compete visually. */
+.ggui-admin-pane {
+  min-width: 0;
+}
+.ggui-config-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--ggui-line-1);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+.ggui-config-panel__name {
+  font-size: 18px;
+}
+.ggui-config-panel__type {
+  margin-left: auto;
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+}
+.ggui-config-value-row {
+  margin-top: 16px;
+}
+.ggui-config-value,
+.ggui-config-schema,
+.ggui-config-raw,
+.ggui-config-error {
+  margin: 0;
+  padding: 12px;
+  background: var(--ggui-paper-2);
+  border: 1px solid var(--ggui-line-2);
+  border-radius: 2px;
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 320px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ggui-config-error {
+  color: var(--ggui-ink);
+  background: var(--ggui-paper);
+}
+
+/* ── status dashboard grid ──────────────────────── */
+.ggui-status-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .ggui-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── status live-sessions hero (Slice 10) ───────── */
+.ggui-status-hero {
+  margin-bottom: 20px;
+  padding: 20px 24px;
+  border: 1px solid var(--ggui-line-2);
+  border-radius: 2px;
+  background: var(--ggui-paper);
+}
+.ggui-status-hero--active {
+  border-color: var(--ggui-ink-2);
+  background: var(--ggui-paper-2);
+}
+.ggui-status-hero--empty {
+  background: var(--ggui-paper);
+}
+.ggui-status-hero__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.ggui-status-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--ggui-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-3);
+}
+.ggui-status-hero__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+.ggui-status-hero__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ggui-line-1);
+  flex-wrap: wrap;
+}
+.ggui-status-hero__row:last-child {
+  border-bottom: 0;
+}
+.ggui-status-hero__row-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ggui-status-hero__foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ggui-line-1);
+  text-align: right;
+}
+
+/* ── link-styled button (text CTA) ──────────────── */
+.ggui-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--ggui-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ggui-ink-2);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--ggui-line-2);
+  text-underline-offset: 3px;
+}
+.ggui-link:hover {
+  color: var(--ggui-ink);
+  text-decoration-color: var(--ggui-ink);
+}
+
+/* ── key/value dl (dashboard cards) ─────────────── */
+.ggui-kv {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.ggui-kv > div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.ggui-kv dt {
+  font-family: var(--ggui-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ggui-ink-4);
+  margin: 0;
+}
+.ggui-kv dd {
+  margin: 0;
+  color: var(--ggui-ink);
+  font-size: 14px;
+}

@@ -1,0 +1,27 @@
+{
+  "name": "gate-typo-classifies-as-not-registered",
+  "description": "The contract references `useGeoLocation` (capital L) under `@ggui-ai/gadgets` — a near-miss typo of the registered `useGeolocation`. A typo'd export name is still an export name absent from every registered package, so the gate MUST classify it as `gadget_not_registered`, NOT `gadget_package_mismatch` (the name does not resolve under any package). The reference gate additionally attaches a did-you-mean suggestion when a registered name is within Levenshtein distance < 3; the suggestion is a message-level aid and does not change the outcome code this catalog asserts.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@ggui-ai/gadgets": { "useGeoLocation": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-ai/gadgets",
+      "version": "1.0.0",
+      "exports": [
+        { "hook": "useCamera" },
+        { "hook": "useClipboardPaste" },
+        { "hook": "useClipboardWrite" },
+        { "hook": "useFilePicker" },
+        { "hook": "useGeolocation" },
+        { "hook": "useMicrophone" },
+        { "hook": "useNotifications" }
+      ]
+    }
+  ],
+  "expect": { "outcome": "reject", "code": "gadget_not_registered" }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "gate-package-mismatch",
+  "description": "The contract references `useLeafletMap` under `@acme/maps`, but the app registers an export of that exact name only under `@ggui-samples/leaflet`. The export NAME resolves — so this is not a typo or a hallucinated capability — but the (package, export) identity pair does not. The gate MUST reject with code `gadget_package_mismatch`: the lower-priority category, which fires only when no `gadget_not_registered` miss outranks it on the same push.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/maps": { "useLeafletMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useLeafletMap" }]
+    }
+  ],
+  "expect": { "outcome": "reject", "code": "gadget_package_mismatch" }
+}

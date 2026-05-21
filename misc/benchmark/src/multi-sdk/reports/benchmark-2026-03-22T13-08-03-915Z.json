@@ -1,0 +1,453 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T13:08:03.914Z",
+    "totalDurationMs": 23309,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a stock ticker dashboard that displays stock prices with live updates. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp (updates in real-time)\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n- Brief flash/highlight animation when a stock price updates\n\nInitial stock data comes from props. Live price updates arrive via stream events — merge them into the displayed data. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time stock price updates from the agent",
+            "events": {
+              "priceUpdate": {
+                "description": "Updated price data for one or more stocks",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "change": {
+                      "type": "number"
+                    },
+                    "changePercent": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "example": {
+                  "symbol": "AAPL",
+                  "price": 179.1,
+                  "change": 2.92,
+                  "changePercent": 1.66
+                }
+              },
+              "marketStatus": {
+                "description": "Market open/closed status update",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "closed", "pre-market", "after-hours"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "open",
+                  "timestamp": "2026-03-15T16:30:00Z"
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "getStockDetail": {
+                "label": "Stock Detail",
+                "description": "Get detailed info for a specific stock (52-week range, volume, etc.)",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "high52w": {
+                      "type": "number"
+                    },
+                    "low52w": {
+                      "type": "number"
+                    },
+                    "volume": {
+                      "type": "number"
+                    },
+                    "marketCap": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "symbol": "AAPL"
+                  },
+                  "response": {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "high52w": 199.62,
+                    "low52w": 140.81,
+                    "volume": 54123000,
+                    "marketCap": "2.89T"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var F=Object.defineProperty;var g=(i,t)=>F(i,\"name\",{value:t,configurable:!0});import{jsx as r,jsxs as c}from\"react/jsx-runtime\";import{useState as d,useEffect as p}from\"react\";import{Container as U,Card as b,Stack as s,Row as f,Box as A,Divider as R,Text as o,Heading as S}from\"@ggui-ai/design/primitives\";import{useStream as v}from\"@ggui-ai/wire\";function z(i){const t=v(\"priceUpdate\"),B=v(\"marketStatus\"),[l,u]=d(i.stocks||[]),[h,y]=d(new Date),[C,m]=d(new Set);p(()=>{i.stocks&&u(i.stocks)},[i.stocks]),p(()=>{if(t.latest){const e=l.map(a=>a.symbol===t.latest?.symbol?{...a,price:t.latest.price??a.price,change:t.latest.change??a.change,changePercent:t.latest.changePercent??a.changePercent}:a);u(e),y(new Date),t.latest.symbol&&(m(a=>new Set(a).add(t.latest.symbol)),setTimeout(()=>{m(a=>{const n=new Set(a);return n.delete(t.latest.symbol),n})},500))}},[t.latest,l]);const x=g(e=>e===void 0?\"\\u2014\":`$${e.toFixed(2)}`,\"formatPrice\"),T=g(e=>e===void 0?\"\\u2014\":`${e>0?\"+\":\"\"}${e.toFixed(2)}%`,\"formatChangePercent\"),w=g(e=>e===void 0?\"var(--ggui-color-onSurface)\":e>=0?\"var(--ggui-color-success-600)\":\"var(--ggui-color-error-600)\",\"getChangeColor\"),P=g(e=>e===void 0?\"\\u2014\":e>=0?\"\\u25B2\":\"\\u25BC\",\"getArrowIcon\");return r(U,{maxWidth:\"2xl\",padding:\"var(--ggui-spacing-6)\",center:!0,children:c(s,{gap:\"var(--ggui-spacing-6)\",children:[c(f,{align:\"center\",justify:\"between\",children:[r(S,{level:1,color:\"var(--ggui-color-onSurface)\",children:\"Market Watch\"}),c(s,{direction:\"horizontal\",align:\"center\",gap:\"var(--ggui-spacing-2)\",children:[r(o,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Last Updated:\"}),r(o,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurface)\",weight:\"semibold\",children:h.toLocaleTimeString([],{hour:\"2-digit\",minute:\"2-digit\",second:\"2-digit\"})})]})]}),r(A,{style:{display:\"grid\",gridTemplateColumns:\"repeat(auto-fit, minmax(280px, 1fr))\",gap:\"var(--ggui-spacing-4)\",\"@media (max-width: 768px)\":{gridTemplateColumns:\"1fr\"}},children:l.length>0?l.map(e=>{const a=C.has(e.symbol||\"\"),n=w(e.change),k=(e.change??0)>=0;return r(b,{padding:\"var(--ggui-spacing-4)\",shadow:\"md\",radius:\"lg\",border:!0,style:{borderColor:n,transition:a?\"background-color 0.5s ease-out\":\"none\",backgroundColor:a?k?\"var(--ggui-color-success-50)\":\"var(--ggui-color-error-50)\":\"var(--ggui-color-surface)\"},children:c(s,{gap:\"var(--ggui-spacing-3)\",children:[r(o,{variant:\"overline\",color:\"var(--ggui-color-onSurfaceVariant)\",size:\"xs\",children:e.symbol||\"\\u2014\"}),r(S,{level:3,color:\"var(--ggui-color-onSurface)\",children:e.symbol||\"N/A\"}),r(o,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:e.name||\"Unknown Company\"}),r(o,{variant:\"body\",color:\"var(--ggui-color-onSurface)\",weight:\"semibold\",size:\"lg\",children:x(e.price)}),r(R,{margin:\"var(--ggui-spacing-2)\"}),c(f,{align:\"center\",justify:\"between\",children:[r(s,{direction:\"horizontal\",align:\"center\",gap:\"var(--ggui-spacing-1)\",children:r(o,{variant:\"body\",color:n,weight:\"semibold\",children:e.change!==void 0?(e.change>0?\"+\":\"\")+e.change.toFixed(2):\"\\u2014\"})}),c(s,{direction:\"horizontal\",align:\"center\",gap:\"var(--ggui-spacing-1)\",children:[r(o,{variant:\"body\",color:n,weight:\"semibold\",children:T(e.changePercent)}),r(o,{variant:\"body\",color:n,size:\"lg\",children:P(e.change)})]})]})]})},e.symbol)}):r(b,{padding:\"var(--ggui-spacing-6)\",shadow:\"sm\",children:r(o,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",align:\"center\",children:\"No stock data available. Waiting for market data...\"})})})]})})}g(z,\"Component\");export{z as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  stocks: Array<{ symbol?: string; name?: string; price?: number; change?: number; changePercent?: number }>; // Array of stocks with symbol, name, price, change, changePercent\n}\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: Updated price data for one or more stocks */\ntype StreamPriceUpdate = { symbol?: string; price?: number; change?: number; changePercent?: number };\n\n/** Stream event: Market open/closed status update */\ntype StreamMarketStatus = { status?: 'open' | 'closed' | 'pre-market' | 'after-hours'; timestamp?: string };\n\n\n\n\nexport default function Component(props: Props) {\n  // Streams — real-time from agent (.latest, .all)\n  const priceUpdate = useStream<StreamPriceUpdate>('priceUpdate'); // Updated price data for one or more stocks\n  const marketStatus = useStream<StreamMarketStatus>('marketStatus'); // Market open/closed status update\n\n  // State for managed stock data (initialized from props, updated by stream)\n  const [stocks, setStocks] = useState(props.stocks || []);\n  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());\n  const [flashingSymbols, setFlashingSymbols] = useState<Set<string>>(new Set());\n\n  // Update stocks when prop changes\n  useEffect(() => {\n    if (props.stocks) {\n      setStocks(props.stocks);\n    }\n  }, [props.stocks]);\n\n  // Merge price updates from stream into displayed stocks\n  useEffect(() => {\n    if (priceUpdate.latest) {\n      const updatedStocks = stocks.map((stock) => {\n        if (stock.symbol === priceUpdate.latest?.symbol) {\n          return {\n            ...stock,\n            price: priceUpdate.latest.price ?? stock.price,\n            change: priceUpdate.latest.change ?? stock.change,\n            changePercent: priceUpdate.latest.changePercent ?? stock.changePercent,\n          };\n        }\n        return stock;\n      });\n      setStocks(updatedStocks);\n      setLastUpdated(new Date());\n\n      // Trigger flash animation for updated symbol\n      if (priceUpdate.latest.symbol) {\n        setFlashingSymbols((prev) => new Set(prev).add(priceUpdate.latest.symbol!));\n        setTimeout(() => {\n          setFlashingSymbols((prev) => {\n            const next = new Set(prev);\n            next.delete(priceUpdate.latest.symbol!);\n            return next;\n          });\n        }, 500);\n      }\n    }\n  }, [priceUpdate.latest, stocks]);\n\n  // Helper to format price with 2 decimals\n  const formatPrice = (price?: number): string => {\n    if (price === undefined) return '—';\n    return `$${price.toFixed(2)}`;\n  };\n\n  // Helper to format change percentage\n  const formatChangePercent = (changePercent?: number): string => {\n    if (changePercent === undefined) return '—';\n    const sign = changePercent > 0 ? '+' : '';\n    return `${sign}${changePercent.toFixed(2)}%`;\n  };\n\n  // Helper to determine color based on change\n  const getChangeColor = (change?: number): string => {\n    if (change === undefined) return 'var(--ggui-color-onSurface)';\n    return change >= 0 ? 'var(--ggui-color-success-600)' : 'var(--ggui-color-error-600)';\n  };\n\n  // Helper to get arrow icon\n  const getArrowIcon = (change?: number): string => {\n    if (change === undefined) return '—';\n    return change >= 0 ? '▲' : '▼';\n  };\n\n  return (\n    <Container maxWidth='2xl' padding='var(--ggui-spacing-6)' center>\n      {/* Header with title and last updated */}\n      <Stack gap='var(--ggui-spacing-6)'>\n        <Row align='center' justify='between'>\n          <Heading level={1} color='var(--ggui-color-onSurface)'>\n            Market Watch\n          </Heading>\n          <Stack direction='horizontal' align='center' gap='var(--ggui-spacing-2)'>\n            <Text variant='bodySmall' color='var(--ggui-color-onSurfaceVariant)'>\n              Last Updated:\n            </Text>\n            <Text variant='bodySmall' color='var(--ggui-color-onSurface)' weight='semibold'>\n              {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}\n            </Text>\n          </Stack>\n        </Row>\n\n        {/* Responsive grid of stock cards */}\n        <Box\n          style={{\n            display: 'grid',\n            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',\n            gap: 'var(--ggui-spacing-4)',\n            '@media (max-width: 768px)': {\n              gridTemplateColumns: '1fr',\n            },\n          } as React.CSSProperties}\n        >\n          {stocks.length > 0 ? (\n            stocks.map((stock) => {\n              const isFlashing = flashingSymbols.has(stock.symbol || '');\n              const changeColor = getChangeColor(stock.change);\n              const isPositive = (stock.change ?? 0) >= 0;\n\n              return (\n                <Card\n                  key={stock.symbol}\n                  padding='var(--ggui-spacing-4)'\n                  shadow='md'\n                  radius='lg'\n                  border={true}\n                  style={{\n                    borderColor: changeColor,\n                    transition: isFlashing ? 'background-color 0.5s ease-out' : 'none',\n                    backgroundColor: isFlashing\n                      ? isPositive\n                        ? 'var(--ggui-color-success-50)'\n                        : 'var(--ggui-color-error-50)'\n                      : 'var(--ggui-color-surface)',\n                  } as React.CSSProperties}\n                >\n                  <Stack gap='var(--ggui-spacing-3)'>\n                    {/* Ticker symbol - large and bold */}\n                    <Text variant='overline' color='var(--ggui-color-onSurfaceVariant)' size='xs'>\n                      {stock.symbol || '—'}\n                    </Text>\n                    <Heading level={3} color='var(--ggui-color-onSurface)'>\n                      {stock.symbol || 'N/A'}\n                    </Heading>\n\n                    {/* Company name */}\n                    <Text variant='bodySmall' color='var(--ggui-color-onSurfaceVariant)'>\n                      {stock.name || 'Unknown Company'}\n                    </Text>\n\n                    {/* Current price */}\n                    <Text variant='body' color='var(--ggui-color-onSurface)' weight='semibold' size='lg'>\n                      {formatPrice(stock.price)}\n                    </Text>\n\n                    {/* Divider */}\n                    <Divider margin='var(--ggui-spacing-2)' />\n\n                    {/* Change amount and percentage with arrow */}\n                    <Row align='center' justify='between'>\n                      <Stack direction='horizontal' align='center' gap='var(--ggui-spacing-1)'>\n                        <Text variant='body' color={changeColor} weight='semibold'>\n                          {stock.change !== undefined\n                            ? (stock.change > 0 ? '+' : '') + stock.change.toFixed(2)\n                            : '—'}\n                        </Text>\n                      </Stack>\n                      <Stack direction='horizontal' align='center' gap='var(--ggui-spacing-1)'>\n                        <Text variant='body' color={changeColor} weight='semibold'>\n                          {formatChangePercent(stock.changePercent)}\n                        </Text>\n                        <Text variant='body' color={changeColor} size='lg'>\n                          {getArrowIcon(stock.change)}\n                        </Text>\n                      </Stack>\n                    </Row>\n                  </Stack>\n                </Card>\n              );\n            })\n          ) : (\n            <Card padding='var(--ggui-spacing-6)' shadow='sm'>\n              <Text variant='body' color='var(--ggui-color-onSurfaceVariant)' align='center'>\n                No stock data available. Waiting for market data...\n              </Text>\n            </Card>\n          )}\n        </Box>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 45093,
+          "output": 3331,
+          "total": 48424
+        },
+        "generationTimeMs": 20748,
+        "turnsUsed": 1,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Stock cards lack semantic structure — consider wrapping each card in an article element or adding role='region' to provide context for screen readers",
+              "fix": "Stock cards lack semantic structure — consider wrapping each card in an article element or adding role='region' to provide context for screen readers"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Arrow icons (▲/▼) are rendered as plain text without aria-label or title attribute — add aria-label to describe direction (e.g., 'Price up' or 'Price down')",
+              "fix": "Arrow icons (▲/▼) are rendered as plain text without aria-label or title attribute — add aria-label to describe direction (e.g., 'Price up' or 'Price down')"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Last Updated timestamp section uses generic Stack/Row elements — consider using a live region (aria-live='polite') to announce updates to screen reader users",
+              "fix": "Last Updated timestamp section uses generic Stack/Row elements — consider using a live region (aria-live='polite') to announce updates to screen reader users"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Stock symbol appears twice (line 162 and 165) — reduce redundancy and ensure screen reader users don't hear it twice; consider using aria-label on the Heading to provide context",
+              "fix": "Stock symbol appears twice (line 162 and 165) — reduce redundancy and ensure screen reader users don't hear it twice; consider using aria-label on the Heading to provide context"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Redundant ticker symbol display: 'symbol' is shown twice in each card (line 161-162 as overline and line 164-165 as heading), creating visual clutter and wasted space",
+              "fix": "Redundant ticker symbol display: 'symbol' is shown twice in each card (line 161-162 as overline and line 164-165 as heading), creating visual clutter and wasted space"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Unbalanced visual hierarchy within stock cards: change amount and change percentage are split across Row with 'justify=between' (line 182), causing them to stretch to opposite edges and appear disconnected from each other",
+              "fix": "Unbalanced visual hierarchy within stock cards: change amount and change percentage are split across Row with 'justify=between' (line 182), causing them to stretch to opposite edges and appear disconnected from each other"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Inconsistent spacing between card content sections: Divider (line 179) is placed with only margin, but the gap between other elements is var(--ggui-spacing-3), making the visual grouping feel uneven",
+              "fix": "Inconsistent spacing between card content sections: Divider (line 179) is placed with only margin, but the gap between other elements is var(--ggui-spacing-3), making the visual grouping feel uneven"
+            }
+          ],
+          "pass": ["functionality", "crash", "interactivity", "loading", "visual"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 20715,
+          "evalMs": 0,
+          "totalMs": 20748
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 79,
+        "finalScore": 79,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 85,
+          "hierarchy": 80,
+          "polish": 70,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 70,
+          "accessibility": 78,
+          "codeQuality": 85
+        },
+        "critique": "The component demonstrates solid use of design tokens and responsive grid layout, but the card styling with inline media queries is non-standard and the flashing animation lacks visual polish. The component is incomplete (truncated source code) and missing the change/percentage display and arrow icons mentioned in the original spec.",
+        "evalTimeMs": 2372
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Stock cards lack semantic structure — consider wrapping each card in an article element or adding role='region' to provide context for screen readers",
+            "fix": "Stock cards lack semantic structure — consider wrapping each card in an article element or adding role='region' to provide context for screen readers"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Arrow icons (▲/▼) are rendered as plain text without aria-label or title attribute — add aria-label to describe direction (e.g., 'Price up' or 'Price down')",
+            "fix": "Arrow icons (▲/▼) are rendered as plain text without aria-label or title attribute — add aria-label to describe direction (e.g., 'Price up' or 'Price down')"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Last Updated timestamp section uses generic Stack/Row elements — consider using a live region (aria-live='polite') to announce updates to screen reader users",
+            "fix": "Last Updated timestamp section uses generic Stack/Row elements — consider using a live region (aria-live='polite') to announce updates to screen reader users"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Stock symbol appears twice (line 162 and 165) — reduce redundancy and ensure screen reader users don't hear it twice; consider using aria-label on the Heading to provide context",
+            "fix": "Stock symbol appears twice (line 162 and 165) — reduce redundancy and ensure screen reader users don't hear it twice; consider using aria-label on the Heading to provide context"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Redundant ticker symbol display: 'symbol' is shown twice in each card (line 161-162 as overline and line 164-165 as heading), creating visual clutter and wasted space",
+            "fix": "Redundant ticker symbol display: 'symbol' is shown twice in each card (line 161-162 as overline and line 164-165 as heading), creating visual clutter and wasted space"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Unbalanced visual hierarchy within stock cards: change amount and change percentage are split across Row with 'justify=between' (line 182), causing them to stretch to opposite edges and appear disconnected from each other",
+            "fix": "Unbalanced visual hierarchy within stock cards: change amount and change percentage are split across Row with 'justify=between' (line 182), causing them to stretch to opposite edges and appear disconnected from each other"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Inconsistent spacing between card content sections: Divider (line 179) is placed with only margin, but the gap between other elements is var(--ggui-spacing-3), making the visual grouping feel uneven",
+            "fix": "Inconsistent spacing between card content sections: Divider (line 179) is placed with only margin, but the gap between other elements is var(--ggui-spacing-3), making the visual grouping feel uneven"
+          }
+        ],
+        "pass": ["functionality", "crash", "interactivity", "loading", "visual"]
+      },
+      "estimatedCostUsd": 0.061748,
+      "timestamp": "2026-03-22T13:08:03.914Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3563,
+        "sourceCodeBytes": 9565,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 79,
+      "avgTimeMs": 20748,
+      "avgCostUsd": 0.061748,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 85,
+        "visualPolish": 78,
+        "interactivity": 70,
+        "accessibility": 78,
+        "codeQuality": 85
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 79,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 79,
+        "avgTimeMs": 20748,
+        "avgCostUsd": 0.061748,
+        "successRate": 1
+      }
+    }
+  }
+}

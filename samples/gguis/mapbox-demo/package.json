@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-samples/ggui-mapbox-demo",
+  "version": "0.0.1",
+  "description": "Reference sample: ggui server pre-configured with the @ggui-samples/gadget-mapbox gadget registered on `app.gadgets` AND `app.publicEnv` carrying the operator's Mapbox access token. Canonical end-to-end demonstration of the public env channel — wrapper `requires` declares `GGUI_PUBLIC_APP_MAPBOX_TOKEN`, the operator stamps the value, the push gate validates, and the iframe runtime forwards the union-filtered subset for `getPublicEnv` to read. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6784}",
+    "start:default-port": "ggui serve --mcp-only --dev-allow-all"
+  },
+  "dependencies": {
+    "@ggui-ai/cli": "workspace:*",
+    "@ggui-samples/gadget-mapbox": "workspace:*"
+  }
+}

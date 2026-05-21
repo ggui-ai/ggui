@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "protocol": "1.1",
+  "app": {
+    "slug": "notes-mount-via-serve",
+    "name": "Notes Mount via ggui serve"
+  },
+  "blueprints": { "include": [] },
+  "primitives": { "packages": [], "local": [] },
+  "mcpMounts": ["./notes-mount.mjs"]
+}

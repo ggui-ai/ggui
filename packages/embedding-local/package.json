@@ -1,0 +1,59 @@
+{
+  "name": "@ggui-ai/embedding-local",
+  "version": "0.1.0-rc.1",
+  "description": "Local-model text embeddings for self-hosted ggui. Provides a cold-start lifecycle (model download, cache resolution, warmup events) and a `@huggingface/transformers`-backed embedding provider running entirely on-device — no embedding API key required.",
+  "keywords": [
+    "ggui",
+    "embeddings",
+    "transformers",
+    "huggingface",
+    "local",
+    "bge"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/embedding-local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/embedding-local"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

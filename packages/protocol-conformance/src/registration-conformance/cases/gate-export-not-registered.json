@@ -1,0 +1,19 @@
+{
+  "name": "gate-export-not-registered",
+  "description": "The contract's `clientCapabilities.gadgets` references the export `useDoorDashCheckout` under `@acme/checkout` — a (package, export) pair absent from every descriptor in the app's registered `App.gadgets` catalog. The push-time gadget gate (SPEC §7.7.2 — `assertGadgetsRegistered`) MUST reject with code `gadget_not_registered`: the most-fundamental miss class, where the export name itself is unknown.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/checkout": { "useDoorDashCheckout": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useLeafletMap" }]
+    }
+  ],
+  "expect": { "outcome": "reject", "code": "gadget_not_registered" }
+}

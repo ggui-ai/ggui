@@ -1,0 +1,3201 @@
+{
+  "meta": {
+    "timestamp": "2026-03-24T03:20:24.822Z",
+    "totalDurationMs": 300088,
+    "totalVariants": 1,
+    "totalCommits": 8,
+    "totalRuns": 8,
+    "successCount": 2,
+    "failureCount": 6,
+    "successRate": 0.25
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.819Z"
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.819Z"
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.819Z"
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "CSS Grid periodic table with category coloring, search, and detail panel",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build an interactive periodic table of elements.\n\nLayout:\n- CSS Grid: 18 columns. Place each element using gridRow and gridColumn from its data.\n- Each cell: symbol (large, centered), atomic number (small, top-left)\n- Color-code by category using design tokens (e.g., noble-gas → one color, halogen → another)\n- Search input at top — filters by name or symbol (case-insensitive)\n- Click an element → detail panel below grid shows: name, symbol, atomicNumber, atomicWeight, category\n- Legend showing each category with its color\n\nAll element data comes from props.elements. Use design system CSS variables.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "elements": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "atomicNumber": {
+                        "type": "number"
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "atomicWeight": {
+                        "type": "number"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "row": {
+                        "type": "number"
+                      },
+                      "col": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Full periodic table element data",
+                "example": [
+                  {
+                    "atomicNumber": 1,
+                    "symbol": "H",
+                    "name": "Hydrogen",
+                    "atomicWeight": 1.008,
+                    "category": "nonmetal",
+                    "row": 1,
+                    "col": 1
+                  },
+                  {
+                    "atomicNumber": 2,
+                    "symbol": "He",
+                    "name": "Helium",
+                    "atomicWeight": 4.003,
+                    "category": "noble-gas",
+                    "row": 1,
+                    "col": 18
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 4,
+              "symbol": "Be",
+              "name": "Beryllium",
+              "atomicWeight": 9.012,
+              "category": "alkaline-earth",
+              "row": 2,
+              "col": 2
+            },
+            {
+              "atomicNumber": 5,
+              "symbol": "B",
+              "name": "Boron",
+              "atomicWeight": 10.81,
+              "category": "metalloid",
+              "row": 2,
+              "col": 13
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 7,
+              "symbol": "N",
+              "name": "Nitrogen",
+              "atomicWeight": 14.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 15
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 9,
+              "symbol": "F",
+              "name": "Fluorine",
+              "atomicWeight": 19,
+              "category": "halogen",
+              "row": 2,
+              "col": 17
+            },
+            {
+              "atomicNumber": 10,
+              "symbol": "Ne",
+              "name": "Neon",
+              "atomicWeight": 20.18,
+              "category": "noble-gas",
+              "row": 2,
+              "col": 18
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 12,
+              "symbol": "Mg",
+              "name": "Magnesium",
+              "atomicWeight": 24.31,
+              "category": "alkaline-earth",
+              "row": 3,
+              "col": 2
+            },
+            {
+              "atomicNumber": 13,
+              "symbol": "Al",
+              "name": "Aluminium",
+              "atomicWeight": 26.98,
+              "category": "post-transition-metal",
+              "row": 3,
+              "col": 13
+            },
+            {
+              "atomicNumber": 14,
+              "symbol": "Si",
+              "name": "Silicon",
+              "atomicWeight": 28.09,
+              "category": "metalloid",
+              "row": 3,
+              "col": 14
+            },
+            {
+              "atomicNumber": 15,
+              "symbol": "P",
+              "name": "Phosphorus",
+              "atomicWeight": 30.97,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 15
+            },
+            {
+              "atomicNumber": 16,
+              "symbol": "S",
+              "name": "Sulfur",
+              "atomicWeight": 32.07,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 16
+            },
+            {
+              "atomicNumber": 17,
+              "symbol": "Cl",
+              "name": "Chlorine",
+              "atomicWeight": 35.45,
+              "category": "halogen",
+              "row": 3,
+              "col": 17
+            },
+            {
+              "atomicNumber": 18,
+              "symbol": "Ar",
+              "name": "Argon",
+              "atomicWeight": 39.95,
+              "category": "noble-gas",
+              "row": 3,
+              "col": 18
+            },
+            {
+              "atomicNumber": 19,
+              "symbol": "K",
+              "name": "Potassium",
+              "atomicWeight": 39.1,
+              "category": "alkali-metal",
+              "row": 4,
+              "col": 1
+            },
+            {
+              "atomicNumber": 20,
+              "symbol": "Ca",
+              "name": "Calcium",
+              "atomicWeight": 40.08,
+              "category": "alkaline-earth",
+              "row": 4,
+              "col": 2
+            },
+            {
+              "atomicNumber": 21,
+              "symbol": "Sc",
+              "name": "Scandium",
+              "atomicWeight": 44.96,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 3
+            },
+            {
+              "atomicNumber": 22,
+              "symbol": "Ti",
+              "name": "Titanium",
+              "atomicWeight": 47.87,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 4
+            },
+            {
+              "atomicNumber": 23,
+              "symbol": "V",
+              "name": "Vanadium",
+              "atomicWeight": 50.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 5
+            },
+            {
+              "atomicNumber": 24,
+              "symbol": "Cr",
+              "name": "Chromium",
+              "atomicWeight": 52,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 6
+            },
+            {
+              "atomicNumber": 25,
+              "symbol": "Mn",
+              "name": "Manganese",
+              "atomicWeight": 54.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 7
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 27,
+              "symbol": "Co",
+              "name": "Cobalt",
+              "atomicWeight": 58.93,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 9
+            },
+            {
+              "atomicNumber": 28,
+              "symbol": "Ni",
+              "name": "Nickel",
+              "atomicWeight": 58.69,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 10
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 30,
+              "symbol": "Zn",
+              "name": "Zinc",
+              "atomicWeight": 65.38,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 12
+            },
+            {
+              "atomicNumber": 31,
+              "symbol": "Ga",
+              "name": "Gallium",
+              "atomicWeight": 69.72,
+              "category": "post-transition-metal",
+              "row": 4,
+              "col": 13
+            },
+            {
+              "atomicNumber": 32,
+              "symbol": "Ge",
+              "name": "Germanium",
+              "atomicWeight": 72.63,
+              "category": "metalloid",
+              "row": 4,
+              "col": 14
+            },
+            {
+              "atomicNumber": 33,
+              "symbol": "As",
+              "name": "Arsenic",
+              "atomicWeight": 74.92,
+              "category": "metalloid",
+              "row": 4,
+              "col": 15
+            },
+            {
+              "atomicNumber": 34,
+              "symbol": "Se",
+              "name": "Selenium",
+              "atomicWeight": 78.97,
+              "category": "nonmetal",
+              "row": 4,
+              "col": 16
+            },
+            {
+              "atomicNumber": 35,
+              "symbol": "Br",
+              "name": "Bromine",
+              "atomicWeight": 79.9,
+              "category": "halogen",
+              "row": 4,
+              "col": 17
+            },
+            {
+              "atomicNumber": 36,
+              "symbol": "Kr",
+              "name": "Krypton",
+              "atomicWeight": 83.8,
+              "category": "noble-gas",
+              "row": 4,
+              "col": 18
+            },
+            {
+              "atomicNumber": 37,
+              "symbol": "Rb",
+              "name": "Rubidium",
+              "atomicWeight": 85.47,
+              "category": "alkali-metal",
+              "row": 5,
+              "col": 1
+            },
+            {
+              "atomicNumber": 38,
+              "symbol": "Sr",
+              "name": "Strontium",
+              "atomicWeight": 87.62,
+              "category": "alkaline-earth",
+              "row": 5,
+              "col": 2
+            },
+            {
+              "atomicNumber": 39,
+              "symbol": "Y",
+              "name": "Yttrium",
+              "atomicWeight": 88.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 3
+            },
+            {
+              "atomicNumber": 40,
+              "symbol": "Zr",
+              "name": "Zirconium",
+              "atomicWeight": 91.22,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 4
+            },
+            {
+              "atomicNumber": 41,
+              "symbol": "Nb",
+              "name": "Niobium",
+              "atomicWeight": 92.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 5
+            },
+            {
+              "atomicNumber": 42,
+              "symbol": "Mo",
+              "name": "Molybdenum",
+              "atomicWeight": 95.95,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 6
+            },
+            {
+              "atomicNumber": 43,
+              "symbol": "Tc",
+              "name": "Technetium",
+              "atomicWeight": 98,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 7
+            },
+            {
+              "atomicNumber": 44,
+              "symbol": "Ru",
+              "name": "Ruthenium",
+              "atomicWeight": 101.07,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 8
+            },
+            {
+              "atomicNumber": 45,
+              "symbol": "Rh",
+              "name": "Rhodium",
+              "atomicWeight": 102.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 9
+            },
+            {
+              "atomicNumber": 46,
+              "symbol": "Pd",
+              "name": "Palladium",
+              "atomicWeight": 106.42,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 10
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 48,
+              "symbol": "Cd",
+              "name": "Cadmium",
+              "atomicWeight": 112.41,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 12
+            },
+            {
+              "atomicNumber": 49,
+              "symbol": "In",
+              "name": "Indium",
+              "atomicWeight": 114.82,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 13
+            },
+            {
+              "atomicNumber": 50,
+              "symbol": "Sn",
+              "name": "Tin",
+              "atomicWeight": 118.71,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 14
+            },
+            {
+              "atomicNumber": 51,
+              "symbol": "Sb",
+              "name": "Antimony",
+              "atomicWeight": 121.76,
+              "category": "metalloid",
+              "row": 5,
+              "col": 15
+            },
+            {
+              "atomicNumber": 52,
+              "symbol": "Te",
+              "name": "Tellurium",
+              "atomicWeight": 127.6,
+              "category": "metalloid",
+              "row": 5,
+              "col": 16
+            },
+            {
+              "atomicNumber": 53,
+              "symbol": "I",
+              "name": "Iodine",
+              "atomicWeight": 126.9,
+              "category": "halogen",
+              "row": 5,
+              "col": 17
+            },
+            {
+              "atomicNumber": 54,
+              "symbol": "Xe",
+              "name": "Xenon",
+              "atomicWeight": 131.29,
+              "category": "noble-gas",
+              "row": 5,
+              "col": 18
+            },
+            {
+              "atomicNumber": 55,
+              "symbol": "Cs",
+              "name": "Cesium",
+              "atomicWeight": 132.91,
+              "category": "alkali-metal",
+              "row": 6,
+              "col": 1
+            },
+            {
+              "atomicNumber": 56,
+              "symbol": "Ba",
+              "name": "Barium",
+              "atomicWeight": 137.33,
+              "category": "alkaline-earth",
+              "row": 6,
+              "col": 2
+            },
+            {
+              "atomicNumber": 72,
+              "symbol": "Hf",
+              "name": "Hafnium",
+              "atomicWeight": 178.49,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 4
+            },
+            {
+              "atomicNumber": 73,
+              "symbol": "Ta",
+              "name": "Tantalum",
+              "atomicWeight": 180.95,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 5
+            },
+            {
+              "atomicNumber": 74,
+              "symbol": "W",
+              "name": "Tungsten",
+              "atomicWeight": 183.84,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 6
+            },
+            {
+              "atomicNumber": 75,
+              "symbol": "Re",
+              "name": "Rhenium",
+              "atomicWeight": 186.21,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 7
+            },
+            {
+              "atomicNumber": 76,
+              "symbol": "Os",
+              "name": "Osmium",
+              "atomicWeight": 190.23,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 8
+            },
+            {
+              "atomicNumber": 77,
+              "symbol": "Ir",
+              "name": "Iridium",
+              "atomicWeight": 192.22,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 9
+            },
+            {
+              "atomicNumber": 78,
+              "symbol": "Pt",
+              "name": "Platinum",
+              "atomicWeight": 195.08,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 10
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 11
+            },
+            {
+              "atomicNumber": 80,
+              "symbol": "Hg",
+              "name": "Mercury",
+              "atomicWeight": 200.59,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 12
+            },
+            {
+              "atomicNumber": 81,
+              "symbol": "Tl",
+              "name": "Thallium",
+              "atomicWeight": 204.38,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 13
+            },
+            {
+              "atomicNumber": 82,
+              "symbol": "Pb",
+              "name": "Lead",
+              "atomicWeight": 207.2,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 14
+            },
+            {
+              "atomicNumber": 83,
+              "symbol": "Bi",
+              "name": "Bismuth",
+              "atomicWeight": 208.98,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 15
+            },
+            {
+              "atomicNumber": 84,
+              "symbol": "Po",
+              "name": "Polonium",
+              "atomicWeight": 209,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 16
+            },
+            {
+              "atomicNumber": 85,
+              "symbol": "At",
+              "name": "Astatine",
+              "atomicWeight": 210,
+              "category": "halogen",
+              "row": 6,
+              "col": 17
+            },
+            {
+              "atomicNumber": 86,
+              "symbol": "Rn",
+              "name": "Radon",
+              "atomicWeight": 222,
+              "category": "noble-gas",
+              "row": 6,
+              "col": 18
+            },
+            {
+              "atomicNumber": 87,
+              "symbol": "Fr",
+              "name": "Francium",
+              "atomicWeight": 223,
+              "category": "alkali-metal",
+              "row": 7,
+              "col": 1
+            },
+            {
+              "atomicNumber": 88,
+              "symbol": "Ra",
+              "name": "Radium",
+              "atomicWeight": 226,
+              "category": "alkaline-earth",
+              "row": 7,
+              "col": 2
+            },
+            {
+              "atomicNumber": 104,
+              "symbol": "Rf",
+              "name": "Rutherfordium",
+              "atomicWeight": 267,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 4
+            },
+            {
+              "atomicNumber": 105,
+              "symbol": "Db",
+              "name": "Dubnium",
+              "atomicWeight": 268,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 5
+            },
+            {
+              "atomicNumber": 106,
+              "symbol": "Sg",
+              "name": "Seaborgium",
+              "atomicWeight": 269,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 6
+            },
+            {
+              "atomicNumber": 107,
+              "symbol": "Bh",
+              "name": "Bohrium",
+              "atomicWeight": 270,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 7
+            },
+            {
+              "atomicNumber": 108,
+              "symbol": "Hs",
+              "name": "Hassium",
+              "atomicWeight": 277,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 8
+            },
+            {
+              "atomicNumber": 109,
+              "symbol": "Mt",
+              "name": "Meitnerium",
+              "atomicWeight": 278,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 9
+            },
+            {
+              "atomicNumber": 110,
+              "symbol": "Ds",
+              "name": "Darmstadtium",
+              "atomicWeight": 281,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 10
+            },
+            {
+              "atomicNumber": 111,
+              "symbol": "Rg",
+              "name": "Roentgenium",
+              "atomicWeight": 282,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 11
+            },
+            {
+              "atomicNumber": 112,
+              "symbol": "Cn",
+              "name": "Copernicium",
+              "atomicWeight": 285,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 12
+            },
+            {
+              "atomicNumber": 113,
+              "symbol": "Nh",
+              "name": "Nihonium",
+              "atomicWeight": 286,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 13
+            },
+            {
+              "atomicNumber": 114,
+              "symbol": "Fl",
+              "name": "Flerovium",
+              "atomicWeight": 289,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 14
+            },
+            {
+              "atomicNumber": 115,
+              "symbol": "Mc",
+              "name": "Moscovium",
+              "atomicWeight": 290,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 15
+            },
+            {
+              "atomicNumber": 116,
+              "symbol": "Lv",
+              "name": "Livermorium",
+              "atomicWeight": 293,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 16
+            },
+            {
+              "atomicNumber": 117,
+              "symbol": "Ts",
+              "name": "Tennessine",
+              "atomicWeight": 294,
+              "category": "halogen",
+              "row": 7,
+              "col": 17
+            },
+            {
+              "atomicNumber": 118,
+              "symbol": "Og",
+              "name": "Oganesson",
+              "atomicWeight": 294,
+              "category": "noble-gas",
+              "row": 7,
+              "col": 18
+            },
+            {
+              "atomicNumber": 57,
+              "symbol": "La",
+              "name": "Lanthanum",
+              "atomicWeight": 138.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 3
+            },
+            {
+              "atomicNumber": 58,
+              "symbol": "Ce",
+              "name": "Cerium",
+              "atomicWeight": 140.12,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 4
+            },
+            {
+              "atomicNumber": 59,
+              "symbol": "Pr",
+              "name": "Praseodymium",
+              "atomicWeight": 140.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 5
+            },
+            {
+              "atomicNumber": 60,
+              "symbol": "Nd",
+              "name": "Neodymium",
+              "atomicWeight": 144.24,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 6
+            },
+            {
+              "atomicNumber": 61,
+              "symbol": "Pm",
+              "name": "Promethium",
+              "atomicWeight": 145,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 7
+            },
+            {
+              "atomicNumber": 62,
+              "symbol": "Sm",
+              "name": "Samarium",
+              "atomicWeight": 150.36,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 8
+            },
+            {
+              "atomicNumber": 63,
+              "symbol": "Eu",
+              "name": "Europium",
+              "atomicWeight": 151.96,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 9
+            },
+            {
+              "atomicNumber": 64,
+              "symbol": "Gd",
+              "name": "Gadolinium",
+              "atomicWeight": 157.25,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 10
+            },
+            {
+              "atomicNumber": 65,
+              "symbol": "Tb",
+              "name": "Terbium",
+              "atomicWeight": 158.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 11
+            },
+            {
+              "atomicNumber": 66,
+              "symbol": "Dy",
+              "name": "Dysprosium",
+              "atomicWeight": 162.5,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 12
+            },
+            {
+              "atomicNumber": 67,
+              "symbol": "Ho",
+              "name": "Holmium",
+              "atomicWeight": 164.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 13
+            },
+            {
+              "atomicNumber": 68,
+              "symbol": "Er",
+              "name": "Erbium",
+              "atomicWeight": 167.26,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 14
+            },
+            {
+              "atomicNumber": 69,
+              "symbol": "Tm",
+              "name": "Thulium",
+              "atomicWeight": 168.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 15
+            },
+            {
+              "atomicNumber": 70,
+              "symbol": "Yb",
+              "name": "Ytterbium",
+              "atomicWeight": 173.05,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 16
+            },
+            {
+              "atomicNumber": 71,
+              "symbol": "Lu",
+              "name": "Lutetium",
+              "atomicWeight": 174.97,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 17
+            },
+            {
+              "atomicNumber": 89,
+              "symbol": "Ac",
+              "name": "Actinium",
+              "atomicWeight": 227,
+              "category": "actinide",
+              "row": 9,
+              "col": 3
+            },
+            {
+              "atomicNumber": 90,
+              "symbol": "Th",
+              "name": "Thorium",
+              "atomicWeight": 232.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 4
+            },
+            {
+              "atomicNumber": 91,
+              "symbol": "Pa",
+              "name": "Protactinium",
+              "atomicWeight": 231.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 5
+            },
+            {
+              "atomicNumber": 92,
+              "symbol": "U",
+              "name": "Uranium",
+              "atomicWeight": 238.03,
+              "category": "actinide",
+              "row": 9,
+              "col": 6
+            },
+            {
+              "atomicNumber": 93,
+              "symbol": "Np",
+              "name": "Neptunium",
+              "atomicWeight": 237,
+              "category": "actinide",
+              "row": 9,
+              "col": 7
+            },
+            {
+              "atomicNumber": 94,
+              "symbol": "Pu",
+              "name": "Plutonium",
+              "atomicWeight": 244,
+              "category": "actinide",
+              "row": 9,
+              "col": 8
+            },
+            {
+              "atomicNumber": 95,
+              "symbol": "Am",
+              "name": "Americium",
+              "atomicWeight": 243,
+              "category": "actinide",
+              "row": 9,
+              "col": 9
+            },
+            {
+              "atomicNumber": 96,
+              "symbol": "Cm",
+              "name": "Curium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 10
+            },
+            {
+              "atomicNumber": 97,
+              "symbol": "Bk",
+              "name": "Berkelium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 11
+            },
+            {
+              "atomicNumber": 98,
+              "symbol": "Cf",
+              "name": "Californium",
+              "atomicWeight": 251,
+              "category": "actinide",
+              "row": 9,
+              "col": 12
+            },
+            {
+              "atomicNumber": 99,
+              "symbol": "Es",
+              "name": "Einsteinium",
+              "atomicWeight": 252,
+              "category": "actinide",
+              "row": 9,
+              "col": 13
+            },
+            {
+              "atomicNumber": 100,
+              "symbol": "Fm",
+              "name": "Fermium",
+              "atomicWeight": 257,
+              "category": "actinide",
+              "row": 9,
+              "col": 14
+            },
+            {
+              "atomicNumber": 101,
+              "symbol": "Md",
+              "name": "Mendelevium",
+              "atomicWeight": 258,
+              "category": "actinide",
+              "row": 9,
+              "col": 15
+            },
+            {
+              "atomicNumber": 102,
+              "symbol": "No",
+              "name": "Nobelium",
+              "atomicWeight": 259,
+              "category": "actinide",
+              "row": 9,
+              "col": 16
+            },
+            {
+              "atomicNumber": 103,
+              "symbol": "Lr",
+              "name": "Lawrencium",
+              "atomicWeight": 266,
+              "category": "actinide",
+              "row": 9,
+              "col": 17
+            }
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.820Z"
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "product-page",
+        "name": "E-Commerce Product Page",
+        "description": "Product detail page with image, tabs, quantity selector, and cart",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "shellType": "fullscreen",
+        "screen": "universal",
+        "prompt": "Build an e-commerce product detail page. Layout:\n\nTop section:\n- Product image placeholder (use a colored box with the product name)\n- Product title, price (with currency from props), and rating stars (1-5)\n- Stock status badge (\"In Stock\" green or \"Low Stock\" warning)\n\nMiddle section — Tab navigation with 3 tabs:\n- \"Description\" tab: renders product description text from props\n- \"Specifications\" tab: renders key-value pairs from props as a table\n- \"Reviews\" tab: renders a list of reviews (author, rating, text, date) from props\n\nBottom section:\n- Quantity selector (increment/decrement buttons, min 1, max from stock)\n- \"Add to Cart\" button (disabled if out of stock)\n- Call props.onAddToCart with { productId, quantity } when clicked\n\nRequirements:\n- All product data from props — nothing hardcoded\n- Use design system tokens for all colors, spacing, typography\n- Price should format with currency symbol from props\n- Rating stars should be visual (filled/empty)\n- Responsive: stack image above details on mobile widths",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "product": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "reviewCount": {
+                      "type": "number"
+                    },
+                    "stock": {
+                      "type": "number"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "specifications": {
+                      "type": "array"
+                    },
+                    "reviews": {
+                      "type": "array"
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Product object with id, name, price, currency, rating, stock, description, specifications[], reviews[]",
+                "example": {
+                  "id": "prod-001",
+                  "name": "Wireless Noise-Cancelling Headphones",
+                  "price": 249.99,
+                  "currency": "USD",
+                  "rating": 4.3,
+                  "reviewCount": 128,
+                  "stock": 12,
+                  "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+                  "specifications": [
+                    {
+                      "key": "Brand",
+                      "value": "AudioMax"
+                    },
+                    {
+                      "key": "Battery Life",
+                      "value": "30 hours"
+                    }
+                  ],
+                  "reviews": [
+                    {
+                      "author": "Alex M.",
+                      "rating": 5,
+                      "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                      "date": "2026-03-01"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "addToCart": {
+                "label": "Add to Cart",
+                "description": "Called when user clicks Add to Cart. Payload: { productId, quantity }",
+                "example": {
+                  "productId": "prod-001",
+                  "quantity": 2
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "product": {
+            "id": "prod-001",
+            "name": "Wireless Noise-Cancelling Headphones",
+            "price": 249.99,
+            "currency": "USD",
+            "rating": 4.3,
+            "reviewCount": 128,
+            "stock": 12,
+            "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+            "specifications": [
+              {
+                "key": "Brand",
+                "value": "AudioMax"
+              },
+              {
+                "key": "Battery Life",
+                "value": "30 hours"
+              },
+              {
+                "key": "Connectivity",
+                "value": "Bluetooth 5.3"
+              },
+              {
+                "key": "Weight",
+                "value": "250g"
+              },
+              {
+                "key": "Driver Size",
+                "value": "40mm"
+              },
+              {
+                "key": "Noise Cancellation",
+                "value": "Adaptive ANC"
+              }
+            ],
+            "reviews": [
+              {
+                "author": "Alex M.",
+                "rating": 5,
+                "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                "date": "2026-03-01"
+              },
+              {
+                "author": "Sarah K.",
+                "rating": 4,
+                "text": "Great sound quality. A bit tight for my head but breaks in after a week.",
+                "date": "2026-02-15"
+              },
+              {
+                "author": "James P.",
+                "rating": 4,
+                "text": "Battery life is exactly as advertised. Very impressed.",
+                "date": "2026-01-28"
+              }
+            ]
+          }
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.821Z"
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "chat-interface",
+        "name": "Chat Interface",
+        "description": "Chat UI with message list, input area, and send callback",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "universal",
+        "prompt": "Build a chat interface component with real-time messaging. Layout:\n\nHeader:\n- Chat title from props\n- Participant count badge\n- Typing indicator (shows when another user is typing, received via stream)\n\nMessage list:\n- Scrollable area showing messages (initial from props, new ones from stream)\n- Each message shows: sender name, message text, formatted timestamp\n- Messages from the current user (where sender matches props.currentUser) align right with primary color background\n- Messages from others align left with surfaceVariant background\n- Group consecutive messages from same sender\n\nInput area at the bottom:\n- Text input field for composing messages\n- Send button (disabled when input is empty)\n- Call the sendMessage action with { text, timestamp: new Date().toISOString() } on click or Enter\n\nRequirements:\n- Initial messages from props, new messages arrive via stream — append them to the list\n- Typing indicator appears/disappears via stream events\n- Use design system CSS variables for all colors and spacing\n- Auto-scroll to bottom when new messages arrive",
+        "contract": {
+          "interaction": "converse",
+          "props": {
+            "properties": {
+              "title": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Chat window title",
+                "example": "Team Chat"
+              },
+              "currentUser": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Current user name (for right-aligning own messages)",
+                "example": "You"
+              },
+              "participantCount": {
+                "schema": {
+                  "type": "number"
+                },
+                "description": "Number of participants",
+                "example": 3
+              },
+              "messages": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sender": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "timestamp": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Initial messages to display on mount",
+                "example": [
+                  {
+                    "sender": "Alice",
+                    "text": "Hey team, the design review is at 3pm",
+                    "timestamp": "2026-03-15T14:00:00Z"
+                  },
+                  {
+                    "sender": "You",
+                    "text": "Perfect, see you both there",
+                    "timestamp": "2026-03-15T14:03:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "sendMessage": {
+                "label": "Send Message",
+                "description": "Called when user sends a message. Payload: { text, timestamp }",
+                "example": {
+                  "text": "Sounds good!",
+                  "timestamp": "2026-03-15T14:10:00Z"
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time chat events from the agent",
+            "events": {
+              "message": {
+                "description": "New message from another participant — append to message list",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sender": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "sender": "Alice",
+                  "text": "Just pushed the latest changes",
+                  "timestamp": "2026-03-15T14:10:00Z"
+                }
+              },
+              "typing": {
+                "description": "Typing indicator — show/hide based on active flag",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sender": {
+                      "type": "string"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "sender": "Bob",
+                  "active": true
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "loadHistory": {
+                "label": "Load History",
+                "description": "Fetch older messages for infinite scroll",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "before": {
+                      "type": "string",
+                      "description": "ISO timestamp cursor"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "description": "Max messages to return"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sender": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "before": "2026-03-15T14:00:00Z",
+                    "limit": 20
+                  },
+                  "response": {
+                    "messages": [
+                      {
+                        "sender": "Alice",
+                        "text": "Earlier message",
+                        "timestamp": "2026-03-15T13:55:00Z"
+                      }
+                    ],
+                    "hasMore": true
+                  }
+                }
+              },
+              "searchMessages": {
+                "label": "Search Messages",
+                "description": "Full-text search across conversation",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sender": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getDraftState": {
+                "description": "Current message draft and typing state",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "draft": {
+                      "type": "string"
+                    },
+                    "isTyping": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "draft": "Hello...",
+                  "isTyping": true
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "title": "Team Chat",
+          "currentUser": "You",
+          "participantCount": 3,
+          "messages": [
+            {
+              "sender": "Alice",
+              "text": "Hey team, the design review is at 3pm",
+              "timestamp": "2026-03-15T14:00:00Z"
+            },
+            {
+              "sender": "Bob",
+              "text": "Got it, I will prepare the mockups",
+              "timestamp": "2026-03-15T14:02:00Z"
+            },
+            {
+              "sender": "You",
+              "text": "Perfect, see you both there",
+              "timestamp": "2026-03-15T14:03:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "Also, can someone review the color palette?",
+              "timestamp": "2026-03-15T14:05:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "I pushed the latest changes to the design branch",
+              "timestamp": "2026-03-15T14:05:30Z"
+            },
+            {
+              "sender": "You",
+              "text": "I will take a look after the meeting",
+              "timestamp": "2026-03-15T14:06:00Z"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var w=Object.defineProperty;var p=(r,g)=>w(r,\"name\",{value:g,configurable:!0});import{jsx as t,jsxs as a}from\"react/jsx-runtime\";import{useState as T,useEffect as x,useRef as A}from\"react\";import{Card as B,Stack as u,Row as C,Box as b,Text as o,Heading as P,Button as H,Input as R,Badge as D}from\"@ggui-ai/design/primitives\";import{useAction as I,useStream as M}from\"@ggui-ai/wire\";function U(r){const g=I(\"sendMessage\"),c=M(\"message\"),l=M(\"typing\"),[d,m]=T(r.messages||[]),[n,v]=T(\"\"),i=A(null);x(()=>{c.latest&&m(e=>[...e,c.latest])},[c.latest]),x(()=>{i.current&&(i.current.scrollTop=i.current.scrollHeight)},[d,l.latest]);const h=p(()=>{if(n.trim()){const e={text:n,timestamp:new Date().toISOString(),sender:r.currentUser};g(e),m(s=>[...s,e]),v(\"\")}},\"handleSend\"),f=l.latest?.active?l.latest.sender:null;return a(u,{gap:\"var(--ggui-spacing-4)\",style:{height:\"100vh\"},children:[a(C,{align:\"center\",justify:\"between\",style:{padding:\"var(--ggui-spacing-4)\"},children:[a(u,{gap:\"var(--ggui-spacing-1)\",children:[t(P,{level:2,children:r.title}),f&&a(o,{variant:\"caption\",color:\"var(--ggui-color-primary-600)\",children:[f,\" is typing...\"]})]}),a(D,{children:[r.participantCount,\" participants\"]})]}),t(b,{ref:i,style:{flex:1,overflowY:\"auto\"},padding:\"var(--ggui-spacing-4)\",children:t(u,{gap:\"var(--ggui-spacing-2)\",children:d.map((e,s)=>{const S=e.sender===r.currentUser,y=d[s-1],k=y&&y.sender===e.sender;return a(b,{alignSelf:S?\"end\":\"start\",style:{maxWidth:\"70%\"},children:[!k&&t(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:e.sender}),a(B,{padding:\"var(--ggui-spacing-3)\",background:S?\"var(--ggui-color-primary-100)\":\"var(--ggui-color-surfaceVariant)\",children:[t(o,{children:e.text}),t(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(e.timestamp||\"\").toLocaleTimeString()})]})]},s)})})}),a(C,{gap:\"var(--ggui-spacing-2)\",style:{padding:\"var(--ggui-spacing-4)\"},children:[t(R,{label:\"Message\",value:n,onChange:v,style:{flex:1}}),t(H,{disabled:!n.trim(),onClick:h,children:\"Send\"})]})]})}p(U,\"Component\");export{U as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  title: string; // Chat window title\n  currentUser: string; // Current user name (for right-aligning own messages)\n  participantCount: number; // Number of participants\n  messages: Array<{ sender?: string; text?: string; timestamp?: string }>; // Initial messages to display on mount\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when user sends a message. Payload: { text, timestamp } */\ntype ActionSendMessagePayload = { text: string; timestamp: string };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: New message from another participant — append to message list */\ntype StreamMessage = { sender?: string; text?: string; timestamp?: string };\n\n/** Stream event: Typing indicator — show/hide based on active flag */\ntype StreamTyping = { sender?: string; active?: boolean };\n\n\n\n\n// Place helper components here if needed\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n    // Actions — fire-and-forget to agent\n  const sendMessage = useAction<ActionSendMessagePayload>('sendMessage'); // Called when user sends a message. Payload: { text, timestamp }\n\n  // Streams — real-time from agent (.latest, .all)\n  const message = useStream<StreamMessage>('message'); // New message from another participant — append to message list\n  const typing = useStream<StreamTyping>('typing'); // Typing indicator — show/hide based on active flag\n  const [messages, setMessages] = useState(props.messages || []);\n  const [input, setInput] = useState('');\n  const scrollRef = useRef<HTMLDivElement>(null);\n\n  useEffect(() => {\n    if (message.latest) {\n      setMessages((prev) => [...prev, message.latest!]);\n    }\n  }, [message.latest]);\n\n  useEffect(() => {\n    if (scrollRef.current) {\n      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;\n    }\n  }, [messages, typing.latest]);\n\n  const handleSend = () => {\n    if (input.trim()) {\n      const msg = { text: input, timestamp: new Date().toISOString(), sender: props.currentUser };\n      sendMessage(msg);\n      setMessages((prev) => [...prev, msg]);\n      setInput('');\n    }\n  };\n\n  const typingUser = typing.latest?.active ? typing.latest.sender : null;\n  return (\n    <Stack gap=\"var(--ggui-spacing-4)\" style={{ height: '100vh' }}>\n      <Row align=\"center\" justify=\"between\" style={{ padding: 'var(--ggui-spacing-4)' }}>\n        <Stack gap=\"var(--ggui-spacing-1)\">\n          <Heading level={2}>{props.title}</Heading>\n          {typingUser && <Text variant=\"caption\" color=\"var(--ggui-color-primary-600)\">{typingUser} is typing...</Text>}\n        </Stack>\n        <Badge>{props.participantCount} participants</Badge>\n      </Row>\n      <Box ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} padding=\"var(--ggui-spacing-4)\">\n        <Stack gap=\"var(--ggui-spacing-2)\">\n          {messages.map((m, i) => {\n            const isMe = m.sender === props.currentUser;\n            const prev = messages[i - 1];\n            const isConsecutive = prev && prev.sender === m.sender;\n            return (\n              <Box key={i} alignSelf={isMe ? 'end' : 'start'} style={{ maxWidth: '70%' }}>\n                {!isConsecutive && <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{m.sender}</Text>}\n                <Card padding=\"var(--ggui-spacing-3)\" background={isMe ? 'var(--ggui-color-primary-100)' : 'var(--ggui-color-surfaceVariant)'}>\n                  <Text>{m.text}</Text>\n                  <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{new Date(m.timestamp || '').toLocaleTimeString()}</Text>\n                </Card>\n              </Box>\n            );\n          })}\n        </Stack>\n      </Box>\n      <Row gap=\"var(--ggui-spacing-2)\" style={{ padding: 'var(--ggui-spacing-4)' }}>\n        <Input label=\"Message\" value={input} onChange={setInput} style={{ flex: 1 }} />\n        <Button disabled={!input.trim()} onClick={handleSend}>Send</Button>\n      </Row>\n    </Stack>\n\n  );\n}\n",
+        "tokens": {
+          "input": 214784,
+          "output": 3201,
+          "total": 217985
+        },
+        "generationTimeMs": 31085,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The input field at line 105 does not support submitting the message when the 'Enter' key is pressed, forcing users to click the button.",
+              "fix": "The input field at line 105 does not support submitting the message when the 'Enter' key is pressed, forcing users to click the button."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The 'Send' button is missing an aria-label or accessible name that describes its function clearly for screen reader users, although it has text content, an explicit aria-label is recommended for buttons in functional UI.",
+              "fix": "The 'Send' button is missing an aria-label or accessible name that describes its function clearly for screen reader users, although it has text content, an explicit aria-label is recommended for buttons in functional UI."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The chat message list container (Box on line 86) lacks an aria-live region (e.g., aria-live=\"polite\") to announce new incoming messages to screen reader users.",
+              "fix": "The chat message list container (Box on line 86) lacks an aria-live region (e.g., aria-live=\"polite\") to announce new incoming messages to screen reader users."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The chat window lacks a designated landmark region (e.g., role=\"log\" or aria-label=\"Chat messages\") to help users navigate to the message content.",
+              "fix": "The chat window lacks a designated landmark region (e.g., role=\"log\" or aria-label=\"Chat messages\") to help users navigate to the message content."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Input component lacks a prop for hiding the label or the visual composition requires a dedicated 'sr-only' label to prevent the input from being pushed out of alignment with the Send button",
+              "fix": "Input component lacks a prop for hiding the label or the visual composition requires a dedicated 'sr-only' label to prevent the input from being pushed out of alignment with the Send button"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Timestamp in message card is not clearly separated from the message text; it should have a small spacer or appear on its own line for better readability",
+              "fix": "Timestamp in message card is not clearly separated from the message text; it should have a small spacer or appear on its own line for better readability"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The layout uses raw style objects for critical layout properties (e.g., 'flex: 1', 'overflowY: auto') instead of wrapping in design system primitives where possible for consistency",
+              "fix": "The layout uses raw style objects for critical layout properties (e.g., 'flex: 1', 'overflowY: auto') instead of wrapping in design system primitives where possible for consistency"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state when messages array is empty — should provide a visual indicator or placeholder message indicating the start of the chat.",
+              "fix": "No empty state when messages array is empty — should provide a visual indicator or placeholder message indicating the start of the chat."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 78: style={{ height: '100vh' }} uses a hardcoded pixel/viewport value instead of design system layout tokens if applicable.",
+              "fix": "Line 78: style={{ height: '100vh' }} uses a hardcoded pixel/viewport value instead of design system layout tokens if applicable."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 86: style={{ flex: 1, overflowY: 'auto' }} uses custom CSS properties that should ideally be managed via design system layout primitives or tokens if available.",
+              "fix": "Line 86: style={{ flex: 1, overflowY: 'auto' }} uses custom CSS properties that should ideally be managed via design system layout primitives or tokens if available."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 93: style={{ maxWidth: '70%' }} uses a hardcoded percentage instead of a design token.",
+              "fix": "Line 93: style={{ maxWidth: '70%' }} uses a hardcoded percentage instead of a design token."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 105: style={{ flex: 1 }} uses a hardcoded flex property instead of design system layout tokens.",
+              "fix": "Line 105: style={{ flex: 1 }} uses a hardcoded flex property instead of design system layout tokens."
+            }
+          ],
+          "pass": ["functionality", "crash"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 18175,
+          "evalMs": 0,
+          "totalMs": 31085
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 83.6,
+        "finalScore": 83.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 85,
+          "designTokens": 90,
+          "hierarchy": 80,
+          "polish": 75,
+          "dataPresentation": 88,
+          "completeness": 88,
+          "visualPolish": 83,
+          "interactivity": 75,
+          "accessibility": 83,
+          "codeQuality": 90
+        },
+        "critique": "The component demonstrates solid layout structure with proper flex/stack usage and responsive scrolling, and makes excellent use of ggui design tokens throughout. Minor issues include the message input row lacking vertical alignment refinement, missing focus/disabled visual states on the input field, and the message list could benefit from smoother scroll behavior or message entry animations.",
+        "evalTimeMs": 2852
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The input field at line 105 does not support submitting the message when the 'Enter' key is pressed, forcing users to click the button.",
+            "fix": "The input field at line 105 does not support submitting the message when the 'Enter' key is pressed, forcing users to click the button."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The 'Send' button is missing an aria-label or accessible name that describes its function clearly for screen reader users, although it has text content, an explicit aria-label is recommended for buttons in functional UI.",
+            "fix": "The 'Send' button is missing an aria-label or accessible name that describes its function clearly for screen reader users, although it has text content, an explicit aria-label is recommended for buttons in functional UI."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The chat message list container (Box on line 86) lacks an aria-live region (e.g., aria-live=\"polite\") to announce new incoming messages to screen reader users.",
+            "fix": "The chat message list container (Box on line 86) lacks an aria-live region (e.g., aria-live=\"polite\") to announce new incoming messages to screen reader users."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The chat window lacks a designated landmark region (e.g., role=\"log\" or aria-label=\"Chat messages\") to help users navigate to the message content.",
+            "fix": "The chat window lacks a designated landmark region (e.g., role=\"log\" or aria-label=\"Chat messages\") to help users navigate to the message content."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Input component lacks a prop for hiding the label or the visual composition requires a dedicated 'sr-only' label to prevent the input from being pushed out of alignment with the Send button",
+            "fix": "Input component lacks a prop for hiding the label or the visual composition requires a dedicated 'sr-only' label to prevent the input from being pushed out of alignment with the Send button"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Timestamp in message card is not clearly separated from the message text; it should have a small spacer or appear on its own line for better readability",
+            "fix": "Timestamp in message card is not clearly separated from the message text; it should have a small spacer or appear on its own line for better readability"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The layout uses raw style objects for critical layout properties (e.g., 'flex: 1', 'overflowY: auto') instead of wrapping in design system primitives where possible for consistency",
+            "fix": "The layout uses raw style objects for critical layout properties (e.g., 'flex: 1', 'overflowY: auto') instead of wrapping in design system primitives where possible for consistency"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state when messages array is empty — should provide a visual indicator or placeholder message indicating the start of the chat.",
+            "fix": "No empty state when messages array is empty — should provide a visual indicator or placeholder message indicating the start of the chat."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 78: style={{ height: '100vh' }} uses a hardcoded pixel/viewport value instead of design system layout tokens if applicable.",
+            "fix": "Line 78: style={{ height: '100vh' }} uses a hardcoded pixel/viewport value instead of design system layout tokens if applicable."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 86: style={{ flex: 1, overflowY: 'auto' }} uses custom CSS properties that should ideally be managed via design system layout primitives or tokens if available.",
+            "fix": "Line 86: style={{ flex: 1, overflowY: 'auto' }} uses custom CSS properties that should ideally be managed via design system layout primitives or tokens if available."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 93: style={{ maxWidth: '70%' }} uses a hardcoded percentage instead of a design token.",
+            "fix": "Line 93: style={{ maxWidth: '70%' }} uses a hardcoded percentage instead of a design token."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 105: style={{ flex: 1 }} uses a hardcoded flex property instead of design system layout tokens.",
+            "fix": "Line 105: style={{ flex: 1 }} uses a hardcoded flex property instead of design system layout tokens."
+          }
+        ],
+        "pass": ["functionality", "crash"]
+      },
+      "estimatedCostUsd": 0.116995,
+      "timestamp": "2026-03-24T03:15:59.899Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2092,
+        "sourceCodeBytes": 5788,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a stock ticker dashboard that displays stock prices with live updates. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp (updates in real-time)\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n- Brief flash/highlight animation when a stock price updates\n\nInitial stock data comes from props. Live price updates arrive via stream events — merge them into the displayed data. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time stock price updates from the agent",
+            "events": {
+              "priceUpdate": {
+                "description": "Updated price data for one or more stocks",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "change": {
+                      "type": "number"
+                    },
+                    "changePercent": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "example": {
+                  "symbol": "AAPL",
+                  "price": 179.1,
+                  "change": 2.92,
+                  "changePercent": 1.66
+                }
+              },
+              "marketStatus": {
+                "description": "Market open/closed status update",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "closed", "pre-market", "after-hours"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "open",
+                  "timestamp": "2026-03-15T16:30:00Z"
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "getStockDetail": {
+                "label": "Stock Detail",
+                "description": "Get detailed info for a specific stock (52-week range, volume, etc.)",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "high52w": {
+                      "type": "number"
+                    },
+                    "low52w": {
+                      "type": "number"
+                    },
+                    "volume": {
+                      "type": "number"
+                    },
+                    "marketCap": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "symbol": "AAPL"
+                  },
+                  "response": {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "high52w": 199.62,
+                    "low52w": 140.81,
+                    "volume": 54123000,
+                    "marketCap": "2.89T"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var s=Object.defineProperty;var i=(e,r)=>s(e,\"name\",{value:r,configurable:!0});import{jsx as a,jsxs as o}from\"react/jsx-runtime\";import{Container as c,Card as g,Stack as m,Row as p,Text as t,Icon as l}from\"@ggui-ai/design/primitives\";import{useStream as n}from\"@ggui-ai/wire\";const Te=i(({stock:e})=>{const r=(e.change??0)>=0;return a(g,{padding:\"var(--ggui-spacing-4)\",style:{border:`1px solid ${r?\"var(--ggui-color-success-500)\":\"var(--ggui-color-error-500)\"}`},children:o(m,{gap:\"var(--ggui-spacing-2)\",children:[a(t,{weight:\"bold\",size:\"2xl\",children:e.symbol}),a(t,{color:\"var(--ggui-color-onSurfaceVariant)\",children:e.name}),o(t,{size:\"xl\",weight:\"semibold\",children:[\"$\",e.price?.toFixed(2)]}),o(p,{gap:\"var(--ggui-spacing-2)\",style:{color:r?\"var(--ggui-color-success-600)\":\"var(--ggui-color-error-600)\"},children:[a(l,{name:r?\"arrow-up\":\"arrow-down\",size:16}),o(t,{children:[e.change?.toFixed(2),\" (\",e.changePercent?.toFixed(2),\"%)\"]})]})]})})},\"StockCard\");function d(e){const r=n(\"priceUpdate\"),u=n(\"marketStatus\");return a(c,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\"})}i(d,\"Component\");export{d as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  stocks: Array<{ symbol?: string; name?: string; price?: number; change?: number; changePercent?: number }>; // Array of stocks with symbol, name, price, change, changePercent\n}\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: Updated price data for one or more stocks */\ntype StreamPriceUpdate = { symbol?: string; price?: number; change?: number; changePercent?: number };\n\n/** Stream event: Market open/closed status update */\n/** Stream event: Market open/closed status update */\ntype StreamMarketStatus = { status?: 'open' | 'closed' | 'pre-market' | 'after-hours'; timestamp?: string };\n\n// Place helper components here if needed\nconst StockCard = (props: { stock: NonNullable<Props['stocks'][0]> }) => {\n  const { stock } = props;\n  const isPositive = (stock.change ?? 0) >= 0;\n  return (\n    <Card padding=\"var(--ggui-spacing-4)\" style={{ border: `1px solid ${isPositive ? 'var(--ggui-color-success-500)' : 'var(--ggui-color-error-500)'}` }}>\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        <Text weight=\"bold\" size=\"2xl\">{stock.symbol}</Text>\n        <Text color=\"var(--ggui-color-onSurfaceVariant)\">{stock.name}</Text>\n        <Text size=\"xl\" weight=\"semibold\">${stock.price?.toFixed(2)}</Text>\n        <Row gap=\"var(--ggui-spacing-2)\" style={{ color: isPositive ? 'var(--ggui-color-success-600)' : 'var(--ggui-color-error-600)' }}>\n          <Icon name={isPositive ? 'trending-up' : 'trending-down'} size={16} />\n          <Text>{stock.change?.toFixed(2)} ({stock.changePercent?.toFixed(2)}%)</Text>\n        </Row>\n      </Stack>\n    </Card>\n  );\n};\n48│ \n49│ export default function Component(props: Props) {\n50│   // DO NOT EDIT wire hooks — auto-generated from the data contract\n51│   \n52│   // Streams — real-time from agent (.latest, .all)\n53│   const priceUpdate = useStream<StreamPriceUpdate>('priceUpdate'); // Updated price data for one or more stocks\n54│   const marketStatus = useStream<StreamMarketStatus>('marketStatus'); // Market open/closed status update\n55│ \n56│   return (\n57│     <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n58│       {/* implement your UI here */}\n59│     </Container>\n60│   );\n61│ }\n",
+        "tokens": {
+          "input": 391269,
+          "output": 4107,
+          "total": 395376
+        },
+        "generationTimeMs": 36511,
+        "turnsUsed": 8,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Header is completely missing. It must include \"Market Watch\" title and a \"Last Updated\" timestamp that updates in real-time.",
+              "fix": "Header is completely missing. It must include \"Market Watch\" title and a \"Last Updated\" timestamp that updates in real-time."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The responsive grid of stock cards is not rendered in the JSX.",
+              "fix": "The responsive grid of stock cards is not rendered in the JSX."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The stock data from props is not initialized or rendered.",
+              "fix": "The stock data from props is not initialized or rendered."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Live price updates (stream events) are not merged or used to update the displayed data.",
+              "fix": "Live price updates (stream events) are not merged or used to update the displayed data."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "No flash/highlight animation implemented for stock price updates.",
+              "fix": "No flash/highlight animation implemented for stock price updates."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The market status stream event is not consumed or displayed.",
+              "fix": "The market status stream event is not consumed or displayed."
+            },
+            {
+              "tier": 2,
+              "result": "fail",
+              "category": "interactivity",
+              "severity": "critical",
+              "description": "The component has no content or layout implemented in the return statement. As a stock dashboard, it lacks interactive features such as the ability to click on a stock card for details, a refresh button to manually sync data, or sorting/filtering controls which are standard for list-based data dashboards.",
+              "fix": "The component has no content or layout implemented in the return statement. As a stock dashboard, it lacks interactive features such as the ability to click on a stock card for details, a refresh button to manually sync data, or sorting/filtering controls which are standard for list-based data dashboards."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The component lacks a main heading (h1) to define the page content, violating heading hierarchy best practices.",
+              "fix": "The component lacks a main heading (h1) to define the page content, violating heading hierarchy best practices."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The 'Icon' component used for the arrow (line 44) lacks an 'aria-label' or 'title' to explain its meaning to screen reader users.",
+              "fix": "The 'Icon' component used for the arrow (line 44) lacks an 'aria-label' or 'title' to explain its meaning to screen reader users."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The stock card lacks a landmark or role (e.g., role='article') to identify it as a distinct content block in the grid.",
+              "fix": "The stock card lacks a landmark or role (e.g., role='article') to identify it as a distinct content block in the grid."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The 'Last Updated' timestamp is missing an aria-live region to notify screen reader users when the data updates in real-time.",
+              "fix": "The 'Last Updated' timestamp is missing an aria-live region to notify screen reader users when the data updates in real-time."
+            },
+            {
+              "tier": 2,
+              "result": "fail",
+              "category": "layout",
+              "severity": "critical",
+              "description": "The component render function is empty (line 62), failing to display the header and the stock card grid required by the prompt.",
+              "fix": "The component render function is empty (line 62), failing to display the header and the stock card grid required by the prompt."
+            },
+            {
+              "tier": 2,
+              "result": "fail",
+              "category": "loading",
+              "severity": "critical",
+              "description": "Component shows blank screen when no stocks are provided — needs empty state message",
+              "fix": "Component shows blank screen when no stocks are provided — needs empty state message"
+            },
+            {
+              "tier": 2,
+              "result": "fail",
+              "category": "loading",
+              "severity": "critical",
+              "description": "Component lacks a loading or initial state for stream data",
+              "fix": "Component lacks a loading or initial state for stream data"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 38: inline style object used for border; use design system properties or composition variants instead of style={{...}} to apply borders where possible.",
+              "fix": "Line 38: inline style object used for border; use design system properties or composition variants instead of style={{...}} to apply borders where possible."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 43: inline style object used for color; avoid style props for color, use Text or appropriate component props for color consistency.",
+              "fix": "Line 43: inline style object used for color; avoid style props for color, use Text or appropriate component props for color consistency."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 44: numeric size prop size={16} should use a design system size token.",
+              "fix": "Line 44: numeric size prop size={16} should use a design system size token."
+            }
+          ],
+          "pass": ["crash"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 27713,
+          "evalMs": 0,
+          "totalMs": 36511
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 45,
+        "finalScore": 45,
+        "issues": [],
+        "dimensions": {
+          "layout": 45,
+          "designTokens": 75,
+          "hierarchy": 35,
+          "polish": 40,
+          "dataPresentation": 30,
+          "completeness": 30,
+          "visualPolish": 40,
+          "interactivity": 40,
+          "accessibility": 40,
+          "codeQuality": 75
+        },
+        "critique": "The component has a good foundation with proper design tokens in the StockCard helper, but the main component is completely empty—there's no header, timestamp display, grid layout, or data rendering. The StockCard correctly uses semantic color tokens and spacing variables, but the incomplete implementation means the responsive grid (3 columns desktop, 1 mobile) and real-time updates are missing entirely.",
+        "evalTimeMs": 2385
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Header is completely missing. It must include \"Market Watch\" title and a \"Last Updated\" timestamp that updates in real-time.",
+            "fix": "Header is completely missing. It must include \"Market Watch\" title and a \"Last Updated\" timestamp that updates in real-time."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The responsive grid of stock cards is not rendered in the JSX.",
+            "fix": "The responsive grid of stock cards is not rendered in the JSX."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The stock data from props is not initialized or rendered.",
+            "fix": "The stock data from props is not initialized or rendered."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Live price updates (stream events) are not merged or used to update the displayed data.",
+            "fix": "Live price updates (stream events) are not merged or used to update the displayed data."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "No flash/highlight animation implemented for stock price updates.",
+            "fix": "No flash/highlight animation implemented for stock price updates."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The market status stream event is not consumed or displayed.",
+            "fix": "The market status stream event is not consumed or displayed."
+          },
+          {
+            "tier": 2,
+            "result": "fail",
+            "category": "interactivity",
+            "severity": "critical",
+            "description": "The component has no content or layout implemented in the return statement. As a stock dashboard, it lacks interactive features such as the ability to click on a stock card for details, a refresh button to manually sync data, or sorting/filtering controls which are standard for list-based data dashboards.",
+            "fix": "The component has no content or layout implemented in the return statement. As a stock dashboard, it lacks interactive features such as the ability to click on a stock card for details, a refresh button to manually sync data, or sorting/filtering controls which are standard for list-based data dashboards."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The component lacks a main heading (h1) to define the page content, violating heading hierarchy best practices.",
+            "fix": "The component lacks a main heading (h1) to define the page content, violating heading hierarchy best practices."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The 'Icon' component used for the arrow (line 44) lacks an 'aria-label' or 'title' to explain its meaning to screen reader users.",
+            "fix": "The 'Icon' component used for the arrow (line 44) lacks an 'aria-label' or 'title' to explain its meaning to screen reader users."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The stock card lacks a landmark or role (e.g., role='article') to identify it as a distinct content block in the grid.",
+            "fix": "The stock card lacks a landmark or role (e.g., role='article') to identify it as a distinct content block in the grid."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The 'Last Updated' timestamp is missing an aria-live region to notify screen reader users when the data updates in real-time.",
+            "fix": "The 'Last Updated' timestamp is missing an aria-live region to notify screen reader users when the data updates in real-time."
+          },
+          {
+            "tier": 2,
+            "result": "fail",
+            "category": "layout",
+            "severity": "critical",
+            "description": "The component render function is empty (line 62), failing to display the header and the stock card grid required by the prompt.",
+            "fix": "The component render function is empty (line 62), failing to display the header and the stock card grid required by the prompt."
+          },
+          {
+            "tier": 2,
+            "result": "fail",
+            "category": "loading",
+            "severity": "critical",
+            "description": "Component shows blank screen when no stocks are provided — needs empty state message",
+            "fix": "Component shows blank screen when no stocks are provided — needs empty state message"
+          },
+          {
+            "tier": 2,
+            "result": "fail",
+            "category": "loading",
+            "severity": "critical",
+            "description": "Component lacks a loading or initial state for stream data",
+            "fix": "Component lacks a loading or initial state for stream data"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 38: inline style object used for border; use design system properties or composition variants instead of style={{...}} to apply borders where possible.",
+            "fix": "Line 38: inline style object used for border; use design system properties or composition variants instead of style={{...}} to apply borders where possible."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 43: inline style object used for color; avoid style props for color, use Text or appropriate component props for color consistency.",
+            "fix": "Line 43: inline style object used for color; avoid style props for color, use Text or appropriate component props for color consistency."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 44: numeric size prop size={16} should use a design system size token.",
+            "fix": "Line 44: numeric size prop size={16} should use a design system size token."
+          }
+        ],
+        "pass": ["crash"]
+      },
+      "estimatedCostUsd": 0.2079555,
+      "timestamp": "2026-03-24T03:16:04.872Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1126,
+        "sourceCodeBytes": 4058,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "universal",
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)",
+                "example": {}
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from",
+                "example": ["👤", "🧑‍💻", "🎨", "📊"]
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown",
+                "example": ["Developer", "Designer", "Manager", "Other"]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding",
+                "example": {
+                  "name": "Jane",
+                  "email": "jane@example.com",
+                  "avatar": "🧑‍💻",
+                  "role": "Developer",
+                  "emailNotifications": true,
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-24T03:20:24.822Z"
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-default-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 64.3,
+      "avgTimeMs": 33798,
+      "avgCostUsd": 0.16247525,
+      "successRate": 0.25,
+      "dimensionAvgs": {
+        "completeness": 59,
+        "visualPolish": 61.5,
+        "interactivity": 57.5,
+        "accessibility": 61.5,
+        "codeQuality": 82.5
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "periodic-table",
+      "commitName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "product-page",
+      "commitName": "E-Commerce Product Page",
+      "complexity": "complex",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "chat-interface",
+      "commitName": "Chat Interface",
+      "complexity": "medium",
+      "avgScore": 83.6,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 45,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "onboarding-wizard",
+      "commitName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 64.3,
+        "avgTimeMs": 33798,
+        "avgCostUsd": 0.16247525,
+        "successRate": 0.25
+      }
+    }
+  }
+}

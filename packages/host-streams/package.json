@@ -1,0 +1,55 @@
+{
+  "name": "@ggui-ai/host-streams",
+  "version": "0.1.0-rc.1",
+  "private": true,
+  "description": "Host-side stream mediator for ggui. Lets an MCP Apps host own a single WebSocket connection (with polling fallback) and fan each channel frame to the right iframe via postMessage, instead of every iframe opening its own socket.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-apps",
+    "websocket",
+    "iframe"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ggui-ai/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/host-streams"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/host-streams",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

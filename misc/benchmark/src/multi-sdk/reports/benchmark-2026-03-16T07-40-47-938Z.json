@@ -1,0 +1,525 @@
+{
+  "meta": {
+    "timestamp": "2026-03-16T07:40:47.937Z",
+    "totalDurationMs": 375335,
+    "totalVariants": 2,
+    "totalPrompts": 2,
+    "totalRuns": 4,
+    "successCount": 3,
+    "failureCount": 1,
+    "successRate": 0.75
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-c1-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "sampleProps": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as r,jsxs as i}from\"react/jsx-runtime\";import{Card as y,Stack as o,Row as f,Text as a,Box as n}from\"@ggui-ai/design/primitives\";function h(g){const{city:d,temperature:l,condition:c,humidity:u,windSpeed:p,unit:s,forecast:m}=g;return r(y,{padding:24,shadow:\"md\",style:{background:\"linear-gradient(135deg, var(--ggui-color-primary-50, #f0f9ff), var(--ggui-color-primary-100, #e0f2fe))\",borderColor:\"var(--ggui-color-primary-200, #bae6fd)\"},children:i(o,{direction:\"vertical\",gap:24,children:[r(\"div\",{children:r(a,{variant:\"h2\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",weight:\"bold\",children:d})}),i(o,{direction:\"horizontal\",gap:24,align:\"center\",justify:\"between\",children:[i(o,{direction:\"vertical\",gap:8,align:\"start\",children:[r(\"div\",{style:{fontSize:\"64px\",lineHeight:1},children:(t=>{const e=t.toLowerCase();return e.includes(\"sunny\")||e.includes(\"clear\")?\"\\u2600\\uFE0F\":e.includes(\"cloud\")?\"\\u2601\\uFE0F\":e.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":e.includes(\"snow\")?\"\\u2744\\uFE0F\":e.includes(\"storm\")||e.includes(\"thunder\")?\"\\u26C8\\uFE0F\":e.includes(\"wind\")?\"\\u{1F4A8}\":e.includes(\"fog\")||e.includes(\"mist\")?\"\\u{1F32B}\\uFE0F\":\"\\u{1F324}\\uFE0F\"})(c)}),i(a,{variant:\"h1\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",weight:\"bold\",children:[l,\"\\xB0\",s]}),r(a,{variant:\"body\",color:\"var(--ggui-color-primary-700, #0369a1)\",weight:\"semibold\",children:c})]}),i(o,{direction:\"vertical\",gap:16,children:[r(n,{padding:12,borderRadius:\"var(--ggui-shape-radius-md, 8px)\",background:\"var(--ggui-color-primary-100, #e0f2fe)\",style:{borderLeft:\"4px solid var(--ggui-color-primary-500, #0ea5e9)\"},children:i(o,{direction:\"vertical\",gap:4,children:[r(a,{variant:\"caption\",color:\"var(--ggui-color-primary-600, #0284c7)\",weight:\"medium\",children:\"Humidity\"}),i(a,{variant:\"h3\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",weight:\"semibold\",children:[u,\"%\"]})]})}),r(n,{padding:12,borderRadius:\"var(--ggui-shape-radius-md, 8px)\",background:\"var(--ggui-color-primary-100, #e0f2fe)\",style:{borderLeft:\"4px solid var(--ggui-color-primary-500, #0ea5e9)\"},children:i(o,{direction:\"vertical\",gap:4,children:[r(a,{variant:\"caption\",color:\"var(--ggui-color-primary-600, #0284c7)\",weight:\"medium\",children:\"Wind Speed\"}),i(a,{variant:\"h3\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",weight:\"semibold\",children:[p,\" mph\"]})]})})]})]}),r(\"div\",{style:{height:\"1px\",background:\"var(--ggui-color-primary-200, #bae6fd)\"}}),i(o,{direction:\"vertical\",gap:12,children:[r(a,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",weight:\"semibold\",children:\"5-Day Forecast\"}),r(f,{gap:8,wrap:!0,justify:\"start\",style:{overflow:\"auto\",paddingBottom:\"4px\"},children:m.map((t,e)=>{const v=t.day+e;return r(n,{padding:12,borderRadius:\"var(--ggui-shape-radius-md, 8px)\",background:\"var(--ggui-color-primary-50, #f0f9ff)\",style:{border:\"1px solid var(--ggui-color-primary-200, #bae6fd)\",minWidth:\"90px\",textAlign:\"center\",flexShrink:0},children:i(o,{direction:\"vertical\",gap:6,align:\"center\",children:[r(a,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",weight:\"semibold\",children:t.day}),r(\"div\",{style:{fontSize:\"24px\",lineHeight:1},children:t.icon}),i(o,{direction:\"horizontal\",gap:4,align:\"center\",children:[i(a,{variant:\"caption\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",weight:\"bold\",children:[t.high,\"\\xB0\"]}),i(a,{variant:\"caption\",color:\"var(--ggui-color-primary-600, #0284c7)\",children:[t.low,\"\\xB0\"]})]})]})},v)})})]})]})})}export{h as default};\n",
+        "sourceCode": "\nimport { Card, Stack, Row, Text, Box } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit: string;\n  forecast: Array<{ day: string; icon: string; high: number; low: number }>;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const { city, temperature, condition, humidity, windSpeed, unit, forecast } = props;\n\n  // Map weather conditions to emoji\n  const getWeatherEmoji = (cond: string): string => {\n    const condLower = cond.toLowerCase();\n    if (condLower.includes('sunny') || condLower.includes('clear')) return '☀️';\n    if (condLower.includes('cloud')) return '☁️';\n    if (condLower.includes('rain')) return '🌧️';\n    if (condLower.includes('snow')) return '❄️';\n    if (condLower.includes('storm') || condLower.includes('thunder')) return '⛈️';\n    if (condLower.includes('wind')) return '💨';\n    if (condLower.includes('fog') || condLower.includes('mist')) return '🌫️';\n    return '🌤️'; // default\n  };\n\n  return (\n    <Card\n      padding={24}\n      shadow=\"md\"\n      style={{\n        background: 'linear-gradient(135deg, var(--ggui-color-primary-50, #f0f9ff), var(--ggui-color-primary-100, #e0f2fe))',\n        borderColor: 'var(--ggui-color-primary-200, #bae6fd)',\n      }}\n    >\n      <Stack direction=\"vertical\" gap={24}>\n        {/* Header with city name */}\n        <div>\n          <Text\n            variant=\"h2\"\n            color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n            weight=\"bold\"\n          >\n            {city}\n          </Text>\n        </div>\n\n        {/* Current weather section */}\n        <Stack direction=\"horizontal\" gap={24} align=\"center\" justify=\"between\">\n          {/* Temperature and condition */}\n          <Stack direction=\"vertical\" gap={8} align=\"start\">\n            <div style={{ fontSize: '64px', lineHeight: 1 }}>\n              {getWeatherEmoji(condition)}\n            </div>\n            <Text\n              variant=\"h1\"\n              color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n              weight=\"bold\"\n            >\n              {temperature}°{unit}\n            </Text>\n            <Text\n              variant=\"body\"\n              color=\"var(--ggui-color-primary-700, #0369a1)\"\n              weight=\"semibold\"\n            >\n              {condition}\n            </Text>\n          </Stack>\n\n          {/* Humidity and wind speed */}\n          <Stack direction=\"vertical\" gap={16}>\n            <Box\n              padding={12}\n              borderRadius=\"var(--ggui-shape-radius-md, 8px)\"\n              background=\"var(--ggui-color-primary-100, #e0f2fe)\"\n              style={{\n                borderLeft: '4px solid var(--ggui-color-primary-500, #0ea5e9)',\n              }}\n            >\n              <Stack direction=\"vertical\" gap={4}>\n                <Text\n                  variant=\"caption\"\n                  color=\"var(--ggui-color-primary-600, #0284c7)\"\n                  weight=\"medium\"\n                >\n                  Humidity\n                </Text>\n                <Text\n                  variant=\"h3\"\n                  color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n                  weight=\"semibold\"\n                >\n                  {humidity}%\n                </Text>\n              </Stack>\n            </Box>\n\n            <Box\n              padding={12}\n              borderRadius=\"var(--ggui-shape-radius-md, 8px)\"\n              background=\"var(--ggui-color-primary-100, #e0f2fe)\"\n              style={{\n                borderLeft: '4px solid var(--ggui-color-primary-500, #0ea5e9)',\n              }}\n            >\n              <Stack direction=\"vertical\" gap={4}>\n                <Text\n                  variant=\"caption\"\n                  color=\"var(--ggui-color-primary-600, #0284c7)\"\n                  weight=\"medium\"\n                >\n                  Wind Speed\n                </Text>\n                <Text\n                  variant=\"h3\"\n                  color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n                  weight=\"semibold\"\n                >\n                  {windSpeed} mph\n                </Text>\n              </Stack>\n            </Box>\n          </Stack>\n        </Stack>\n\n        {/* Divider */}\n        <div\n          style={{\n            height: '1px',\n            background: 'var(--ggui-color-primary-200, #bae6fd)',\n          }}\n        />\n\n        {/* 5-day forecast strip */}\n        <Stack direction=\"vertical\" gap={12}>\n          <Text\n            variant=\"label\"\n            color=\"var(--ggui-color-primary-700, #0369a1)\"\n            weight=\"semibold\"\n          >\n            5-Day Forecast\n          </Text>\n          <Row\n            gap={8}\n            wrap={true}\n            justify=\"start\"\n            style={{\n              overflow: 'auto',\n              paddingBottom: '4px',\n            }}\n          >\n            {forecast.map((day, idx) => {\n              const key = day.day + idx;\n              return (\n                <Box\n                  key={key}\n                  padding={12}\n                  borderRadius=\"var(--ggui-shape-radius-md, 8px)\"\n                  background=\"var(--ggui-color-primary-50, #f0f9ff)\"\n                  style={{\n                    border: '1px solid var(--ggui-color-primary-200, #bae6fd)',\n                    minWidth: '90px',\n                    textAlign: 'center',\n                    flexShrink: 0,\n                  }}\n                >\n                  <Stack direction=\"vertical\" gap={6} align=\"center\">\n                    <Text\n                      variant=\"label\"\n                      color=\"var(--ggui-color-primary-700, #0369a1)\"\n                      weight=\"semibold\"\n                    >\n                      {day.day}\n                    </Text>\n                    <div style={{ fontSize: '24px', lineHeight: 1 }}>\n                      {day.icon}\n                    </div>\n                    <Stack direction=\"horizontal\" gap={4} align=\"center\">\n                      <Text\n                        variant=\"caption\"\n                        color=\"var(--ggui-color-primary-900, #0c4a6e)\"\n                        weight=\"bold\"\n                      >\n                        {day.high}°\n                      </Text>\n                      <Text\n                        variant=\"caption\"\n                        color=\"var(--ggui-color-primary-600, #0284c7)\"\n                      >\n                        {day.low}°\n                      </Text>\n                    </Stack>\n                  </Stack>\n                </Box>\n              );\n            })}\n          </Row>\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}\n",
+        "tokens": {
+          "input": 99491,
+          "output": 10270,
+          "total": 109761
+        },
+        "generationTimeMs": 75326,
+        "turnsUsed": 6
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.150841,
+      "timestamp": "2026-03-16T07:35:47.934Z",
+      "postGeneration": {
+        "hasSendSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3469,
+        "sourceCodeBytes": 6659,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-c1-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass"
+      },
+      "prompt": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "Periodic table grid with element details, search/filter, and color coding",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements. Requirements:\n- Grid layout matching the standard periodic table shape (18 columns, with gaps for lanthanides/actinides)\n- Each element cell shows: symbol (large), atomic number (small, top-left)\n- Color-code cells by element category (alkali metals, noble gases, transition metals, etc.) using design system color tokens\n- Clicking an element shows a detail panel with: name, symbol, atomic number, atomic weight, electron configuration, and category\n- Search/filter input at the top that filters elements by name or symbol\n- Smooth transitions when filtering\n- A legend showing category-to-color mapping\n\nAll element data must come from props as an array. Use the design system CSS variables for all colors and spacing.",
+        "sampleProps": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "electronConfiguration": "1s1",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "electronConfiguration": "1s2",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "electronConfiguration": "[He] 2s1",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "electronConfiguration": "[He] 2s2 2p2",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "electronConfiguration": "[He] 2s2 2p4",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "electronConfiguration": "[Ne] 3s1",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "electronConfiguration": "[Ar] 3d6 4s2",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "electronConfiguration": "[Ar] 3d10 4s1",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "electronConfiguration": "[Kr] 4d10 5s1",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "electronConfiguration": "[Xe] 4f14 5d10 6s1",
+              "row": 6,
+              "col": 11
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{Fragment as H,jsx as r,jsxs as e}from\"react/jsx-runtime\";import{useState as h,useMemo as C}from\"react\";import{Container as A,Card as s,Stack as u,Row as T,Text as i,Input as L,Icon as p,MotionKeyframes as I,useMotion as R}from\"@ggui-ai/design/primitives\";import{animation as w}from\"@ggui-ai/design/tokens\";const V={\"Alkali Metal\":\"var(--ggui-color-primary-500, #0ea5e9)\",\"Alkaline Earth Metal\":\"var(--ggui-color-primary-400, #38bdf8)\",Lanthanide:\"var(--ggui-color-warning-500, #f59e0b)\",Actinide:\"var(--ggui-color-error-500, #ef4444)\",\"Transition Metal\":\"var(--ggui-color-success-500, #22c55e)\",\"Post-transition Metal\":\"var(--ggui-color-primary-300, #7dd3fc)\",Metalloid:\"var(--ggui-color-warning-400, #fbbf24)\",Nonmetal:\"var(--ggui-color-neutral-400, #9ca3af)\",Halogen:\"var(--ggui-color-warning-600, #d97706)\",\"Noble Gas\":\"var(--ggui-color-primary-600, #0284c7)\"};function P({elements:l}){const[g,S]=h(\"\"),[n,b]=h(null),{motionEnabled:d}=R(),f=C(()=>{if(!g.trim())return l;const o=g.toLowerCase();return l.filter(t=>t.name.toLowerCase().includes(o)||t.symbol.toLowerCase().includes(o))},[g,l]),k=C(()=>Array.from(new Set(l.map(o=>o.category))).sort(),[l]),x=Array.from({length:7},()=>Array.from({length:18},()=>null));f.forEach(o=>{const t=o.row-1,a=o.col-1;t>=0&&t<7&&a>=0&&a<18&&(x[t][a]=o)});const m=o=>V[o]||\"var(--ggui-color-neutral-200, #e5e7eb)\",E=(o,t)=>o+\"-\"+t,N=(o,t)=>(o*18+t)*10;return e(H,{children:[r(I,{}),r(A,{maxWidth:\"full\",padding:\"var(--ggui-spacing-6, 24px)\",children:e(u,{direction:\"vertical\",gap:24,children:[e(\"div\",{children:[r(i,{variant:\"h1\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Interactive Periodic Table\"}),r(i,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Click on any element to view details\"})]}),r(L,{label:\"Search Elements\",placeholder:\"Search by element name or symbol...\",value:g,onChange:S,leftIcon:r(p,{name:\"search\",size:18})}),r(s,{padding:\"var(--ggui-spacing-4, 16px)\",children:e(u,{direction:\"vertical\",gap:12,children:[r(i,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Element Categories\"}),r(\"div\",{style:{display:\"grid\",gridTemplateColumns:\"repeat(auto-fit, minmax(180px, 1fr))\",gap:\"var(--ggui-spacing-3, 12px)\"},children:k.map(o=>e(T,{gap:8,align:\"center\",children:[r(\"div\",{style:{width:24,height:24,borderRadius:\"var(--ggui-shape-radius-md, 8px)\",backgroundColor:m(o),border:\"1px solid var(--ggui-color-outline, #d4d4d8)\",flexShrink:0}}),r(i,{variant:\"caption\",color:\"var(--ggui-color-onSurface, #18181b)\",children:o})]},o))})]})}),r(\"div\",{style:{display:\"grid\",gridTemplateColumns:\"repeat(18, 1fr)\",gap:\"var(--ggui-spacing-2, 8px)\",padding:\"var(--ggui-spacing-4, 16px)\",backgroundColor:\"var(--ggui-color-surface, #fafafa)\",borderRadius:\"var(--ggui-shape-radius-lg, 12px)\",border:\"1px solid var(--ggui-color-outline, #d4d4d8)\"},children:x.map((o,t)=>o.map((a,y)=>{const M=E(t,y),z=N(t,y);return r(\"div\",{onClick:()=>a&&b(a),style:{cursor:a?\"pointer\":\"default\",animation:d&&a?w.scaleIn:\"none\",animationDelay:d?z+\"ms\":\"0ms\"},children:a?e(s,{padding:\"var(--ggui-spacing-2, 8px)\",shadow:n?.atomicNumber===a.atomicNumber?\"lg\":\"sm\",border:!0,style:{backgroundColor:m(a.category),cursor:\"pointer\",transition:\"all 200ms cubic-bezier(0.4, 0, 0.2, 1)\",minHeight:\"80px\",display:\"flex\",flexDirection:\"column\",justifyContent:\"space-between\",border:n?.atomicNumber===a.atomicNumber?\"2px solid var(--ggui-color-onSurface, #18181b)\":\"1px solid var(--ggui-color-outlineVariant, #e4e4e7)\",transform:n?.atomicNumber===a.atomicNumber?\"scale(1.05)\":\"scale(1)\"},onMouseEnter:v=>{if(n?.atomicNumber!==a.atomicNumber){const c=v.currentTarget;c.style.transform=\"scale(1.02)\",c.style.boxShadow=\"var(--ggui-shape-shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1))\"}},onMouseLeave:v=>{if(n?.atomicNumber!==a.atomicNumber){const c=v.currentTarget;c.style.transform=\"scale(1)\",c.style.boxShadow=\"var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))\"}},children:[r(i,{variant:\"caption\",weight:\"semibold\",color:\"var(--ggui-color-onSurface, #18181b)\",align:\"left\",style:{fontSize:\"var(--ggui-font-size-xs, 12px)\"},children:a.atomicNumber}),r(i,{variant:\"h3\",weight:\"bold\",color:\"var(--ggui-color-onSurface, #18181b)\",align:\"center\",style:{fontSize:\"var(--ggui-font-size-xl, 20px)\",margin:\"4px 0\"},children:a.symbol}),r(i,{variant:\"caption\",color:\"var(--ggui-color-onSurface, #18181b)\",align:\"center\",style:{fontSize:\"var(--ggui-font-size-xs, 10px)\",opacity:.7},children:a.name})]}):r(\"div\",{})},M)}))}),n&&r(s,{padding:\"var(--ggui-spacing-6, 24px)\",shadow:\"lg\",style:{animation:d?w.slideInUp:\"none\",backgroundColor:\"var(--ggui-color-container, #ede9fe)\",borderLeft:\"4px solid \"+m(n.category)},children:e(u,{direction:\"vertical\",gap:16,children:[e(T,{justify:\"between\",align:\"start\",children:[e(\"div\",{children:[r(i,{variant:\"h2\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:n.name}),r(i,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:n.category})]}),r(\"button\",{onClick:()=>b(null),style:{background:\"none\",border:\"none\",cursor:\"pointer\",padding:\"var(--ggui-spacing-2, 8px)\",display:\"flex\",alignItems:\"center\",justifyContent:\"center\",color:\"var(--ggui-color-onContainer, #4c1d95)\"},children:r(p,{name:\"x\",size:24})})]}),e(\"div\",{style:{display:\"grid\",gridTemplateColumns:\"repeat(auto-fit, minmax(200px, 1fr))\",gap:\"var(--ggui-spacing-4, 16px)\"},children:[e(\"div\",{children:[r(i,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:\"Atomic Number\"}),r(i,{variant:\"h3\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:n.atomicNumber})]}),e(\"div\",{children:[r(i,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:\"Symbol\"}),r(i,{variant:\"h3\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:n.symbol})]}),e(\"div\",{children:[r(i,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:\"Atomic Weight\"}),r(i,{variant:\"h3\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:n.atomicWeight.toFixed(3)})]})]}),e(\"div\",{children:[r(i,{variant:\"label\",weight:\"semibold\",color:\"var(--ggui-color-onContainer, #4c1d95)\",children:\"Electron Configuration\"}),r(i,{variant:\"body\",color:\"var(--ggui-color-onContainer, #4c1d95)\",style:{fontFamily:\"monospace\",marginTop:\"var(--ggui-spacing-2, 8px)\",padding:\"var(--ggui-spacing-2, 8px)\",backgroundColor:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\"},children:n.electronConfiguration})]})]})}),f.length===0&&r(s,{padding:\"var(--ggui-spacing-8, 32px)\",shadow:\"none\",children:e(u,{direction:\"vertical\",gap:8,align:\"center\",children:[r(p,{name:\"search\",size:32,color:\"var(--ggui-color-onSurfaceVariant, #52525b)\"}),e(i,{variant:\"body\",align:\"center\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:['No elements found matching \"',g,'\"']})]})})]})})]})}export{P as default};\n",
+        "sourceCode": "\nimport { useState, useMemo } from 'react';\nimport { Container, Card, Stack, Row, Text, Input, Icon, MotionKeyframes, useMotion } from '@ggui-ai/design/primitives';\nimport { animation } from '@ggui-ai/design/tokens';\n\ninterface Element {\n  atomicNumber: number;\n  symbol: string;\n  name: string;\n  atomicWeight: number;\n  category: string;\n  electronConfiguration: string;\n  row: number;\n  col: number;\n}\n\ninterface Props {\n  elements: Element[];\n}\n\n// Category to color mapping\nconst categoryColorMap: Record<string, string> = {\n  'Alkali Metal': 'var(--ggui-color-primary-500, #0ea5e9)',\n  'Alkaline Earth Metal': 'var(--ggui-color-primary-400, #38bdf8)',\n  'Lanthanide': 'var(--ggui-color-warning-500, #f59e0b)',\n  'Actinide': 'var(--ggui-color-error-500, #ef4444)',\n  'Transition Metal': 'var(--ggui-color-success-500, #22c55e)',\n  'Post-transition Metal': 'var(--ggui-color-primary-300, #7dd3fc)',\n  'Metalloid': 'var(--ggui-color-warning-400, #fbbf24)',\n  'Nonmetal': 'var(--ggui-color-neutral-400, #9ca3af)',\n  'Halogen': 'var(--ggui-color-warning-600, #d97706)',\n  'Noble Gas': 'var(--ggui-color-primary-600, #0284c7)',\n};\n\nexport default function PeriodicTable({ elements }: Props) {\n  const [searchTerm, setSearchTerm] = useState('');\n  const [selectedElement, setSelectedElement] = useState<Element | null>(null);\n  const { motionEnabled } = useMotion();\n\n  // Filter elements based on search\n  const filteredElements = useMemo(() => {\n    if (!searchTerm.trim()) return elements;\n    const term = searchTerm.toLowerCase();\n    return elements.filter(el =>\n      el.name.toLowerCase().includes(term) ||\n      el.symbol.toLowerCase().includes(term)\n    );\n  }, [searchTerm, elements]);\n\n  // Get unique categories for legend\n  const uniqueCategories = useMemo(() => {\n    return Array.from(new Set(elements.map(el => el.category))).sort();\n  }, [elements]);\n\n  // Build grid with proper positioning\n  const gridCells: (Element | null)[][] = Array.from({ length: 7 }, () =>\n    Array.from({ length: 18 }, () => null)\n  );\n\n  filteredElements.forEach(element => {\n    const rowIdx = element.row - 1;\n    const colIdx = element.col - 1;\n    if (rowIdx >= 0 && rowIdx < 7 && colIdx >= 0 && colIdx < 18) {\n      gridCells[rowIdx][colIdx] = element;\n    }\n  });\n\n  const getElementColor = (category: string): string => {\n    return categoryColorMap[category] || 'var(--ggui-color-neutral-200, #e5e7eb)';\n  };\n\n  const getCellKey = (rowIdx: number, colIdx: number): string => {\n    return rowIdx + '-' + colIdx;\n  };\n\n  const getDelayMs = (rowIdx: number, colIdx: number): number => {\n    return (rowIdx * 18 + colIdx) * 10;\n  };\n\n  return (\n    <>\n      <MotionKeyframes />\n      <Container maxWidth=\"full\" padding=\"var(--ggui-spacing-6, 24px)\">\n        <Stack direction=\"vertical\" gap={24}>\n          {/* Title */}\n          <div>\n            <Text variant=\"h1\" color=\"var(--ggui-color-onSurface, #18181b)\">\n              Interactive Periodic Table\n            </Text>\n            <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n              Click on any element to view details\n            </Text>\n          </div>\n\n          {/* Search Input */}\n          <Input\n            label=\"Search Elements\"\n            placeholder=\"Search by element name or symbol...\"\n            value={searchTerm}\n            onChange={setSearchTerm}\n            leftIcon={<Icon name=\"search\" size={18} />}\n          />\n\n          {/* Legend */}\n          <Card padding=\"var(--ggui-spacing-4, 16px)\">\n            <Stack direction=\"vertical\" gap={12}>\n              <Text variant=\"label\" weight=\"semibold\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                Element Categories\n              </Text>\n              <div style={{\n                display: 'grid',\n                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',\n                gap: 'var(--ggui-spacing-3, 12px)',\n              }}>\n                {uniqueCategories.map(category => (\n                  <Row key={category} gap={8} align=\"center\">\n                    <div\n                      style={{\n                        width: 24,\n                        height: 24,\n                        borderRadius: 'var(--ggui-shape-radius-md, 8px)',\n                        backgroundColor: getElementColor(category),\n                        border: '1px solid var(--ggui-color-outline, #d4d4d8)',\n                        flexShrink: 0,\n                      }}\n                    />\n                    <Text variant=\"caption\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                      {category}\n                    </Text>\n                  </Row>\n                ))}\n              </div>\n            </Stack>\n          </Card>\n\n          {/* Periodic Table Grid */}\n          <div style={{\n            display: 'grid',\n            gridTemplateColumns: 'repeat(18, 1fr)',\n            gap: 'var(--ggui-spacing-2, 8px)',\n            padding: 'var(--ggui-spacing-4, 16px)',\n            backgroundColor: 'var(--ggui-color-surface, #fafafa)',\n            borderRadius: 'var(--ggui-shape-radius-lg, 12px)',\n            border: '1px solid var(--ggui-color-outline, #d4d4d8)',\n          }}>\n            {gridCells.map((row, rowIdx) =>\n              row.map((element, colIdx) => {\n                const cellKey = getCellKey(rowIdx, colIdx);\n                const delayMs = getDelayMs(rowIdx, colIdx);\n                return (\n                  <div\n                    key={cellKey}\n                    onClick={() => element && setSelectedElement(element)}\n                    style={{\n                      cursor: element ? 'pointer' : 'default',\n                      animation: motionEnabled && element ? animation.scaleIn : 'none',\n                      animationDelay: motionEnabled ? delayMs + 'ms' : '0ms',\n                    }}\n                  >\n                    {element ? (\n                      <Card\n                        padding=\"var(--ggui-spacing-2, 8px)\"\n                        shadow={selectedElement?.atomicNumber === element.atomicNumber ? 'lg' : 'sm'}\n                        border\n                        style={{\n                          backgroundColor: getElementColor(element.category),\n                          cursor: 'pointer',\n                          transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',\n                          minHeight: '80px',\n                          display: 'flex',\n                          flexDirection: 'column',\n                          justifyContent: 'space-between',\n                          border: selectedElement?.atomicNumber === element.atomicNumber\n                            ? '2px solid var(--ggui-color-onSurface, #18181b)'\n                            : '1px solid var(--ggui-color-outlineVariant, #e4e4e7)',\n                          transform: selectedElement?.atomicNumber === element.atomicNumber\n                            ? 'scale(1.05)'\n                            : 'scale(1)',\n                        }}\n                        onMouseEnter={(e) => {\n                          if (selectedElement?.atomicNumber !== element.atomicNumber) {\n                            const elem = e.currentTarget as HTMLElement;\n                            elem.style.transform = 'scale(1.02)';\n                            elem.style.boxShadow = 'var(--ggui-shape-shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1))';\n                          }\n                        }}\n                        onMouseLeave={(e) => {\n                          if (selectedElement?.atomicNumber !== element.atomicNumber) {\n                            const elem = e.currentTarget as HTMLElement;\n                            elem.style.transform = 'scale(1)';\n                            elem.style.boxShadow = 'var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))';\n                          }\n                        }}\n                      >\n                        <Text\n                          variant=\"caption\"\n                          weight=\"semibold\"\n                          color=\"var(--ggui-color-onSurface, #18181b)\"\n                          align=\"left\"\n                          style={{ fontSize: 'var(--ggui-font-size-xs, 12px)' }}\n                        >\n                          {element.atomicNumber}\n                        </Text>\n                        <Text\n                          variant=\"h3\"\n                          weight=\"bold\"\n                          color=\"var(--ggui-color-onSurface, #18181b)\"\n                          align=\"center\"\n                          style={{ fontSize: 'var(--ggui-font-size-xl, 20px)', margin: '4px 0' }}\n                        >\n                          {element.symbol}\n                        </Text>\n                        <Text\n                          variant=\"caption\"\n                          color=\"var(--ggui-color-onSurface, #18181b)\"\n                          align=\"center\"\n                          style={{ fontSize: 'var(--ggui-font-size-xs, 10px)', opacity: 0.7 }}\n                        >\n                          {element.name}\n                        </Text>\n                      </Card>\n                    ) : (\n                      <div />\n                    )}\n                  </div>\n                );\n              })\n            )}\n          </div>\n\n          {/* Detail Panel */}\n          {selectedElement && (\n            <Card\n              padding=\"var(--ggui-spacing-6, 24px)\"\n              shadow=\"lg\"\n              style={{\n                animation: motionEnabled ? animation.slideInUp : 'none',\n                backgroundColor: 'var(--ggui-color-container, #ede9fe)',\n                borderLeft: '4px solid ' + getElementColor(selectedElement.category),\n              }}\n            >\n              <Stack direction=\"vertical\" gap={16}>\n                <Row justify=\"between\" align=\"start\">\n                  <div>\n                    <Text variant=\"h2\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      {selectedElement.name}\n                    </Text>\n                    <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      {selectedElement.category}\n                    </Text>\n                  </div>\n                  <button\n                    onClick={() => setSelectedElement(null)}\n                    style={{\n                      background: 'none',\n                      border: 'none',\n                      cursor: 'pointer',\n                      padding: 'var(--ggui-spacing-2, 8px)',\n                      display: 'flex',\n                      alignItems: 'center',\n                      justifyContent: 'center',\n                      color: 'var(--ggui-color-onContainer, #4c1d95)',\n                    }}\n                  >\n                    <Icon name=\"x\" size={24} />\n                  </button>\n                </Row>\n\n                <div style={{\n                  display: 'grid',\n                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',\n                  gap: 'var(--ggui-spacing-4, 16px)',\n                }}>\n                  <div>\n                    <Text variant=\"label\" weight=\"semibold\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      Atomic Number\n                    </Text>\n                    <Text variant=\"h3\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      {selectedElement.atomicNumber}\n                    </Text>\n                  </div>\n                  <div>\n                    <Text variant=\"label\" weight=\"semibold\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      Symbol\n                    </Text>\n                    <Text variant=\"h3\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      {selectedElement.symbol}\n                    </Text>\n                  </div>\n                  <div>\n                    <Text variant=\"label\" weight=\"semibold\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      Atomic Weight\n                    </Text>\n                    <Text variant=\"h3\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                      {selectedElement.atomicWeight.toFixed(3)}\n                    </Text>\n                  </div>\n                </div>\n\n                <div>\n                  <Text variant=\"label\" weight=\"semibold\" color=\"var(--ggui-color-onContainer, #4c1d95)\">\n                    Electron Configuration\n                  </Text>\n                  <Text\n                    variant=\"body\"\n                    color=\"var(--ggui-color-onContainer, #4c1d95)\"\n                    style={{\n                      fontFamily: 'monospace',\n                      marginTop: 'var(--ggui-spacing-2, 8px)',\n                      padding: 'var(--ggui-spacing-2, 8px)',\n                      backgroundColor: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n                      borderRadius: 'var(--ggui-shape-radius-md, 8px)',\n                    }}\n                  >\n                    {selectedElement.electronConfiguration}\n                  </Text>\n                </div>\n              </Stack>\n            </Card>\n          )}\n\n          {/* Empty State */}\n          {filteredElements.length === 0 && (\n            <Card padding=\"var(--ggui-spacing-8, 32px)\" shadow=\"none\">\n              <Stack direction=\"vertical\" gap={8} align=\"center\">\n                <Icon name=\"search\" size={32} color=\"var(--ggui-color-onSurfaceVariant, #52525b)\" />\n                <Text variant=\"body\" align=\"center\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                  No elements found matching \"{searchTerm}\"\n                </Text>\n              </Stack>\n            </Card>\n          )}\n        </Stack>\n      </Container>\n    </>\n  );\n}\n",
+        "tokens": {
+          "input": 173673,
+          "output": 20887,
+          "total": 194560
+        },
+        "generationTimeMs": 125639,
+        "turnsUsed": 7
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.278108,
+      "timestamp": "2026-03-16T07:36:38.249Z",
+      "postGeneration": {
+        "hasSendSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6944,
+        "sourceCodeBytes": 13804,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-c4835-1",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass",
+        "modelRoles": {
+          "thinking": "anthropic/claude-opus-4-6",
+          "coding": "anthropic/claude-sonnet-4-6",
+          "evaluation": "anthropic/claude-opus-4-6"
+        }
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "sampleProps": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as r,jsxs as e}from\"react/jsx-runtime\";import{Card as S,Stack as s,Text as a}from\"@ggui-ai/design/primitives\";const f={sunny:\"linear-gradient(135deg, var(--ggui-color-warning, #f59e0b), var(--ggui-color-primary, #3b82f6))\",cloudy:\"linear-gradient(135deg, var(--ggui-color-surface-variant, #94a3b8), var(--ggui-color-surface, #e2e8f0))\",rainy:\"linear-gradient(135deg, var(--ggui-color-secondary, #6366f1), var(--ggui-color-primary, #3b82f6))\",snowy:\"linear-gradient(135deg, var(--ggui-color-surface, #f8fafc), var(--ggui-color-primary, #3b82f6))\",stormy:\"linear-gradient(135deg, var(--ggui-color-surface-variant, #334155), var(--ggui-color-secondary, #6366f1))\",windy:\"linear-gradient(135deg, var(--ggui-color-primary, #3b82f6), var(--ggui-color-secondary, #6366f1))\"};function p(t){const i=t.toLowerCase();return i.includes(\"sun\")||i.includes(\"clear\")?\"sunny\":i.includes(\"rain\")||i.includes(\"shower\")||i.includes(\"drizzle\")?\"rainy\":i.includes(\"snow\")||i.includes(\"sleet\")||i.includes(\"frost\")?\"snowy\":i.includes(\"storm\")||i.includes(\"thunder\")||i.includes(\"lightning\")?\"stormy\":i.includes(\"wind\")||i.includes(\"breeze\")||i.includes(\"gust\")?\"windy\":\"cloudy\"}function z(t){const i=p(t);return{sunny:\"\\u2600\\uFE0F\",cloudy:\"\\u26C5\",rainy:\"\\u{1F327}\\uFE0F\",snowy:\"\\u2744\\uFE0F\",stormy:\"\\u26C8\\uFE0F\",windy:\"\\u{1F4A8}\"}[i]??\"\\u{1F321}\\uFE0F\"}function w(t,i,l,g,c){return t+\": \"+i+\", high \"+String(l)+\"\\xB0\"+g+\", low \"+String(c)+\"\\xB0\"+g}function T(t){const{city:i,temperature:l,condition:g,humidity:c,windSpeed:v,unit:d,forecast:y}=t,x=p(g),m=z(g),b=f[x]??f.cloudy,h=\"Weather condition: \"+g;return r(\"div\",{style:{padding:\"var(--ggui-spacing-4, 16px)\",maxWidth:\"420px\",width:\"100%\",margin:\"0 auto\",fontFamily:\"var(--ggui-font-family, sans-serif)\"},children:e(S,{variant:\"elevated\",style:{overflow:\"hidden\",borderRadius:\"var(--ggui-radius-xl, 20px)\",border:\"1px solid var(--ggui-color-outline, #e2e8f0)\"},children:[e(\"div\",{style:{background:b,padding:\"var(--ggui-spacing-8, 32px) var(--ggui-spacing-6, 24px) var(--ggui-spacing-6, 24px)\",position:\"relative\"},children:[e(s,{direction:\"horizontal\",gap:\"2\",align:\"center\",children:[r(\"span\",{style:{fontSize:\"var(--ggui-font-size-sm, 14px)\",opacity:.85},children:\"\\u{1F4CD}\"}),r(a,{variant:\"label\",style:{color:\"var(--ggui-color-onPrimary, #fff)\",fontWeight:\"600\",letterSpacing:\"0.05em\",textTransform:\"uppercase\",fontSize:\"var(--ggui-font-size-sm, 13px)\"},children:i})]}),e(s,{direction:\"horizontal\",gap:\"4\",align:\"center\",style:{marginTop:\"var(--ggui-spacing-4, 16px)\"},children:[e(\"div\",{children:[e(a,{variant:\"display\",style:{color:\"var(--ggui-color-onPrimary, #fff)\",fontSize:\"var(--ggui-font-size-6xl, 80px)\",fontWeight:\"700\",lineHeight:\"1\",letterSpacing:\"-0.03em\"},children:[l,\"\\xB0\",d]}),r(a,{variant:\"body\",style:{color:\"var(--ggui-color-onPrimary, #fff)\",opacity:.9,marginTop:\"var(--ggui-spacing-1, 4px)\",fontSize:\"var(--ggui-font-size-lg, 18px)\",fontWeight:\"500\"},children:g})]}),r(\"div\",{style:{marginLeft:\"auto\",fontSize:\"var(--ggui-font-size-7xl, 72px)\",lineHeight:\"1\",userSelect:\"none\"},\"aria-label\":h,role:\"img\",children:m})]})]}),r(\"div\",{style:{padding:\"var(--ggui-spacing-4, 16px) var(--ggui-spacing-6, 24px)\",background:\"var(--ggui-color-surface, #fff)\",borderBottom:\"1px solid var(--ggui-color-outline, #e2e8f0)\"},children:e(s,{direction:\"horizontal\",gap:\"4\",align:\"center\",children:[e(\"div\",{style:{flex:1,textAlign:\"center\",padding:\"var(--ggui-spacing-3, 12px)\",borderRadius:\"var(--ggui-radius-lg, 12px)\",background:\"var(--ggui-color-surface-variant, #f1f5f9)\"},children:[r(\"div\",{style:{fontSize:\"var(--ggui-font-size-2xl, 24px)\",marginBottom:\"var(--ggui-spacing-1, 4px)\"},role:\"img\",\"aria-label\":\"Humidity\",children:\"\\u{1F4A7}\"}),e(a,{variant:\"heading\",style:{color:\"var(--ggui-color-onSurface, #1e293b)\",fontWeight:\"700\",fontSize:\"var(--ggui-font-size-lg, 18px)\"},children:[c,\"%\"]}),r(a,{variant:\"caption\",style:{color:\"var(--ggui-color-onSurface-variant, #64748b)\",fontSize:\"var(--ggui-font-size-xs, 11px)\",textTransform:\"uppercase\",letterSpacing:\"0.05em\"},children:\"Humidity\"})]}),r(\"div\",{style:{width:\"1px\",height:\"48px\",background:\"var(--ggui-color-outline, #e2e8f0)\"},\"aria-hidden\":\"true\"}),e(\"div\",{style:{flex:1,textAlign:\"center\",padding:\"var(--ggui-spacing-3, 12px)\",borderRadius:\"var(--ggui-radius-lg, 12px)\",background:\"var(--ggui-color-surface-variant, #f1f5f9)\"},children:[r(\"div\",{style:{fontSize:\"var(--ggui-font-size-2xl, 24px)\",marginBottom:\"var(--ggui-spacing-1, 4px)\"},role:\"img\",\"aria-label\":\"Wind speed\",children:\"\\u{1F32C}\\uFE0F\"}),e(a,{variant:\"heading\",style:{color:\"var(--ggui-color-onSurface, #1e293b)\",fontWeight:\"700\",fontSize:\"var(--ggui-font-size-lg, 18px)\"},children:[v,\" km/h\"]}),r(a,{variant:\"caption\",style:{color:\"var(--ggui-color-onSurface-variant, #64748b)\",fontSize:\"var(--ggui-font-size-xs, 11px)\",textTransform:\"uppercase\",letterSpacing:\"0.05em\"},children:\"Wind Speed\"})]})]})}),e(\"div\",{style:{padding:\"var(--ggui-spacing-4, 16px) var(--ggui-spacing-6, 24px) var(--ggui-spacing-5, 20px)\",background:\"var(--ggui-color-surface, #fff)\"},children:[r(a,{variant:\"label\",style:{color:\"var(--ggui-color-onSurface-variant, #64748b)\",fontWeight:\"600\",fontSize:\"var(--ggui-font-size-xs, 11px)\",textTransform:\"uppercase\",letterSpacing:\"0.08em\",marginBottom:\"var(--ggui-spacing-3, 12px)\",display:\"block\"},children:\"5-Day Forecast\"}),r(s,{direction:\"horizontal\",gap:\"2\",align:\"stretch\",children:y.map(n=>e(\"div\",{style:{flex:1,textAlign:\"center\",padding:\"var(--ggui-spacing-3, 10px) var(--ggui-spacing-2, 6px)\",borderRadius:\"var(--ggui-radius-lg, 12px)\",background:\"var(--ggui-color-surface-variant, #f8fafc)\",border:\"1px solid var(--ggui-color-outline, #e2e8f0)\",transition:\"all 0.2s ease\",cursor:\"default\"},onMouseEnter:u=>{const o=u.currentTarget;o.style.background=\"var(--ggui-color-primary-container, #dbeafe)\",o.style.borderColor=\"var(--ggui-color-primary, #3b82f6)\",o.style.transform=\"translateY(-2px)\",o.style.boxShadow=\"0 4px 12px var(--ggui-color-shadow, #00000014)\"},onMouseLeave:u=>{const o=u.currentTarget;o.style.background=\"var(--ggui-color-surface-variant, #f8fafc)\",o.style.borderColor=\"var(--ggui-color-outline, #e2e8f0)\",o.style.transform=\"translateY(0)\",o.style.boxShadow=\"none\"},role:\"listitem\",\"aria-label\":w(n.day,n.icon,n.high,d,n.low),tabIndex:0,children:[r(a,{variant:\"caption\",style:{color:\"var(--ggui-color-onSurface-variant, #64748b)\",fontWeight:\"600\",fontSize:\"var(--ggui-font-size-xs, 11px)\",textTransform:\"uppercase\",letterSpacing:\"0.05em\",display:\"block\"},children:n.day}),r(\"div\",{style:{fontSize:\"var(--ggui-font-size-2xl, 22px)\",margin:\"var(--ggui-spacing-2, 6px) 0\",userSelect:\"none\"},role:\"img\",\"aria-hidden\":\"true\",children:n.icon}),e(a,{variant:\"body\",style:{color:\"var(--ggui-color-onSurface, #1e293b)\",fontWeight:\"700\",fontSize:\"var(--ggui-font-size-sm, 13px)\",display:\"block\"},children:[n.high,\"\\xB0\"]}),e(a,{variant:\"caption\",style:{color:\"var(--ggui-color-onSurface-variant, #94a3b8)\",fontWeight:\"500\",fontSize:\"var(--ggui-font-size-xs, 11px)\",display:\"block\"},children:[n.low,\"\\xB0\"]})]},n.day))})]})]})})}export{T as default};\n",
+        "sourceCode": "\nimport React from \"react\";\nimport { Card, Stack, Text, Button, Input } from \"@ggui-ai/design/primitives\";\n\ninterface Props {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit: string;\n  forecast: Array<{ day: string; icon: string; high: number; low: number }>;\n}\n\nconst conditionGradients: Record<string, string> = {\n  sunny: \"linear-gradient(135deg, var(--ggui-color-warning, #f59e0b), var(--ggui-color-primary, #3b82f6))\",\n  cloudy: \"linear-gradient(135deg, var(--ggui-color-surface-variant, #94a3b8), var(--ggui-color-surface, #e2e8f0))\",\n  rainy: \"linear-gradient(135deg, var(--ggui-color-secondary, #6366f1), var(--ggui-color-primary, #3b82f6))\",\n  snowy: \"linear-gradient(135deg, var(--ggui-color-surface, #f8fafc), var(--ggui-color-primary, #3b82f6))\",\n  stormy: \"linear-gradient(135deg, var(--ggui-color-surface-variant, #334155), var(--ggui-color-secondary, #6366f1))\",\n  windy: \"linear-gradient(135deg, var(--ggui-color-primary, #3b82f6), var(--ggui-color-secondary, #6366f1))\",\n};\n\nfunction getConditionKey(condition: string): string {\n  const lower = condition.toLowerCase();\n  if (lower.includes(\"sun\") || lower.includes(\"clear\")) return \"sunny\";\n  if (lower.includes(\"rain\") || lower.includes(\"shower\") || lower.includes(\"drizzle\")) return \"rainy\";\n  if (lower.includes(\"snow\") || lower.includes(\"sleet\") || lower.includes(\"frost\")) return \"snowy\";\n  if (lower.includes(\"storm\") || lower.includes(\"thunder\") || lower.includes(\"lightning\")) return \"stormy\";\n  if (lower.includes(\"wind\") || lower.includes(\"breeze\") || lower.includes(\"gust\")) return \"windy\";\n  return \"cloudy\";\n}\n\nfunction getConditionEmoji(condition: string): string {\n  const key = getConditionKey(condition);\n  const map: Record<string, string> = {\n    sunny: \"☀️\",\n    cloudy: \"⛅\",\n    rainy: \"🌧️\",\n    snowy: \"❄️\",\n    stormy: \"⛈️\",\n    windy: \"💨\",\n  };\n  return map[key] ?? \"🌡️\";\n}\n\nfunction buildForecastLabel(day: string, icon: string, high: number, unit: string, low: number): string {\n  return day + \": \" + icon + \", high \" + String(high) + \"°\" + unit + \", low \" + String(low) + \"°\" + unit;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const {\n    city,\n    temperature,\n    condition,\n    humidity,\n    windSpeed,\n    unit,\n    forecast,\n  } = props;\n\n  const conditionKey = getConditionKey(condition);\n  const conditionEmoji = getConditionEmoji(condition);\n  const gradient = conditionGradients[conditionKey] ?? conditionGradients[\"cloudy\"];\n  const conditionAriaLabel = \"Weather condition: \" + condition;\n\n  return (\n    <div\n      style={{\n        padding: \"var(--ggui-spacing-4, 16px)\",\n        maxWidth: \"420px\",\n        width: \"100%\",\n        margin: \"0 auto\",\n        fontFamily: \"var(--ggui-font-family, sans-serif)\",\n      }}\n    >\n      <Card\n        variant=\"elevated\"\n        style={{\n          overflow: \"hidden\",\n          borderRadius: \"var(--ggui-radius-xl, 20px)\",\n          border: \"1px solid var(--ggui-color-outline, #e2e8f0)\",\n        }}\n      >\n        {/* Hero section with gradient */}\n        <div\n          style={{\n            background: gradient,\n            padding: \"var(--ggui-spacing-8, 32px) var(--ggui-spacing-6, 24px) var(--ggui-spacing-6, 24px)\",\n            position: \"relative\",\n          }}\n        >\n          {/* City name */}\n          <Stack direction=\"horizontal\" gap=\"2\" align=\"center\">\n            <span style={{ fontSize: \"var(--ggui-font-size-sm, 14px)\", opacity: 0.85 }}>📍</span>\n            <Text\n              variant=\"label\"\n              style={{\n                color: \"var(--ggui-color-onPrimary, #fff)\",\n                fontWeight: \"600\",\n                letterSpacing: \"0.05em\",\n                textTransform: \"uppercase\",\n                fontSize: \"var(--ggui-font-size-sm, 13px)\",\n              }}\n            >\n              {city}\n            </Text>\n          </Stack>\n\n          {/* Temperature & Condition */}\n          <Stack direction=\"horizontal\" gap=\"4\" align=\"center\" style={{ marginTop: \"var(--ggui-spacing-4, 16px)\" }}>\n            <div>\n              <Text\n                variant=\"display\"\n                style={{\n                  color: \"var(--ggui-color-onPrimary, #fff)\",\n                  fontSize: \"var(--ggui-font-size-6xl, 80px)\",\n                  fontWeight: \"700\",\n                  lineHeight: \"1\",\n                  letterSpacing: \"-0.03em\",\n                }}\n              >\n                {temperature}°{unit}\n              </Text>\n              <Text\n                variant=\"body\"\n                style={{\n                  color: \"var(--ggui-color-onPrimary, #fff)\",\n                  opacity: 0.9,\n                  marginTop: \"var(--ggui-spacing-1, 4px)\",\n                  fontSize: \"var(--ggui-font-size-lg, 18px)\",\n                  fontWeight: \"500\",\n                }}\n              >\n                {condition}\n              </Text>\n            </div>\n            <div\n              style={{\n                marginLeft: \"auto\",\n                fontSize: \"var(--ggui-font-size-7xl, 72px)\",\n                lineHeight: \"1\",\n                userSelect: \"none\",\n              }}\n              aria-label={conditionAriaLabel}\n              role=\"img\"\n            >\n              {conditionEmoji}\n            </div>\n          </Stack>\n        </div>\n\n        {/* Stats row */}\n        <div\n          style={{\n            padding: \"var(--ggui-spacing-4, 16px) var(--ggui-spacing-6, 24px)\",\n            background: \"var(--ggui-color-surface, #fff)\",\n            borderBottom: \"1px solid var(--ggui-color-outline, #e2e8f0)\",\n          }}\n        >\n          <Stack direction=\"horizontal\" gap=\"4\" align=\"center\">\n            {/* Humidity */}\n            <div\n              style={{\n                flex: 1,\n                textAlign: \"center\",\n                padding: \"var(--ggui-spacing-3, 12px)\",\n                borderRadius: \"var(--ggui-radius-lg, 12px)\",\n                background: \"var(--ggui-color-surface-variant, #f1f5f9)\",\n              }}\n            >\n              <div style={{ fontSize: \"var(--ggui-font-size-2xl, 24px)\", marginBottom: \"var(--ggui-spacing-1, 4px)\" }} role=\"img\" aria-label=\"Humidity\">💧</div>\n              <Text\n                variant=\"heading\"\n                style={{\n                  color: \"var(--ggui-color-onSurface, #1e293b)\",\n                  fontWeight: \"700\",\n                  fontSize: \"var(--ggui-font-size-lg, 18px)\",\n                }}\n              >\n                {humidity}%\n              </Text>\n              <Text\n                variant=\"caption\"\n                style={{\n                  color: \"var(--ggui-color-onSurface-variant, #64748b)\",\n                  fontSize: \"var(--ggui-font-size-xs, 11px)\",\n                  textTransform: \"uppercase\",\n                  letterSpacing: \"0.05em\",\n                }}\n              >\n                Humidity\n              </Text>\n            </div>\n\n            {/* Divider */}\n            <div\n              style={{\n                width: \"1px\",\n                height: \"48px\",\n                background: \"var(--ggui-color-outline, #e2e8f0)\",\n              }}\n              aria-hidden=\"true\"\n            />\n\n            {/* Wind */}\n            <div\n              style={{\n                flex: 1,\n                textAlign: \"center\",\n                padding: \"var(--ggui-spacing-3, 12px)\",\n                borderRadius: \"var(--ggui-radius-lg, 12px)\",\n                background: \"var(--ggui-color-surface-variant, #f1f5f9)\",\n              }}\n            >\n              <div style={{ fontSize: \"var(--ggui-font-size-2xl, 24px)\", marginBottom: \"var(--ggui-spacing-1, 4px)\" }} role=\"img\" aria-label=\"Wind speed\">🌬️</div>\n              <Text\n                variant=\"heading\"\n                style={{\n                  color: \"var(--ggui-color-onSurface, #1e293b)\",\n                  fontWeight: \"700\",\n                  fontSize: \"var(--ggui-font-size-lg, 18px)\",\n                }}\n              >\n                {windSpeed} km/h\n              </Text>\n              <Text\n                variant=\"caption\"\n                style={{\n                  color: \"var(--ggui-color-onSurface-variant, #64748b)\",\n                  fontSize: \"var(--ggui-font-size-xs, 11px)\",\n                  textTransform: \"uppercase\",\n                  letterSpacing: \"0.05em\",\n                }}\n              >\n                Wind Speed\n              </Text>\n            </div>\n          </Stack>\n        </div>\n\n        {/* 5-day forecast strip */}\n        <div\n          style={{\n            padding: \"var(--ggui-spacing-4, 16px) var(--ggui-spacing-6, 24px) var(--ggui-spacing-5, 20px)\",\n            background: \"var(--ggui-color-surface, #fff)\",\n          }}\n        >\n          <Text\n            variant=\"label\"\n            style={{\n              color: \"var(--ggui-color-onSurface-variant, #64748b)\",\n              fontWeight: \"600\",\n              fontSize: \"var(--ggui-font-size-xs, 11px)\",\n              textTransform: \"uppercase\",\n              letterSpacing: \"0.08em\",\n              marginBottom: \"var(--ggui-spacing-3, 12px)\",\n              display: \"block\",\n            }}\n          >\n            5-Day Forecast\n          </Text>\n          <Stack direction=\"horizontal\" gap=\"2\" align=\"stretch\">\n            {forecast.map((item) => (\n              <div\n                key={item.day}\n                style={{\n                  flex: 1,\n                  textAlign: \"center\",\n                  padding: \"var(--ggui-spacing-3, 10px) var(--ggui-spacing-2, 6px)\",\n                  borderRadius: \"var(--ggui-radius-lg, 12px)\",\n                  background: \"var(--ggui-color-surface-variant, #f8fafc)\",\n                  border: \"1px solid var(--ggui-color-outline, #e2e8f0)\",\n                  transition: \"all 0.2s ease\",\n                  cursor: \"default\",\n                }}\n                onMouseEnter={(e) => {\n                  const el = e.currentTarget as HTMLDivElement;\n                  el.style.background = \"var(--ggui-color-primary-container, #dbeafe)\";\n                  el.style.borderColor = \"var(--ggui-color-primary, #3b82f6)\";\n                  el.style.transform = \"translateY(-2px)\";\n                  el.style.boxShadow = \"0 4px 12px var(--ggui-color-shadow, #00000014)\";\n                }}\n                onMouseLeave={(e) => {\n                  const el = e.currentTarget as HTMLDivElement;\n                  el.style.background = \"var(--ggui-color-surface-variant, #f8fafc)\";\n                  el.style.borderColor = \"var(--ggui-color-outline, #e2e8f0)\";\n                  el.style.transform = \"translateY(0)\";\n                  el.style.boxShadow = \"none\";\n                }}\n                role=\"listitem\"\n                aria-label={buildForecastLabel(item.day, item.icon, item.high, unit, item.low)}\n                tabIndex={0}\n              >\n                <Text\n                  variant=\"caption\"\n                  style={{\n                    color: \"var(--ggui-color-onSurface-variant, #64748b)\",\n                    fontWeight: \"600\",\n                    fontSize: \"var(--ggui-font-size-xs, 11px)\",\n                    textTransform: \"uppercase\",\n                    letterSpacing: \"0.05em\",\n                    display: \"block\",\n                  }}\n                >\n                  {item.day}\n                </Text>\n                <div\n                  style={{\n                    fontSize: \"var(--ggui-font-size-2xl, 22px)\",\n                    margin: \"var(--ggui-spacing-2, 6px) 0\",\n                    userSelect: \"none\",\n                  }}\n                  role=\"img\"\n                  aria-hidden=\"true\"\n                >\n                  {item.icon}\n                </div>\n                <Text\n                  variant=\"body\"\n                  style={{\n                    color: \"var(--ggui-color-onSurface, #1e293b)\",\n                    fontWeight: \"700\",\n                    fontSize: \"var(--ggui-font-size-sm, 13px)\",\n                    display: \"block\",\n                  }}\n                >\n                  {item.high}°\n                </Text>\n                <Text\n                  variant=\"caption\"\n                  style={{\n                    color: \"var(--ggui-color-onSurface-variant, #94a3b8)\",\n                    fontWeight: \"500\",\n                    fontSize: \"var(--ggui-font-size-xs, 11px)\",\n                    display: \"block\",\n                  }}\n                >\n                  {item.low}°\n                </Text>\n              </div>\n            ))}\n          </Stack>\n        </div>\n      </Card>\n    </div>\n  );\n}\n",
+        "tokens": {
+          "input": 51800,
+          "output": 16244,
+          "total": 68044
+        },
+        "generationTimeMs": 164521,
+        "turnsUsed": 5
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.13302000000000003,
+      "timestamp": "2026-03-16T07:37:17.455Z",
+      "postGeneration": {
+        "hasSendSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 7080,
+        "sourceCodeBytes": 12586,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-raw-single-pass-c4835-1",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "mode": "raw",
+        "recipe": "single-pass",
+        "modelRoles": {
+          "thinking": "anthropic/claude-opus-4-6",
+          "coding": "anthropic/claude-sonnet-4-6",
+          "evaluation": "anthropic/claude-opus-4-6"
+        }
+      },
+      "prompt": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "Periodic table grid with element details, search/filter, and color coding",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements. Requirements:\n- Grid layout matching the standard periodic table shape (18 columns, with gaps for lanthanides/actinides)\n- Each element cell shows: symbol (large), atomic number (small, top-left)\n- Color-code cells by element category (alkali metals, noble gases, transition metals, etc.) using design system color tokens\n- Clicking an element shows a detail panel with: name, symbol, atomic number, atomic weight, electron configuration, and category\n- Search/filter input at the top that filters elements by name or symbol\n- Smooth transitions when filtering\n- A legend showing category-to-color mapping\n\nAll element data must come from props as an array. Use the design system CSS variables for all colors and spacing.",
+        "sampleProps": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "electronConfiguration": "1s1",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "electronConfiguration": "1s2",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "electronConfiguration": "[He] 2s1",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "electronConfiguration": "[He] 2s2 2p2",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "electronConfiguration": "[He] 2s2 2p4",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "electronConfiguration": "[Ne] 3s1",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "electronConfiguration": "[Ar] 3d6 4s2",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "electronConfiguration": "[Ar] 3d10 4s1",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "electronConfiguration": "[Kr] 4d10 5s1",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "electronConfiguration": "[Xe] 4f14 5d10 6s1",
+              "row": 6,
+              "col": 11
+            }
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 300000ms",
+      "timestamp": "2026-03-16T07:40:47.936Z"
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-raw-single-pass-c1-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 100482.5,
+      "avgCostUsd": 0.2144745,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    },
+    {
+      "variantId": "claude-raw-single-pass-c4835-1",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 164521,
+      "avgCostUsd": 0.13302000000000003,
+      "successRate": 0.5,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    }
+  ],
+  "promptSummaries": [
+    {
+      "promptId": "weather-card",
+      "promptName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-c1-0",
+      "worstVariantId": "claude-raw-single-pass-c4835-1"
+    },
+    {
+      "promptId": "periodic-table",
+      "promptName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": -1,
+      "bestVariantId": "claude-raw-single-pass-c1-0",
+      "worstVariantId": "claude-raw-single-pass-c1-0"
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": -1,
+        "avgTimeMs": 121828.66666666667,
+        "avgCostUsd": 0.18732300000000002,
+        "successRate": 0.75
+      }
+    }
+  }
+}

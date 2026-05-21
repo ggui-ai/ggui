@@ -1,0 +1,360 @@
+{
+  "schemaVersion": "slo.v0",
+  "generatedAt": "2026-04-20T05:20:44.809Z",
+  "floorLabel": "v0-seed",
+  "notes": [
+    "finalCompiledAt reflects handler-return time (OSS Slice A defers stack-item compilation). See tags.finalCompiledReliable.",
+    "blueprint_hit / generation_miss are emitter-simulated in v0 — the push handler does not yet branch on blueprint-finder results.",
+    "finalDomVisibleAt is reserved (always null in v0). A renderer-driven v0.5 populates it.",
+    "Stats are min/median/max per branch path; p50/p95 are deliberately NOT reported at this corpus size."
+  ],
+  "results": [
+    {
+      "caseId": "blueprint-hit-weather",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 335.146778,
+        "firstPreviewAt": 411.879434,
+        "previewFinalizedAt": 411.956491,
+        "finalCompiledAt": 336.462417,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "blueprint_hit",
+        "previewFrames": 1,
+        "usedBlueprint": true,
+        "usedGeneration": false,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 76.73265600000002,
+        "timeToPreviewFinalize": 76.80971300000004,
+        "timeToFinalCompiled": 1.3156390000000329,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "blueprint-hit-weather",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 413.264446,
+        "firstPreviewAt": 489.214819,
+        "previewFinalizedAt": 489.229317,
+        "finalCompiledAt": 413.770431,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "blueprint_hit",
+        "previewFrames": 1,
+        "usedBlueprint": true,
+        "usedGeneration": false,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 75.95037299999996,
+        "timeToPreviewFinalize": 75.96487099999996,
+        "timeToFinalCompiled": 0.5059849999999528,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "blueprint-hit-weather",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 489.343795,
+        "firstPreviewAt": 565.274482,
+        "previewFinalizedAt": 565.287977,
+        "finalCompiledAt": 489.687581,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "blueprint_hit",
+        "previewFrames": 1,
+        "usedBlueprint": true,
+        "usedGeneration": false,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 75.93068700000003,
+        "timeToPreviewFinalize": 75.94418199999996,
+        "timeToFinalCompiled": 0.3437860000000228,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "generation-miss-dashboard",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 565.444265,
+        "firstPreviewAt": 625.918553,
+        "previewFinalizedAt": 776.105162,
+        "finalCompiledAt": 565.738076,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "generation_miss",
+        "previewFrames": 4,
+        "usedBlueprint": false,
+        "usedGeneration": true,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 60.474288,
+        "timeToPreviewFinalize": 210.66089699999998,
+        "timeToFinalCompiled": 0.29381100000000515,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "generation-miss-dashboard",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 776.232575,
+        "firstPreviewAt": 836.896554,
+        "previewFinalizedAt": 987.099043,
+        "finalCompiledAt": 776.537917,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "generation_miss",
+        "previewFrames": 4,
+        "usedBlueprint": false,
+        "usedGeneration": true,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 60.66397900000004,
+        "timeToPreviewFinalize": 210.86646800000005,
+        "timeToFinalCompiled": 0.305341999999996,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "generation-miss-dashboard",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 991.292992,
+        "firstPreviewAt": 1051.625338,
+        "previewFinalizedAt": 1201.424508,
+        "finalCompiledAt": 991.56456,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "generation_miss",
+        "previewFrames": 4,
+        "usedBlueprint": false,
+        "usedGeneration": true,
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": 60.33234600000003,
+        "timeToPreviewFinalize": 210.13151600000003,
+        "timeToFinalCompiled": 0.27156800000000203,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "oss-miss-survey",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 1201.527284,
+        "firstPreviewAt": null,
+        "previewFinalizedAt": null,
+        "finalCompiledAt": 1201.737124,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "oss_miss",
+        "previewFrames": 0,
+        "usedBlueprint": false,
+        "usedGeneration": false,
+        "previewExpected": false,
+        "previewObserved": false,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": null,
+        "timeToPreviewFinalize": null,
+        "timeToFinalCompiled": 0.2098399999999856,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "oss-miss-survey",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 1201.780387,
+        "firstPreviewAt": null,
+        "previewFinalizedAt": null,
+        "finalCompiledAt": 1201.910835,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "oss_miss",
+        "previewFrames": 0,
+        "usedBlueprint": false,
+        "usedGeneration": false,
+        "previewExpected": false,
+        "previewObserved": false,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": null,
+        "timeToPreviewFinalize": null,
+        "timeToFinalCompiled": 0.13044799999988754,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    },
+    {
+      "caseId": "oss-miss-survey",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 1201.948487,
+        "firstPreviewAt": null,
+        "previewFinalizedAt": null,
+        "finalCompiledAt": 1202.093263,
+        "finalDomVisibleAt": null
+      },
+      "tags": {
+        "path": "oss_miss",
+        "previewFrames": 0,
+        "usedBlueprint": false,
+        "usedGeneration": false,
+        "previewExpected": false,
+        "previewObserved": false,
+        "finalCompiledReliable": false
+      },
+      "derived": {
+        "timeToFirstPreview": null,
+        "timeToPreviewFinalize": null,
+        "timeToFinalCompiled": 0.1447760000000926,
+        "timeToFinalVisible": null
+      },
+      "errors": []
+    }
+  ],
+  "summary": [
+    {
+      "path": "blueprint_hit",
+      "runs": 3,
+      "timeToFirstPreview": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 75.93068700000003,
+        "median": 75.95037299999996,
+        "max": 76.73265600000002
+      },
+      "timeToPreviewFinalize": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 75.94418199999996,
+        "median": 75.96487099999996,
+        "max": 76.80971300000004
+      },
+      "timeToFinalCompiled": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.3437860000000228,
+        "median": 0.5059849999999528,
+        "max": 1.3156390000000329
+      },
+      "previewFrames": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 1,
+        "median": 1,
+        "max": 1
+      },
+      "previewObservedCount": 3,
+      "previewExpectedButMissingCount": 0
+    },
+    {
+      "path": "generation_miss",
+      "runs": 3,
+      "timeToFirstPreview": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 60.33234600000003,
+        "median": 60.474288,
+        "max": 60.66397900000004
+      },
+      "timeToPreviewFinalize": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 210.13151600000003,
+        "median": 210.66089699999998,
+        "max": 210.86646800000005
+      },
+      "timeToFinalCompiled": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.27156800000000203,
+        "median": 0.29381100000000515,
+        "max": 0.305341999999996
+      },
+      "previewFrames": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 4,
+        "median": 4,
+        "max": 4
+      },
+      "previewObservedCount": 3,
+      "previewExpectedButMissingCount": 0
+    },
+    {
+      "path": "oss_miss",
+      "runs": 3,
+      "timeToFirstPreview": {
+        "count": 0,
+        "nullCount": 3,
+        "min": null,
+        "median": null,
+        "max": null
+      },
+      "timeToPreviewFinalize": {
+        "count": 0,
+        "nullCount": 3,
+        "min": null,
+        "median": null,
+        "max": null
+      },
+      "timeToFinalCompiled": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.13044799999988754,
+        "median": 0.1447760000000926,
+        "max": 0.2098399999999856
+      },
+      "previewFrames": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0,
+        "median": 0,
+        "max": 0
+      },
+      "previewObservedCount": 0,
+      "previewExpectedButMissingCount": 0
+    }
+  ]
+}

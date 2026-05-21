@@ -1,0 +1,391 @@
+{
+  "schemaVersion": "a2ui.v0",
+  "generatedAt": "2026-04-20T05:13:13.194Z",
+  "floorLabel": "v0-seed",
+  "notes": [
+    "handoffGapMs is reserved (always null in v0) — no hosted call site invokes finalizeProvisionalPreview yet.",
+    "The deterministic emitter is the only producer wired today; Haiku-backed producer drops in behind the same interface.",
+    "Parse is evaluated per-frame via parseServerMessage BEFORE transport ack — parseFailCount > 0 is the primary regression signal.",
+    "Stats are min/median/max per intent-shape; p50/p95 are deliberately NOT reported at this corpus size.",
+    "No DOM-visible / renderer / visual-delta checkpoint — that is v0.5 work."
+  ],
+  "results": [
+    {
+      "caseId": "form-feedback",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 305.949351,
+        "firstFrameAt": 307.470653,
+        "previewFinalizedAt": 309.923151,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "form-feedback",
+        "intentShape": "form",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 1.5213020000000483,
+        "timeToPreviewFinalize": 3.9738000000000397,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "form-feedback",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 310.042308,
+        "firstFrameAt": 310.10631,
+        "previewFinalizedAt": 310.400591,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "form-feedback",
+        "intentShape": "form",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.06400200000001632,
+        "timeToPreviewFinalize": 0.35828300000002855,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "form-feedback",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 310.421231,
+        "firstFrameAt": 310.471767,
+        "previewFinalizedAt": 310.644026,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "form-feedback",
+        "intentShape": "form",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.05053600000002234,
+        "timeToPreviewFinalize": 0.22279500000001917,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "list-todos",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 310.671388,
+        "firstFrameAt": 310.705703,
+        "previewFinalizedAt": 311.105216,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "list-todos",
+        "intentShape": "list",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.03431500000004917,
+        "timeToPreviewFinalize": 0.43382800000000543,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "list-todos",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 311.124382,
+        "firstFrameAt": 311.171963,
+        "previewFinalizedAt": 311.331136,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "list-todos",
+        "intentShape": "list",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.04758099999997967,
+        "timeToPreviewFinalize": 0.20675399999998945,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "list-todos",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 311.347698,
+        "firstFrameAt": 311.378827,
+        "previewFinalizedAt": 311.459662,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "list-todos",
+        "intentShape": "list",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.03112900000002128,
+        "timeToPreviewFinalize": 0.1119640000000004,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "minimal-greeting",
+      "runIndex": 0,
+      "checkpoints": {
+        "startedAt": 311.475141,
+        "firstFrameAt": 311.502914,
+        "previewFinalizedAt": 311.565343,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "minimal-greeting",
+        "intentShape": "minimal",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.02777299999996785,
+        "timeToPreviewFinalize": 0.09020199999997658,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "minimal-greeting",
+      "runIndex": 1,
+      "checkpoints": {
+        "startedAt": 311.581885,
+        "firstFrameAt": 311.617032,
+        "previewFinalizedAt": 311.691103,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "minimal-greeting",
+        "intentShape": "minimal",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.03514699999999493,
+        "timeToPreviewFinalize": 0.10921799999999848,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    },
+    {
+      "caseId": "minimal-greeting",
+      "runIndex": 2,
+      "checkpoints": {
+        "startedAt": 311.707995,
+        "firstFrameAt": 311.744124,
+        "previewFinalizedAt": 311.805692,
+        "handoffGapMs": null
+      },
+      "frames": {
+        "frameCount": 4,
+        "parsePassCount": 4,
+        "parseFailCount": 0
+      },
+      "tags": {
+        "caseId": "minimal-greeting",
+        "intentShape": "minimal",
+        "previewExpected": true,
+        "previewObserved": true,
+        "finalizeObserved": true
+      },
+      "derived": {
+        "timeToFirstFrame": 0.03612900000001673,
+        "timeToPreviewFinalize": 0.09769700000003922,
+        "parsePassRate": 1,
+        "framesBeforeFinalize": 4
+      },
+      "parseIssueSamples": [],
+      "errors": []
+    }
+  ],
+  "summary": [
+    {
+      "intentShape": "form",
+      "runs": 3,
+      "timeToFirstFrame": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.05053600000002234,
+        "median": 0.06400200000001632,
+        "max": 1.5213020000000483
+      },
+      "timeToPreviewFinalize": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.22279500000001917,
+        "median": 0.35828300000002855,
+        "max": 3.9738000000000397
+      },
+      "frameCount": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 4,
+        "median": 4,
+        "max": 4
+      },
+      "parsePassRate": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 1,
+        "median": 1,
+        "max": 1
+      },
+      "previewExpectedButMissingCount": 0,
+      "runsWithParseFailures": 0,
+      "totalParseFailures": 0
+    },
+    {
+      "intentShape": "list",
+      "runs": 3,
+      "timeToFirstFrame": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.03112900000002128,
+        "median": 0.03431500000004917,
+        "max": 0.04758099999997967
+      },
+      "timeToPreviewFinalize": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.1119640000000004,
+        "median": 0.20675399999998945,
+        "max": 0.43382800000000543
+      },
+      "frameCount": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 4,
+        "median": 4,
+        "max": 4
+      },
+      "parsePassRate": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 1,
+        "median": 1,
+        "max": 1
+      },
+      "previewExpectedButMissingCount": 0,
+      "runsWithParseFailures": 0,
+      "totalParseFailures": 0
+    },
+    {
+      "intentShape": "minimal",
+      "runs": 3,
+      "timeToFirstFrame": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.02777299999996785,
+        "median": 0.03514699999999493,
+        "max": 0.03612900000001673
+      },
+      "timeToPreviewFinalize": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.09020199999997658,
+        "median": 0.09769700000003922,
+        "max": 0.10921799999999848
+      },
+      "frameCount": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 4,
+        "median": 4,
+        "max": 4
+      },
+      "parsePassRate": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 1,
+        "median": 1,
+        "max": 1
+      },
+      "previewExpectedButMissingCount": 0,
+      "runsWithParseFailures": 0,
+      "totalParseFailures": 0
+    }
+  ]
+}

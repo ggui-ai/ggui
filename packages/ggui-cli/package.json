@@ -1,0 +1,77 @@
+{
+  "name": "@ggui-ai/cli",
+  "version": "0.1.0-rc.1",
+  "description": "The `ggui` CLI — run the ggui protocol locally: dev server, self-hosted MCP server, and gadget / blueprint authoring. End-to-end OSS and self-hosted workflows; no account required.",
+  "keywords": [
+    "ggui",
+    "cli",
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "generative-ui",
+    "dev-server"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "ggui": "./dist/cli.js"
+  },
+  "exports": {
+    "./tunnel-provider": {
+      "types": "./dist/tunnel-provider.d.ts",
+      "import": "./dist/tunnel-provider.js",
+      "default": "./dist/tunnel-provider.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
+    "@ggui-ai/agent-runtime": "workspace:*",
+    "@ggui-ai/artifact-manifest": "workspace:*",
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/dev-stack": "workspace:*",
+    "@ggui-ai/gadget-signing": "workspace:*",
+    "@ggui-ai/embedding-local": "workspace:*",
+    "@ggui-ai/mcp-server": "workspace:*",
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/mcp-server-handlers": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/registry-core": "workspace:*",
+    "@ggui-ai/iframe-runtime": "workspace:*",
+    "@ggui-ai/ui-gen": "workspace:*",
+    "@ggui-ai/ui-registry": "workspace:*",
+    "@huggingface/transformers": "^3.0.0",
+    "@noble/hashes": "^1.6.0",
+    "esbuild": "^0.25.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0",
+    "zod": "^4.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/ggui-cli"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/ggui-cli",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

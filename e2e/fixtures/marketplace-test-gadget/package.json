@@ -1,0 +1,12 @@
+{
+  "name": "@my-org/marketplace-test-gadget",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Workspace-private test gadget consumed by registry e2e scenarios — a minimal valid gadget repo with a useTestProbe hook that emits a deterministic window.postMessage on first render, so Playwright can wait for a known signal instead of asserting DOM structure.",
+  "type": "module",
+  "files": [
+    "ggui.gadget.json",
+    "src",
+    "dist"
+  ]
+}

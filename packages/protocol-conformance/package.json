@@ -1,0 +1,79 @@
+{
+  "name": "@ggui-ai/protocol-conformance",
+  "version": "0.1.0-rc.1",
+  "description": "Conformance test kit for the ggui protocol. Drives a behavioral fixture catalog against a live implementation over WebSocket, plus three pure-function catalogs (schema, registration, resolution) for the gadget obligations, and reports a scorecard-style pass / fail / skip. MCP builders adopt this kit to prove their implementation is protocol-conformant.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "protocol",
+    "conformance",
+    "test-kit"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ggui-protocol-conformance": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./fixtures": {
+      "types": "./dist/fixtures/index.d.ts",
+      "import": "./dist/fixtures/index.js",
+      "default": "./dist/fixtures/index.js"
+    },
+    "./schema-conformance": {
+      "types": "./dist/schema-conformance/index.d.ts",
+      "import": "./dist/schema-conformance/index.js",
+      "default": "./dist/schema-conformance/index.js"
+    },
+    "./registration-conformance": {
+      "types": "./dist/registration-conformance/index.d.ts",
+      "import": "./dist/registration-conformance/index.js",
+      "default": "./dist/registration-conformance/index.js"
+    },
+    "./resolution-conformance": {
+      "types": "./dist/resolution-conformance/index.d.ts",
+      "import": "./dist/resolution-conformance/index.js",
+      "default": "./dist/resolution-conformance/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/protocol": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/protocol-conformance"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/protocol-conformance",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

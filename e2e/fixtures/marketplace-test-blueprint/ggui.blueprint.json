@@ -1,0 +1,14 @@
+{
+  "kind": "blueprint",
+  "scope": "@ggui-test",
+  "name": "probe-blueprint",
+  "version": "0.0.1",
+  "visibility": "public",
+  "description": "Test blueprint emitting a data-testid='blueprint-probe' div for Playwright assertions.",
+  "source": "export default function ProbeBlueprint() { return <div data-testid=\"blueprint-probe\">PROBE</div>; }",
+  "variance": {
+    "persona": "test-harness",
+    "seedPrompt": "Slice 4.5 marketplace blueprint lifecycle probe"
+  },
+  "tags": ["test", "fixture"]
+}

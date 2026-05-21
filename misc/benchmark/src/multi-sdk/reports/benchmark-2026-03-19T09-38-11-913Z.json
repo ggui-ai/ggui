@@ -1,0 +1,251 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T09:38:11.912Z",
+    "totalDurationMs": 40989,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-multi-agent-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-agent",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var y=Object.defineProperty;var r=(o,n)=>y(o,\"name\",{value:n,configurable:!0});import{jsx as i}from\"react/jsx-runtime\";const w={Sunny:\"\\u2600\\uFE0F\",Clear:\"\\u{1F319}\",Cloudy:\"\\u2601\\uFE0F\",\"Partly Cloudy\":\"\\u26C5\",Rainy:\"\\u{1F327}\\uFE0F\",Showers:\"\\u{1F326}\\uFE0F\",Thunderstorm:\"\\u26C8\\uFE0F\",Snowy:\"\\u2744\\uFE0F\",Windy:\"\\u{1F4A8}\",Foggy:\"\\u{1F32B}\\uFE0F\",Default:\"\\u2601\\uFE0F\"},S={Sunny:\"var(--ggui-color-sun, #FFD700)\",Clear:\"var(--ggui-color-sky-clear, #1E90FF)\",Cloudy:\"var(--ggui-color-cloud, #B0C4DE)\",\"Partly Cloudy\":\"var(--ggui-color-sky-partly, #87CEEB)\",Rainy:\"var(--ggui-color-rain, #4682B4)\",Showers:\"var(--ggui-color-shower, #5F9EA0)\",Thunderstorm:\"var(--ggui-color-storm, #483D8B)\",Snowy:\"var(--ggui-color-snow, #F0F8FF)\",Windy:\"var(--ggui-color-wind, #DCDCDC)\",Foggy:\"var(--ggui-color-fog, #778899)\",Default:\"var(--ggui-color-primary, #87CEEB)\"},f={Sun:\"Sunday\",Mon:\"Monday\",Tue:\"Tuesday\",Wed:\"Wednesday\",Thu:\"Thursday\",Fri:\"Friday\",Sat:\"Saturday\"},T=[{day:\"Mon\",icon:\"Sunny\",high:24,low:16},{day:\"Tue\",icon:\"Partly Cloudy\",high:22,low:15},{day:\"Wed\",icon:\"Cloudy\",high:20,low:14},{day:\"Thu\",icon:\"Rainy\",high:18,low:12},{day:\"Fri\",icon:\"Showers\",high:19,low:13}];function D(o){const{temperature:n=0,humidity:a=0,windSpeed:e=0,unit:t=\"C\"}=o;return useMemo(()=>{const u=Math.round(n??0).toString(),d=`${Math.round(a??0)}%`,s=`${(e??0).toFixed(1)} ${t===\"F\"?\"mph\":\"km/h\"}`,c=t===\"F\"?\"\\xB0F\":\"\\xB0C\",l={weekday:\"long\",month:\"long\",day:\"numeric\"},g=new Intl.DateTimeFormat(\"en-US\",l).format(new Date);return{formattedTemp:u,formattedWind:s,formattedHumidity:d,unitLabel:c,currentDate:g}},[n,a,e,t])}r(D,\"useWeather\");function h(o){return i(Container,{padding:\"var(--ggui-spacing-md, 16px)\",background:\"var(--ggui-color-surface, #ffffff)\"})}r(h,\"ComponentUI\");function m(o){const n=useComponent(o);return i(h,{...o,...n})}r(m,\"Component\");export{m as default};\n",
+        "sourceCode": "// --- types.d.ts ---\nexport interface ForecastDay {\n  day: string;\n  icon: string;\n  high: number;\n  low: number;\n}\n\nexport interface WeatherCardProps {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit?: 'C' | 'F' | string;\n  forecast: ForecastDay[];\n}\n\nexport interface WeatherHookReturn {\n  formattedTemp: string;\n  formattedWind: string;\n  formattedHumidity: string;\n  unitLabel: string;\n  currentDate: string;\n}\n\nexport interface WeatherHeaderProps {\n  city: string;\n  condition: string;\n  date: string;\n}\n\nexport interface MainTempProps {\n  temperature: string;\n  unitLabel: string;\n}\n\nexport interface WeatherMetricsProps {\n  humidity: string;\n  windSpeed: string;\n}\n\nexport interface ForecastStripProps {\n  forecast: ForecastDay[];\n  unitLabel: string;\n}\n\nexport interface ForecastItemProps {\n  item: ForecastDay;\n  unitLabel: string;\n}\n\n\n// --- constants.ts ---\nimport { ForecastDay } from './types';\n\n/**\n * Mapping of common weather conditions to display icons (emojis).\n */\nexport const WEATHER_ICONS = {\n  Sunny: '☀️',\n  Clear: '🌙',\n  Cloudy: '☁️',\n  'Partly Cloudy': '⛅',\n  Rainy: '🌧️',\n  Showers: '🌦️',\n  Thunderstorm: '⛈️',\n  Snowy: '❄️',\n  Windy: '💨',\n  Foggy: '🌫️',\n  Default: '☁️',\n} as const;\n\n/**\n * Mapping of weather conditions to CSS variable names for dynamic styling.\n * Uses design system tokens with original hex colors as fallbacks.\n */\nexport const WEATHER_THEMES = {\n  Sunny: 'var(--ggui-color-sun, #FFD700)',\n  Clear: 'var(--ggui-color-sky-clear, #1E90FF)',\n  Cloudy: 'var(--ggui-color-cloud, #B0C4DE)',\n  'Partly Cloudy': 'var(--ggui-color-sky-partly, #87CEEB)',\n  Rainy: 'var(--ggui-color-rain, #4682B4)',\n  Showers: 'var(--ggui-color-shower, #5F9EA0)',\n  Thunderstorm: 'var(--ggui-color-storm, #483D8B)',\n  Snowy: 'var(--ggui-color-snow, #F0F8FF)',\n  Windy: 'var(--ggui-color-wind, #DCDCDC)',\n  Foggy: 'var(--ggui-color-fog, #778899)',\n  Default: 'var(--ggui-color-primary, #87CEEB)',\n} as const;\n\n/**\n * Mapping of shorthand day codes to full day names.\n */\nexport const DAYS_MAP: Record<string, string> = {\n  Sun: 'Sunday',\n  Mon: 'Monday',\n  Tue: 'Tuesday',\n  Wed: 'Wednesday',\n  Thu: 'Thursday',\n  Fri: 'Friday',\n  Sat: 'Saturday',\n} as const;\n\n/**\n * Default fallback data for the forecast strip if no data is provided.\n */\nexport const DEFAULT_FORECAST: ForecastDay[] = [\n  { day: 'Mon', icon: 'Sunny', high: 24, low: 16 },\n  { day: 'Tue', icon: 'Partly Cloudy', high: 22, low: 15 },\n  { day: 'Wed', icon: 'Cloudy', high: 20, low: 14 },\n  { day: 'Thu', icon: 'Rainy', high: 18, low: 12 },\n  { day: 'Fri', icon: 'Showers', high: 19, low: 13 },\n];\n\n\n// --- hooks.ts ---\nimport { useMemo } from 'react';\nimport type { WeatherCardProps, WeatherHookReturn } from './types';\n\n/**\n * Custom hook for processing weather data and providing formatted display values.\n * \n * @param props - The raw weather data props including temperature, humidity, wind speed, and units.\n * @returns Formatted strings for temperature, wind, humidity, the unit label, and the current date.\n */\nexport function useWeather(props: WeatherCardProps): WeatherHookReturn {\n  const {\n    temperature = 0,\n    humidity = 0,\n    windSpeed = 0,\n    unit = 'C',\n  } = props;\n\n  return useMemo(() => {\n    // Round the temperature prop to the nearest whole number and convert it to a string.\n    const formattedTemp = Math.round(temperature ?? 0).toString();\n\n    // Format the humidity prop as a percentage string (e.g., \"85%\").\n    // We round it to ensure it's a whole number for consistent display.\n    const formattedHumidity = `${Math.round(humidity ?? 0)}%`;\n\n    // Format the windSpeed prop with one decimal place and append the appropriate unit.\n    // Metric (C) uses \"km/h\", Imperial (F) uses \"mph\".\n    const displayWindValue = (windSpeed ?? 0).toFixed(1);\n    const windUnitLabel = unit === 'F' ? 'mph' : 'km/h';\n    const formattedWind = `${displayWindValue} ${windUnitLabel}`;\n\n    // Convert the unit prop into a display label (e.g., \"°C\" or \"°F\").\n    const unitLabel = unit === 'F' ? '°F' : '°C';\n\n    // Generate a human-readable date string for the current day.\n    // Format: \"Monday, July 10\"\n    const dateOptions: Intl.DateTimeFormatOptions = {\n      weekday: 'long',\n      month: 'long',\n      day: 'numeric',\n    };\n    const currentDate = new Intl.DateTimeFormat('en-US', dateOptions).format(new Date());\n\n    return {\n      formattedTemp,\n      formattedWind,\n      formattedHumidity,\n      unitLabel,\n      currentDate,\n    };\n  }, [temperature, humidity, windSpeed, unit]);\n}\n\n\n// --- components/WeatherHeader.tsx ---\n// components/WeatherHeader.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Stack, Text } from '@ggui-ai/design/primitives';\nimport type { components/WeatherHeaderProps } from './types';\n\nexport function components/WeatherHeader(props: components/WeatherHeaderProps) {\n  return (\n    <Container>\n      {/* TODO: implement components/WeatherHeader */}\n    </Container>\n  );\n}\n\n\n// --- components/MainTemp.tsx ---\n// components/MainTemp.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Stack, Text } from '@ggui-ai/design/primitives';\nimport type { components/MainTempProps } from './types';\n\nexport function components/MainTemp(props: components/MainTempProps) {\n  return (\n    <Container>\n      {/* TODO: implement components/MainTemp */}\n    </Container>\n  );\n}\n\n\n// --- components/WeatherMetrics.tsx ---\n// components/WeatherMetrics.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Stack, Text } from '@ggui-ai/design/primitives';\nimport type { components/WeatherMetricsProps } from './types';\n\nexport function components/WeatherMetrics(props: components/WeatherMetricsProps) {\n  return (\n    <Container>\n      {/* TODO: implement components/WeatherMetrics */}\n    </Container>\n  );\n}\n\n\n// --- components/ForecastStrip.tsx ---\n// components/ForecastStrip.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Stack, Text } from '@ggui-ai/design/primitives';\nimport type { components/ForecastStripProps } from './types';\n\nexport function components/ForecastStrip(props: components/ForecastStripProps) {\n  return (\n    <Container>\n      {/* TODO: implement components/ForecastStrip */}\n    </Container>\n  );\n}\n\n\n// --- ui.tsx ---\n// ui.tsx — main visual layout, design system primitives\nimport React from 'react';\nimport { Container, Stack, Heading, Text, Card, Divider } from '@ggui-ai/design/primitives';\nimport type { Props, HookReturn } from './types';\nimport { components/WeatherHeader, components/MainTemp, components/WeatherMetrics, components/ForecastStrip } from './components';\n\nexport function ComponentUI(props: Props & HookReturn) {\n\n  return (\n    <Container\n      padding=\"var(--ggui-spacing-md, 16px)\"\n      background=\"var(--ggui-color-surface, #ffffff)\"\n    >\n      {/* TODO: implement UI layout */}\n    </Container>\n  );\n}\n\n\n// --- render.tsx ---\n// render.tsx — entry point\nimport React from 'react';\nimport type { Props } from './types';\nimport { useComponent } from './hooks';\nimport { ComponentUI } from './ui';\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n  return <ComponentUI {...props} {...state} />;\n}\n",
+        "tokens": {
+          "input": 71184,
+          "output": 6624,
+          "total": 77808
+        },
+        "generationTimeMs": 38215,
+        "turnsUsed": 8,
+        "iterations": 1,
+        "recipeName": "multi-agent",
+        "passesUsed": 1
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 15,
+        "finalScore": 15,
+        "issues": [],
+        "dimensions": {
+          "layout": 15,
+          "designTokens": 25,
+          "hierarchy": 10,
+          "polish": 5,
+          "dataPresentation": 20,
+          "completeness": 20,
+          "visualPolish": 13,
+          "interactivity": 5,
+          "accessibility": 13,
+          "codeQuality": 25
+        },
+        "critique": "This component is fundamentally incomplete with all sub-components and main UI marked as TODO, making it non-functional. While the supporting files (types, constants, hooks) are well-structured and follow design system conventions, the actual rendering implementation is entirely missing. The constants file includes problematic fallback hex colors alongside CSS variables, violating the design token requirement.",
+        "evalTimeMs": 2537
+      },
+      "estimatedCostUsd": 0.055464,
+      "timestamp": "2026-03-19T09:38:11.912Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1871,
+        "sourceCodeBytes": 7292,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": ["Hardcoded string \"Sunny\" found — should be a prop default"]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-multi-agent-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 15,
+      "avgTimeMs": 38215,
+      "avgCostUsd": 0.055464,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 20,
+        "visualPolish": 13,
+        "interactivity": 5,
+        "accessibility": 13,
+        "codeQuality": 25
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 15,
+      "bestVariantId": "google-multi-agent-0",
+      "worstVariantId": "google-multi-agent-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 15,
+        "avgTimeMs": 38215,
+        "avgCostUsd": 0.055464,
+        "successRate": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@ggui-ai/e2e",
+  "version": "0.0.1",
+  "description": "Dedicated E2E harness for the ggui OSS product boundary. Zero dependency on any closed package, no hosted-platform SDKs, no sandbox auth fixtures — by design. OSS claim is expressed in the dep graph, not just the npm scope.",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "test:journeys-ggui-oss": "playwright test --project=journeys-ggui-oss",
+    "test:mcp-fixtures": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@ggui-ai/mcp-server": "workspace:*",
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/mcp-server-handlers": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/protocol-conformance": "workspace:*",
+    "@ggui-ai/protocol-reference-server": "workspace:*",
+    "@ggui-ai/ui-gen": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@playwright/test": "^1.40.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.0",
+    "better-sqlite3": "^12.9.0",
+    "dotenv": "^16.4.0",
+    "vitest": "^3.0.0",
+    "ws": "^8.16.0",
+    "zod": "^4.3.6"
+  }
+}

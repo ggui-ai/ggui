@@ -1,0 +1,441 @@
+name: Release
+
+# Public-repo OSS release path. This workflow lives under the subtree-synced
+# `oss/.github/workflows/` directory in the monorepo, so it appears at
+# `.github/workflows/release.yml` in `github.com/ggui-ai/ggui` after the
+# subtree split strips the `oss/` prefix.
+#
+# Release model: "publish what's in git."
+#   - Version numbers come from each `packages/<pkg>/package.json` as committed.
+#   - This workflow NEVER mutates package.json, package-lock.json, or git
+#     state. Bumps happen in a separate PR against the monorepo that flows
+#     through the subtree split; the release workflow just publishes the
+#     already-committed versions.
+#   - If a target `name@version` is already on npm, the publish step fails
+#     cleanly for that package. Nothing auto-increments.
+#
+# Triggers:
+#
+#   1. `workflow_dispatch` — operator preflight / dry-run / subset testing.
+#      Default is dry-run so a misclick cannot ship. Full live publish from
+#      dispatch requires `dry-run: false` AND `confirm_version_set: yes`.
+#
+#   2. `release: [published]` — the real npm-publish event. Cutting a
+#      GitHub Release on github.com IS the human acknowledgement. On this
+#      trigger the workflow:
+#        - always publishes the full canonical set (subset selection is
+#          dispatch-only)
+#        - always runs live (dry-run inputs don't apply)
+#        - treats the release event itself as the confirmation
+#        - still runs the same preflight (build, typecheck, closure,
+#          collision, branch-context) and the same post-publish smoke.
+#
+#   There are deliberately no other triggers. No push, no tag, no schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Comma-separated package names (without scope), or 'all'. Dispatch-only; ignored on release events. Order is ignored; the workflow enforces a fixed leaf-first order internally."
+        required: false
+        default: "all"
+      dry-run:
+        description: "Dispatch-only. If true, runs pnpm publish --dry-run; no tarballs land on npm. Release-triggered runs always publish live."
+        required: false
+        type: boolean
+        default: true
+      confirm_version_set:
+        description: "Dispatch-only. Must be exactly 'yes' to allow a non-dry-run dispatch publish. Release-triggered runs treat the GitHub Release event as the confirmation."
+        required: false
+        default: "no"
+  release:
+    types:
+      - published
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Preflight — what will be published, does it build, and is anything
+  # already on npm at the intended version? All read-only; no side effects.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      filter: ${{ steps.resolve.outputs.filter }}
+      effective_dry_run: ${{ steps.route.outputs.effective_dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      # Route the two trigger types to a single set of effective inputs so
+      # every subsequent step reads from one canonical source. Dispatch
+      # respects operator inputs; release event overrides to a live,
+      # full-set, pre-confirmed publish.
+      - name: Route event → effective inputs
+        id: route
+        run: |
+          set -euo pipefail
+          EVENT="${{ github.event_name }}"
+          case "$EVENT" in
+            workflow_dispatch)
+              REQ_PKGS="${{ github.event.inputs.packages }}"
+              DRY_RUN="${{ github.event.inputs.dry-run }}"
+              CONFIRM="${{ github.event.inputs.confirm_version_set }}"
+              # Normalise empty dispatch defaults (shouldn't happen given the
+              # schema, but belt-and-braces so later shell comparisons are
+              # deterministic).
+              [ -z "$REQ_PKGS" ] && REQ_PKGS="all"
+              [ -z "$DRY_RUN" ]  && DRY_RUN="true"
+              [ -z "$CONFIRM" ]  && CONFIRM="no"
+              ;;
+            release)
+              # Release event IS the human confirmation; no subset games.
+              REQ_PKGS="all"
+              DRY_RUN="false"
+              CONFIRM="yes"
+              ;;
+            *)
+              echo "::error::Unsupported event '$EVENT'. This workflow accepts only workflow_dispatch and release[published]."
+              exit 1
+              ;;
+          esac
+          echo "event=$EVENT" >> "$GITHUB_OUTPUT"
+          echo "effective_req_pkgs=$REQ_PKGS" >> "$GITHUB_OUTPUT"
+          echo "effective_dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
+          echo "effective_confirm=$CONFIRM" >> "$GITHUB_OUTPUT"
+
+      # Release-event safety: don't publish off a non-default branch.
+      # `target_commitish` on a UI-created release is the branch the
+      # release was targeted at (usually 'main'). If someone cuts a
+      # release from a feature branch or a fork, fail here rather than
+      # shipping that branch's versions to npm.
+      #
+      # Limitation: when a release is created via the REST API with a
+      # specific commit SHA, `target_commitish` is that SHA, not a branch
+      # name. This check accepts either (a) a match with the default
+      # branch, or (b) a SHA that is reachable from the default branch —
+      # the latter requires a fetch. We do the cheaper (a) match inline
+      # and fall back to a hint rather than a deep history walk.
+      - name: Validate release context
+        if: ${{ github.event_name == 'release' }}
+        run: |
+          set -euo pipefail
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          TARGET="${{ github.event.release.target_commitish }}"
+          TAG="${{ github.event.release.tag_name }}"
+          NAME="${{ github.event.release.name }}"
+          IS_DRAFT="${{ github.event.release.draft }}"
+          IS_PRERELEASE="${{ github.event.release.prerelease }}"
+          echo "release tag: $TAG"
+          echo "release name: $NAME"
+          echo "release target_commitish: $TARGET"
+          echo "default branch: $DEFAULT_BRANCH"
+          echo "draft: $IS_DRAFT"
+          echo "prerelease: $IS_PRERELEASE"
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "::error::Draft release fired 'published' — refusing to publish."
+            exit 1
+          fi
+          if [ "$TARGET" != "$DEFAULT_BRANCH" ]; then
+            echo "::warning::Release target_commitish is '$TARGET', not default branch '$DEFAULT_BRANCH'."
+            echo "::warning::This may be a SHA (API-created release) or a non-default branch. If you intended to publish from $DEFAULT_BRANCH, recreate the release against the default branch."
+            echo "::warning::Proceeding — the collision check + npm's own immutability is the last-line defence."
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build all targets
+        run: pnpm -r --filter "./packages/*" build
+
+      - name: Typecheck all targets
+        run: pnpm -r --filter "./packages/*" typecheck
+
+      # Canonical leaf-first publish order — bare package directory names
+      # (each use site below prefixes `packages/`). In github.com/ggui-ai/ggui
+      # a package lives at `packages/<dir>/` after the subtree split strips
+      # the `oss/` prefix. Keep this list ordered by dependency depth —
+      # anything earlier in the list MAY be depended on by anything later,
+      # never the reverse. Private packages (e.g. host-streams) are built
+      # but not published, so they are deliberately absent.
+      - name: Resolve publish filter
+        id: resolve
+        run: |
+          set -euo pipefail
+          INPUT="${{ steps.route.outputs.effective_req_pkgs }}"
+
+          # The canonical order. If you add a package here, add it in the
+          # right layer. If you remove one, remove it from the monorepo
+          # first so the subtree reflects reality.
+          ORDER=(
+            agent-runtime
+            protocol
+            artifact-manifest
+            gadget-signing
+            registry-core
+            blueprint-probe
+            preview-a2ui
+            channel-client
+            gadgets
+            wire
+            design
+            iframe-runtime
+            shared
+            ggui-react
+            ggui-react-native
+            chat-self-hosted
+            project-config
+            ui-registry
+            dev-stack
+            embedding-local
+            console
+            mcp-server-core
+            negotiator
+            sandbox
+            ui-visual-tester
+            ui-gen
+            mcp-server-handlers
+            mcp-server
+            ggui-cli
+            predefined
+            protocol-conformance
+            protocol-reference-server
+            registry-server
+          )
+
+          if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
+            FILTER="${ORDER[*]}"
+          else
+            # Intersect user's selection with ORDER (preserve order, dedup).
+            # Only the dispatch path can take this branch — release events
+            # always pass INPUT="all".
+            REQUESTED=$(echo "$INPUT" | tr ',' ' ' | xargs -n1 | sort -u)
+            FILTER=""
+            for pkg in "${ORDER[@]}"; do
+              for r in $REQUESTED; do
+                if [ "$pkg" = "$r" ]; then
+                  FILTER="${FILTER:+$FILTER }$pkg"
+                fi
+              done
+            done
+            # Detect unknown names.
+            for r in $REQUESTED; do
+              ok=0
+              for pkg in "${ORDER[@]}"; do
+                [ "$pkg" = "$r" ] && ok=1
+              done
+              if [ $ok -eq 0 ]; then
+                echo "::error::Unknown package '$r' — not in canonical ORDER."
+                exit 1
+              fi
+            done
+          fi
+          echo "Publish filter (leaf-first): $FILTER"
+          echo "filter=$FILTER" >> "$GITHUB_OUTPUT"
+
+      - name: Print intended publish plan
+        run: |
+          set -euo pipefail
+          EVENT="${{ steps.route.outputs.event }}"
+          DRY_RUN="${{ steps.route.outputs.effective_dry_run }}"
+          CONFIRM="${{ steps.route.outputs.effective_confirm }}"
+
+          echo "## Publish plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EVENT" = "release" ]; then
+            echo "**Trigger:** GitHub Release \`${{ github.event.release.tag_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Release name:** ${{ github.event.release.name }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Target:** \`${{ github.event.release.target_commitish }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Mode:** live publish (subset/dry-run inputs are dispatch-only)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Trigger:** \`workflow_dispatch\` (operator preflight / dry-run)" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Dispatch dry-run:** \`$DRY_RUN\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Dispatch confirmation:** \`$CONFIRM\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| # | Package | Version | Source path |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---------|---------|-------------|" >> "$GITHUB_STEP_SUMMARY"
+          i=1
+          for pkg in ${{ steps.resolve.outputs.filter }}; do
+            name=$(node -pe "require('./packages/$pkg/package.json').name")
+            ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            echo "| $i | \`$name\` | \`$ver\` | \`packages/$pkg/\` |" >> "$GITHUB_STEP_SUMMARY"
+            i=$((i+1))
+          done
+
+      # Safety gate: the closure check walks each target's workspace-deps
+      # and verifies every `workspace:*` edge points at another package
+      # ALSO in the publish filter. Catches the class of bugs where a
+      # non-OSS-source dep slips in as `workspace:*` (e.g. @ggui-private/*,
+      # @ggui-cloud/*, @ggui-apps/*, or any @guuey-*/* — @guuey/* itself
+      # is published to public npm but from dist, not from this subtree,
+      # so a `workspace:*` edge into it is still a packaging bug) or
+      # where an open dep is forgotten (e.g. @ggui-ai/design missing
+      # from the list even though @ggui-ai/project-config imports it).
+      - name: Verify workspace-dep closure
+        run: |
+          set -euo pipefail
+          FILTER="${{ steps.resolve.outputs.filter }}"
+          # Build the set of names-to-be-published from filter dirs.
+          NAMES=""
+          for pkg in $FILTER; do
+            n=$(node -pe "require('./packages/$pkg/package.json').name")
+            NAMES="${NAMES:+$NAMES }$n"
+          done
+          echo "Publish-set names: $NAMES"
+
+          FAIL=0
+          for pkg in $FILTER; do
+            bad=$(node -e "
+              const j = require('./packages/$pkg/package.json');
+              const names = ('$NAMES').split(/\s+/).filter(Boolean);
+              const all = { ...(j.dependencies||{}), ...(j.peerDependencies||{}) };
+              const violations = [];
+              for (const [k, v] of Object.entries(all)) {
+                if (!String(v).startsWith('workspace:')) continue;
+                // Any non-@ggui-ai/* workspace dep in an @ggui-ai/* package is wrong.
+                // Monorepo-only scopes (@ggui-private/*, @ggui-cloud/*, @ggui-apps/*,
+                // @guuey-*/*) MUST NOT appear as workspace:* edges in a published OSS
+                // package. @guuey/* is published to npm but only from dist artifacts,
+                // never as workspace:* source — same rule applies.
+                if (j.name && j.name.startsWith('@ggui-ai/') && !k.startsWith('@ggui-ai/')) {
+                  violations.push(k + ' (scope-boundary violation)');
+                  continue;
+                }
+                if (!names.includes(k)) {
+                  violations.push(k + ' (missing from publish filter)');
+                }
+              }
+              console.log(violations.join('|'));
+            ")
+            if [ -n "$bad" ]; then
+              echo "::error::$pkg: $bad"
+              FAIL=1
+            fi
+          done
+          if [ $FAIL -ne 0 ]; then
+            echo "::error::Closure check failed. Either add the missing packages to the filter, or fix the scope violation."
+            exit 1
+          fi
+
+      - name: Detect version collisions on npm
+        run: |
+          set -euo pipefail
+          FAIL=0
+          for pkg in ${{ steps.resolve.outputs.filter }}; do
+            name=$(node -pe "require('./packages/$pkg/package.json').name")
+            ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            # `npm view name@ver version` exits non-zero on 404 (= free to publish).
+            if out=$(npm view "$name@$ver" version 2>&1); then
+              if [ -n "$out" ] && [ "$out" != "npm warn"* ]; then
+                echo "::error::$name@$ver is already published on npm. Bump in a separate PR before releasing."
+                FAIL=1
+              fi
+            fi
+          done
+          if [ $FAIL -ne 0 ]; then
+            echo "::error::One or more targets already published at their intended versions."
+            echo "::error::This workflow never mutates package.json. Bump versions in a monorepo PR, sync the subtree, then retry."
+            exit 1
+          fi
+
+      # Confirmation gate. On release event the gate passes automatically
+      # (the release-published event IS the confirmation). On dispatch
+      # with dry-run=false, operator must have explicitly set
+      # confirm_version_set=yes; otherwise fail with guidance.
+      - name: Enforce explicit confirmation for real publish
+        if: ${{ steps.route.outputs.effective_dry_run != 'true' }}
+        run: |
+          if [ "${{ steps.route.outputs.effective_confirm }}" != "yes" ]; then
+            echo "::error::Non-dry-run publish requires confirm_version_set='yes' (spelled exactly)."
+            echo "::error::Either re-run dispatch with dry-run=true (default), set confirm_version_set=yes, or cut a GitHub Release."
+            exit 1
+          fi
+
+  # ── Publish — gated by the `npm-publish` environment (configure in the
+  # public repo's Settings → Environments with required reviewers).
+  publish:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+
+      - name: Publish (leaf-first)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
+          PUBLISH_ARGS=(--access public --no-git-checks)
+          if [ "$DRY_RUN" = "true" ]; then
+            PUBLISH_ARGS+=(--dry-run)
+          fi
+
+          for pkg in ${{ needs.preflight.outputs.filter }}; do
+            name=$(node -pe "require('./packages/$pkg/package.json').name")
+            ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            echo "::group::Publishing $name@$ver from packages/$pkg/"
+            (cd "packages/$pkg" && pnpm publish "${PUBLISH_ARGS[@]}")
+            echo "::endgroup::"
+          done
+
+          echo "## Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "**Dry run — nothing landed on npm.**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Real publish. Tarballs are live on https://registry.npmjs.org/**." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ── Post-publish consumer smoke. Narrow and high-signal: install
+  # @ggui-ai/cli in a clean directory, confirm the bin resolves + executes.
+  # Only runs on a real (non-dry) publish — triggered either by a release
+  # event or by a dispatch with dry-run=false + confirm_version_set=yes.
+  smoke:
+    needs: [preflight, publish]
+    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Smoke — @ggui-ai/cli
+        run: |
+          set -euo pipefail
+          # Let npm's registry mirrors catch up before we fetch.
+          sleep 30
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install @ggui-ai/cli
+          ./node_modules/.bin/ggui --version
+          ./node_modules/.bin/ggui --help

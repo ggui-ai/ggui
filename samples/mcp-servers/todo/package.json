@@ -1,0 +1,25 @@
+{
+  "name": "@ggui-samples/mcp-todo",
+  "version": "0.0.1",
+  "description": "Reference sample: a minimal standalone MCP server exposing a todo-list CRUD surface (todo_list, todo_add, todo_toggle, todo_delete). Used by e2e/scenarios to give the conformance suite real backing state to assert against. Not published.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ggui-sample-mcp-todo": "./dist/index.js"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
+  }
+}

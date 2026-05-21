@@ -1,0 +1,188 @@
+# Test Metadata Reporter
+
+## Overview
+
+The Test Metadata Reporter captures test execution metadata (prompts, tokens, cost, etc.) and displays it in the Preview Test Runner UI.
+
+## Architecture
+
+```
+Test Execution Flow:
+┌──────────────────────────────────────────────────────────────┐
+│ 1. Test runs and calls reportTestMetadata()                 │
+│    ↓ Writes to .test-results/test-metadata.json            │
+│ 2. Vitest completes tests                                   │
+│    ↓ Custom reporter collects results                       │
+│ 3. Reporter merges metadata with test results               │
+│    ↓ Writes to .test-results/latest-run.json               │
+│ 4. Preview server reads latest-run.json                     │
+│    ↓ Enriches test results for UI                          │
+│ 5. UI displays tests with metadata                          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## Files
+
+- `src/test-reporter.ts` - Custom Vitest reporter
+- `src/test-utils/metadata-reporter.ts` - Utility for tests to report metadata
+- `.test-results/test-metadata.json` - Raw metadata from tests
+- `.test-results/latest-run.json` - Merged test results + metadata
+- `preview/server/routes/tests.ts` - Reads merged results for UI
+
+## Usage in Tests
+
+### Basic Example
+
+```typescript
+import { reportTestMetadata } from "../test-utils/metadata-reporter.js";
+
+it("should generate a button component", async () => {
+  const prompt = "A simple button";
+  const result = await generateComponent(prompt);
+
+  // Report metadata for preview UI
+  await reportTestMetadata({
+    prompt,
+    componentId: result.id,
+    strategy: "balanced",
+    model: "anthropic/claude-haiku-4-5",
+    generationTimeMs: result.duration,
+    tokens: {
+      input: result.inputTokens,
+      output: result.outputTokens,
+      total: result.totalTokens,
+    },
+    cost: result.estimatedCost,
+    codeSize: result.code.length,
+  });
+
+  expect(result.code).toBeTruthy();
+});
+```
+
+### What Gets Captured
+
+The reporter captures:
+
+- ✅ Test name, status (pass/fail/skip), duration
+- ✅ Error messages (if test fails)
+- ✅ Prompt used to generate component
+- ✅ Component ID (for linking to preview)
+- ✅ Strategy (balanced, strict, creative)
+- ✅ Model used (e.g., claude-haiku-4-5)
+- ✅ Generation time in milliseconds
+- ✅ Token usage (input, output, total)
+- ✅ Estimated cost in USD
+- ✅ Code size in bytes
+
+### What Gets Displayed in UI
+
+The Preview Test Runner UI shows:
+
+1. **Test list** with pass/fail status
+2. **Prompt** used to generate the component
+3. **Metadata panel** with:
+   - Strategy
+   - Duration
+   - Tokens (input/output/total)
+   - Cost
+   - Code size
+4. **Component preview** (collapsible iframe)
+
+## Configuration
+
+The custom reporter is configured in `vitest.config.ts`:
+
+```typescript
+export default defineConfig({
+  test: {
+    reporters: [
+      "default", // Standard console output
+      resolve(__dirname, "src/test-reporter.ts"), // Custom reporter
+    ],
+  },
+});
+```
+
+## Modifying Existing Tests
+
+To add metadata reporting to existing benchmark tests:
+
+1. Import the utility:
+
+   ```typescript
+   import { reportTestMetadata } from "../test-utils/metadata-reporter.js";
+   ```
+
+2. After component generation, report metadata:
+
+   ```typescript
+   await reportTestMetadata({
+     prompt: "your prompt here",
+     componentId: generatedComponentId,
+     strategy: "balanced",
+     // ... other metadata
+   });
+   ```
+
+3. Run tests normally - metadata is captured automatically
+
+## Testing
+
+Run a test with the reporter:
+
+```bash
+# Run specific test
+npx vitest run src/test-utils/metadata-reporter.example.test.ts
+
+# Run all tests (reporter enabled in vitest.config.ts)
+pnpm test
+
+# Check output
+cat .test-results/latest-run.json | jq .
+```
+
+## Preview UI Integration
+
+The preview test runner automatically reads from `.test-results/latest-run.json`:
+
+1. Start preview server: `pnpm dev` (in core/dev-server)
+2. Navigate to Tests tab: http://localhost:9283
+3. Select a test suite and click "Run Tests"
+4. Tests with metadata show:
+   - Prompt
+   - Metadata panel
+   - "Show Preview" button (if componentId provided)
+
+## Troubleshooting
+
+### "With metadata: 0" in output
+
+**Cause**: Test names in test-metadata.json don't match names in latest-run.json
+
+**Solution**: The reporter uses fuzzy matching. Check that `reportTestMetadata()` is called inside the `it()` block, not in `beforeEach()` or `describe()`.
+
+### Metadata not showing in UI
+
+**Check**:
+
+1. Does `.test-results/latest-run.json` exist?
+2. Does it contain metadata field?
+3. Is preview server reading from correct directory?
+4. Check browser console for API errors
+
+### Component preview not showing
+
+**Requires**:
+
+- `componentId` must be set
+- Component must exist in `.generated/` directory (for components generated by `make gen-samples`)
+- Or component must be accessible via test results directory
+
+## Future Enhancements
+
+- [ ] Store component code in test results for preview
+- [ ] Historical test metrics (trend analysis)
+- [ ] Automatic cost budget warnings
+- [ ] Performance regression detection
+- [ ] Export test reports as JSON/HTML

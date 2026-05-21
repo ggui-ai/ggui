@@ -1,0 +1,13 @@
+{
+  "name": "wire-registry-metadata-reject",
+  "description": "An export entry carrying per-export registry metadata (`permission`). The registry-side teaching + gating fields — `permission`, `example`, `gotchas`, `required` — live on each `exports[*]` of the registered descriptor, never on the wire. `gadgetExportUseSchema` admits only the optional prose pair `description`/`usage` and is `.strict()`, so a `permission` field MUST be rejected at parse time.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-ai/gadgets": {
+        "useGeolocation": { "permission": "geolocation" }
+      }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "per-export registry metadata (permission/example/gotchas/required) is descriptor-side, not a wire field; gadgetExportUseSchema is .strict()."
+}

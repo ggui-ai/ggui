@@ -1,0 +1,184 @@
+/**
+ * Scenario 25 — component-gadget registry round-trip (GG.8 close).
+ *
+ * The GG.8 arc's headline capability: gadgets are no longer hook-only.
+ * A gadget package may export a COMPONENT (a chart, a map, a
+ * date-picker) the generated UI renders as JSX — `<LeafletMap … />` —
+ * instead of a hook it calls. This scenario pins the component-gadget
+ * wire path end-to-end through `ggui_push`, against the
+ * `@ggui-samples/ggui-leaflet-demo` fixture server (port 6783).
+ *
+ * The demo's `ggui.json#app.gadgets` registers the
+ * `@ggui-samples/gadget-leaflet` package — a single COMPONENT export,
+ * `LeafletMap` (the GG.8.7 hook→component migration).
+ *
+ * What this proves:
+ *
+ *   1. `ggui_list_gadgets` surfaces the `@ggui-samples/gadget-leaflet`
+ *      package descriptor with its `LeafletMap` component export.
+ *   2. A `ggui_push` whose contract declares a package-keyed
+ *      `clientCapabilities.gadgets` entry — `{ "@ggui-samples/gadget-leaflet":
+ *      { LeafletMap: {} } }` — for that registered COMPONENT export
+ *      succeeds: `assertGadgetsRegistered` resolves the
+ *      `(package, export)` reference by identity, kind-agnostic. The
+ *      export-name grammar (PascalCase) marks it a component; the gate
+ *      never special-cases kind.
+ *   3. A `ggui_push` referencing an UNREGISTERED component export is
+ *      REJECTED with `gadget_not_registered` — the same gate, the same
+ *      reject code as the hook path (scenario 19).
+ *
+ * Companion to scenario 19 (hook-gadget registry gate). Where 19 pins
+ * the gate against the STDLIB hook catalog, this pins it against an
+ * operator-registered COMPONENT package.
+ *
+ * Every push uses `decision.kind: 'override'` for the same reason
+ * scenario 19 does — it pins the effective contract to the agent's
+ * draft so the gate validates the exact `(package, export)` references
+ * the test declares, regardless of any synth/cache fast-path.
+ *
+ * No LLM, no internet, no extra infrastructure for the gate path.
+ */
+import { describe, expect, test } from 'vitest';
+import {
+  gadgetExportName,
+  type DataContract,
+  type GadgetDescriptor,
+} from '@ggui-ai/protocol';
+import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+
+const GGUI_LEAFLET_PORT = Number.parseInt(
+  process.env.GGUI_LEAFLET_PORT ?? '6783',
+  10,
+);
+const MCP_URL = `http://localhost:${GGUI_LEAFLET_PORT}/mcp`;
+
+const LEAFLET_PACKAGE = '@ggui-samples/gadget-leaflet';
+
+interface ListGadgetsOut {
+  gadgets: readonly GadgetDescriptor[];
+}
+
+interface NewSessionOut {
+  sessionId: string;
+}
+
+interface HandshakeOut {
+  handshakeId: string;
+}
+
+const SCENARIO_INTENT =
+  'render a small map preview — scenario 25 (component gadget round-trip)';
+
+async function newSessionAndHandshake(args: {
+  contract: DataContract;
+  idBase: string;
+}): Promise<{ handshakeId: string; sessionId: string }> {
+  const ns = unwrapStructured<NewSessionOut>(
+    await callTool(MCP_URL, 'ggui_new_session', { seed: args.idBase }),
+  );
+  const hs = unwrapStructured<HandshakeOut>(
+    await callTool(MCP_URL, 'ggui_handshake', {
+      sessionId: ns.sessionId,
+      intent: SCENARIO_INTENT,
+      blueprintDraft: { contract: args.contract },
+      forceCreate: true,
+    }),
+  );
+  return { handshakeId: hs.handshakeId, sessionId: ns.sessionId };
+}
+
+/**
+ * Read the tool-level error message from a `tools/call` response. Push
+ * validators throw → MCP wraps the throw as `result.isError: true`
+ * with the message in `result.content[0].text`. Returns the message
+ * string when present, or `null` when the response was a success.
+ */
+function readToolErrorMessage(resp: unknown): string | null {
+  const r = (
+    resp as {
+      result?: { isError?: boolean; content?: ReadonlyArray<{ text?: string }> };
+    }
+  ).result;
+  if (r?.isError !== true) return null;
+  const text = r.content?.[0]?.text;
+  return typeof text === 'string' ? text : '';
+}
+
+describe('Scenario 25 — component-gadget registry round-trip', () => {
+  test('ggui_list_gadgets surfaces the gadget-leaflet package with its LeafletMap component export', async () => {
+    const out = unwrapStructured<ListGadgetsOut>(
+      await callTool(MCP_URL, 'ggui_list_gadgets', {}),
+    );
+    const leaflet = out.gadgets.find((d) => d.package === LEAFLET_PACKAGE);
+    expect(leaflet).toBeDefined();
+    // The export is a COMPONENT — discriminated by field presence.
+    const leafletExport = leaflet?.exports[0];
+    expect(leafletExport).toBeDefined();
+    expect(leafletExport && 'component' in leafletExport).toBe(true);
+    expect(leaflet?.exports.map(gadgetExportName)).toContain('LeafletMap');
+  });
+
+  test('push with a registered component gadget succeeds (gate accepts the component ref)', async () => {
+    const contract = {
+      propsSpec: {
+        description: 'scenario 25 — registered-component push',
+        properties: {
+          center: {
+            schema: { type: 'array' },
+            required: false,
+            description: '[lat, lng] map center',
+          },
+        },
+      },
+      clientCapabilities: {
+        gadgets: {
+          [LEAFLET_PACKAGE]: { LeafletMap: {} },
+        },
+      },
+    } satisfies DataContract;
+    const { handshakeId } = await newSessionAndHandshake({
+      contract,
+      idBase: 'sc25-registered',
+    });
+    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+      handshakeId,
+      decision: { kind: 'override', blueprintDraft: { contract } },
+    });
+    // Gate accepts a component-gadget reference → push completes.
+    expect(readToolErrorMessage(pushResp)).toBeNull();
+    const structured = (
+      pushResp as { result?: { structuredContent?: { stackItemId?: string } } }
+    ).result?.structuredContent;
+    expect(structured?.stackItemId).toBeTypeOf('string');
+  });
+
+  test('push with an unregistered component export is rejected with the gate error', async () => {
+    const contract = {
+      propsSpec: {
+        description: 'scenario 25 — unregistered-component push',
+        properties: {
+          center: { schema: { type: 'array' }, required: false },
+        },
+      },
+      clientCapabilities: {
+        gadgets: {
+          // PascalCase name → component-grammar export; never
+          // registered on this app → the registry gate rejects it.
+          [LEAFLET_PACKAGE]: { MapboxGlobe: {} },
+        },
+      },
+    } satisfies DataContract;
+    const { handshakeId } = await newSessionAndHandshake({
+      contract,
+      idBase: 'sc25-unregistered',
+    });
+    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+      handshakeId,
+      decision: { kind: 'override', blueprintDraft: { contract } },
+    });
+    const message = readToolErrorMessage(pushResp);
+    expect(message).not.toBeNull();
+    expect(message ?? '').toMatch(/gadget_not_registered/i);
+    expect(message ?? '').toMatch(/MapboxGlobe/);
+  });
+});

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "color": {
+    "$type": "color",
+    "primary": {
+      "50": { "$value": "#eff6ff" },
+      "100": { "$value": "#dbeafe" },
+      "200": { "$value": "#bfdbfe" },
+      "300": { "$value": "#93c5fd" },
+      "400": { "$value": "#60a5fa" },
+      "500": { "$value": "#3b82f6" },
+      "600": { "$value": "#2563eb" },
+      "700": { "$value": "#1d4ed8" },
+      "800": { "$value": "#1e40af" },
+      "900": { "$value": "#1e3a8a" }
+    },
+    "neutral": {
+      "50": { "$value": "#fafafa" },
+      "100": { "$value": "#f5f5f5" },
+      "200": { "$value": "#e5e5e5" },
+      "300": { "$value": "#d4d4d4" },
+      "400": { "$value": "#a3a3a3" },
+      "500": { "$value": "#737373" },
+      "600": { "$value": "#525252" },
+      "700": { "$value": "#404040" },
+      "800": { "$value": "#262626" },
+      "900": { "$value": "#171717" }
+    },
+    "success": {
+      "50": { "$value": "#f0fdf4" },
+      "500": { "$value": "#22c55e" },
+      "700": { "$value": "#15803d" }
+    },
+    "warning": {
+      "50": { "$value": "#fffbeb" },
+      "500": { "$value": "#f59e0b" },
+      "700": { "$value": "#b45309" }
+    },
+    "error": {
+      "50": { "$value": "#fef2f2" },
+      "500": { "$value": "#ef4444" },
+      "700": { "$value": "#b91c1c" }
+    },
+    "background": {
+      "default": { "$value": "#ffffff" },
+      "subtle": { "$value": "#fafafa" },
+      "muted": { "$value": "#f5f5f5" }
+    },
+    "foreground": {
+      "default": { "$value": "#171717" },
+      "muted": { "$value": "#737373" },
+      "subtle": { "$value": "#a3a3a3" }
+    },
+    "border": {
+      "default": { "$value": "#e5e5e5" },
+      "strong": { "$value": "#d4d4d4" }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "0": { "$value": "0px" },
+    "1": { "$value": "4px" },
+    "2": { "$value": "8px" },
+    "3": { "$value": "12px" },
+    "4": { "$value": "16px" },
+    "5": { "$value": "20px" },
+    "6": { "$value": "24px" },
+    "8": { "$value": "32px" },
+    "10": { "$value": "40px" },
+    "12": { "$value": "48px" },
+    "16": { "$value": "64px" },
+    "20": { "$value": "80px" },
+    "24": { "$value": "96px" }
+  },
+  "borderRadius": {
+    "$type": "dimension",
+    "none": { "$value": "0px" },
+    "sm": { "$value": "4px" },
+    "md": { "$value": "8px" },
+    "lg": { "$value": "12px" },
+    "xl": { "$value": "16px" },
+    "2xl": { "$value": "24px" },
+    "full": { "$value": "9999px" }
+  },
+  "typography": {
+    "fontFamily": {
+      "$type": "fontFamily",
+      "sans": { "$value": ["Inter", "system-ui", "sans-serif"] },
+      "mono": { "$value": ["JetBrains Mono", "Menlo", "monospace"] }
+    },
+    "fontSize": {
+      "$type": "dimension",
+      "xs": { "$value": "12px" },
+      "sm": { "$value": "14px" },
+      "base": { "$value": "16px" },
+      "lg": { "$value": "18px" },
+      "xl": { "$value": "20px" },
+      "2xl": { "$value": "24px" },
+      "3xl": { "$value": "30px" },
+      "4xl": { "$value": "36px" }
+    },
+    "fontWeight": {
+      "$type": "fontWeight",
+      "normal": { "$value": 400 },
+      "medium": { "$value": 500 },
+      "semibold": { "$value": 600 },
+      "bold": { "$value": 700 }
+    },
+    "lineHeight": {
+      "$type": "dimension",
+      "tight": { "$value": "1.25" },
+      "normal": { "$value": "1.5" },
+      "relaxed": { "$value": "1.75" }
+    }
+  },
+  "shadow": {
+    "$type": "shadow",
+    "sm": {
+      "$value": {
+        "offsetX": "0px",
+        "offsetY": "1px",
+        "blur": "2px",
+        "spread": "0px",
+        "color": "rgba(0, 0, 0, 0.05)"
+      }
+    },
+    "md": {
+      "$value": {
+        "offsetX": "0px",
+        "offsetY": "4px",
+        "blur": "6px",
+        "spread": "-1px",
+        "color": "rgba(0, 0, 0, 0.1)"
+      }
+    },
+    "lg": {
+      "$value": {
+        "offsetX": "0px",
+        "offsetY": "10px",
+        "blur": "15px",
+        "spread": "-3px",
+        "color": "rgba(0, 0, 0, 0.1)"
+      }
+    },
+    "xl": {
+      "$value": {
+        "offsetX": "0px",
+        "offsetY": "20px",
+        "blur": "25px",
+        "spread": "-5px",
+        "color": "rgba(0, 0, 0, 0.1)"
+      }
+    }
+  },
+  "transition": {
+    "$type": "duration",
+    "fast": { "$value": "150ms" },
+    "normal": { "$value": "200ms" },
+    "slow": { "$value": "300ms" }
+  }
+}

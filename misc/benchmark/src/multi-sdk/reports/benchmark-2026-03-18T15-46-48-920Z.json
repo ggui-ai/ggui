@@ -1,0 +1,1566 @@
+{
+  "meta": {
+    "timestamp": "2026-03-18T15:46:48.919Z",
+    "totalDurationMs": 302114,
+    "totalVariants": 1,
+    "totalCommits": 2,
+    "totalRuns": 2,
+    "successCount": 2,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        },
+        "planningMode": "stuffed"
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as t,jsxs as a}from\"react/jsx-runtime\";import{Card as b,Stack as i,Divider as S,Text as r,Heading as n}from\"@ggui-ai/design/primitives\";function s(o){const{city:c=\"Unknown City\",temperature:l=0,condition:d=\"N/A\",humidity:g=0,windSpeed:u=0,unit:m=\"C\",forecast:p=[]}=o;return t(b,{shadow:\"md\",padding:24,radius:\"lg\",children:a(i,{gap:24,children:[a(i,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:[t(n,{level:3,children:c}),t(r,{variant:\"bodyLarge\",children:d})]}),t(i,{align:\"center\",gap:4,children:a(n,{level:1,color:\"var(--ggui-color-primary-600, #0284c7)\",children:[l,\"\\xB0\",m]})}),a(i,{direction:\"horizontal\",justify:\"around\",children:[a(i,{align:\"center\",gap:4,children:[t(r,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Humidity\"}),a(r,{variant:\"body\",children:[g,\"%\"]})]}),a(i,{align:\"center\",gap:4,children:[t(r,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Wind\"}),a(r,{variant:\"body\",children:[u,\" km/h\"]})]})]}),t(S,{margin:0,color:\"var(--ggui-color-outlineVariant, #e4e4e7)\"}),t(i,{direction:\"horizontal\",justify:\"between\",children:p.map((e,y)=>a(i,{align:\"center\",gap:8,children:[t(r,{variant:\"caption\",weight:\"medium\",children:e.day??\"--\"}),t(r,{size:\"xl\",children:e.icon??\"\\u2601\\uFE0F\"}),a(i,{direction:\"horizontal\",gap:4,children:[a(r,{variant:\"bodySmall\",weight:\"semibold\",children:[e.high,\"\\xB0\"]}),a(r,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[e.low,\"\\xB0\"]})]})]},y))})]})})}export{s as default};\n",
+        "sourceCode": "import React from 'react';\nimport { Card, Stack, Divider, Text, Heading } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit?: string;\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>;\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const {\n    city = 'Unknown City',\n    temperature = 0,\n    condition = 'N/A',\n    humidity = 0,\n    windSpeed = 0,\n    unit = 'C',\n    forecast = [],\n  } = props;\n\n  return (\n    <Card shadow=\"md\" padding={24} radius=\"lg\">\n      <Stack gap={24}>\n        <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n          <Heading level={3}>{city}</Heading>\n          <Text variant=\"bodyLarge\">{condition}</Text>\n        </Stack>\n\n        <Stack align=\"center\" gap={4}>\n          <Heading level={1} color=\"var(--ggui-color-primary-600, #0284c7)\">\n            {temperature}°{unit}\n          </Heading>\n        </Stack>\n\n        <Stack direction=\"horizontal\" justify=\"around\">\n          <Stack align=\"center\" gap={4}>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Humidity</Text>\n            <Text variant=\"body\">{humidity}%</Text>\n          </Stack>\n          <Stack align=\"center\" gap={4}>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Wind</Text>\n            <Text variant=\"body\">{windSpeed} km/h</Text>\n          </Stack>\n        </Stack>\n\n        <Divider margin={0} color=\"var(--ggui-color-outlineVariant, #e4e4e7)\" />\n\n        <Stack direction=\"horizontal\" justify=\"between\">\n          {forecast.map((item, index) => (\n            <Stack key={index} align=\"center\" gap={8}>\n              <Text variant=\"caption\" weight=\"medium\">{item.day ?? '--'}</Text>\n              <Text size=\"xl\">{item.icon ?? '☁️'}</Text>\n              <Stack direction=\"horizontal\" gap={4}>\n                <Text variant=\"bodySmall\" weight=\"semibold\">{item.high}°</Text>\n                <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">{item.low}°</Text>\n              </Stack>\n            </Stack>\n          ))}\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}",
+        "tokens": {
+          "input": 261753,
+          "output": 3034,
+          "total": 264787
+        },
+        "generationTimeMs": 26255,
+        "turnsUsed": 2,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 85,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The forecast items lack hover states, which would improve the user experience for interactive weather widgets.",
+                "fix": "Add a subtle hover background color or scale effect to the forecast day columns."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Weather icons are currently rendered as text emojis, which may lack consistent screen reader announcement or visual scaling.",
+                "fix": "Wrap icons in an aria-hidden span and add an aria-label to the parent element describing the weather condition."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The current layout for humidity and wind speed uses 'justify: around', which can look unaligned on very wide cards.",
+                "fix": "Use a grid or explicit flex-basis to ensure consistent spacing between metrics."
+              }
+            ],
+            "critique": "The component is clean, well-structured, and correctly maps all required props. It provides a solid baseline, though adding subtle micro-interactions to the forecast strip would elevate it to production-ready status.",
+            "inputTokens": 1389,
+            "outputTokens": 328
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 73,
+        "finalScore": 73,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 80,
+          "polish": 60,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 60,
+          "accessibility": 78,
+          "codeQuality": 65
+        },
+        "critique": "The component has good hierarchy and data presentation, but uses hardcoded fallback hex colors in inline styles instead of relying purely on design tokens, and lacks interactive polish (no hover states, transitions, or responsive behavior for the forecast strip). The forecast items also need better spacing tokens for gap values.",
+        "evalTimeMs": 2336
+      },
+      "estimatedCostUsd": 0.1399785,
+      "timestamp": "2026-03-18T15:42:15.424Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1555,
+        "sourceCodeBytes": 2248,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        },
+        "planningMode": "stuffed"
+      },
+      "commit": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "CSS Grid periodic table with category coloring, search, and detail panel",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements.\n\nLayout:\n- CSS Grid: 18 columns. Place each element using gridRow and gridColumn from its data.\n- Each cell: symbol (large, centered), atomic number (small, top-left)\n- Color-code by category using design tokens (e.g., noble-gas → one color, halogen → another)\n- Search input at top — filters by name or symbol (case-insensitive)\n- Click an element → detail panel below grid shows: name, symbol, atomicNumber, atomicWeight, category\n- Legend showing each category with its color\n\nAll element data comes from props.elements. Use design system CSS variables.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "elements": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "atomicNumber": {
+                        "type": "number"
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "atomicWeight": {
+                        "type": "number"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "row": {
+                        "type": "number"
+                      },
+                      "col": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Full periodic table element data",
+                "example": [
+                  {
+                    "atomicNumber": 1,
+                    "symbol": "H",
+                    "name": "Hydrogen",
+                    "atomicWeight": 1.008,
+                    "category": "nonmetal",
+                    "row": 1,
+                    "col": 1
+                  },
+                  {
+                    "atomicNumber": 2,
+                    "symbol": "He",
+                    "name": "Helium",
+                    "atomicWeight": 4.003,
+                    "category": "noble-gas",
+                    "row": 1,
+                    "col": 18
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 4,
+              "symbol": "Be",
+              "name": "Beryllium",
+              "atomicWeight": 9.012,
+              "category": "alkaline-earth",
+              "row": 2,
+              "col": 2
+            },
+            {
+              "atomicNumber": 5,
+              "symbol": "B",
+              "name": "Boron",
+              "atomicWeight": 10.81,
+              "category": "metalloid",
+              "row": 2,
+              "col": 13
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 7,
+              "symbol": "N",
+              "name": "Nitrogen",
+              "atomicWeight": 14.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 15
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 9,
+              "symbol": "F",
+              "name": "Fluorine",
+              "atomicWeight": 19,
+              "category": "halogen",
+              "row": 2,
+              "col": 17
+            },
+            {
+              "atomicNumber": 10,
+              "symbol": "Ne",
+              "name": "Neon",
+              "atomicWeight": 20.18,
+              "category": "noble-gas",
+              "row": 2,
+              "col": 18
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 12,
+              "symbol": "Mg",
+              "name": "Magnesium",
+              "atomicWeight": 24.31,
+              "category": "alkaline-earth",
+              "row": 3,
+              "col": 2
+            },
+            {
+              "atomicNumber": 13,
+              "symbol": "Al",
+              "name": "Aluminium",
+              "atomicWeight": 26.98,
+              "category": "post-transition-metal",
+              "row": 3,
+              "col": 13
+            },
+            {
+              "atomicNumber": 14,
+              "symbol": "Si",
+              "name": "Silicon",
+              "atomicWeight": 28.09,
+              "category": "metalloid",
+              "row": 3,
+              "col": 14
+            },
+            {
+              "atomicNumber": 15,
+              "symbol": "P",
+              "name": "Phosphorus",
+              "atomicWeight": 30.97,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 15
+            },
+            {
+              "atomicNumber": 16,
+              "symbol": "S",
+              "name": "Sulfur",
+              "atomicWeight": 32.07,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 16
+            },
+            {
+              "atomicNumber": 17,
+              "symbol": "Cl",
+              "name": "Chlorine",
+              "atomicWeight": 35.45,
+              "category": "halogen",
+              "row": 3,
+              "col": 17
+            },
+            {
+              "atomicNumber": 18,
+              "symbol": "Ar",
+              "name": "Argon",
+              "atomicWeight": 39.95,
+              "category": "noble-gas",
+              "row": 3,
+              "col": 18
+            },
+            {
+              "atomicNumber": 19,
+              "symbol": "K",
+              "name": "Potassium",
+              "atomicWeight": 39.1,
+              "category": "alkali-metal",
+              "row": 4,
+              "col": 1
+            },
+            {
+              "atomicNumber": 20,
+              "symbol": "Ca",
+              "name": "Calcium",
+              "atomicWeight": 40.08,
+              "category": "alkaline-earth",
+              "row": 4,
+              "col": 2
+            },
+            {
+              "atomicNumber": 21,
+              "symbol": "Sc",
+              "name": "Scandium",
+              "atomicWeight": 44.96,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 3
+            },
+            {
+              "atomicNumber": 22,
+              "symbol": "Ti",
+              "name": "Titanium",
+              "atomicWeight": 47.87,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 4
+            },
+            {
+              "atomicNumber": 23,
+              "symbol": "V",
+              "name": "Vanadium",
+              "atomicWeight": 50.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 5
+            },
+            {
+              "atomicNumber": 24,
+              "symbol": "Cr",
+              "name": "Chromium",
+              "atomicWeight": 52,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 6
+            },
+            {
+              "atomicNumber": 25,
+              "symbol": "Mn",
+              "name": "Manganese",
+              "atomicWeight": 54.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 7
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 27,
+              "symbol": "Co",
+              "name": "Cobalt",
+              "atomicWeight": 58.93,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 9
+            },
+            {
+              "atomicNumber": 28,
+              "symbol": "Ni",
+              "name": "Nickel",
+              "atomicWeight": 58.69,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 10
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 30,
+              "symbol": "Zn",
+              "name": "Zinc",
+              "atomicWeight": 65.38,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 12
+            },
+            {
+              "atomicNumber": 31,
+              "symbol": "Ga",
+              "name": "Gallium",
+              "atomicWeight": 69.72,
+              "category": "post-transition-metal",
+              "row": 4,
+              "col": 13
+            },
+            {
+              "atomicNumber": 32,
+              "symbol": "Ge",
+              "name": "Germanium",
+              "atomicWeight": 72.63,
+              "category": "metalloid",
+              "row": 4,
+              "col": 14
+            },
+            {
+              "atomicNumber": 33,
+              "symbol": "As",
+              "name": "Arsenic",
+              "atomicWeight": 74.92,
+              "category": "metalloid",
+              "row": 4,
+              "col": 15
+            },
+            {
+              "atomicNumber": 34,
+              "symbol": "Se",
+              "name": "Selenium",
+              "atomicWeight": 78.97,
+              "category": "nonmetal",
+              "row": 4,
+              "col": 16
+            },
+            {
+              "atomicNumber": 35,
+              "symbol": "Br",
+              "name": "Bromine",
+              "atomicWeight": 79.9,
+              "category": "halogen",
+              "row": 4,
+              "col": 17
+            },
+            {
+              "atomicNumber": 36,
+              "symbol": "Kr",
+              "name": "Krypton",
+              "atomicWeight": 83.8,
+              "category": "noble-gas",
+              "row": 4,
+              "col": 18
+            },
+            {
+              "atomicNumber": 37,
+              "symbol": "Rb",
+              "name": "Rubidium",
+              "atomicWeight": 85.47,
+              "category": "alkali-metal",
+              "row": 5,
+              "col": 1
+            },
+            {
+              "atomicNumber": 38,
+              "symbol": "Sr",
+              "name": "Strontium",
+              "atomicWeight": 87.62,
+              "category": "alkaline-earth",
+              "row": 5,
+              "col": 2
+            },
+            {
+              "atomicNumber": 39,
+              "symbol": "Y",
+              "name": "Yttrium",
+              "atomicWeight": 88.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 3
+            },
+            {
+              "atomicNumber": 40,
+              "symbol": "Zr",
+              "name": "Zirconium",
+              "atomicWeight": 91.22,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 4
+            },
+            {
+              "atomicNumber": 41,
+              "symbol": "Nb",
+              "name": "Niobium",
+              "atomicWeight": 92.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 5
+            },
+            {
+              "atomicNumber": 42,
+              "symbol": "Mo",
+              "name": "Molybdenum",
+              "atomicWeight": 95.95,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 6
+            },
+            {
+              "atomicNumber": 43,
+              "symbol": "Tc",
+              "name": "Technetium",
+              "atomicWeight": 98,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 7
+            },
+            {
+              "atomicNumber": 44,
+              "symbol": "Ru",
+              "name": "Ruthenium",
+              "atomicWeight": 101.07,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 8
+            },
+            {
+              "atomicNumber": 45,
+              "symbol": "Rh",
+              "name": "Rhodium",
+              "atomicWeight": 102.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 9
+            },
+            {
+              "atomicNumber": 46,
+              "symbol": "Pd",
+              "name": "Palladium",
+              "atomicWeight": 106.42,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 10
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 48,
+              "symbol": "Cd",
+              "name": "Cadmium",
+              "atomicWeight": 112.41,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 12
+            },
+            {
+              "atomicNumber": 49,
+              "symbol": "In",
+              "name": "Indium",
+              "atomicWeight": 114.82,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 13
+            },
+            {
+              "atomicNumber": 50,
+              "symbol": "Sn",
+              "name": "Tin",
+              "atomicWeight": 118.71,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 14
+            },
+            {
+              "atomicNumber": 51,
+              "symbol": "Sb",
+              "name": "Antimony",
+              "atomicWeight": 121.76,
+              "category": "metalloid",
+              "row": 5,
+              "col": 15
+            },
+            {
+              "atomicNumber": 52,
+              "symbol": "Te",
+              "name": "Tellurium",
+              "atomicWeight": 127.6,
+              "category": "metalloid",
+              "row": 5,
+              "col": 16
+            },
+            {
+              "atomicNumber": 53,
+              "symbol": "I",
+              "name": "Iodine",
+              "atomicWeight": 126.9,
+              "category": "halogen",
+              "row": 5,
+              "col": 17
+            },
+            {
+              "atomicNumber": 54,
+              "symbol": "Xe",
+              "name": "Xenon",
+              "atomicWeight": 131.29,
+              "category": "noble-gas",
+              "row": 5,
+              "col": 18
+            },
+            {
+              "atomicNumber": 55,
+              "symbol": "Cs",
+              "name": "Cesium",
+              "atomicWeight": 132.91,
+              "category": "alkali-metal",
+              "row": 6,
+              "col": 1
+            },
+            {
+              "atomicNumber": 56,
+              "symbol": "Ba",
+              "name": "Barium",
+              "atomicWeight": 137.33,
+              "category": "alkaline-earth",
+              "row": 6,
+              "col": 2
+            },
+            {
+              "atomicNumber": 72,
+              "symbol": "Hf",
+              "name": "Hafnium",
+              "atomicWeight": 178.49,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 4
+            },
+            {
+              "atomicNumber": 73,
+              "symbol": "Ta",
+              "name": "Tantalum",
+              "atomicWeight": 180.95,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 5
+            },
+            {
+              "atomicNumber": 74,
+              "symbol": "W",
+              "name": "Tungsten",
+              "atomicWeight": 183.84,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 6
+            },
+            {
+              "atomicNumber": 75,
+              "symbol": "Re",
+              "name": "Rhenium",
+              "atomicWeight": 186.21,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 7
+            },
+            {
+              "atomicNumber": 76,
+              "symbol": "Os",
+              "name": "Osmium",
+              "atomicWeight": 190.23,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 8
+            },
+            {
+              "atomicNumber": 77,
+              "symbol": "Ir",
+              "name": "Iridium",
+              "atomicWeight": 192.22,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 9
+            },
+            {
+              "atomicNumber": 78,
+              "symbol": "Pt",
+              "name": "Platinum",
+              "atomicWeight": 195.08,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 10
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 11
+            },
+            {
+              "atomicNumber": 80,
+              "symbol": "Hg",
+              "name": "Mercury",
+              "atomicWeight": 200.59,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 12
+            },
+            {
+              "atomicNumber": 81,
+              "symbol": "Tl",
+              "name": "Thallium",
+              "atomicWeight": 204.38,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 13
+            },
+            {
+              "atomicNumber": 82,
+              "symbol": "Pb",
+              "name": "Lead",
+              "atomicWeight": 207.2,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 14
+            },
+            {
+              "atomicNumber": 83,
+              "symbol": "Bi",
+              "name": "Bismuth",
+              "atomicWeight": 208.98,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 15
+            },
+            {
+              "atomicNumber": 84,
+              "symbol": "Po",
+              "name": "Polonium",
+              "atomicWeight": 209,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 16
+            },
+            {
+              "atomicNumber": 85,
+              "symbol": "At",
+              "name": "Astatine",
+              "atomicWeight": 210,
+              "category": "halogen",
+              "row": 6,
+              "col": 17
+            },
+            {
+              "atomicNumber": 86,
+              "symbol": "Rn",
+              "name": "Radon",
+              "atomicWeight": 222,
+              "category": "noble-gas",
+              "row": 6,
+              "col": 18
+            },
+            {
+              "atomicNumber": 87,
+              "symbol": "Fr",
+              "name": "Francium",
+              "atomicWeight": 223,
+              "category": "alkali-metal",
+              "row": 7,
+              "col": 1
+            },
+            {
+              "atomicNumber": 88,
+              "symbol": "Ra",
+              "name": "Radium",
+              "atomicWeight": 226,
+              "category": "alkaline-earth",
+              "row": 7,
+              "col": 2
+            },
+            {
+              "atomicNumber": 104,
+              "symbol": "Rf",
+              "name": "Rutherfordium",
+              "atomicWeight": 267,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 4
+            },
+            {
+              "atomicNumber": 105,
+              "symbol": "Db",
+              "name": "Dubnium",
+              "atomicWeight": 268,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 5
+            },
+            {
+              "atomicNumber": 106,
+              "symbol": "Sg",
+              "name": "Seaborgium",
+              "atomicWeight": 269,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 6
+            },
+            {
+              "atomicNumber": 107,
+              "symbol": "Bh",
+              "name": "Bohrium",
+              "atomicWeight": 270,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 7
+            },
+            {
+              "atomicNumber": 108,
+              "symbol": "Hs",
+              "name": "Hassium",
+              "atomicWeight": 277,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 8
+            },
+            {
+              "atomicNumber": 109,
+              "symbol": "Mt",
+              "name": "Meitnerium",
+              "atomicWeight": 278,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 9
+            },
+            {
+              "atomicNumber": 110,
+              "symbol": "Ds",
+              "name": "Darmstadtium",
+              "atomicWeight": 281,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 10
+            },
+            {
+              "atomicNumber": 111,
+              "symbol": "Rg",
+              "name": "Roentgenium",
+              "atomicWeight": 282,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 11
+            },
+            {
+              "atomicNumber": 112,
+              "symbol": "Cn",
+              "name": "Copernicium",
+              "atomicWeight": 285,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 12
+            },
+            {
+              "atomicNumber": 113,
+              "symbol": "Nh",
+              "name": "Nihonium",
+              "atomicWeight": 286,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 13
+            },
+            {
+              "atomicNumber": 114,
+              "symbol": "Fl",
+              "name": "Flerovium",
+              "atomicWeight": 289,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 14
+            },
+            {
+              "atomicNumber": 115,
+              "symbol": "Mc",
+              "name": "Moscovium",
+              "atomicWeight": 290,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 15
+            },
+            {
+              "atomicNumber": 116,
+              "symbol": "Lv",
+              "name": "Livermorium",
+              "atomicWeight": 293,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 16
+            },
+            {
+              "atomicNumber": 117,
+              "symbol": "Ts",
+              "name": "Tennessine",
+              "atomicWeight": 294,
+              "category": "halogen",
+              "row": 7,
+              "col": 17
+            },
+            {
+              "atomicNumber": 118,
+              "symbol": "Og",
+              "name": "Oganesson",
+              "atomicWeight": 294,
+              "category": "noble-gas",
+              "row": 7,
+              "col": 18
+            },
+            {
+              "atomicNumber": 57,
+              "symbol": "La",
+              "name": "Lanthanum",
+              "atomicWeight": 138.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 3
+            },
+            {
+              "atomicNumber": 58,
+              "symbol": "Ce",
+              "name": "Cerium",
+              "atomicWeight": 140.12,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 4
+            },
+            {
+              "atomicNumber": 59,
+              "symbol": "Pr",
+              "name": "Praseodymium",
+              "atomicWeight": 140.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 5
+            },
+            {
+              "atomicNumber": 60,
+              "symbol": "Nd",
+              "name": "Neodymium",
+              "atomicWeight": 144.24,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 6
+            },
+            {
+              "atomicNumber": 61,
+              "symbol": "Pm",
+              "name": "Promethium",
+              "atomicWeight": 145,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 7
+            },
+            {
+              "atomicNumber": 62,
+              "symbol": "Sm",
+              "name": "Samarium",
+              "atomicWeight": 150.36,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 8
+            },
+            {
+              "atomicNumber": 63,
+              "symbol": "Eu",
+              "name": "Europium",
+              "atomicWeight": 151.96,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 9
+            },
+            {
+              "atomicNumber": 64,
+              "symbol": "Gd",
+              "name": "Gadolinium",
+              "atomicWeight": 157.25,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 10
+            },
+            {
+              "atomicNumber": 65,
+              "symbol": "Tb",
+              "name": "Terbium",
+              "atomicWeight": 158.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 11
+            },
+            {
+              "atomicNumber": 66,
+              "symbol": "Dy",
+              "name": "Dysprosium",
+              "atomicWeight": 162.5,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 12
+            },
+            {
+              "atomicNumber": 67,
+              "symbol": "Ho",
+              "name": "Holmium",
+              "atomicWeight": 164.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 13
+            },
+            {
+              "atomicNumber": 68,
+              "symbol": "Er",
+              "name": "Erbium",
+              "atomicWeight": 167.26,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 14
+            },
+            {
+              "atomicNumber": 69,
+              "symbol": "Tm",
+              "name": "Thulium",
+              "atomicWeight": 168.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 15
+            },
+            {
+              "atomicNumber": 70,
+              "symbol": "Yb",
+              "name": "Ytterbium",
+              "atomicWeight": 173.05,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 16
+            },
+            {
+              "atomicNumber": 71,
+              "symbol": "Lu",
+              "name": "Lutetium",
+              "atomicWeight": 174.97,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 17
+            },
+            {
+              "atomicNumber": 89,
+              "symbol": "Ac",
+              "name": "Actinium",
+              "atomicWeight": 227,
+              "category": "actinide",
+              "row": 9,
+              "col": 3
+            },
+            {
+              "atomicNumber": 90,
+              "symbol": "Th",
+              "name": "Thorium",
+              "atomicWeight": 232.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 4
+            },
+            {
+              "atomicNumber": 91,
+              "symbol": "Pa",
+              "name": "Protactinium",
+              "atomicWeight": 231.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 5
+            },
+            {
+              "atomicNumber": 92,
+              "symbol": "U",
+              "name": "Uranium",
+              "atomicWeight": 238.03,
+              "category": "actinide",
+              "row": 9,
+              "col": 6
+            },
+            {
+              "atomicNumber": 93,
+              "symbol": "Np",
+              "name": "Neptunium",
+              "atomicWeight": 237,
+              "category": "actinide",
+              "row": 9,
+              "col": 7
+            },
+            {
+              "atomicNumber": 94,
+              "symbol": "Pu",
+              "name": "Plutonium",
+              "atomicWeight": 244,
+              "category": "actinide",
+              "row": 9,
+              "col": 8
+            },
+            {
+              "atomicNumber": 95,
+              "symbol": "Am",
+              "name": "Americium",
+              "atomicWeight": 243,
+              "category": "actinide",
+              "row": 9,
+              "col": 9
+            },
+            {
+              "atomicNumber": 96,
+              "symbol": "Cm",
+              "name": "Curium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 10
+            },
+            {
+              "atomicNumber": 97,
+              "symbol": "Bk",
+              "name": "Berkelium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 11
+            },
+            {
+              "atomicNumber": 98,
+              "symbol": "Cf",
+              "name": "Californium",
+              "atomicWeight": 251,
+              "category": "actinide",
+              "row": 9,
+              "col": 12
+            },
+            {
+              "atomicNumber": 99,
+              "symbol": "Es",
+              "name": "Einsteinium",
+              "atomicWeight": 252,
+              "category": "actinide",
+              "row": 9,
+              "col": 13
+            },
+            {
+              "atomicNumber": 100,
+              "symbol": "Fm",
+              "name": "Fermium",
+              "atomicWeight": 257,
+              "category": "actinide",
+              "row": 9,
+              "col": 14
+            },
+            {
+              "atomicNumber": 101,
+              "symbol": "Md",
+              "name": "Mendelevium",
+              "atomicWeight": 258,
+              "category": "actinide",
+              "row": 9,
+              "col": 15
+            },
+            {
+              "atomicNumber": 102,
+              "symbol": "No",
+              "name": "Nobelium",
+              "atomicWeight": 259,
+              "category": "actinide",
+              "row": 9,
+              "col": 16
+            },
+            {
+              "atomicNumber": 103,
+              "symbol": "Lr",
+              "name": "Lawrencium",
+              "atomicWeight": 266,
+              "category": "actinide",
+              "row": 9,
+              "col": 17
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as t,jsxs as r}from\"react/jsx-runtime\";import{useState as c,useMemo as u}from\"react\";import{Container as f,Stack as m,Box as g,Text as n,Heading as d,Card as w,Divider as k}from\"@ggui-ai/design/primitives\";import{Badge as S}from\"@ggui-ai/design/components\";function x(p){const{elements:o=[]}=p,[i,y]=c(\"\"),[a,b]=c(null),h=u(()=>{if(!i)return o;const e=i.toLowerCase();return o.filter(s=>s.name?.toLowerCase().includes(e)||s.symbol?.toLowerCase().includes(e))},[o,i]),C=u(()=>Array.from(new Set(o.map(e=>e.category))),[o]),l=e=>{switch(e){case\"nonmetal\":return\"var(--ggui-color-primary-200)\";case\"noble-gas\":return\"var(--ggui-color-info-100)\";case\"alkali-metal\":return\"var(--ggui-color-warning-100)\";default:return\"var(--ggui-color-neutral-100)\"}};return t(f,{maxWidth:\"full\",padding:32,children:r(m,{gap:24,children:[r(m,{gap:8,children:[t(n,{as:\"label\",htmlFor:\"search-el\",weight:\"medium\",children:\"Search Elements\"}),t(g,{as:\"input\",id:\"search-el\",value:i,onChange:e=>y(e.target.value)})]}),t(g,{style:{display:\"grid\",gridTemplateColumns:\"repeat(18, 1fr)\",gap:8,alignItems:\"start\"},children:o.map(e=>{const s=h.includes(e);return r(g,{style:{gridRow:e.row,gridColumn:e.col,opacity:s?1:.2,transition:\"all 200ms ease-in-out\",cursor:\"pointer\"},background:l(e.category),borderRadius:\"sm\",padding:8,onClick:()=>b(e),children:[t(n,{variant:\"caption\",children:e.atomicNumber}),t(d,{level:4,children:e.symbol})]},e.atomicNumber)})}),t(m,{direction:\"horizontal\",gap:8,wrap:!0,children:C.map(e=>t(S,{style:{backgroundColor:l(e)},children:e??\"unknown\"},e))}),a&&r(w,{shadow:\"md\",padding:24,children:[t(d,{level:3,children:a.name}),t(k,{margin:16}),r(m,{gap:8,children:[r(n,{children:[t(\"strong\",{children:\"Symbol:\"}),\" \",a.symbol]}),r(n,{children:[t(\"strong\",{children:\"Atomic Number:\"}),\" \",a.atomicNumber]}),r(n,{children:[t(\"strong\",{children:\"Atomic Weight:\"}),\" \",a.atomicWeight]}),r(n,{children:[t(\"strong\",{children:\"Category:\"}),\" \",a.category]})]})]})]})})}export{x as default};\n",
+        "sourceCode": "import React, { useState, useMemo } from 'react';\nimport { Container, Stack, Box, Text, Heading, Card, Divider, Spacer } from '@ggui-ai/design/primitives';\nimport { Badge } from '@ggui-ai/design/components';\n\ninterface Element {\n  atomicNumber?: number;\n  symbol?: string;\n  name?: string;\n  atomicWeight?: number;\n  category?: string;\n  row?: number;\n  col?: number;\n}\n\ninterface Props {\n  elements?: Element[];\n}\n\nexport default function GeneratedComponent(props: Props) {\n  const { elements = [] } = props;\n  const [searchQuery, setSearchQuery] = useState('');\n  const [selected, setSelected] = useState<Element | null>(null);\n\n  const filteredElements = useMemo(() => {\n    if (!searchQuery) return elements;\n    const q = searchQuery.toLowerCase();\n    return elements.filter(\n      (e) =>\n        e.name?.toLowerCase().includes(q) ||\n        e.symbol?.toLowerCase().includes(q)\n    );\n  }, [elements, searchQuery]);\n\n  const categories = useMemo(() => Array.from(new Set(elements.map((e) => e.category))), [elements]);\n\n  const getCategoryColor = (cat?: string) => {\n    switch (cat) {\n      case 'nonmetal': return 'var(--ggui-color-primary-200)';\n      case 'noble-gas': return 'var(--ggui-color-info-100)';\n      case 'alkali-metal': return 'var(--ggui-color-warning-100)';\n      default: return 'var(--ggui-color-neutral-100)';\n    }\n  };\n\n  return (\n    <Container maxWidth=\"full\" padding={32}>\n      <Stack gap={24}>\n        <Stack gap={8}>\n          <Text as=\"label\" htmlFor=\"search-el\" weight=\"medium\">Search Elements</Text>\n          <Box as=\"input\" id=\"search-el\" value={searchQuery} onChange={(e: any) => setSearchQuery(e.target.value)} />\n        </Stack>\n\n        <Box \n          style={{ \n            display: 'grid', \n            gridTemplateColumns: 'repeat(18, 1fr)', \n            gap: 8,\n            alignItems: 'start'\n          }}\n        >\n          {elements.map((el) => {\n            const isMatch = filteredElements.includes(el);\n            return (\n              <Box\n                key={el.atomicNumber}\n                style={{ \n                  gridRow: el.row, \n                  gridColumn: el.col,\n                  opacity: isMatch ? 1 : 0.2,\n                  transition: 'all 200ms ease-in-out',\n                  cursor: 'pointer'\n                }}\n                background={getCategoryColor(el.category)}\n                borderRadius=\"sm\"\n                padding={8}\n                onClick={() => setSelected(el)}\n              >\n                <Text variant=\"caption\">{el.atomicNumber}</Text>\n                <Heading level={4}>{el.symbol}</Heading>\n              </Box>\n            );\n          })}\n        </Box>\n\n        <Stack direction=\"horizontal\" gap={8} wrap>\n          {categories.map((cat) => (\n            <Badge key={cat} style={{ backgroundColor: getCategoryColor(cat) }}>{cat ?? 'unknown'}</Badge>\n          ))}\n        </Stack>\n\n        {selected && (\n          <Card shadow=\"md\" padding={24}>\n            <Heading level={3}>{selected.name}</Heading>\n            <Divider margin={16} />\n            <Stack gap={8}>\n              <Text><strong>Symbol:</strong> {selected.symbol}</Text>\n              <Text><strong>Atomic Number:</strong> {selected.atomicNumber}</Text>\n              <Text><strong>Atomic Weight:</strong> {selected.atomicWeight}</Text>\n              <Text><strong>Category:</strong> {selected.category}</Text>\n            </Stack>\n          </Card>\n        )}\n      </Stack>\n    </Container>\n  );\n}",
+        "tokens": {
+          "input": 4445840,
+          "output": 49847,
+          "total": 4495687
+        },
+        "generationTimeMs": 270633,
+        "turnsUsed": 50,
+        "iterations": 1,
+        "recipeName": "iterative",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": true,
+            "finalScore": 74,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 75,
+              "interactivity": 70,
+              "accessibility": 60,
+              "codeQuality": 75
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Grid cells have no hover state, making them feel static despite being interactive.",
+                "fix": "Add a hover effect (e.g., scale or border color change) to the grid items."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The search input is a raw Box component without proper styles or ARIA associations, and grid cells are not focusable or keyboard-navigable.",
+                "fix": "Use the library's Input primitive for the search field and add tabIndex={0} and keyboard event handlers (onKeyDown) to the grid cells."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The search input lacks visual feedback and proper styling.",
+                "fix": "Apply consistent padding, border, and focus states to the search input."
+              },
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "Missing a clear legend description; the badges act as placeholders but don't visually represent the mapping clearly.",
+                "fix": "Add a heading above the category list and ensure colors in the legend match the cells perfectly."
+              }
+            ],
+            "critique": "The component successfully implements the complex grid layout requirement using the specified data points. It is functional and well-structured, but it suffers from a lack of focus on accessibility and polished interaction states that would make it feel like a professional tool.",
+            "inputTokens": 1721,
+            "outputTokens": 412
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 70,
+        "finalScore": 70,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 70,
+          "polish": 60,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 73,
+          "interactivity": 60,
+          "accessibility": 73,
+          "codeQuality": 65
+        },
+        "critique": "The component uses CSS Grid correctly for the periodic table layout and renders data properly from props, but has several issues: the search input lacks proper styling (raw HTML input instead of ggui component), hardcoded pixel values (32, 24, 8) for spacing instead of design tokens, and missing interactive polish (no focus states, button styling). The design tokens are partially used but inconsistently—gaps use raw pixels and the input element bypasses ggui's form primitives.",
+        "evalTimeMs": 2859
+      },
+      "estimatedCostUsd": 2.372461,
+      "timestamp": "2026-03-18T15:46:48.919Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1990,
+        "sourceCodeBytes": 3479,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"nonmetal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default",
+            "Hardcoded string \"alkali-metal\" found — should be a prop default",
+            "Hardcoded string \"noble-gas\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-default-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 71.5,
+      "avgTimeMs": 148444,
+      "avgCostUsd": 1.25621975,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 82.5,
+        "visualPolish": 75.5,
+        "interactivity": 60,
+        "accessibility": 75.5,
+        "codeQuality": 65
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 73,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0"
+    },
+    {
+      "commitId": "periodic-table",
+      "commitName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": 70,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 71.5,
+        "avgTimeMs": 148444,
+        "avgCostUsd": 1.25621975,
+        "successRate": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+packages:
+  # All public @ggui-ai/* packages (the publishable set; the leaf-first
+  # publish order lives in .github/workflows/release.yml). host-streams
+  # is a workspace member but `private: true` — built, never published.
+  # benchmark + benchmark-viewer are workspace-private under misc/.
+  - "packages/agent-runtime"
+  - "packages/artifact-manifest"
+  - "packages/blueprint-probe"
+  - "packages/channel-client"
+  - "packages/chat-self-hosted"
+  - "packages/console"
+  - "packages/design"
+  - "packages/dev-stack"
+  - "packages/embedding-local"
+  - "packages/gadget-signing"
+  - "packages/gadgets"
+  - "packages/ggui-cli"
+  - "packages/ggui-react"
+  - "packages/ggui-react-native"
+  - "packages/host-streams"
+  - "packages/iframe-runtime"
+  - "packages/mcp-server"
+  - "packages/mcp-server-core"
+  - "packages/mcp-server-handlers"
+  - "packages/negotiator"
+  - "packages/predefined"
+  - "packages/preview-a2ui"
+  - "packages/project-config"
+  - "packages/protocol"
+  - "packages/protocol-conformance"
+  - "packages/protocol-reference-server"
+  - "packages/registry-core"
+  - "packages/registry-server"
+  - "packages/sandbox"
+  - "packages/shared"
+  - "packages/ui-gen"
+  - "packages/ui-registry"
+  - "packages/ui-visual-tester"
+  - "packages/wire"
+  # OSS e2e suites — journeys (Playwright), wire-scenario contract suite,
+  # and the Tier-2 MCP Apps host simulator (vitest, no browser).
+  - "e2e/journeys"
+  - "e2e/scenarios"
+  - "e2e/mcp-host-simulator"
+  # Marketplace test fixtures — workspace-private published gadget /
+  # blueprint repos consumed by e2e to exercise publish→search→install.
+  - "e2e/fixtures/*"
+  # Reference samples — one agent framework / gadget / ggui / mcp-server
+  # per dir. Workspace-private; not published.
+  - "samples/agents/*"
+  - "samples/gadgets/*"
+  - "samples/gguis/*"
+  - "samples/mcp-servers/*"
+  # Workspace-private OSS tooling — benchmark + benchmark-viewer. Never
+  # published.
+  - "misc/*"

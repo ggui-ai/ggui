@@ -1,0 +1,44 @@
+{
+  "kind": "gadget",
+  "scope": "@ggui-samples",
+  "name": "gadget-chart",
+  "version": "0.0.1",
+  "bundle": "src/index.tsx",
+  "visibility": "public",
+  "description": "Mixed gadget package — a pure-SVG `Chart` bar-chart component plus a `useChartTheme` companion hook, behind one npm identity.",
+  "exports": [
+    {
+      "component": "Chart",
+      "description": "Render a responsive SVG bar chart. Each datum is a labelled magnitude; bars scale to the largest value.",
+      "usage": "Render `<Chart data={[{ label, value }]} />` when the intent names a bar chart or a metric breakdown. Optional `height` (default 240) and `barColor` (any CSS color or `var(--…)`). The component owns the full SVG render — pass plain data, no refs.",
+      "example": {
+        "componentSnippet": "function RevenuePanel({ quarters }: Props) { return <Chart data={quarters.map((q) => ({ label: q.label, value: q.revenue }))} height={260} />; }",
+        "props": {
+          "data": [
+            { "label": "Q1", "value": 120 },
+            { "label": "Q2", "value": 180 },
+            { "label": "Q3", "value": 150 },
+            { "label": "Q4", "value": 210 }
+          ],
+          "height": 260
+        }
+      },
+      "gotchas": "Pass `data` as plain `{ label, value }` objects from props — never hardcode chart values. Negative values clamp to a zero-height bar."
+    },
+    {
+      "hook": "useChartTheme",
+      "description": "Read the active ggui theme and return resolved chart colors — a categorical palette plus axis / label / grid colors.",
+      "usage": "Call `const theme = useChartTheme();` then pass `theme.palette[0]` to `<Chart barColor>` so the chart tracks the app theme. Takes no arguments.",
+      "example": {
+        "call": "const theme = useChartTheme();",
+        "returns": {
+          "palette": ["#3b82f6", "#0ea5e9", "#22c55e", "#f59e0b", "#ef4444"],
+          "axisColor": "#d4d4d8",
+          "labelColor": "#18181b",
+          "gridColor": "#e4e4e7"
+        }
+      }
+    }
+  ],
+  "tags": ["chart", "dataviz", "svg"]
+}

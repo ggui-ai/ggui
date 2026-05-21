@@ -1,0 +1,11 @@
+{
+  "name": "wire-empty-package-reject",
+  "description": "A package entry with an empty export map (`{}`). A `clientCapabilities.gadgets` package entry MUST declare at least one export — an entry that names a package but uses none of its exports carries no wire meaning. `gadgetPackageUseSchema` refines on `Object.keys(r).length > 0`, so an empty entry MUST be rejected.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": {}
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "a clientCapabilities.gadgets package entry must declare at least one export (gadgetPackageUseSchema non-empty refine)."
+}

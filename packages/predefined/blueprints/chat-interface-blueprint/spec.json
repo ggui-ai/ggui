@@ -1,0 +1,110 @@
+{
+  "name": "ChatInterfaceBlueprint",
+  "level": "blueprint",
+  "category": "messaging",
+  "description": "A complete chat interface with message bubbles, input field, send button, typing indicator, and timestamps. Supports real-time agent messages via ggui_emit, typing indicators, and message status updates. Ideal for agent conversations, support chat, and messaging apps.",
+  "visual": {
+    "description": "Full-height layout with a header showing chat title and status, scrollable message area with left-aligned received and right-aligned sent bubbles, animated typing indicator, scroll-to-bottom button, and a bottom input bar with send button.",
+    "layout": "vertical stack with header, message area, and input bar",
+    "tokens": [
+      "color.primary.600",
+      "color.primary.50",
+      "color.neutral.100",
+      "color.neutral.200",
+      "color.neutral.500",
+      "spacing.3",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.lg",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Chat title displayed in the header",
+        "defaultValue": "Chat"
+      },
+      {
+        "name": "initialMessages",
+        "type": "array",
+        "required": false,
+        "description": "Initial array of message objects with id, text, sender, and timestamp"
+      },
+      {
+        "name": "currentUser",
+        "type": "string",
+        "required": false,
+        "description": "Identifier for the current user to determine sent vs received",
+        "defaultValue": "user"
+      }
+    ],
+    "callbacks": ["onSubmit"],
+    "slots": []
+  },
+  "stream": {
+    "description": "Real-time data contract for agent-to-component communication",
+    "events": {
+      "message": {
+        "description": "New chat message from agent or system",
+        "schema": {
+          "text": { "type": "string", "description": "Message text content" },
+          "sender": {
+            "type": "string",
+            "enum": ["agent", "user"],
+            "description": "Who sent the message"
+          }
+        }
+      },
+      "typing": {
+        "description": "Show or hide the typing indicator",
+        "schema": {
+          "active": { "type": "boolean", "description": "Whether the agent is currently typing" }
+        }
+      },
+      "status": {
+        "description": "Update delivery status of a specific message",
+        "schema": {
+          "messageId": { "type": "string", "description": "ID of the message to update" },
+          "status": {
+            "type": "string",
+            "enum": ["sent", "delivered", "read", "failed"],
+            "description": "New delivery status"
+          }
+        }
+      },
+      "component": {
+        "description": "Embed a generated UI component inline in the chat as an iframe card",
+        "schema": {
+          "url": { "type": "string", "description": "Render URL for the component iframe" },
+          "title": {
+            "type": "string",
+            "description": "Title displayed above the embedded component"
+          }
+        }
+      },
+      "clear": {
+        "description": "Clear all chat history",
+        "schema": {}
+      }
+    }
+  },
+  "examples": [
+    { "prompt": "chat interface", "match": 0.95 },
+    { "prompt": "messaging app", "match": 0.95 },
+    { "prompt": "real-time chat", "match": 0.95 },
+    { "prompt": "agent chat", "match": 0.95 },
+    { "prompt": "chat room", "match": 0.9 },
+    { "prompt": "message conversation", "match": 0.9 },
+    { "prompt": "chat window", "match": 0.9 },
+    { "prompt": "talk to agent", "match": 0.9 },
+    { "prompt": "conversation with AI", "match": 0.9 },
+    { "prompt": "instant messenger", "match": 0.85 },
+    { "prompt": "support chat", "match": 0.85 },
+    { "prompt": "chat bubbles", "match": 0.9 }
+  ],
+  "tags": ["chat", "messaging", "conversation", "messages", "real-time", "agent", "blueprint"]
+}

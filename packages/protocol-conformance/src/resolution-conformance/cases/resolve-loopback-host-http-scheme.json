@@ -1,0 +1,13 @@
+{
+  "name": "resolve-loopback-host-http-scheme",
+  "description": "A `bundleHost` resolving to localhost (`localhost`, `127.0.0.1`, or `0.0.0.0`, each optionally with a port). The resolver MUST emit the `http://` scheme for loopback hosts: a local-registry workflow publishes over `http://`, and an `https://` render URL would mixed-content-block in the sandboxed iframe. Every non-loopback host gets `https://`.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper",
+    "version": "2.3.1",
+    "bundleHost": "localhost:4873"
+  },
+  "expect": {
+    "bundleUrl": "http://localhost:4873/bundles/@acme/leaflet-wrapper/2.3.1/bundle.js",
+    "styleUrl": "http://localhost:4873/bundles/@acme/leaflet-wrapper/2.3.1/style.css"
+  }
+}

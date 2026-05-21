@@ -1,0 +1,57 @@
+{
+  "name": "StatusDashboard",
+  "level": "blueprint",
+  "category": "monitoring",
+  "description": "A system status dashboard showing service health, uptime indicators, and incident history. Ideal for status pages, monitoring agents, and infrastructure overviews.",
+  "visual": {
+    "description": "Header with overall status indicator. Grid of service cards each showing name, status dot (green/yellow/red), uptime percentage, and last check time. Below, a timeline of recent incidents.",
+    "layout": "header + service grid + incident timeline",
+    "tokens": [
+      "color.primary.600",
+      "color.success.500",
+      "color.warning.500",
+      "color.error.500",
+      "color.neutral.200",
+      "spacing.3",
+      "spacing.4",
+      "borderRadius.md",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Dashboard title",
+        "defaultValue": "System Status"
+      },
+      {
+        "name": "services",
+        "type": "array",
+        "required": false,
+        "description": "Array of service objects with name, status (operational|degraded|down), uptime, lastChecked"
+      },
+      {
+        "name": "incidents",
+        "type": "array",
+        "required": false,
+        "description": "Array of incident objects with title, status, timestamp, description"
+      }
+    ],
+    "callbacks": ["onServiceClick", "onRefresh"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "status page", "match": 0.95 },
+    { "prompt": "system status dashboard", "match": 0.95 },
+    { "prompt": "service health monitor", "match": 0.9 },
+    { "prompt": "uptime dashboard", "match": 0.9 },
+    { "prompt": "infrastructure status", "match": 0.85 },
+    { "prompt": "monitoring dashboard", "match": 0.85 },
+    { "prompt": "show me service health", "match": 0.85 },
+    { "prompt": "are all services running", "match": 0.8 }
+  ],
+  "tags": ["status", "monitoring", "health", "uptime", "services", "incidents", "blueprint"]
+}

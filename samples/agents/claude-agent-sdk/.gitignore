@@ -1,0 +1,4 @@
+dist/
+dist-ui/
+node_modules/
+*.tsbuildinfo

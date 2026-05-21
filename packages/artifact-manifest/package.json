@@ -1,0 +1,55 @@
+{
+  "name": "@ggui-ai/artifact-manifest",
+  "version": "0.1.0-rc.1",
+  "description": "Strict zod schemas + parsers for ggui marketplace artifact manifests — ggui.gadget.json (gadget bundles) and ggui.blueprint.json (cached UI blueprints).",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "manifest",
+    "zod",
+    "schema",
+    "marketplace",
+    "mcp"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/protocol": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/artifact-manifest"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/artifact-manifest",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

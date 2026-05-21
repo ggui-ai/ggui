@@ -1,0 +1,27 @@
+{
+  "kind": "gadget",
+  "scope": "@ggui-samples",
+  "name": "gadget-leaflet",
+  "version": "0.0.1",
+  "bundle": "src/index.tsx",
+  "visibility": "public",
+  "description": "Render an interactive Leaflet map with a tile layer and pan/zoom controls.",
+  "exports": [
+    {
+      "component": "LeafletMap",
+      "description": "Render an interactive Leaflet map with a tile layer, pan/zoom, and optional markers. The component owns the container, sizing, and lifecycle.",
+      "usage": "Render `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, points-of-interest grid). Optional `markers={[{ lat, lng, label? }]}` plot pins; optional `tileUrl` swaps the OpenStreetMap default; optional `height` (default 400) sizes the map.",
+      "example": {
+        "componentSnippet": "function DeliveryMap({ center, deliveries }: Props) { return <LeafletMap center={center} zoom={12} markers={deliveries.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, label: d.label }))} />; }",
+        "props": {
+          "center": [37.7749, -122.4194],
+          "zoom": 12,
+          "markers": [{ "lat": 37.78, "lng": -122.4, "label": "Pickup" }]
+        }
+      },
+      "gotchas": "The component owns map sizing (default 400px height; override with the `height` prop) and the full Leaflet lifecycle — just render `<LeafletMap center={[lat, lng]} zoom={n} />`. Do NOT import `leaflet` directly or hand-roll a container ref. `center` is `[latitude, longitude]`."
+    }
+  ],
+  "connect": ["https://tile.openstreetmap.org"],
+  "tags": ["map", "geo", "leaflet"]
+}

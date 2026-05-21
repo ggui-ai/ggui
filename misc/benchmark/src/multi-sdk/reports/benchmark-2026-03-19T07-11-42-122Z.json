@@ -1,0 +1,251 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T07:11:42.121Z",
+    "totalDurationMs": 154880,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-multi-agent-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-agent",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var p=Object.defineProperty;var c=(t,r)=>p(t,\"name\",{value:r,configurable:!0});import{jsx as a,jsxs as e}from\"react/jsx-runtime\";const S={Sunny:\"\\u2600\\uFE0F\",Cloudy:\"\\u2601\\uFE0F\",Rainy:\"\\u{1F327}\\uFE0F\",Snowy:\"\\u2744\\uFE0F\",Stormy:\"\\u26C8\\uFE0F\",\"Partly Cloudy\":\"\\u26C5\",Clear:\"\\u2600\\uFE0F\",Mist:\"\\u{1F32B}\\uFE0F\",Thunderstorm:\"\\u26C8\\uFE0F\",Drizzle:\"\\u{1F326}\\uFE0F\"},b=\"\\xB0C\",m=c(t=>{const{temperature:r,humidity:i,windSpeed:n,unit:o=\"C\"}=t;return useMemo(()=>({formattedTemp:`${Math.round(r)}\\xB0${o}`,formattedHumidity:`${i}%`,formattedWind:`${n} km/h`,unit:o}),[r,i,n,o])},\"useWeather\"),T=c(({day:t,icon:r,high:i,low:n,unit:o})=>a(Box,{padding:\"var(--ggui-spacing-2, 8px)\",background:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-md, 8px)\",children:e(Stack,{gap:\"var(--ggui-spacing-1, 4px)\",align:\"center\",children:[a(Text,{size:\"sm\",weight:\"semibold\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",as:\"span\",align:\"center\",children:t}),a(Text,{size:\"3xl\",as:\"span\",align:\"center\",children:r}),e(Stack,{gap:0,align:\"center\",children:[e(Text,{size:\"sm\",weight:\"bold\",align:\"center\",children:[Math.round(i),\"\\xB0\",o]}),e(Text,{size:\"xs\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",align:\"center\",children:[Math.round(n),\"\\xB0\",o]})]})]})}),\"ForecastItem\"),k=c(t=>{const{city:r,condition:i,forecast:n}=t,{formattedTemp:o,formattedHumidity:l,formattedWind:d,unit:u}=m(t),s=S[i]||\"\\u{1F321}\\uFE0F\";return a(Container,{maxWidth:\"sm\",padding:16,children:a(Card,{padding:32,shadow:\"md\",radius:\"xl\",border:!1,children:e(Stack,{gap:32,children:[e(Stack,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:[e(Stack,{gap:4,children:[a(Heading,{level:2,color:\"var(--ggui-color-onSurface, #18181b)\",children:r}),a(Text,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:i})]}),a(Text,{size:\"4xl\",as:\"span\",children:s})]}),a(Box,{paddingY:16,children:a(Stack,{align:\"center\",children:a(Text,{size:\"4xl\",weight:\"bold\",color:\"var(--ggui-color-primary-600, #0284c7)\",align:\"center\",children:o})})}),e(Stack,{gap:0,children:[a(Divider,{margin:0,color:\"var(--ggui-color-outlineVariant, #e4e4e7)\"}),a(Box,{paddingY:24,children:e(Stack,{direction:\"horizontal\",justify:\"around\",align:\"center\",children:[e(Stack,{align:\"center\",gap:4,children:[a(Text,{variant:\"overline\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Humidity\"}),a(Text,{weight:\"semibold\",size:\"lg\",color:\"var(--ggui-color-onSurface, #18181b)\",children:l})]}),a(Divider,{orientation:\"vertical\",margin:12,color:\"var(--ggui-color-outline, #d4d4d8)\"}),e(Stack,{align:\"center\",gap:4,children:[a(Text,{variant:\"overline\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Wind\"}),a(Text,{weight:\"semibold\",size:\"lg\",color:\"var(--ggui-color-onSurface, #18181b)\",children:d})]})]})}),a(Divider,{margin:0,color:\"var(--ggui-color-outlineVariant, #e4e4e7)\"})]}),e(Stack,{gap:16,children:[a(Text,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Next Days\"}),a(Stack,{direction:\"horizontal\",gap:12,justify:\"between\",wrap:!0,children:n.map((g,x)=>a(T,{...g,unit:u},`${g.day}-${x}`))})]})]})})})},\"WeatherCard\");function v(t){return a(k,{...t})}c(v,\"Render\");export{b as DEFAULT_UNIT,T as ForecastItem,S as WEATHER_ICONS,k as WeatherCard,v as default,m as useWeather};\n",
+        "sourceCode": "// --- types.d.ts ---\nexport interface ForecastDay {\n  day: string;\n  icon: string;\n  high: number;\n  low: number;\n}\n\nexport interface Props {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit?: string;\n  forecast: ForecastDay[];\n}\n\nexport interface ForecastItemProps extends ForecastDay {\n  unit: string;\n}\n\nexport interface HookReturn {\n  formattedTemp: string;\n  formattedHumidity: string;\n  formattedWind: string;\n  unit: string;\n}\n\n\n// --- constants.ts ---\nimport { ForecastDay } from './types';\n\nexport const WEATHER_ICONS: Record<string, ForecastDay['icon']> = {\n  Sunny: '☀️',\n  Cloudy: '☁️',\n  Rainy: '🌧️',\n  Snowy: '❄️',\n  Stormy: '⛈️',\n  'Partly Cloudy': '⛅',\n  Clear: '☀️',\n  Mist: '🌫️',\n  Thunderstorm: '⛈️',\n  Drizzle: '🌦️',\n};\n\nexport const DEFAULT_UNIT = '°C';\n\n\n// --- hooks.ts ---\nimport { useMemo } from 'react';\nimport { Props, HookReturn } from './types';\n\nexport const useWeather = (props: Props): HookReturn => {\n  const { temperature, humidity, windSpeed, unit = 'C' } = props;\n\n  return useMemo(() => {\n    return {\n      formattedTemp: `${Math.round(temperature)}°${unit}`,\n      formattedHumidity: `${humidity}%`,\n      formattedWind: `${windSpeed} km/h`,\n      unit,\n    };\n  }, [temperature, humidity, windSpeed, unit]);\n};\n\n\n// --- ForecastItem.tsx ---\nimport React from 'react';\nimport { Box, Stack, Text } from '@ggui-ai/design/primitives';\nimport { ForecastItemProps } from './types';\n\n/**\n * ForecastItem displays a single day's forecast details.\n * Uses Box for visual containment and Stack for layout.\n */\nexport const ForecastItem: React.FC<ForecastItemProps> = ({ day, icon, high, low, unit }) => {\n  return (\n    <Box \n      padding=\"var(--ggui-spacing-2, 8px)\"\n      background=\"var(--ggui-color-surfaceVariant, #f4f4f5)\"\n      borderRadius=\"var(--ggui-shape-radius-md, 8px)\"\n    >\n      <Stack gap=\"var(--ggui-spacing-1, 4px)\" align=\"center\">\n        <Text \n          size=\"sm\" \n          weight=\"semibold\"\n          color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n          as=\"span\"\n          align=\"center\"\n        >\n          {day}\n        </Text>\n        \n        <Text size=\"3xl\" as=\"span\" align=\"center\">\n          {icon}\n        </Text>\n        \n        <Stack gap={0} align=\"center\">\n          <Text size=\"sm\" weight=\"bold\" align=\"center\">\n            {Math.round(high)}°{unit}\n          </Text>\n          <Text \n            size=\"xs\" \n            color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n            align=\"center\"\n          >\n            {Math.round(low)}°{unit}\n          </Text>\n        </Stack>\n      </Stack>\n    </Box>\n  );\n};\n\n\n// --- ui.tsx ---\nimport React from 'react';\nimport { Card, Stack, Heading, Text, Container, Divider, Box } from '@ggui-ai/design/primitives';\nimport { Props } from './types';\nimport { useWeather } from './hooks';\nimport { ForecastItem } from './ForecastItem';\nimport { WEATHER_ICONS } from './constants';\n\nexport const WeatherCard: React.FC<Props> = (props) => {\n  const { city, condition, forecast } = props;\n  const { formattedTemp, formattedHumidity, formattedWind, unit } = useWeather(props);\n  \n  const weatherIcon = WEATHER_ICONS[condition] || '🌡️';\n\n  return (\n    <Container maxWidth=\"sm\" padding={16}>\n      <Card padding={32} shadow=\"md\" radius=\"xl\" border={false}>\n        <Stack gap={32}>\n          {/* Header Section */}\n          <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n            <Stack gap={4}>\n              <Heading level={2} color=\"var(--ggui-color-onSurface, #18181b)\">\n                {city}\n              </Heading>\n              <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                {condition}\n              </Text>\n            </Stack>\n            <Text \n              size=\"4xl\" \n              as=\"span\"\n            >\n              {weatherIcon}\n            </Text>\n          </Stack>\n\n          {/* Hero Section - Large Temperature */}\n          <Box paddingY={16}>\n            <Stack align=\"center\">\n              <Text \n                size=\"4xl\"\n                weight=\"bold\" \n                color=\"var(--ggui-color-primary-600, #0284c7)\"\n                align=\"center\"\n              >\n                {formattedTemp}\n              </Text>\n            </Stack>\n          </Box>\n\n          {/* Detail Section - Humidity & Wind */}\n          <Stack gap={0}>\n            <Divider margin={0} color=\"var(--ggui-color-outlineVariant, #e4e4e7)\" />\n            <Box paddingY={24}>\n              <Stack direction=\"horizontal\" justify=\"around\" align=\"center\">\n                <Stack align=\"center\" gap={4}>\n                  <Text variant=\"overline\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                    Humidity\n                  </Text>\n                  <Text weight=\"semibold\" size=\"lg\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                    {formattedHumidity}\n                  </Text>\n                </Stack>\n                \n                <Divider orientation=\"vertical\" margin={12} color=\"var(--ggui-color-outline, #d4d4d8)\" />\n                \n                <Stack align=\"center\" gap={4}>\n                  <Text variant=\"overline\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                    Wind\n                  </Text>\n                  <Text weight=\"semibold\" size=\"lg\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                    {formattedWind}\n                  </Text>\n                </Stack>\n              </Stack>\n            </Box>\n            <Divider margin={0} color=\"var(--ggui-color-outlineVariant, #e4e4e7)\" />\n          </Stack>\n\n          {/* Forecast Section */}\n          <Stack gap={16}>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurface, #18181b)\">\n              Next Days\n            </Text>\n            <Stack direction=\"horizontal\" gap={12} justify=\"between\" wrap>\n              {forecast.map((item, idx) => (\n                <ForecastItem \n                  key={`${item.day}-${idx}`} \n                  {...item} \n                  unit={unit} \n                />\n              ))}\n            </Stack>\n          </Stack>\n        </Stack>\n      </Card>\n    </Container>\n  );\n};\n\n\n// --- render.tsx ---\nimport { WeatherCard } from './ui';\nimport { Props } from './types';\n\nexport default function Render(props: Props) {\n  return <WeatherCard {...props} />;\n}\n",
+        "tokens": {
+          "input": 272396,
+          "output": 7299,
+          "total": 279695
+        },
+        "generationTimeMs": 151607,
+        "turnsUsed": 4,
+        "iterations": 1,
+        "recipeName": "multi-agent",
+        "passesUsed": 1
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 82.6,
+        "finalScore": 82.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 85,
+          "designTokens": 75,
+          "hierarchy": 88,
+          "polish": 70,
+          "dataPresentation": 95,
+          "completeness": 95,
+          "visualPolish": 87,
+          "interactivity": 70,
+          "accessibility": 87,
+          "codeQuality": 75
+        },
+        "critique": "The component has excellent data handling and clear visual hierarchy with proper spacing and structure. However, there are gaps in design token usage: hardcoded pixel values (16, 32, 24, 12) for spacing instead of var(--ggui-spacing-*), and missing interactive polish like hover/focus states on forecast items. The layout is responsive and well-organized with good use of dividers and sections.",
+        "evalTimeMs": 3010
+      },
+      "estimatedCostUsd": 0.158095,
+      "timestamp": "2026-03-19T07:11:42.121Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3345,
+        "sourceCodeBytes": 6415,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-multi-agent-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 82.6,
+      "avgTimeMs": 151607,
+      "avgCostUsd": 0.158095,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 95,
+        "visualPolish": 87,
+        "interactivity": 70,
+        "accessibility": 87,
+        "codeQuality": 75
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 82.6,
+      "bestVariantId": "google-multi-agent-0",
+      "worstVariantId": "google-multi-agent-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 82.6,
+        "avgTimeMs": 151607,
+        "avgCostUsd": 0.158095,
+        "successRate": 1
+      }
+    }
+  }
+}

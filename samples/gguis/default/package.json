@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-samples/ggui-default",
+  "version": "0.0.1",
+  "description": "Reference sample: baseline `ggui serve` configuration — zero customization, defaults everywhere. The smallest viable ggui-serving operator config. Pair with @ggui-samples/agent-claude-sdk to exercise the protocol end-to-end. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6781}",
+    "start:default-port": "ggui serve --mcp-only --dev-allow-all",
+    "start:secure": "ggui serve --mcp-only --port ${PORT:-6781}"
+  },
+  "dependencies": {
+    "@ggui-ai/cli": "workspace:*"
+  }
+}

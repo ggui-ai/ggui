@@ -1,0 +1,69 @@
+{
+  "name": "@ggui-ai/console",
+  "version": "0.1.0-rc.1",
+  "description": "Operator console for a self-hosted @ggui-ai/mcp-server instance — a single-origin admin and devtools surface served by the server itself.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "console",
+    "admin",
+    "operator",
+    "devtools"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "dist-server",
+    "README.md"
+  ],
+  "exports": {
+    "./server": {
+      "types": "./dist-server/server.d.ts",
+      "import": "./dist-server/server.js",
+      "default": "./dist-server/server.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run build:spa && pnpm run build:server && pnpm run check:bundle-size",
+    "build:spa": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "check:bundle-size": "tsx scripts/check-bundle-size.ts",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
+    "@ggui-ai/react": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@ggui-ai/protocol": "workspace:*",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "jsdom": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.2",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/console"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/console",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

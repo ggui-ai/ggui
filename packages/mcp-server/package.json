@@ -1,0 +1,72 @@
+{
+  "name": "@ggui-ai/mcp-server",
+  "version": "0.1.0-rc.1",
+  "description": "Self-hosted MCP server for the ggui protocol. An HTTP/MCP binding layer over @ggui-ai/mcp-server-handlers and the reference adapters from @ggui-ai/mcp-server-core — run it via `ggui serve`.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-server",
+    "generative-ui",
+    "agent",
+    "self-hosted"
+  ],
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/console": "workspace:*",
+    "@ggui-ai/iframe-runtime": "workspace:*",
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/mcp-server-handlers": "workspace:*",
+    "@ggui-ai/negotiator": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/ui-gen": "workspace:*",
+    "@ggui-ai/ui-registry": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "express": "^4.21.0",
+    "nodemailer": "^8.0.7",
+    "resend": "^6.12.2",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/mcp-server",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

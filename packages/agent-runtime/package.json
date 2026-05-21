@@ -1,0 +1,57 @@
+{
+  "name": "@ggui-ai/agent-runtime",
+  "version": "0.1.0-rc.1",
+  "description": "Pluggable adapter seam for supervising whatever actually runs an agent — the Claude Agent SDK, OpenAI Agents, the Vercel AI SDK, a plain subprocess, and more. Lets a host swap agent runtimes without hardcoding any framework into its dev loop.",
+  "keywords": [
+    "ggui",
+    "agent",
+    "agent-runtime",
+    "adapter",
+    "claude-agent-sdk"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./process": {
+      "types": "./dist/process.d.ts",
+      "import": "./dist/process.js",
+      "default": "./dist/process.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/agent-runtime"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/agent-runtime",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "protocol": "1.1",
+  "app": {
+    "slug": "tasks-contacts-mount-via-serve",
+    "name": "Tasks + Contacts Composition via ggui serve"
+  },
+  "blueprints": { "include": [] },
+  "primitives": { "packages": [], "local": [] },
+  "mcpMounts": ["./tasks-mount.mjs", "./contacts-mount.mjs"]
+}

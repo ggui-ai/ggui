@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-samples/ggui-leaflet-demo",
+  "version": "0.0.1",
+  "description": "Reference sample: ggui server pre-configured with the @ggui-samples/gadget-leaflet plugin registered on `app.gadgets`. Demonstrates the end-to-end plugin slice — agent contracts may declare `clientCapabilities.gadgets[*].component = 'LeafletMap'`, and the boilerplate generator + CSP derivation handle bundle loading + tile origin allowlisting. Pair with @ggui-samples/agent-claude-sdk to exercise via real LLM. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6783}",
+    "start:default-port": "ggui serve --mcp-only --dev-allow-all"
+  },
+  "dependencies": {
+    "@ggui-ai/cli": "workspace:*",
+    "@ggui-samples/gadget-leaflet": "workspace:*"
+  }
+}

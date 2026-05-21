@@ -1,0 +1,89 @@
+{
+  "name": "DataTableBlueprint",
+  "level": "blueprint",
+  "category": "data",
+  "description": "A feature-rich data table with pagination, sorting, filtering, row selection, and row actions. Ideal for admin panels, data management, and reporting interfaces.",
+  "visual": {
+    "description": "Full-width table with sticky header. Top toolbar contains search input, filters, and bulk action buttons. Table body has alternating row colors with hover highlights. Footer contains pagination controls with page size selector.",
+    "layout": "toolbar + table + pagination footer",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.50",
+      "color.neutral.50",
+      "color.neutral.100",
+      "color.neutral.200",
+      "color.neutral.500",
+      "spacing.2",
+      "spacing.3",
+      "spacing.4",
+      "borderRadius.md",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "columns",
+        "type": "array",
+        "required": true,
+        "description": "Column definitions with key, header, sortable, width properties"
+      },
+      {
+        "name": "data",
+        "type": "array",
+        "required": true,
+        "description": "Array of row data objects"
+      },
+      {
+        "name": "pageSize",
+        "type": "number",
+        "required": false,
+        "description": "Number of rows per page",
+        "defaultValue": 10
+      },
+      {
+        "name": "selectable",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether rows can be selected",
+        "defaultValue": false
+      },
+      {
+        "name": "searchable",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show search input",
+        "defaultValue": true
+      },
+      {
+        "name": "loading",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether data is loading",
+        "defaultValue": false
+      }
+    ],
+    "callbacks": [
+      "onRowClick",
+      "onSort",
+      "onSearch",
+      "onPageChange",
+      "onSelectionChange",
+      "onRowAction"
+    ],
+    "slots": ["toolbar", "emptyState", "rowActions"]
+  },
+  "examples": [
+    { "prompt": "data table", "match": 0.95 },
+    { "prompt": "table with pagination", "match": 0.95 },
+    { "prompt": "sortable table", "match": 0.9 },
+    { "prompt": "data grid", "match": 0.9 },
+    { "prompt": "list of records", "match": 0.85 },
+    { "prompt": "admin data table", "match": 0.9 },
+    { "prompt": "paginated list", "match": 0.85 },
+    { "prompt": "table with search and filter", "match": 0.9 },
+    { "prompt": "user management table", "match": 0.8 },
+    { "prompt": "order list table", "match": 0.8 }
+  ],
+  "tags": ["table", "data", "grid", "pagination", "sorting", "filter", "admin", "list", "blueprint"]
+}

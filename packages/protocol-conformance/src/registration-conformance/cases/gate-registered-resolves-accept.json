@@ -1,0 +1,25 @@
+{
+  "name": "gate-registered-resolves-accept",
+  "description": "The positive baseline. The contract references a hook export (`useLeafletMap` from `@ggui-samples/leaflet`) and a package that exposes both a component and a hook export (`RevenueChart` + `useChartTheme` from `@ggui-samples/charts`). Every `(package, export)` pair the contract names resolves to a registered export by identity. The gate MUST accept — no reject, regardless of export kind.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@ggui-samples/leaflet": { "useLeafletMap": {} },
+        "@ggui-samples/charts": { "RevenueChart": {}, "useChartTheme": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "2.3.1",
+      "exports": [{ "hook": "useLeafletMap" }]
+    },
+    {
+      "package": "@ggui-samples/charts",
+      "version": "1.0.0",
+      "exports": [{ "component": "RevenueChart" }, { "hook": "useChartTheme" }]
+    }
+  ],
+  "expect": { "outcome": "accept" }
+}

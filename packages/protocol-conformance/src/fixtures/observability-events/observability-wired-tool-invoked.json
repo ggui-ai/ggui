@@ -1,0 +1,28 @@
+{
+  "name": "observability-wired-tool-invoked",
+  "description": "Standalone `wired-tool-invoked` observability row. Distinct from `wired-action-success`'s DOM-level assertion — asserts directly on the postMessage observability envelope shape so Phase 3.1 can assert wire-byte equality without DOM observation.",
+  "skipReason": null,
+  "setup": [
+    { "type": "create-session", "sessionId": "ck-obs-wired-1" },
+    { "type": "register-tool", "toolName": "tasks_complete", "handler": "echo" },
+    { "type": "register-actionspec", "name": "toggleTask", "tool": "tasks_complete" }
+  ],
+  "inputEnvelope": {
+    "type": "action",
+    "channel": 0,
+    "sessionId": "ck-obs-wired-1",
+    "action": {
+      "name": "toggleTask",
+      "data": { "id": "seed-1" }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "observability-event",
+    "event": {
+      "kind": "wired-tool-invoked",
+      "toolName": "tasks_complete",
+      "actionName": "toggleTask"
+    }
+  },
+  "teardown": [{ "type": "close-session", "sessionId": "ck-obs-wired-1" }]
+}

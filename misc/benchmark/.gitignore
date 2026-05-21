@@ -1,0 +1,7 @@
+# `pnpm deploy --filter @ggui-ai/benchmark deploy/` output — built fresh
+# for each Docker image build, never committed.
+deploy/
+
+# Local bench output — also never committed; Fargate writes to S3.
+benchmark-results/
+.embeddings/

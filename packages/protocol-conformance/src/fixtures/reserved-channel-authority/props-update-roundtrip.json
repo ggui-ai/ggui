@@ -1,0 +1,34 @@
+{
+  "name": "props-update-roundtrip",
+  "description": "Host delivers a `props_update` envelope on channel 0 with a new props payload. The iframe's DOM reflects the new props within `timeoutMs` — evidence on a stamped data-attribute. Proves the host -> iframe props channel is live-wired, complementing the wired-action (iframe -> host) path.",
+  "skipReason": null,
+  "setup": [
+    { "type": "create-session", "sessionId": "ck-props-update-1" },
+    {
+      "type": "emit-envelope",
+      "channel": "_ggui:props",
+      "payload": {
+        "type": "props_update",
+        "sessionId": "ck-props-update-1",
+        "props": { "greeting": "initial" }
+      }
+    }
+  ],
+  "inputEnvelope": {
+    "type": "props-update",
+    "channel": 0,
+    "sessionId": "ck-props-update-1",
+    "props": { "greeting": "updated-by-host" }
+  },
+  "expectedBehavior": {
+    "kind": "props-update",
+    "channel": "_ggui:props",
+    "props": { "greeting": "updated-by-host" },
+    "evidence": {
+      "selector": "[data-ggui-greeting]",
+      "attribute": "data-ggui-greeting",
+      "expected": "updated-by-host"
+    }
+  },
+  "teardown": [{ "type": "close-session", "sessionId": "ck-props-update-1" }]
+}

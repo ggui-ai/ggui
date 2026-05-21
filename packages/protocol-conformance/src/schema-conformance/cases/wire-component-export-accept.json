@@ -1,0 +1,10 @@
+{
+  "name": "wire-component-export-accept",
+  "description": "A gadget export name is either a `use`-prefixed hook or a PascalCase component — the two grammars are disjoint, so the map KEY alone discriminates kind with no `hook`/`component` tag on the wire. A PascalCase key (`RevenueChart`) is a valid component export reference.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/charts": { "RevenueChart": {} }
+    }
+  },
+  "expect": "accept"
+}

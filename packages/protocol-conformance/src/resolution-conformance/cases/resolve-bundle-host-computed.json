@@ -1,0 +1,13 @@
+{
+  "name": "resolve-bundle-host-computed",
+  "description": "A descriptor with a hostname-only `bundleHost` (no scheme, no path) and no explicit `bundleUrl`. The resolver MUST compute both the bundle and style URLs as `https://<bundleHost>/bundles/<package>/<version>/<file>` — the path layout matching `@ggui-ai/registry-core`'s `BundleStorage` so a bundle published to one registry resolves cleanly from the other.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper",
+    "version": "2.3.1",
+    "bundleHost": "cdn.example.com"
+  },
+  "expect": {
+    "bundleUrl": "https://cdn.example.com/bundles/@acme/leaflet-wrapper/2.3.1/bundle.js",
+    "styleUrl": "https://cdn.example.com/bundles/@acme/leaflet-wrapper/2.3.1/style.css"
+  }
+}

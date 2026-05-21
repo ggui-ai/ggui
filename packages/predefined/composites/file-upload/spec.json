@@ -1,0 +1,60 @@
+{
+  "name": "FileUploadComposite",
+  "level": "composite",
+  "category": "forms",
+  "description": "A file upload component with drag-and-drop zone, file list showing name, size, and progress bar, remove button per file, and upload action button. Ideal for document uploaders, media pickers, and form file inputs.",
+  "visual": {
+    "description": "Vertical layout with a dashed-border drag-and-drop zone at top with icon and helper text, a file list below showing each file with name, size, progress bar, and remove button, and an upload button at the bottom.",
+    "layout": "vertical stack with drop zone, file list, and action button",
+    "tokens": [
+      "color.primary.600",
+      "color.primary.50",
+      "color.neutral.200",
+      "color.neutral.500",
+      "color.error.500",
+      "color.success.500",
+      "spacing.3",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.md",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "accept",
+        "type": "string",
+        "required": false,
+        "description": "Accepted file types (e.g. '.pdf,.jpg,.png')"
+      },
+      {
+        "name": "maxFiles",
+        "type": "number",
+        "required": false,
+        "description": "Maximum number of files allowed",
+        "defaultValue": 5
+      },
+      {
+        "name": "maxSizeMB",
+        "type": "number",
+        "required": false,
+        "description": "Maximum file size in MB",
+        "defaultValue": 10
+      }
+    ],
+    "callbacks": ["onUpload", "onRemove"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "file upload", "match": 0.95 },
+    { "prompt": "drag and drop upload", "match": 0.95 },
+    { "prompt": "file picker", "match": 0.9 },
+    { "prompt": "document uploader", "match": 0.9 },
+    { "prompt": "upload form", "match": 0.85 },
+    { "prompt": "file drop zone", "match": 0.9 },
+    { "prompt": "media uploader", "match": 0.85 },
+    { "prompt": "attachment upload", "match": 0.85 }
+  ],
+  "tags": ["file", "upload", "drag-drop", "form", "attachment", "composite"]
+}

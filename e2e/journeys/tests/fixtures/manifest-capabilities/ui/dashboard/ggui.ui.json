@@ -1,0 +1,11 @@
+{
+  "id": "weather-card-fixture",
+  "name": "Weather Card Fixture",
+  "description": "Manifest-capabilities E2E fixture blueprint — declared via ggui.json#blueprints.include and surfaced through ggui_list_featured_blueprints at boot.",
+  "category": "data",
+  "contract": {
+    "props": {
+      "city": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "wire-stale-libraries-reject",
+  "description": "A `clientCapabilities` object carrying the retired `libraries` sibling alongside `gadgets`. `libraries` was renamed to `gadgets`; `clientCapabilitiesSpecSchema` is `.strict()` (not `.passthrough()`) precisely so a stale `libraries` field — or any other unknown sibling — MUST fail loudly at parse time rather than being silently dropped.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": { "useLeafletMap": {} }
+    },
+    "libraries": {
+      "@ggui-samples/leaflet": { "useLeafletMap": {} }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "`libraries` is the retired pre-rename name of `gadgets`; clientCapabilitiesSpecSchema is .strict()."
+}

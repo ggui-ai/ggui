@@ -1,0 +1,745 @@
+{
+  "meta": {
+    "timestamp": "2026-03-20T07:59:18.029Z",
+    "totalDurationMs": 378920,
+    "totalVariants": 1,
+    "totalCommits": 4,
+    "totalRuns": 4,
+    "successCount": 2,
+    "failureCount": 2,
+    "successRate": 0.5
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var t=Object.defineProperty;var o=(e,r)=>t(e,\"name\",{value:r,configurable:!0});import{Fragment as c,jsx as u}from\"react/jsx-runtime\";import{useMemo as n}from\"react\";function a(e){return{weatherIcon:n(()=>{switch(e.condition.toLowerCase()){case\"sunny\":return\"sun\";case\"cloudy\":return\"cloud\";case\"rainy\":return\"cloud-rain\";default:return\"cloud\"}},[e.condition])}}o(a,\"useComponent\");function i(e){const r=a(e);return u(c,{})}o(i,\"Component\");export{i as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>; // 5-day forecast array\n}\n\nfunction useComponent(props: Props) {\n  const weatherIcon = useMemo(() => {\n    switch (props.condition.toLowerCase()) {\n      case 'sunny': return 'sun';\n      case 'cloudy': return 'cloud';\n      case 'rainy': return 'cloud-rain';\n      default: return 'cloud';\n    }\n  }, [props.condition]);\n\n  return { weatherIcon };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  return (<></>); // TODO: implement the UI here\n}\n",
+        "tokens": {
+          "input": 44739,
+          "output": 711,
+          "total": 45450
+        },
+        "generationTimeMs": 7046,
+        "turnsUsed": 1,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "timing": {
+          "plannerMs": 4279,
+          "codingMs": 2732,
+          "evalMs": 2,
+          "totalMs": 7046
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 7,
+        "finalScore": 7,
+        "issues": [],
+        "dimensions": {
+          "layout": 15,
+          "designTokens": 5,
+          "hierarchy": 5,
+          "polish": 5,
+          "dataPresentation": 5,
+          "completeness": 5,
+          "visualPolish": 10,
+          "interactivity": 5,
+          "accessibility": 10,
+          "codeQuality": 5
+        },
+        "critique": "The component is completely unimplemented—it returns an empty fragment. While the props interface is well-defined and the useComponent hook properly maps weather conditions to icons, there is no actual UI rendered. This results in zero functionality for all evaluation dimensions.",
+        "evalTimeMs": 2720
+      },
+      "estimatedCostUsd": 0.0245025,
+      "timestamp": "2026-03-20T07:53:09.096Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 462,
+        "sourceCodeBytes": 1804,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 180000ms",
+      "timestamp": "2026-03-20T07:56:09.097Z"
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- All initial tasks come from props as an array with column assignment\n- Call props.onTaskUpdate when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "Timeout after 180000ms",
+      "timestamp": "2026-03-20T07:59:09.098Z"
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "prompt": "Build a stock ticker dashboard that displays stock prices. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp from props\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n\nAll stock data comes from props. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              },
+              "lastUpdated": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "ISO timestamp of last price update",
+                "example": "2026-03-15T16:30:00Z"
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ],
+          "lastUpdated": "2026-03-15T16:30:00Z"
+        }
+      },
+      "generation": {
+        "compiledCode": "var v=Object.defineProperty;var i=(o,t)=>v(o,\"name\",{value:t,configurable:!0});import{jsx as e,jsxs as a}from\"react/jsx-runtime\";import{Container as b,Card as f,Stack as l,Row as p,Box as C,Text as c,Heading as g,Icon as T}from\"@ggui-ai/design/primitives\";import{CardGrid as x}from\"@ggui-ai/design/compositions\";function h(o){const{stocks:t,lastUpdated:n}=o;return{stocks:t,lastUpdated:n}}i(h,\"useComponent\");function S(o){const t=h(o),{stocks:n,lastUpdated:u}=t;return e(b,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-4)\",children:a(l,{gap:\"var(--ggui-spacing-4)\",children:[e(C,{padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-surfaceVariant)\",children:a(p,{justify:\"between\",align:\"center\",children:[e(g,{level:1,children:\"Market Watch\"}),a(c,{variant:\"caption\",children:[\"Last Updated: \",new Date(u).toLocaleTimeString()]})]})}),e(x,{columns:{sm:1,md:3},gap:16,children:n.map((r,m)=>{const d=(r.change||0)>=0,s=d?\"var(--ggui-color-success)\":\"var(--ggui-color-error)\";return e(f,{shadow:\"sm\",padding:\"var(--ggui-spacing-4)\",radius:\"md\",border:!0,children:a(l,{gap:\"var(--ggui-spacing-2)\",children:[e(g,{level:3,children:r.symbol}),e(c,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:r.name}),a(g,{level:4,children:[\"$\",r.price?.toFixed(2)]}),a(p,{align:\"center\",gap:\"var(--ggui-spacing-1)\",children:[e(T,{name:d?\"arrow-up\":\"arrow-down\",size:16,color:s}),a(c,{color:s,variant:\"label\",children:[r.change?.toFixed(2),\" (\",r.changePercent?.toFixed(2),\"%)\"]})]})]})},m)})})]})})}i(S,\"Component\");export{S as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  stocks: Array<{ symbol?: string; name?: string; price?: number; change?: number; changePercent?: number }>; // Array of stocks with symbol, name, price, change, changePercent\n  lastUpdated: string; // ISO timestamp of last price update\n}\n\nfunction useComponent(props: Props) {\n  const { stocks, lastUpdated } = props;\n  return { stocks, lastUpdated };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  const { stocks, lastUpdated } = state;\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-4)\">\n      <Stack gap=\"var(--ggui-spacing-4)\">\n        <Box padding=\"var(--ggui-spacing-4)\" background=\"var(--ggui-color-surfaceVariant)\">\n          <Row justify=\"between\" align=\"center\">\n            <Heading level={1}>Market Watch</Heading>\n            <Text variant=\"caption\">Last Updated: {new Date(lastUpdated).toLocaleTimeString()}</Text>\n          </Row>\n        </Box>\n        <CardGrid columns={{ sm: 1, md: 3 }} gap={16}>\n          {stocks.map((stock, i) => {\n            const isPositive = (stock.change || 0) >= 0;\n            const color = isPositive ? 'var(--ggui-color-success)' : 'var(--ggui-color-error)';\n            return (\n              <Card key={i} shadow=\"sm\" padding=\"var(--ggui-spacing-4)\" radius=\"md\" border={true}>\n                <Stack gap=\"var(--ggui-spacing-2)\">\n                  <Heading level={3}>{stock.symbol}</Heading>\n                  <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{stock.name}</Text>\n                  <Heading level={4}>${stock.price?.toFixed(2)}</Heading>\n                  <Row align=\"center\" gap=\"var(--ggui-spacing-1)\">\n                    <Icon name={isPositive ? 'arrow-up' : 'arrow-down'} size={16} color={color} />\n                    <Text color={color} variant=\"label\">\n                      {stock.change?.toFixed(2)} ({stock.changePercent?.toFixed(2)}%)\n                    </Text>\n                  </Row>\n                </Stack>\n              </Card>\n            );\n          })}\n        </CardGrid>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 44760,
+          "output": 1201,
+          "total": 45961
+        },
+        "generationTimeMs": 6476,
+        "turnsUsed": 1,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "timing": {
+          "plannerMs": 3031,
+          "codingMs": 3435,
+          "evalMs": 1,
+          "totalMs": 6476
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 86,
+        "finalScore": 86,
+        "issues": [],
+        "dimensions": {
+          "layout": 92,
+          "designTokens": 85,
+          "hierarchy": 88,
+          "polish": 75,
+          "dataPresentation": 90,
+          "completeness": 90,
+          "visualPolish": 90,
+          "interactivity": 75,
+          "accessibility": 90,
+          "codeQuality": 85
+        },
+        "critique": "The component has solid layout and data presentation with proper responsive grid and formatting. Main issues: hardcoded gap={16} in CardGrid (should use design tokens), missing hover/focus states on cards for interactivity, and no loading/empty state handling when stocks array is empty.",
+        "evalTimeMs": 2453
+      },
+      "estimatedCostUsd": 0.025983,
+      "timestamp": "2026-03-20T07:59:18.028Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1549,
+        "sourceCodeBytes": 3049,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-single-component-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 46.5,
+      "avgTimeMs": 6761,
+      "avgCostUsd": 0.02524275,
+      "successRate": 0.5,
+      "dimensionAvgs": {
+        "completeness": 47.5,
+        "visualPolish": 50,
+        "interactivity": 40,
+        "accessibility": 50,
+        "codeQuality": 45
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 7,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 0,
+      "bestVariantId": "none",
+      "worstVariantId": "none"
+    },
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 86,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 46.5,
+        "avgTimeMs": 6761,
+        "avgCostUsd": 0.02524275,
+        "successRate": 0.5
+      }
+    }
+  }
+}

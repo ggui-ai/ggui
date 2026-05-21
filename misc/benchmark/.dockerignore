@@ -1,0 +1,4 @@
+# Only the deploy/ output goes into the image. Everything else is noise.
+*
+!deploy/
+!Dockerfile

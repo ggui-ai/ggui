@@ -1,0 +1,8 @@
+{
+  "name": "resolve-package-only-no-version",
+  "description": "A descriptor with a `package` but no `version` — not enough to assemble a hostable bundle path. The resolver MUST return no URLs (such an entry is resolved iframe-side via a bare-specifier `package` import, no bundle URL needed). Guards against a resolver that emits a malformed `.../undefined/bundle.js`.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper"
+  },
+  "expect": {}
+}

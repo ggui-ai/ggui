@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "timestamp": "2026-03-15T00:50:51.145Z",
+    "totalDurationMs": 137772,
+    "totalVariants": 3,
+    "totalPrompts": 1,
+    "totalRuns": 3,
+    "successCount": 2,
+    "failureCount": 1,
+    "successRate": 0.6666666666666666
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-haiku",
+        "sdkName": "claude",
+        "tier": "fast",
+        "modelId": "anthropic/claude-haiku-4-5"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Simple weather display with temperature, condition, and forecast",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "expectedMinScore": 70,
+        "complexity": "simple"
+      },
+      "generation": {
+        "compiledCode": "import{Fragment as k,jsx as i,jsxs as t}from\"react/jsx-runtime\";import{useState as x,useEffect as S}from\"react\";import{Container as b,Card as l,Stack as a,Row as y,Text as e,MotionKeyframes as z,useMotion as W}from\"@ggui-ai/design/primitives\";import{animation as d}from\"@ggui-ai/design/tokens\";const s=c=>{const o=c.toLowerCase();return o.includes(\"sunny\")||o.includes(\"clear\")?\"\\u2600\\uFE0F\":o.includes(\"cloud\")?\"\\u2601\\uFE0F\":o.includes(\"rain\")||o.includes(\"wet\")?\"\\u{1F327}\\uFE0F\":o.includes(\"snow\")?\"\\u2744\\uFE0F\":o.includes(\"wind\")?\"\\u{1F4A8}\":o.includes(\"thunder\")||o.includes(\"storm\")?\"\\u26C8\\uFE0F\":o.includes(\"fog\")||o.includes(\"mist\")?\"\\u{1F32B}\\uFE0F\":o.includes(\"partly\")?\"\\u26C5\":\"\\u{1F324}\\uFE0F\"};function w({location:c=\"San Francisco\",current:o={temperature:72,condition:\"Partly Cloudy\",humidity:65,windSpeed:12},forecast:p=[{day:\"Mon\",condition:\"Sunny\",high:75,low:62},{day:\"Tue\",condition:\"Cloudy\",high:70,low:60},{day:\"Wed\",condition:\"Rainy\",high:65,low:55},{day:\"Thu\",condition:\"Partly Cloudy\",high:68,low:58},{day:\"Fri\",condition:\"Sunny\",high:76,low:63}],onSubmit:C}){const{motionEnabled:r}=W(),[g,u]=x(!1);S(()=>{u(!0)},[]);const f=s(o.condition),m=p.slice(0,5);return t(k,{children:[i(z,{}),i(b,{maxWidth:\"md\",children:i(l,{padding:24,shadow:\"md\",style:{animation:g&&r?d.slideInUp:\"none\",background:\"linear-gradient(135deg, var(--ggui-color-primary-50, #f0f9ff), var(--ggui-color-primary-100, #e0f2fe))\",border:\"1px solid var(--ggui-color-primary-200, #bae6fd)\"},children:t(a,{direction:\"vertical\",gap:24,children:[t(a,{direction:\"vertical\",gap:8,children:[i(e,{variant:\"h3\",style:{color:\"var(--ggui-color-primary-900, #0c4a6e)\",fontSize:\"var(--ggui-typography-fontSize-lg, 18px)\",fontWeight:\"var(--ggui-typography-fontWeight-semibold, 600)\"},children:c}),i(e,{variant:\"body\",style:{color:\"var(--ggui-color-primary-700, #0369a1)\",fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\"},children:\"Today's Weather\"})]}),t(a,{direction:\"horizontal\",gap:20,align:\"center\",children:[i(\"div\",{style:{fontSize:\"64px\",lineHeight:\"1\",animation:g&&r?d.slideInUp:\"none\",animationDelay:r?\"100ms\":\"0ms\"},children:f}),t(a,{direction:\"vertical\",gap:8,children:[t(\"div\",{style:{fontSize:\"var(--ggui-typography-fontSize-4xl, 36px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",lineHeight:\"1\"},children:[o.temperature,\"\\xB0F\"]}),i(e,{style:{color:\"var(--ggui-color-primary-700, #0369a1)\",fontSize:\"var(--ggui-typography-fontSize-base, 16px)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:o.condition})]})]}),t(y,{gap:16,justify:\"start\",style:{animation:g&&r?d.fadeIn:\"none\",animationDelay:r?\"200ms\":\"0ms\"},children:[i(l,{padding:16,shadow:\"sm\",style:{flex:1,background:\"var(--ggui-color-surface, #ffffff)\",border:\"1px solid var(--ggui-color-primary-200, #bae6fd)\"},children:t(a,{direction:\"vertical\",gap:8,align:\"center\",children:[i(e,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:\"Humidity\"}),t(\"div\",{style:{fontSize:\"var(--ggui-typography-fontSize-2xl, 24px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\",color:\"var(--ggui-color-primary-600, #0284c7)\"},children:[o.humidity,\"%\"]})]})}),i(l,{padding:16,shadow:\"sm\",style:{flex:1,background:\"var(--ggui-color-surface, #ffffff)\",border:\"1px solid var(--ggui-color-primary-200, #bae6fd)\"},children:t(a,{direction:\"vertical\",gap:8,align:\"center\",children:[i(e,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:\"Wind\"}),t(\"div\",{style:{fontSize:\"var(--ggui-typography-fontSize-2xl, 24px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\",color:\"var(--ggui-color-primary-600, #0284c7)\"},children:[o.windSpeed,\" mph\"]})]})})]}),i(\"div\",{style:{height:\"1px\",background:\"var(--ggui-color-primary-200, #bae6fd)\"}}),i(e,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",fontWeight:\"var(--ggui-typography-fontWeight-semibold, 600)\",color:\"var(--ggui-color-primary-900, #0c4a6e)\"},children:\"5-Day Forecast\"}),i(y,{gap:12,justify:\"start\",wrap:!0,style:{animation:g&&r?d.fadeIn:\"none\",animationDelay:r?\"300ms\":\"0ms\"},children:m.map((n,h)=>{const v=300+h*50+\"ms\";return i(\"div\",{style:{flex:\"0 1 calc(20% - 10px)\",minWidth:\"80px\"},children:i(l,{padding:12,shadow:\"sm\",style:{background:\"var(--ggui-color-surface, #ffffff)\",border:\"1px solid var(--ggui-color-primary-200, #bae6fd)\",textAlign:\"center\",animation:g&&r?d.scaleIn:\"none\",animationDelay:r?v:\"0ms\",transformOrigin:\"center\"},children:t(a,{direction:\"vertical\",gap:8,align:\"center\",children:[i(e,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",fontWeight:\"var(--ggui-typography-fontWeight-semibold, 600)\",color:\"var(--ggui-color-primary-700, #0369a1)\"},children:n.day}),i(\"div\",{style:{fontSize:\"28px\",lineHeight:\"1\"},children:s(n.condition)}),i(e,{style:{fontSize:\"var(--ggui-typography-fontSize-xs, 12px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\",lineHeight:\"1.2\"},children:n.condition}),t(\"div\",{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\",color:\"var(--ggui-color-primary-600, #0284c7)\"},children:[n.high,\"\\xB0\"]}),t(e,{style:{fontSize:\"var(--ggui-typography-fontSize-xs, 12px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\"},children:[n.low,\"\\xB0\"]})]})})},n.day)})})]})})})]})}export{w as default};\n",
+        "sourceCode": "import { useState, useEffect } from 'react';\nimport { Container, Card, Stack, Row, Text, Badge, MotionKeyframes, useMotion } from '@ggui-ai/design/primitives';\nimport { animation } from '@ggui-ai/design/tokens';\n\ninterface CurrentWeather {\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n}\n\ninterface ForecastDay {\n  day: string;\n  condition: string;\n  high: number;\n  low: number;\n}\n\ninterface Props {\n  location?: string;\n  current?: CurrentWeather;\n  forecast?: ForecastDay[];\n  onSubmit?: (data: unknown) => void;\n}\n\n// Weather emoji mapping\nconst getWeatherEmoji = (condition: string): string => {\n  const c = condition.toLowerCase();\n  if (c.includes('sunny') || c.includes('clear')) return '☀️';\n  if (c.includes('cloud')) return '☁️';\n  if (c.includes('rain') || c.includes('wet')) return '🌧️';\n  if (c.includes('snow')) return '❄️';\n  if (c.includes('wind')) return '💨';\n  if (c.includes('thunder') || c.includes('storm')) return '⛈️';\n  if (c.includes('fog') || c.includes('mist')) return '🌫️';\n  if (c.includes('partly')) return '⛅';\n  return '🌤️';\n};\n\nexport default function GeneratedComponent({\n  location = 'San Francisco',\n  current = {\n    temperature: 72,\n    condition: 'Partly Cloudy',\n    humidity: 65,\n    windSpeed: 12,\n  },\n  forecast = [\n    { day: 'Mon', condition: 'Sunny', high: 75, low: 62 },\n    { day: 'Tue', condition: 'Cloudy', high: 70, low: 60 },\n    { day: 'Wed', condition: 'Rainy', high: 65, low: 55 },\n    { day: 'Thu', condition: 'Partly Cloudy', high: 68, low: 58 },\n    { day: 'Fri', condition: 'Sunny', high: 76, low: 63 },\n  ],\n  onSubmit,\n}: Props) {\n  const { motionEnabled } = useMotion();\n  const [mounted, setMounted] = useState(false);\n\n  useEffect(() => {\n    setMounted(true);\n  }, []);\n\n  const currentEmoji = getWeatherEmoji(current.condition);\n  const forecastItems = forecast.slice(0, 5);\n\n  return (\n    <>\n      <MotionKeyframes />\n      <Container maxWidth=\"md\">\n        <Card\n          padding={24}\n          shadow=\"md\"\n          style={{\n            animation: mounted && motionEnabled ? animation.slideInUp : 'none',\n            background: `linear-gradient(135deg, var(--ggui-color-primary-50, #f0f9ff), var(--ggui-color-primary-100, #e0f2fe))`,\n            border: `1px solid var(--ggui-color-primary-200, #bae6fd)`,\n          }}\n        >\n          <Stack direction=\"vertical\" gap={24}>\n            {/* Header with Location */}\n            <Stack direction=\"vertical\" gap={8}>\n              <Text\n                variant=\"h3\"\n                style={{\n                  color: 'var(--ggui-color-primary-900, #0c4a6e)',\n                  fontSize: 'var(--ggui-typography-fontSize-lg, 18px)',\n                  fontWeight: 'var(--ggui-typography-fontWeight-semibold, 600)',\n                }}\n              >\n                {location}\n              </Text>\n              <Text\n                variant=\"body\"\n                style={{\n                  color: 'var(--ggui-color-primary-700, #0369a1)',\n                  fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                }}\n              >\n                Today's Weather\n              </Text>\n            </Stack>\n\n            {/* Current Weather - Large Temperature */}\n            <Stack direction=\"horizontal\" gap={20} align=\"center\">\n              <div\n                style={{\n                  fontSize: '64px',\n                  lineHeight: '1',\n                  animation: mounted && motionEnabled ? animation.slideInUp : 'none',\n                  animationDelay: motionEnabled ? '100ms' : '0ms',\n                }}\n              >\n                {currentEmoji}\n              </div>\n              <Stack direction=\"vertical\" gap={8}>\n                <div\n                  style={{\n                    fontSize: 'var(--ggui-typography-fontSize-4xl, 36px)',\n                    fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n                    color: 'var(--ggui-color-primary-900, #0c4a6e)',\n                    lineHeight: '1',\n                  }}\n                >\n                  {current.temperature}°F\n                </div>\n                <Text\n                  style={{\n                    color: 'var(--ggui-color-primary-700, #0369a1)',\n                    fontSize: 'var(--ggui-typography-fontSize-base, 16px)',\n                    fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                  }}\n                >\n                  {current.condition}\n                </Text>\n              </Stack>\n            </Stack>\n\n            {/* Humidity and Wind - Side by Side */}\n            <Row\n              gap={16}\n              justify=\"start\"\n              style={{\n                animation: mounted && motionEnabled ? animation.fadeIn : 'none',\n                animationDelay: motionEnabled ? '200ms' : '0ms',\n              }}\n            >\n              <Card\n                padding={16}\n                shadow=\"sm\"\n                style={{\n                  flex: 1,\n                  background: 'var(--ggui-color-surface, #ffffff)',\n                  border: `1px solid var(--ggui-color-primary-200, #bae6fd)`,\n                }}\n              >\n                <Stack direction=\"vertical\" gap={8} align=\"center\">\n                  <Text\n                    style={{\n                      fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                      color: 'var(--ggui-color-text-secondary, #6b7280)',\n                      fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                    }}\n                  >\n                    Humidity\n                  </Text>\n                  <div\n                    style={{\n                      fontSize: 'var(--ggui-typography-fontSize-2xl, 24px)',\n                      fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n                      color: 'var(--ggui-color-primary-600, #0284c7)',\n                    }}\n                  >\n                    {current.humidity}%\n                  </div>\n                </Stack>\n              </Card>\n\n              <Card\n                padding={16}\n                shadow=\"sm\"\n                style={{\n                  flex: 1,\n                  background: 'var(--ggui-color-surface, #ffffff)',\n                  border: `1px solid var(--ggui-color-primary-200, #bae6fd)`,\n                }}\n              >\n                <Stack direction=\"vertical\" gap={8} align=\"center\">\n                  <Text\n                    style={{\n                      fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                      color: 'var(--ggui-color-text-secondary, #6b7280)',\n                      fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                    }}\n                  >\n                    Wind\n                  </Text>\n                  <div\n                    style={{\n                      fontSize: 'var(--ggui-typography-fontSize-2xl, 24px)',\n                      fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n                      color: 'var(--ggui-color-primary-600, #0284c7)',\n                    }}\n                  >\n                    {current.windSpeed} mph\n                  </div>\n                </Stack>\n              </Card>\n            </Row>\n\n            {/* Divider */}\n            <div\n              style={{\n                height: '1px',\n                background: 'var(--ggui-color-primary-200, #bae6fd)',\n              }}\n            />\n\n            {/* 5-Day Forecast Header */}\n            <Text\n              style={{\n                fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                fontWeight: 'var(--ggui-typography-fontWeight-semibold, 600)',\n                color: 'var(--ggui-color-primary-900, #0c4a6e)',\n              }}\n            >\n              5-Day Forecast\n            </Text>\n\n            {/* Forecast Strip */}\n            <Row\n              gap={12}\n              justify=\"start\"\n              wrap={true}\n              style={{\n                animation: mounted && motionEnabled ? animation.fadeIn : 'none',\n                animationDelay: motionEnabled ? '300ms' : '0ms',\n              }}\n            >\n              {forecastItems.map((day, index) => {\n                const delayMs = 300 + index * 50;\n                const delayStr = delayMs + 'ms';\n                return (\n                  <div\n                    key={day.day}\n                    style={{\n                      flex: `0 1 calc(20% - 10px)`,\n                      minWidth: '80px',\n                    }}\n                  >\n                    <Card\n                      padding={12}\n                      shadow=\"sm\"\n                      style={{\n                        background: 'var(--ggui-color-surface, #ffffff)',\n                        border: `1px solid var(--ggui-color-primary-200, #bae6fd)`,\n                        textAlign: 'center',\n                        animation: mounted && motionEnabled ? animation.scaleIn : 'none',\n                        animationDelay: motionEnabled ? delayStr : '0ms',\n                        transformOrigin: 'center',\n                      }}\n                    >\n                      <Stack direction=\"vertical\" gap={8} align=\"center\">\n                        <Text\n                          style={{\n                            fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                            fontWeight: 'var(--ggui-typography-fontWeight-semibold, 600)',\n                            color: 'var(--ggui-color-primary-700, #0369a1)',\n                          }}\n                        >\n                          {day.day}\n                        </Text>\n                        <div style={{ fontSize: '28px', lineHeight: '1' }}>\n                          {getWeatherEmoji(day.condition)}\n                        </div>\n                        <Text\n                          style={{\n                            fontSize: 'var(--ggui-typography-fontSize-xs, 12px)',\n                            color: 'var(--ggui-color-text-secondary, #6b7280)',\n                            lineHeight: '1.2',\n                          }}\n                        >\n                          {day.condition}\n                        </Text>\n                        <div\n                          style={{\n                            fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                            fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n                            color: 'var(--ggui-color-primary-600, #0284c7)',\n                          }}\n                        >\n                          {day.high}°\n                        </div>\n                        <Text\n                          style={{\n                            fontSize: 'var(--ggui-typography-fontSize-xs, 12px)',\n                            color: 'var(--ggui-color-text-secondary, #6b7280)',\n                          }}\n                        >\n                          {day.low}°\n                        </Text>\n                      </Stack>\n                    </Card>\n                  </div>\n                );\n              })}\n            </Row>\n          </Stack>\n        </Card>\n      </Container>\n    </>\n  );\n}",
+        "tokens": {
+          "input": 100726,
+          "output": 12979,
+          "total": 113705
+        },
+        "generationTimeMs": 74081,
+        "turnsUsed": 5
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.165621,
+      "timestamp": "2026-03-15T00:49:47.457Z"
+    },
+    {
+      "variant": {
+        "id": "openai-mini",
+        "sdkName": "openai",
+        "tier": "fast",
+        "modelId": "openai/gpt-4.1-mini"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Simple weather display with temperature, condition, and forecast",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "expectedMinScore": 70,
+        "complexity": "simple"
+      },
+      "generation": null,
+      "evaluation": null,
+      "estimatedCostUsd": 0,
+      "error": "OpenAI adapter: no compiled code produced after all turns",
+      "timestamp": "2026-03-15T00:49:01.566Z"
+    },
+    {
+      "variant": {
+        "id": "google-flash",
+        "sdkName": "google",
+        "tier": "fast",
+        "modelId": "gemini/gemini-2.5-flash"
+      },
+      "prompt": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Simple weather display with temperature, condition, and forecast",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "expectedMinScore": 70,
+        "complexity": "simple"
+      },
+      "generation": {
+        "compiledCode": "import{jsx as e,jsxs as i}from\"react/jsx-runtime\";import{Container as f,Card as d,Stack as o,Row as g,Text as t,Divider as h}from\"@ggui-ai/design/primitives\";function s({city:n=\"Unknown City\",currentTemperature:u=25,currentCondition:a=\"Partly Cloudy\",currentHumidity:l=60,currentWindSpeed:p=10,forecast:y=[{day:\"Mon\",icon:\"\\u2600\\uFE0F\",high:28,low:18},{day:\"Tue\",icon:\"\\u2601\\uFE0F\",high:26,low:17},{day:\"Wed\",icon:\"\\u{1F327}\\uFE0F\",high:22,low:15},{day:\"Thu\",icon:\"\\u{1F324}\\uFE0F\",high:24,low:16},{day:\"Fri\",icon:\"\\u2600\\uFE0F\",high:27,low:19}],onSubmit:m}){return e(f,{maxWidth:\"sm\",center:!0,children:e(d,{padding:\"var(--ggui-spacing-lg, 24px)\",shadow:\"md\",style:{background:\"var(--ggui-color-surface, #ffffff)\",borderRadius:\"var(--ggui-radius-lg, 12px)\",borderColor:\"var(--ggui-color-gray-200, #e5e7eb)\",borderWidth:\"1px\",borderStyle:\"solid\"},children:i(o,{direction:\"vertical\",gap:20,align:\"center\",children:[e(t,{variant:\"h2\",align:\"center\",style:{color:\"var(--ggui-color-text-primary, #111827)\",fontSize:\"var(--ggui-typography-fontSize-3xl, 30px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\"},children:n}),i(t,{style:{fontSize:\"var(--ggui-typography-fontSize-4xl, 36px)\",fontWeight:\"var(--ggui-typography-fontWeight-bold, 700)\",color:\"var(--ggui-color-primary-600, #0284c7)\"},children:[u,\"\\xB0C\"]}),i(g,{gap:8,align:\"center\",children:[e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-2xl, 24px)\",lineHeight:\"1\"},children:(r=>(r=r.toLowerCase(),r.includes(\"sunny\")?\"\\u2600\\uFE0F\":r.includes(\"cloudy\")?\"\\u2601\\uFE0F\":r.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":r.includes(\"storm\")?\"\\u26C8\\uFE0F\":r.includes(\"snow\")?\"\\u2744\\uFE0F\":r.includes(\"clear\")?\"\\u2600\\uFE0F\":r.includes(\"partly cloudy\")?\"\\u{1F324}\\uFE0F\":r.includes(\"fog\")?\"\\u{1F32B}\\uFE0F\":\"\\u{1F321}\\uFE0F\"))(a)}),e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-xl, 20px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\"},children:a})]}),i(g,{gap:16,justify:\"center\",children:[i(o,{direction:\"vertical\",align:\"center\",gap:4,children:[e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-text-primary, #111827)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:\"Humidity\"}),i(t,{style:{fontSize:\"var(--ggui-typography-fontSize-md, 16px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\"},children:[l,\"%\"]})]}),i(o,{direction:\"vertical\",align:\"center\",gap:4,children:[e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-text-primary, #111827)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:\"Wind\"}),i(t,{style:{fontSize:\"var(--ggui-typography-fontSize-md, 16px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\"},children:[p,\" km/h\"]})]})]}),e(h,{margin:\"var(--ggui-spacing-md, 16px)\"}),e(g,{justify:\"around\",fullWidth:!0,wrap:!0,gap:16,children:y.map((r,c)=>i(o,{direction:\"vertical\",align:\"center\",gap:4,style:{minWidth:\"60px\"},children:[e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-text-primary, #111827)\",fontWeight:\"var(--ggui-typography-fontWeight-medium, 500)\"},children:r.day}),e(t,{style:{fontSize:\"var(--ggui-typography-fontSize-xl, 20px)\",lineHeight:\"1\"},children:r.icon}),i(t,{style:{fontSize:\"var(--ggui-typography-fontSize-sm, 14px)\",color:\"var(--ggui-color-primary-700, #0369a1)\",fontWeight:\"var(--ggui-typography-fontWeight-semibold, 600)\"},children:[r.high,\"\\xB0\"]}),i(t,{style:{fontSize:\"var(--ggui-typography-fontSize-xs, 12px)\",color:\"var(--ggui-color-text-secondary, #6b7280)\"},children:[r.low,\"\\xB0\"]})]},c))})]})})})}export{s as default};\n",
+        "sourceCode": "\nimport { useState } from 'react';\nimport { Container, Card, Stack, Row, Text, Divider } from '@ggui-ai/design/primitives';\n\ninterface ForecastItem {\n  day: string; // e.g., \"Mon\", \"Tue\"\n  icon: string; // e.g., \"☀️\", \"☁️\", \"🌧️\"\n  high: number;\n  low: number;\n}\n\ninterface Props {\n  city?: string;\n  currentTemperature?: number;\n  currentCondition?: string;\n  currentHumidity?: number; // percentage\n  currentWindSpeed?: number; // km/h or mph\n  forecast?: ForecastItem[];\n  onSubmit?: (data: unknown) => void;\n}\n\nexport default function GeneratedComponent({\n  city = \"Unknown City\",\n  currentTemperature = 25,\n  currentCondition = \"Partly Cloudy\",\n  currentHumidity = 60,\n  currentWindSpeed = 10,\n  forecast = [\n    { day: \"Mon\", icon: \"☀️\", high: 28, low: 18 },\n    { day: \"Tue\", icon: \"☁️\", high: 26, low: 17 },\n    { day: \"Wed\", icon: \"🌧️\", high: 22, low: 15 },\n    { day: \"Thu\", icon: \"🌤️\", high: 24, low: 16 },\n    { day: \"Fri\", icon: \"☀️\", high: 27, low: 19 },\n  ],\n  onSubmit\n}: Props) {\n\n  const getConditionEmoji = (condition: string) => {\n    condition = condition.toLowerCase();\n    if (condition.includes(\"sunny\")) return \"☀️\";\n    if (condition.includes(\"cloudy\")) return \"☁️\";\n    if (condition.includes(\"rain\")) return \"🌧️\";\n    if (condition.includes(\"storm\")) return \"⛈️\";\n    if (condition.includes(\"snow\")) return \"❄️\";\n    if (condition.includes(\"clear\")) return \"☀️\";\n    if (condition.includes(\"partly cloudy\")) return \"🌤️\";\n    if (condition.includes(\"fog\")) return \"🌫️\";\n    return \"🌡️\"; // Default\n  };\n\n  return (\n    <Container maxWidth=\"sm\" center={true}>\n      <Card\n        padding=\"var(--ggui-spacing-lg, 24px)\"\n        shadow=\"md\"\n        style={{\n          background: 'var(--ggui-color-surface, #ffffff)',\n          borderRadius: 'var(--ggui-radius-lg, 12px)',\n          borderColor: 'var(--ggui-color-gray-200, #e5e7eb)',\n          borderWidth: '1px',\n          borderStyle: 'solid',\n        }}\n      >\n        <Stack direction=\"vertical\" gap={20} align=\"center\">\n          {/* Current Weather */}\n          <Text\n            variant=\"h2\"\n            align=\"center\"\n            style={{\n              color: 'var(--ggui-color-text-primary, #111827)',\n              fontSize: 'var(--ggui-typography-fontSize-3xl, 30px)',\n              fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n            }}\n          >\n            {city}\n          </Text>\n\n          <Text\n            style={{\n              fontSize: 'var(--ggui-typography-fontSize-4xl, 36px)',\n              fontWeight: 'var(--ggui-typography-fontWeight-bold, 700)',\n              color: 'var(--ggui-color-primary-600, #0284c7)',\n            }}\n          >\n            {currentTemperature}°C\n          </Text>\n\n          <Row gap={8} align=\"center\">\n            <Text\n              style={{\n                fontSize: 'var(--ggui-typography-fontSize-2xl, 24px)',\n                lineHeight: '1',\n              }}\n            >\n              {getConditionEmoji(currentCondition)}\n            </Text>\n            <Text\n              style={{\n                fontSize: 'var(--ggui-typography-fontSize-xl, 20px)',\n                color: 'var(--ggui-color-text-secondary, #6b7280)',\n              }}\n            >\n              {currentCondition}\n            </Text>\n          </Row>\n\n          <Row gap={16} justify=\"center\">\n            <Stack direction=\"vertical\" align=\"center\" gap={4}>\n              <Text\n                style={{\n                  fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                  color: 'var(--ggui-color-text-primary, #111827)',\n                  fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                }}\n              >\n                Humidity\n              </Text>\n              <Text\n                style={{\n                  fontSize: 'var(--ggui-typography-fontSize-md, 16px)',\n                  color: 'var(--ggui-color-text-secondary, #6b7280)',\n                }}\n              >\n                {currentHumidity}%\n              </Text>\n            </Stack>\n            <Stack direction=\"vertical\" align=\"center\" gap={4}>\n              <Text\n                style={{\n                  fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                  color: 'var(--ggui-color-text-primary, #111827)',\n                  fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                }}\n              >\n                Wind\n              </Text>\n              <Text\n                style={{\n                  fontSize: 'var(--ggui-typography-fontSize-md, 16px)',\n                  color: 'var(--ggui-color-text-secondary, #6b7280)',\n                }}\n              >\n                {currentWindSpeed} km/h\n              </Text>\n            </Stack>\n          </Row>\n\n          <Divider margin=\"var(--ggui-spacing-md, 16px)\" />\n\n          {/* 5-Day Forecast */}\n          <Row justify=\"around\" fullWidth={true} wrap={true} gap={16}>\n            {forecast.map((dayForecast, index) => (\n              <Stack key={index} direction=\"vertical\" align=\"center\" gap={4} style={{ minWidth: '60px' }}>\n                <Text\n                  style={{\n                    fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                    color: 'var(--ggui-color-text-primary, #111827)',\n                    fontWeight: 'var(--ggui-typography-fontWeight-medium, 500)',\n                  }}\n                >\n                  {dayForecast.day}\n                </Text>\n                <Text\n                  style={{\n                    fontSize: 'var(--ggui-typography-fontSize-xl, 20px)',\n                    lineHeight: '1',\n                  }}\n                >\n                  {dayForecast.icon}\n                </Text>\n                <Text\n                  style={{\n                    fontSize: 'var(--ggui-typography-fontSize-sm, 14px)',\n                    color: 'var(--ggui-color-primary-700, #0369a1)',\n                    fontWeight: 'var(--ggui-typography-fontWeight-semibold, 600)',\n                  }}\n                >\n                  {dayForecast.high}°\n                </Text>\n                <Text\n                  style={{\n                    fontSize: 'var(--ggui-typography-fontSize-xs, 12px)',\n                    color: 'var(--ggui-color-text-secondary, #6b7280)',\n                  }}\n                >\n                  {dayForecast.low}°\n                </Text>\n              </Stack>\n            ))}\n          </Row>\n        </Stack>\n      </Card>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 33494,
+          "output": 1368,
+          "total": 34862
+        },
+        "generationTimeMs": 109578,
+        "turnsUsed": 9
+      },
+      "evaluation": null,
+      "estimatedCostUsd": 0.0058449,
+      "timestamp": "2026-03-15T00:50:51.145Z"
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "openai-mini",
+      "sdkName": "openai",
+      "tier": "fast",
+      "modelId": "openai/gpt-4.1-mini",
+      "avgScore": 0,
+      "avgTimeMs": 0,
+      "avgCostUsd": 0,
+      "successRate": 0,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    },
+    {
+      "variantId": "claude-haiku",
+      "sdkName": "claude",
+      "tier": "fast",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": -1,
+      "avgTimeMs": 74081,
+      "avgCostUsd": 0.165621,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    },
+    {
+      "variantId": "google-flash",
+      "sdkName": "google",
+      "tier": "fast",
+      "modelId": "gemini/gemini-2.5-flash",
+      "avgScore": -1,
+      "avgTimeMs": 109578,
+      "avgCostUsd": 0.0058449,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 0,
+        "visualPolish": 0,
+        "interactivity": 0,
+        "accessibility": 0,
+        "codeQuality": 0
+      }
+    }
+  ],
+  "promptSummaries": [
+    {
+      "promptId": "weather-card",
+      "promptName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": -1,
+      "bestVariantId": "claude-haiku",
+      "worstVariantId": "google-flash"
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "fast": {
+        "avgScore": -1,
+        "avgTimeMs": 74081,
+        "avgCostUsd": 0.165621,
+        "successRate": 1
+      }
+    },
+    "openai": {
+      "fast": {
+        "avgScore": -1,
+        "avgTimeMs": 0,
+        "avgCostUsd": 0,
+        "successRate": 0
+      }
+    },
+    "google": {
+      "fast": {
+        "avgScore": -1,
+        "avgTimeMs": 109578,
+        "avgCostUsd": 0.0058449,
+        "successRate": 1
+      }
+    }
+  }
+}

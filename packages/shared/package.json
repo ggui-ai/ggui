@@ -1,0 +1,44 @@
+{
+  "name": "@ggui-ai/shared",
+  "version": "0.1.0-rc.1",
+  "description": "Shared types for ggui SDK packages — self-repair, agent listings",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "types",
+    "sdk"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/shared"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/shared",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

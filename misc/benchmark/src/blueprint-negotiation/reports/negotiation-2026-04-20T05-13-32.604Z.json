@@ -1,0 +1,315 @@
+{
+  "schemaVersion": "blueprint-negotiation.v0",
+  "generatedAt": "2026-04-20T05:13:32.604Z",
+  "floorLabel": "v0-seed",
+  "notes": [
+    "Multi-registry arbitration is NOT benchable in v0 — `negotiate()` takes a single VectorStore. arbitrationCorrectnessRate is always 0; schema slot reserved for v0.5.",
+    "Confidence is NOT surfaced on negotiate() result (internal only). tags.confidence is always null in v0.",
+    "No real LLM calls — miss cases route through a deterministic stub. Decision latency stays near 0 on fast-path hits, minimal overhead on stubbed misses.",
+    "empty-registry clean miss is a SUCCESS case, not a failure. Look for emptyRegistryCleanMissRate on the empty row — 1.0 is the healthy value.",
+    "Stats are min/median/max per registry mode; p50/p95 are deliberately NOT reported at this corpus size."
+  ],
+  "results": [
+    {
+      "caseId": "clear-hit-feedback-form",
+      "runIndex": 0,
+      "checkpoints": {
+        "decisionStartedAt": 263.310059,
+        "decisionCompletedAt": 264.454572
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "clear-hit-feedback-form",
+        "registryMode": "hosted",
+        "expectedOutcome": "hit",
+        "observedOutcome": "hit",
+        "expectedBlueprintId": "p_feedback-form",
+        "observedBlueprintId": "p_feedback-form",
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 1.1445129999999608,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "clear-hit-feedback-form",
+      "runIndex": 1,
+      "checkpoints": {
+        "decisionStartedAt": 264.600631,
+        "decisionCompletedAt": 264.748593
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "clear-hit-feedback-form",
+        "registryMode": "hosted",
+        "expectedOutcome": "hit",
+        "observedOutcome": "hit",
+        "expectedBlueprintId": "p_feedback-form",
+        "observedBlueprintId": "p_feedback-form",
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.1479620000000068,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "clear-hit-feedback-form",
+      "runIndex": 2,
+      "checkpoints": {
+        "decisionStartedAt": 264.883851,
+        "decisionCompletedAt": 265.084624
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "clear-hit-feedback-form",
+        "registryMode": "hosted",
+        "expectedOutcome": "hit",
+        "observedOutcome": "hit",
+        "expectedBlueprintId": "p_feedback-form",
+        "observedBlueprintId": "p_feedback-form",
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.2007730000000265,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "clean-miss-nothing-relevant",
+      "runIndex": 0,
+      "checkpoints": {
+        "decisionStartedAt": 265.168454,
+        "decisionCompletedAt": 265.51234
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 1
+      },
+      "tags": {
+        "caseId": "clean-miss-nothing-relevant",
+        "registryMode": "hosted",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.3438859999999977,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "clean-miss-nothing-relevant",
+      "runIndex": 1,
+      "checkpoints": {
+        "decisionStartedAt": 265.605097,
+        "decisionCompletedAt": 265.740225
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "clean-miss-nothing-relevant",
+        "registryMode": "hosted",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.1351280000000088,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "clean-miss-nothing-relevant",
+      "runIndex": 2,
+      "checkpoints": {
+        "decisionStartedAt": 265.874812,
+        "decisionCompletedAt": 266.034586
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "clean-miss-nothing-relevant",
+        "registryMode": "hosted",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.15977399999997033,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "empty-registry-miss",
+      "runIndex": 0,
+      "checkpoints": {
+        "decisionStartedAt": 266.065906,
+        "decisionCompletedAt": 266.152281
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "empty-registry-miss",
+        "registryMode": "empty",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.08637500000003229,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "empty-registry-miss",
+      "runIndex": 1,
+      "checkpoints": {
+        "decisionStartedAt": 266.170666,
+        "decisionCompletedAt": 266.249015
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "empty-registry-miss",
+        "registryMode": "empty",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.07834900000000289,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    },
+    {
+      "caseId": "empty-registry-miss",
+      "runIndex": 2,
+      "checkpoints": {
+        "decisionStartedAt": 266.274143,
+        "decisionCompletedAt": 266.359877
+      },
+      "stageLatencies": {
+        "embeddingLatencyMs": 0,
+        "searchLatencyMs": 0,
+        "decisionLatencyMs": 0
+      },
+      "tags": {
+        "caseId": "empty-registry-miss",
+        "registryMode": "empty",
+        "expectedOutcome": "miss",
+        "observedOutcome": "miss",
+        "expectedBlueprintId": null,
+        "observedBlueprintId": null,
+        "arbitrationObserved": false,
+        "confidence": null,
+        "errorClass": null
+      },
+      "derived": {
+        "decisionTimeMs": 0.0857340000000022,
+        "outcomeCorrect": true
+      },
+      "errors": []
+    }
+  ],
+  "summary": [
+    {
+      "registryMode": "hosted",
+      "runs": 6,
+      "hitRate": 0.5,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0,
+      "exactMatchRateOnHits": 1,
+      "emptyRegistryCleanMissRate": null,
+      "wrongHitRate": 0,
+      "errorRate": 0,
+      "arbitrationCorrectnessRate": 0,
+      "decisionTimeMs": {
+        "count": 6,
+        "nullCount": 0,
+        "min": 0.1351280000000088,
+        "median": 0.18027349999999842,
+        "max": 1.1445129999999608
+      }
+    },
+    {
+      "registryMode": "empty",
+      "runs": 3,
+      "hitRate": 0,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": null,
+      "exactMatchRateOnHits": null,
+      "emptyRegistryCleanMissRate": 1,
+      "wrongHitRate": 0,
+      "errorRate": 0,
+      "arbitrationCorrectnessRate": 0,
+      "decisionTimeMs": {
+        "count": 3,
+        "nullCount": 0,
+        "min": 0.07834900000000289,
+        "median": 0.0857340000000022,
+        "max": 0.08637500000003229
+      }
+    }
+  ]
+}

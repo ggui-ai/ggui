@@ -1,0 +1,118 @@
+{
+  "name": "@ggui-ai/mcp-server-handlers",
+  "version": "0.1.0-rc.1",
+  "description": "MCP tool handler logic for the ggui protocol. Pure over @ggui-ai/mcp-server-core seams and consumed by @ggui-ai/mcp-server. Never imports AWS, HTTP transports, or CLI concerns.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-server",
+    "generative-ui",
+    "tool-handlers"
+  ],
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./blueprints": {
+      "types": "./dist/blueprints/index.d.ts",
+      "import": "./dist/blueprints/index.js"
+    },
+    "./provider-keys": {
+      "types": "./dist/provider-keys/index.d.ts",
+      "import": "./dist/provider-keys/index.js"
+    },
+    "./session-mutations": {
+      "types": "./dist/session-mutations/index.d.ts",
+      "import": "./dist/session-mutations/index.js"
+    },
+    "./threads": {
+      "types": "./dist/threads/index.d.ts",
+      "import": "./dist/threads/index.js"
+    },
+    "./credits": {
+      "types": "./dist/credits/index.d.ts",
+      "import": "./dist/credits/index.js"
+    },
+    "./app-discovery": {
+      "types": "./dist/app-discovery/index.d.ts",
+      "import": "./dist/app-discovery/index.js"
+    },
+    "./ops-blueprint": {
+      "types": "./dist/ops-blueprint/index.d.ts",
+      "import": "./dist/ops-blueprint/index.js"
+    },
+    "./ops-apps": {
+      "types": "./dist/ops-apps/index.d.ts",
+      "import": "./dist/ops-apps/index.js"
+    },
+    "./ops-orgs": {
+      "types": "./dist/ops-orgs/index.d.ts",
+      "import": "./dist/ops-orgs/index.js"
+    },
+    "./ops-connector-keys": {
+      "types": "./dist/ops-connector-keys/index.d.ts",
+      "import": "./dist/ops-connector-keys/index.js"
+    },
+    "./ops-coupon": {
+      "types": "./dist/ops-coupon/index.d.ts",
+      "import": "./dist/ops-coupon/index.js"
+    },
+    "./contract-tests": {
+      "types": "./dist/contract-tests/index.d.ts",
+      "import": "./dist/contract-tests/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/negotiator": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/ui-gen": "workspace:*",
+    "@ggui-ai/ui-registry": "workspace:*"
+  },
+  "peerDependencies": {
+    "vitest": ">=1.0.0",
+    "zod": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    },
+    "zod": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0",
+    "zod": "^4.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/mcp-server-handlers"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/mcp-server-handlers",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

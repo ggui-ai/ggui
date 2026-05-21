@@ -1,0 +1,2065 @@
+{
+  "meta": {
+    "timestamp": "2026-03-24T05:50:10.023Z",
+    "totalDurationMs": 88980,
+    "totalVariants": 1,
+    "totalCommits": 4,
+    "totalRuns": 4,
+    "successCount": 4,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var l=Object.defineProperty;var c=(e,a)=>l(e,\"name\",{value:a,configurable:!0});import{jsx as i,jsxs as t}from\"react/jsx-runtime\";import{useMemo as m}from\"react\";import{Container as s,Card as f,Stack as r,Row as g,Divider as p,Text as n,Heading as d}from\"@ggui-ai/design/primitives\";function T(e){const a=e.toLowerCase();return a.includes(\"sun\")?\"\\u2600\\uFE0F\":a.includes(\"cloud\")?\"\\u2601\\uFE0F\":a.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":a.includes(\"snow\")?\"\\u2744\\uFE0F\":\"\\u{1F321}\\uFE0F\"}c(T,\"getWeatherIcon\");function b(e){const a=m(()=>T(e.condition),[e.condition]);return i(s,{maxWidth:\"md\",padding:\"var(--ggui-spacing-6)\",children:i(f,{shadow:\"md\",padding:\"var(--ggui-spacing-6)\",children:t(r,{gap:\"var(--ggui-spacing-6)\",align:\"center\",children:[t(g,{justify:\"between\",style:{width:\"100%\"},children:[i(d,{level:2,children:e.city}),i(n,{children:a})]}),t(r,{align:\"center\",gap:\"var(--ggui-spacing-1)\",children:[t(d,{level:1,children:[e.temperature,\"\\xB0\",e.unit]}),i(n,{color:\"var(--ggui-color-primary-600)\",children:e.condition})]}),t(g,{gap:\"var(--ggui-spacing-8)\",children:[t(r,{align:\"center\",children:[i(n,{children:\"Humidity\"}),t(n,{children:[e.humidity,\"%\"]})]}),t(r,{align:\"center\",children:[i(n,{children:\"Wind\"}),t(n,{children:[e.windSpeed,\" km/h\"]})]})]}),i(p,{}),i(g,{gap:\"var(--ggui-spacing-4)\",children:(e.forecast||[]).map((o,u)=>t(r,{align:\"center\",gap:\"var(--ggui-spacing-1)\",children:[i(n,{children:o.day}),i(n,{children:o.icon}),t(n,{children:[o.high,\"\\xB0 / \",o.low,\"\\xB0\"]})]},u))})]})})})}c(b,\"Component\");export{b as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>; // 5-day forecast array\n}\n\n\n\n\n\n// Place helper components here if needed\nfunction getWeatherIcon(condition: string) {\n  const c = condition.toLowerCase();\n  if (c.includes('sun')) return '☀️';\n  if (c.includes('cloud')) return '☁️';\n  if (c.includes('rain')) return '🌧️';\n  if (c.includes('snow')) return '❄️';\n  return '🌡️';\n}\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  \n  const weatherIcon = useMemo(() => getWeatherIcon(props.condition), [props.condition]);\n\n  return (\n    <Container maxWidth=\"md\" padding=\"var(--ggui-spacing-6)\">\n\n      <Card shadow=\"md\" padding=\"var(--ggui-spacing-6)\">\n        <Stack gap=\"var(--ggui-spacing-6)\" align=\"center\">\n          <Row justify=\"between\" style={{ width: '100%' }}>\n            <Heading level={2}>{props.city}</Heading>\n            <Text>{weatherIcon}</Text>\n          </Row>\n\n          <Stack align=\"center\" gap=\"var(--ggui-spacing-1)\">\n            <Heading level={1}>\n              {props.temperature}°{props.unit}\n            </Heading>\n            <Text color=\"var(--ggui-color-primary-600)\">{props.condition}</Text>\n          </Stack>\n\n          <Row gap=\"var(--ggui-spacing-8)\">\n            <Stack align=\"center\">\n              <Text>Humidity</Text>\n              <Text>{props.humidity}%</Text>\n            </Stack>\n            <Stack align=\"center\">\n              <Text>Wind</Text>\n              <Text>{props.windSpeed} km/h</Text>\n            </Stack>\n          </Row>\n\n          <Divider />\n\n          <Row gap=\"var(--ggui-spacing-4)\">\n            {(props.forecast || []).map((day, index) => (\n              <Stack key={index} align=\"center\" gap=\"var(--ggui-spacing-1)\">\n                <Text>{day.day}</Text>\n                <Text>{day.icon}</Text>\n                <Text>{day.high}° / {day.low}°</Text>\n              </Stack>\n            ))}\n          </Row>\n        </Stack>\n      </Card>\n    </Container>\n  );\n\n}\n",
+        "tokens": {
+          "input": 71844,
+          "output": 1765,
+          "total": 73609
+        },
+        "generationTimeMs": 43752,
+        "turnsUsed": 3,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The weather forecast items are not interactive; they lack hover feedback or clickability (e.g., to show more details) which would be standard for a forecast strip.",
+              "fix": "The weather forecast items are not interactive; they lack hover feedback or clickability (e.g., to show more details) which would be standard for a forecast strip."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "There is no refresh mechanism or interaction for the user to update the weather data.",
+              "fix": "There is no refresh mechanism or interaction for the user to update the weather data."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The weather condition icon (line 54) lacks descriptive alt text or an aria-label, which is necessary for screen readers to identify the meaning of the icon.",
+              "fix": "The weather condition icon (line 54) lacks descriptive alt text or an aria-label, which is necessary for screen readers to identify the meaning of the icon."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The forecast icons (line 81) lack descriptive alt text or aria-labels for each day's weather condition.",
+              "fix": "The forecast icons (line 81) lack descriptive alt text or aria-labels for each day's weather condition."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The data in the humidity and wind speed sections (lines 65-72) is presented without semantic context or aria-labels, making it difficult for screen readers to associate the label with the value.",
+              "fix": "The data in the humidity and wind speed sections (lines 65-72) is presented without semantic context or aria-labels, making it difficult for screen readers to associate the label with the value."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The 5-day forecast items in the row at line 77 lack horizontal space/alignment; they will appear cramped against each other without using a grid or spacer.",
+              "fix": "The 5-day forecast items in the row at line 77 lack horizontal space/alignment; they will appear cramped against each other without using a grid or spacer."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The 'Humidity' and 'Wind' labels and their values at lines 64-73 lack consistent internal vertical spacing, making the information hierarchy feel slightly disjointed.",
+              "fix": "The 'Humidity' and 'Wind' labels and their values at lines 64-73 lack consistent internal vertical spacing, making the information hierarchy feel slightly disjointed."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state handling when the forecast array is empty — should display a message indicating no forecast data is available instead of an empty row",
+              "fix": "No empty state handling when the forecast array is empty — should display a message indicating no forecast data is available instead of an empty row"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 52: The inline style `style={{ width: '100%' }}` bypasses the design system layout properties and should be replaced with a layout primitive prop or a standardized class if available.",
+              "fix": "Line 52: The inline style `style={{ width: '100%' }}` bypasses the design system layout properties and should be replaced with a layout primitive prop or a standardized class if available."
+            }
+          ],
+          "pass": ["functionality", "crash", "accessibility"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 43706,
+          "evalMs": 0,
+          "totalMs": 43752
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 69,
+        "finalScore": 69,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 85,
+          "hierarchy": 70,
+          "polish": 50,
+          "dataPresentation": 65,
+          "completeness": 65,
+          "visualPolish": 73,
+          "interactivity": 50,
+          "accessibility": 73,
+          "codeQuality": 85
+        },
+        "critique": "The component uses design tokens well for spacing and colors, but lacks polish with no hover/focus states or transitions. Data presentation has issues: forecast items lack proper spacing for a 5-day strip layout, wind speed assumes 'km/h' without respecting unit prop, and there's no handling for missing/undefined forecast data that could cause layout breaks.",
+        "evalTimeMs": 2512
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The weather forecast items are not interactive; they lack hover feedback or clickability (e.g., to show more details) which would be standard for a forecast strip.",
+            "fix": "The weather forecast items are not interactive; they lack hover feedback or clickability (e.g., to show more details) which would be standard for a forecast strip."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "There is no refresh mechanism or interaction for the user to update the weather data.",
+            "fix": "There is no refresh mechanism or interaction for the user to update the weather data."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The weather condition icon (line 54) lacks descriptive alt text or an aria-label, which is necessary for screen readers to identify the meaning of the icon.",
+            "fix": "The weather condition icon (line 54) lacks descriptive alt text or an aria-label, which is necessary for screen readers to identify the meaning of the icon."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The forecast icons (line 81) lack descriptive alt text or aria-labels for each day's weather condition.",
+            "fix": "The forecast icons (line 81) lack descriptive alt text or aria-labels for each day's weather condition."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The data in the humidity and wind speed sections (lines 65-72) is presented without semantic context or aria-labels, making it difficult for screen readers to associate the label with the value.",
+            "fix": "The data in the humidity and wind speed sections (lines 65-72) is presented without semantic context or aria-labels, making it difficult for screen readers to associate the label with the value."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The 5-day forecast items in the row at line 77 lack horizontal space/alignment; they will appear cramped against each other without using a grid or spacer.",
+            "fix": "The 5-day forecast items in the row at line 77 lack horizontal space/alignment; they will appear cramped against each other without using a grid or spacer."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The 'Humidity' and 'Wind' labels and their values at lines 64-73 lack consistent internal vertical spacing, making the information hierarchy feel slightly disjointed.",
+            "fix": "The 'Humidity' and 'Wind' labels and their values at lines 64-73 lack consistent internal vertical spacing, making the information hierarchy feel slightly disjointed."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state handling when the forecast array is empty — should display a message indicating no forecast data is available instead of an empty row",
+            "fix": "No empty state handling when the forecast array is empty — should display a message indicating no forecast data is available instead of an empty row"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 52: The inline style `style={{ width: '100%' }}` bypasses the design system layout properties and should be replaced with a layout primitive prop or a standardized class if available.",
+            "fix": "Line 52: The inline style `style={{ width: '100%' }}` bypasses the design system layout properties and should be replaced with a layout primitive prop or a standardized class if available."
+          }
+        ],
+        "pass": ["functionality", "crash", "accessibility"]
+      },
+      "estimatedCostUsd": 0.041217000000000004,
+      "timestamp": "2026-03-24T05:49:27.456Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1550,
+        "sourceCodeBytes": 3988,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var L=Object.defineProperty;var u=(g,l)=>L(g,\"name\",{value:l,configurable:!0});import{jsx as e,jsxs as n}from\"react/jsx-runtime\";import{useState as s,useMemo as O,useEffect as z}from\"react\";import{Container as G,Card as y,Stack as c,Row as o,Box as A,Text as P,Heading as D,Button as v,Input as I,Select as H,Badge as k,Avatar as j}from\"@ggui-ai/design/primitives\";import{Clickable as m}from\"@ggui-ai/design/interact\";import{useAction as Y,useStream as _}from\"@ggui-ai/wire\";const q={high:\"error\",medium:\"warning\",low:\"default\"};function J(g){const l=Y(\"taskUpdate\"),f=_(\"taskChanged\"),[d,p]=s(g.tasks||[]),[U,h]=s(null),[C,b]=s(\"\"),[S,F]=s(\"medium\");z(()=>{if(f.latest){const{action:i,task:a}=f.latest;if(!a||!a.id)return;p(t=>i===\"delete\"?t.filter(r=>r.id!==a.id):t.find(r=>r.id===a.id)?t.map(r=>r.id===a.id?a:r):[...t,a])}},[f.latest]);const M=u((i,a)=>{p(t=>t.map(T=>T.id===i?{...T,column:a}:T)),l({action:\"move\",taskId:i,data:{column:a}})},\"moveTask\"),[N,B]=s(null),[w,R]=s(\"\"),W=u(i=>{p(a=>a.map(t=>t.id===i.id?{...t,title:w}:t)),l({action:\"edit\",taskId:i.id,data:{...i,title:w}}),B(null)},\"editTaskTitle\"),E=u(i=>{if(!C)return;const a={id:Date.now().toString(),title:C,priority:S,column:i,assignee:\"??\"};p(t=>[...t,a]),l({action:\"create\",taskId:a.id,data:{column:i}}),b(\"\"),h(null)},\"addTask\"),x=O(()=>{const i=d.length,a=d.filter(t=>t.column===\"done\").length;return{total:i,done:a}},[d]);return e(G,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:n(c,{gap:\"var(--ggui-spacing-6)\",children:[e(y,{padding:\"var(--ggui-spacing-4)\",children:n(o,{justify:\"between\",align:\"center\",children:[e(D,{level:2,children:\"Team Tasks\"}),n(o,{gap:\"var(--ggui-spacing-4)\",children:[n(k,{variant:\"default\",children:[x.total,\" Total Tasks\"]}),n(k,{variant:\"success\",children:[x.done,\" Completed\"]})]})]})}),e(o,{gap:\"var(--ggui-spacing-4)\",align:\"start\",children:(g.columns||[]).map(i=>e(A,{style:{flex:1,minWidth:280},children:n(c,{gap:\"var(--ggui-spacing-3)\",children:[n(o,{justify:\"between\",align:\"center\",children:[e(D,{level:4,children:i.name}),e(k,{variant:\"default\",children:d.filter(a=>a.column===i.id).length})]}),e(c,{gap:\"var(--ggui-spacing-2)\",children:d.filter(a=>a.column===i.id).map(a=>e(y,{padding:\"var(--ggui-spacing-3)\",children:n(c,{gap:\"var(--ggui-spacing-2)\",children:[N===a.id?n(o,{gap:\"var(--ggui-spacing-2)\",children:[e(I,{label:\"Title\",value:w,onChange:R}),e(v,{variant:\"primary\",as:m,onClick:()=>W(a),children:\"Save\"})]}):e(A,{as:m,onClick:()=>{B(a.id),R(a.title||\"\")},children:e(P,{weight:\"semibold\",children:a.title})}),a.dueDate&&n(P,{size:\"sm\",color:\"var(--ggui-color-text-secondary)\",children:[\"Due: \",a.dueDate]}),n(o,{gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[e(k,{variant:q[a.priority||\"low\"],children:a.priority}),e(j,{name:a.assignee||\"T\",size:24}),e(H,{label:\"Move\",value:a.column,onChange:t=>M(a.id,t),options:(g.columns||[]).map(t=>({value:t.id,label:t.name}))})]})]})},a.id))}),U===i.id?e(y,{padding:\"var(--ggui-spacing-3)\",children:n(c,{gap:\"var(--ggui-spacing-2)\",children:[e(I,{label:\"Task Title\",value:C,onChange:b}),e(H,{label:\"Priority\",value:S,onChange:a=>F(a),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),n(o,{gap:\"var(--ggui-spacing-2)\",children:[e(v,{variant:\"primary\",as:m,onClick:()=>E(i.id),children:\"Add\"}),e(v,{variant:\"ghost\",as:m,onClick:()=>h(null),children:\"Cancel\"})]})]})}):e(v,{variant:\"outline\",fullWidth:!0,as:m,onClick:()=>h(i.id),children:\"+ Add Task\"})]})},i.id))})]})})}u(J,\"Component\");export{J as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\nconst PRIORITY_COLORS: Record<string, 'default' | 'error' | 'warning' | 'success'> = {\n  high: 'error',\n  medium: 'warning',\n  low: 'default',\n};\n\nexport default function Component(props: Props) {\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate');\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged');\n\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [addingTo, setAddingTo] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n\n  useEffect(() => {\n    if (taskChanged.latest) {\n      const { action, task } = taskChanged.latest;\n      if (!task || !task.id) return;\n      setTasks(prev => {\n        if (action === 'delete') return prev.filter(t => t.id !== task.id);\n        const exists = prev.find(t => t.id === task.id);\n        if (exists) return prev.map(t => t.id === task.id ? task : t);\n        return [...prev, task];\n      });\n    }\n  }, [taskChanged.latest]);\n\n  const moveTask = (taskId: string, newColumn: string) => {\n    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, column: newColumn } : t));\n    taskUpdate({ action: 'move', taskId, data: { column: newColumn } });\n  };\n\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editingTitle, setEditingTitle] = useState('');\n\n  const editTaskTitle = (task: typeof tasks[0]) => {\n    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, title: editingTitle } : t));\n    taskUpdate({ action: 'edit', taskId: task.id!, data: { ...task, title: editingTitle } as any });\n    setEditingTaskId(null);\n  };\n\n\n\n  const addTask = (columnId: string) => {\n    if (!newTaskTitle) return;\n    const newTask = {\n      id: Date.now().toString(),\n      title: newTaskTitle,\n      priority: newTaskPriority,\n      column: columnId,\n      assignee: '??'\n    };\n    setTasks(prev => [...prev, newTask]);\n    taskUpdate({ action: 'create', taskId: newTask.id, data: { column: columnId } });\n    setNewTaskTitle('');\n    setAddingTo(null);\n  };\n\n  const stats = useMemo(() => {\n    const total = tasks.length;\n    const done = tasks.filter(t => t.column === 'done').length;\n    return { total, done };\n  }, [tasks]);\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        <Card padding=\"var(--ggui-spacing-4)\">\n          <Row justify=\"between\" align=\"center\">\n            <Heading level={2}>Team Tasks</Heading>\n            <Row gap=\"var(--ggui-spacing-4)\">\n              <Badge variant=\"default\">{stats.total} Total Tasks</Badge>\n              <Badge variant=\"success\">{stats.done} Completed</Badge>\n            </Row>\n          </Row>\n        </Card>\n\n        <Row gap=\"var(--ggui-spacing-4)\" align=\"start\">\n          {(props.columns || []).map(col => (\n            <Box key={col.id} style={{ flex: 1, minWidth: 280 }}>\n              <Stack gap=\"var(--ggui-spacing-3)\">\n                <Row justify=\"between\" align=\"center\">\n                  <Heading level={4}>{col.name}</Heading>\n                  <Badge variant=\"default\">{tasks.filter(t => t.column === col.id).length}</Badge>\n                </Row>\n                \n                <Stack gap=\"var(--ggui-spacing-2)\">\n                  {tasks.filter(t => t.column === col.id).map(task => (\n                      <Card key={task.id} padding=\"var(--ggui-spacing-3)\">\n                        <Stack gap=\"var(--ggui-spacing-2)\">\n                          {editingTaskId === task.id ? (\n                            <Row gap=\"var(--ggui-spacing-2)\">\n                              <Input label=\"Title\" value={editingTitle} onChange={setEditingTitle} />\n                              <Button variant=\"primary\" as={Clickable} onClick={() => editTaskTitle(task)}>Save</Button>\n                            </Row>\n                          ) : (\n                            <Box as={Clickable} onClick={() => { setEditingTaskId(task.id!); setEditingTitle(task.title || ''); }}>\n                              <Text weight=\"semibold\">{task.title}</Text>\n                            </Box>\n                          )}\n                          {task.dueDate && <Text size=\"sm\" color=\"var(--ggui-color-text-secondary)\">Due: {task.dueDate}</Text>}\n                          <Row gap=\"var(--ggui-spacing-2)\" align=\"center\">\n                            <Badge variant={PRIORITY_COLORS[task.priority || 'low']}>{task.priority}</Badge>\n                            <Avatar name={task.assignee || 'T'} size={24} />\n                            <Select\n                              label=\"Move\"\n                              value={task.column!}\n                              onChange={(newCol: string) => moveTask(task.id!, newCol)}\n                              options={(props.columns || []).map(c => ({ value: c.id!, label: c.name! }))}\n                            />\n                          </Row>\n                        </Stack>\n                      </Card>\n\n                  ))}\n\n                </Stack>\n\n                {addingTo === col.id ? (\n                  <Card padding=\"var(--ggui-spacing-3)\">\n                    <Stack gap=\"var(--ggui-spacing-2)\">\n                      <Input label=\"Task Title\" value={newTaskTitle} onChange={setNewTaskTitle} />\n                      <Select label=\"Priority\" value={newTaskPriority} onChange={(v: any) => setNewTaskPriority(v)} options={[{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}]} />\n                      <Row gap=\"var(--ggui-spacing-2)\">\n                        <Button variant=\"primary\" as={Clickable} onClick={() => addTask(col.id!)}>Add</Button>\n                        <Button variant=\"ghost\" as={Clickable} onClick={() => setAddingTo(null)}>Cancel</Button>\n                      </Row>\n                    </Stack>\n                  </Card>\n                ) : (\n                  <Button variant=\"outline\" fullWidth as={Clickable} onClick={() => setAddingTo(col.id!)}>+ Add Task</Button>\n                )}\n              </Stack>\n            </Box>\n          ))}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 168518,
+          "output": 6953,
+          "total": 175471
+        },
+        "generationTimeMs": 86171,
+        "turnsUsed": 5,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Task title cannot be edited by double-clicking (only a single-click triggers the edit form)",
+              "fix": "Task title cannot be edited by double-clicking (only a single-click triggers the edit form)"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The Add Task form does not allow setting a Due Date for new tasks, which is part of the task schema",
+              "fix": "The Add Task form does not allow setting a Due Date for new tasks, which is part of the task schema"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The task edit functionality does not allow editing the priority or due date of an existing task (only the title is editable)",
+              "fix": "The task edit functionality does not allow editing the priority or due date of an existing task (only the title is editable)"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 74: task.id! — task.id can be undefined, using the non-null assertion operator on a potentially undefined value during an edit action is unsafe.",
+              "fix": "Line 74: task.id! — task.id can be undefined, using the non-null assertion operator on a potentially undefined value during an edit action is unsafe."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 133: task.id! — task.id can be undefined, accessing a potentially undefined value here is unsafe.",
+              "fix": "Line 133: task.id! — task.id can be undefined, accessing a potentially undefined value here is unsafe."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 144: task.id! — task.id can be undefined, using it in the moveTask function is unsafe.",
+              "fix": "Line 144: task.id! — task.id can be undefined, using it in the moveTask function is unsafe."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 145: c.id! and c.name! — c.id and c.name can be undefined, accessing them in the .map() is unsafe.",
+              "fix": "Line 145: c.id! and c.name! — c.id and c.name can be undefined, accessing them in the .map() is unsafe."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 161: col.id! — col.id can be undefined, passing it to addTask is unsafe.",
+              "fix": "Line 161: col.id! — col.id can be undefined, passing it to addTask is unsafe."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The edit title flow lacks a \"Cancel\" button, preventing the user from discarding changes if they accidentally initiate an edit.",
+              "fix": "The edit title flow lacks a \"Cancel\" button, preventing the user from discarding changes if they accidentally initiate an edit."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "There is no visual indication (e.g., cursor pointer or hover state) on the task card to inform the user that clicking the title triggers an edit mode.",
+              "fix": "There is no visual indication (e.g., cursor pointer or hover state) on the task card to inform the user that clicking the title triggers an edit mode."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The edit action on line 133 is bound to a click event on a Box, which is not keyboard-focusable. It should be triggered by a button or include tabIndex and keydown listeners to be accessible.",
+              "fix": "The edit action on line 133 is bound to a click event on a Box, which is not keyboard-focusable. It should be triggered by a button or include tabIndex and keydown listeners to be accessible."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The 'Move' Select component on line 141 has a label=\"Move\", which is generic. It should ideally be more specific, like \"Move task to column\" or provide aria-label referencing the task title to differentiate multiple select inputs on the same page.",
+              "fix": "The 'Move' Select component on line 141 has a label=\"Move\", which is generic. It should ideally be more specific, like \"Move task to column\" or provide aria-label referencing the task title to differentiate multiple select inputs on the same page."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The '+ Add Task' button on line 167 uses an icon character (+) inside text; it should have a descriptive label for screen readers if the text were not already clear, but more importantly, it is a trigger that lacks a clear visual focus state indication when navigated via keyboard.",
+              "fix": "The '+ Add Task' button on line 167 uses an icon character (+) inside text; it should have a descriptive label for screen readers if the text were not already clear, but more importantly, it is a trigger that lacks a clear visual focus state indication when navigated via keyboard."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The task card contains a 'Move' Select dropdown which is extremely cramped and causes layout overflow or alignment issues when placed inside a horizontal row with other elements (Badge, Avatar).",
+              "fix": "The task card contains a 'Move' Select dropdown which is extremely cramped and causes layout overflow or alignment issues when placed inside a horizontal row with other elements (Badge, Avatar)."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The 'Move' Select dropdown in the task card lacks a label/placeholder that is appropriate for its size, making it visually crowded.",
+              "fix": "The 'Move' Select dropdown in the task card lacks a label/placeholder that is appropriate for its size, making it visually crowded."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The task creation form within the column is not visually distinct enough from the task cards; it needs a clearer separator or visual boundary to indicate it is a functional input area rather than just another card.",
+              "fix": "The task creation form within the column is not visually distinct enough from the task cards; it needs a clearer separator or visual boundary to indicate it is a functional input area rather than just another card."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "The columns contain no visual indicator or \"No tasks\" message when a column is empty, leading to a broken/empty layout look.",
+              "fix": "The columns contain no visual indicator or \"No tasks\" message when a column is empty, leading to a broken/empty layout look."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 116: Style object 'flex: 1, minWidth: 280' bypasses design system; should use layout components or tokens if applicable",
+              "fix": "Line 116: Style object 'flex: 1, minWidth: 280' bypasses design system; should use layout components or tokens if applicable"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 140: Avatar size 24 should use a design system size token if available, rather than a raw number",
+              "fix": "Line 140: Avatar size 24 should use a design system size token if available, rather than a raw number"
+            }
+          ],
+          "pass": ["interactivity", "accessibility", "layout"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 86026,
+          "evalMs": 0,
+          "totalMs": 86171
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 68.4,
+        "finalScore": 68.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 72,
+          "designTokens": 65,
+          "hierarchy": 75,
+          "polish": 60,
+          "dataPresentation": 70,
+          "completeness": 70,
+          "visualPolish": 74,
+          "interactivity": 60,
+          "accessibility": 74,
+          "codeQuality": 65
+        },
+        "critique": "The component has a reasonable Kanban structure with proper flex layouts and responsive columns, but lacks sophisticated interaction polish (no drag-and-drop, missing hover states on cards). Design token usage is inconsistent—while spacing tokens are applied throughout, color variables aren't fully leveraged (hardcoded 'var(--ggui-color-text-secondary)' reference and inconsistent badge variants). The code is truncated mid-implementation, leaving the 'Add Task' form incomplete.",
+        "evalTimeMs": 2659
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Task title cannot be edited by double-clicking (only a single-click triggers the edit form)",
+            "fix": "Task title cannot be edited by double-clicking (only a single-click triggers the edit form)"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The Add Task form does not allow setting a Due Date for new tasks, which is part of the task schema",
+            "fix": "The Add Task form does not allow setting a Due Date for new tasks, which is part of the task schema"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The task edit functionality does not allow editing the priority or due date of an existing task (only the title is editable)",
+            "fix": "The task edit functionality does not allow editing the priority or due date of an existing task (only the title is editable)"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 74: task.id! — task.id can be undefined, using the non-null assertion operator on a potentially undefined value during an edit action is unsafe.",
+            "fix": "Line 74: task.id! — task.id can be undefined, using the non-null assertion operator on a potentially undefined value during an edit action is unsafe."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 133: task.id! — task.id can be undefined, accessing a potentially undefined value here is unsafe.",
+            "fix": "Line 133: task.id! — task.id can be undefined, accessing a potentially undefined value here is unsafe."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 144: task.id! — task.id can be undefined, using it in the moveTask function is unsafe.",
+            "fix": "Line 144: task.id! — task.id can be undefined, using it in the moveTask function is unsafe."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 145: c.id! and c.name! — c.id and c.name can be undefined, accessing them in the .map() is unsafe.",
+            "fix": "Line 145: c.id! and c.name! — c.id and c.name can be undefined, accessing them in the .map() is unsafe."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 161: col.id! — col.id can be undefined, passing it to addTask is unsafe.",
+            "fix": "Line 161: col.id! — col.id can be undefined, passing it to addTask is unsafe."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The edit title flow lacks a \"Cancel\" button, preventing the user from discarding changes if they accidentally initiate an edit.",
+            "fix": "The edit title flow lacks a \"Cancel\" button, preventing the user from discarding changes if they accidentally initiate an edit."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "There is no visual indication (e.g., cursor pointer or hover state) on the task card to inform the user that clicking the title triggers an edit mode.",
+            "fix": "There is no visual indication (e.g., cursor pointer or hover state) on the task card to inform the user that clicking the title triggers an edit mode."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The edit action on line 133 is bound to a click event on a Box, which is not keyboard-focusable. It should be triggered by a button or include tabIndex and keydown listeners to be accessible.",
+            "fix": "The edit action on line 133 is bound to a click event on a Box, which is not keyboard-focusable. It should be triggered by a button or include tabIndex and keydown listeners to be accessible."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The 'Move' Select component on line 141 has a label=\"Move\", which is generic. It should ideally be more specific, like \"Move task to column\" or provide aria-label referencing the task title to differentiate multiple select inputs on the same page.",
+            "fix": "The 'Move' Select component on line 141 has a label=\"Move\", which is generic. It should ideally be more specific, like \"Move task to column\" or provide aria-label referencing the task title to differentiate multiple select inputs on the same page."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The '+ Add Task' button on line 167 uses an icon character (+) inside text; it should have a descriptive label for screen readers if the text were not already clear, but more importantly, it is a trigger that lacks a clear visual focus state indication when navigated via keyboard.",
+            "fix": "The '+ Add Task' button on line 167 uses an icon character (+) inside text; it should have a descriptive label for screen readers if the text were not already clear, but more importantly, it is a trigger that lacks a clear visual focus state indication when navigated via keyboard."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The task card contains a 'Move' Select dropdown which is extremely cramped and causes layout overflow or alignment issues when placed inside a horizontal row with other elements (Badge, Avatar).",
+            "fix": "The task card contains a 'Move' Select dropdown which is extremely cramped and causes layout overflow or alignment issues when placed inside a horizontal row with other elements (Badge, Avatar)."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The 'Move' Select dropdown in the task card lacks a label/placeholder that is appropriate for its size, making it visually crowded.",
+            "fix": "The 'Move' Select dropdown in the task card lacks a label/placeholder that is appropriate for its size, making it visually crowded."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The task creation form within the column is not visually distinct enough from the task cards; it needs a clearer separator or visual boundary to indicate it is a functional input area rather than just another card.",
+            "fix": "The task creation form within the column is not visually distinct enough from the task cards; it needs a clearer separator or visual boundary to indicate it is a functional input area rather than just another card."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "The columns contain no visual indicator or \"No tasks\" message when a column is empty, leading to a broken/empty layout look.",
+            "fix": "The columns contain no visual indicator or \"No tasks\" message when a column is empty, leading to a broken/empty layout look."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 116: Style object 'flex: 1, minWidth: 280' bypasses design system; should use layout components or tokens if applicable",
+            "fix": "Line 116: Style object 'flex: 1, minWidth: 280' bypasses design system; should use layout components or tokens if applicable"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 140: Avatar size 24 should use a design system size token if available, rather than a raw number",
+            "fix": "Line 140: Avatar size 24 should use a design system size token if available, rather than a raw number"
+          }
+        ],
+        "pass": ["interactivity", "accessibility", "layout"]
+      },
+      "estimatedCostUsd": 0.105118,
+      "timestamp": "2026-03-24T05:50:10.023Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3537,
+        "sourceCodeBytes": 9036,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "chat-interface",
+        "name": "Chat Interface",
+        "description": "Chat UI with message list, input area, and send callback",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "universal",
+        "prompt": "Build a chat interface component with real-time messaging. Layout:\n\nHeader:\n- Chat title from props\n- Participant count badge\n- Typing indicator (shows when another user is typing, received via stream)\n\nMessage list:\n- Scrollable area showing messages (initial from props, new ones from stream)\n- Each message shows: sender name, message text, formatted timestamp\n- Messages from the current user (where sender matches props.currentUser) align right with primary color background\n- Messages from others align left with surfaceVariant background\n- Group consecutive messages from same sender\n\nInput area at the bottom:\n- Text input field for composing messages\n- Send button (disabled when input is empty)\n- Call the sendMessage action with { text, timestamp: new Date().toISOString() } on click or Enter\n\nRequirements:\n- Initial messages from props, new messages arrive via stream — append them to the list\n- Typing indicator appears/disappears via stream events\n- Use design system CSS variables for all colors and spacing\n- Auto-scroll to bottom when new messages arrive",
+        "contract": {
+          "interaction": "converse",
+          "props": {
+            "properties": {
+              "title": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Chat window title",
+                "example": "Team Chat"
+              },
+              "currentUser": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Current user name (for right-aligning own messages)",
+                "example": "You"
+              },
+              "participantCount": {
+                "schema": {
+                  "type": "number"
+                },
+                "description": "Number of participants",
+                "example": 3
+              },
+              "messages": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sender": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "timestamp": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Initial messages to display on mount",
+                "example": [
+                  {
+                    "sender": "Alice",
+                    "text": "Hey team, the design review is at 3pm",
+                    "timestamp": "2026-03-15T14:00:00Z"
+                  },
+                  {
+                    "sender": "You",
+                    "text": "Perfect, see you both there",
+                    "timestamp": "2026-03-15T14:03:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "sendMessage": {
+                "label": "Send Message",
+                "description": "Called when user sends a message. Payload: { text, timestamp }",
+                "example": {
+                  "text": "Sounds good!",
+                  "timestamp": "2026-03-15T14:10:00Z"
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time chat events from the agent",
+            "events": {
+              "message": {
+                "description": "New message from another participant — append to message list",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sender": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "sender": "Alice",
+                  "text": "Just pushed the latest changes",
+                  "timestamp": "2026-03-15T14:10:00Z"
+                }
+              },
+              "typing": {
+                "description": "Typing indicator — show/hide based on active flag",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sender": {
+                      "type": "string"
+                    },
+                    "active": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "sender": "Bob",
+                  "active": true
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "loadHistory": {
+                "label": "Load History",
+                "description": "Fetch older messages for infinite scroll",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "before": {
+                      "type": "string",
+                      "description": "ISO timestamp cursor"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "description": "Max messages to return"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sender": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "before": "2026-03-15T14:00:00Z",
+                    "limit": 20
+                  },
+                  "response": {
+                    "messages": [
+                      {
+                        "sender": "Alice",
+                        "text": "Earlier message",
+                        "timestamp": "2026-03-15T13:55:00Z"
+                      }
+                    ],
+                    "hasMore": true
+                  }
+                }
+              },
+              "searchMessages": {
+                "label": "Search Messages",
+                "description": "Full-text search across conversation",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sender": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getDraftState": {
+                "description": "Current message draft and typing state",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "draft": {
+                      "type": "string"
+                    },
+                    "isTyping": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "draft": "Hello...",
+                  "isTyping": true
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "title": "Team Chat",
+          "currentUser": "You",
+          "participantCount": 3,
+          "messages": [
+            {
+              "sender": "Alice",
+              "text": "Hey team, the design review is at 3pm",
+              "timestamp": "2026-03-15T14:00:00Z"
+            },
+            {
+              "sender": "Bob",
+              "text": "Got it, I will prepare the mockups",
+              "timestamp": "2026-03-15T14:02:00Z"
+            },
+            {
+              "sender": "You",
+              "text": "Perfect, see you both there",
+              "timestamp": "2026-03-15T14:03:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "Also, can someone review the color palette?",
+              "timestamp": "2026-03-15T14:05:00Z"
+            },
+            {
+              "sender": "Alice",
+              "text": "I pushed the latest changes to the design branch",
+              "timestamp": "2026-03-15T14:05:30Z"
+            },
+            {
+              "sender": "You",
+              "text": "I will take a look after the meeting",
+              "timestamp": "2026-03-15T14:06:00Z"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var B=Object.defineProperty;var d=(r,i)=>B(r,\"name\",{value:i,configurable:!0});import{jsx as t,jsxs as s}from\"react/jsx-runtime\";import{useState as f,useMemo as P,useEffect as S,useRef as R}from\"react\";import{Container as U,Card as T,Stack as m,Row as C,Box as y,Text as p,Heading as D,Button as H,Input as I,Badge as E}from\"@ggui-ai/design/primitives\";import{Clickable as F}from\"@ggui-ai/design/interact\";import{useAction as V,useStream as k}from\"@ggui-ai/wire\";const L=d(({sender:r,text:i,timestamp:o,isOwn:n})=>s(m,{align:n?\"end\":\"start\",gap:\"var(--ggui-spacing-1)\",children:[!n&&t(p,{variant:\"caption\",children:r}),t(y,{padding:\"var(--ggui-spacing-3)\",borderRadius:\"var(--ggui-shape-radius-md)\",background:n?\"var(--ggui-color-primary-600)\":\"var(--ggui-color-surfaceVariant)\",children:t(p,{color:n?\"white\":\"var(--ggui-color-onSurfaceVariant)\",children:i})}),t(p,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(o||\"\").toLocaleTimeString([],{hour:\"2-digit\",minute:\"2-digit\"})})]}),\"MessageBubble\");function z(r){const i=V(\"sendMessage\"),o=k(\"message\"),n=k(\"typing\"),[u,h]=f(r.messages||[]),[g,b]=f(\"\"),[c,M]=f(new Set),v=R(null);S(()=>{o.latest&&h(e=>[...e,o.latest])},[o.latest]),S(()=>{n.latest&&M(e=>{const a=new Set(e);return n.latest?.active?a.add(n.latest.sender||\"Someone\"):a.delete(n.latest?.sender||\"\"),a})},[n.latest]),S(()=>{v.current?.scrollTo({top:v.current.scrollHeight,behavior:\"smooth\"})},[u,c]);const x=d(()=>{if(!g.trim())return;const e={sender:r.currentUser,text:g,timestamp:new Date().toISOString()};h(a=>[...a,e]),i({text:g,timestamp:e.timestamp}),b(\"\")},\"handleSend\"),w=P(()=>{const e=[];return u.forEach(a=>{const l=a.sender||\"Unknown\";e.length>0&&e[e.length-1].sender===l?e[e.length-1].messages.push(a):e.push({sender:l,messages:[a]})}),e},[u]);return t(U,{maxWidth:\"md\",padding:\"0\",children:s(m,{gap:\"var(--ggui-spacing-4)\",style:{height:\"90vh\"},children:[s(T,{padding:\"var(--ggui-spacing-4)\",children:[s(C,{justify:\"between\",align:\"center\",children:[t(D,{level:3,children:r.title}),s(E,{children:[r.participantCount,\" Participants\"]})]}),c.size>0&&s(p,{variant:\"caption\",color:\"var(--ggui-color-primary-600)\",children:[Array.from(c).join(\", \"),\" \",c.size===1?\"is\":\"are\",\" typing...\"]})]}),t(y,{ref:v,style:{flex:1,overflowY:\"auto\"},padding:\"var(--ggui-spacing-4)\",children:t(m,{gap:\"var(--ggui-spacing-4)\",children:w.map((e,a)=>t(m,{align:e.sender===r.currentUser?\"end\":\"start\",gap:\"var(--ggui-spacing-1)\",children:e.messages.map((l,A)=>t(L,{...l,isOwn:l.sender===r.currentUser},A))},a))})}),t(T,{padding:\"var(--ggui-spacing-3)\",children:s(C,{gap:\"var(--ggui-spacing-2)\",align:\"end\",children:[t(y,{style:{flex:1},children:t(I,{label:\"Message\",value:g,onChange:b,placeholder:\"Type a message...\",onKeyDown:e=>e.key===\"Enter\"&&x()})}),t(H,{variant:\"primary\",as:F,onClick:x,disabled:!g.trim(),children:\"Send\"})]})})]})})}d(z,\"Component\");export{z as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  title: string; // Chat window title\n  currentUser: string; // Current user name (for right-aligning own messages)\n  participantCount: number; // Number of participants\n  messages: Array<{ sender?: string; text?: string; timestamp?: string }>; // Initial messages to display on mount\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when user sends a message. Payload: { text, timestamp } */\ntype ActionSendMessagePayload = { text: string; timestamp: string };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: New message from another participant — append to message list */\ntype StreamMessage = { sender?: string; text?: string; timestamp?: string };\n\n/** Stream event: Typing indicator — show/hide based on active flag */\ntype StreamTyping = { sender?: string; active?: boolean };\n\n\n\n\nconst MessageBubble = ({ sender, text, timestamp, isOwn }: { sender?: string, text?: string, timestamp?: string, isOwn: boolean }) => (\n  <Stack align={isOwn ? 'end' : 'start'} gap=\"var(--ggui-spacing-1)\">\n    {!isOwn && <Text variant=\"caption\">{sender}</Text>}\n    <Box \n      padding=\"var(--ggui-spacing-3)\" \n      borderRadius=\"var(--ggui-shape-radius-md)\" \n      background={isOwn ? 'var(--ggui-color-primary-600)' : 'var(--ggui-color-surfaceVariant)'}\n    >\n      <Text color={isOwn ? 'white' : 'var(--ggui-color-onSurfaceVariant)'}>{text}</Text>\n    </Box>\n    <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">\n      {new Date(timestamp || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n    </Text>\n  </Stack>\n);\n\n\nexport default function Component(props: Props) {\n  // Actions — fire-and-forget to agent\n  const sendMessage = useAction<ActionSendMessagePayload>('sendMessage'); // Called when user sends a message. Payload: { text, timestamp }\n\n  // Streams — real-time from agent (.latest, .all)\n  const message = useStream<StreamMessage>('message'); // New message from another participant — append to message list\n  const typing = useStream<StreamTyping>('typing'); // Typing indicator — show/hide based on active flag\n\n  const [messages, setMessages] = useState(props.messages || []);\n  const [inputValue, setInputValue] = useState('');\n  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());\n  const scrollRef = useRef<HTMLDivElement>(null);\n\n  useEffect(() => {\n    if (message.latest) {\n      setMessages((prev) => [...prev, message.latest!]);\n    }\n  }, [message.latest]);\n\n  useEffect(() => {\n    if (typing.latest) {\n      setTypingUsers(prev => {\n        const next = new Set(prev);\n        if (typing.latest?.active) next.add(typing.latest.sender || 'Someone');\n        else next.delete(typing.latest?.sender || '');\n        return next;\n      });\n    }\n  }, [typing.latest]);\n\n  useEffect(() => {\n    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });\n  }, [messages, typingUsers]);\n\n  const handleSend = () => {\n    if (!inputValue.trim()) return;\n    const msg = { sender: props.currentUser, text: inputValue, timestamp: new Date().toISOString() };\n    setMessages((prev) => [...prev, msg]);\n    sendMessage({ text: inputValue, timestamp: msg.timestamp });\n    setInputValue('');\n  };\n\n  const groupedMessages = useMemo(() => {\n    const groups: Array<{ sender: string, messages: typeof messages }> = [];\n    messages.forEach((msg) => {\n      const sender = msg.sender || 'Unknown';\n      if (groups.length > 0 && groups[groups.length - 1].sender === sender) {\n        groups[groups.length - 1].messages.push(msg);\n      } else {\n        groups.push({ sender, messages: [msg] });\n      }\n    });\n    return groups;\n  }, [messages]);\n\n  return (\n    <Container maxWidth=\"md\" padding=\"0\">\n      <Stack gap=\"var(--ggui-spacing-4)\" style={{ height: '90vh' }}>\n        <Card padding=\"var(--ggui-spacing-4)\">\n          <Row justify=\"between\" align=\"center\">\n            <Heading level={3}>{props.title}</Heading>\n            <Badge>{props.participantCount} Participants</Badge>\n          </Row>\n          {typingUsers.size > 0 && (\n            <Text variant=\"caption\" color=\"var(--ggui-color-primary-600)\">\n              {Array.from(typingUsers).join(', ')} {typingUsers.size === 1 ? 'is' : 'are'} typing...\n            </Text>\n          )}\n        </Card>\n\n        <Box ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} padding=\"var(--ggui-spacing-4)\">\n          <Stack gap=\"var(--ggui-spacing-4)\">\n            {groupedMessages.map((group, i) => (\n              <Stack key={i} align={group.sender === props.currentUser ? 'end' : 'start'} gap=\"var(--ggui-spacing-1)\">\n                {group.messages.map((msg, j) => (\n                  <MessageBubble key={j} {...msg} isOwn={msg.sender === props.currentUser} />\n                ))}\n              </Stack>\n            ))}\n          </Stack>\n        </Box>\n\n        <Card padding=\"var(--ggui-spacing-3)\">\n          <Row gap=\"var(--ggui-spacing-2)\" align=\"end\">\n            <Box style={{ flex: 1 }}>\n              <Input\n                label=\"Message\"\n                value={inputValue}\n                onChange={setInputValue}\n                placeholder=\"Type a message...\"\n                onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleSend()}\n              />\n            </Box>\n            <Button \n              variant=\"primary\" \n              as={Clickable}\n              onClick={handleSend}\n              disabled={!inputValue.trim()}\n            >\n              Send\n            </Button>\n          </Row>\n\n        </Card>\n      </Stack>\n    </Container>\n  );\n\n}\n",
+        "tokens": {
+          "input": 123024,
+          "output": 3551,
+          "total": 126575
+        },
+        "generationTimeMs": 68799,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Input component on line 143 is missing a 'label' or 'aria-label' prop to describe its purpose for screen readers.",
+              "fix": "Input component on line 143 is missing a 'label' or 'aria-label' prop to describe its purpose for screen readers."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The chat message list container (line 128) lacks a background color or border to visually distinguish it as a scrollable area, causing content to bleed into the background.",
+              "fix": "The chat message list container (line 128) lacks a background color or border to visually distinguish it as a scrollable area, causing content to bleed into the background."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The MessageBubble component (line 41) is nested inside a Stack (line 131), causing redundant stacking and potential alignment issues; grouping logic and individual message display are competing for layout control.",
+              "fix": "The MessageBubble component (line 41) is nested inside a Stack (line 131), causing redundant stacking and potential alignment issues; grouping logic and individual message display are competing for layout control."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The input field container (Card at line 140) and header (Card at line 116) have inconsistent padding (spacing-3 vs spacing-4) relative to the overall chat composition.",
+              "fix": "The input field container (Card at line 140) and header (Card at line 116) have inconsistent padding (spacing-3 vs spacing-4) relative to the overall chat composition."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The typing indicator (line 121) is inside the Header card but creates a layout jump when it appears/disappears, it should likely be placed outside or handled with a fixed-height container to prevent layout shift.",
+              "fix": "The typing indicator (line 121) is inside the Header card but creates a layout jump when it appears/disappears, it should likely be placed outside or handled with a fixed-height container to prevent layout shift."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state when the messages list is empty — should show a message indicating there are no messages yet instead of a blank space.",
+              "fix": "No empty state when the messages list is empty — should show a message indicating there are no messages yet instead of a blank space."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 49: hardcoded color 'white' should use a design system variable (e.g., var(--ggui-color-onPrimary))",
+              "fix": "Line 49: hardcoded color 'white' should use a design system variable (e.g., var(--ggui-color-onPrimary))"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 115: style={{ height: '90vh' }} bypasses design system tokens for sizing/spacing",
+              "fix": "Line 115: style={{ height: '90vh' }} bypasses design system tokens for sizing/spacing"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 128: style={{ flex: 1, overflowY: 'auto' }} bypasses layout system styling patterns",
+              "fix": "Line 128: style={{ flex: 1, overflowY: 'auto' }} bypasses layout system styling patterns"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 142: style={{ flex: 1 }} bypasses layout system styling patterns",
+              "fix": "Line 142: style={{ flex: 1 }} bypasses layout system styling patterns"
+            }
+          ],
+          "pass": ["functionality", "crash", "interactivity", "layout"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 68648,
+          "evalMs": 0,
+          "totalMs": 68799
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 81.6,
+        "finalScore": 81.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 78,
+          "designTokens": 85,
+          "hierarchy": 82,
+          "polish": 75,
+          "dataPresentation": 88,
+          "completeness": 88,
+          "visualPolish": 80,
+          "interactivity": 75,
+          "accessibility": 80,
+          "codeQuality": 85
+        },
+        "critique": "The component has solid structure and good use of design tokens, but has a few issues: the scrollRef Box uses inline style for flex/overflow instead of proper layout props, and the 90vh hard-coded height is a pixel value instead of a token. The typing indicator and message grouping logic are well-implemented, but interactive polish could be enhanced with loading states and input feedback.",
+        "evalTimeMs": 2775
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Input component on line 143 is missing a 'label' or 'aria-label' prop to describe its purpose for screen readers.",
+            "fix": "Input component on line 143 is missing a 'label' or 'aria-label' prop to describe its purpose for screen readers."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The chat message list container (line 128) lacks a background color or border to visually distinguish it as a scrollable area, causing content to bleed into the background.",
+            "fix": "The chat message list container (line 128) lacks a background color or border to visually distinguish it as a scrollable area, causing content to bleed into the background."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The MessageBubble component (line 41) is nested inside a Stack (line 131), causing redundant stacking and potential alignment issues; grouping logic and individual message display are competing for layout control.",
+            "fix": "The MessageBubble component (line 41) is nested inside a Stack (line 131), causing redundant stacking and potential alignment issues; grouping logic and individual message display are competing for layout control."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The input field container (Card at line 140) and header (Card at line 116) have inconsistent padding (spacing-3 vs spacing-4) relative to the overall chat composition.",
+            "fix": "The input field container (Card at line 140) and header (Card at line 116) have inconsistent padding (spacing-3 vs spacing-4) relative to the overall chat composition."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The typing indicator (line 121) is inside the Header card but creates a layout jump when it appears/disappears, it should likely be placed outside or handled with a fixed-height container to prevent layout shift.",
+            "fix": "The typing indicator (line 121) is inside the Header card but creates a layout jump when it appears/disappears, it should likely be placed outside or handled with a fixed-height container to prevent layout shift."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state when the messages list is empty — should show a message indicating there are no messages yet instead of a blank space.",
+            "fix": "No empty state when the messages list is empty — should show a message indicating there are no messages yet instead of a blank space."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 49: hardcoded color 'white' should use a design system variable (e.g., var(--ggui-color-onPrimary))",
+            "fix": "Line 49: hardcoded color 'white' should use a design system variable (e.g., var(--ggui-color-onPrimary))"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 115: style={{ height: '90vh' }} bypasses design system tokens for sizing/spacing",
+            "fix": "Line 115: style={{ height: '90vh' }} bypasses design system tokens for sizing/spacing"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 128: style={{ flex: 1, overflowY: 'auto' }} bypasses layout system styling patterns",
+            "fix": "Line 128: style={{ flex: 1, overflowY: 'auto' }} bypasses layout system styling patterns"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 142: style={{ flex: 1 }} bypasses layout system styling patterns",
+            "fix": "Line 142: style={{ flex: 1 }} bypasses layout system styling patterns"
+          }
+        ],
+        "pass": ["functionality", "crash", "interactivity", "layout"]
+      },
+      "estimatedCostUsd": 0.07216499999999999,
+      "timestamp": "2026-03-24T05:49:52.765Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2915,
+        "sourceCodeBytes": 7377,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a stock ticker dashboard that displays stock prices with live updates. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp (updates in real-time)\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n- Brief flash/highlight animation when a stock price updates\n\nInitial stock data comes from props. Live price updates arrive via stream events — merge them into the displayed data. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time stock price updates from the agent",
+            "events": {
+              "priceUpdate": {
+                "description": "Updated price data for one or more stocks",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "change": {
+                      "type": "number"
+                    },
+                    "changePercent": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "example": {
+                  "symbol": "AAPL",
+                  "price": 179.1,
+                  "change": 2.92,
+                  "changePercent": 1.66
+                }
+              },
+              "marketStatus": {
+                "description": "Market open/closed status update",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "closed", "pre-market", "after-hours"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "open",
+                  "timestamp": "2026-03-15T16:30:00Z"
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "getStockDetail": {
+                "label": "Stock Detail",
+                "description": "Get detailed info for a specific stock (52-week range, volume, etc.)",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "high52w": {
+                      "type": "number"
+                    },
+                    "low52w": {
+                      "type": "number"
+                    },
+                    "volume": {
+                      "type": "number"
+                    },
+                    "marketCap": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "symbol": "AAPL"
+                  },
+                  "response": {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "high52w": 199.62,
+                    "low52w": 140.81,
+                    "volume": 54123000,
+                    "marketCap": "2.89T"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var k=Object.defineProperty;var l=(e,o)=>k(e,\"name\",{value:o,configurable:!0});import{jsx as a,jsxs as r}from\"react/jsx-runtime\";import{useState as d,useMemo as h,useEffect as C}from\"react\";import{Container as x,Card as T,Stack as m,Row as g,Box as P,Text as s,Heading as p,Icon as w}from\"@ggui-ai/design/primitives\";import{useStream as u}from\"@ggui-ai/wire\";import{MotionKeyframes as U,useAnimationKey as F}from\"@ggui-ai/design/primitives\";import{animation as R}from\"@ggui-ai/design/tokens\";const H=l(({stock:e})=>{const o=F(e.price),i=(e.change??0)>=0,n=i?\"var(--ggui-color-success-600)\":\"var(--ggui-color-error-600)\";return a(T,{padding:\"var(--ggui-spacing-4)\",style:{animation:R.flash,\"--ggui-flash-color\":i?\"var(--ggui-color-success-100)\":\"var(--ggui-color-error-100)\",border:`1px solid ${n}`},children:r(m,{gap:\"var(--ggui-spacing-2)\",children:[r(g,{justify:\"between\",align:\"center\",children:[a(p,{level:3,children:e.symbol}),a(s,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:e.name})]}),r(p,{level:2,children:[\"$\",e.price?.toFixed(2)]}),r(g,{gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[r(s,{style:{color:n},weight:\"semibold\",children:[i?\"+\":\"\",e.change?.toFixed(2),\" (\",i?\"+\":\"\",e.changePercent?.toFixed(2),\"%)\"]}),a(w,{name:i?\"arrow-up\":\"arrow-down\",color:n,size:16})]})]})},o)},\"StockCard\");function M(e){const o=u(\"priceUpdate\"),i=u(\"marketStatus\"),[n,b]=d(e.stocks??[]),[f,S]=d(new Date);C(()=>{const t=o.latest;t&&t.symbol&&(b(y=>y.map(c=>c.symbol===t.symbol?{...c,...t}:c)),S(new Date))},[o.latest]);const v=h(()=>n.filter(t=>t.symbol),[n]);return r(x,{maxWidth:\"3xl\",padding:\"var(--ggui-spacing-6)\",children:[a(U,{}),r(m,{gap:\"var(--ggui-spacing-6)\",children:[r(g,{justify:\"between\",align:\"center\",children:[a(p,{level:1,children:\"Market Watch\"}),r(m,{align:\"end\",children:[a(s,{variant:\"label\",children:\"Last Updated\"}),a(s,{variant:\"bodySmall\",children:f.toLocaleTimeString()})]})]}),a(P,{children:a(\"div\",{style:{display:\"grid\",gridTemplateColumns:\"repeat(auto-fill, minmax(300px, 1fr))\",gap:\"var(--ggui-spacing-4)\"},children:v.map(t=>a(H,{stock:t},t.symbol))})})]})]})}l(M,\"Component\");export{M as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  stocks: Array<{ symbol?: string; name?: string; price?: number; change?: number; changePercent?: number }>; // Array of stocks with symbol, name, price, change, changePercent\n}\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: Updated price data for one or more stocks */\ntype StreamPriceUpdate = { symbol?: string; price?: number; change?: number; changePercent?: number };\n\n/** Stream event: Market open/closed status update */\ntype StreamMarketStatus = { status?: 'open' | 'closed' | 'pre-market' | 'after-hours'; timestamp?: string };\n\n\n\n\nimport { MotionKeyframes, useAnimationKey } from '@ggui-ai/design/primitives';\nimport { animation } from '@ggui-ai/design/tokens';\nimport { Clickable } from '@ggui-ai/design/interact';\n\nconst StockCard = ({ stock }: { stock: NonNullable<Props['stocks']>[0] }) => {\n  const flashKey = useAnimationKey(stock.price);\n  const isPositive = (stock.change ?? 0) >= 0;\n  const color = isPositive ? 'var(--ggui-color-success-600)' : 'var(--ggui-color-error-600)';\n\n  return (\n    <Card \n      key={flashKey} \n      padding=\"var(--ggui-spacing-4)\" \n      style={{\n        animation: animation.flash,\n        '--ggui-flash-color': isPositive ? 'var(--ggui-color-success-100)' : 'var(--ggui-color-error-100)',\n        border: `1px solid ${color}`\n      } as React.CSSProperties}\n    >\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        <Row justify=\"between\" align=\"center\">\n          <Heading level={3}>{stock.symbol}</Heading>\n          <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{stock.name}</Text>\n        </Row>\n        <Heading level={2}>${stock.price?.toFixed(2)}</Heading>\n        <Row gap=\"var(--ggui-spacing-2)\" align=\"center\">\n          <Text style={{ color }} weight=\"semibold\">\n            {isPositive ? '+' : ''}{stock.change?.toFixed(2)} ({isPositive ? '+' : ''}{stock.changePercent?.toFixed(2)}%)\n          </Text>\n          <Icon name={isPositive ? 'arrow-up' : 'arrow-down'} color={color} size={16} />\n        </Row>\n      </Stack>\n    </Card>\n  );\n};\n\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  \n  // Streams — real-time from agent (.latest, .all)\n  const priceUpdate = useStream<StreamPriceUpdate>('priceUpdate'); // Updated price data for one or more stocks\n  const marketStatus = useStream<StreamMarketStatus>('marketStatus'); // Market open/closed status update\n  const [stocks, setStocks] = useState(props.stocks ?? []);\n  const [lastUpdated, setLastUpdated] = useState(new Date());\n\n  useEffect(() => {\n    const update = priceUpdate.latest;\n    if (update && update.symbol) {\n      setStocks((prev) => prev.map(s => s.symbol === update.symbol ? { ...s, ...update } : s));\n      setLastUpdated(new Date());\n    }\n  }, [priceUpdate.latest]);\n\n  const sortedStocks = useMemo(() => stocks.filter(s => s.symbol), [stocks]);\n\n  return (\n    <Container maxWidth=\"3xl\" padding=\"var(--ggui-spacing-6)\">\n      <MotionKeyframes />\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        <Row justify=\"between\" align=\"center\">\n          <Heading level={1}>Market Watch</Heading>\n          <Stack align=\"end\">\n            <Text variant=\"label\">Last Updated</Text>\n            <Text variant=\"bodySmall\">{lastUpdated.toLocaleTimeString()}</Text>\n          </Stack>\n        </Row>\n\n        <Box>\n          <div style={{ \n            display: 'grid', \n            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', \n            gap: 'var(--ggui-spacing-4)' \n          }}>\n            {sortedStocks.map((stock) => (\n              <StockCard key={stock.symbol} stock={stock} />\n            ))}\n          </div>\n        </Box>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 81322,
+          "output": 2310,
+          "total": 83632
+        },
+        "generationTimeMs": 53039,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "Stock cards are not interactive — add hover states or make them clickable to allow users to view detailed stock information",
+              "fix": "Stock cards are not interactive — add hover states or make them clickable to allow users to view detailed stock information"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "Dashboard lacks any controls for managing the list, such as a refresh button or a way to filter/search for specific stocks",
+              "fix": "Dashboard lacks any controls for managing the list, such as a refresh button or a way to filter/search for specific stocks"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The arrow icons in the stock cards (line 63) are visual decorations that provide semantic meaning (positive/negative change) but are not explicitly hidden from screen readers (missing aria-hidden=\"true\").",
+              "fix": "The arrow icons in the stock cards (line 63) are visual decorations that provide semantic meaning (positive/negative change) but are not explicitly hidden from screen readers (missing aria-hidden=\"true\")."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The stock price change text (lines 60-62) combines multiple pieces of information into a single text node, which may be confusing for screen readers; consider using aria-label to provide a more descriptive summary like \"Price increase of 2.34, 1.33 percent\".",
+              "fix": "The stock price change text (lines 60-62) combines multiple pieces of information into a single text node, which may be confusing for screen readers; consider using aria-label to provide a more descriptive summary like \"Price increase of 2.34, 1.33 percent\"."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The CardGrid component is available in @ggui-ai/design/compositions but was not used, leading to custom CSS grid implementation which might bypass design system responsive grid standards.",
+              "fix": "The CardGrid component is available in @ggui-ai/design/compositions but was not used, leading to custom CSS grid implementation which might bypass design system responsive grid standards."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The use of 'div' with inline styles for the grid at lines 103-107 breaks the design system pattern of using available layout primitives or compositions.",
+              "fix": "The use of 'div' with inline styles for the grid at lines 103-107 breaks the design system pattern of using available layout primitives or compositions."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state shown when the stocks array is empty — please add a friendly message indicating no stocks are available.",
+              "fix": "No empty state shown when the stocks array is empty — please add a friendly message indicating no stocks are available."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 63: Icon size 16 should use a design system size token (e.g., var(--ggui-size-*)) instead of a raw number.",
+              "fix": "Line 63: Icon size 16 should use a design system size token (e.g., var(--ggui-size-*)) instead of a raw number."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 103: The responsive grid layout is using a raw CSS div with hardcoded pixels (300px) instead of using the provided CardGrid component or layout primitives that respect design system spacing/grid tokens.",
+              "fix": "Line 103: The responsive grid layout is using a raw CSS div with hardcoded pixels (300px) instead of using the provided CardGrid component or layout primitives that respect design system spacing/grid tokens."
+            }
+          ],
+          "pass": ["functionality", "crash", "accessibility", "layout"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 52883,
+          "evalMs": 0,
+          "totalMs": 53039
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 84,
+        "finalScore": 84,
+        "issues": [],
+        "dimensions": {
+          "layout": 85,
+          "designTokens": 75,
+          "hierarchy": 82,
+          "polish": 88,
+          "dataPresentation": 90,
+          "completeness": 90,
+          "visualPolish": 84,
+          "interactivity": 88,
+          "accessibility": 84,
+          "codeQuality": 75
+        },
+        "critique": "The component has a solid responsive grid layout with good use of design tokens for spacing and colors. However, it mixes semantic color tokens (success/error) well but uses inline `style` objects instead of consistent token application, and the grid uses a raw `minmax(300px, 1fr)` with hardcoded pixel values instead of token-based sizing. Polish is strong with animations and state management, but could benefit from loading states during stream updates.",
+        "evalTimeMs": 2896
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "Stock cards are not interactive — add hover states or make them clickable to allow users to view detailed stock information",
+            "fix": "Stock cards are not interactive — add hover states or make them clickable to allow users to view detailed stock information"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "Dashboard lacks any controls for managing the list, such as a refresh button or a way to filter/search for specific stocks",
+            "fix": "Dashboard lacks any controls for managing the list, such as a refresh button or a way to filter/search for specific stocks"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The arrow icons in the stock cards (line 63) are visual decorations that provide semantic meaning (positive/negative change) but are not explicitly hidden from screen readers (missing aria-hidden=\"true\").",
+            "fix": "The arrow icons in the stock cards (line 63) are visual decorations that provide semantic meaning (positive/negative change) but are not explicitly hidden from screen readers (missing aria-hidden=\"true\")."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The stock price change text (lines 60-62) combines multiple pieces of information into a single text node, which may be confusing for screen readers; consider using aria-label to provide a more descriptive summary like \"Price increase of 2.34, 1.33 percent\".",
+            "fix": "The stock price change text (lines 60-62) combines multiple pieces of information into a single text node, which may be confusing for screen readers; consider using aria-label to provide a more descriptive summary like \"Price increase of 2.34, 1.33 percent\"."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The CardGrid component is available in @ggui-ai/design/compositions but was not used, leading to custom CSS grid implementation which might bypass design system responsive grid standards.",
+            "fix": "The CardGrid component is available in @ggui-ai/design/compositions but was not used, leading to custom CSS grid implementation which might bypass design system responsive grid standards."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The use of 'div' with inline styles for the grid at lines 103-107 breaks the design system pattern of using available layout primitives or compositions.",
+            "fix": "The use of 'div' with inline styles for the grid at lines 103-107 breaks the design system pattern of using available layout primitives or compositions."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state shown when the stocks array is empty — please add a friendly message indicating no stocks are available.",
+            "fix": "No empty state shown when the stocks array is empty — please add a friendly message indicating no stocks are available."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 63: Icon size 16 should use a design system size token (e.g., var(--ggui-size-*)) instead of a raw number.",
+            "fix": "Line 63: Icon size 16 should use a design system size token (e.g., var(--ggui-size-*)) instead of a raw number."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 103: The responsive grid layout is using a raw CSS div with hardcoded pixels (300px) instead of using the provided CardGrid component or layout primitives that respect design system spacing/grid tokens.",
+            "fix": "Line 103: The responsive grid layout is using a raw CSS div with hardcoded pixels (300px) instead of using the provided CardGrid component or layout primitives that respect design system spacing/grid tokens."
+          }
+        ],
+        "pass": ["functionality", "crash", "accessibility", "layout"]
+      },
+      "estimatedCostUsd": 0.047591,
+      "timestamp": "2026-03-24T05:49:37.125Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2160,
+        "sourceCodeBytes": 5479,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-default-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 75.75,
+      "avgTimeMs": 62940.25,
+      "avgCostUsd": 0.06652274999999999,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 78.25,
+        "visualPolish": 77.75,
+        "interactivity": 68.25,
+        "accessibility": 77.75,
+        "codeQuality": 77.5
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 3,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 69,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 68.4,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "chat-interface",
+      "commitName": "Chat Interface",
+      "complexity": "medium",
+      "avgScore": 81.6,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 84,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 75.75,
+        "avgTimeMs": 62940.25,
+        "avgCostUsd": 0.06652274999999999,
+        "successRate": 1
+      }
+    }
+  }
+}

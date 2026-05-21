@@ -1,0 +1,63 @@
+{
+  "name": "@ggui-ai/blueprint-probe",
+  "version": "0.1.0-rc.1",
+  "description": "Dev/CI runtime probe for ggui blueprint manifests. Implements BlueprintProbeRunner from @ggui-ai/registry-core using Node's vm module + React's renderToString. Catches blueprints that throw on initial render (hook misuse, destructuring errors, missing props) in CI instead of at iframe-load time.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "blueprint",
+    "registry",
+    "conformance",
+    "ci",
+    "react"
+  ],
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/blueprint-probe",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/blueprint-probe"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ggui-ai/artifact-manifest": "workspace:*",
+    "@ggui-ai/registry-core": "workspace:*",
+    "esbuild": "^0.25.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

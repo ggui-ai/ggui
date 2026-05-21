@@ -1,0 +1,116 @@
+name: CLI Binary Release
+
+# SECONDARY release path — cross-platform prebuilt binaries for the `ggui`
+# CLI, attached to a GitHub Release. The PRIMARY install path is npm
+# (`npx @ggui-ai/cli` / `npm install @ggui-ai/cli`), handled by `release.yml`.
+#
+# This workflow builds a bun-compiled bin out of `ggui-cli/src/cli.ts`
+# so users on systems without a Node runtime can still run `ggui serve`
+# from a single binary. Do NOT publish to npm from here — that is
+# `release.yml`'s job, and overlap leads to version drift.
+#
+# Trigger model: a tag of shape `ggui-cli-vX.Y.Z` — narrower than the
+# generic `v*` tag the old workflow accepted, so a normal release tag
+# doesn't trigger an unwanted binary build. Manual `workflow_dispatch`
+# with an explicit `version` input is also supported for one-offs.
+#
+# Lives under `oss/.github/workflows/` in the monorepo, projected
+# to `.github/workflows/cli-release.yml` in `github.com/ggui-ai/ggui`
+# after the subtree split strips the `oss/` prefix.
+
+on:
+  push:
+    tags:
+      - "ggui-cli-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "CLI version to release (e.g. 0.1.0). Must match packages/ggui-cli/package.json exactly."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Resolve tag version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+            TAG="ggui-cli-v${VER}"
+          else
+            TAG="${GITHUB_REF_NAME}"           # e.g. ggui-cli-v0.1.0
+            VER="${TAG#ggui-cli-v}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches packages/ggui-cli/package.json
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          PKG_VERSION=$(node -pe "require('./packages/ggui-cli/package.json').version")
+          echo "Tag: $TAG_VERSION | packages/ggui-cli/package.json: $PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Version mismatch — tag $TAG_VERSION but packages/ggui-cli/package.json is $PKG_VERSION."
+            echo "::error::This workflow does NOT mutate package.json. Bump the version in a separate PR (flow it through the subtree), then re-tag."
+            exit 1
+          fi
+
+      # The CLI's bun-compiled entry needs the workspace built first so
+      # imports like `@ggui-ai/dev-stack` resolve to local dist/.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+
+      - name: Build cross-platform binaries
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          for target in bun-linux-x64 bun-linux-arm64 bun-darwin-x64 bun-darwin-arm64; do
+            name="ggui-$(echo "$target" | sed 's/bun-//')"
+            echo "::group::Building $name"
+            bun build packages/ggui-cli/src/cli.ts \
+              --compile \
+              --outfile "dist/$name" \
+              --target="$target" \
+              --define "__CLI_VERSION__='${VER}'"
+            echo "::endgroup::"
+          done
+          ls -lh dist/
+
+      - name: Smoke — linux-x64 binary runs
+        run: |
+          set -euo pipefail
+          chmod +x dist/ggui-linux-x64
+          dist/ggui-linux-x64 --version
+          dist/ggui-linux-x64 --help >/dev/null
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release create "$TAG" \
+            --title "ggui CLI v${{ steps.version.outputs.version }}" \
+            --notes "Prebuilt binaries for \`ggui\` CLI. The primary install path is npm — \`npx @ggui-ai/cli\` or \`npm install @ggui-ai/cli\`. These binaries are for systems without a Node runtime." \
+            dist/ggui-*

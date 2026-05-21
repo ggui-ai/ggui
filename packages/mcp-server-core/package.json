@@ -1,0 +1,82 @@
+{
+  "name": "@ggui-ai/mcp-server-core",
+  "version": "0.1.0-rc.1",
+  "description": "Core interfaces and reference storage adapters for the ggui MCP server — UiGenerator, SessionStore, BlueprintProvider, AuthAdapter, plus in-memory and SQLite implementations. The pluggable seam layer @ggui-ai/mcp-server is built on.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-server",
+    "generative-ui",
+    "interfaces",
+    "storage-adapter"
+  ],
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./in-memory": {
+      "types": "./dist/in-memory/index.d.ts",
+      "import": "./dist/in-memory/index.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite/index.d.ts",
+      "import": "./dist/sqlite/index.js"
+    },
+    "./plaintext": {
+      "types": "./dist/plaintext/index.d.ts",
+      "import": "./dist/plaintext/index.js"
+    },
+    "./contract-tests": {
+      "types": "./dist/contract-tests/index.d.ts",
+      "import": "./dist/contract-tests/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/protocol": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "better-sqlite3": ">=11.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@ggui-ai/gadgets": "workspace:*",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "better-sqlite3": "^12.9.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/mcp-server-core"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/mcp-server-core",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "wire-prose-accept",
+  "description": "A gadget export entry MAY carry the two optional intent-specific prose fields `description` and `usage`. When present the agent's prose wins over the registered export's text; when omitted, push-time resolution inherits the registered text verbatim. Both are the ONLY wire-authored payload on an export entry.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": {
+        "useLeafletMap": {
+          "description": "Interactive map of the delivery route.",
+          "usage": "Render once the courier location stream is live."
+        }
+      }
+    }
+  },
+  "expect": "accept"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@ggui-samples/gadget-chart",
+  "version": "0.0.1",
+  "description": "Reference ggui gadget package demonstrating a MIXED package — a `Chart` component gadget plus a `useChartTheme` companion hook behind one npm identity, built with the `defineGadgetPackage` SDK. Pure-SVG bar chart, no 3rd-party charting dependency. Not published — sample only.",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@ggui-ai/gadgets": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "react": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

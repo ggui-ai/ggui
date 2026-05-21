@@ -1,0 +1,31 @@
+{
+  "name": "@ggui-samples/agent-claude-sdk",
+  "version": "0.0.1",
+  "description": "Reference sample: a Claude Agent SDK app that hosts the ggui MCP server, with a React chat UI built on @ggui-ai/react's <McpAppIframe>. Boots an HTTP server (port 6790) that serves the chat shell + an SSE-streamed /chat endpoint. Real LLM via ANTHROPIC_API_KEY. Used both as developer reference and as a fixture for the Playwright matrix e2e under e2e/tests/agent-loop/. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "pnpm run build:ui && tsx src/index.ts",
+    "dev": "pnpm run build:ui && tsx watch src/index.ts",
+    "build:ui": "vite build",
+    "build": "pnpm run build:ui && tsc -b",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@ggui-ai/react": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "dotenv": "^16.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.2"
+  }
+}

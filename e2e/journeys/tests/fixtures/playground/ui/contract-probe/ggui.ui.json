@@ -1,0 +1,45 @@
+{
+  "id": "contract-probe",
+  "name": "Contract probe",
+  "description": "Slice 11.5 C7 pathological coverage. Declares four actions exercising every canonical contract-error code: tool_threw, schema_violation, tool_not_found, tool_timeout. Subscribes to `_ggui:contract-error` and paints each envelope as DOM so the Lane-1 Playwright spec can assert the canonical contract-error emission without peeking at activity internals.",
+  "category": "diagnostic",
+  "contract": {
+    "intent": "Exercise every canonical contract-error code emitted by the wiredActionRouter — tool_threw via a broken action, schema_violation via a malformed refresh, tool_not_found via an unregistered tool name, tool_timeout via a hanging tool.",
+    "props": {},
+    "actionSpec": {
+      "triggerBroken": {
+        "label": "Trigger broken tool",
+        "description": "Wires to `tasks_broken` — always throws. Expected envelope code: TOOL_THREW.",
+        "nextStep": "tasks_broken"
+      },
+      "triggerMalformedRefresh": {
+        "label": "Trigger malformed refresh",
+        "description": "Wires to `tasks_list` (valid). The `tasks` channel refresh is `tasks_malformed_list` (returns wrong shape). Expected envelope code: SCHEMA_VIOLATION on the refresh side.",
+        "nextStep": "tasks_list"
+      },
+      "triggerNotFound": {
+        "label": "Trigger tool-not-found",
+        "description": "Wires to `doesNotExist` — deliberately NOT registered on the tasks mount. The router's `has()` check fails and emits TOOL_NOT_FOUND before any invocation. Tool name matches the conformance fixture `wired-action-tool-not-found.json`'s `expectedBehavior.toolName`.",
+        "nextStep": "doesNotExist"
+      },
+      "triggerTimeout": {
+        "label": "Trigger tool-timeout",
+        "description": "Wires to `hanging_tool` — sleeps past the wiredActionRouter timeout. The router races invoke against the configured timeout and emits TOOL_TIMEOUT when the timer wins. Tool name matches the conformance fixture `wired-action-tool-timeout.json`'s `expectedBehavior.toolName`.",
+        "nextStep": "hanging_tool"
+      }
+    },
+    "streamSpec": {
+      "tasks": {
+        "description": "Refreshes from `tasks_malformed_list` on every wired action. The declared schema rejects the `{wrong:'shape'}` shape that tool returns, so the refresh emits a contract-error envelope rather than mutating this channel.",
+        "schema": {
+          "type": "object",
+          "required": ["items"],
+          "properties": { "items": { "type": "array" } }
+        },
+        "mode": "replace",
+        "replay": "latest",
+        "tool": "tasks_malformed_list"
+      }
+    }
+  }
+}

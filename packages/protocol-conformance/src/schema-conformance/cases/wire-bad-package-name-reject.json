@@ -1,0 +1,11 @@
+{
+  "name": "wire-bad-package-name-reject",
+  "description": "A `gadgets` map keyed by `Leaflet` — not a valid npm package name (uppercase first character). Package keys MUST match `NPM_PACKAGE_NAME_RE` (lowercase alphanumerics + `.`/`_`/`-`, an optional single `@scope/` prefix, no leading non-alphanumeric, no URL). A descriptor is looked up by npm package name, so a malformed key cannot resolve and MUST be rejected.",
+  "clientCapabilities": {
+    "gadgets": {
+      "Leaflet": { "useLeafletMap": {} }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "package key must match NPM_PACKAGE_NAME_RE; `Leaflet` is uppercase."
+}

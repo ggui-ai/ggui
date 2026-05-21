@@ -1,0 +1,577 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T16:34:41.616Z",
+    "totalDurationMs": 60481,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var j=Object.defineProperty;var v=(r,l)=>j(r,\"name\",{value:l,configurable:!0});import{jsx as i,jsxs as s}from\"react/jsx-runtime\";import{useState as d,useCallback as z,useMemo as $,useEffect as D}from\"react\";import{Container as q,Card as A,Stack as o,Row as J,Box as K,Divider as E,Text as B,Heading as I,Button as c,Input as H,Select as O,Badge as W,Avatar as Q,Progress as X}from\"@ggui-ai/design/primitives\";import{Dropdown as Y}from\"@ggui-ai/design/components\";import{Clickable as Z}from\"@ggui-ai/design/interact\";import{useAction as _,useStream as aa}from\"@ggui-ai/wire\";function ia(r){switch(r){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}}v(ia,\"getPriorityVariant\");function ta(r){if(!r)return\"\";try{return new Date(r).toLocaleDateString(\"en-US\",{month:\"short\",day:\"numeric\"})}catch{return r}}v(ta,\"formatDueDate\");function ea(r){const l=_(\"taskUpdate\"),k=aa(\"taskChanged\"),[g,u]=d(r.tasks||[]),[m,f]=d(null),[h,T]=d(\"\"),[y,C]=d(\"medium\"),[R,b]=d(null),[x,S]=d(\"\");D(()=>{u(r.tasks||[])},[r.tasks]),D(()=>{if(k.latest){const{action:t,task:e}=k.latest;if(!e?.id)return;u(n=>t===\"delete\"?n.filter(a=>a.id!==e.id):t===\"create\"?[...n,e]:n.map(a=>a.id===e.id?{...a,...e}:a))}},[k.latest]);const M=$(()=>{const t={};return(r.columns||[]).forEach(e=>{t[e.id||\"\"]=[]}),g.forEach(e=>{const n=e.column||\"todo\";t[n]||(t[n]=[]),t[n].push(e)}),t},[g,r.columns]),w=g.length,P=g.filter(t=>t.column===\"done\").length,F=z(()=>{if(!h.trim()||!m)return;const t=`task-${Date.now()}`,e={id:t,title:h,priority:y,column:m};u(n=>[...n,e]),l({action:\"create\",taskId:t,data:{column:m}}),T(\"\"),C(\"medium\"),f(null)},[h,y,m,l]),V=z((t,e)=>{u(n=>n.map(a=>a.id===t?{...a,column:e}:a)),l({action:\"move\",taskId:t,data:{column:e}})},[l]),L=z((t,e)=>{u(n=>n.map(a=>a.id===t?{...a,title:e}:a)),l({action:\"edit\",taskId:t,data:{column:g.find(n=>n.id===t)?.column||\"todo\"}}),b(null),S(\"\")},[g,l]);return i(q,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:s(o,{gap:\"var(--ggui-spacing-6)\",children:[i(A,{shadow:\"md\",padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-primary-50)\",children:s(o,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:[s(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-4)\",align:\"center\",children:[i(I,{level:3,color:\"var(--ggui-color-primary-900)\",children:\"Task Board\"}),i(E,{orientation:\"vertical\",margin:\"var(--ggui-spacing-2)\"}),s(B,{variant:\"body\",color:\"var(--ggui-color-primary-700)\",children:[i(\"strong\",{children:P}),\" of \",i(\"strong\",{children:w}),\" completed\"]})]}),i(X,{value:w>0?P/w*100:0,max:100,variant:\"success\",size:\"md\",showLabel:!1})]})}),i(J,{gap:\"var(--ggui-spacing-4)\",align:\"start\",wrap:!0,children:(r.columns||[]).map(t=>{const e=M[t.id||\"\"]||[],n=m===t.id;return i(K,{padding:\"var(--ggui-spacing-4)\",background:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"var(--ggui-shape-radius-lg)\",style:{minWidth:\"300px\",flex:\"0 1 auto\"},children:s(o,{gap:\"var(--ggui-spacing-3)\",children:[i(o,{direction:\"horizontal\",justify:\"between\",align:\"center\",children:s(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[i(I,{level:4,color:\"var(--ggui-color-onSurface)\",children:t.name}),i(W,{variant:\"secondary\",size:\"sm\",children:e.length})]})}),i(E,{orientation:\"horizontal\",margin:\"var(--ggui-spacing-2)\",color:\"var(--ggui-color-outlineVariant)\"}),i(o,{gap:\"var(--ggui-spacing-2)\",style:{minHeight:\"200px\"},children:e.map(a=>{const N=R===a.id,G=ia(a.priority),U=ta(a.dueDate);return i(A,{shadow:\"sm\",padding:\"var(--ggui-spacing-3)\",border:!0,radius:\"md\",background:\"var(--ggui-color-surface)\",children:s(o,{gap:\"var(--ggui-spacing-2)\",children:[N?s(o,{gap:\"var(--ggui-spacing-2)\",direction:\"horizontal\",align:\"center\",children:[i(H,{label:\"Edit task title\",value:x,onChange:S,placeholder:\"Task title\",size:\"sm\",style:{flex:1}}),i(c,{variant:\"primary\",size:\"sm\",onClick:()=>L(a.id||\"\",x),children:\"Save\"}),i(c,{variant:\"ghost\",size:\"sm\",onClick:()=>b(null),children:\"Cancel\"})]}):i(B,{variant:\"body\",color:\"var(--ggui-color-onSurface)\",as:Z,onClick:()=>{b(a.id||null),S(a.title||\"\")},style:{cursor:\"pointer\",fontWeight:500},children:a.title||\"Untitled Task\"}),a.priority&&i(W,{variant:G,size:\"sm\",pill:!0,children:a.priority.charAt(0).toUpperCase()+a.priority.slice(1)}),s(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[a.assignee&&i(Q,{name:a.assignee,size:\"sm\"}),U&&s(B,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[\"\\u{1F4C5} \",U]})]}),i(Y,{trigger:i(c,{variant:\"outline\",size:\"sm\",fullWidth:!0,children:\"Move to...\"}),options:(r.columns||[]).map(p=>({value:p.id||\"\",label:p.name||\"Unknown\",disabled:p.id===t.id})),value:t.id||\"\",onChange:p=>V(a.id||\"\",p),placement:\"bottom-start\"})]})},a.id)})}),n?i(A,{shadow:\"sm\",padding:\"var(--ggui-spacing-3)\",border:!0,radius:\"md\",background:\"var(--ggui-color-primary-50)\",children:s(o,{gap:\"var(--ggui-spacing-2)\",children:[i(H,{label:\"Task title\",value:h,onChange:T,placeholder:\"Enter task title\",size:\"sm\"}),i(O,{label:\"Priority\",value:y,onChange:a=>C(a),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}],size:\"sm\"}),s(o,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2)\",children:[i(c,{variant:\"primary\",size:\"sm\",fullWidth:!0,onClick:F,children:\"Add Task\"}),i(c,{variant:\"ghost\",size:\"sm\",fullWidth:!0,onClick:()=>{f(null),T(\"\"),C(\"medium\")},children:\"Cancel\"})]})]})}):i(c,{variant:\"secondary\",size:\"sm\",fullWidth:!0,onClick:()=>f(t.id||\"\"),children:\"+ Add Task\"})]})},t.id)})})]})})}v(ea,\"Component\");export{ea as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\n// Helper: Get priority badge variant and color\nfunction getPriorityVariant(priority?: string): 'default' | 'success' | 'warning' | 'error' {\n  switch (priority) {\n    case 'high': return 'error';\n    case 'medium': return 'warning';\n    case 'low': return 'success';\n    default: return 'default';\n  }\n}\n\n// Helper: Format due date to readable string\nfunction formatDueDate(dueDate?: string): string {\n  if (!dueDate) return '';\n  try {\n    const date = new Date(dueDate);\n    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });\n  } catch {\n    return dueDate;\n  }\n}\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  // Actions — fire-and-forget to agent\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate'); // Called when a task is moved, edited, or created. Payload: { action, taskId, data }\n\n  // Streams — real-time from agent (.latest, .all)\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged'); // A task was moved, edited, or created by another user — update it in the board\n\n  // Local state for task management\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [addingTaskInColumn, setAddingTaskInColumn] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editingTitle, setEditingTitle] = useState('');\n\n  // Sync with props\n  useEffect(() => {\n    setTasks(props.tasks || []);\n  }, [props.tasks]);\n\n  // Handle incoming task updates from stream\n  useEffect(() => {\n    if (taskChanged.latest) {\n      const { action: changeAction, task: changedTask } = taskChanged.latest;\n      if (!changedTask?.id) return;\n\n      setTasks((prevTasks) => {\n        if (changeAction === 'delete') {\n          return prevTasks.filter((t) => t.id !== changedTask.id);\n        } else if (changeAction === 'create') {\n          return [...prevTasks, changedTask];\n        } else {\n          // move, edit, or unknown action\n          return prevTasks.map((t) => (t.id === changedTask.id ? { ...t, ...changedTask } : t));\n        }\n      });\n    }\n  }, [taskChanged.latest]);\n\n  // Compute tasks by column\n  const tasksByColumn = useMemo(() => {\n    const map: Record<string, typeof tasks> = {};\n    (props.columns || []).forEach((col) => {\n      map[col.id || ''] = [];\n    });\n    tasks.forEach((task) => {\n      const colId = task.column || 'todo';\n      if (!map[colId]) map[colId] = [];\n      map[colId].push(task);\n    });\n    return map;\n  }, [tasks, props.columns]);\n\n  // Summary stats\n  const totalTasks = tasks.length;\n  const completedTasks = tasks.filter((t) => t.column === 'done').length;\n\n  // Add new task\n  const handleAddTask = useCallback(() => {\n    if (!newTaskTitle.trim() || !addingTaskInColumn) return;\n    const taskId = `task-${Date.now()}`;\n    const newTask = {\n      id: taskId,\n      title: newTaskTitle,\n      priority: newTaskPriority,\n      column: addingTaskInColumn,\n    };\n    setTasks((prev) => [...prev, newTask]);\n    taskUpdate({ action: 'create', taskId, data: { column: addingTaskInColumn } });\n    setNewTaskTitle('');\n    setNewTaskPriority('medium');\n    setAddingTaskInColumn(null);\n  }, [newTaskTitle, newTaskPriority, addingTaskInColumn, taskUpdate]);\n\n  // Move task to another column\n  const handleMoveTask = useCallback((taskId: string, newColumn: string) => {\n    setTasks((prev) =>\n      prev.map((t) => (t.id === taskId ? { ...t, column: newColumn } : t))\n    );\n    taskUpdate({ action: 'move', taskId, data: { column: newColumn } });\n  }, [taskUpdate]);\n\n  // Edit task title\n  const handleEditTask = useCallback((taskId: string, newTitle: string) => {\n    setTasks((prev) =>\n      prev.map((t) => (t.id === taskId ? { ...t, title: newTitle } : t))\n    );\n    taskUpdate({ action: 'edit', taskId, data: { column: tasks.find((t) => t.id === taskId)?.column || 'todo' } });\n    setEditingTaskId(null);\n    setEditingTitle('');\n  }, [tasks, taskUpdate]);\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Summary Bar */}\n        <Card shadow=\"md\" padding=\"var(--ggui-spacing-4)\" background=\"var(--ggui-color-primary-50)\">\n          <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n            <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4)\" align=\"center\">\n              <Heading level={3} color=\"var(--ggui-color-primary-900)\">Task Board</Heading>\n              <Divider orientation=\"vertical\" margin=\"var(--ggui-spacing-2)\" />\n              <Text variant=\"body\" color=\"var(--ggui-color-primary-700)\">\n                <strong>{completedTasks}</strong> of <strong>{totalTasks}</strong> completed\n              </Text>\n            </Stack>\n            <Progress\n              value={totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0}\n              max={100}\n              variant=\"success\"\n              size=\"md\"\n              showLabel={false}\n            />\n          </Stack>\n        </Card>\n\n        {/* Kanban Board */}\n        <Row gap=\"var(--ggui-spacing-4)\" align=\"start\" wrap={true}>\n          {(props.columns || []).map((column) => {\n            const columnTasks = tasksByColumn[column.id || ''] || [];\n            const isAddingInThisColumn = addingTaskInColumn === column.id;\n\n            return (\n              <Box\n                key={column.id}\n                padding=\"var(--ggui-spacing-4)\"\n                background=\"var(--ggui-color-surfaceVariant)\"\n                borderRadius=\"var(--ggui-shape-radius-lg)\"\n                style={{ minWidth: '300px', flex: '0 1 auto' }}\n              >\n                <Stack gap=\"var(--ggui-spacing-3)\">\n                  {/* Column Header */}\n                  <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n                    <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-2)\" align=\"center\">\n                      <Heading level={4} color=\"var(--ggui-color-onSurface)\">{column.name}</Heading>\n                      <Badge variant=\"secondary\" size=\"sm\">{columnTasks.length}</Badge>\n                    </Stack>\n                  </Stack>\n\n                  <Divider orientation=\"horizontal\" margin=\"var(--ggui-spacing-2)\" color=\"var(--ggui-color-outlineVariant)\" />\n\n                  {/* Task Cards */}\n                  <Stack gap=\"var(--ggui-spacing-2)\" style={{ minHeight: '200px' }}>\n                    {columnTasks.map((task) => {\n                      const isEditing = editingTaskId === task.id;\n                      const priorityVariant = getPriorityVariant(task.priority);\n                      const dueStr = formatDueDate(task.dueDate);\n\n                      return (\n                        <Card\n                          key={task.id}\n                          shadow=\"sm\"\n                          padding=\"var(--ggui-spacing-3)\"\n                          border={true}\n                          radius=\"md\"\n                          background=\"var(--ggui-color-surface)\"\n                        >\n                          <Stack gap=\"var(--ggui-spacing-2)\">\n                            {/* Task Title (Editable) */}\n                            {isEditing ? (\n                              <Stack gap=\"var(--ggui-spacing-2)\" direction=\"horizontal\" align=\"center\">\n                                <Input\n                                  label=\"Edit task title\"\n                                  value={editingTitle}\n                                  onChange={setEditingTitle}\n                                  placeholder=\"Task title\"\n                                  size=\"sm\"\n                                  style={{ flex: 1 }}\n                                />\n                                <Button\n                                  variant=\"primary\"\n                                  size=\"sm\"\n                                  onClick={() => handleEditTask(task.id || '', editingTitle)}\n                                >\n                                  Save\n                                </Button>\n                                <Button\n                                  variant=\"ghost\"\n                                  size=\"sm\"\n                                  onClick={() => setEditingTaskId(null)}\n                                >\n                                  Cancel\n                                </Button>\n                              </Stack>\n                            ) : (\n                              <Box as={Clickable} onClick={() => {\n                                setEditingTaskId(task.id || null);\n                                setEditingTitle(task.title || '');\n                              }}>\n                                <Text\n                                  variant=\"body\"\n                                  color=\"var(--ggui-color-onSurface)\"\n                                  style={{ fontWeight: 500 }}\n                                >\n                                  {task.title || 'Untitled Task'}\n                                </Text>\n                              </Box>\n                            )}\n\n                            {/* Priority Badge */}\n                            {task.priority && (\n                              <Badge variant={priorityVariant} size=\"sm\" pill={true}>\n                                {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}\n                              </Badge>\n                            )}\n\n                            {/* Assignee & Due Date */}\n                            <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-2)\" align=\"center\">\n                              {task.assignee && (\n                                <Avatar name={task.assignee} size=\"sm\" />\n                              )}\n                              {dueStr && (\n                                <Row gap=\"var(--ggui-spacing-1)\" align=\"center\">\n                                  <Icon name=\"calendar\" size={14} color=\"var(--ggui-color-onSurfaceVariant)\" />\n                                  <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{dueStr}</Text>\n                                </Row>\n                              )}\n                            </Stack>\n                            {/* Move to Column Dropdown */}\n                            <Dropdown\n                              trigger={<Button variant=\"outline\" size=\"sm\" fullWidth={true}>Move to...</Button>}\n                              options={(props.columns || []).map((col) => ({\n                                value: col.id || '',\n                                label: col.name || 'Unknown',\n                                disabled: col.id === column.id,\n                              }))}\n                              value={column.id || ''}\n                              onChange={(newCol) => handleMoveTask(task.id || '', newCol)}\n                              placement=\"bottom-start\"\n                            />\n                           </Stack>\n                         </Card>\n                       );\n                     })}\n                   </Stack>\n\n                   {/* Add Task Form */}\n                   {isAddingInThisColumn ? (\n                     <Card shadow=\"sm\" padding=\"var(--ggui-spacing-3)\" border={true} radius=\"md\" background=\"var(--ggui-color-primary-50)\">\n                       <Stack gap=\"var(--ggui-spacing-2)\">\n                         <Input\n                           label=\"Task title\"\n                           value={newTaskTitle}\n                           onChange={setNewTaskTitle}\n                           placeholder=\"Enter task title\"\n                           size=\"sm\"\n                         />\n                         <Select\n                           label=\"Priority\"\n                           value={newTaskPriority}\n                           onChange={(val) => setNewTaskPriority(val as 'low' | 'medium' | 'high')}\n                           options={[\n                             { value: 'low', label: 'Low' },\n                             { value: 'medium', label: 'Medium' },\n                             { value: 'high', label: 'High' },\n                           ]}\n                           size=\"sm\"\n                         />\n                         <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-2)\">\n                           <Button\n                             variant=\"primary\"\n                             size=\"sm\"\n                             fullWidth={true}\n                             onClick={handleAddTask}\n                           >\n                             Add Task\n                           </Button>\n                           <Button\n                             variant=\"ghost\"\n                             size=\"sm\"\n                             fullWidth={true}\n                             onClick={() => {\n                               setAddingTaskInColumn(null);\n                               setNewTaskTitle('');\n                               setNewTaskPriority('medium');\n                             }}\n                           >\n                             Cancel\n                           </Button>\n                         </Stack>\n                       </Stack>\n                     </Card>\n                   ) : (\n                     <Button\n                       variant=\"secondary\"\n                       size=\"sm\"\n                       fullWidth={true}\n                       onClick={() => setAddingTaskInColumn(column.id || '')}\n                     >\n                       + Add Task\n                     </Button>\n                   )}\n                 </Stack>\n               </Box>\n             );\n           })}\n         </Row>\n              </Box>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 105500,
+          "output": 8161,
+          "total": 113661
+        },
+        "generationTimeMs": 52884,
+        "turnsUsed": 8,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "New tasks should be created in the 'To Do' column by default, but the current implementation allows adding tasks to any column via the 'Add Task' button. The original requirement specifies 'New tasks start in \"To Do\" column'",
+              "fix": "New tasks should be created in the 'To Do' column by default, but the current implementation allows adding tasks to any column via the 'Add Task' button. The original requirement specifies 'New tasks start in \"To Do\" column'"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Edit task title via double-click is not implemented — only single-click to enter edit mode is available. The original request specifies 'editable on double-click or via edit button'",
+              "fix": "Edit task title via double-click is not implemented — only single-click to enter edit mode is available. The original request specifies 'editable on double-click or via edit button'"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Edit button for task titles is missing — only clickable text is provided for editing",
+              "fix": "Edit button for task titles is missing — only clickable text is provided for editing"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Task title editing does not persist the title change in the action payload — the taskUpdate action is called with column data only, not with the new title value",
+              "fix": "Task title editing does not persist the title change in the action payload — the taskUpdate action is called with column data only, not with the new title value"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task title text element (line 242-253) is clickable but not keyboard accessible — needs role='button', tabindex='0', and Enter/Space key handlers",
+              "fix": "Task title text element (line 242-253) is clickable but not keyboard accessible — needs role='button', tabindex='0', and Enter/Space key handlers"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task title editing triggered by click with no indication to screen readers that it's interactive — add aria-label or tooltip",
+              "fix": "Task title editing triggered by click with no indication to screen readers that it's interactive — add aria-label or tooltip"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move to column dropdown (line 276) trigger button has no aria-label or aria-expanded to indicate dropdown state",
+              "fix": "Move to column dropdown (line 276) trigger button has no aria-label or aria-expanded to indicate dropdown state"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Column count badge (line 192) is not announced as part of column header — wrap in semantic list structure or use aria-label for context",
+              "fix": "Column count badge (line 192) is not announced as part of column header — wrap in semantic list structure or use aria-label for context"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Due date emoji (📅 line 270) may not be announced by screen readers — use aria-label='Due date:' instead of relying on emoji",
+              "fix": "Due date emoji (📅 line 270) may not be announced by screen readers — use aria-label='Due date:' instead of relying on emoji"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task card container (line 206) lacks semantic structure — should use article role with aria-label containing task title",
+              "fix": "Task card container (line 206) lacks semantic structure — should use article role with aria-label containing task title"
+            }
+          ],
+          "pass": ["crash", "interactivity", "layout", "loading", "visual"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 52848,
+          "evalMs": 0,
+          "totalMs": 52884
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 56.4,
+        "finalScore": 56.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 42,
+          "designTokens": 75,
+          "hierarchy": 65,
+          "polish": 45,
+          "dataPresentation": 55,
+          "completeness": 55,
+          "visualPolish": 54,
+          "interactivity": 45,
+          "accessibility": 54,
+          "codeQuality": 75
+        },
+        "critique": "The component has incomplete implementation (code cuts off mid-render) and missing critical Kanban functionality like drag-and-drop, column rendering, and task cards. While design tokens are mostly used correctly, the layout is broken due to truncation and lacks responsive column structure. Polish is weak with minimal hover/focus states and no loading/disabled state handling.",
+        "evalTimeMs": 7406
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "New tasks should be created in the 'To Do' column by default, but the current implementation allows adding tasks to any column via the 'Add Task' button. The original requirement specifies 'New tasks start in \"To Do\" column'",
+            "fix": "New tasks should be created in the 'To Do' column by default, but the current implementation allows adding tasks to any column via the 'Add Task' button. The original requirement specifies 'New tasks start in \"To Do\" column'"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Edit task title via double-click is not implemented — only single-click to enter edit mode is available. The original request specifies 'editable on double-click or via edit button'",
+            "fix": "Edit task title via double-click is not implemented — only single-click to enter edit mode is available. The original request specifies 'editable on double-click or via edit button'"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Edit button for task titles is missing — only clickable text is provided for editing",
+            "fix": "Edit button for task titles is missing — only clickable text is provided for editing"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Task title editing does not persist the title change in the action payload — the taskUpdate action is called with column data only, not with the new title value",
+            "fix": "Task title editing does not persist the title change in the action payload — the taskUpdate action is called with column data only, not with the new title value"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task title text element (line 242-253) is clickable but not keyboard accessible — needs role='button', tabindex='0', and Enter/Space key handlers",
+            "fix": "Task title text element (line 242-253) is clickable but not keyboard accessible — needs role='button', tabindex='0', and Enter/Space key handlers"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task title editing triggered by click with no indication to screen readers that it's interactive — add aria-label or tooltip",
+            "fix": "Task title editing triggered by click with no indication to screen readers that it's interactive — add aria-label or tooltip"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move to column dropdown (line 276) trigger button has no aria-label or aria-expanded to indicate dropdown state",
+            "fix": "Move to column dropdown (line 276) trigger button has no aria-label or aria-expanded to indicate dropdown state"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Column count badge (line 192) is not announced as part of column header — wrap in semantic list structure or use aria-label for context",
+            "fix": "Column count badge (line 192) is not announced as part of column header — wrap in semantic list structure or use aria-label for context"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Due date emoji (📅 line 270) may not be announced by screen readers — use aria-label='Due date:' instead of relying on emoji",
+            "fix": "Due date emoji (📅 line 270) may not be announced by screen readers — use aria-label='Due date:' instead of relying on emoji"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task card container (line 206) lacks semantic structure — should use article role with aria-label containing task title",
+            "fix": "Task card container (line 206) lacks semantic structure — should use article role with aria-label containing task title"
+          }
+        ],
+        "pass": ["crash", "interactivity", "layout", "loading", "visual"]
+      },
+      "estimatedCostUsd": 0.146305,
+      "timestamp": "2026-03-22T16:34:41.616Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5605,
+        "sourceCodeBytes": 16847,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"medium\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"high\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 56.4,
+      "avgTimeMs": 52884,
+      "avgCostUsd": 0.146305,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 55,
+        "visualPolish": 54,
+        "interactivity": 45,
+        "accessibility": 54,
+        "codeQuality": 75
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 56.4,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 56.4,
+        "avgTimeMs": 52884,
+        "avgCostUsd": 0.146305,
+        "successRate": 1
+      }
+    }
+  }
+}

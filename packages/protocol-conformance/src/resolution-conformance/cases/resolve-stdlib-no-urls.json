@@ -1,0 +1,10 @@
+{
+  "name": "resolve-stdlib-no-urls",
+  "description": "The first-party `@ggui-ai/gadgets` stdlib package. Its exports ship with the iframe runtime — no bundle is fetched. The resolver MUST return no URLs for it, and MUST do so even when a `bundleUrl` is present: the stdlib's transport is first-party by construction and operators do not override it.",
+  "entry": {
+    "package": "@ggui-ai/gadgets",
+    "version": "1.0.0",
+    "bundleUrl": "https://example.com/should-be-ignored.js"
+  },
+  "expect": {}
+}

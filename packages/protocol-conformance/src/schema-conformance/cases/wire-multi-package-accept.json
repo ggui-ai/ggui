@@ -1,0 +1,14 @@
+{
+  "name": "wire-multi-package-accept",
+  "description": "`clientCapabilities.gadgets` MAY reference multiple packages, and a single package MAY expose multiple exports — hooks and components mixed. Each package entry is its own export map; there is no package-level wrapper field on the wire.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/charts": {
+        "RevenueChart": {},
+        "useChartTheme": { "usage": "Match the chart palette to the app theme." }
+      },
+      "@ggui-ai/gadgets": { "useClipboardWrite": {} }
+    }
+  },
+  "expect": "accept"
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "1",
+  "protocol": "draft-2026-05-23",
+  "app": {
+    "slug": "sample-ggui-mapbox-missing-env",
+    "name": "Sample ggui — Mapbox gadget demo WITHOUT publicEnv (negative-path fixture)",
+    "gadgets": [
+      {
+        "package": "@ggui-samples/gadget-mapbox",
+        "version": "0.0.1",
+        "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"],
+        "connect": ["https://api.mapbox.com", "https://*.tiles.mapbox.com"],
+        "exports": [
+          {
+            "hook": "useMapbox",
+            "description": "Render an interactive Mapbox GL map with style, pan/zoom controls, and marker support. Returns a container ref to attach to a <div>.",
+            "usage": "Mount when the intent names a rendered map. Pass `center: [lng, lat]` (Mapbox uses lng-first order) + `zoom: 2..22`. Default style is `mapbox://styles/mapbox/streets-v12`.",
+            "example": {
+              "call": "const map = useMapbox({ center: [-122.4194, 37.7749], zoom: 12 });",
+              "returns": {
+                "status": "completed",
+                "value": { "containerRef": "<DOM ref callback>" }
+              }
+            },
+            "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` (opposite of Leaflet's `[lat, lng]`). This negative-path fixture deliberately omits `App.publicEnv`, so any push using this hook is rejected with `gadget_public_env_missing`."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+# Build context for e2e/publish-gate/Dockerfile.
+# The image runs a fresh `pnpm install` + `pnpm -r build`, so host
+# node_modules / dist / build caches must NOT be copied in — they are
+# platform-specific and would defeat the hermetic-build guarantee.
+node_modules
+**/node_modules
+dist
+**/dist
+.turbo
+**/.turbo
+*.tsbuildinfo
+**/*.tsbuildinfo
+.changeset
+**/coverage
+**/.test-results
+**/test-results

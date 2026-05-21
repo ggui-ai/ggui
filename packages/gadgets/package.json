@@ -1,0 +1,72 @@
+{
+  "name": "@ggui-ai/gadgets",
+  "version": "0.1.0-rc.1",
+  "description": "Browser-capability gadget hooks for ggui — declared via DataContract.clientCapabilities.gadgets, mounted by the UI generator's component code.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "gadgets",
+    "react-hooks",
+    "browser-capabilities",
+    "geolocation",
+    "clipboard",
+    "mcp"
+  ],
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/gadgets",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/gadgets"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./codegen": {
+      "import": "./dist/codegen.mjs",
+      "require": "./dist/codegen.js",
+      "types": "./dist/codegen.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@ggui-ai/protocol": "workspace:*"
+  }
+}

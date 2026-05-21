@@ -1,0 +1,1298 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T03:25:03.825Z",
+    "totalDurationMs": 56477,
+    "totalVariants": 1,
+    "totalCommits": 3,
+    "totalRuns": 3,
+    "successCount": 3,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var m=Object.defineProperty;var l=(r,c)=>m(r,\"name\",{value:c,configurable:!0});import{jsx as e,jsxs as a}from\"react/jsx-runtime\";import{useCallback as s}from\"react\";import{Container as f,Card as d,Stack as t,Box as g,Divider as b,Text as o,Heading as u}from\"@ggui-ai/design/primitives\";function S(r){return{getWeatherEmoji:s(i=>{const n=i.toLowerCase();return n.includes(\"sun\")||n.includes(\"clear\")?\"\\u2600\\uFE0F\":n.includes(\"cloud\")?\"\\u2601\\uFE0F\":n.includes(\"rain\")?\"\\u{1F327}\\uFE0F\":n.includes(\"snow\")?\"\\u2744\\uFE0F\":n.includes(\"wind\")?\"\\u{1F4A8}\":n.includes(\"fog\")?\"\\u{1F32B}\\uFE0F\":\"\\u{1F324}\\uFE0F\"},[])}}l(S,\"useComponent\");function h(r){const c=S(r);return e(f,{maxWidth:\"md\",padding:24,children:a(t,{gap:16,children:[e(d,{shadow:\"md\",padding:24,radius:\"lg\",children:a(t,{gap:16,align:\"center\",children:[a(t,{gap:8,align:\"center\",children:[e(u,{level:2,color:\"var(--ggui-color-onSurface, #18181b)\",children:r.city}),e(o,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:r.condition})]}),e(g,{padding:16,background:\"var(--ggui-color-primary-50, #f0f9ff)\",borderRadius:12,children:e(o,{size:\"4xl\",align:\"center\",children:c.getWeatherEmoji(r.condition)})}),e(t,{gap:4,align:\"center\",children:a(o,{size:\"4xl\",weight:\"bold\",color:\"var(--ggui-color-primary-600, #0284c7)\",children:[r.temperature,\"\\xB0\",r.unit]})}),e(b,{margin:8}),a(t,{direction:\"horizontal\",gap:24,justify:\"center\",align:\"center\",wrap:!0,children:[e(g,{padding:12,children:a(t,{gap:4,align:\"center\",children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"\\u{1F4A7} Humidity\"}),a(o,{size:\"lg\",weight:\"semibold\",color:\"var(--ggui-color-onSurface, #18181b)\",children:[r.humidity,\"%\"]})]})}),e(g,{padding:12,children:a(t,{gap:4,align:\"center\",children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"\\u{1F4A8} Wind Speed\"}),a(o,{size:\"lg\",weight:\"semibold\",color:\"var(--ggui-color-onSurface, #18181b)\",children:[r.windSpeed,\" m/s\"]})]})})]})]})}),a(t,{gap:8,children:[e(u,{level:4,color:\"var(--ggui-color-onSurface, #18181b)\",children:\"5-Day Forecast\"}),e(t,{direction:\"horizontal\",gap:8,wrap:!0,children:r.forecast&&r.forecast.length>0?r.forecast.map((i,n)=>e(d,{shadow:\"sm\",padding:12,radius:\"md\",border:!0,style:{flex:\"1 1 auto\",minWidth:\"100px\"},children:a(t,{gap:8,align:\"center\",justify:\"center\",children:[i.day&&e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",align:\"center\",children:i.day}),i.icon&&e(o,{size:\"2xl\",align:\"center\",children:i.icon}),(i.high!==void 0||i.low!==void 0)&&a(t,{gap:2,align:\"center\",children:[i.high!==void 0&&a(o,{variant:\"caption\",weight:\"semibold\",color:\"var(--ggui-color-onSurface, #18181b)\",children:[i.high,\"\\xB0\",r.unit]}),i.low!==void 0&&a(o,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[i.low,\"\\xB0\",r.unit]})]})]})},n)):e(o,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"No forecast data available\"})})]})]})})}l(h,\"Component\");export{h as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef, useMemo } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>; // 5-day forecast array\n}\n\nfunction useComponent(props: Props) {\n  // Map weather conditions to emoji icons\n  const getWeatherEmoji = useCallback((condition: string): string => {\n    const conditionLower = condition.toLowerCase();\n    if (conditionLower.includes('sun') || conditionLower.includes('clear')) return '☀️';\n    if (conditionLower.includes('cloud')) return '☁️';\n    if (conditionLower.includes('rain')) return '🌧️';\n    if (conditionLower.includes('snow')) return '❄️';\n    if (conditionLower.includes('wind')) return '💨';\n    if (conditionLower.includes('fog')) return '🌫️';\n    return '🌤️';\n  }, []);\n\n  return {\n    getWeatherEmoji,\n  };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  return (\n    <Container maxWidth=\"md\" padding={24}>\n      <Stack gap={16}>\n        {/* Main Weather Card */}\n        <Card shadow=\"md\" padding={24} radius=\"lg\">\n          <Stack gap={16} align=\"center\">\n            {/* City Name and Condition */}\n            <Stack gap={8} align=\"center\">\n              <Heading level={2} color=\"var(--ggui-color-onSurface, #18181b)\">{props.city}</Heading>\n              <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">{props.condition}</Text>\n            </Stack>\n\n            {/* Weather Icon - Large */}\n            <Box padding={16} background=\"var(--ggui-color-primary-50, #f0f9ff)\" borderRadius={12}>\n              <Text size=\"4xl\" align=\"center\">\n                {state.getWeatherEmoji(props.condition)}\n              </Text>\n            </Box>\n\n            {/* Current Temperature - Large and Prominent */}\n            <Stack gap={4} align=\"center\">\n              <Text\n                size=\"4xl\"\n                weight=\"bold\"\n                color=\"var(--ggui-color-primary-600, #0284c7)\"\n              >\n                {props.temperature}°{props.unit}\n              </Text>\n            </Stack>\n\n            {/* Divider */}\n            <Divider margin={8} />\n\n            {/* Humidity and Wind Speed */}\n            <Stack direction=\"horizontal\" gap={24} justify=\"center\" align=\"center\" wrap>\n              <Box padding={12}>\n                <Stack gap={4} align=\"center\">\n                  <Text\n                    variant=\"label\"\n                    color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                  >\n                    💧 Humidity\n                  </Text>\n                  <Text\n                    size=\"lg\"\n                    weight=\"semibold\"\n                    color=\"var(--ggui-color-onSurface, #18181b)\"\n                  >\n                    {props.humidity}%\n                  </Text>\n                </Stack>\n              </Box>\n              <Box padding={12}>\n                <Stack gap={4} align=\"center\">\n                  <Text\n                    variant=\"label\"\n                    color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                  >\n                    💨 Wind Speed\n                  </Text>\n                  <Text\n                    size=\"lg\"\n                    weight=\"semibold\"\n                    color=\"var(--ggui-color-onSurface, #18181b)\"\n                  >\n                    {props.windSpeed} m/s\n                  </Text>\n                </Stack>\n              </Box>\n            </Stack>\n          </Stack>\n        </Card>\n\n        {/* 5-Day Forecast */}\n        <Stack gap={8}>\n          <Heading level={4} color=\"var(--ggui-color-onSurface, #18181b)\">5-Day Forecast</Heading>\n          <Stack direction=\"horizontal\" gap={8} wrap>\n            {props.forecast && props.forecast.length > 0 ? (\n              props.forecast.map((day, index) => (\n                <Card\n                  key={index}\n                  shadow=\"sm\"\n                  padding={12}\n                  radius=\"md\"\n                  border={true}\n                  style={{ flex: '1 1 auto', minWidth: '100px' }}\n                >\n                  <Stack gap={8} align=\"center\" justify=\"center\">\n                    {/* Day Name */}\n                    {day.day && (\n                      <Text\n                        variant=\"label\"\n                        color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                        align=\"center\"\n                      >\n                        {day.day}\n                      </Text>\n                    )}\n\n                    {/* Day Icon/Emoji */}\n                    {day.icon && (\n                      <Text size=\"2xl\" align=\"center\">\n                        {day.icon}\n                      </Text>\n                    )}\n\n                    {/* High/Low Temps */}\n                    {(day.high !== undefined || day.low !== undefined) && (\n                      <Stack gap={2} align=\"center\">\n                        {day.high !== undefined && (\n                          <Text\n                            variant=\"caption\"\n                            weight=\"semibold\"\n                            color=\"var(--ggui-color-onSurface, #18181b)\"\n                          >\n                            {day.high}°{props.unit}\n                          </Text>\n                        )}\n                        {day.low !== undefined && (\n                          <Text\n                            variant=\"caption\"\n                            color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n                          >\n                            {day.low}°{props.unit}\n                          </Text>\n                        )}\n                      </Stack>\n                    )}\n                  </Stack>\n                </Card>\n              ))\n            ) : (\n              <Text\n                variant=\"body\"\n                color=\"var(--ggui-color-onSurfaceVariant, #52525b)\"\n              >\n                No forecast data available\n              </Text>\n            )}\n          </Stack>\n        </Stack>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 99491,
+          "output": 3726,
+          "total": 103217
+        },
+        "generationTimeMs": 22152,
+        "turnsUsed": 2,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "Forecast cards have no hover/focus feedback — users cannot tell they are interactive elements",
+              "fix": "Forecast cards have no hover/focus feedback — users cannot tell they are interactive elements"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "No interactive elements (buttons, clickable areas) to modify or drill-down into weather details — component is purely display-only",
+              "fix": "No interactive elements (buttons, clickable areas) to modify or drill-down into weather details — component is purely display-only"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Weather emoji icons lack alt text or aria-label (lines 54-56, 140-144) — screen readers cannot announce the weather condition visually conveyed by emojis",
+              "fix": "Weather emoji icons lack alt text or aria-label (lines 54-56, 140-144) — screen readers cannot announce the weather condition visually conveyed by emojis"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "No aria-label or aria-describedby on main weather card to describe its purpose",
+              "fix": "No aria-label or aria-describedby on main weather card to describe its purpose"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Heading hierarchy issue: main 'City Name' uses level={2} (h2) but should start with level={1} (h1) — no h1 on page",
+              "fix": "Heading hierarchy issue: main 'City Name' uses level={2} (h2) but should start with level={1} (h1) — no h1 on page"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Humidity and Wind Speed sections lack semantic labels — consider using aria-label to clarify what each metric represents for screen reader users",
+              "fix": "Humidity and Wind Speed sections lack semantic labels — consider using aria-label to clarify what each metric represents for screen reader users"
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "contract",
+            "types",
+            "imports",
+            "tokens",
+            "functionality",
+            "crash",
+            "layout",
+            "loading",
+            "visual",
+            "dynamic:weather-icon-mapping",
+            "dynamic:forecast-strip-layout",
+            "dynamic:temperature-unit-display"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 13934,
+          "evalMs": 8177,
+          "totalMs": 22152
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 88,
+        "finalScore": 88,
+        "issues": [],
+        "dimensions": {
+          "layout": 92,
+          "designTokens": 88,
+          "hierarchy": 90,
+          "polish": 75,
+          "dataPresentation": 95,
+          "completeness": 95,
+          "visualPolish": 91,
+          "interactivity": 75,
+          "accessibility": 91,
+          "codeQuality": 88
+        },
+        "critique": "The component has excellent layout and data handling, with proper responsive flex usage and all data correctly sourced from props. However, it uses some hardcoded color fallback values (e.g., '#18181b') alongside CSS variables, and lacks interactive polish such as hover states on forecast cards or transitions. The hierarchy is strong with clear visual weight differentiation.",
+        "evalTimeMs": 2474
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "Forecast cards have no hover/focus feedback — users cannot tell they are interactive elements",
+            "fix": "Forecast cards have no hover/focus feedback — users cannot tell they are interactive elements"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "No interactive elements (buttons, clickable areas) to modify or drill-down into weather details — component is purely display-only",
+            "fix": "No interactive elements (buttons, clickable areas) to modify or drill-down into weather details — component is purely display-only"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Weather emoji icons lack alt text or aria-label (lines 54-56, 140-144) — screen readers cannot announce the weather condition visually conveyed by emojis",
+            "fix": "Weather emoji icons lack alt text or aria-label (lines 54-56, 140-144) — screen readers cannot announce the weather condition visually conveyed by emojis"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "No aria-label or aria-describedby on main weather card to describe its purpose",
+            "fix": "No aria-label or aria-describedby on main weather card to describe its purpose"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Heading hierarchy issue: main 'City Name' uses level={2} (h2) but should start with level={1} (h1) — no h1 on page",
+            "fix": "Heading hierarchy issue: main 'City Name' uses level={2} (h2) but should start with level={1} (h1) — no h1 on page"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Humidity and Wind Speed sections lack semantic labels — consider using aria-label to clarify what each metric represents for screen reader users",
+            "fix": "Humidity and Wind Speed sections lack semantic labels — consider using aria-label to clarify what each metric represents for screen reader users"
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "contract",
+          "types",
+          "imports",
+          "tokens",
+          "functionality",
+          "crash",
+          "layout",
+          "loading",
+          "visual",
+          "dynamic:weather-icon-mapping",
+          "dynamic:forecast-strip-layout",
+          "dynamic:temperature-unit-display"
+        ]
+      },
+      "estimatedCostUsd": 0.118121,
+      "timestamp": "2026-03-22T03:24:32.188Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3051,
+        "sourceCodeBytes": 7203,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var L=Object.defineProperty;var T=(r,a)=>L(r,\"name\",{value:a,configurable:!0});import{jsx as e,jsxs as t}from\"react/jsx-runtime\";import{useState as l,useCallback as S}from\"react\";import{Container as z,Card as c,Stack as i,Row as D,Box as O,Divider as b,Text as o,Heading as d,Button as w,Input as V,TextArea as W,Checkbox as Y,RadioGroup as $,Badge as q,Progress as G}from\"@ggui-ai/design/primitives\";function M(r){const[a,m]=l(1),[n,g]=l(\"\"),[s,B]=l(\"\"),[p,F]=l(\"\"),[u,N]=l([]),[f,H]=l(\"\"),y=s===\"\"||/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s),v=n.trim()!==\"\"&&y&&s.trim()!==\"\",h=p!==\"\",C=u.length>0,P=S(()=>{a===1&&!v||a===2&&!h||a===3&&!C||a<5&&m(a+1)},[a,v,h,C]),R=S(()=>{a>1&&m(a-1)},[a]),A=S(()=>{submit({name:n.trim(),email:s.trim(),satisfaction:parseInt(p,10),features:u,comments:f.trim()})},[n,s,p,u,f,submit]),I=S(k=>{N(x=>x.includes(k)?x.filter(E=>E!==k):[...x,k])},[]);return{step:a,name:n,setName:g,email:s,setEmail:B,satisfaction:p,setSatisfaction:F,features:u,handleFeatureToggle:I,comments:f,setComments:H,handleNext:P,handleBack:R,handleSubmit:A,isStep1Valid:v,isStep2Valid:h,isStep3Valid:C,isValidEmail:y}}T(M,\"useComponent\");function U(r){const a=M(r),m=r.satisfactionLabels.map((n,g)=>({value:String(g+1),label:`${g+1} - ${n}`}));return e(z,{maxWidth:\"lg\",padding:24,center:!0,children:t(i,{gap:24,children:[t(i,{gap:8,children:[e(d,{level:1,children:\"Survey Form\"}),t(o,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Step \",a.step,\" of 4\"]}),e(G,{value:a.step,max:4,variant:\"default\",size:\"md\",showLabel:!1})]}),a.step===1&&e(c,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:16,children:[e(d,{level:3,children:\"Personal Information\"}),e(V,{label:\"Full Name\",value:a.name,onChange:a.setName,placeholder:\"John Doe\",required:!0}),e(V,{label:\"Email Address\",type:\"email\",value:a.email,onChange:a.setEmail,placeholder:\"john@example.com\",required:!0,error:a.email!==\"\"&&!a.isValidEmail?\"Please enter a valid email\":\"\"})]})}),a.step===2&&e(c,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:16,children:[e(d,{level:3,children:\"How Satisfied Are You?\"}),e($,{label:\"Satisfaction Rating\",value:a.satisfaction,onChange:a.setSatisfaction,options:m,direction:\"vertical\"})]})}),a.step===3&&e(c,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:16,children:[e(d,{level:3,children:\"Which Features Interest You?\"}),e(i,{gap:12,children:r.featureOptions.map(n=>e(Y,{label:n,checked:a.features.includes(n),onChange:()=>a.handleFeatureToggle(n)},n))})]})}),a.step===4&&e(c,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:16,children:[e(d,{level:3,children:\"Additional Comments\"}),e(W,{label:\"Comments (Optional)\",value:a.comments,onChange:a.setComments,placeholder:\"Share any additional feedback...\",rows:6,maxLength:500,showCount:!0})]})}),a.step===5&&e(c,{shadow:\"md\",padding:24,radius:\"lg\",children:t(i,{gap:20,children:[e(d,{level:3,children:\"Review Your Answers\"}),e(O,{background:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",padding:16,borderRadius:8,children:t(i,{gap:12,children:[t(i,{gap:4,children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Name\"}),e(o,{variant:\"body\",children:a.name})]}),e(b,{margin:8}),t(i,{gap:4,children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Email\"}),e(o,{variant:\"body\",children:a.email})]}),e(b,{margin:8}),t(i,{gap:4,children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Satisfaction Rating\"}),t(o,{variant:\"body\",children:[a.satisfaction,\" - \",r.satisfactionLabels[parseInt(a.satisfaction,10)-1]]})]}),e(b,{margin:8}),t(i,{gap:4,children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Interested Features\"}),e(i,{gap:6,direction:\"horizontal\",wrap:!0,children:a.features.map(n=>e(q,{variant:\"primary\",size:\"md\",children:n},n))})]}),e(b,{margin:8}),t(i,{gap:4,children:[e(o,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Comments\"}),e(o,{variant:\"body\",children:a.comments||\"(No comments provided)\"})]})]})})]})}),t(D,{gap:12,justify:\"between\",align:\"center\",children:[e(w,{variant:\"outline\",onClick:a.handleBack,disabled:a.step===1,children:\"Back\"}),t(i,{direction:\"horizontal\",gap:8,children:[a.step<5&&e(w,{variant:\"primary\",onClick:a.handleNext,disabled:a.step===1&&!a.isStep1Valid||a.step===2&&!a.isStep2Valid||a.step===3&&!a.isStep3Valid,children:\"Next\"}),a.step===5&&e(w,{variant:\"primary\",onClick:a.handleSubmit,children:\"Submit Survey\"})]})]})]})})}T(U,\"Component\");export{U as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  featureOptions: string[]; // Available feature options for the checkbox step\n  satisfactionLabels: string[]; // Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)\n  onSubmit: (data: ActionSubmitPayload) => void; // Called with all collected answers\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called with all collected answers as a structured object */\ntype ActionSubmitPayload = { name: string; email: string; satisfaction: number; features: string[]; comments: string };\n\nfunction useComponent(props: Props) {\n  // Actions — fire-and-forget to agent\n  // Actions — fire-and-forget to agent (removed unused useAction import)\n\n  // Form state\n  const [step, setStep] = useState(1);\n  const [name, setName] = useState('');\n  const [email, setEmail] = useState('');\n  const [satisfaction, setSatisfaction] = useState('');\n  const [features, setFeatures] = useState<string[]>([]);\n  const [comments, setComments] = useState('');\n\n  // Validation\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  const isValidEmail = email === '' || emailRegex.test(email);\n  const isNameValid = name.trim() !== '';\n  const isStep1Valid = isNameValid && isValidEmail && email.trim() !== '';\n  const isStep2Valid = satisfaction !== '';\n  const isStep3Valid = features.length > 0;\n\n  // Navigation\n  const handleNext = useCallback(() => {\n    if (step === 1 && !isStep1Valid) return;\n    if (step === 2 && !isStep2Valid) return;\n    if (step === 3 && !isStep3Valid) return;\n    if (step < 5) {\n      setStep(step + 1);\n    }\n  }, [step, isStep1Valid, isStep2Valid, isStep3Valid]);\n\n  const handleBack = useCallback(() => {\n    if (step > 1) {\n      setStep(step - 1);\n    }\n  }, [step]);\n\n  const handleSubmit = useCallback((onSubmitFn: (data: ActionSubmitPayload) => void) => {\n    onSubmitFn({\n      name: name.trim(),\n      email: email.trim(),\n      satisfaction: parseInt(satisfaction, 10),\n      features,\n      comments: comments.trim()\n    });\n  }, [name, email, satisfaction, features, comments]);\n\n  // Feature toggle handler\n  const handleFeatureToggle = useCallback((feature: string) => {\n    setFeatures(prev =>\n      prev.includes(feature)\n        ? prev.filter(f => f !== feature)\n        : [...prev, feature]\n    );\n  }, []);\n\n  return {\n    step,\n    name,\n    setName,\n    email,\n    setEmail,\n    satisfaction,\n    setSatisfaction,\n    features,\n    handleFeatureToggle,\n    comments,\n    setComments,\n    handleNext,\n    handleBack,\n    handleSubmit: (fn: (data: ActionSubmitPayload) => void) => state.handleSubmit(fn),\n    isStep1Valid,\n    isStep2Valid,\n    isStep3Valid,\n    isValidEmail\n  };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  const satisfactionOptions = props.satisfactionLabels.map((label, idx) => ({\n    value: String(idx + 1),\n    label: `${idx + 1} - ${label}`\n  }));\n\n  return (\n    <Container maxWidth=\"lg\" padding={24} center>\n      <Stack gap={24}>\n        {/* Header */}\n        <Stack gap={8}>\n          <Heading level={1}>Survey Form</Heading>\n          <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n            Step {state.step} of 4\n          </Text>\n          <Progress\n            value={state.step}\n            max={4}\n            variant=\"default\"\n            size=\"md\"\n            showLabel={false}\n          />\n        </Stack>\n\n        {/* Step 1: Name & Email */}\n        {state.step === 1 && (\n          <Card shadow=\"md\" padding={24} radius=\"lg\">\n            <Stack gap={16}>\n              <Heading level={3}>Personal Information</Heading>\n              <Input\n                label=\"Full Name\"\n                value={state.name}\n                onChange={state.setName}\n                placeholder=\"John Doe\"\n                required\n              />\n              <Input\n                label=\"Email Address\"\n                type=\"email\"\n                value={state.email}\n                onChange={state.setEmail}\n                placeholder=\"john@example.com\"\n                required\n                error={state.email !== '' && !state.isValidEmail ? 'Please enter a valid email' : ''}\n              />\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 2: Satisfaction Rating */}\n        {state.step === 2 && (\n          <Card shadow=\"md\" padding={24} radius=\"lg\">\n            <Stack gap={16}>\n              <Heading level={3}>How Satisfied Are You?</Heading>\n              <RadioGroup\n                label=\"Satisfaction Rating\"\n                value={state.satisfaction}\n                onChange={state.setSatisfaction}\n                options={satisfactionOptions}\n                direction=\"vertical\"\n              />\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 3: Feature Interests */}\n        {state.step === 3 && (\n          <Card shadow=\"md\" padding={24} radius=\"lg\">\n            <Stack gap={16}>\n              <Heading level={3}>Which Features Interest You?</Heading>\n              <Stack gap={12}>\n                {props.featureOptions.map(feature => (\n                  <Checkbox\n                    key={feature}\n                    label={feature}\n                    checked={state.features.includes(feature)}\n                    onChange={() => state.handleFeatureToggle(feature)}\n                  />\n                ))}\n              </Stack>\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 4: Comments */}\n        {state.step === 4 && (\n          <Card shadow=\"md\" padding={24} radius=\"lg\">\n            <Stack gap={16}>\n              <Heading level={3}>Additional Comments</Heading>\n              <TextArea\n                label=\"Comments (Optional)\"\n                value={state.comments}\n                onChange={state.setComments}\n                placeholder=\"Share any additional feedback...\"\n                rows={6}\n                maxLength={500}\n                showCount\n              />\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 5: Review */}\n        {state.step === 5 && (\n          <Card shadow=\"md\" padding={24} radius=\"lg\">\n            <Stack gap={20}>\n              <Heading level={3}>Review Your Answers</Heading>\n\n              <Box\n                background=\"var(--ggui-color-surfaceVariant, #f4f4f5)\"\n                padding={16}\n                borderRadius={8}\n              >\n                <Stack gap={12}>\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      Name\n                    </Text>\n                    <Text variant=\"body\">{state.name}</Text>\n                  </Stack>\n                  <Divider margin={8} />\n\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      Email\n                    </Text>\n                    <Text variant=\"body\">{state.email}</Text>\n                  </Stack>\n                  <Divider margin={8} />\n\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      Satisfaction Rating\n                    </Text>\n                    <Text variant=\"body\">\n                      {state.satisfaction ? `${state.satisfaction} - ${props.satisfactionLabels[parseInt(state.satisfaction, 10) - 1]}` : 'N/A'}\n                    </Text>\n                  </Stack>\n                  <Divider margin={8} />\n\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      Interested Features\n                    </Text>\n                    <Stack gap={6} direction=\"horizontal\" wrap>\n                      {state.features.map(feature => (\n                        <Badge key={feature} variant=\"primary\" size=\"md\">\n                          {feature}\n                        </Badge>\n                      ))}\n                    </Stack>\n                  </Stack>\n                  <Divider margin={8} />\n\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                      Comments\n                    </Text>\n                    <Text variant=\"body\">\n                      {state.comments || '(No comments provided)'}\n                    </Text>\n                  </Stack>\n                </Stack>\n              </Box>\n            </Stack>\n          </Card>\n        )}\n\n        {/* Navigation Buttons */}\n        <Row gap={12} justify=\"between\" align=\"center\">\n          <Button\n            variant=\"outline\"\n            onClick={state.handleBack}\n            disabled={state.step === 1}\n          >\n            Back\n          </Button>\n\n          <Stack direction=\"horizontal\" gap={8}>\n            {state.step < 5 && (\n              <Button\n                variant=\"primary\"\n                onClick={state.handleNext}\n                disabled={\n                  (state.step === 1 && !state.isStep1Valid) ||\n                  (state.step === 2 && !state.isStep2Valid) ||\n                  (state.step === 3 && !state.isStep3Valid)\n                }\n              >\n                Next\n              </Button>\n            )}\n            {state.step === 5 && (\n              <Button\n                variant=\"primary\"\n                onClick={() => state.handleSubmit(props.onSubmit)}\n              >\n                Submit Survey\n              </Button>\n            )}\n          </Stack>\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 79332,
+          "output": 5455,
+          "total": 84787
+        },
+        "generationTimeMs": 33927,
+        "turnsUsed": 5,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Missing onSubmit prop: The component calls submit() on line 56, but 'submit' is never defined or imported from props. The handleSubmit callback will crash at runtime with 'submit is not defined'",
+              "fix": "Missing onSubmit prop: The component calls submit() on line 56, but 'submit' is never defined or imported from props. The handleSubmit callback will crash at runtime with 'submit is not defined'"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Missing onSubmit callback invocation: The component never receives or calls props.onSubmit, making it impossible for the parent component to receive survey results",
+              "fix": "Missing onSubmit callback invocation: The component never receives or calls props.onSubmit, making it impossible for the parent component to receive survey results"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 56: handleSubmit calls submit() but 'submit' is not defined or passed as a prop - will cause ReferenceError",
+              "fix": "Line 56: handleSubmit calls submit() but 'submit' is not defined or passed as a prop - will cause ReferenceError"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 63: handleSubmit dependency array references 'submit' which doesn't exist - useCallback will fail",
+              "fix": "Line 63: handleSubmit dependency array references 'submit' which doesn't exist - useCallback will fail"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 233: Array access props.satisfactionLabels[parseInt(state.satisfaction, 10) - 1] can crash if satisfaction is '1' and results in index 0, but also if state.satisfaction is empty string (parseInt returns NaN) leading to undefined array access",
+              "fix": "Line 233: Array access props.satisfactionLabels[parseInt(state.satisfaction, 10) - 1] can crash if satisfaction is '1' and results in index 0, but also if state.satisfaction is empty string (parseInt returns NaN) leading to undefined array access"
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "contract",
+            "types",
+            "imports",
+            "tokens",
+            "interactivity",
+            "accessibility",
+            "layout",
+            "loading",
+            "visual",
+            "dynamic:form-validation-rules",
+            "dynamic:multi-step-state-management",
+            "dynamic:submission-data-structure"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 26340,
+          "evalMs": 7525,
+          "totalMs": 33927
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 75,
+        "finalScore": 75,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 80,
+          "polish": 70,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 70,
+          "accessibility": 78,
+          "codeQuality": 65
+        },
+        "critique": "The component has a solid multi-step structure with clear progress indication and proper form validation, but suffers from incomplete implementation (Step 5 is cut off, handleSubmit references undefined 'state' variable), inconsistent design token usage (hardcoded color fallbacks like '#52525b' and '#f4f4f5'), and missing focus/hover states on interactive elements. The data presentation is strong with proper validation and formatting, but the polish is hampered by the broken submit logic and lack of interactive feedback states.",
+        "evalTimeMs": 2588
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Missing onSubmit prop: The component calls submit() on line 56, but 'submit' is never defined or imported from props. The handleSubmit callback will crash at runtime with 'submit is not defined'",
+            "fix": "Missing onSubmit prop: The component calls submit() on line 56, but 'submit' is never defined or imported from props. The handleSubmit callback will crash at runtime with 'submit is not defined'"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Missing onSubmit callback invocation: The component never receives or calls props.onSubmit, making it impossible for the parent component to receive survey results",
+            "fix": "Missing onSubmit callback invocation: The component never receives or calls props.onSubmit, making it impossible for the parent component to receive survey results"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 56: handleSubmit calls submit() but 'submit' is not defined or passed as a prop - will cause ReferenceError",
+            "fix": "Line 56: handleSubmit calls submit() but 'submit' is not defined or passed as a prop - will cause ReferenceError"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 63: handleSubmit dependency array references 'submit' which doesn't exist - useCallback will fail",
+            "fix": "Line 63: handleSubmit dependency array references 'submit' which doesn't exist - useCallback will fail"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 233: Array access props.satisfactionLabels[parseInt(state.satisfaction, 10) - 1] can crash if satisfaction is '1' and results in index 0, but also if state.satisfaction is empty string (parseInt returns NaN) leading to undefined array access",
+            "fix": "Line 233: Array access props.satisfactionLabels[parseInt(state.satisfaction, 10) - 1] can crash if satisfaction is '1' and results in index 0, but also if state.satisfaction is empty string (parseInt returns NaN) leading to undefined array access"
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "contract",
+          "types",
+          "imports",
+          "tokens",
+          "interactivity",
+          "accessibility",
+          "layout",
+          "loading",
+          "visual",
+          "dynamic:form-validation-rules",
+          "dynamic:multi-step-state-management",
+          "dynamic:submission-data-structure"
+        ]
+      },
+      "estimatedCostUsd": 0.10660700000000001,
+      "timestamp": "2026-03-22T03:24:44.075Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4574,
+        "sourceCodeBytes": 10591,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var G=Object.defineProperty;var k=(c,e)=>G(c,\"name\",{value:e,configurable:!0});import{jsx as t,jsxs as r}from\"react/jsx-runtime\";import j,{useState as u,useCallback as C,useEffect as L}from\"react\";import{Container as V,Card as E,Stack as d,Row as $,Box as w,Divider as q,Spacer as J,Text as T,Button as p,Input as M,Select as K,Badge as b,Avatar as O,Progress as Q,Icon as A}from\"@ggui-ai/design/primitives\";import{Dropdown as Z}from\"@ggui-ai/design/components\";import{Clickable as _}from\"@ggui-ai/design/interact\";function tt(c){const e=k(a=>{window.dispatchEvent(new CustomEvent(\"ggui:action\",{detail:{name:\"taskUpdate\",payload:a}}))},\"taskUpdate\"),[s,v]=u(null),n={latest:s,all:[s].filter(Boolean)},[l,m]=u(c.tasks||[]),[g,S]=u(null),[f,x]=u(\"\"),[R,P]=u(null),[y,D]=u(\"\"),[z,F]=u(\"medium\");L(()=>{const a=k(i=>{const o=i;o.detail.name===\"taskChanged\"&&v(o.detail.data)},\"handleStreamEvent\");return window.addEventListener(\"ggui:agent-data\",a),()=>window.removeEventListener(\"ggui:agent-data\",a)},[]),L(()=>{if(s?.task){const a=s.task;m(i=>{const o=i.filter(h=>h.id!==a.id);return s?.action!==\"delete\"&&o.push(a),o})}},[s]);const W=j.useMemo(()=>{const a={};return c.columns.forEach(i=>{a[i.id||\"\"]=[]}),l.forEach(i=>{const o=i.column||\"todo\";a[o]||(a[o]=[]),a[o].push(i)}),a},[l,c.columns]),H=l.length,N=W.done?.length||0,U=C((a,i)=>{l.find(h=>h.id===a)&&(m(h=>h.map(B=>B.id===a?{...B,column:i}:B)),e({action:\"move\",taskId:a,data:{column:i}}))},[l,e]),I=C(a=>{const i=l.find(o=>o.id===a);i&&(S(a),x(i.title||\"\"))},[l]),X=C(a=>{f.trim()&&(m(i=>i.map(o=>o.id===a?{...o,title:f}:o)),e({action:\"edit\",taskId:a,data:{column:l.find(i=>i.id===a)?.column||\"todo\"}}),S(null),x(\"\"))},[f,l,e]),Y=C(a=>{if(!y.trim())return;const i={id:`task-${Date.now()}`,title:y,priority:z,column:a,assignee:\"\",dueDate:\"\"};m(o=>[...o,i]),e({action:\"create\",taskId:i.id,data:{column:a}}),D(\"\"),F(\"medium\"),P(null)},[y,z,e]);return{tasks:l,setTasks:m,tasksByColumn:W,totalTasks:H,completedTasks:N,editingTaskId:g,setEditingTaskId:S,editTitle:f,setEditTitle:x,showAddForm:R,setShowAddForm:P,newTaskTitle:y,setNewTaskTitle:D,newTaskPriority:z,setNewTaskPriority:F,handleMoveTask:U,handleStartEdit:I,handleSaveEdit:X,handleAddTask:Y,taskUpdate:e,taskChanged:n}}k(tt,\"useComponent\");function et(c){const e=tt(c);return t(V,{maxWidth:\"2xl\",padding:24,children:r(d,{gap:24,children:[t(E,{padding:16,shadow:\"md\",radius:\"lg\",children:r(d,{direction:\"horizontal\",gap:24,align:\"center\",children:[r(d,{direction:\"horizontal\",gap:8,align:\"center\",children:[t(T,{variant:\"label\",children:\"Tasks:\"}),t(b,{variant:\"primary\",size:\"md\",children:e.totalTasks})]}),t(q,{orientation:\"vertical\"}),r(d,{direction:\"horizontal\",gap:8,align:\"center\",children:[t(T,{variant:\"label\",children:\"Completed:\"}),t(b,{variant:\"success\",size:\"md\",children:e.completedTasks})]}),t(J,{size:\"flex\"}),t(Q,{value:e.totalTasks>0?e.completedTasks/e.totalTasks*100:0,max:100,variant:\"success\",size:\"md\",showLabel:!1})]})}),t($,{gap:16,wrap:!0,children:c.columns.map(s=>{const v=e.tasksByColumn[s.id||\"\"]||[];return t(w,{style:{flex:\"0 0 calc(33.333% - 12px)\",minWidth:\"300px\",display:\"flex\",flexDirection:\"column\"},children:t(E,{padding:0,shadow:\"sm\",radius:\"lg\",border:!0,children:r(d,{gap:0,children:[t(w,{paddingX:16,paddingY:12,background:\"var(--ggui-color-primary-50, #f0f9ff)\",borderRadius:0,style:{borderBottom:\"2px solid var(--ggui-color-primary-200, #bae6fd)\"},children:r(d,{direction:\"horizontal\",gap:8,justify:\"between\",align:\"center\",children:[t(T,{variant:\"label\",color:\"var(--ggui-color-primary-900, #0c4a6e)\",children:s.name}),t(b,{variant:\"primary\",size:\"sm\",children:v.length})]})}),t(w,{paddingX:12,paddingY:12,style:{minHeight:\"200px\"},children:t(d,{gap:8,children:v.map(n=>{const l=e.editingTaskId===n.id,m=n.priority===\"high\"?\"error\":n.priority===\"medium\"?\"warning\":\"success\";return t(E,{padding:12,shadow:\"sm\",radius:\"md\",border:!0,as:_,style:{cursor:\"grab\",transition:\"all 200ms ease-in-out\"},children:r(d,{gap:8,children:[l?r(d,{direction:\"horizontal\",gap:4,children:[t(M,{label:\"Edit title\",value:e.editTitle,onChange:e.setEditTitle,size:\"sm\",type:\"text\"}),t(p,{variant:\"primary\",size:\"xs\",onClick:()=>e.handleSaveEdit(n.id||\"\"),children:\"Save\"}),t(p,{variant:\"ghost\",size:\"xs\",onClick:()=>e.setEditingTaskId(null),children:\"Cancel\"})]}):r(d,{direction:\"horizontal\",gap:8,justify:\"between\",align:\"start\",children:[t(T,{variant:\"body\",style:{flex:1,fontWeight:\"var(--ggui-font-weight-semibold, 600)\"},children:n.title}),t(p,{variant:\"ghost\",size:\"xs\",onClick:()=>e.handleStartEdit(n.id||\"\"),children:t(A,{name:\"edit-2\",size:14})})]}),n.priority&&t(b,{variant:m,size:\"sm\",pill:!0,children:n.priority}),r(d,{direction:\"horizontal\",gap:8,align:\"center\",children:[n.assignee&&t(O,{name:n.assignee,size:\"sm\",shape:\"circle\"}),n.dueDate&&r(T,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Due: \",n.dueDate]})]}),t(Z,{trigger:r(p,{variant:\"outline\",size:\"xs\",fullWidth:!0,children:[\"Move to...  \",t(A,{name:\"chevron-down\",size:12})]}),options:c.columns.filter(g=>g.id!==s.id).map(g=>({value:g.id||\"\",label:g.name||\"\"})),value:\"\",onChange:g=>e.handleMoveTask(n.id||\"\",g),placement:\"bottom-end\"})]})},n.id)})})}),t(w,{paddingX:12,paddingY:8,children:e.showAddForm===s.id?r(d,{gap:8,children:[t(M,{label:\"Task title\",value:e.newTaskTitle,onChange:e.setNewTaskTitle,placeholder:\"Enter task title\",size:\"sm\"}),t(K,{label:\"Priority\",value:e.newTaskPriority,onChange:n=>e.setNewTaskPriority(n),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}],size:\"sm\"}),r(d,{direction:\"horizontal\",gap:8,children:[t(p,{variant:\"primary\",size:\"xs\",onClick:()=>e.handleAddTask(s.id||\"\"),fullWidth:!0,children:\"Add\"}),t(p,{variant:\"ghost\",size:\"xs\",onClick:()=>e.setShowAddForm(null),fullWidth:!0,children:\"Cancel\"})]})]}):r(p,{variant:\"ghost\",size:\"sm\",fullWidth:!0,onClick:()=>e.setShowAddForm(s.id||\"\"),children:[t(A,{name:\"plus\",size:16}),\" Add Task\"]})})]})})},s.id)})})]})})}k(et,\"Component\");export{et as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef, useEffect } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column?: string; title?: string } };\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\nfunction useComponent(props: Props) {\n  // Actions — fire-and-forget to agent\n  const taskUpdate = (payload: ActionTaskUpdatePayload) => {\n    window.dispatchEvent(new CustomEvent('ggui:action', { detail: { name: 'taskUpdate', payload } }));\n  };\n\n  // Streams — real-time from agent (.latest, .all)\n  const [taskChangedData, setTaskChangedData] = useState<StreamTaskChanged | null>(null);\n  const taskChanged = { latest: taskChangedData, all: [taskChangedData].filter(Boolean) as StreamTaskChanged[] };\n\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editTitle, setEditTitle] = useState('');\n  const [showAddForm, setShowAddForm] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n\n  // Listen for stream events and update tasks in real-time\n  useEffect(() => {\n    const handleStreamEvent = (event: Event) => {\n      const customEvent = event as CustomEvent<{ name: string; data: StreamTaskChanged }>;\n      if (customEvent.detail.name === 'taskChanged') {\n        setTaskChangedData(customEvent.detail.data);\n      }\n    };\n    window.addEventListener('ggui:agent-data', handleStreamEvent as EventListener);\n    return () => window.removeEventListener('ggui:agent-data', handleStreamEvent as EventListener);\n  }, []);\n\n  // Update tasks when props change or stream events arrive\n  useEffect(() => {\n    if (taskChangedData?.task) {\n      const updated = taskChangedData.task;\n      setTasks((prev) => {\n        const filtered = prev.filter((t) => t.id !== updated.id);\n        if (taskChangedData?.action !== 'delete') {\n          filtered.push(updated);\n        }\n        return filtered;\n      });\n    }\n  }, [taskChangedData]);\n\n  // Compute tasks per column\n  const tasksByColumn = React.useMemo(() => {\n    const byCol: Record<string, typeof tasks> = {};\n    props.columns.forEach((col) => {\n      byCol[col.id || ''] = [];\n    });\n    tasks.forEach((task) => {\n      const col = task.column || 'todo';\n      if (!byCol[col]) byCol[col] = [];\n      byCol[col].push(task);\n    });\n    return byCol;\n  }, [tasks, props.columns]);\n\n  // Summary stats\n  const totalTasks = tasks.length;\n  const completedTasks = tasksByColumn['done']?.length || 0;\n\n  // Move task to column\n  const handleMoveTask = useCallback(\n    (taskId: string, toColumn: string) => {\n      const task = tasks.find((t) => t.id === taskId);\n      if (!task) return;\n\n      setTasks((prev) =>\n        prev.map((t) => (t.id === taskId ? { ...t, column: toColumn } : t))\n      );\n      taskUpdate({ action: 'move', taskId, data: { column: toColumn } });\n    },\n    [tasks, taskUpdate]\n  );\n\n  // Start editing task\n  const handleStartEdit = useCallback((taskId: string) => {\n    const task = tasks.find((t) => t.id === taskId);\n    if (task) {\n      setEditingTaskId(taskId);\n      setEditTitle(task.title || '');\n    }\n  }, [tasks]);\n\n  // Save edited task\n  const handleSaveEdit = useCallback(\n    (taskId: string) => {\n      if (!editTitle.trim()) return;\n      setTasks((prev) =>\n        prev.map((t) => (t.id === taskId ? { ...t, title: editTitle } : t))\n      );\n      taskUpdate({ action: 'edit', taskId, data: { title: editTitle, column: tasks.find((t) => t.id === taskId)?.column || 'todo' } });\n      setEditingTaskId(null);\n      setEditTitle('');\n    },\n    [editTitle, tasks, taskUpdate]\n  );\n\n  // Add new task\n  const handleAddTask = useCallback(\n    (columnId: string) => {\n      if (!newTaskTitle.trim()) return;\n      const newTask = {\n        id: `task-${Date.now()}`,\n        title: newTaskTitle,\n        priority: newTaskPriority,\n        column: columnId,\n        assignee: '',\n        dueDate: '',\n      };\n      setTasks((prev) => [...prev, newTask]);\n      taskUpdate({ action: 'create', taskId: newTask.id, data: { column: columnId } });\n      setNewTaskTitle('');\n      setNewTaskPriority('medium');\n      setShowAddForm(null);\n    },\n    [newTaskTitle, newTaskPriority, taskUpdate]\n  );\n\n  return {\n    tasks,\n    setTasks,\n    tasksByColumn,\n    totalTasks,\n    completedTasks,\n    editingTaskId,\n    setEditingTaskId,\n    editTitle,\n    setEditTitle,\n    showAddForm,\n    setShowAddForm,\n    newTaskTitle,\n    setNewTaskTitle,\n    newTaskPriority,\n    setNewTaskPriority,\n    handleMoveTask,\n    handleStartEdit,\n    handleSaveEdit,\n    handleAddTask,\n    taskUpdate,\n    taskChanged,\n  };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  return (\n    <Container maxWidth=\"2xl\" padding={24}>\n      <Stack gap={24}>\n        {/* Summary Bar */}\n        <Card padding={16} shadow=\"md\" radius=\"lg\">\n          <Stack direction=\"horizontal\" gap={24} align=\"center\">\n            <Stack direction=\"horizontal\" gap={8} align=\"center\">\n              <Text variant=\"label\">Tasks:</Text>\n              <Badge variant=\"primary\" size=\"md\">{state.totalTasks}</Badge>\n            </Stack>\n            <Divider orientation=\"vertical\" />\n            <Stack direction=\"horizontal\" gap={8} align=\"center\">\n              <Text variant=\"label\">Completed:</Text>\n              <Badge variant=\"success\" size=\"md\">{state.completedTasks}</Badge>\n            </Stack>\n            <Spacer size=\"flex\" />\n            <Progress\n              value={state.totalTasks > 0 ? (state.completedTasks / state.totalTasks) * 100 : 0}\n              max={100}\n              variant=\"success\"\n              size=\"md\"\n              showLabel={false}\n            />\n          </Stack>\n        </Card>\n\n        {/* Kanban Board */}\n        <Row gap={16} wrap>\n          {props.columns.map((column) => {\n            const colTasks = state.tasksByColumn[column.id || ''] || [];\n            return (\n              <Box\n                key={column.id}\n                style={{\n                  flex: '0 0 calc(33.333% - 12px)',\n                  minWidth: '300px',\n                  display: 'flex',\n                  flexDirection: 'column',\n                }}\n              >\n                <Card padding={0} shadow=\"sm\" radius=\"lg\" border>\n                  <Stack gap={0}>\n                    {/* Column Header */}\n                    <Box\n                      paddingX={16}\n                      paddingY={12}\n                      background=\"var(--ggui-color-primary-50, #f0f9ff)\"\n                      borderRadius={0}\n                      style={{\n                        borderBottom: '2px solid var(--ggui-color-primary-200, #bae6fd)',\n                      }}\n                    >\n                      <Stack direction=\"horizontal\" gap={8} justify=\"between\" align=\"center\">\n                        <Text variant=\"label\" color=\"var(--ggui-color-primary-900, #0c4a6e)\">\n                          {column.name}\n                        </Text>\n                        <Badge variant=\"primary\" size=\"sm\">\n                          {colTasks.length}\n                        </Badge>\n                      </Stack>\n                    </Box>\n\n                    {/* Task List */}\n                    <Box paddingX={12} paddingY={12} style={{ minHeight: '200px' }}>\n                      <Stack gap={8}>\n                        {colTasks.map((task) => {\n                          const isEditing = state.editingTaskId === task.id;\n                          const priorityVariant =\n                            task.priority === 'high'\n                              ? 'error'\n                              : task.priority === 'medium'\n                              ? 'warning'\n                              : 'success';\n\n                          return (\n                            <Card\n                              key={task.id}\n                              padding={12}\n                              shadow=\"sm\"\n                              radius=\"md\"\n                              border\n                              as={Clickable}\n                              style={{\n                                cursor: 'grab',\n                                transition: 'all 200ms ease-in-out',\n                              }}\n                            >\n                              <Stack gap={8}>\n                                {/* Task Title */}\n                                {isEditing ? (\n                                  <Stack direction=\"horizontal\" gap={4}>\n                                    <Input\n                                      label=\"Edit title\"\n                                      value={state.editTitle}\n                                      onChange={state.setEditTitle}\n                                      size=\"sm\"\n                                      type=\"text\"\n                                    />\n                                    <Button\n                                      variant=\"primary\"\n                                      size=\"xs\"\n                                      onClick={() => state.handleSaveEdit(task.id || '')}\n                                    >\n                                      Save\n                                    </Button>\n                                    <Button\n                                      variant=\"ghost\"\n                                      size=\"xs\"\n                                      onClick={() => state.setEditingTaskId(null)}\n                                    >\n                                      Cancel\n                                    </Button>\n                                  </Stack>\n                                ) : (\n                                  <Stack\n                                    direction=\"horizontal\"\n                                    gap={8}\n                                    justify=\"between\"\n                                    align=\"start\"\n                                    as={Clickable}\n                                    onClick={() => {\n                                      if (state.editingTaskId !== task.id) {\n                                        state.handleStartEdit(task.id || '');\n                                      }\n                                    }}\n                                    onDoubleClick={() => state.handleStartEdit(task.id || '')}\n                                    style={{ userSelect: 'none' }}\n                                  >\n                                    <Text\n                                      variant=\"body\"\n                                      style={{\n                                        flex: 1,\n                                        fontWeight: 'var(--ggui-font-weight-semibold, 600)',\n                                      }}\n                                    >\n                                      {task.title}\n                                    </Text>\n                                    <Button\n                                      variant=\"ghost\"\n                                      size=\"xs\"\n                                      onClick={(e) => {\n                                        e.stopPropagation();\n                                        state.handleStartEdit(task.id || '');\n                                      }}\n                                    >\n                                      <Icon name=\"edit-2\" size={14} />\n                                    </Button>\n                                  </Stack>\n\n                                {/* Priority Badge */}\n                                {task.priority && (\n                                  <Badge\n                                  <Badge\n                                    variant={priorityVariant as any}\n                                    size=\"sm\"\n                                    pill\n                                  >\n                                    {task.priority}\n                                  </Badge>\n                                )}\n\n                                {/* Assignee & Due Date */}\n                                <Stack direction=\"horizontal\" gap={8} align=\"center\">\n                                  {task.assignee && (\n                                    <Avatar\n                                      name={task.assignee}\n                                      size=\"sm\"\n                                      shape=\"circle\"\n                                    />\n                                  )}\n                                  {task.dueDate && (\n                                    <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                                      Due: {task.dueDate}\n                                    </Text>\n                                  )}\n                                </Stack>\n\n                                {/* Move Dropdown */}\n                                <Dropdown\n                                  trigger={\n                                    <Button variant=\"outline\" size=\"xs\" fullWidth>\n                                      Move to...  <Icon name=\"chevron-down\" size={12} />\n                                    </Button>\n                                  }\n                                  options={props.columns\n                                    .filter((c) => c.id !== column.id)\n                                    .map((c) => ({\n                                      value: c.id || '',\n                                      label: c.name || '',\n                                    }))}\n                                  value=\"\"\n                                  onChange={(val) => state.handleMoveTask(task.id || '', val)}\n                                  placement=\"bottom-end\"\n                                />\n                              </Stack>\n                            </Card>\n                          );\n                        })}\n                      </Stack>\n                    </Box>\n\n                    {/* Add Task Form */}\n                    <Box paddingX={12} paddingY={8}>\n                      {state.showAddForm === column.id ? (\n                        <Stack gap={8}>\n                          <Input\n                            label=\"Task title\"\n                            value={state.newTaskTitle}\n                            onChange={state.setNewTaskTitle}\n                            placeholder=\"Enter task title\"\n                            size=\"sm\"\n                          />\n                          <Select\n                            label=\"Priority\"\n                            value={state.newTaskPriority}\n                            onChange={(val) => state.setNewTaskPriority(val as 'low' | 'medium' | 'high')}\n                            options={[\n                              { value: 'low', label: 'Low' },\n                              { value: 'medium', label: 'Medium' },\n                              { value: 'high', label: 'High' },\n                            ]}\n                            size=\"sm\"\n                          />\n                          <Stack direction=\"horizontal\" gap={8}>\n                            <Button\n                              variant=\"primary\"\n                              size=\"xs\"\n                              onClick={() => state.handleAddTask(column.id || '')}\n                              fullWidth\n                            >\n                              Add\n                            </Button>\n                            <Button\n                              variant=\"ghost\"\n                              size=\"xs\"\n                              onClick={() => state.setShowAddForm(null)}\n                              fullWidth\n                            >\n                              Cancel\n                            </Button>\n                          </Stack>\n                        </Stack>\n                      ) : (\n                        <Button\n                          variant=\"ghost\"\n                          size=\"sm\"\n                          fullWidth\n                          onClick={() => state.setShowAddForm(column.id || '')}\n                        >\n                          <Icon name=\"plus\" size={16} /> Add Task\n                        </Button>\n                      )}\n                    </Box>\n                  </Stack>\n                </Card>\n              </Box>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 115549,
+          "output": 8245,
+          "total": 123794
+        },
+        "generationTimeMs": 53707,
+        "turnsUsed": 6,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 0,
+              "result": "warn",
+              "category": "contract",
+              "subcategory": "__streamSpec__",
+              "severity": "major",
+              "description": "Component should output a __GGUI_STREAM_SPEC__ marker describing the expected data shape",
+              "fix": "Output __GGUI_STREAM_SPEC__ { ... } __GGUI_STREAM_SPEC_END__ with the event schema"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Task title edit via double-click is not implemented — only edit button exists",
+              "fix": "Task title edit via double-click is not implemented — only edit button exists"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Edit action in taskUpdate payload is incomplete — does not include title in data property",
+              "fix": "Edit action in taskUpdate payload is incomplete — does not include title in data property"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Priority color coding uses hardcoded color names instead of design tokens — should use var(--ggui-*) for colors",
+              "fix": "Priority color coding uses hardcoded color names instead of design tokens — should use var(--ggui-*) for colors"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Edit button (line 299) lacks aria-label — icon-only buttons need accessible labels",
+              "fix": "Edit button (line 299) lacks aria-label — icon-only buttons need accessible labels"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move dropdown button (line 334) lacks aria-label for clarity",
+              "fix": "Move dropdown button (line 334) lacks aria-label for clarity"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task card itself is marked as Clickable (line 251) but serves no interactive purpose — may confuse assistive technology",
+              "fix": "Task card itself is marked as Clickable (line 251) but serves no interactive purpose — may confuse assistive technology"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Column header section lacks semantic heading element (should be h2 or h3, not just Text)",
+              "fix": "Column header section lacks semantic heading element (should be h2 or h3, not just Text)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Missing aria-live region for real-time task updates from stream events",
+              "fix": "Missing aria-live region for real-time task updates from stream events"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Edit mode cancel button could benefit from more explicit labeling for context",
+              "fix": "Edit mode cancel button could benefit from more explicit labeling for context"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "No clear indication of edit mode to screen readers — context switch not announced",
+              "fix": "No clear indication of edit mode to screen readers — context switch not announced"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state message when a column has no tasks — should display 'No tasks in this column' or similar instead of blank space",
+              "fix": "No empty state message when a column has no tasks — should display 'No tasks in this column' or similar instead of blank space"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No loading indicator while real-time stream events are being processed or initial data is being fetched",
+              "fix": "No loading indicator while real-time stream events are being processed or initial data is being fetched"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "Error handling missing for malformed stream events (taskChangedData?.task could be invalid) — should validate before updating state",
+              "fix": "Error handling missing for malformed stream events (taskChangedData?.task could be invalid) — should validate before updating state"
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "types",
+            "imports",
+            "tokens",
+            "crash",
+            "interactivity",
+            "layout",
+            "visual",
+            "dynamic:move-between-columns",
+            "dynamic:real-time-stream-updates",
+            "dynamic:inline-task-creation"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 43488,
+          "evalMs": 10152,
+          "totalMs": 53707
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 41.4,
+        "finalScore": 41.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 42,
+          "designTokens": 15,
+          "hierarchy": 55,
+          "polish": 35,
+          "dataPresentation": 60,
+          "completeness": 60,
+          "visualPolish": 49,
+          "interactivity": 35,
+          "accessibility": 49,
+          "codeQuality": 15
+        },
+        "critique": "The component has significant issues with design token usage—it hardcodes pixel values (24, 16, 8, 12) instead of using var(--ggui-spacing-*), and lacks semantic color tokens for priorities and states. The layout is incomplete (source code cuts off mid-render), but the flex approach is reasonable; however, there's no proper responsive behavior or gap handling. Polish is weak with no visible hover/focus states, transitions, or disabled states on forms.",
+        "evalTimeMs": 2556
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 0,
+            "result": "warn",
+            "category": "contract",
+            "subcategory": "__streamSpec__",
+            "severity": "major",
+            "description": "Component should output a __GGUI_STREAM_SPEC__ marker describing the expected data shape",
+            "fix": "Output __GGUI_STREAM_SPEC__ { ... } __GGUI_STREAM_SPEC_END__ with the event schema"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Task title edit via double-click is not implemented — only edit button exists",
+            "fix": "Task title edit via double-click is not implemented — only edit button exists"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Edit action in taskUpdate payload is incomplete — does not include title in data property",
+            "fix": "Edit action in taskUpdate payload is incomplete — does not include title in data property"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Priority color coding uses hardcoded color names instead of design tokens — should use var(--ggui-*) for colors",
+            "fix": "Priority color coding uses hardcoded color names instead of design tokens — should use var(--ggui-*) for colors"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Edit button (line 299) lacks aria-label — icon-only buttons need accessible labels",
+            "fix": "Edit button (line 299) lacks aria-label — icon-only buttons need accessible labels"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move dropdown button (line 334) lacks aria-label for clarity",
+            "fix": "Move dropdown button (line 334) lacks aria-label for clarity"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task card itself is marked as Clickable (line 251) but serves no interactive purpose — may confuse assistive technology",
+            "fix": "Task card itself is marked as Clickable (line 251) but serves no interactive purpose — may confuse assistive technology"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Column header section lacks semantic heading element (should be h2 or h3, not just Text)",
+            "fix": "Column header section lacks semantic heading element (should be h2 or h3, not just Text)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Missing aria-live region for real-time task updates from stream events",
+            "fix": "Missing aria-live region for real-time task updates from stream events"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Edit mode cancel button could benefit from more explicit labeling for context",
+            "fix": "Edit mode cancel button could benefit from more explicit labeling for context"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "No clear indication of edit mode to screen readers — context switch not announced",
+            "fix": "No clear indication of edit mode to screen readers — context switch not announced"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state message when a column has no tasks — should display 'No tasks in this column' or similar instead of blank space",
+            "fix": "No empty state message when a column has no tasks — should display 'No tasks in this column' or similar instead of blank space"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No loading indicator while real-time stream events are being processed or initial data is being fetched",
+            "fix": "No loading indicator while real-time stream events are being processed or initial data is being fetched"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "Error handling missing for malformed stream events (taskChangedData?.task could be invalid) — should validate before updating state",
+            "fix": "Error handling missing for malformed stream events (taskChangedData?.task could be invalid) — should validate before updating state"
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "types",
+          "imports",
+          "tokens",
+          "crash",
+          "interactivity",
+          "layout",
+          "visual",
+          "dynamic:move-between-columns",
+          "dynamic:real-time-stream-updates",
+          "dynamic:inline-task-creation"
+        ]
+      },
+      "estimatedCostUsd": 0.156774,
+      "timestamp": "2026-03-22T03:25:03.825Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6027,
+        "sourceCodeBytes": 18438,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"done\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"done\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"done\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 68.13333333333334,
+      "avgTimeMs": 36595.333333333336,
+      "avgCostUsd": 0.12716733333333333,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 80,
+        "visualPolish": 72.66666666666667,
+        "interactivity": 60,
+        "accessibility": 72.66666666666667,
+        "codeQuality": 56
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 2
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 88,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 75,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 41.4,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 68.13333333333334,
+        "avgTimeMs": 36595.333333333336,
+        "avgCostUsd": 0.12716733333333333,
+        "successRate": 1
+      }
+    }
+  }
+}

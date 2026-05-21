@@ -1,0 +1,62 @@
+{
+  "name": "@ggui-ai/gadget-signing",
+  "version": "0.1.0-rc.1",
+  "description": "Gadget bundle signing + verification for the ggui gadget marketplace. Ed25519 author-key path + sigstore/cosign keyless path. Pure-TS @noble crypto for Ed25519 — browser-safe.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "gadgets",
+    "code-signing",
+    "ed25519",
+    "sigstore",
+    "cosign",
+    "supply-chain"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts --max-warnings 0",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.2.0",
+    "@noble/hashes": "^1.6.0",
+    "@sigstore/bundle": "^4.0.0",
+    "sigstore": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/gadget-signing"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/gadget-signing",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

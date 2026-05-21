@@ -1,0 +1,251 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T08:52:54.960Z",
+    "totalDurationMs": 288391,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-multi-agent-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-agent",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-pro-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "",
+        "sourceCode": "// --- types.d.ts ---\nexport interface ForecastDay {\n  day: string;\n  icon: string;\n  high: number;\n  low: number;\n}\n\nexport interface WeatherProps {\n  city: string;\n  temperature: number;\n  condition: string;\n  humidity: number;\n  windSpeed: number;\n  unit?: string;\n  forecast: ForecastDay[];\n}\n\nexport interface HookReturn {\n  formattedTemp: string;\n  formattedHumidity: string;\n  formattedWind: string;\n  weatherIcon: string;\n  processedForecast: ForecastDay[];\n}\n\nexport interface WeatherMainProps {\n  city: string;\n  temperature: string;\n  condition: string;\n  icon: string;\n}\n\nexport interface WeatherStatsProps {\n  humidity: string;\n  windSpeed: string;\n}\n\nexport interface ForecastStripProps {\n  forecast: ForecastDay[];\n  unit: string;\n}\n\nexport interface ForecastItemProps {\n  item: ForecastDay;\n  unit: string;\n}\n\n\n// --- constants.ts ---\n// constants.ts — static data, mappings, configurations\n\nexport const WEATHER_ICONS: Record<string, string> = {\n  'Sunny': '☀️',\n  'Cloudy': '☁️',\n  'Rainy': '🌧️',\n  'Partly Cloudy': '⛅',\n  'Stormy': '⛈️',\n  'Snowy': '❄️',\n  'Clear': '☀️',\n  'Mist': '🌫️',\n  'Fog': '🌫️',\n};\n\nexport type UnitType = 'metric' | 'imperial';\n\ninterface UnitLabel {\n  temperature: string;\n  speed: string;\n}\n\nexport const UNIT_LABELS: Record<UnitType, UnitLabel> = {\n  metric: {\n    temperature: '°C',\n    speed: 'km/h',\n  },\n  imperial: {\n    temperature: '°F',\n    speed: 'mph',\n  },\n};\n\nexport const DEFAULT_UNIT: UnitType = 'metric';\n\n\n// --- hooks.ts ---\n// hooks.ts — state, handlers, data transformations\nimport { useMemo } from 'react';\nimport type { WeatherProps, HookReturn } from './types';\n\nexport function useComponent(props: WeatherProps): HookReturn {\n  const { temperature, humidity, windSpeed, unit = '°C', condition, forecast } = props;\n\n  const formattedTemp = `${temperature}${unit}`;\n  const formattedHumidity = `${humidity}%`;\n  const formattedWind = `${windSpeed} km/h`;\n\n  const weatherIcon = useMemo(() => {\n    switch (condition) {\n      case 'Sunny':\n        return '☀️';\n      case 'Cloudy':\n        return '☁️';\n      case 'Rainy':\n        return '🌧️';\n      case 'Snowy':\n        return '❄️';\n      case 'Partly Cloudy':\n        return '⛅';\n      default:\n        return '🌡️';\n    }\n  }, [condition]);\n\n  const processedForecast = useMemo(() => {\n    return forecast.slice(0, 5);\n  }, [forecast]);\n\n  return {\n    formattedTemp,\n    formattedHumidity,\n    formattedWind,\n    weatherIcon,\n    processedForecast,\n  };\n}\n\n\n// --- components/WeatherMain.tsx ---\nimport React from 'react';\nimport { Stack, Heading, Text } from '@ggui-ai/design/primitives';\nimport { WeatherMainProps } from '../types';\n\nexport const WeatherMain: React.FC<WeatherMainProps> = ({\n  city,\n  temperature,\n  condition,\n  icon,\n}) => {\n  return (\n    <Stack align=\"center\" gap={12}>\n      {/* City Name: Prominent but secondary (Level 2), Neutral 600 */}\n      <Heading \n        level={2} \n        color=\"var(--ggui-color-neutral-600, #4b5563)\"\n        align=\"center\"\n      >\n        {city}\n      </Heading>\n\n      {/* Temperature and Icon: Alongside, horizontally grouped */}\n      <Stack direction=\"horizontal\" align=\"center\" gap={12}>\n        {/* Weather Icon: Large font size (3rem) */}\n        <Text \n          as=\"span\" \n          style={{ fontSize: '3rem', lineHeight: 1 }}\n        >\n          {icon}\n        </Text>\n        \n        {/* Temperature: Largest element, bold, Neutral 900, responsive sizing */}\n        <Text\n          weight=\"bold\"\n          color=\"var(--ggui-color-neutral-900, #111827)\"\n          align=\"center\"\n          style={{ \n            fontSize: 'clamp(4rem, 12vw, 5.5rem)', \n            lineHeight: 1 \n          }}\n        >\n          {temperature}\n        </Text>\n      </Stack>\n\n      {/* Condition: Clearly below, size lg, capitalized, Neutral 500 */}\n      <Text\n        size=\"lg\"\n        color=\"var(--ggui-color-neutral-500, #6b7280)\"\n        align=\"center\"\n        style={{ textTransform: 'capitalize' }}\n      >\n        {condition}\n      </Text>\n    </Stack>\n  );\n};\n\n\n// --- components/WeatherStats.tsx ---\nimport React from 'react';\nimport { Stack, Text } from '@ggui-ai/design/primitives';\nimport { WeatherStatsProps } from '../types';\n\n/**\n * WeatherStats component displays secondary weather metrics (humidity and wind speed)\n * in a side-by-side layout using vertical stacks for each stat.\n */\nexport const WeatherStats: React.FC<WeatherStatsProps> = ({ humidity, windSpeed }) => {\n  return (\n    <Stack\n      direction=\"horizontal\"\n      gap={24}\n      justify=\"center\"\n      align=\"center\"\n    >\n      <Stack align=\"center\" gap={4}>\n        <Text size=\"sm\" color=\"var(--ggui-color-neutral-500, #6b7280)\">\n          💧 Humidity\n        </Text>\n        <Text weight=\"medium\" color=\"var(--ggui-color-neutral-900, #111827)\">\n          {humidity}\n        </Text>\n      </Stack>\n      <Stack align=\"center\" gap={4}>\n        <Text size=\"sm\" color=\"var(--ggui-color-neutral-500, #6b7280)\">\n          💨 Wind\n        </Text>\n        <Text weight=\"medium\" color=\"var(--ggui-color-neutral-900, #111827)\">\n          {windSpeed}\n        </Text>\n      </Stack>\n    </Stack>\n  );\n};\n\nexport default WeatherStats;\n\n\n// --- components/ForecastStrip.tsx ---\nimport React from 'react';\nimport { Stack, Text } from '@ggui-ai/design/primitives';\nimport { ForecastStripProps, ForecastItemProps } from '../types';\n\n/**\n * ForecastItem: Internal sub-component for rendering a single day's forecast.\n */\nconst ForecastItem: React.FC<ForecastItemProps> = ({ item, unit }) => {\n  return (\n    <Stack align=\"center\" gap={8} style={{ minWidth: 60, flex: 1 }}>\n      {/* Day Label */}\n      <Text \n        size=\"sm\" \n        color=\"var(--ggui-color-neutral-500, #6b7280)\" \n        style={{ textTransform: 'uppercase' }}\n      >\n        {item.day}\n      </Text>\n\n      {/* Icon */}\n      <Text size=\"2xl\" style={{ lineHeight: 1 }}>\n        {item.icon}\n      </Text>\n\n      {/* Temperatures */}\n      <Stack direction=\"horizontal\" gap={4} align=\"center\">\n        <Text weight=\"bold\" size=\"base\">\n          {item.high}{unit}\n        </Text>\n        <Text \n          size=\"sm\" \n          color=\"var(--ggui-color-neutral-400, #9ca3af)\"\n        >\n          {item.low}{unit}\n        </Text>\n      </Stack>\n    </Stack>\n  );\n};\n\n/**\n * ForecastStrip: Displays a horizontal sequence of daily weather forecasts.\n */\nexport const ForecastStrip: React.FC<ForecastStripProps> = ({ forecast, unit }) => {\n  // Handle empty or undefined forecast arrays gracefully\n  if (!forecast || forecast.length === 0) {\n    return null;\n  }\n\n  return (\n    <Stack\n      direction=\"horizontal\"\n      justify=\"between\"\n      style={{\n        overflowX: 'auto',\n        WebkitOverflowScrolling: 'touch',\n        borderTop: '1px solid var(--ggui-color-neutral-100, #f3f4f6)',\n        paddingTop: 'var(--ggui-spacing-4, 16px)',\n        gap: 'var(--ggui-spacing-4, 16px)',\n      }}\n    >\n      {forecast.map((item, index) => (\n        <ForecastItem key={`${item.day}-${index}`} item={item} unit={unit} />\n      ))}\n    </Stack>\n  );\n};\n\nexport default ForecastStrip;\n\n\n// --- ui.tsx ---\nimport React from 'react';\nimport { WeatherProps } from './types';\nimport { useWeather } from './hooks/useWeather';\nimport { Container, Card, Stack, Divider } from '@ggui-ai/design/primitives';\nimport { WeatherMain, WeatherStats, ForecastStrip } from './components';\n\n/**\n * WeatherCard Component\n *\n * The main weather dashboard component that displays the current weather,\n * detailed statistics, and a 5-day forecast.\n */\nexport const WeatherCard: React.FC<WeatherProps> = ({\n  city,\n  temperature,\n  condition,\n  humidity,\n  windSpeed,\n  unit = '°C',\n  forecast,\n}) => {\n  // Initialize the useWeather hook with provided weather data\n  const {\n    formattedTemp,\n    formattedHumidity,\n    formattedWind,\n    weatherIcon,\n    processedForecast,\n  } = useWeather({\n    temperature,\n    humidity,\n    windSpeed,\n    forecast,\n    unit,\n  });\n\n  return (\n    <Container maxWidth=\"sm\">\n      <Card shadow=\"md\" padding={16}>\n        <Stack direction=\"vertical\" gap={24}>\n          {/* Top Section: City and Current Weather */}\n          <WeatherMain\n            city={city}\n            temperature={formattedTemp}\n            condition={condition}\n            icon={weatherIcon}\n          />\n\n          <Divider />\n\n          {/* Middle Section: Humidity and Wind Speed Stats */}\n          <WeatherStats\n            humidity={formattedHumidity}\n            windSpeed={formattedWind}\n          />\n\n          <Divider />\n\n          {/* Bottom Section: 5-Day Forecast Strip */}\n          <ForecastStrip forecast={processedForecast} unit={unit} />\n        </Stack>\n      </Card>\n    </Container>\n  );\n};\n\nexport default WeatherCard;\n\n\n// --- render.tsx ---\n// render.tsx — entry point\nimport React from 'react';\nimport type { Props } from './types';\nimport { useComponent } from './hooks';\nimport { ComponentUI } from './ui';\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n  return <ComponentUI {...props} {...state} />;\n}\n",
+        "tokens": {
+          "input": 454811,
+          "output": 8517,
+          "total": 463328
+        },
+        "generationTimeMs": 281681,
+        "turnsUsed": 7,
+        "iterations": 1,
+        "recipeName": "multi-agent",
+        "passesUsed": 1
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 70,
+        "finalScore": 70,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 65,
+          "hierarchy": 80,
+          "polish": 60,
+          "dataPresentation": 70,
+          "completeness": 70,
+          "visualPolish": 78,
+          "interactivity": 60,
+          "accessibility": 78,
+          "codeQuality": 65
+        },
+        "critique": "The component has good visual hierarchy and responsive layout, but suffers from inconsistent design token usage (hardcoded fallback colors, inline styles for spacing), missing interactive polish (no hover/focus states, transitions), and a critical hook import mismatch (imports useWeather but exports useComponent). The forecast strip overflow handling is good, but the main UI file is incomplete.",
+        "evalTimeMs": 6509
+      },
+      "estimatedCostUsd": 0.25295650000000003,
+      "timestamp": "2026-03-19T08:52:54.959Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 0,
+        "sourceCodeBytes": 9067,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": ["Hardcoded string \"Sunny\" found — should be a prop default"]
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-multi-agent-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 70,
+      "avgTimeMs": 281681,
+      "avgCostUsd": 0.25295650000000003,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 70,
+        "visualPolish": 78,
+        "interactivity": 60,
+        "accessibility": 78,
+        "codeQuality": 65
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 70,
+      "bestVariantId": "google-multi-agent-0",
+      "worstVariantId": "google-multi-agent-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 70,
+        "avgTimeMs": 281681,
+        "avgCostUsd": 0.25295650000000003,
+        "successRate": 1
+      }
+    }
+  }
+}

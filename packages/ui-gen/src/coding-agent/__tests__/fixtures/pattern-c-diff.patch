@@ -1,0 +1,76 @@
+--- a/ui.tsx
++++ b/ui.tsx
+@@ -103,9 +103,9 @@
+           <Stack direction="vertical" gap="var(--ggui-spacing-4, 16px)" align="stretch">
+             {messageGroups.map((group, groupIdx) => {
+-              const sender = group[0].sender;
++              const sender = group[0]?.sender;
+               const isOwn = isOwnMessage(sender);
+ 
+               return (
+                 <Stack
+                   key={groupIdx}
+                   direction="horizontal"
+                   gap="var(--ggui-spacing-2, 8px)"
+-                  align="flex-end"
+-                  justify={isOwn ? 'end' : 'start'}
++                  align="end"
+                   style={{ marginLeft: isOwn ? 'auto' : 0, marginRight: isOwn ? 0 : 'auto' }}
+                 >
+@@ -117,16 +117,16 @@
+                   <Stack direction="vertical" gap="var(--ggui-spacing-1, 4px)" align={isOwn ? 'end' : 'start'} style={{ maxWidth: '60%' }}>
+                     {group.map((msg, msgIdx) => (
+                       <Card
+                         key={msgIdx}
+                         padding="var(--ggui-spacing-2, 8px) var(--ggui-spacing-4, 16px)"
+                         shadow="sm"
+                         radius="lg"
+                         style={{
+                           backgroundColor: isOwn
+                             ? 'var(--ggui-color-primary-600, #0284c7)'
+                             : 'var(--ggui-color-surfaceVariant, #f4f4f5)',
+-                          color: isOwn ? '#ffffff' : 'var(--ggui-color-onSurface, #18181b)',
++                          color: isOwn ? 'var(--ggui-color-onPrimary, #ffffff)' : 'var(--ggui-color-onSurface, #18181b)',
+                         }}
+                       >
+-                        <Text variant="body" color={isOwn ? '#ffffff' : undefined} style={{ margin: 0 }}>
+-                          {msg.text}
++                        <Text variant="body" color={isOwn ? 'var(--ggui-color-onPrimary, #ffffff)' : undefined} style={{ margin: 0 }}>
++                          {msg?.text}
+                         </Text>
+                       </Card>
+                     ))}
+@@ -136,7 +136,7 @@
+                       color="var(--ggui-color-onSurfaceVariant, #52525b)"
+                       style={{ opacity: 0.7, margin: 0 }}
+                     >
+-                      {formatTime(group[group.length - 1].timestamp)}
++                      {formatTime(group[group.length - 1]?.timestamp)}
+                     </Text>
+                   </Stack>
+                   {isOwn && <Avatar name={props.currentUser} size="sm" />}
+@@ -153,31 +153,20 @@
+         <Stack
+           direction="horizontal"
+           gap="var(--ggui-spacing-2, 8px)"
+-          align="flex-end"
++          align="end"
+           style={{ padding: 'var(--ggui-spacing-4, 16px)' }}
+         >
+           <div style={{ flex: 1 }}>
+             <Input
+-              ref={inputRef}
+               label="Message"
+               placeholder="Type a message..."
+               value={inputValue}
+               onChange={setInputValue}
+               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                 if (e.key === 'Enter' && !e.shiftKey) {
+                   e.preventDefault();
+                   handleSend();
+                 }
+               }}
+-              style={{ display: 'block' }}
+             />
+           </div>
+           <Button

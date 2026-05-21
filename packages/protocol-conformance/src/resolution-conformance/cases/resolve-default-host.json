@@ -1,0 +1,12 @@
+{
+  "name": "resolve-default-host",
+  "description": "A descriptor with `package` + `version` but neither `bundleHost` nor `bundleUrl`. The resolver MUST fall through to the spec default host `registry.ggui.ai` — first-party and hosted-registry publishes resolve with zero operator config.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper",
+    "version": "2.3.1"
+  },
+  "expect": {
+    "bundleUrl": "https://registry.ggui.ai/bundles/@acme/leaflet-wrapper/2.3.1/bundle.js",
+    "styleUrl": "https://registry.ggui.ai/bundles/@acme/leaflet-wrapper/2.3.1/style.css"
+  }
+}

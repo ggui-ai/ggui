@@ -1,0 +1,96 @@
+{
+  "name": "@ggui-ai/protocol",
+  "version": "0.1.0-rc.1",
+  "description": "ggui protocol types — events, sessions, WebSocket, MCP, LLM models",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ggui",
+    "protocol",
+    "mcp",
+    "generative-ui",
+    "agent",
+    "websocket"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./content-hash": {
+      "import": "./dist/validation/content-hash.js",
+      "require": "./dist/validation/content-hash.js",
+      "default": "./dist/validation/content-hash.js",
+      "types": "./dist/validation/content-hash.d.ts"
+    },
+    "./blueprint-key": {
+      "import": "./dist/registry/blueprint-key.js",
+      "require": "./dist/registry/blueprint-key.js",
+      "default": "./dist/registry/blueprint-key.js",
+      "types": "./dist/registry/blueprint-key.d.ts"
+    },
+    "./transport/websocket": {
+      "import": "./dist/transport/websocket.js",
+      "require": "./dist/transport/websocket.js",
+      "default": "./dist/transport/websocket.js",
+      "types": "./dist/transport/websocket.d.ts"
+    },
+    "./integrations/mcp-apps": {
+      "import": "./dist/integrations/mcp-apps.js",
+      "require": "./dist/integrations/mcp-apps.js",
+      "default": "./dist/integrations/mcp-apps.js",
+      "types": "./dist/integrations/mcp-apps.d.ts"
+    },
+    "./version": {
+      "import": "./dist/version.js",
+      "require": "./dist/version.js",
+      "default": "./dist/version.js",
+      "types": "./dist/version.d.ts"
+    },
+    "./errors/version-mismatch": {
+      "import": "./dist/errors/version-mismatch.js",
+      "require": "./dist/errors/version-mismatch.js",
+      "default": "./dist/errors/version-mismatch.js",
+      "types": "./dist/errors/version-mismatch.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "sync-check": "tsx src/schemas/sync-check.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/protocol"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/protocol",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "canonicalize": "^2.0.0",
+    "zod": "^4.3.6"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "@ggui-ai/iframe-runtime",
+  "version": "0.1.0-rc.1",
+  "description": "The iframe-local ggui runtime: a self-contained ESM bundle that boots inside an MCP Apps host iframe, runs the protocol-version handshake, opens the live-channel WebSocket, and renders the session stack. Bundles React, ReactDOM, and the ggui design system so generated component code has a single seam to read from.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-apps",
+    "iframe",
+    "runtime",
+    "react"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
+    },
+    "./runtime.js": {
+      "default": "./dist/iframe-runtime.js"
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.types.json && pnpm run check:bundle-size",
+    "check:bundle-size": "tsx scripts/check-bundle-size.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/channel-client": "workspace:*",
+    "@ggui-ai/gadgets": "workspace:*",
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/wire": "workspace:*",
+    "qrcode-generator": "^2.0.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.12",
+    "jsdom": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/iframe-runtime"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/iframe-runtime",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

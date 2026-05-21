@@ -1,0 +1,1246 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T03:58:14.928Z",
+    "totalDurationMs": 73329,
+    "totalVariants": 1,
+    "totalCommits": 3,
+    "totalRuns": 3,
+    "successCount": 3,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var q=Object.defineProperty;var r=(s,h)=>q(s,\"name\",{value:h,configurable:!0});import{jsx as e,jsxs as n}from\"react/jsx-runtime\";import{useState as f,useCallback as l}from\"react\";import{Container as G,Card as L,Stack as o,Box as w,Divider as V,Text as i,Heading as v,Button as R,Input as z,TextArea as O,Checkbox as U,RadioGroup as Y,Badge as $,Progress as j}from\"@ggui-ai/design/primitives\";function J(s){const h=l(g=>{console.log(\"Form submitted:\",g)},[]),[a,S]=f(1),[c,C]=f(\"\"),[d,x]=f(\"\"),[m,k]=f(\"\"),[u,N]=f([]),[T,H]=f(\"\"),P=l(g=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(g),[]),y=l(()=>c.trim().length>0&&P(d),[c,d,P]),b=l(()=>m!==\"\",[m]),A=l(()=>{a===1&&!y()||a===2&&!b()||a<4&&S(a+1)},[a,y,b]),E=l(()=>{a>1&&S(a-1)},[a]),F=l(()=>{const g={name:c.trim(),email:d.trim(),satisfaction:m,features:u,comments:T.trim()};h(g)},[c,d,m,u,T]);return{currentStep:a,setCurrentStep:S,name:c,setName:C,email:d,setEmail:x,satisfaction:m,setSatisfaction:k,features:u,setFeatures:N,comments:T,setComments:H,handleNext:A,handleBack:E,handleSubmit:F,isStep1Valid:y,isStep2Valid:b}}r(J,\"useComponent\");function K(s){const h=J(s),{currentStep:a,name:S,setName:c,email:C,setEmail:d,satisfaction:x,setSatisfaction:m,features:k,setFeatures:u,comments:N,setComments:T,handleNext:H,handleBack:P,handleSubmit:y,isStep1Valid:b,isStep2Valid:A}=h,E=l(t=>{u(p=>p.includes(t)?p.filter(B=>B!==t):[...p,t])},[]),F=r(()=>n(o,{gap:16,children:[e(v,{level:3,children:\"Your Information\"}),e(z,{label:\"Name\",value:S,onChange:c,placeholder:\"Enter your full name\",required:!0}),e(z,{label:\"Email\",type:\"email\",value:C,onChange:d,placeholder:\"Enter your email address\",required:!0,error:C&&!b()?\"Please enter a valid email address\":void 0})]}),\"renderStep1\"),g=r(()=>n(o,{gap:16,children:[e(v,{level:3,children:\"How satisfied are you?\"}),e(Y,{label:\"Satisfaction Rating\",value:x!==\"\"?String(x):\"\",onChange:t=>m(Number(t)),options:s.satisfactionLabels.map((t,p)=>({value:String(p+1),label:t})),direction:\"vertical\"})]}),\"renderStep2\"),I=r(()=>n(o,{gap:16,children:[e(v,{level:3,children:\"Which features interest you?\"}),e(o,{gap:8,children:s.featureOptions.map(t=>e(U,{label:t,checked:k.includes(t),onChange:p=>{u(p?B=>[...B,t]:B=>B.filter(W=>W!==t))}},t))})]}),\"renderStep3\"),D=r(()=>n(o,{gap:16,children:[e(v,{level:3,children:\"Additional Comments\"}),e(O,{label:\"Comments\",value:N,onChange:T,placeholder:\"Tell us anything else you'd like to share (optional)\",maxLength:500,showCount:!0,rows:6})]}),\"renderStep4\"),M=r(()=>n(o,{gap:16,children:[e(v,{level:3,children:\"Review Your Answers\"}),e(L,{shadow:\"sm\",padding:16,border:!0,children:n(o,{gap:12,children:[n(w,{children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Name\"}),e(i,{children:S})]}),e(V,{}),n(w,{children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Email\"}),e(i,{children:C})]}),e(V,{}),n(w,{children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Satisfaction\"}),e(i,{children:s.satisfactionLabels[x-1]})]}),e(V,{}),n(w,{children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Features of Interest\"}),e(o,{gap:4,direction:\"horizontal\",wrap:!0,children:k.length>0?k.map(t=>e($,{variant:\"primary\",size:\"sm\",children:t},t)):e(i,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"None selected\"})})]}),e(V,{}),n(w,{children:[e(i,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Comments\"}),e(i,{children:N||\"(No additional comments)\"})]})]})})]}),\"renderReview\");return e(G,{maxWidth:\"md\",padding:24,children:n(o,{gap:24,children:[n(o,{gap:8,children:[e(v,{level:1,children:\"Multi-Step Survey\"}),e(j,{value:a,max:5,variant:\"default\",size:\"md\",showLabel:!0})]}),n(L,{shadow:\"md\",padding:24,radius:\"lg\",border:!1,children:[a===1&&F(),a===2&&g(),a===3&&I(),a===4&&D(),a===5&&M()]}),n(o,{direction:\"horizontal\",gap:12,justify:\"between\",align:\"center\",children:[e(R,{variant:\"outline\",onClick:P,disabled:a===1,children:\"Back\"}),n(i,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Step \",a,\" of 5\"]}),a<5?e(R,{variant:\"primary\",onClick:H,disabled:a===1&&!b()||a===2&&!A(),children:\"Next\"}):e(R,{variant:\"primary\",onClick:y,children:\"Submit\"})]})]})})}r(K,\"Component\");export{K as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  featureOptions: string[]; // Available feature options for the checkbox step\n  satisfactionLabels: string[]; // Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called with all collected answers as a structured object */\ntype ActionSubmitPayload = { name: string; email: string; satisfaction: number; features: string[]; comments: string };\n\nfunction useComponent(props: Props) {\n  // Actions — fire-and-forget to agent\n  const submit = useCallback((payload: ActionSubmitPayload) => {\n    console.log('Form submitted:', payload);\n  }, []);\n\n  // Form state — track all steps\n  const [currentStep, setCurrentStep] = useState(1);\n  const [name, setName] = useState('');\n  const [email, setEmail] = useState('');\n  const [satisfaction, setSatisfaction] = useState<number | ''>('');\n  const [features, setFeatures] = useState<string[]>([]);\n  const [comments, setComments] = useState('');\n\n  // Validation helpers\n  const isValidEmail = useCallback((value: string) => {\n    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n    return emailRegex.test(value);\n  }, []);\n\n  const isStep1Valid = useCallback(() => {\n    return name.trim().length > 0 && email.trim().length > 0 && isValidEmail(email);\n  }, [name, email, isValidEmail]);\n\n  const isStep2Valid = useCallback(() => {\n    return satisfaction !== '';\n  }, [satisfaction]);\n\n  // Navigation handlers\n  const handleNext = useCallback(() => {\n    if (currentStep === 1 && !isStep1Valid()) return;\n    if (currentStep === 2 && !isStep2Valid()) return;\n    if (currentStep < 5) {\n      setCurrentStep(currentStep + 1);\n    }\n  }, [currentStep, isStep1Valid, isStep2Valid]);\n\n  const handleBack = useCallback(() => {\n    if (currentStep > 1) {\n      setCurrentStep(currentStep - 1);\n    }\n  }, [currentStep]);\n\n  const handleSubmit = useCallback(() => {\n    const payload: ActionSubmitPayload = {\n      name: name.trim(),\n      email: email.trim(),\n      satisfaction: satisfaction as number,\n      features,\n      comments: comments.trim(),\n    };\n    submit(payload);\n  }, [name, email, satisfaction, features, comments]);\n\n  return {\n    currentStep,\n    setCurrentStep,\n    name,\n    setName,\n    email,\n    setEmail,\n    satisfaction,\n    setSatisfaction,\n    features,\n    setFeatures,\n    comments,\n    setComments,\n    handleNext,\n    handleBack,\n    handleSubmit,\n    isStep1Valid,\n    isStep2Valid,\n  };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  const {\n    currentStep,\n    name,\n    setName,\n    email,\n    setEmail,\n    satisfaction,\n    setSatisfaction,\n    features,\n    setFeatures,\n    comments,\n    setComments,\n    handleNext,\n    handleBack,\n    handleSubmit,\n    isStep1Valid,\n    isStep2Valid,\n  } = state;\n\n  // Helper to toggle feature checkbox\n  const toggleFeature = useCallback(\n    (feature: string) => {\n      setFeatures((prev) =>\n        prev.includes(feature) ? prev.filter((f) => f !== feature) : [...prev, feature]\n      );\n    },\n    []\n  );\n\n  // Render step 1: Name & Email\n  const renderStep1 = () => (\n    <Stack gap={16}>\n      <Heading level={3}>Your Information</Heading>\n      <Input\n        label=\"Name\"\n        value={name}\n        onChange={setName}\n        placeholder=\"Enter your full name\"\n        required\n        error={name && name.trim().length === 0 && currentStep >= 1 ? 'Name is required' : undefined}\n      />\n      <Input\n        label=\"Email\"\n        type=\"email\"\n        value={email}\n        onChange={setEmail}\n        placeholder=\"Enter your email address\"\n        required\n        error={email && !isValidEmail(email) ? 'Please enter a valid email address' : undefined}\n      />\n    </Stack>\n  );\n\n  // Render step 2: Satisfaction Rating\n  const renderStep2 = () => (\n    <Stack gap={16}>\n      <Heading level={3}>How satisfied are you?</Heading>\n      <RadioGroup\n        label=\"Satisfaction Rating\"\n        value={satisfaction !== '' ? String(satisfaction) : ''}\n        onChange={(val) => setSatisfaction(Number(val))}\n        options={(props.satisfactionLabels || []).map((label, idx) => ({\n          value: String(idx + 1),\n          label: label,\n        }))}\n      />\n\n  // Render step 3: Feature Interests\n  const renderStep3 = () => (\n    <Stack gap={16}>\n      <Heading level={3}>Which features interest you?</Heading>\n      <Stack gap={8}>\n        {(props.featureOptions || []).map((feature) => (\n          <Checkbox\n            key={feature}\n            label={feature}\n            checked={features.includes(feature)}\n            onChange={(checked) => {\n              if (checked) {\n                setFeatures((prev) => [...prev, feature]);\n              } else {\n                setFeatures((prev) => prev.filter((f) => f !== feature));\n              }\n            }}\n          />\n        ))}\n      </Stack>\n    </Stack>\n  );\n\n  // Render step 4: Comments\n  const renderStep4 = () => (\n    <Stack gap={16}>\n      <Heading level={3}>Additional Comments</Heading>\n      <TextArea\n        label=\"Comments\"\n        value={comments}\n        onChange={setComments}\n        placeholder=\"Tell us anything else you'd like to share (optional)\"\n        maxLength={500}\n        showCount\n        rows={6}\n      />\n    </Stack>\n  );\n\n  // Render review step\n  const renderReview = () => (\n    <Stack gap={16}>\n      <Heading level={3}>Review Your Answers</Heading>\n      <Card shadow=\"sm\" padding={16} border>\n        <Stack gap={12}>\n          <Box>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Name</Text>\n            <Text>{name}</Text>\n          </Box>\n          <Divider />\n          <Box>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Email</Text>\n            <Text>{email}</Text>\n          </Box>\n          <Divider />\n          <Box>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Satisfaction</Text>\n            <Text>{satisfaction && typeof satisfaction === 'number' && satisfaction > 0 ? props.satisfactionLabels[satisfaction - 1] : 'Not selected'}</Text>\n          </Box>\n          <Divider />\n          <Box>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Features of Interest</Text>\n            <Stack gap={4} direction=\"horizontal\" wrap>\n              {features.length > 0 ? (\n                features.map((feature) => (\n                  <Badge key={feature} variant=\"primary\" size=\"sm\">\n                    {feature}\n                  </Badge>\n                ))\n              ) : (\n                <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                  None selected\n                </Text>\n              )}\n            </Stack>\n          </Box>\n          <Divider />\n          <Box>\n            <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">Comments</Text>\n            <Text>{comments || '(No additional comments)'}</Text>\n          </Box>\n        </Stack>\n      </Card>\n    </Stack>\n  );\n\n  return (\n    <Container maxWidth=\"md\" padding={24}>\n      <Stack gap={24}>\n        {/* Header */}\n        <Stack gap={8}>\n          <Heading level={1}>Multi-Step Survey</Heading>\n          <Progress\n             max={5},\n            variant=\"default\"\n            size=\"md\"\n            showLabel\n          />\n        </Stack>\n\n        {/* Form Content */}\n        <Card shadow=\"md\" padding={24} radius=\"lg\" border={false}>\n          {currentStep === 1 && renderStep1()}\n          {currentStep === 2 && renderStep2()}\n          {currentStep === 3 && renderStep3()}\n          {currentStep === 4 && renderStep4()}\n          {currentStep === 5 && renderReview()}\n        </Card>\n\n        {/* Navigation */}\n        <Stack direction=\"horizontal\" gap={12} justify=\"between\" align=\"center\">\n          <Button\n            variant=\"outline\"\n            onClick={handleBack}\n            disabled={currentStep === 1}\n          >\n            Back\n          </Button>\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n            Step {currentStep} of 5\n          </Text>\n          {currentStep < 5 ? (\n            <Button\n              variant=\"primary\"\n              onClick={handleNext}\n              disabled={\n                (currentStep === 1 && !isStep1Valid()) ||\n                (currentStep === 2 && !isStep2Valid())\n              }\n            >\n              Next\n            </Button>\n          ) : (\n            <Button variant=\"primary\" onClick={handleSubmit}>\n              Submit\n            </Button>\n          )}\n        </Stack>\n      </Stack>\n    </Container>\n  );\n}\n\n",
+        "tokens": {
+          "input": 104237,
+          "output": 8323,
+          "total": 112560
+        },
+        "generationTimeMs": 57869,
+        "turnsUsed": 11,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Progress bar shows 'Step X of 5' but original request specifies 4 steps — progress tracking is incorrect",
+              "fix": "Progress bar shows 'Step X of 5' but original request specifies 4 steps — progress tracking is incorrect"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Progress bar max value is 5 when there should only be 4 content steps plus 1 review step, creating confusion in the step counter",
+              "fix": "Progress bar max value is 5 when there should only be 4 content steps plus 1 review step, creating confusion in the step counter"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Required features validation is incomplete — Step 3 (feature interests) has no validation requirement specified but can proceed empty, and Step 4 (comments) is optional but no validation exists for it",
+              "fix": "Required features validation is incomplete — Step 3 (feature interests) has no validation requirement specified but can proceed empty, and Step 4 (comments) is optional but no validation exists for it"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Final review step is implemented as step 5 instead of being presented as a special state, conflating the step counter",
+              "fix": "Final review step is implemented as step 5 instead of being presented as a special state, conflating the step counter"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "No inline validation feedback shown for name field — only email shows error message; name field should display validation error inline",
+              "fix": "No inline validation feedback shown for name field — only email shows error message; name field should display validation error inline"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 223: Array index out of bounds — props.satisfactionLabels[satisfaction as number - 1] will crash if satisfaction is empty string or 0, as it's initialized as '' and could be accessed before being set. Even though satisfaction is type-guarded, the array index calculation (satisfaction - 1) on an invalid satisfaction value could return negative index or exceed bounds.",
+              "fix": "Line 223: Array index out of bounds — props.satisfactionLabels[satisfaction as number - 1] will crash if satisfaction is empty string or 0, as it's initialized as '' and could be accessed before being set. Even though satisfaction is type-guarded, the array index calculation (satisfaction - 1) on an invalid satisfaction value could return negative index or exceed bounds."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 171: Missing null/undefined guard on props.featureOptions before .map() — if props.featureOptions is undefined or null, this will crash. No default value provided.",
+              "fix": "Line 171: Missing null/undefined guard on props.featureOptions before .map() — if props.featureOptions is undefined or null, this will crash. No default value provided."
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 157: Missing null/undefined guard on props.satisfactionLabels before .map() — if props.satisfactionLabels is undefined or null, this will crash. No default value provided.",
+              "fix": "Line 157: Missing null/undefined guard on props.satisfactionLabels before .map() — if props.satisfactionLabels is undefined or null, this will crash. No default value provided."
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "contract",
+            "types",
+            "imports",
+            "tokens",
+            "interactivity",
+            "accessibility",
+            "layout",
+            "loading",
+            "visual",
+            "dynamic:form-validation-flow",
+            "dynamic:multi-step-state-persistence",
+            "dynamic:review-step-accuracy"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 39844,
+          "evalMs": 17983,
+          "totalMs": 57869
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 66.4,
+        "finalScore": 66.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 72,
+          "designTokens": 45,
+          "hierarchy": 75,
+          "polish": 60,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 74,
+          "interactivity": 60,
+          "accessibility": 74,
+          "codeQuality": 45
+        },
+        "critique": "The form structure is generally sound with proper step progression and card-based layout, but the code is incomplete (truncated ending) and has inconsistent design token usage—mixing hardcoded fallback colors like 'var(--ggui-color-onSurfaceVariant, #52525b)' instead of relying purely on design tokens. Polish is hindered by missing hover/focus states and validation feedback styling on form inputs.",
+        "evalTimeMs": 2269
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Progress bar shows 'Step X of 5' but original request specifies 4 steps — progress tracking is incorrect",
+            "fix": "Progress bar shows 'Step X of 5' but original request specifies 4 steps — progress tracking is incorrect"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Progress bar max value is 5 when there should only be 4 content steps plus 1 review step, creating confusion in the step counter",
+            "fix": "Progress bar max value is 5 when there should only be 4 content steps plus 1 review step, creating confusion in the step counter"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Required features validation is incomplete — Step 3 (feature interests) has no validation requirement specified but can proceed empty, and Step 4 (comments) is optional but no validation exists for it",
+            "fix": "Required features validation is incomplete — Step 3 (feature interests) has no validation requirement specified but can proceed empty, and Step 4 (comments) is optional but no validation exists for it"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Final review step is implemented as step 5 instead of being presented as a special state, conflating the step counter",
+            "fix": "Final review step is implemented as step 5 instead of being presented as a special state, conflating the step counter"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "No inline validation feedback shown for name field — only email shows error message; name field should display validation error inline",
+            "fix": "No inline validation feedback shown for name field — only email shows error message; name field should display validation error inline"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 223: Array index out of bounds — props.satisfactionLabels[satisfaction as number - 1] will crash if satisfaction is empty string or 0, as it's initialized as '' and could be accessed before being set. Even though satisfaction is type-guarded, the array index calculation (satisfaction - 1) on an invalid satisfaction value could return negative index or exceed bounds.",
+            "fix": "Line 223: Array index out of bounds — props.satisfactionLabels[satisfaction as number - 1] will crash if satisfaction is empty string or 0, as it's initialized as '' and could be accessed before being set. Even though satisfaction is type-guarded, the array index calculation (satisfaction - 1) on an invalid satisfaction value could return negative index or exceed bounds."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 171: Missing null/undefined guard on props.featureOptions before .map() — if props.featureOptions is undefined or null, this will crash. No default value provided.",
+            "fix": "Line 171: Missing null/undefined guard on props.featureOptions before .map() — if props.featureOptions is undefined or null, this will crash. No default value provided."
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 157: Missing null/undefined guard on props.satisfactionLabels before .map() — if props.satisfactionLabels is undefined or null, this will crash. No default value provided.",
+            "fix": "Line 157: Missing null/undefined guard on props.satisfactionLabels before .map() — if props.satisfactionLabels is undefined or null, this will crash. No default value provided."
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "contract",
+          "types",
+          "imports",
+          "tokens",
+          "interactivity",
+          "accessibility",
+          "layout",
+          "loading",
+          "visual",
+          "dynamic:form-validation-flow",
+          "dynamic:multi-step-state-persistence",
+          "dynamic:review-step-accuracy"
+        ]
+      },
+      "estimatedCostUsd": 0.14585199999999998,
+      "timestamp": "2026-03-22T03:58:01.950Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4354,
+        "sourceCodeBytes": 9678,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var $=Object.defineProperty;var p=(u,e)=>$(u,\"name\",{value:e,configurable:!0});import{jsx as t,jsxs as o}from\"react/jsx-runtime\";import{useState as c,useCallback as C,useEffect as K}from\"react\";import{Container as Y,Card as P,Stack as m,Row as h,Box as B,Divider as z,Text as w,Heading as b,Button as f,Input as R,Select as q,Badge as F,Avatar as J}from\"@ggui-ai/design/primitives\";import{Dropdown as O}from\"@ggui-ai/design/components\";import{Clickable as Q}from\"@ggui-ai/design/interact\";function X(u){const e=p(n=>{window.dispatchEvent(new CustomEvent(\"ggui:action\",{detail:{action:\"taskUpdate\",payload:n}}))},\"handleTaskUpdate\"),[H,d]=c(null),[l,i]=c(u.tasks||[]),[r,N]=c(\"todo\"),[v,S]=c(\"\"),[y,x]=c(\"medium\"),[I,E]=c(null),[M,A]=c(\"\"),[U,D]=c(null);K(()=>{const n=p(s=>{const a=s.detail;a?.task&&i(k=>a.action===\"delete\"&&a.task?.id?k.filter(T=>T.id!==a.task?.id):a.action===\"create\"&&a.task?.id&&!k.find(T=>T.id===a.task?.id)?[...k,a.task]:a.action===\"move\"||a.action===\"edit\"?k.map(T=>T.id===a.task?.id?{...T,...a.task}:T):k)},\"handleAgentData\");return window.addEventListener(\"ggui:agent-data\",n),()=>window.removeEventListener(\"ggui:agent-data\",n)},[]);const L=C((n,s)=>{i(g=>g.map(a=>a.id===n?{...a,column:s}:a)),e({action:\"move\",taskId:n,data:{column:s}})},[e]),j=C((n,s)=>{s.trim()&&(i(g=>g.map(a=>a.id===n?{...a,title:s}:a)),e({action:\"edit\",taskId:n,data:{column:l.find(g=>g.id===n)?.column||\"todo\"}})),E(null),A(\"\")},[e,l]),W=C(n=>{if(v.trim()){const s=`task-${Date.now()}`,g={id:s,title:v,priority:y,column:n,assignee:\"\",dueDate:\"\"};i(a=>[...a,g]),e({action:\"create\",taskId:s,data:{column:n}}),S(\"\"),x(\"medium\"),D(null)}},[v,y,e]),G=l.length,V=l.filter(n=>n.column===\"done\").length;return{tasks:l,setTasks:i,newTaskColumn:r,setNewTaskColumn:N,newTaskTitle:v,setNewTaskTitle:S,newTaskPriority:y,setNewTaskPriority:x,editingTaskId:I,setEditingTaskId:E,editingTaskTitle:M,setEditingTaskTitle:A,showAddForm:U,setShowAddForm:D,handleMoveTask:L,handleEditTaskTitle:j,handleAddTask:W,totalTasks:G,completedTasks:V}}p(X,\"useComponent\");function Z(u){const e=X(u),H={low:\"var(--ggui-color-info-600, #0284c7)\",medium:\"var(--ggui-color-warning-600, #d97706)\",high:\"var(--ggui-color-error-600, #dc2626)\"};return t(Y,{maxWidth:\"3xl\",padding:24,children:o(m,{gap:24,children:[t(B,{background:\"var(--ggui-color-primary-50, #f0f9ff)\",padding:16,borderRadius:8,children:t(h,{justify:\"between\",align:\"center\",children:o(m,{direction:\"horizontal\",gap:16,children:[o(m,{gap:4,children:[t(w,{variant:\"label\",color:\"var(--ggui-color-primary-600, #0284c7)\",children:\"Total Tasks\"}),t(b,{level:3,children:e.totalTasks})]}),t(z,{orientation:\"vertical\",margin:0}),o(m,{gap:4,children:[t(w,{variant:\"label\",color:\"var(--ggui-color-success-600, #16a34a)\",children:\"Completed\"}),t(b,{level:3,children:e.completedTasks})]})]})})}),t(h,{gap:16,align:\"start\",wrap:!0,children:u.columns.map(d=>{const l=e.tasks.filter(i=>i.column===d.id);return o(B,{style:{flex:\"0 1 320px\",background:\"var(--ggui-color-surfaceVariant, #f4f4f5)\",borderRadius:\"var(--ggui-shape-radius-lg, 12px)\",padding:\"var(--ggui-spacing-4, 16px)\",minHeight:\"500px\",display:\"flex\",flexDirection:\"column\"},children:[o(m,{gap:8,style:{marginBottom:\"var(--ggui-spacing-4, 16px)\"},children:[o(h,{justify:\"between\",align:\"center\",children:[t(b,{level:4,children:d.name}),t(F,{variant:\"secondary\",size:\"sm\",children:l.length})]}),t(z,{orientation:\"horizontal\",margin:0})]}),t(m,{gap:12,style:{flex:1,overflowY:\"auto\",marginBottom:\"var(--ggui-spacing-4, 16px)\"},children:l.map(i=>t(P,{shadow:\"sm\",padding:12,radius:\"md\",children:o(m,{gap:8,children:[e.editingTaskId===i.id?t(R,{label:\"Edit task\",value:e.editingTaskTitle,onChange:e.setEditingTaskTitle,onKeyDown:r=>{r.key===\"Enter\"&&e.handleEditTaskTitle(i.id,e.editingTaskTitle),r.key===\"Escape\"&&(e.setEditingTaskId(null),e.setEditingTaskTitle(\"\"))},placeholder:\"Task title\",size:\"sm\"}):t(w,{as:Q,onClick:()=>{e.setEditingTaskId(i.id),e.setEditingTaskTitle(i.title||\"\")},variant:\"body\",weight:\"semibold\",style:{cursor:\"pointer\"},children:i.title}),o(h,{gap:8,justify:\"start\",align:\"center\",children:[i.priority&&t(F,{variant:i.priority===\"high\"?\"error\":i.priority===\"medium\"?\"warning\":\"info\",size:\"sm\",children:i.priority}),i.assignee&&t(J,{name:i.assignee,size:\"xs\"})]}),i.dueDate&&o(w,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Due: \",new Date(i.dueDate).toLocaleDateString()]}),t(O,{trigger:t(f,{variant:\"outline\",size:\"xs\",children:\"Move\"}),options:u.columns.filter(r=>r.id!==d.id).map(r=>({value:r.id,label:`Move to ${r.name}`})),value:\"\",onChange:r=>e.handleMoveTask(i.id,r),placement:\"bottom-start\"})]})},i.id))}),e.showAddForm===d.id?t(P,{shadow:\"sm\",padding:12,radius:\"md\",border:!0,children:o(m,{gap:8,children:[t(R,{label:\"Task title\",value:e.newTaskTitle,onChange:e.setNewTaskTitle,placeholder:\"Enter task title\",size:\"sm\"}),t(q,{label:\"Priority\",value:e.newTaskPriority,onChange:i=>e.setNewTaskPriority(i),options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}],size:\"sm\"}),o(h,{gap:8,justify:\"end\",children:[t(f,{variant:\"ghost\",size:\"sm\",onClick:()=>{e.setShowAddForm(null),e.setNewTaskTitle(\"\"),e.setNewTaskPriority(\"medium\")},children:\"Cancel\"}),t(f,{variant:\"primary\",size:\"sm\",onClick:()=>e.handleAddTask(d.id),children:\"Add\"})]})]})}):t(f,{variant:\"ghost\",fullWidth:!0,onClick:()=>e.setShowAddForm(d.id),children:\"+ Add Task\"})]},d.id)})})]})})}p(Z,\"Component\");export{Z as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef, useEffect } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column: string } };\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\nfunction useComponent(props: Props) {\n  // Actions — fire-and-forget to agent\n  const handleTaskUpdate = (payload: ActionTaskUpdatePayload) => {\n    window.dispatchEvent(new CustomEvent('ggui:action', { detail: { action: 'taskUpdate', payload } }));\n  };\n\n  // Streams — real-time from agent (listen via window event)\n  const [streamData, setStreamData] = useState<StreamTaskChanged | null>(null);\n\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [newTaskColumn, setNewTaskColumn] = useState('todo');\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editingTaskTitle, setEditingTaskTitle] = useState('');\n  const [showAddForm, setShowAddForm] = useState<string | null>(null);\n\n  // Update local tasks when stream events arrive\n  useEffect(() => {\n    const handleAgentData = (event: Event) => {\n      const customEvent = event as CustomEvent<StreamTaskChanged>;\n      const taskEvent = customEvent.detail;\n      if (taskEvent?.task) {\n        setTasks((prev) => {\n          if (taskEvent.action === 'delete' && taskEvent.task?.id) {\n            return prev.filter((t) => t.id !== taskEvent.task?.id);\n          }\n          if (taskEvent.action === 'create' && taskEvent.task?.id) {\n            if (!prev.find((t) => t.id === taskEvent.task?.id)) {\n              return [...prev, taskEvent.task];\n            }\n          }\n          if (taskEvent.action === 'move' || taskEvent.action === 'edit') {\n            return prev.map((t) => (t.id === taskEvent.task?.id ? { ...t, ...taskEvent.task } : t));\n          }\n          return prev;\n        });\n      }\n    };\n    window.addEventListener('ggui:agent-data', handleAgentData);\n    return () => window.removeEventListener('ggui:agent-data', handleAgentData);\n  }, []);\n\n  const handleMoveTask = useCallback(\n    (taskId: string, newColumn: string) => {\n      setTasks((prev) =>\n        prev.map((t) => (t.id === taskId ? { ...t, column: newColumn } : t))\n      );\n      handleTaskUpdate({ action: 'move', taskId, data: { column: newColumn } });\n    },\n    [handleTaskUpdate]\n  );\n\n  const handleEditTaskTitle = useCallback(\n    (taskId: string, newTitle: string) => {\n      if (newTitle.trim()) {\n        setTasks((prev) =>\n          prev.map((t) => (t.id === taskId ? { ...t, title: newTitle } : t))\n        );\n        handleTaskUpdate({ action: 'edit', taskId, data: { column: tasks.find((t) => t.id === taskId)?.column || 'todo' } });\n      }\n      setEditingTaskId(null);\n      setEditingTaskTitle('');\n    },\n    [handleTaskUpdate, tasks]\n  );\n\n  const handleAddTask = useCallback(\n    (columnId: string) => {\n      if (newTaskTitle.trim()) {\n        const newId = `task-${Date.now()}`;\n        const newTask = {\n          id: newId,\n          title: newTaskTitle,\n          priority: newTaskPriority,\n          column: columnId,\n          assignee: '',\n          dueDate: '',\n        };\n        setTasks((prev) => [...prev, newTask]);\n        handleTaskUpdate({ action: 'create', taskId: newId, data: { column: columnId } });\n        setNewTaskTitle('');\n        setNewTaskPriority('medium');\n        setShowAddForm(null);\n      }\n    },\n    [newTaskTitle, newTaskPriority, handleTaskUpdate]\n  );\n\n  const totalTasks = tasks.length;\n  const completedTasks = tasks.filter((t) => t.column === 'done').length;\n\n  return {\n    tasks,\n    setTasks,\n    newTaskColumn,\n    setNewTaskColumn,\n    newTaskTitle,\n    setNewTaskTitle,\n    newTaskPriority,\n    setNewTaskPriority,\n    editingTaskId,\n    setEditingTaskId,\n    editingTaskTitle,\n    setEditingTaskTitle,\n    showAddForm,\n    setShowAddForm,\n    handleMoveTask,\n    handleEditTaskTitle,\n    handleAddTask,\n    totalTasks,\n    completedTasks,\n  };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n\n  // Priority color mapping\n  const priorityColors: { [key in 'low' | 'medium' | 'high']: string } = {\n    low: 'var(--ggui-color-info-600, #0284c7)',\n    medium: 'var(--ggui-color-warning-600, #d97706)',\n    high: 'var(--ggui-color-error-600, #dc2626)',\n  };\n\n  return (\n    <Container maxWidth='3xl' padding={24}>\n      <Stack gap={24}>\n        {/* Summary Bar */}\n        <Box background='var(--ggui-color-primary-50, #f0f9ff)' padding={16} borderRadius={8}>\n          <Row justify='between' align='center'>\n            <Stack direction='horizontal' gap={16}>\n              <Stack gap={4}>\n                <Text variant='label' color='var(--ggui-color-primary-600, #0284c7)'>Total Tasks</Text>\n                <Heading level={3}>{state.totalTasks}</Heading>\n              </Stack>\n              <Divider orientation='vertical' margin={0} />\n              <Stack gap={4}>\n                <Text variant='label' color='var(--ggui-color-success-600, #16a34a)'>Completed</Text>\n                <Heading level={3}>{state.completedTasks}</Heading>\n              </Stack>\n            </Stack>\n          </Row>\n        </Box>\n\n        {/* Kanban Board */}\n         <Row gap={16} align='start' wrap={true}>\n          {props.columns.map((column) => {\n            const columnTasks = state.tasks.filter((t) => t.column === column.id);\n\n            return (\n              <Box\n                key={column.id}\n                style={{\n                  flex: '0 1 320px',\n                  background: 'var(--ggui-color-surfaceVariant, #f4f4f5)',\n                  borderRadius: 'var(--ggui-shape-radius-lg, 12px)',\n                  padding: 'var(--ggui-spacing-4, 16px)',\n                  minHeight: '500px',\n                  display: 'flex',\n                  flexDirection: 'column',\n                }}\n              >\n                {/* Column Header */}\n                <Stack gap={8} style={{ marginBottom: 'var(--ggui-spacing-4, 16px)' }}>\n                  <Row justify='between' align='center'>\n                    <Heading level={4}>{column.name}</Heading>\n                    <Badge variant='secondary' size='sm'>{columnTasks.length}</Badge>\n                  </Row>\n                  <Divider orientation='horizontal' margin={0} />\n                </Stack>\n\n                {/* Task List */}\n                <Stack gap={12} style={{ flex: 1, overflowY: 'auto', marginBottom: 'var(--ggui-spacing-4, 16px)' }}>\n                  {columnTasks.map((task) => (\n                    <Card key={task.id} shadow='sm' padding={12} radius='md'>\n                      <Stack gap={8}>\n                        {/* Task Title */}\n                        {state.editingTaskId === task.id ? (\n                           <Input\n                             label='Edit task'\n                             value={state.editingTaskTitle}\n                             onChange={state.setEditingTaskTitle}\n                             onKeyDown={(e: any) => {\n                               if (e.key === 'Enter') state.handleEditTaskTitle(task.id!, state.editingTaskTitle);\n                               if (e.key === 'Escape') { state.setEditingTaskId(null); state.setEditingTaskTitle(''); }\n                             }}\n                             placeholder='Task title'\n                             size='sm'\n                           />\n                        ) : (\n                          <Text\n                            as={Clickable}\n                            onClick={() => {\n                              state.setEditingTaskId(task.id!);\n                              state.setEditingTaskTitle(task.title || '');\n                            }}\n                            variant='body'\n                            weight='semibold'\n                            style={{ cursor: 'pointer' }}\n                          >\n                            {task.title}\n                          </Text>\n                        )}\n\n                        {/* Priority & Assignee Row */}\n                        <Row gap={8} justify='start' align='center'>\n                          {task.priority && (\n                            <Badge\n                              variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'info'}\n                              size='sm'\n                            >\n                              {task.priority}\n                            </Badge>\n                          )}\n                          {task.assignee && (\n                            <Avatar name={task.assignee} size='xs' />\n                          )}\n                        </Row>\n\n                        {/* Due Date */}\n                        {task.dueDate && (\n                          <Text variant='caption' color='var(--ggui-color-onSurfaceVariant, #52525b)'>\n                            Due: {new Date(task.dueDate).toLocaleDateString()}\n                          </Text>\n                        )}\n\n                        {/* Move Controls */}\n                        <Dropdown\n                          trigger={<Button variant='outline' size='xs'>Move</Button>}\n                          options={props.columns\n                            .filter((c) => c.id !== column.id)\n                            .map((c) => ({\n                              value: c.id!,\n                              label: `Move to ${c.name}`,\n                            }))\n                          }\n                          value=''\n                          onChange={(value) => state.handleMoveTask(task.id!, value)}\n                          placement='bottom-start'\n                        />\n                      </Stack>\n                    </Card>\n                  ))}\n                </Stack>\n\n                {/* Add Task Button / Form */}\n                {state.showAddForm === column.id ? (\n                  <Card shadow='sm' padding={12} radius='md' border={true}>\n                    <Stack gap={8}>\n                      <Input\n                        label='Task title'\n                        value={state.newTaskTitle}\n                        onChange={state.setNewTaskTitle}\n                        placeholder='Enter task title'\n                        size='sm'\n                      />\n                      <Select\n                        label='Priority'\n                        value={state.newTaskPriority}\n                        onChange={(value) => state.setNewTaskPriority(value as 'low' | 'medium' | 'high')}\n                        options={[\n                          { value: 'low', label: 'Low' },\n                          { value: 'medium', label: 'Medium' },\n                          { value: 'high', label: 'High' },\n                        ]}\n                        size='sm'\n                      />\n                      <Row gap={8} justify='end'>\n                        <Button\n                          variant='ghost'\n                          size='sm'\n                          onClick={() => {\n                            state.setShowAddForm(null);\n                            state.setNewTaskTitle('');\n                            state.setNewTaskPriority('medium');\n                          }}\n                        >\n                          Cancel\n                        </Button>\n                        <Button\n                          variant='primary'\n                          size='sm'\n                          onClick={() => state.handleAddTask(column.id!)}\n                        >\n                          Add\n                        </Button>\n                      </Row>\n                    </Stack>\n                  </Card>\n                ) : (\n                  <Button\n                    variant='ghost'\n                    fullWidth={true}\n                    onClick={() => state.setShowAddForm(column.id!)}\n                  >\n                    + Add Task\n                  </Button>\n                )}\n              </Box>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 89176,
+          "output": 12190,
+          "total": 101366
+        },
+        "generationTimeMs": 70593,
+        "turnsUsed": 4,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 0,
+              "result": "warn",
+              "category": "contract",
+              "subcategory": "taskChanged",
+              "severity": "major",
+              "description": "StreamSpec declares event 'taskChanged' but component doesn't reference it",
+              "fix": "Handle event type 'taskChanged' (A task was moved, edited, or created by another user — update it in the board) in your ggui:agent-data event handler"
+            },
+            {
+              "tier": 0,
+              "result": "warn",
+              "category": "contract",
+              "subcategory": "__streamSpec__",
+              "severity": "major",
+              "description": "Component should output a __GGUI_STREAM_SPEC__ marker describing the expected data shape",
+              "fix": "Output __GGUI_STREAM_SPEC__ { ... } __GGUI_STREAM_SPEC_END__ with the event schema"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task title uses Clickable wrapper instead of semantic button/interactive element for edit mode trigger — clicking a Text element may not be announced as interactive to screen readers",
+              "fix": "Task title uses Clickable wrapper instead of semantic button/interactive element for edit mode trigger — clicking a Text element may not be announced as interactive to screen readers"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Avatar component on line 239 displays assignee initials but lacks aria-label to describe the assignee — only name prop may not be sufficient for accessibility",
+              "fix": "Avatar component on line 239 displays assignee initials but lacks aria-label to describe the assignee — only name prop may not be sufficient for accessibility"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move button (line 252) has no aria-label describing what column the task will be moved to — generic 'Move' text is ambiguous",
+              "fix": "Move button (line 252) has no aria-label describing what column the task will be moved to — generic 'Move' text is ambiguous"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "No keyboard shortcut hints or aria-instructions for double-click edit pattern — users may not discover click-to-edit functionality",
+              "fix": "No keyboard shortcut hints or aria-instructions for double-click edit pattern — users may not discover click-to-edit functionality"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Summary bar uses Heading level=3 for task counts (lines 157, 162) but has no parent h1/h2 establishing hierarchy context",
+              "fix": "Summary bar uses Heading level=3 for task counts (lines 157, 162) but has no parent h1/h2 establishing hierarchy context"
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "types",
+            "imports",
+            "tokens",
+            "functionality",
+            "crash",
+            "interactivity",
+            "layout",
+            "loading",
+            "visual",
+            "dynamic:real-time-stream-sync",
+            "dynamic:inline-add-task-form",
+            "dynamic:task-move-controls"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 67176,
+          "evalMs": 3353,
+          "totalMs": 70593
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 47,
+        "finalScore": 47,
+        "issues": [],
+        "dimensions": {
+          "layout": 45,
+          "designTokens": 35,
+          "hierarchy": 60,
+          "polish": 40,
+          "dataPresentation": 55,
+          "completeness": 55,
+          "visualPolish": 53,
+          "interactivity": 40,
+          "accessibility": 53,
+          "codeQuality": 35
+        },
+        "critique": "The component has significant issues with design token compliance—hardcoded fallback colors (rgba/hex) undermine the design system, and spacing uses raw pixel values instead of token variables. The layout is incomplete (source code cuts off mid-component), making it impossible to evaluate the full Kanban board structure, task cards, and interactive elements. Critical missing pieces include task card rendering, edit functionality, move dropdowns, and add task forms that are referenced in state but not implemented.",
+        "evalTimeMs": 2521
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 0,
+            "result": "warn",
+            "category": "contract",
+            "subcategory": "taskChanged",
+            "severity": "major",
+            "description": "StreamSpec declares event 'taskChanged' but component doesn't reference it",
+            "fix": "Handle event type 'taskChanged' (A task was moved, edited, or created by another user — update it in the board) in your ggui:agent-data event handler"
+          },
+          {
+            "tier": 0,
+            "result": "warn",
+            "category": "contract",
+            "subcategory": "__streamSpec__",
+            "severity": "major",
+            "description": "Component should output a __GGUI_STREAM_SPEC__ marker describing the expected data shape",
+            "fix": "Output __GGUI_STREAM_SPEC__ { ... } __GGUI_STREAM_SPEC_END__ with the event schema"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task title uses Clickable wrapper instead of semantic button/interactive element for edit mode trigger — clicking a Text element may not be announced as interactive to screen readers",
+            "fix": "Task title uses Clickable wrapper instead of semantic button/interactive element for edit mode trigger — clicking a Text element may not be announced as interactive to screen readers"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Avatar component on line 239 displays assignee initials but lacks aria-label to describe the assignee — only name prop may not be sufficient for accessibility",
+            "fix": "Avatar component on line 239 displays assignee initials but lacks aria-label to describe the assignee — only name prop may not be sufficient for accessibility"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move button (line 252) has no aria-label describing what column the task will be moved to — generic 'Move' text is ambiguous",
+            "fix": "Move button (line 252) has no aria-label describing what column the task will be moved to — generic 'Move' text is ambiguous"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "No keyboard shortcut hints or aria-instructions for double-click edit pattern — users may not discover click-to-edit functionality",
+            "fix": "No keyboard shortcut hints or aria-instructions for double-click edit pattern — users may not discover click-to-edit functionality"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Summary bar uses Heading level=3 for task counts (lines 157, 162) but has no parent h1/h2 establishing hierarchy context",
+            "fix": "Summary bar uses Heading level=3 for task counts (lines 157, 162) but has no parent h1/h2 establishing hierarchy context"
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "types",
+          "imports",
+          "tokens",
+          "functionality",
+          "crash",
+          "interactivity",
+          "layout",
+          "loading",
+          "visual",
+          "dynamic:real-time-stream-sync",
+          "dynamic:inline-add-task-form",
+          "dynamic:task-move-controls"
+        ]
+      },
+      "estimatedCostUsd": 0.150126,
+      "timestamp": "2026-03-22T03:58:14.928Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5478,
+        "sourceCodeBytes": 14003,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "claude-haiku-4-5-20251001"
+        }
+      },
+      "commit": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)",
+                "example": {}
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from",
+                "example": ["👤", "🧑‍💻", "🎨", "📊"]
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown",
+                "example": ["Developer", "Designer", "Manager", "Other"]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding",
+                "example": {
+                  "name": "Jane",
+                  "email": "jane@example.com",
+                  "avatar": "🧑‍💻",
+                  "role": "Developer",
+                  "emailNotifications": true,
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": {
+        "compiledCode": "var D=Object.defineProperty;var h=(c,s)=>D(c,\"name\",{value:s,configurable:!0});import{jsx as a,jsxs as t}from\"react/jsx-runtime\";import{useState as w,useCallback as m}from\"react\";import{Container as E,Card as P,Stack as n,Row as b,Box as S,Divider as v,Text as l,Heading as C,Button as N,Input as B,Select as F,Toggle as R,Badge as H}from\"@ggui-ai/design/primitives\";import{Clickable as V}from\"@ggui-ai/design/interact\";function z(c){const s=h(async g=>{console.log(\"Complete:\",g)},\"complete\"),[i,r]=w(1),[e,k]=w({name:c.initialProfile?.name??\"\",email:c.initialProfile?.email??\"\",avatar:c.initialProfile?.avatar??\"\",role:c.initialProfile?.role??\"\",emailNotifications:c.initialProfile?.emailNotifications??!1,theme:c.initialProfile?.theme??\"light\"}),d=m(g=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(g),[]),u=m(()=>e.name.trim().length>0&&d(e.email)&&e.avatar.length>0,[e,d]),p=m(()=>e.role.length>0,[e]),x=m((g,o)=>{k(A=>({...A,[g]:o}))},[]),f=m(()=>{i===1&&u()?r(2):i===2&&p()&&r(3)},[i,u,p]),y=m(()=>{i>1&&r(i-1)},[i]),T=m(()=>{e.name&&d(e.email)&&e.avatar&&e.role&&s({name:e.name,email:e.email,avatar:e.avatar,role:e.role,emailNotifications:e.emailNotifications,theme:e.theme})},[e,d,s]);return{currentStep:i,setCurrentStep:r,formData:e,handleFieldChange:x,handleNext:f,handleBack:y,handleComplete:T,isStep1Valid:u,isStep2Valid:p}}h(z,\"useComponent\");function I(c){const s=z(c),{currentStep:i,formData:r,handleFieldChange:e,handleNext:k,handleBack:d,handleComplete:u,isStep1Valid:p,isStep2Valid:x}=s,f=3,y=i/f*100,T=r.email&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(r.email)?\"Please enter a valid email address\":\"\",g=r.name.trim()?\"\":\"Name is required\";return a(E,{maxWidth:\"md\",padding:24,children:t(n,{gap:24,children:[t(n,{gap:16,children:[a(C,{level:2,children:\"Create Your Profile\"}),t(l,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"Step \",i,\" of \",f]}),a(S,{background:\"var(--ggui-color-outlineVariant, #e4e4e7)\",borderRadius:8,paddingY:0,paddingX:0,style:{height:\"4px\",overflow:\"hidden\"},children:a(S,{background:\"var(--ggui-color-primary-600, #0284c7)\",style:{width:`${y}%`,height:\"100%\",transition:\"width 300ms cubic-bezier(0.4, 0, 0.2, 1)\"}})})]}),i===1&&a(P,{padding:24,shadow:\"md\",children:t(n,{gap:16,children:[a(C,{level:3,children:\"Profile Setup\"}),a(B,{label:\"Full Name\",value:r.name,onChange:o=>e(\"name\",o),placeholder:\"Enter your full name\",error:g}),a(B,{label:\"Email Address\",type:\"email\",value:r.email,onChange:o=>e(\"email\",o),placeholder:\"you@example.com\",error:T}),t(n,{gap:8,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:\"Choose Avatar\"}),a(b,{gap:16,align:\"center\",children:c.avatarOptions.map(o=>a(S,{as:V,onClick:()=>e(\"avatar\",o),style:{fontSize:\"2rem\",cursor:\"pointer\",padding:8,borderRadius:8,border:r.avatar===o?\"2px solid var(--ggui-color-primary-600, #0284c7)\":\"2px solid transparent\",transition:\"all 200ms ease-in-out\"},hoverStyle:{backgroundColor:\"var(--ggui-color-primary-50, #f0f9ff)\"},children:o},o))})]})]})}),i===2&&a(P,{padding:24,shadow:\"md\",children:t(n,{gap:16,children:[a(C,{level:3,children:\"Preferences\"}),a(F,{label:\"Role\",value:r.role,onChange:o=>e(\"role\",o),options:c.roleOptions.map(o=>({value:o,label:o})),placeholder:\"Select your role\"}),t(b,{gap:8,align:\"center\",justify:\"between\",children:[a(l,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Email Notifications\"}),a(R,{label:\"\",checked:r.emailNotifications,onChange:o=>e(\"emailNotifications\",o),size:\"md\"})]}),t(b,{gap:8,align:\"center\",justify:\"between\",children:[a(l,{variant:\"label\",color:\"var(--ggui-color-onSurface, #18181b)\",children:\"Dark Theme\"}),a(R,{label:\"\",checked:r.theme===\"dark\",onChange:o=>e(\"theme\",o?\"dark\":\"light\"),size:\"md\"})]})]})}),i===3&&a(P,{padding:24,shadow:\"md\",children:t(n,{gap:16,children:[a(C,{level:3,children:\"Review Your Information\"}),a(S,{background:\"var(--ggui-color-primary-50, #f0f9ff)\",borderRadius:8,padding:16,children:t(n,{gap:12,children:[t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Name\"}),a(l,{color:\"var(--ggui-color-onSurface, #18181b)\",children:r.name})]}),a(v,{}),t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Email\"}),a(l,{color:\"var(--ggui-color-onSurface, #18181b)\",children:r.email})]}),a(v,{}),t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Avatar\"}),a(l,{style:{fontSize:\"1.5rem\"},children:r.avatar})]}),a(v,{}),t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Role\"}),a(l,{color:\"var(--ggui-color-onSurface, #18181b)\",children:r.role})]}),a(v,{}),t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Email Notifications\"}),a(H,{variant:r.emailNotifications?\"success\":\"default\",children:r.emailNotifications?\"Enabled\":\"Disabled\"})]}),a(v,{}),t(n,{gap:4,children:[a(l,{variant:\"label\",color:\"var(--ggui-color-primary-700, #0369a1)\",children:\"Theme\"}),a(l,{color:\"var(--ggui-color-onSurface, #18181b)\",children:r.theme===\"dark\"?\"Dark\":\"Light\"})]})]})})]})}),t(b,{gap:8,justify:\"between\",children:[a(N,{variant:\"ghost\",onClick:d,disabled:i===1,children:\"Go Back\"}),i<f?a(N,{variant:\"primary\",onClick:k,disabled:i===1?!p():!x(),children:\"Next\"}):a(N,{variant:\"primary\",onClick:u,children:\"Complete Setup\"})]})]})})}h(I,\"Component\");export{I as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  initialProfile: { name?: string; email?: string; avatar?: string; role?: string; emailNotifications?: boolean; theme?: string }; // Pre-filled profile data for editing (all fields optional)\n  avatarOptions: string[]; // Available avatar emojis to choose from\n  roleOptions: string[]; // Available role options for the dropdown\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called with all profile data when user completes onboarding */\ntype ActionCompletePayload = { name: string; email: string; avatar: string; role: string; emailNotifications: boolean; theme: string };\n\nfunction useComponent(props: Props) {\n  // Actions — fire-and-forget to agent\n  const complete = async (payload: ActionCompletePayload) => { console.log('Complete:', payload); };\n\n  // State management\n  const [currentStep, setCurrentStep] = useState(1);\n  const [formData, setFormData] = useState({\n    name: props.initialProfile?.name ?? '',\n    email: props.initialProfile?.email ?? '',\n    avatar: props.initialProfile?.avatar ?? '',\n    role: props.initialProfile?.role ?? '',\n    emailNotifications: props.initialProfile?.emailNotifications ?? false,\n    theme: props.initialProfile?.theme ?? 'light',\n  });\n\n  // Validation\n  const isValidEmail = useCallback((email: string) => {\n    return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\n  }, []);\n\n  const isStep1Valid = useCallback(() => {\n    return formData.name.trim().length > 0 && isValidEmail(formData.email) && formData.avatar.length > 0;\n  }, [formData, isValidEmail]);\n\n  const isStep2Valid = useCallback(() => {\n    return formData.role.length > 0;\n  }, [formData]);\n\n  // Handlers\n  const handleFieldChange = useCallback((field: string, value: string | boolean) => {\n    setFormData(prev => ({ ...prev, [field]: value }));\n  }, []);\n\n  const handleNext = useCallback(() => {\n    if (currentStep === 1 && isStep1Valid()) {\n      setCurrentStep(2);\n    } else if (currentStep === 2 && isStep2Valid()) {\n      setCurrentStep(3);\n    }\n  }, [currentStep, isStep1Valid, isStep2Valid]);\n\n  const handleBack = useCallback(() => {\n    if (currentStep > 1) {\n      setCurrentStep(currentStep - 1);\n    }\n  }, [currentStep]);\n\n  const handleComplete = useCallback(() => {\n    if (formData.name && isValidEmail(formData.email) && formData.avatar && formData.role) {\n      complete({\n        name: formData.name,\n        email: formData.email,\n        avatar: formData.avatar,\n        role: formData.role,\n        emailNotifications: formData.emailNotifications,\n        theme: formData.theme,\n      });\n    }\n  }, [formData, isValidEmail, complete]);\n\n  return { currentStep, setCurrentStep, formData, handleFieldChange, handleNext, handleBack, handleComplete, isStep1Valid, isStep2Valid };\n}\n\nexport default function Component(props: Props) {\n  const state = useComponent(props);\n  const { currentStep, formData, handleFieldChange, handleNext, handleBack, handleComplete, isStep1Valid, isStep2Valid } = state;\n\n  const totalSteps = 3;\n  const progressPercent = (currentStep / totalSteps) * 100;\n\n  // Validate email format\n  const emailError = formData.email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(formData.email) ? 'Please enter a valid email address' : '';\n  const nameError = !formData.name.trim() ? 'Name is required' : '';\n\n  return (\n    <Container maxWidth=\"md\" padding={24}>\n      <Stack gap={24}>\n        {/* Header */}\n        <Stack gap={16}>\n          <Heading level={2}>Create Your Profile</Heading>\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n            Step {currentStep} of {totalSteps}\n          </Text>\n\n          {/* Progress Bar */}\n          <Box\n            background=\"var(--ggui-color-outlineVariant, #e4e4e7)\"\n            borderRadius={8}\n            paddingY={0}\n            paddingX={0}\n            style={{ height: '4px', overflow: 'hidden' }}\n          >\n            <Box\n              background=\"var(--ggui-color-primary-600, #0284c7)\"\n              style={{\n                width: `${progressPercent}%`,\n                height: '100%',\n                transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',\n              }}\n            />\n          </Box>\n        </Stack>\n        {/* Step 1: Profile Setup */}\n        {currentStep === 1 && (\n          <Card padding={24} shadow=\"md\">\n            <Stack gap={16}>\n              <Heading level={3}>Profile Setup</Heading>\n\n              <Input\n                label=\"Full Name\"\n                value={formData.name}\n                onChange={(value) => handleFieldChange('name', value)}\n                placeholder=\"Enter your full name\"\n                error={nameError}\n              />\n\n              <Input\n                label=\"Email Address\"\n                type=\"email\"\n                value={formData.email}\n                onChange={(value) => handleFieldChange('email', value)}\n                placeholder=\"you@example.com\"\n                error={emailError}\n              />\n\n              <Stack gap={8}>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">\n                  Choose Avatar\n                </Text>\n                <Row gap={16} align=\"center\">\n                  {props.avatarOptions.map((emoji) => (\n                    <Box\n                      key={emoji}\n                      as={Clickable}\n                      onClick={() => handleFieldChange('avatar', emoji)}\n                      style={{\n                        fontSize: '2rem',\n                        cursor: 'pointer',\n                        padding: 8,\n                        borderRadius: 8,\n                        border: formData.avatar === emoji ? '2px solid var(--ggui-color-primary-600, #0284c7)' : '2px solid transparent',\n                        transition: 'all 200ms ease-in-out',\n                      }}\n                      hoverStyle={{\n                        backgroundColor: 'var(--ggui-color-primary-50, #f0f9ff)',\n                      }}\n                    >\n                      {emoji}\n                    </Box>\n                  ))}\n                </Row>\n              </Stack>\n            </Stack>\n          </Card>\n        )}\n        {/* Step 2: Preferences */}\n        {currentStep === 2 && (\n          <Card padding={24} shadow=\"md\">\n            <Stack gap={16}>\n              <Heading level={3}>Preferences</Heading>\n\n              <Select\n                label=\"Role\"\n                value={formData.role}\n                onChange={(value) => handleFieldChange('role', value)}\n                options={props.roleOptions.map(role => ({ value: role, label: role }))}\n                placeholder=\"Select your role\"\n              />\n\n              <Row gap={8} align=\"center\" justify=\"between\">\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                  Email Notifications\n                </Text>\n                <Toggle\n                  label=\"\"\n                  checked={formData.emailNotifications}\n                  onChange={(value) => handleFieldChange('emailNotifications', value)}\n                  size=\"md\"\n                />\n              </Row>\n\n              <Row gap={8} align=\"center\" justify=\"between\">\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurface, #18181b)\">\n                  Dark Theme\n                </Text>\n                <Toggle\n                  label=\"\"\n                  checked={formData.theme === 'dark'}\n                  onChange={(value) => handleFieldChange('theme', value ? 'dark' : 'light')}\n                  size=\"md\"\n                />\n              </Row>\n             </Stack>\n           </Card>\n        )}\n        {/* Step 3: Review & Confirm */}\n        {currentStep === 3 && (\n          <Card padding={24} shadow=\"md\">\n            <Stack gap={16}>\n              <Heading level={3}>Review Your Information</Heading>\n\n              {/* Summary Section */}\n              <Box background=\"var(--ggui-color-primary-50, #f0f9ff)\" borderRadius={8} padding={16}>\n                <Stack gap={12}>\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Name</Text>\n                    <Text color=\"var(--ggui-color-onSurface, #18181b)\">{formData.name}</Text>\n                  </Stack>\n                  <Divider />\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Email</Text>\n                    <Text color=\"var(--ggui-color-onSurface, #18181b)\">{formData.email}</Text>\n                  </Stack>\n                  <Divider />\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Avatar</Text>\n                    <Text style={{ fontSize: '1.5rem' }}>{formData.avatar}</Text>\n                  </Stack>\n                  <Divider />\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Role</Text>\n                    <Text color=\"var(--ggui-color-onSurface, #18181b)\">{formData.role}</Text>\n                  </Stack>\n                  <Divider />\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Email Notifications</Text>\n                    <Badge variant={formData.emailNotifications ? 'success' : 'default'}>\n                      {formData.emailNotifications ? 'Enabled' : 'Disabled'}\n                    </Badge>\n                  </Stack>\n                  <Divider />\n                  <Stack gap={4}>\n                    <Text variant=\"label\" color=\"var(--ggui-color-primary-700, #0369a1)\">Theme</Text>\n                    <Text color=\"var(--ggui-color-onSurface, #18181b)\">{formData.theme === 'dark' ? 'Dark' : 'Light'}</Text>\n                  </Stack>\n                </Stack>\n              </Box>\n            </Stack>\n          </Card>\n        )}\n        {/* Navigation Buttons */}\n        <Row gap={8} justify=\"between\">\n          <Button\n            variant=\"ghost\"\n            onClick={handleBack}\n            disabled={currentStep === 1}\n          >\n            Go Back\n          </Button>\n\n          {currentStep < totalSteps ? (\n            <Button\n              variant=\"primary\"\n              onClick={handleNext}\n              disabled={currentStep === 1 ? !isStep1Valid() : !isStep2Valid()}\n            >\n              Next\n            </Button>\n          ) : (\n            <Button\n              variant=\"primary\"\n              onClick={handleComplete}\n            >\n              Complete Setup\n            </Button>\n          )}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 95490,
+          "output": 11256,
+          "total": 106746
+        },
+        "generationTimeMs": 61585,
+        "turnsUsed": 6,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Avatar selection buttons lack aria-label or role attributes for screen reader users - emoji buttons should have descriptive labels like 'aria-label=\"Select avatar {emoji}\"'",
+              "fix": "Avatar selection buttons lack aria-label or role attributes for screen reader users - emoji buttons should have descriptive labels like 'aria-label=\"Select avatar {emoji}\"'"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Avatar selection buttons are not keyboard accessible - Clickable component boxes need proper role=\"button\" and keyboard event handlers (Enter/Space keys)",
+              "fix": "Avatar selection buttons are not keyboard accessible - Clickable component boxes need proper role=\"button\" and keyboard event handlers (Enter/Space keys)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Toggle components lack aria-label to clarify their purpose - 'Email Notifications' and 'Dark Theme' toggles should have descriptive aria-labels for screen readers",
+              "fix": "Toggle components lack aria-label to clarify their purpose - 'Email Notifications' and 'Dark Theme' toggles should have descriptive aria-labels for screen readers"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Choose Avatar section label is Text component, not a proper <label> element - should use FormField wrapper or semantic label element for better form semantics",
+              "fix": "Choose Avatar section label is Text component, not a proper <label> element - should use FormField wrapper or semantic label element for better form semantics"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Missing aria-current or similar indicator for current step in progress bar - screen readers don't know which step is active",
+              "fix": "Missing aria-current or similar indicator for current step in progress bar - screen readers don't know which step is active"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 156-162: Avatar selection box uses inline style properties (fontSize, padding, borderRadius, border) that bypass design system — should use component props and design tokens",
+              "fix": "Line 156-162: Avatar selection box uses inline style properties (fontSize, padding, borderRadius, border) that bypass design system — should use component props and design tokens"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 163-165: hoverStyle object uses inline style with hardcoded background color reference — should leverage component's built-in hover states",
+              "fix": "Line 163-165: hoverStyle object uses inline style with hardcoded background color reference — should leverage component's built-in hover states"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 117: Transition property in inline style (cubic-bezier easing) — should use design system motion/animation tokens if available",
+              "fix": "Line 117: Transition property in inline style (cubic-bezier easing) — should use design system motion/animation tokens if available"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Inconsistent spacing in avatar selection (padding: 8) — should use standardized spacing token (var(--ggui-spacing-2) or similar)",
+              "fix": "Inconsistent spacing in avatar selection (padding: 8) — should use standardized spacing token (var(--ggui-spacing-2) or similar)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 100, 146, 190, 202: Some color references use fallback hex values alongside CSS variables — should rely solely on var() tokens",
+              "fix": "Line 100, 146, 190, 202: Some color references use fallback hex values alongside CSS variables — should rely solely on var() tokens"
+            }
+          ],
+          "pass": [
+            "compile",
+            "security",
+            "contract",
+            "types",
+            "imports",
+            "tokens",
+            "functionality",
+            "crash",
+            "interactivity",
+            "layout",
+            "loading",
+            "dynamic:step-progression-validation",
+            "dynamic:data-persistence-across-steps",
+            "dynamic:review-step-summary-accuracy"
+          ]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 58168,
+          "evalMs": 3348,
+          "totalMs": 61585
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 72,
+        "finalScore": 72,
+        "issues": [],
+        "dimensions": {
+          "layout": 72,
+          "designTokens": 65,
+          "hierarchy": 75,
+          "polish": 68,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 74,
+          "interactivity": 68,
+          "accessibility": 74,
+          "codeQuality": 65
+        },
+        "critique": "The component has a solid structure with proper step management and responsive layout, but the source code is truncated mid-Toggle handler, making it incomplete. While it correctly uses design tokens for colors (var(--ggui-color-*)) and spacing via Stack/Row components, there are some inconsistencies: hardcoded padding values in Box styles (8px, 16px) instead of spacing tokens, and inline style objects that bypass the design system. The progress bar and avatar selection show good polish with transitions and hover states, but missing interactive feedback on Toggle and Select components.",
+        "evalTimeMs": 2788
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Avatar selection buttons lack aria-label or role attributes for screen reader users - emoji buttons should have descriptive labels like 'aria-label=\"Select avatar {emoji}\"'",
+            "fix": "Avatar selection buttons lack aria-label or role attributes for screen reader users - emoji buttons should have descriptive labels like 'aria-label=\"Select avatar {emoji}\"'"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Avatar selection buttons are not keyboard accessible - Clickable component boxes need proper role=\"button\" and keyboard event handlers (Enter/Space keys)",
+            "fix": "Avatar selection buttons are not keyboard accessible - Clickable component boxes need proper role=\"button\" and keyboard event handlers (Enter/Space keys)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Toggle components lack aria-label to clarify their purpose - 'Email Notifications' and 'Dark Theme' toggles should have descriptive aria-labels for screen readers",
+            "fix": "Toggle components lack aria-label to clarify their purpose - 'Email Notifications' and 'Dark Theme' toggles should have descriptive aria-labels for screen readers"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Choose Avatar section label is Text component, not a proper <label> element - should use FormField wrapper or semantic label element for better form semantics",
+            "fix": "Choose Avatar section label is Text component, not a proper <label> element - should use FormField wrapper or semantic label element for better form semantics"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Missing aria-current or similar indicator for current step in progress bar - screen readers don't know which step is active",
+            "fix": "Missing aria-current or similar indicator for current step in progress bar - screen readers don't know which step is active"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 156-162: Avatar selection box uses inline style properties (fontSize, padding, borderRadius, border) that bypass design system — should use component props and design tokens",
+            "fix": "Line 156-162: Avatar selection box uses inline style properties (fontSize, padding, borderRadius, border) that bypass design system — should use component props and design tokens"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 163-165: hoverStyle object uses inline style with hardcoded background color reference — should leverage component's built-in hover states",
+            "fix": "Line 163-165: hoverStyle object uses inline style with hardcoded background color reference — should leverage component's built-in hover states"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 117: Transition property in inline style (cubic-bezier easing) — should use design system motion/animation tokens if available",
+            "fix": "Line 117: Transition property in inline style (cubic-bezier easing) — should use design system motion/animation tokens if available"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Inconsistent spacing in avatar selection (padding: 8) — should use standardized spacing token (var(--ggui-spacing-2) or similar)",
+            "fix": "Inconsistent spacing in avatar selection (padding: 8) — should use standardized spacing token (var(--ggui-spacing-2) or similar)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 100, 146, 190, 202: Some color references use fallback hex values alongside CSS variables — should rely solely on var() tokens",
+            "fix": "Line 100, 146, 190, 202: Some color references use fallback hex values alongside CSS variables — should rely solely on var() tokens"
+          }
+        ],
+        "pass": [
+          "compile",
+          "security",
+          "contract",
+          "types",
+          "imports",
+          "tokens",
+          "functionality",
+          "crash",
+          "interactivity",
+          "layout",
+          "loading",
+          "dynamic:step-progression-validation",
+          "dynamic:data-persistence-across-steps",
+          "dynamic:review-step-summary-accuracy"
+        ]
+      },
+      "estimatedCostUsd": 0.15177000000000002,
+      "timestamp": "2026-03-22T03:58:06.187Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5464,
+        "sourceCodeBytes": 11684,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 61.800000000000004,
+      "avgTimeMs": 63349,
+      "avgCostUsd": 0.14924933333333332,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 71.66666666666667,
+        "visualPolish": 67,
+        "interactivity": 56,
+        "accessibility": 67,
+        "codeQuality": 48.333333333333336
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 2,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 66.4,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 47,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "onboarding-wizard",
+      "commitName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": 72,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 61.800000000000004,
+        "avgTimeMs": 63349,
+        "avgCostUsd": 0.14924933333333332,
+        "successRate": 1
+      }
+    }
+  }
+}

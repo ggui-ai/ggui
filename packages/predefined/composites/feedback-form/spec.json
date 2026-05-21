@@ -1,0 +1,72 @@
+{
+  "name": "FeedbackForm",
+  "level": "composite",
+  "category": "forms",
+  "description": "A feedback form with star rating, category selection, and message field for collecting user feedback and reviews",
+  "visual": {
+    "description": "Card with vertical layout. Star rating selector at top, optional category dropdown, textarea for detailed feedback, and submit button. Shows success state after submission. Uses primary color for active stars and button.",
+    "layout": "vertical stack in centered card",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.600",
+      "color.neutral.200",
+      "color.neutral.500",
+      "color.warning.500",
+      "color.success.500",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Form title",
+        "defaultValue": "Share Your Feedback"
+      },
+      {
+        "name": "categories",
+        "type": "array",
+        "required": false,
+        "description": "Array of feedback category strings (e.g., ['Bug Report', 'Feature Request', 'General'])"
+      },
+      {
+        "name": "maxRating",
+        "type": "number",
+        "required": false,
+        "description": "Maximum star rating value",
+        "defaultValue": 5
+      },
+      {
+        "name": "submitLabel",
+        "type": "string",
+        "required": false,
+        "description": "Submit button text",
+        "defaultValue": "Submit Feedback"
+      },
+      {
+        "name": "showRating",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show the star rating selector",
+        "defaultValue": true
+      }
+    ],
+    "callbacks": ["onSubmit"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "feedback form", "match": 0.95 },
+    { "prompt": "rating form", "match": 0.9 },
+    { "prompt": "review form with stars", "match": 0.9 },
+    { "prompt": "user feedback", "match": 0.85 },
+    { "prompt": "star rating feedback", "match": 0.9 },
+    { "prompt": "customer review form", "match": 0.85 },
+    { "prompt": "product review", "match": 0.8 },
+    { "prompt": "satisfaction survey", "match": 0.8 }
+  ],
+  "tags": ["feedback", "rating", "review", "stars", "form", "survey", "satisfaction"]
+}

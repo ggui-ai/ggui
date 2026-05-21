@@ -1,0 +1,51 @@
+{
+  "name": "@ggui-ai/channel-client",
+  "version": "0.1.0-rc.1",
+  "description": "Transport-negotiated channel registry for ggui clients. A framework-agnostic library (no React, no iframe assumptions): channels register once with a ChannelRegistry, and each channel picks a WebSocket or polling transport based on what the session bootstrap declares.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "websocket",
+    "polling",
+    "transport"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/channel-client",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/channel-client"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0",
+    "jsdom": "^25.0.0"
+  }
+}

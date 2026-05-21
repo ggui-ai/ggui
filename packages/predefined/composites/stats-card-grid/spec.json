@@ -1,0 +1,59 @@
+{
+  "name": "StatsCardGrid",
+  "level": "composite",
+  "category": "data",
+  "description": "A responsive grid of metric/KPI cards showing statistics with labels, values, change indicators, and optional trend direction. Ideal for dashboard summaries and overview sections.",
+  "visual": {
+    "description": "Responsive grid of cards, each showing a metric label, large value, and optional change percentage with up/down indicator. Cards have subtle borders, hover shadow, and color-coded change indicators (green for positive, red for negative).",
+    "layout": "responsive grid of metric cards (2-4 columns)",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.50",
+      "color.neutral.100",
+      "color.neutral.200",
+      "color.neutral.500",
+      "color.success.500",
+      "color.error.500",
+      "spacing.4",
+      "spacing.6",
+      "borderRadius.lg",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "stats",
+        "type": "array",
+        "required": true,
+        "description": "Array of stat objects with label, value, change, changeLabel, and trend ('up' | 'down' | 'neutral')"
+      },
+      {
+        "name": "columns",
+        "type": "number",
+        "required": false,
+        "description": "Number of columns in the grid",
+        "defaultValue": 4
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Optional section title above the grid"
+      }
+    ],
+    "callbacks": ["onStatClick"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "stats cards", "match": 0.95 },
+    { "prompt": "KPI dashboard", "match": 0.9 },
+    { "prompt": "metric cards", "match": 0.95 },
+    { "prompt": "dashboard stats", "match": 0.9 },
+    { "prompt": "overview metrics", "match": 0.85 },
+    { "prompt": "analytics summary cards", "match": 0.85 },
+    { "prompt": "key performance indicators", "match": 0.85 },
+    { "prompt": "stats overview grid", "match": 0.9 }
+  ],
+  "tags": ["stats", "metrics", "KPI", "dashboard", "cards", "analytics", "overview", "data"]
+}

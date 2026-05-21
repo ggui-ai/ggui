@@ -1,0 +1,83 @@
+{
+  "name": "AuthFlowBlueprint",
+  "level": "blueprint",
+  "category": "auth",
+  "description": "A complete authentication flow with login, signup, and password reset screens. Features tabbed navigation between views, form validation, social login buttons, and branded header.",
+  "visual": {
+    "description": "Centered card on a gradient or branded background. Card contains tabs for Login/Sign Up at top, form fields in middle, and action buttons at bottom. Includes 'Forgot Password' link and optional social login buttons (Google, GitHub, etc.).",
+    "layout": "centered card with tabs, form, and actions",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.600",
+      "color.neutral.50",
+      "color.neutral.100",
+      "color.neutral.500",
+      "color.error.500",
+      "spacing.4",
+      "spacing.6",
+      "spacing.8",
+      "borderRadius.lg",
+      "shadow.lg"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "initialView",
+        "type": "string",
+        "required": false,
+        "description": "Initial view to show: 'login', 'signup', or 'reset'",
+        "defaultValue": "login"
+      },
+      {
+        "name": "logo",
+        "type": "string",
+        "required": false,
+        "description": "URL or component for logo display"
+      },
+      {
+        "name": "appName",
+        "type": "string",
+        "required": false,
+        "description": "Application name for branding",
+        "defaultValue": "App"
+      },
+      {
+        "name": "socialProviders",
+        "type": "array",
+        "required": false,
+        "description": "Social login providers to show (e.g., ['google', 'github'])"
+      },
+      {
+        "name": "showSignup",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether to show the signup tab",
+        "defaultValue": true
+      }
+    ],
+    "callbacks": ["onLogin", "onSignup", "onPasswordReset", "onSocialLogin"],
+    "slots": ["header", "footer", "loginForm", "signupForm"]
+  },
+  "examples": [
+    { "prompt": "login page", "match": 0.95 },
+    { "prompt": "authentication flow", "match": 0.95 },
+    { "prompt": "sign in page", "match": 0.95 },
+    { "prompt": "login and signup", "match": 0.9 },
+    { "prompt": "user authentication", "match": 0.9 },
+    { "prompt": "login form with signup", "match": 0.9 },
+    { "prompt": "auth screens", "match": 0.85 },
+    { "prompt": "sign up page", "match": 0.85 },
+    { "prompt": "password reset flow", "match": 0.8 }
+  ],
+  "tags": [
+    "auth",
+    "login",
+    "signup",
+    "authentication",
+    "password",
+    "sign-in",
+    "register",
+    "blueprint"
+  ]
+}

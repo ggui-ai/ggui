@@ -1,0 +1,28 @@
+// ⚠️ DO NOT EDIT imports — all available components are pre-imported.
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';
+import { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';
+import { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';
+import { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';
+
+// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.
+interface Props {
+  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate
+  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: "todo", name: "To Do"}, {id: "in-progress", name: "In Progress"}, {id: "done", name: "Done"}]
+  onTaskUpdate?: (data: Record<string, unknown>) => void; // Action: Task Updated
+}
+
+function useComponent(props: Props) {
+  const handleTaskUpdate = useCallback((data: Record<string, unknown>) => {
+    props.onTaskUpdate?.(data);
+  }, [props.onTaskUpdate]);
+
+  // TODO: add state and computed values
+  return {};
+}
+
+export default function Component(props: Props) {
+  const state = useComponent(props);
+
+  return (<></>); // TODO: implement the UI here
+}

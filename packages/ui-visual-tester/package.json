@@ -1,0 +1,71 @@
+{
+  "name": "@ggui-ai/ui-visual-tester",
+  "version": "0.1.0-rc.1",
+  "description": "Behavioral validator for ggui-generated component code. Renders a component in real Chromium via Playwright, clicks each action declared in its contract, and verifies the action actually does something — mutating bound state or dispatching to the agent. Catches buttons wired to no-op handlers that structural validators miss. Playwright is an optional peer dependency, injected by the caller.",
+  "keywords": [
+    "ggui",
+    "playwright",
+    "validation",
+    "testing",
+    "ui"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/ui-visual-tester",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/ui-visual-tester"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "fixture",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build-fixture-bundle.mjs && tsc -p tsconfig.build.json",
+    "build:bundle": "node scripts/build-fixture-bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/build-fixture-bundle.mjs && vitest run"
+  },
+  "peerDependencies": {
+    "playwright-core": "^1.58.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/wire": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.12",
+    "playwright-core": "^1.58.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

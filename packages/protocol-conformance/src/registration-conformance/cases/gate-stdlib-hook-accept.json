@@ -1,0 +1,27 @@
+{
+  "name": "gate-stdlib-hook-accept",
+  "description": "The contract references `useGeolocation` under `@ggui-ai/gadgets` — one of the seven first-party browser-capability hooks. The app's catalog is the `STDLIB_GADGETS` baseline: the single `@ggui-ai/gadgets` package descriptor whose `exports` carry all seven stdlib hooks. The `(package, export)` pair resolves, so the gate MUST accept. (When a real app row carries no explicit catalog, the push handler substitutes `STDLIB_GADGETS` before calling the gate — this case provides that baseline directly.)",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@ggui-ai/gadgets": { "useGeolocation": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-ai/gadgets",
+      "version": "1.0.0",
+      "exports": [
+        { "hook": "useCamera" },
+        { "hook": "useClipboardPaste" },
+        { "hook": "useClipboardWrite" },
+        { "hook": "useFilePicker" },
+        { "hook": "useGeolocation" },
+        { "hook": "useMicrophone" },
+        { "hook": "useNotifications" }
+      ]
+    }
+  ],
+  "expect": { "outcome": "accept" }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "gate-priority-not-registered-outranks-mismatch",
+  "description": "A single push that references BOTH an unknown export (`useDoorDashCheckout` under `@acme/checkout`) AND a package-mismatched export (`useLeafletMap` under `@acme/maps`, registered only under `@ggui-samples/leaflet`). The gate classifies every miss and MUST throw the most-fundamental category FIRST — `gadget_not_registered` outranks `gadget_package_mismatch`, because an author who got the export name wrong cannot act on a 'wrong package' message. The lower-priority package miss rides the rejection's `secondary` so the author corrects both in one round trip; the catalog asserts the primary outcome code.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/checkout": { "useDoorDashCheckout": {} },
+        "@acme/maps": { "useLeafletMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useLeafletMap" }]
+    }
+  ],
+  "expect": { "outcome": "reject", "code": "gadget_not_registered" }
+}

@@ -1,0 +1,101 @@
+# LiteLLM Proxy Configuration for Multi-Provider BYOK
+#
+# This config defines model aliases that route to the actual provider models.
+# API keys are read from environment variables.
+
+model_list:
+  # Anthropic Models (Claude 4.6 series - latest as of 2026)
+  # Input context: 200K tokens | Output limit: 64,000 tokens
+  - model_name: anthropic/claude-sonnet-4-6
+    litellm_params:
+      model: claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  # Anthropic Models (Claude 4.5 series)
+  - model_name: anthropic/claude-haiku-4-5
+    litellm_params:
+      model: claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  - model_name: anthropic/claude-sonnet-4-5
+    litellm_params:
+      model: claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  - model_name: anthropic/claude-opus-4-5
+    litellm_params:
+      model: claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  # Bare model IDs (for direct Anthropic SDK usage via repair-service, etc.)
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  - model_name: claude-sonnet-4-5-20250929
+    litellm_params:
+      model: claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 64000
+
+  # Google Gemini Models (Gemini 3 series - latest as of 2026)
+  # Works with Claude Agent SDK via LiteLLM format translation
+  # Input context: 1,048,576 tokens | Output limit: 65,536 tokens
+  - model_name: gemini/gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY
+      max_tokens: 65536 # Gemini 3 Flash output limit
+
+  - model_name: gemini/gemini-3-pro-preview
+    litellm_params:
+      model: gemini/gemini-3-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+      max_tokens: 65536 # Gemini 3 Pro output limit
+
+  # OpenAI Models (GPT-5.2 series - latest as of 2026)
+  # Output limit: 128,000 tokens
+  - model_name: openai/gpt-5.2
+    litellm_params:
+      model: gpt-5.2
+      api_key: os.environ/OPENAI_API_KEY
+      max_tokens: 128000
+
+  - model_name: openai/gpt-5.2-codex
+    litellm_params:
+      model: gpt-5.2-codex
+      api_key: os.environ/OPENAI_API_KEY
+      max_tokens: 128000
+
+  # Legacy OpenAI Models (keeping for backward compatibility)
+  - model_name: openai/gpt-4o
+    litellm_params:
+      model: gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+      max_tokens: 16384
+
+  - model_name: openai/gpt-4o-mini
+    litellm_params:
+      model: gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+      max_tokens: 16384
+
+litellm_settings:
+  # Drop unsupported parameters instead of failing
+  drop_params: true
+  # Automatically adjust parameters to fit model limits (caps max_tokens)
+  modify_params: true
+  # Request timeout in seconds (5 minutes for complex generations)
+  request_timeout: 300
+  # Enable detailed logging for debugging
+  set_verbose: true
+
+general_settings:
+  # No master key — proxy is container-internal, no auth needed for completions
+  master_key: null

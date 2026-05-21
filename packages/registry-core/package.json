@@ -1,0 +1,79 @@
+{
+  "name": "@ggui-ai/registry-core",
+  "version": "0.1.0-rc.1",
+  "description": "Pure-TypeScript registry operations and storage interfaces for the ggui marketplace. No I/O, no HTTP — operations take typed inputs plus a storage deps bag and return discriminated-union results.",
+  "keywords": [
+    "ggui",
+    "registry",
+    "marketplace",
+    "mcp",
+    "conformance",
+    "storage-interface"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ggui-ai/artifact-manifest": "workspace:*",
+    "@ggui-ai/gadget-signing": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "esbuild": "0.25.12",
+    "oxc-parser": "^0.131.0",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "vitest": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/registry-core"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/registry-core",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

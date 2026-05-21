@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Scope CI to the publishable packages/ tree. The e2e suites,
+      # samples, and misc/ tooling are workspace members (so their
+      # `@ggui-ai/*` imports resolve) but are exercised by their own
+      # suites — running their Playwright projects here would need
+      # browsers + a live server.
+      #
+      # `@ggui-ai/ui-gen` emits an 8 MB+ adapters bundle; tsup's worker
+      # OOMs on the 7 GB default GitHub runner with Node's default
+      # heap. Bump for the build phase only.
+      - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm -r --filter "./packages/*" build
+
+      - name: Typecheck
+        run: pnpm -r --filter "./packages/*" typecheck
+
+      - name: Test
+        run: pnpm -r --filter "./packages/*" test

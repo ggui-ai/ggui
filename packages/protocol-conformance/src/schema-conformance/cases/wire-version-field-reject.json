@@ -1,0 +1,13 @@
+{
+  "name": "wire-version-field-reject",
+  "description": "An export entry carrying a `version` field. `version` is the operator's deployment pin in `App.gadgets`, never the agent's to author — it is resolved from the registry at push time, never carried on the wire. `gadgetExportUseSchema` is `.strict()`, so a `version` field MUST be rejected at parse time rather than silently dropped.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": {
+        "useLeafletMap": { "version": "2.3.1" }
+      }
+    }
+  },
+  "expect": "reject",
+  "rejectReason": "`version` is registry-side (App.gadgets), not a wire field; gadgetExportUseSchema is .strict()."
+}

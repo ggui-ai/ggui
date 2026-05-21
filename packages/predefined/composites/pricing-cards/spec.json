@@ -1,0 +1,58 @@
+{
+  "name": "PricingCards",
+  "level": "composite",
+  "category": "marketing",
+  "description": "A responsive pricing comparison layout with plan cards showing name, price, feature list, and CTA button. Supports highlighting a recommended plan. Common in SaaS agent interfaces.",
+  "visual": {
+    "description": "Horizontal row of pricing cards with equal height. Each card shows plan name, price with billing period, feature list with check/cross icons, and a CTA button. The recommended plan has a highlighted border and badge. Cards are responsive and stack on mobile.",
+    "layout": "responsive row of equal-height cards",
+    "tokens": [
+      "color.primary.500",
+      "color.primary.600",
+      "color.primary.50",
+      "color.neutral.200",
+      "color.neutral.500",
+      "color.success.500",
+      "spacing.4",
+      "spacing.6",
+      "spacing.8",
+      "borderRadius.lg",
+      "shadow.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "plans",
+        "type": "array",
+        "required": true,
+        "description": "Array of plan objects with name, price, period, features (array of {text, included}), ctaLabel, and recommended (boolean)"
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "required": false,
+        "description": "Section title above the cards"
+      },
+      {
+        "name": "subtitle",
+        "type": "string",
+        "required": false,
+        "description": "Section subtitle/description"
+      }
+    ],
+    "callbacks": ["onSelectPlan"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "pricing cards", "match": 0.95 },
+    { "prompt": "pricing table", "match": 0.95 },
+    { "prompt": "pricing plans", "match": 0.95 },
+    { "prompt": "subscription plans", "match": 0.9 },
+    { "prompt": "plan comparison", "match": 0.85 },
+    { "prompt": "pricing page", "match": 0.9 },
+    { "prompt": "SaaS pricing", "match": 0.85 },
+    { "prompt": "billing plans", "match": 0.8 }
+  ],
+  "tags": ["pricing", "plans", "billing", "subscription", "comparison", "SaaS", "marketing"]
+}

@@ -1,0 +1,79 @@
+{
+  "name": "TwoColumnLayout",
+  "level": "blueprint",
+  "category": "layout",
+  "description": "A responsive two-column layout with a sidebar on the left and a main content area on the right. The sidebar supports navigation links, widgets, or auxiliary content. On smaller screens, the layout stacks vertically with the sidebar on top.",
+  "visual": {
+    "description": "Full-height two-column layout. Left sidebar with navigation links, logo, and optional widgets. Right main content area with header and scrollable body. Sidebar collapses on mobile.",
+    "layout": "sidebar-main with responsive stacking",
+    "tokens": [
+      "color.primary.600",
+      "color.neutral.50",
+      "color.neutral.100",
+      "color.neutral.200",
+      "color.neutral.700",
+      "color.neutral.900",
+      "spacing.3",
+      "spacing.4",
+      "spacing.6",
+      "spacing.8",
+      "borderRadius.md",
+      "shadow.sm"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "sidebarWidth",
+        "type": "number",
+        "required": false,
+        "description": "Width of the sidebar in pixels",
+        "defaultValue": 260
+      },
+      {
+        "name": "sidebarTitle",
+        "type": "string",
+        "required": false,
+        "description": "Title displayed at the top of the sidebar",
+        "defaultValue": "App Name"
+      },
+      {
+        "name": "navItems",
+        "type": "array",
+        "required": false,
+        "description": "Navigation items for the sidebar"
+      },
+      {
+        "name": "mainTitle",
+        "type": "string",
+        "required": false,
+        "description": "Title for the main content header"
+      },
+      {
+        "name": "collapsible",
+        "type": "boolean",
+        "required": false,
+        "description": "Whether the sidebar can be collapsed",
+        "defaultValue": true
+      }
+    ],
+    "callbacks": ["onNavSelect", "onSidebarToggle"],
+    "slots": ["sidebarContent", "mainContent", "sidebarFooter", "mainHeader"]
+  },
+  "examples": [
+    { "prompt": "two column layout with sidebar and main content", "match": 0.98 },
+    {
+      "prompt": "A two column layout with a sidebar on the left and main content on the right",
+      "match": 0.99
+    },
+    { "prompt": "sidebar layout", "match": 0.95 },
+    { "prompt": "two column page layout", "match": 0.95 },
+    { "prompt": "layout with left sidebar and right content area", "match": 0.95 },
+    { "prompt": "admin panel layout with sidebar navigation", "match": 0.9 },
+    { "prompt": "app shell with sidebar", "match": 0.9 },
+    { "prompt": "dashboard layout with sidebar", "match": 0.85 },
+    { "prompt": "two panel layout", "match": 0.9 },
+    { "prompt": "side navigation layout", "match": 0.85 }
+  ],
+  "tags": ["layout", "sidebar", "two-column", "navigation", "responsive", "blueprint"]
+}

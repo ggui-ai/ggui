@@ -1,0 +1,54 @@
+{
+  "name": "@ggui-ai/ui-registry",
+  "version": "0.1.0-rc.1",
+  "description": "Source-contract interface for ggui UI artifacts — cloud, local, and any future registry implement the `UiRegistry` shape so tooling can read and write UIs through one contract. Deliberately search-free and sync-free; a types-only package.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ggui-ai/project-config": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/ui-registry"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/ui-registry",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "keywords": [
+    "ggui",
+    "ui-registry",
+    "registry",
+    "contract",
+    "types"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

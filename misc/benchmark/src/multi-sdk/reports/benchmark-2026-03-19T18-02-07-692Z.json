@@ -1,0 +1,3303 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T18:02:07.691Z",
+    "totalDurationMs": 100405,
+    "totalVariants": 1,
+    "totalCommits": 5,
+    "totalRuns": 5,
+    "successCount": 5,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var m=Object.defineProperty;var c=(e,n)=>m(e,\"name\",{value:n,configurable:!0});import{jsx as a,jsxs as r}from\"react/jsx-runtime\";import{useCallback as s}from\"react\";import{Card as b,Stack as d,Row as u,Box as l,Divider as f,Text as t,Heading as g,Badge as p,Icon as v}from\"@ggui-ai/design/primitives\";import{Hoverable as S}from\"@ggui-ai/design/interact\";function y(e){return{getIcon:s(o=>{const i=o.toLowerCase();return i.includes(\"sun\")?\"sun\":i.includes(\"cloud\")?\"cloud\":i.includes(\"rain\")?\"rain\":\"cloud\"},[])}}c(y,\"useComponent\");function T(e){const{getIcon:n}=y(e);return a(b,{padding:24,shadow:\"md\",style:{maxWidth:400},children:r(d,{gap:16,children:[r(u,{justify:\"between\",align:\"center\",children:[a(g,{level:2,children:e.city}),a(p,{variant:\"primary\",children:e.unit})]}),r(d,{align:\"center\",gap:4,children:[r(g,{level:1,color:\"var(--ggui-color-primary-600)\",children:[e.temperature,\"\\xB0\"]}),a(t,{variant:\"bodyLarge\",children:e.condition})]}),r(u,{justify:\"around\",children:[r(l,{children:[a(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Humidity\"}),r(t,{variant:\"label\",children:[e.humidity,\"%\"]})]}),r(l,{children:[a(t,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Wind\"}),r(t,{variant:\"label\",children:[e.windSpeed,\" km/h\"]})]})]}),a(f,{margin:8}),a(u,{justify:\"between\",children:e.forecast.map((o,i)=>a(l,{as:S,hoverStyle:{background:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"var(--ggui-shape-radius-md)\"},padding:8,children:r(d,{align:\"center\",gap:4,children:[a(t,{variant:\"caption\",children:o.day}),a(v,{name:n(o.icon),size:20,color:\"var(--ggui-color-onSurfaceVariant)\"}),r(t,{variant:\"bodySmall\",weight:\"semibold\",children:[o.high,\"\\xB0/\",o.low,\"\\xB0\"]})]})},i))})]})})}c(T,\"Component\");export{T as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: { day: string; icon: string; high: number; low: number }[]; // 5-day forecast array\n}\n\nfunction useComponent(props: Props) {\n  const getIcon = useCallback((condition: string) => {\n    const cond = condition.toLowerCase();\n    if (cond.includes('sun')) return 'sun';\n    if (cond.includes('cloud')) return 'cloud';\n    if (cond.includes('rain')) return 'rain';\n    return 'cloud';\n  }, []);\n\n  return { getIcon };\n}\n\nexport default function Component(props: Props) {\n  const { getIcon } = useComponent(props);\n\n  return (\n    <Card padding={24} shadow=\"md\" style={{ maxWidth: 400 }}>\n      <Stack gap={16}>\n        <Row justify=\"between\" align=\"center\">\n          <Heading level={2}>{props.city}</Heading>\n          <Badge variant=\"primary\">{props.unit}</Badge>\n        </Row>\n\n        <Stack align=\"center\" gap={4}>\n          <Heading level={1} color=\"var(--ggui-color-primary-600)\">{props.temperature}°</Heading>\n          <Text variant=\"bodyLarge\">{props.condition}</Text>\n        </Stack>\n\n        <Row justify=\"around\">\n          <Box>\n            <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">Humidity</Text>\n            <Text variant=\"label\">{props.humidity}%</Text>\n          </Box>\n          <Box>\n            <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">Wind</Text>\n            <Text variant=\"label\">{props.windSpeed} km/h</Text>\n          </Box>\n        </Row>\n\n        <Divider margin={8} />\n\n        <Row justify=\"between\">\n          {props.forecast.map((f, i) => (\n            <Box\n              as={Hoverable}\n              key={i}\n              hoverStyle={{ background: 'var(--ggui-color-surfaceVariant)', borderRadius: 'var(--ggui-shape-radius-md)' }}\n              padding={8}\n            >\n              <Stack align=\"center\" gap={4}>\n                <Text variant=\"caption\">{f.day}</Text>\n                <Icon name={getIcon(f.icon)} size={20} color=\"var(--ggui-color-onSurfaceVariant)\" />\n                <Text variant=\"bodySmall\" weight=\"semibold\">{f.high}°/{f.low}°</Text>\n              </Stack>\n            </Box>\n          ))}\n        </Row>\n      </Stack>\n    </Card>\n  );\n}\n",
+        "tokens": {
+          "input": 137544,
+          "output": 2819,
+          "total": 140363
+        },
+        "generationTimeMs": 20480,
+        "turnsUsed": 3,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 84,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 80,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The forecast icons are mapped to the current condition icon rather than the icon specified in the forecast array.",
+                "fix": "Update the mapping in the forecast map loop to use f.icon instead of the conditionIcon derived from the current weather."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The component lacks hover states or subtle transitions that would enhance the 'card' feel when interacting with the dashboard.",
+                "fix": "Wrap the Card or forecast elements in a Hoverable component or add transition properties to the container."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The forecast strip is slightly cramped due to the horizontal layout without defined minimum widths.",
+                "fix": "Add a minimum width to the forecast day column or increase the gap between items to ensure labels don't clip."
+              }
+            ],
+            "critique": "The component is clean, well-structured, and adheres strictly to the provided design primitives. It effectively displays all required weather data, though the forecast logic should map individual day icons instead of reusing the primary condition icon.",
+            "inputTokens": 1584,
+            "outputTokens": 340
+          },
+          {
+            "passed": false,
+            "finalScore": 87,
+            "dimensions": {
+              "completeness": 100,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 80,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The forecast layout lacks a hover effect on individual days, which would improve the interactive feel.",
+                "fix": "Wrap forecast items in a Clickable or Hoverable primitive to provide visual feedback."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The component is purely static and lacks interactive states for the forecast items.",
+                "fix": "Add a subtle transition or scale effect when interacting with the forecast column."
+              }
+            ],
+            "critique": "The component is clean, follows the design contract perfectly, and uses the design system primitives effectively. The layout is well-structured, though adding subtle hover effects on the forecast days would elevate the user experience from functional to polished.",
+            "inputTokens": 1598,
+            "outputTokens": 246
+          },
+          {
+            "passed": true,
+            "finalScore": 91,
+            "dimensions": {
+              "completeness": 100,
+              "visualPolish": 90,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The current temperature and weather conditions are not wrapped in landmark elements, and the forecast icons lack aria-labels to explain the weather state to screen readers.",
+                "fix": "Add aria-label to the Icon components within the forecast and ensure the main layout uses semantic container tags."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The layout is a bit dense; the 5-day forecast could benefit from slightly more padding or a subtle border between items to improve scanability.",
+                "fix": "Increase horizontal spacing in the forecast Row or use a Divider if needed."
+              }
+            ],
+            "critique": "The component is well-structured, uses the provided design system primitives effectively, and correctly maps all required props. It feels cohesive and professional, though minor improvements to ARIA labels and spacing would elevate the accessibility and visual hierarchy.",
+            "inputTokens": 1658,
+            "outputTokens": 278
+          }
+        ],
+        "timing": {
+          "plannerMs": 4098,
+          "codingMs": 4496,
+          "evalMs": 11875,
+          "totalMs": 20480
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "finalScore": 91,
+        "dimensions": {
+          "completeness": 100,
+          "visualPolish": 90,
+          "interactivity": 85,
+          "accessibility": 80,
+          "codeQuality": 95
+        },
+        "issues": [
+          {
+            "dimension": "accessibility",
+            "severity": "minor",
+            "description": "The current temperature and weather conditions are not wrapped in landmark elements, and the forecast icons lack aria-labels to explain the weather state to screen readers.",
+            "fix": "Add aria-label to the Icon components within the forecast and ensure the main layout uses semantic container tags."
+          },
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "The layout is a bit dense; the 5-day forecast could benefit from slightly more padding or a subtle border between items to improve scanability.",
+            "fix": "Increase horizontal spacing in the forecast Row or use a Divider if needed."
+          }
+        ],
+        "critique": "The component is well-structured, uses the provided design system primitives effectively, and correctly maps all required props. It feels cohesive and professional, though minor improvements to ARIA labels and spacing would elevate the accessibility and visual hierarchy.",
+        "inputTokens": 1658,
+        "outputTokens": 278
+      },
+      "estimatedCostUsd": 0.07722899999999999,
+      "timestamp": "2026-03-19T18:00:47.893Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1784,
+        "sourceCodeBytes": 3388,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- All initial tasks come from props as an array with column assignment\n- Call props.onTaskUpdate when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var A=Object.defineProperty;var g=(n,o)=>A(n,\"name\",{value:o,configurable:!0});import{jsx as t,jsxs as i}from\"react/jsx-runtime\";import{useState as T,useCallback as B}from\"react\";import{Container as P,Card as R,Stack as m,Row as C,Box as D,Text as x,Heading as S,Button as k,Input as H,Select as M,Badge as f,Avatar as N}from\"@ggui-ai/design/primitives\";import{Dropdown as U}from\"@ggui-ai/design/components\";import{CardGrid as z}from\"@ggui-ai/design/compositions\";function F(n){const o=B(e=>{n.onTaskUpdate?.(e)},[n.onTaskUpdate]),[s,d]=T(n.tasks),[v,u]=T(null),[l,c]=T(\"\"),[p,w]=T(\"medium\");return{tasks:s,isAdding:v,setIsAdding:u,newTaskTitle:l,setNewTaskTitle:c,newTaskPriority:p,setNewTaskPriority:w,moveTask:g((e,a)=>{const r=s.map(h=>h.id===e?{...h,column:a}:h);d(r),o({type:\"MOVE_TASK\",taskId:e,columnId:a})},\"moveTask\"),addTask:g(e=>{if(!l)return;const a={id:Date.now().toString(),title:l,priority:p,assignee:\"??\",column:e,dueDate:new Date().toISOString().split(\"T\")[0]};d([...s,a]),c(\"\"),u(null),o({type:\"ADD_TASK\",...a})},\"addTask\")}}g(F,\"useComponent\");function I(n){const{tasks:o,isAdding:s,setIsAdding:d,newTaskTitle:v,setNewTaskTitle:u,newTaskPriority:l,setNewTaskPriority:c,moveTask:p,addTask:w}=F(n),b=o.length,y=o.filter(e=>e.column===\"done\").length;return t(P,{maxWidth:\"3xl\",padding:24,children:i(m,{gap:16,children:[i(C,{justify:\"between\",align:\"center\",children:[t(S,{level:2,children:\"Project Board\"}),i(m,{direction:\"horizontal\",gap:8,children:[i(f,{variant:\"secondary\",children:[b,\" tasks\"]}),i(f,{variant:\"success\",children:[y,\" completed\"]})]})]}),t(z,{columns:{sm:1,md:3},gap:16,children:n.columns.map(e=>t(D,{background:\"var(--ggui-color-surfaceVariant)\",padding:16,borderRadius:8,children:i(m,{gap:12,children:[i(S,{level:3,children:[e.name,\" (\",o.filter(a=>a.column===e.id).length,\")\"]}),o.filter(a=>a.column===e.id).map(a=>t(R,{padding:12,shadow:\"sm\",children:i(m,{gap:8,children:[t(x,{children:a.title}),i(C,{justify:\"between\",align:\"center\",children:[t(f,{variant:a.priority===\"high\"?\"error\":a.priority===\"medium\"?\"warning\":\"primary\",children:a.priority}),t(N,{name:a.assignee,size:24})]}),t(U,{trigger:t(k,{variant:\"ghost\",size:\"sm\",children:\"Move\"}),value:e.id,onChange:r=>p(a.id,r),options:n.columns.map(r=>({value:r.id||\"\",label:r.name||\"\"}))})]})},a.id)),s===e.id?i(m,{gap:8,children:[t(H,{label:\"Title\",placeholder:\"Task title...\",value:v,onChange:u}),t(M,{label:\"Priority\",value:l,onChange:c,options:[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}]}),i(C,{gap:8,children:[t(k,{size:\"sm\",onClick:()=>w(e.id||\"\"),children:\"Add\"}),t(k,{size:\"sm\",variant:\"ghost\",onClick:()=>d(null),children:\"Cancel\"})]})]}):t(k,{variant:\"ghost\",onClick:()=>d(e.id||null),children:\"+ Add Task\"})]})},e.id))})]})})}g(I,\"Component\");export{I as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: { id: string; title: string; priority: string; assignee: string; column: string; dueDate: string }[]; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n  onTaskUpdate?: (data: Record<string, unknown>) => void; // Action: Task Updated\n}\n\nfunction useComponent(props: Props) {\n  const handleTaskUpdate = useCallback((data: Record<string, unknown>) => {\n    props.onTaskUpdate?.(data);\n  }, [props.onTaskUpdate]);\n\n  const [tasks, setTasks] = useState(props.tasks);\n  const [isAdding, setIsAdding] = useState<string | null>(null);\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState('medium');\n\n  const moveTask = (taskId: string, columnId: string) => {\n    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, column: columnId } : t);\n    setTasks(updatedTasks);\n    handleTaskUpdate({ type: 'MOVE_TASK', taskId, columnId });\n  };\n\n  const addTask = (columnId: string) => {\n    if (!newTaskTitle) return;\n    const newTask = {\n      id: Date.now().toString(),\n      title: newTaskTitle,\n      priority: newTaskPriority,\n      assignee: '??',\n      column: columnId,\n      dueDate: new Date().toISOString().split('T')[0]\n    };\n    setTasks([...tasks, newTask]);\n    setNewTaskTitle('');\n    setIsAdding(null);\n    handleTaskUpdate({ type: 'ADD_TASK', ...newTask });\n  };\n\n  const editTask = (taskId: string, title: string) => {\n    setTasks(tasks.map(t => t.id === taskId ? { ...t, title } : t));\n    handleTaskUpdate({ type: 'EDIT_TASK', taskId, title });\n  };\n\n  return { tasks, isAdding, setIsAdding, editingTaskId, setEditingTaskId, newTaskTitle, setNewTaskTitle, newTaskPriority, setNewTaskPriority, moveTask, addTask, editTask };\n}\n\nexport default function Component(props: Props) {\n  const { tasks, isAdding, setIsAdding, editingTaskId, setEditingTaskId, newTaskTitle, setNewTaskTitle, newTaskPriority, setNewTaskPriority, moveTask, addTask, editTask } = useComponent(props);\n  const totalTasks = tasks.length;\n  const completedTasks = tasks.filter(t => t.column === 'done').length;\n\n  return (\n    <Container maxWidth=\"3xl\" padding={24}>\n      <Stack gap={16}>\n        <Row justify=\"between\" align=\"center\">\n          <Heading level={2}>Project Board</Heading>\n          <Stack direction=\"horizontal\" gap={8}>\n            <Badge variant=\"secondary\">{totalTasks} tasks</Badge>\n            <Badge variant=\"success\">{completedTasks} completed</Badge>\n          </Stack>\n        </Row>\n        <CardGrid columns={{ sm: 1, md: 3 }} gap={16}>\n          {props.columns.map(col => (\n            (() => {\n              const colTasks = tasks.filter(t => t.column === col.id);\n              return (\n            <Box key={col.id} background=\"var(--ggui-color-surfaceVariant)\" padding={16} borderRadius={8}>\n              <Stack gap={12}>\n                <Row justify=\"between\" align=\"center\">\n                  <Heading level={3} color=\"var(--ggui-color-onSurfaceVariant)\">{col.name}</Heading>\n                  <Badge variant=\"secondary\">{colTasks.length}</Badge>\n                </Row>\n                <Stack as=\"ul\" gap={8} style={{ listStyle: 'none', padding: 0, margin: 0 }}>\n                  {colTasks.map(task => (\n                  <Card as=\"li\" key={task.id} padding={12} shadow=\"sm\" role=\"listitem\" onDoubleClick={() => setEditingTaskId(task.id)}>\n                    <Stack gap={8}>\n                      {editingTaskId === task.id ? (\n                        <Input \n                          autoFocus \n                          aria-label=\"Edit task title\"\n                          value={task.title} \n                          onChange={(val) => editTask(task.id, val)} \n                          onKeyDown={(e) => { if (e.key === 'Enter') setEditingTaskId(null); }}\n                          onBlur={() => setEditingTaskId(null)}\n                        />\n                      ) : (\n                        <Text variant=\"bodySmall\" style={{ fontWeight: 500 }}>{task.title}</Text>\n                      )}\n                      <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">Due: {task.dueDate}</Text>\n                      <Row justify=\"between\" align=\"center\">\n                        <Badge variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'primary'}>{task.priority}</Badge>\n                        <Row gap={4} align=\"center\">\n                          <Avatar name={task.assignee} size={24} />\n                          <Dropdown aria-label={`Move task ${task.title}`} trigger={<Button variant=\"ghost\" size=\"xs\"><Icon name=\"chevron-down\" size={16} /></Button>} value={col.id} onChange={(nextCol) => moveTask(task.id, nextCol)} options={props.columns.map(c => ({ value: c.id || '', label: c.name || '' }))} />\n                        </Row>\n                      </Row>\n                    </Stack>\n                  </Card>\n                  ))}\n                </Stack>\n                {isAdding === col.id ? (\n                  <Stack gap={8}>\n                    <Input aria-label=\"New task title\" placeholder=\"Enter task title...\" value={newTaskTitle} onChange={setNewTaskTitle} />\n                    <Select label=\"Set Priority\" value={newTaskPriority} onChange={setNewTaskPriority} options={[{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}]} />\n                    <Row gap={8}>\n                      <Button size=\"sm\" onClick={() => addTask(col.id || '')}>Save Task</Button>\n                      <Button size=\"sm\" variant=\"ghost\" onClick={() => setIsAdding(null)}>Cancel</Button>\n                    </Row>\n                  </Stack>\n                ) : (\n                  <Button variant=\"ghost\" onClick={() => setIsAdding(col.id || null)}>+ Add Task</Button>\n                )}\n              </Stack>\n            </Box>\n              );\n            })()\n          ))}\n        </CardGrid>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 799567,
+          "output": 18473,
+          "total": 818040
+        },
+        "generationTimeMs": 100278,
+        "turnsUsed": 17,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 79,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 75,
+              "accessibility": 70,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The task title editing feature (double-click or edit button) mentioned in requirements is missing.",
+                "fix": "Add an edit state to individual task cards with an Input field triggered by a toggle state or double-click handler."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "Task creation logic uses shared state for newTaskTitle and newTaskPriority, which causes collisions when having multiple 'Add' forms potentially visible or clearing the global state incorrectly.",
+                "fix": "Either restrict to one active form at a time or move the form state into a controlled sub-component that manages its own input local to the column context."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The 'Move' dropdown trigger doesn't have an aria-label, and list items are not properly landmarked as task cards.",
+                "fix": "Add aria-label='Move task' to the dropdown button and use semantic elements like <li> for tasks inside the column container."
+              }
+            ],
+            "critique": "The component effectively implements the Kanban board structure and correctly uses the provided design primitives. It is visually clean and functional, but it misses the specific 'edit task' requirement and would benefit from more robust form state management to avoid input collisions between columns.",
+            "inputTokens": 2337,
+            "outputTokens": 379
+          },
+          {
+            "passed": false,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "Task edit functionality uses an 'onChange' trigger on an input which fires on every keystroke, causing instant updates to the state without a save/submit step.",
+                "fix": "Use a local 'editingTitle' state and add a 'Save' button or blur event to trigger the editTask call."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The task title is only actionable via an 'onClick' handler on a 'Text' component, which is not keyboard accessible (no focus states, not a button).",
+                "fix": "Wrap the title in a 'Button' (ghost variant) or add tabIndex and keydown event handling to make it accessible."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Move' dropdown uses the default column options, including the current column, which is functionally redundant.",
+                "fix": "Filter the dropdown options to exclude the current column ID to prevent unnecessary re-renders or logic triggers."
+              }
+            ],
+            "critique": "The component is well-structured and uses the requested design system effectively. It handles state management logic cleanly, though the interaction design for task editing and accessibility needs refinement to ensure screen reader support and better control over save operations.",
+            "inputTokens": 2560,
+            "outputTokens": 374
+          },
+          {
+            "passed": false,
+            "finalScore": 86,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 85
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Move' dropdown button triggers the default column action immediately on selection, which might be confusing for users expecting a confirmation.",
+                "fix": "Implement a more explicit selection flow or ensure the dropdown reflects the current status clearly."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The edit-on-click trigger for titles is somewhat hidden; double-click was requested but implemented via a button click pattern.",
+                "fix": "Attach onDoubleClick event handlers to the Title text element to trigger editing state."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The 'Add Task' form inputs lack explicit accessibility labels/associations beyond the placeholder.",
+                "fix": "Ensure the Input and Select components in the 'Add Task' form have aria-labels or explicitly rendered label elements."
+              }
+            ],
+            "critique": "The component is highly functional and cleanly implemented, adhering well to the provided design system. The layout effectively utilizes the CardGrid and Stack components, and state management is handled predictably. Minor refinements in interaction patterns (e.g., specific double-click requirement) and accessibility labels would elevate this to production-perfect.",
+            "inputTokens": 2625,
+            "outputTokens": 356
+          },
+          {
+            "passed": false,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The 'Add Task' form uses a shared global state for the title input, which prevents creating tasks in different columns simultaneously and causes input clearing issues.",
+                "fix": "Use a local object state keyed by column ID or move the 'isAdding' form into a sub-component to encapsulate local form state."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The editable title uses a Button component wrapper for double-click simulation, which can be confusing for screen readers regarding the interactive nature of the text.",
+                "fix": "Use a native input or a more semantic toggle pattern that clearly identifies the editable region."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The task list lacks a visible indicator of task count per column in the header as requested in the requirements.",
+                "fix": "Add a Badge or Text element next to the column heading showing the filtered length of tasks."
+              },
+              {
+                "dimension": "codeQuality",
+                "severity": "minor",
+                "description": "The `editTask` function triggers on every keystroke (`onChange`), which is inefficient and causes immediate data updates before the user finishes editing.",
+                "fix": "Implement a local state for editing or only trigger the update onBlur/onSubmit."
+              }
+            ],
+            "critique": "The component is functional and well-structured, successfully implementing the required Kanban board logic. While the visual hierarchy is clear and uses design tokens effectively, the form handling logic could be more robust to avoid global state collisions, and the header is missing the specified task count per column.",
+            "inputTokens": 2625,
+            "outputTokens": 449
+          },
+          {
+            "passed": false,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "Task edit functionality relies on a single click triggering a blur immediately, and the edit logic in the provided code directly overwrites the title on every keystroke rather than on commit.",
+                "fix": "Use a local state variable for the temporary edit title and apply it only on blur or enter key press."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The task title is wrapped in a button which is redundant, and the input field inside the card lacks a clear label for screen readers.",
+                "fix": "Use an aria-label on the input field and handle focus management properly when toggling between view/edit modes."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Task counts are missing from the column headers as requested.",
+                "fix": "Add a numeric counter next to the column heading, e.g., 'To Do (3)'."
+              }
+            ],
+            "critique": "The component is well-structured and functional, successfully using the provided primitives to build a clean Kanban board. The core requirements are met, though the editing experience needs refinement to ensure it doesn't trigger immediate state updates on every keystroke, and column metadata could be more descriptive.",
+            "inputTokens": 2625,
+            "outputTokens": 366
+          },
+          {
+            "passed": false,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The 'Move' dropdown updates the state correctly but displays the current column as the selected option in the menu, which can be confusing.",
+                "fix": "Filter the move options to exclude the current column or set the default selected value correctly."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "Editing a task via double-click or button press isn't explicitly communicated to screen readers, and the input behavior on Blur might cause accidental state submission.",
+                "fix": "Add aria-labels or live regions during edit mode; ensure the 'Move' dropdown has a descriptive aria-label."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The task count in the header is missing from the column headers, which was a specific requirement.",
+                "fix": "Add a badge or text indicating the count of tasks within each column (e.g., tasks.filter(...).length)."
+              }
+            ],
+            "critique": "The component is well-structured and functional, successfully implementing the required state logic and column management. The UI is clean, although it lacks the requested task counts per column and could benefit from slightly more explicit accessibility labels for interactive states.",
+            "inputTokens": 2648,
+            "outputTokens": 361
+          },
+          {
+            "passed": false,
+            "finalScore": 82,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 85,
+              "accessibility": 75,
+              "codeQuality": 80
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The due date field from the task object is not being rendered in the task card.",
+                "fix": "Add a <Text> or <small> element displaying task.dueDate inside the Card component."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The inline editing logic for task titles is slightly confusing for screen readers and keyboard users as it switches between a click-to-edit box and an input field.",
+                "fix": "Use a clear 'Edit' icon button instead of relying solely on the clickable task title area, or ensure the input has a clear label."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Move' dropdown functionality is implemented but might feel cramped within the small card footprint.",
+                "fix": "Ensure the Dropdown menu has enough z-index to appear over other elements and consider placing it in a footer row within the card."
+              }
+            ],
+            "critique": "The component is well-structured and follows the requested design patterns effectively. It successfully implements the Kanban logic and state management. The visual hierarchy is clear, though it would benefit from including the due date field as requested and refining the inline editing UX for better accessibility.",
+            "inputTokens": 2748,
+            "outputTokens": 365
+          },
+          {
+            "passed": false,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Move' button is visually cluttered within the task card, and the column structure relies on background colors that might blend with the default theme background.",
+                "fix": "Consider moving the move action to a more subtle icon button or dedicated footer area within the Card."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Task cards are rendered as 'listitem' but the parent container lacks the corresponding list container semantics.",
+                "fix": "Ensure the container wrapping the column tasks uses 'role=\"list\"' to properly associate with 'listitem'."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The edit interaction using onBlur causes the edit mode to close immediately if a user clicks slightly outside, potentially causing frustration.",
+                "fix": "Implement a 'Save' button in the edit state instead of relying solely on blur, or add a debounce/timeout."
+              }
+            ],
+            "critique": "The component is well-structured and implements all requested features, including the summary bar and dynamic state management. The code is clean and follows the design system patterns effectively. Minor improvements to semantic accessibility and UI interaction flow would make this a production-grade component.",
+            "inputTokens": 2776,
+            "outputTokens": 362
+          },
+          {
+            "passed": false,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Move' dropdown button placement inside the card is slightly cluttered, especially since each card has an edit button as well.",
+                "fix": "Consider using an Icon button for 'Edit' and moving the 'Move' dropdown to a more subtle trigger or an action menu to reduce visual noise."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The edit functionality on double-click was requested in the prompt but only a dedicated button was implemented.",
+                "fix": "Add an 'onDoubleClick' handler to the Task title Text component to trigger the editing state."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The column containers don't have explicit ARIA landmarks or labels (e.g., role='region' or aria-labelledby).",
+                "fix": "Add aria-labelledby referencing the column header ID to each column box for better screen reader navigation."
+              }
+            ],
+            "critique": "The component is well-structured, clean, and fulfills the core requirements effectively. It handles state management logic cleanly and uses design primitives appropriately. Adding double-click support and standardizing the action layout would make it perfect.",
+            "inputTokens": 2776,
+            "outputTokens": 357
+          },
+          {
+            "passed": false,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Column background color uses a hardcoded CSS variable string rather than the design system's theme-aware token logic.",
+                "fix": "Use a proper semantic token for surface backgrounds instead of 'var(--ggui-color-surfaceVariant)' if possible, or ensure it aligns with the system's naming convention."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "Editing a task triggers onTaskUpdate for every keystroke in the Input field, which is inefficient.",
+                "fix": "Use a local state for the edit buffer and only call onTaskUpdate when the user presses Enter or loses focus (onBlur)."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The Move Task dropdown uses a generic icon without clear text instructions for screen readers.",
+                "fix": "Add an explicit aria-label to the move button that includes the task title."
+              }
+            ],
+            "critique": "The component is highly functional and cleanly implemented, successfully hitting all the complex state management requirements like task movement and inline creation. The visual layout is professional and follows a standard Kanban pattern well; minor improvements to the edit-update cycle and ARIA descriptions would make this production-grade.",
+            "inputTokens": 2744,
+            "outputTokens": 365
+          }
+        ],
+        "timing": {
+          "plannerMs": 3596,
+          "codingMs": 27147,
+          "evalMs": 69492,
+          "totalMs": 100278
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "finalScore": 88,
+        "dimensions": {
+          "completeness": 95,
+          "visualPolish": 85,
+          "interactivity": 85,
+          "accessibility": 80,
+          "codeQuality": 90
+        },
+        "issues": [
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "Column background color uses a hardcoded CSS variable string rather than the design system's theme-aware token logic.",
+            "fix": "Use a proper semantic token for surface backgrounds instead of 'var(--ggui-color-surfaceVariant)' if possible, or ensure it aligns with the system's naming convention."
+          },
+          {
+            "dimension": "interactivity",
+            "severity": "minor",
+            "description": "Editing a task triggers onTaskUpdate for every keystroke in the Input field, which is inefficient.",
+            "fix": "Use a local state for the edit buffer and only call onTaskUpdate when the user presses Enter or loses focus (onBlur)."
+          },
+          {
+            "dimension": "accessibility",
+            "severity": "minor",
+            "description": "The Move Task dropdown uses a generic icon without clear text instructions for screen readers.",
+            "fix": "Add an explicit aria-label to the move button that includes the task title."
+          }
+        ],
+        "critique": "The component is highly functional and cleanly implemented, successfully hitting all the complex state management requirements like task movement and inline creation. The visual layout is professional and follows a standard Kanban pattern well; minor improvements to the edit-update cycle and ARIA descriptions would make this production-grade.",
+        "inputTokens": 2744,
+        "outputTokens": 365
+      },
+      "estimatedCostUsd": 0.4552025,
+      "timestamp": "2026-03-19T18:02:07.691Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2812,
+        "sourceCodeBytes": 7220,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "CSS Grid periodic table with category coloring, search, and detail panel",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements.\n\nLayout:\n- CSS Grid: 18 columns. Place each element using gridRow and gridColumn from its data.\n- Each cell: symbol (large, centered), atomic number (small, top-left)\n- Color-code by category using design tokens (e.g., noble-gas → one color, halogen → another)\n- Search input at top — filters by name or symbol (case-insensitive)\n- Click an element → detail panel below grid shows: name, symbol, atomicNumber, atomicWeight, category\n- Legend showing each category with its color\n\nAll element data comes from props.elements. Use design system CSS variables.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "elements": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "atomicNumber": {
+                        "type": "number"
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "atomicWeight": {
+                        "type": "number"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "row": {
+                        "type": "number"
+                      },
+                      "col": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Full periodic table element data",
+                "example": [
+                  {
+                    "atomicNumber": 1,
+                    "symbol": "H",
+                    "name": "Hydrogen",
+                    "atomicWeight": 1.008,
+                    "category": "nonmetal",
+                    "row": 1,
+                    "col": 1
+                  },
+                  {
+                    "atomicNumber": 2,
+                    "symbol": "He",
+                    "name": "Helium",
+                    "atomicWeight": 4.003,
+                    "category": "noble-gas",
+                    "row": 1,
+                    "col": 18
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 4,
+              "symbol": "Be",
+              "name": "Beryllium",
+              "atomicWeight": 9.012,
+              "category": "alkaline-earth",
+              "row": 2,
+              "col": 2
+            },
+            {
+              "atomicNumber": 5,
+              "symbol": "B",
+              "name": "Boron",
+              "atomicWeight": 10.81,
+              "category": "metalloid",
+              "row": 2,
+              "col": 13
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 7,
+              "symbol": "N",
+              "name": "Nitrogen",
+              "atomicWeight": 14.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 15
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 9,
+              "symbol": "F",
+              "name": "Fluorine",
+              "atomicWeight": 19,
+              "category": "halogen",
+              "row": 2,
+              "col": 17
+            },
+            {
+              "atomicNumber": 10,
+              "symbol": "Ne",
+              "name": "Neon",
+              "atomicWeight": 20.18,
+              "category": "noble-gas",
+              "row": 2,
+              "col": 18
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 12,
+              "symbol": "Mg",
+              "name": "Magnesium",
+              "atomicWeight": 24.31,
+              "category": "alkaline-earth",
+              "row": 3,
+              "col": 2
+            },
+            {
+              "atomicNumber": 13,
+              "symbol": "Al",
+              "name": "Aluminium",
+              "atomicWeight": 26.98,
+              "category": "post-transition-metal",
+              "row": 3,
+              "col": 13
+            },
+            {
+              "atomicNumber": 14,
+              "symbol": "Si",
+              "name": "Silicon",
+              "atomicWeight": 28.09,
+              "category": "metalloid",
+              "row": 3,
+              "col": 14
+            },
+            {
+              "atomicNumber": 15,
+              "symbol": "P",
+              "name": "Phosphorus",
+              "atomicWeight": 30.97,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 15
+            },
+            {
+              "atomicNumber": 16,
+              "symbol": "S",
+              "name": "Sulfur",
+              "atomicWeight": 32.07,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 16
+            },
+            {
+              "atomicNumber": 17,
+              "symbol": "Cl",
+              "name": "Chlorine",
+              "atomicWeight": 35.45,
+              "category": "halogen",
+              "row": 3,
+              "col": 17
+            },
+            {
+              "atomicNumber": 18,
+              "symbol": "Ar",
+              "name": "Argon",
+              "atomicWeight": 39.95,
+              "category": "noble-gas",
+              "row": 3,
+              "col": 18
+            },
+            {
+              "atomicNumber": 19,
+              "symbol": "K",
+              "name": "Potassium",
+              "atomicWeight": 39.1,
+              "category": "alkali-metal",
+              "row": 4,
+              "col": 1
+            },
+            {
+              "atomicNumber": 20,
+              "symbol": "Ca",
+              "name": "Calcium",
+              "atomicWeight": 40.08,
+              "category": "alkaline-earth",
+              "row": 4,
+              "col": 2
+            },
+            {
+              "atomicNumber": 21,
+              "symbol": "Sc",
+              "name": "Scandium",
+              "atomicWeight": 44.96,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 3
+            },
+            {
+              "atomicNumber": 22,
+              "symbol": "Ti",
+              "name": "Titanium",
+              "atomicWeight": 47.87,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 4
+            },
+            {
+              "atomicNumber": 23,
+              "symbol": "V",
+              "name": "Vanadium",
+              "atomicWeight": 50.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 5
+            },
+            {
+              "atomicNumber": 24,
+              "symbol": "Cr",
+              "name": "Chromium",
+              "atomicWeight": 52,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 6
+            },
+            {
+              "atomicNumber": 25,
+              "symbol": "Mn",
+              "name": "Manganese",
+              "atomicWeight": 54.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 7
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 27,
+              "symbol": "Co",
+              "name": "Cobalt",
+              "atomicWeight": 58.93,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 9
+            },
+            {
+              "atomicNumber": 28,
+              "symbol": "Ni",
+              "name": "Nickel",
+              "atomicWeight": 58.69,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 10
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 30,
+              "symbol": "Zn",
+              "name": "Zinc",
+              "atomicWeight": 65.38,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 12
+            },
+            {
+              "atomicNumber": 31,
+              "symbol": "Ga",
+              "name": "Gallium",
+              "atomicWeight": 69.72,
+              "category": "post-transition-metal",
+              "row": 4,
+              "col": 13
+            },
+            {
+              "atomicNumber": 32,
+              "symbol": "Ge",
+              "name": "Germanium",
+              "atomicWeight": 72.63,
+              "category": "metalloid",
+              "row": 4,
+              "col": 14
+            },
+            {
+              "atomicNumber": 33,
+              "symbol": "As",
+              "name": "Arsenic",
+              "atomicWeight": 74.92,
+              "category": "metalloid",
+              "row": 4,
+              "col": 15
+            },
+            {
+              "atomicNumber": 34,
+              "symbol": "Se",
+              "name": "Selenium",
+              "atomicWeight": 78.97,
+              "category": "nonmetal",
+              "row": 4,
+              "col": 16
+            },
+            {
+              "atomicNumber": 35,
+              "symbol": "Br",
+              "name": "Bromine",
+              "atomicWeight": 79.9,
+              "category": "halogen",
+              "row": 4,
+              "col": 17
+            },
+            {
+              "atomicNumber": 36,
+              "symbol": "Kr",
+              "name": "Krypton",
+              "atomicWeight": 83.8,
+              "category": "noble-gas",
+              "row": 4,
+              "col": 18
+            },
+            {
+              "atomicNumber": 37,
+              "symbol": "Rb",
+              "name": "Rubidium",
+              "atomicWeight": 85.47,
+              "category": "alkali-metal",
+              "row": 5,
+              "col": 1
+            },
+            {
+              "atomicNumber": 38,
+              "symbol": "Sr",
+              "name": "Strontium",
+              "atomicWeight": 87.62,
+              "category": "alkaline-earth",
+              "row": 5,
+              "col": 2
+            },
+            {
+              "atomicNumber": 39,
+              "symbol": "Y",
+              "name": "Yttrium",
+              "atomicWeight": 88.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 3
+            },
+            {
+              "atomicNumber": 40,
+              "symbol": "Zr",
+              "name": "Zirconium",
+              "atomicWeight": 91.22,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 4
+            },
+            {
+              "atomicNumber": 41,
+              "symbol": "Nb",
+              "name": "Niobium",
+              "atomicWeight": 92.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 5
+            },
+            {
+              "atomicNumber": 42,
+              "symbol": "Mo",
+              "name": "Molybdenum",
+              "atomicWeight": 95.95,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 6
+            },
+            {
+              "atomicNumber": 43,
+              "symbol": "Tc",
+              "name": "Technetium",
+              "atomicWeight": 98,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 7
+            },
+            {
+              "atomicNumber": 44,
+              "symbol": "Ru",
+              "name": "Ruthenium",
+              "atomicWeight": 101.07,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 8
+            },
+            {
+              "atomicNumber": 45,
+              "symbol": "Rh",
+              "name": "Rhodium",
+              "atomicWeight": 102.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 9
+            },
+            {
+              "atomicNumber": 46,
+              "symbol": "Pd",
+              "name": "Palladium",
+              "atomicWeight": 106.42,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 10
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 48,
+              "symbol": "Cd",
+              "name": "Cadmium",
+              "atomicWeight": 112.41,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 12
+            },
+            {
+              "atomicNumber": 49,
+              "symbol": "In",
+              "name": "Indium",
+              "atomicWeight": 114.82,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 13
+            },
+            {
+              "atomicNumber": 50,
+              "symbol": "Sn",
+              "name": "Tin",
+              "atomicWeight": 118.71,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 14
+            },
+            {
+              "atomicNumber": 51,
+              "symbol": "Sb",
+              "name": "Antimony",
+              "atomicWeight": 121.76,
+              "category": "metalloid",
+              "row": 5,
+              "col": 15
+            },
+            {
+              "atomicNumber": 52,
+              "symbol": "Te",
+              "name": "Tellurium",
+              "atomicWeight": 127.6,
+              "category": "metalloid",
+              "row": 5,
+              "col": 16
+            },
+            {
+              "atomicNumber": 53,
+              "symbol": "I",
+              "name": "Iodine",
+              "atomicWeight": 126.9,
+              "category": "halogen",
+              "row": 5,
+              "col": 17
+            },
+            {
+              "atomicNumber": 54,
+              "symbol": "Xe",
+              "name": "Xenon",
+              "atomicWeight": 131.29,
+              "category": "noble-gas",
+              "row": 5,
+              "col": 18
+            },
+            {
+              "atomicNumber": 55,
+              "symbol": "Cs",
+              "name": "Cesium",
+              "atomicWeight": 132.91,
+              "category": "alkali-metal",
+              "row": 6,
+              "col": 1
+            },
+            {
+              "atomicNumber": 56,
+              "symbol": "Ba",
+              "name": "Barium",
+              "atomicWeight": 137.33,
+              "category": "alkaline-earth",
+              "row": 6,
+              "col": 2
+            },
+            {
+              "atomicNumber": 72,
+              "symbol": "Hf",
+              "name": "Hafnium",
+              "atomicWeight": 178.49,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 4
+            },
+            {
+              "atomicNumber": 73,
+              "symbol": "Ta",
+              "name": "Tantalum",
+              "atomicWeight": 180.95,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 5
+            },
+            {
+              "atomicNumber": 74,
+              "symbol": "W",
+              "name": "Tungsten",
+              "atomicWeight": 183.84,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 6
+            },
+            {
+              "atomicNumber": 75,
+              "symbol": "Re",
+              "name": "Rhenium",
+              "atomicWeight": 186.21,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 7
+            },
+            {
+              "atomicNumber": 76,
+              "symbol": "Os",
+              "name": "Osmium",
+              "atomicWeight": 190.23,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 8
+            },
+            {
+              "atomicNumber": 77,
+              "symbol": "Ir",
+              "name": "Iridium",
+              "atomicWeight": 192.22,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 9
+            },
+            {
+              "atomicNumber": 78,
+              "symbol": "Pt",
+              "name": "Platinum",
+              "atomicWeight": 195.08,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 10
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 11
+            },
+            {
+              "atomicNumber": 80,
+              "symbol": "Hg",
+              "name": "Mercury",
+              "atomicWeight": 200.59,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 12
+            },
+            {
+              "atomicNumber": 81,
+              "symbol": "Tl",
+              "name": "Thallium",
+              "atomicWeight": 204.38,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 13
+            },
+            {
+              "atomicNumber": 82,
+              "symbol": "Pb",
+              "name": "Lead",
+              "atomicWeight": 207.2,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 14
+            },
+            {
+              "atomicNumber": 83,
+              "symbol": "Bi",
+              "name": "Bismuth",
+              "atomicWeight": 208.98,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 15
+            },
+            {
+              "atomicNumber": 84,
+              "symbol": "Po",
+              "name": "Polonium",
+              "atomicWeight": 209,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 16
+            },
+            {
+              "atomicNumber": 85,
+              "symbol": "At",
+              "name": "Astatine",
+              "atomicWeight": 210,
+              "category": "halogen",
+              "row": 6,
+              "col": 17
+            },
+            {
+              "atomicNumber": 86,
+              "symbol": "Rn",
+              "name": "Radon",
+              "atomicWeight": 222,
+              "category": "noble-gas",
+              "row": 6,
+              "col": 18
+            },
+            {
+              "atomicNumber": 87,
+              "symbol": "Fr",
+              "name": "Francium",
+              "atomicWeight": 223,
+              "category": "alkali-metal",
+              "row": 7,
+              "col": 1
+            },
+            {
+              "atomicNumber": 88,
+              "symbol": "Ra",
+              "name": "Radium",
+              "atomicWeight": 226,
+              "category": "alkaline-earth",
+              "row": 7,
+              "col": 2
+            },
+            {
+              "atomicNumber": 104,
+              "symbol": "Rf",
+              "name": "Rutherfordium",
+              "atomicWeight": 267,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 4
+            },
+            {
+              "atomicNumber": 105,
+              "symbol": "Db",
+              "name": "Dubnium",
+              "atomicWeight": 268,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 5
+            },
+            {
+              "atomicNumber": 106,
+              "symbol": "Sg",
+              "name": "Seaborgium",
+              "atomicWeight": 269,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 6
+            },
+            {
+              "atomicNumber": 107,
+              "symbol": "Bh",
+              "name": "Bohrium",
+              "atomicWeight": 270,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 7
+            },
+            {
+              "atomicNumber": 108,
+              "symbol": "Hs",
+              "name": "Hassium",
+              "atomicWeight": 277,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 8
+            },
+            {
+              "atomicNumber": 109,
+              "symbol": "Mt",
+              "name": "Meitnerium",
+              "atomicWeight": 278,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 9
+            },
+            {
+              "atomicNumber": 110,
+              "symbol": "Ds",
+              "name": "Darmstadtium",
+              "atomicWeight": 281,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 10
+            },
+            {
+              "atomicNumber": 111,
+              "symbol": "Rg",
+              "name": "Roentgenium",
+              "atomicWeight": 282,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 11
+            },
+            {
+              "atomicNumber": 112,
+              "symbol": "Cn",
+              "name": "Copernicium",
+              "atomicWeight": 285,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 12
+            },
+            {
+              "atomicNumber": 113,
+              "symbol": "Nh",
+              "name": "Nihonium",
+              "atomicWeight": 286,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 13
+            },
+            {
+              "atomicNumber": 114,
+              "symbol": "Fl",
+              "name": "Flerovium",
+              "atomicWeight": 289,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 14
+            },
+            {
+              "atomicNumber": 115,
+              "symbol": "Mc",
+              "name": "Moscovium",
+              "atomicWeight": 290,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 15
+            },
+            {
+              "atomicNumber": 116,
+              "symbol": "Lv",
+              "name": "Livermorium",
+              "atomicWeight": 293,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 16
+            },
+            {
+              "atomicNumber": 117,
+              "symbol": "Ts",
+              "name": "Tennessine",
+              "atomicWeight": 294,
+              "category": "halogen",
+              "row": 7,
+              "col": 17
+            },
+            {
+              "atomicNumber": 118,
+              "symbol": "Og",
+              "name": "Oganesson",
+              "atomicWeight": 294,
+              "category": "noble-gas",
+              "row": 7,
+              "col": 18
+            },
+            {
+              "atomicNumber": 57,
+              "symbol": "La",
+              "name": "Lanthanum",
+              "atomicWeight": 138.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 3
+            },
+            {
+              "atomicNumber": 58,
+              "symbol": "Ce",
+              "name": "Cerium",
+              "atomicWeight": 140.12,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 4
+            },
+            {
+              "atomicNumber": 59,
+              "symbol": "Pr",
+              "name": "Praseodymium",
+              "atomicWeight": 140.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 5
+            },
+            {
+              "atomicNumber": 60,
+              "symbol": "Nd",
+              "name": "Neodymium",
+              "atomicWeight": 144.24,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 6
+            },
+            {
+              "atomicNumber": 61,
+              "symbol": "Pm",
+              "name": "Promethium",
+              "atomicWeight": 145,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 7
+            },
+            {
+              "atomicNumber": 62,
+              "symbol": "Sm",
+              "name": "Samarium",
+              "atomicWeight": 150.36,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 8
+            },
+            {
+              "atomicNumber": 63,
+              "symbol": "Eu",
+              "name": "Europium",
+              "atomicWeight": 151.96,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 9
+            },
+            {
+              "atomicNumber": 64,
+              "symbol": "Gd",
+              "name": "Gadolinium",
+              "atomicWeight": 157.25,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 10
+            },
+            {
+              "atomicNumber": 65,
+              "symbol": "Tb",
+              "name": "Terbium",
+              "atomicWeight": 158.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 11
+            },
+            {
+              "atomicNumber": 66,
+              "symbol": "Dy",
+              "name": "Dysprosium",
+              "atomicWeight": 162.5,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 12
+            },
+            {
+              "atomicNumber": 67,
+              "symbol": "Ho",
+              "name": "Holmium",
+              "atomicWeight": 164.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 13
+            },
+            {
+              "atomicNumber": 68,
+              "symbol": "Er",
+              "name": "Erbium",
+              "atomicWeight": 167.26,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 14
+            },
+            {
+              "atomicNumber": 69,
+              "symbol": "Tm",
+              "name": "Thulium",
+              "atomicWeight": 168.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 15
+            },
+            {
+              "atomicNumber": 70,
+              "symbol": "Yb",
+              "name": "Ytterbium",
+              "atomicWeight": 173.05,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 16
+            },
+            {
+              "atomicNumber": 71,
+              "symbol": "Lu",
+              "name": "Lutetium",
+              "atomicWeight": 174.97,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 17
+            },
+            {
+              "atomicNumber": 89,
+              "symbol": "Ac",
+              "name": "Actinium",
+              "atomicWeight": 227,
+              "category": "actinide",
+              "row": 9,
+              "col": 3
+            },
+            {
+              "atomicNumber": 90,
+              "symbol": "Th",
+              "name": "Thorium",
+              "atomicWeight": 232.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 4
+            },
+            {
+              "atomicNumber": 91,
+              "symbol": "Pa",
+              "name": "Protactinium",
+              "atomicWeight": 231.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 5
+            },
+            {
+              "atomicNumber": 92,
+              "symbol": "U",
+              "name": "Uranium",
+              "atomicWeight": 238.03,
+              "category": "actinide",
+              "row": 9,
+              "col": 6
+            },
+            {
+              "atomicNumber": 93,
+              "symbol": "Np",
+              "name": "Neptunium",
+              "atomicWeight": 237,
+              "category": "actinide",
+              "row": 9,
+              "col": 7
+            },
+            {
+              "atomicNumber": 94,
+              "symbol": "Pu",
+              "name": "Plutonium",
+              "atomicWeight": 244,
+              "category": "actinide",
+              "row": 9,
+              "col": 8
+            },
+            {
+              "atomicNumber": 95,
+              "symbol": "Am",
+              "name": "Americium",
+              "atomicWeight": 243,
+              "category": "actinide",
+              "row": 9,
+              "col": 9
+            },
+            {
+              "atomicNumber": 96,
+              "symbol": "Cm",
+              "name": "Curium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 10
+            },
+            {
+              "atomicNumber": 97,
+              "symbol": "Bk",
+              "name": "Berkelium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 11
+            },
+            {
+              "atomicNumber": 98,
+              "symbol": "Cf",
+              "name": "Californium",
+              "atomicWeight": 251,
+              "category": "actinide",
+              "row": 9,
+              "col": 12
+            },
+            {
+              "atomicNumber": 99,
+              "symbol": "Es",
+              "name": "Einsteinium",
+              "atomicWeight": 252,
+              "category": "actinide",
+              "row": 9,
+              "col": 13
+            },
+            {
+              "atomicNumber": 100,
+              "symbol": "Fm",
+              "name": "Fermium",
+              "atomicWeight": 257,
+              "category": "actinide",
+              "row": 9,
+              "col": 14
+            },
+            {
+              "atomicNumber": 101,
+              "symbol": "Md",
+              "name": "Mendelevium",
+              "atomicWeight": 258,
+              "category": "actinide",
+              "row": 9,
+              "col": 15
+            },
+            {
+              "atomicNumber": 102,
+              "symbol": "No",
+              "name": "Nobelium",
+              "atomicWeight": 259,
+              "category": "actinide",
+              "row": 9,
+              "col": 16
+            },
+            {
+              "atomicNumber": 103,
+              "symbol": "Lr",
+              "name": "Lawrencium",
+              "atomicWeight": 266,
+              "category": "actinide",
+              "row": 9,
+              "col": 17
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var C=Object.defineProperty;var d=(a,o)=>C(a,\"name\",{value:o,configurable:!0});import{jsx as r,jsxs as i}from\"react/jsx-runtime\";import{useState as p,useMemo as b}from\"react\";import{Container as h,Card as v,Stack as m,Box as x,Divider as S,Text as n,Heading as T,Badge as y,Alert as k}from\"@ggui-ai/design/primitives\";import{SearchField as w}from\"@ggui-ai/design/components\";import{Modal as A}from\"@ggui-ai/design/compositions\";import{Clickable as P}from\"@ggui-ai/design/interact\";function B(a){const[o,u]=p(\"\"),[t,l]=p(null),s=b(()=>Array.from(new Set(a.elements.map(e=>e.category))),[a.elements]),f=b(()=>a.elements.filter(e=>e.name.toLowerCase().includes(o.toLowerCase())||e.symbol.toLowerCase().includes(o.toLowerCase())),[a.elements,o]);return{searchQuery:o,setSearchQuery:u,selected:t,setSelected:l,filtered:f,categories:s,getColor:d(e=>{const g={\"Noble Gas\":\"var(--ggui-color-info-200, #cffafe)\",Halogen:\"var(--ggui-color-warning-200, #fde68a)\",\"Alkali Metal\":\"var(--ggui-color-error-200, #fecaca)\",\"Transition Metal\":\"var(--ggui-color-primary-200, #bae6fd)\",Other:\"var(--ggui-color-surfaceVariant, #f4f4f5)\"};return g[e]||g.Other},\"getColor\")}}d(B,\"useComponent\");function R(a){const{searchQuery:o,setSearchQuery:u,selected:t,setSelected:l,filtered:s,categories:f,getColor:c}=B(a);return r(h,{maxWidth:\"3xl\",padding:24,children:i(m,{gap:24,children:[r(T,{level:2,children:\"Periodic Table\"}),r(w,{value:o,onChange:u,placeholder:\"Filter elements by name or symbol...\"}),r(m,{direction:\"horizontal\",gap:16,wrap:!0,style:{padding:\"var(--ggui-spacing-4)\",border:\"1px solid var(--ggui-color-outlineVariant)\",borderRadius:\"var(--ggui-shape-radius-lg)\"},children:f.map(e=>r(y,{variant:\"default\",style:{background:c(e),color:\"var(--ggui-color-onSurface)\",borderRadius:\"var(--ggui-shape-radius-sm)\"},children:e},e))}),r(x,{style:{display:\"grid\",gridTemplateColumns:\"repeat(18, minmax(40px, 1fr))\",gap:\"var(--ggui-spacing-1)\",overflowX:\"auto\",paddingBottom:8},children:a.elements.map(e=>{const g=o&&!s.includes(e);return i(v,{as:P,onClick:()=>l(e),role:\"button\",\"aria-label\":`Select ${e.name} (${e.symbol})`,padding:8,style:{gridRow:e.row,gridColumn:e.col,minHeight:60,background:c(e.category),opacity:g?.3:1,border:t?.symbol===e.symbol?\"2px solid var(--ggui-color-primary-600)\":\"none\",transition:\"all 200ms ease\",cursor:\"pointer\",display:\"flex\",flexDirection:\"column\",alignItems:\"center\",justifyContent:\"center\"},children:[r(n,{variant:\"caption\",style:{fontSize:\"10px\",alignSelf:\"flex-start\"},children:e.atomicNumber}),r(n,{variant:\"label\",style:{fontWeight:\"bold\",fontSize:\"16px\"},children:e.symbol})]},e.symbol)})}),o&&s.length===0&&r(k,{variant:\"info\",children:\"No elements match your search.\"}),t&&r(A,{open:!0,onClose:()=>l(null),title:\"Element Information\",children:i(m,{gap:16,children:[i(n,{variant:\"label\",style:{fontSize:\"24px\",fontWeight:\"bold\"},children:[t.symbol,\" \\u2014 \",t.name]}),r(y,{variant:\"default\",style:{background:c(t.category),width:\"fit-content\",borderRadius:\"var(--ggui-shape-radius-full)\"},children:t.category}),r(S,{}),i(m,{direction:\"vertical\",gap:8,children:[i(n,{children:[\"Atomic Number: \",r(\"strong\",{children:t.atomicNumber})]}),i(n,{children:[\"Atomic Weight: \",r(\"strong\",{children:t.atomicWeight.toFixed(3)})]})]})]})})]})})}d(R,\"Component\");export{R as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  elements: { atomicNumber: number; symbol: string; name: string; atomicWeight: number; category: string; row: number; col: number }[]; // Full periodic table element data\n}\n\nfunction useComponent(props: Props) {\n  const [searchQuery, setSearchQuery] = useState('');\n  const [selected, setSelected] = useState<Props['elements'][0] | null>(null);\n\n  const categories = useMemo(() => Array.from(new Set(props.elements.map(e => e.category))), [props.elements]);\n  const filtered = useMemo(() => props.elements.filter(e => \n    e.name.toLowerCase().includes(searchQuery.toLowerCase()) || \n    e.symbol.toLowerCase().includes(searchQuery.toLowerCase())\n  ), [props.elements, searchQuery]);\n\n  const getColor = (cat: string) => {\n    const map: Record<string, string> = {\n      'Noble Gas': 'var(--ggui-color-info-600, #0891b2)',\n      'Halogen': 'var(--ggui-color-warning-600, #d97706)',\n      'Alkali Metal': 'var(--ggui-color-error-600, #dc2626)',\n      'Transition Metal': 'var(--ggui-color-primary-600, #0284c7)',\n      'Other': 'var(--ggui-color-neutral-400, #9ca3af)',\n    };\n    return map[cat] || map['Other'];\n  };\n\n  return { searchQuery, setSearchQuery, selected, setSelected, filtered, categories, getColor };\n}\n\nexport default function Component(props: Props) {\n  const { searchQuery, setSearchQuery, selected, setSelected, filtered, categories, getColor } = useComponent(props);\n\n  return (\n    <Container maxWidth=\"3xl\" padding={32}>\n      <Stack gap={32}>\n        <Heading level={2}>Periodic Table</Heading>\n        <SearchField value={searchQuery} onChange={setSearchQuery} placeholder=\"Filter elements by name or symbol...\" />\n        <Card padding={16} radius=\"md\" border={true} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--ggui-spacing-2)' }}>\n          <Text variant=\"label\" style={{ alignSelf: 'center', marginRight: 'var(--ggui-spacing-2)' }}>Legend:</Text>\n          {categories.map(cat => (\n            <Badge key={cat} variant=\"default\" style={{ background: getColor(cat), color: 'white', fontWeight: '500' }}>{cat}</Badge>\n          ))}\n        </Card>\n        <Box style={{ \n          display: 'grid', \n          gridTemplateColumns: 'repeat(18, minmax(50px, 1fr))', \n          gridTemplateRows: 'repeat(7, 60px)',\n          gap: 'var(--ggui-spacing-1)', \n          overflowX: 'auto', \n          padding: 'var(--ggui-spacing-2)',\n          background: 'var(--ggui-color-surfaceVariant)',\n          borderRadius: 'var(--ggui-shape-radius-md)'\n        }}>\n          {props.elements.map(e => {\n            const isFiltered = searchQuery && !filtered.includes(e);\n            return (\n              <Card\n                key={e.symbol}\n                as={Clickable}\n                onClick={() => setSelected(e)} \n                role=\"button\"\n                aria-label={`Select ${e.name} (${e.symbol})`}\n                padding={8}\n                style={{ \n                  gridRow: e.row, gridColumn: e.col, minHeight: 60,\n                  background: getColor(e.category), \n                  color: 'white',\n                  opacity: isFiltered ? 0.3 : 1, \n                  border: selected?.symbol === e.symbol ? '2px solid white' : '1px solid rgba(255,255,255,0.3)',\n                  transition: 'all 200ms ease', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'\n                }}\n              >\n                <Text variant=\"caption\" style={{ fontSize: '9px', alignSelf: 'flex-start', color: 'white' }}>{e.atomicNumber}</Text>\n                <Text variant=\"label\" style={{ fontWeight: 'bold', fontSize: '14px', color: 'white' }}>{e.symbol}</Text>\n              </Card>\n            );\n          })}\n        </Box>\n        {searchQuery && filtered.length === 0 && (\n            <Alert variant=\"info\">No elements match your search.</Alert>\n        )}\n        {selected && (\n          <Modal open={true} onClose={() => setSelected(null)} title={`${selected.name} (${selected.symbol})`}>\n              <Stack gap={16}>\n                  <Badge variant=\"default\" style={{ background: getColor(selected.category), color: 'white', width: 'fit-content', borderRadius: 'var(--ggui-shape-radius-full)' }}>{selected.category}</Badge>\n                  <Divider />\n                  <Stack direction=\"vertical\" gap={8}>\n                    <Text variant=\"bodySmall\">Atomic Number: <strong>{selected.atomicNumber}</strong></Text>\n                    <Text variant=\"bodySmall\">Atomic Weight: <strong>{selected.atomicWeight.toFixed(3)}</strong></Text>\n                  </Stack>\n              </Stack>\n          </Modal>\n        )}\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 469214,
+          "output": 14511,
+          "total": 483725
+        },
+        "generationTimeMs": 77957,
+        "turnsUsed": 10,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 80,
+            "dimensions": {
+              "completeness": 85,
+              "visualPolish": 80,
+              "interactivity": 75,
+              "accessibility": 70,
+              "codeQuality": 85
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "major",
+                "description": "Legend component is missing, despite being requested in the prompt.",
+                "fix": "Add a section displaying categories and their associated colors/labels below or above the grid."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "No feedback or visual transition when an element is clicked or while it is in a selected state.",
+                "fix": "Apply a distinct border or scale transform to the currently selected card to highlight it in the grid."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The periodic table is not keyboard accessible beyond standard focusable elements; the grid cells are divs and don't describe their semantic purpose.",
+                "fix": "Wrap grid cells in button elements or add role='button' and onKeyDown handlers for enter/space keys."
+              }
+            ],
+            "critique": "The component effectively implements the CSS Grid logic and filtering functionality required. It needs a legend and improved accessibility for the grid cells to reach production quality.",
+            "inputTokens": 1737,
+            "outputTokens": 317
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 90,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "The atomic weight is missing from the detail panel, despite being required by the prompt.",
+                "fix": "Add a <Text> line to the detail panel displaying {selected.atomicWeight}."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Grid layout may suffer on smaller screens as it is locked to 18 columns, and the cells lack fixed aspect ratios making them look irregular.",
+                "fix": "Apply aspect-ratio: 1/1 to the Card components and consider a responsive wrapper or scroll container for the grid."
+              }
+            ],
+            "critique": "The component is well-structured and follows the design system patterns effectively. It implements the grid logic correctly and provides a clean UI; simply adding the missing atomic weight to the details view would make it fully compliant with the prompt.",
+            "inputTokens": 1933,
+            "outputTokens": 272
+          },
+          {
+            "passed": false,
+            "finalScore": 86,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The legend is not effectively grouped or styled as a distinct section, potentially causing overflow on smaller screens.",
+                "fix": "Wrap the legend in a styled Card or use a dedicated component to visually separate it from the grid."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "No visual indicator (like a ring or border) highlights which element is currently selected in the grid.",
+                "fix": "Add a conditional border or shadow to the Card component when it matches the 'selected' state."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Elements that are faded out via the search filter remain interactive (clickable).",
+                "fix": "Disable interactivity or add 'aria-disabled' to elements that do not match the current search filter."
+              }
+            ],
+            "critique": "The component is well-structured and makes excellent use of CSS Grid to replicate the periodic table layout accurately. The logic is clean and efficient, though the UI would benefit from active state styling in the grid to help users track their selection. Overall, a very solid implementation.",
+            "inputTokens": 1968,
+            "outputTokens": 340
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Grid cells feel a bit cramped with the default Card padding and borders on smaller screen widths.",
+                "fix": "Adjust the grid cell styling to ensure the symbol is consistently centered and handle long category names in the legend with text-wrapping."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The legend lacks semantic list structure.",
+                "fix": "Wrap the legend items in a <ul> or <ol> list to provide better context for screen reader users."
+              }
+            ],
+            "critique": "The component is well-structured and follows the grid requirements effectively. It handles filtering and selection states gracefully with good visual feedback using design tokens.",
+            "inputTokens": 2090,
+            "outputTokens": 237
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The grid container lacks responsive handling for small screens, causing horizontal overflow.",
+                "fix": "Add overflow-x auto styling to the wrapper box of the grid."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Selected state indicator relies solely on a border color, which might not meet contrast requirements for some users.",
+                "fix": "Consider adding an aria-pressed state or a visual checkmark icon within the card."
+              }
+            ],
+            "critique": "The component is well-structured and maps the data correctly using grid coordinates as requested. The UI is clean, functional, and utilizes design tokens effectively; it just needs minor adjustments to handle responsiveness and persistent state clarity.",
+            "inputTokens": 2131,
+            "outputTokens": 245
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The legend and the grid cells use hardcoded hex/variable colors that may conflict with theme modes.",
+                "fix": "Use semantic tokens from @ggui-ai/design system instead of custom color mappings for better theme consistency."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Grid cell size is quite small; at standard desktop resolutions, the content might feel cramped.",
+                "fix": "Increase minmax width in gridTemplateColumns and add a min-height to the card to ensure consistent spacing."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The detail panel appears below the grid, but focus is not programmatically shifted to it when an element is selected.",
+                "fix": "Use a ref to focus the detail panel's heading when 'selected' changes to improve keyboard accessibility."
+              }
+            ],
+            "critique": "The component is well-structured and implements the requirements effectively using CSS Grid. The visual hierarchy is clear, and the interactive states (hover/selection) provide good feedback. A slight improvement in focus management and using semantic design tokens for colors would make this production-ready.",
+            "inputTokens": 2187,
+            "outputTokens": 352
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The legend badges use background colors that are very light/pastel, which might conflict with accessibility or legibility.",
+                "fix": "Consider adding a subtle border or darkening the text color slightly to ensure better contrast against the background colors."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Grid cells might appear squashed on smaller screens despite the scroll container.",
+                "fix": "Ensure the grid items have a minimum width or use aspect-ratio: 1 to keep them square-like."
+              }
+            ],
+            "critique": "The component is well-structured and implements all requested features, including the dynamic grid layout and filtering logic. The use of a Modal for element details is a clean design choice that keeps the UI uncluttered. Minor visual tweaks to the legend accessibility would elevate this to production-ready status.",
+            "inputTokens": 2170,
+            "outputTokens": 274
+          },
+          {
+            "passed": false,
+            "finalScore": 86,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The legend badges display colors but lack clear labels or indicators that they correspond to specific category mappings beyond proximity.",
+                "fix": "Use a standard legend component or list that explicitly shows the category name next to a color swatch."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "Elements remain fully clickable even when filtered out (opacity reduced), which can be confusing.",
+                "fix": "Add 'pointer-events: none' to filtered-out elements to prevent interaction."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "Grid cells lack adequate contrast in color coding; some background-text combinations may fail WCAG contrast ratios.",
+                "fix": "Implement a helper to determine text color (black vs white) based on the background color luminance."
+              }
+            ],
+            "critique": "The component effectively implements the required grid layout and search functionality using standard design tokens. The code is modular and clean, though it would benefit from a more explicit legend implementation and refined contrast handling for the color-coded elements.",
+            "inputTokens": 2231,
+            "outputTokens": 330
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The legend badges are clustered tightly and don't clearly communicate their purpose as a legend.",
+                "fix": "Wrap the legend badges in a clear container with a 'Legend:' prefix or label to distinguish them from tag clouds."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The Periodic Table grid elements are interactive, but the grid structure doesn't use semantic list or table elements, potentially confusing screen readers when navigating the 18-column layout.",
+                "fix": "Consider adding 'role=grid' to the container and 'role=gridcell' to individual cards to improve keyboard navigation and assistive technology context."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "On smaller screens, the 18-column grid will force significant horizontal scrolling, which is expected but could be handled more elegantly.",
+                "fix": "Add a descriptive label indicating 'Scroll horizontally to view full table' or ensure the container handles overflow gracefully with consistent scrollbar styling."
+              }
+            ],
+            "critique": "The implementation is excellent, effectively using CSS Grid to map the periodic table and adhering to all requested features. The UI is clean, interactions are smooth, and the state management for filtering and selection is handled well. Minor UX improvements to the legend display and grid semantics would push this to a 100.",
+            "inputTokens": 2326,
+            "outputTokens": 393
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The periodic table grid lacks a container to force a fixed aspect ratio or handle small screens gracefully, leading to potential squishing on narrow viewports.",
+                "fix": "Use a min-width on the container or wrapping logic for the grid to ensure it doesn't break layout."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Legend' section uses a Card component that might look cluttered if the category list grows; the badges have high-saturation backgrounds that could conflict with text legibility.",
+                "fix": "Use a subtle background color for the legend card and ensure white text contrast is checked against the specific theme tokens."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "When filtering, the hidden elements are dimmed but remain focusable via keyboard navigation.",
+                "fix": "Add 'tabIndex={isFiltered ? -1 : 0}' to the element cards to skip hidden elements when using the Tab key."
+              }
+            ],
+            "critique": "The implementation is highly effective and adheres strictly to the grid requirements. It handles filtering and selection state cleanly, providing a solid UX. Improvements could be made to ensure responsiveness on smaller displays and better keyboard handling for filtered items.",
+            "inputTokens": 2318,
+            "outputTokens": 368
+          }
+        ],
+        "timing": {
+          "plannerMs": 3622,
+          "codingMs": 5135,
+          "evalMs": 69169,
+          "totalMs": 77957
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "finalScore": 89,
+        "dimensions": {
+          "completeness": 95,
+          "visualPolish": 85,
+          "interactivity": 90,
+          "accessibility": 85,
+          "codeQuality": 90
+        },
+        "issues": [
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "The periodic table grid lacks a container to force a fixed aspect ratio or handle small screens gracefully, leading to potential squishing on narrow viewports.",
+            "fix": "Use a min-width on the container or wrapping logic for the grid to ensure it doesn't break layout."
+          },
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "The 'Legend' section uses a Card component that might look cluttered if the category list grows; the badges have high-saturation backgrounds that could conflict with text legibility.",
+            "fix": "Use a subtle background color for the legend card and ensure white text contrast is checked against the specific theme tokens."
+          },
+          {
+            "dimension": "accessibility",
+            "severity": "minor",
+            "description": "When filtering, the hidden elements are dimmed but remain focusable via keyboard navigation.",
+            "fix": "Add 'tabIndex={isFiltered ? -1 : 0}' to the element cards to skip hidden elements when using the Tab key."
+          }
+        ],
+        "critique": "The implementation is highly effective and adheres strictly to the grid requirements. It handles filtering and selection state cleanly, providing a solid UX. Improvements could be made to ensure responsiveness on smaller displays and better keyboard handling for filtered items.",
+        "inputTokens": 2318,
+        "outputTokens": 368
+      },
+      "estimatedCostUsd": 0.27814,
+      "timestamp": "2026-03-19T18:01:45.370Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 3299,
+        "sourceCodeBytes": 5606,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "product-page",
+        "name": "E-Commerce Product Page",
+        "description": "Product detail page with image, tabs, quantity selector, and cart",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an e-commerce product detail page. Layout:\n\nTop section:\n- Product image placeholder (use a colored box with the product name)\n- Product title, price (with currency from props), and rating stars (1-5)\n- Stock status badge (\"In Stock\" green or \"Low Stock\" warning)\n\nMiddle section — Tab navigation with 3 tabs:\n- \"Description\" tab: renders product description text from props\n- \"Specifications\" tab: renders key-value pairs from props as a table\n- \"Reviews\" tab: renders a list of reviews (author, rating, text, date) from props\n\nBottom section:\n- Quantity selector (increment/decrement buttons, min 1, max from stock)\n- \"Add to Cart\" button (disabled if out of stock)\n- Call props.onAddToCart with { productId, quantity } when clicked\n\nRequirements:\n- All product data from props — nothing hardcoded\n- Use design system tokens for all colors, spacing, typography\n- Price should format with currency symbol from props\n- Rating stars should be visual (filled/empty)\n- Responsive: stack image above details on mobile widths",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "product": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "reviewCount": {
+                      "type": "number"
+                    },
+                    "stock": {
+                      "type": "number"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "specifications": {
+                      "type": "array"
+                    },
+                    "reviews": {
+                      "type": "array"
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Product object with id, name, price, currency, rating, stock, description, specifications[], reviews[]",
+                "example": {
+                  "id": "prod-001",
+                  "name": "Wireless Noise-Cancelling Headphones",
+                  "price": 249.99,
+                  "currency": "USD",
+                  "rating": 4.3,
+                  "reviewCount": 128,
+                  "stock": 12,
+                  "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+                  "specifications": [
+                    {
+                      "key": "Brand",
+                      "value": "AudioMax"
+                    },
+                    {
+                      "key": "Battery Life",
+                      "value": "30 hours"
+                    }
+                  ],
+                  "reviews": [
+                    {
+                      "author": "Alex M.",
+                      "rating": 5,
+                      "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                      "date": "2026-03-01"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "addToCart": {
+                "label": "Add to Cart",
+                "description": "Called when user clicks Add to Cart. Payload: { productId, quantity }",
+                "example": {
+                  "productId": "prod-001",
+                  "quantity": 2
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "product": {
+            "id": "prod-001",
+            "name": "Wireless Noise-Cancelling Headphones",
+            "price": 249.99,
+            "currency": "USD",
+            "rating": 4.3,
+            "reviewCount": 128,
+            "stock": 12,
+            "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+            "specifications": [
+              {
+                "key": "Brand",
+                "value": "AudioMax"
+              },
+              {
+                "key": "Battery Life",
+                "value": "30 hours"
+              },
+              {
+                "key": "Connectivity",
+                "value": "Bluetooth 5.3"
+              },
+              {
+                "key": "Weight",
+                "value": "250g"
+              },
+              {
+                "key": "Driver Size",
+                "value": "40mm"
+              },
+              {
+                "key": "Noise Cancellation",
+                "value": "Adaptive ANC"
+              }
+            ],
+            "reviews": [
+              {
+                "author": "Alex M.",
+                "rating": 5,
+                "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                "date": "2026-03-01"
+              },
+              {
+                "author": "Sarah K.",
+                "rating": 4,
+                "text": "Great sound quality. A bit tight for my head but breaks in after a week.",
+                "date": "2026-02-15"
+              },
+              {
+                "author": "James P.",
+                "rating": 4,
+                "text": "Battery life is exactly as advertised. Very impressed.",
+                "date": "2026-01-28"
+              }
+            ]
+          }
+        }
+      },
+      "generation": {
+        "compiledCode": "var h=Object.defineProperty;var s=(n,c)=>h(n,\"name\",{value:c,configurable:!0});import{jsx as e,jsxs as t}from\"react/jsx-runtime\";import{useState as k,useCallback as C}from\"react\";import{Container as x,Card as S,Stack as o,Row as b,Box as T,Spacer as w,Text as i,Heading as f,Button as v,Badge as A,Icon as y,Table as R,Tabs as B}from\"@ggui-ai/design/primitives\";function I(n){const c=C(d=>{n.onAddToCart?.(d)},[n.onAddToCart]),[u,m]=k(1),[g,p]=k(\"description\"),a=C(d=>{m(r=>Math.max(1,Math.min(n.product.stock,r+d)))},[n.product.stock]);return{quantity:u,activeTab:g,setActiveTab:p,handleQuantityChange:a,handleAddToCart:s(()=>c({productId:n.product.id,quantity:u}),\"handleAddToCart\")}}s(I,\"useComponent\");function P(n){const{quantity:c,activeTab:u,setActiveTab:m,handleQuantityChange:g,handleAddToCart:p}=I(n),{product:a}=n,d=s(r=>t(b,{gap:2,children:[[1,2,3,4,5].map(l=>e(y,{name:l<=Math.round(r)?\"star\":\"star-outline\",size:16,color:\"var(--ggui-color-warning-500, #f59e0b)\"},l)),t(i,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant, #52525b)\",children:[\"(\",a.reviewCount,\")\"]})]}),\"renderStars\");return e(x,{maxWidth:\"lg\",padding:24,children:t(o,{gap:32,children:[t(o,{direction:\"vertical\",gap:32,children:[e(T,{background:\"var(--ggui-color-surfaceVariant)\",padding:48,borderRadius:\"lg\",style:{minHeight:400,display:\"flex\",alignItems:\"center\",justifyContent:\"center\"},children:t(f,{level:2,align:\"center\",children:[a.name,\" Image\"]})}),t(o,{gap:16,children:[e(f,{level:1,children:a.name}),d(a.rating),t(i,{variant:\"bodyLarge\",size:\"2xl\",weight:\"bold\",children:[a.currency,a.price.toFixed(2)]}),e(A,{variant:a.stock>0?\"success\":\"error\",pill:!0,children:a.stock>0?`In Stock (${a.stock} available)`:\"Out of Stock\"}),e(T,{background:\"var(--ggui-color-surfaceVariant)\",padding:24,borderRadius:\"lg\",children:t(o,{gap:12,children:[e(i,{variant:\"label\",children:\"Quantity\"}),t(b,{gap:16,align:\"center\",children:[e(v,{variant:\"outline\",size:\"md\",onClick:()=>g(-1),\"aria-label\":\"Decrease quantity\",children:\"-\"}),e(i,{children:c}),e(v,{variant:\"outline\",size:\"md\",onClick:()=>g(1),\"aria-label\":\"Increase quantity\",children:\"+\"}),e(w,{size:\"flex\"}),e(v,{variant:\"primary\",disabled:a.stock===0,onClick:p,children:\"Add to Cart\"})]})]})})]})]}),e(B,{items:[{key:\"description\",label:\"Description\",content:e(i,{children:a.description})},{key:\"specs\",label:\"Specifications\",content:e(R,{columns:[{key:\"label\",header:\"Feature\"},{key:\"value\",header:\"Details\"}],data:a.specifications})},{key:\"reviews\",label:\"Reviews\",content:e(o,{gap:16,children:a.reviews.map(r=>e(S,{padding:16,shadow:\"none\",border:!0,children:t(o,{gap:4,children:[t(i,{variant:\"label\",children:[r.author,\" - \",r.date]}),e(b,{children:[1,2,3,4,5].map(l=>e(y,{name:l<=r.rating?\"star\":\"star-outline\",size:12,color:\"var(--ggui-color-warning-500, #f59e0b)\"},l))}),e(i,{variant:\"bodySmall\",children:r.text})]})},r.id))})}],activeKey:u,onChange:m})]})})}s(P,\"Component\");export{P as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  product: { id: string; name: string; price: number; currency: string; rating: number; reviewCount: number; stock: number; description: string; specifications: { label: string; value: string }[]; reviews: { id: string; author: string; rating: number; text: string; date: string }[] };\n  onAddToCart?: (data: Record<string, unknown>) => void; // Action: Add to Cart\n}\n\nfunction useComponent(props: Props) {\n  const handleAddToCart = useCallback((data: Record<string, unknown>) => {\n    props.onAddToCart?.(data);\n  }, [props.onAddToCart]);\n\n  const [quantity, setQuantity] = useState(1);\n  const [activeTab, setActiveTab] = useState('description');\n\n  const handleQuantityChange = useCallback((delta: number) => {\n    setQuantity(q => Math.max(1, Math.min(props.product.stock, q + delta)));\n  }, [props.product.stock]);\n\n  return {\n    quantity,\n    activeTab,\n    setActiveTab,\n    handleQuantityChange,\n    handleAddToCart: () => handleAddToCart({ productId: props.product.id, quantity })\n  };\n}\n\nexport default function Component(props: Props) {\n  const { quantity, activeTab, setActiveTab, handleQuantityChange, handleAddToCart } = useComponent(props);\n  const { product } = props;\n\n  const renderStars = (rating: number) => (\n    <Row gap={2}>\n      {[1, 2, 3, 4, 5].map((star) => (\n        <Icon key={star} size={16} color=\"var(--ggui-color-warning-500, #f59e0b)\"><svg viewBox=\"0 0 24 24\" fill={star <= Math.round(rating) ? 'currentColor' : 'none'} stroke=\"currentColor\" strokeWidth=\"2\"><path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\"/></svg></Icon>\n      ))}\n      <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\" aria-label={`${product.reviewCount} reviews`}>({product.reviewCount})</Text>\n    </Row>\n  );\n\n  return (\n    <Container maxWidth=\"lg\" padding={24}>\n      <Stack gap={32}>\n        <Row direction=\"horizontal\" gap={48} align=\"start\" wrap>\n          <Box background=\"var(--ggui-color-surfaceVariant)\" padding={64} borderRadius=\"lg\" style={{ flex: '1 1 400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>\n             <Heading level={2}>{product.name}</Heading>\n          </Box>\n          <Stack gap={24} style={{ flex: '1 1 400px' }}>\n            <Heading level={1}>{product.name}</Heading>\n            {renderStars(product.rating)}\n            <Text variant=\"bodyLarge\" size=\"2xl\" weight=\"bold\">{product.currency}{product.price.toFixed(2)}</Text>\n            <Box>\n              <Badge variant={product.stock > 0 ? 'success' : 'error'} size=\"lg\">\n                {product.stock > 0 ? (product.stock < 5 ? `Low Stock (${product.stock} available)` : 'In Stock') : 'Out of Stock'}\n              </Badge>\n            </Box>\n            <Card padding={24} shadow=\"none\" border radius=\"md\">\n              <Stack gap={16}>\n                <Row gap={4} align=\"center\">\n                  <Button variant=\"outline\" size=\"sm\" onClick={() => handleQuantityChange(-1)} aria-label=\"Decrease quantity\"><Icon name=\"minus\" size={16}/></Button>\n                  <Text variant=\"body\" weight=\"medium\" style={{ minWidth: 32, textAlign: 'center' }}>{quantity}</Text>\n                  <Button variant=\"outline\" size=\"sm\" onClick={() => handleQuantityChange(1)} aria-label=\"Increase quantity\"><Icon name=\"plus\" size={16}/></Button>\n                  <Spacer size=\"flex\" />\n                  <Button variant=\"primary\" size=\"md\" disabled={product.stock === 0} onClick={handleAddToCart}>Add to Cart</Button>\n                </Row>\n                {product.stock === 0 && <Text variant=\"caption\" color=\"var(--ggui-color-error-500)\">Out of stock</Text>}\n              </Stack>\n            </Card>\n          </Stack>\n        </Row>\n        <Tabs \n          items={[\n            { key: 'description', label: 'Description', content: <Box paddingY={16}><Text>{product.description}</Text></Box> },\n            { key: 'specs', label: 'Specifications', content: <Box paddingY={16}><Table columns={[{ key: 'label', header: 'Feature' }, { key: 'value', header: 'Details' }]} data={product.specifications} bordered /></Box> },\n            { key: 'reviews', label: 'Reviews', content: <Box paddingY={16}><Stack gap={16}>{product.reviews.map(r => (\n              <Card key={r.id} padding={16} shadow=\"sm\">\n                <Stack gap={8}>\n                  <Row justify=\"between\"><Text variant=\"label\">{r.author}</Text><Text variant=\"caption\">{new Date(r.date).toLocaleDateString()}</Text></Row>\n                  {renderStars(r.rating)}\n                  <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant, #52525b)\">{r.text}</Text>\n                </Stack>\n              </Card>\n            ))}</Stack></Box> }\n          ]}\n          activeKey={activeTab}\n          onChange={setActiveTab}\n        />\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 426177,
+          "output": 14913,
+          "total": 441090
+        },
+        "generationTimeMs": 76904,
+        "turnsUsed": 9,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 69,
+            "dimensions": {
+              "completeness": 65,
+              "visualPolish": 75,
+              "interactivity": 70,
+              "accessibility": 65,
+              "codeQuality": 70
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "critical",
+                "description": "The 'Specifications' and 'Reviews' tabs are empty placeholders rather than rendering the actual array data provided in the props.",
+                "fix": "Map through product.specifications to render in a Table and product.reviews to display the comment list."
+              },
+              {
+                "dimension": "completeness",
+                "severity": "major",
+                "description": "The rating system is completely missing despite being requested.",
+                "fix": "Render a row of star icons based on the product.rating prop."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Mobile responsiveness is handled by default block flow, but the layout doesn't explicitly switch stack direction on small screens.",
+                "fix": "Use responsive props or a media query to ensure the stack direction is vertical on mobile."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The quantity buttons lack visual feedback or disabled states at boundaries.",
+                "fix": "Add disabled attributes to the decrement button when quantity is 1 and increment button when at max stock."
+              }
+            ],
+            "critique": "The component provides a clean base structure but fails to implement the core data-driven requirements for the Tabs content. To reach production quality, the placeholder logic in the tabs must be replaced with the actual data mapping and the visual star rating component needs to be integrated.",
+            "inputTokens": 1865,
+            "outputTokens": 401
+          },
+          {
+            "passed": false,
+            "finalScore": 86,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The layout uses a fixed horizontal direction without responsive breaking logic for mobile.",
+                "fix": "Use a conditional stack direction based on viewport width (e.g., direction={{ base: 'vertical', md: 'horizontal' }})."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The quantity selector buttons do not visually react when reaching min (1) or max (stock) boundaries.",
+                "fix": "Add 'disabled' attribute to decrement button when quantity is 1, and increment button when quantity is equal to product.stock."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Quantity buttons lack aria-labels to explain their function to screen readers.",
+                "fix": "Add aria-label='Decrease quantity' and aria-label='Increase quantity' to the respective buttons."
+              }
+            ],
+            "critique": "The component is well-structured and follows design system constraints effectively. The use of tabs and grid layouts is clean; implementing responsive stacking and better feedback for quantity limits would elevate this to a production-ready standard.",
+            "inputTokens": 2300,
+            "outputTokens": 338
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 80,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The layout uses a fixed horizontal direction, which prevents the responsiveness requested in the prompt.",
+                "fix": "Use a conditional stack direction (e.g., direction='horizontal' but responsive-stack='vertical') or media query utility classes to stack image and details on smaller screens."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "Quantity buttons lack aria-labels, and the increment/decrement controls don't indicate their purpose to screen readers.",
+                "fix": "Add aria-label='Decrease quantity' and aria-label='Increase quantity' to the respective buttons."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The product image box has a fixed min-height of 400px which may look disproportionate on smaller devices.",
+                "fix": "Use a responsive height or aspect-ratio utility."
+              }
+            ],
+            "critique": "The component is well-structured and follows clean coding patterns with solid state management. It fulfills the functional requirements effectively, though it could be improved with more robust responsive styling and better accessibility labels for the interactive quantity controls.",
+            "inputTokens": 2300,
+            "outputTokens": 346
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The layout is single-column even on large screens, meaning the product image takes up the full width instead of a side-by-side product detail view.",
+                "fix": "Use a Row/Flex grid container to place the image and details side-by-side on desktop (responsive breakpoint)."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The quantity display is just a text element, which provides no indication to screen readers that it is the current value of the input.",
+                "fix": "Use an aria-live region or a read-only input field for the quantity display to ensure screen readers announce changes."
+              }
+            ],
+            "critique": "The component is highly functional and cleanly implemented with good use of the design system primitives. It follows all logic requirements perfectly. The visual layout would benefit from a more standard e-commerce two-column desktop grid to improve the balance between the hero image and the product details.",
+            "inputTokens": 2332,
+            "outputTokens": 297
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The 'Add to Cart' button is inside a bordered card, but the visual hierarchy feels slightly disconnected from the price/stock section above it.",
+                "fix": "Consider removing the border on the quantity/add-to-cart card or integrating it directly into the product info stack for a cleaner look."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The quantity increment/decrement buttons lack aria-labels, which are necessary for screen readers to identify the action.",
+                "fix": "Add 'aria-label=\"Decrease quantity\"' and 'aria-label=\"Increase quantity\"' to the respective buttons."
+              },
+              {
+                "dimension": "completeness",
+                "severity": "minor",
+                "description": "Reviews lack the visual star representation requested in the requirements.",
+                "fix": "Include the visual star component inside the review cards to match the primary rating section."
+              }
+            ],
+            "critique": "This is a clean, well-structured component that correctly utilizes the design system and handles complex logic like quantity constraints and state management effectively. The responsive layout works as expected, and the code is maintainable. Adding minor accessibility labels and consistent star representations in reviews would elevate it to perfect status.",
+            "inputTokens": 2326,
+            "outputTokens": 361
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The product image placeholder is generic and uses a generic user icon instead of representing a product.",
+                "fix": "Replace the 'user' icon with a 'package' or 'image' icon and perhaps display the product name inside the box as requested."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The review stars within the reviews list are rendering but lack descriptive alt text for screen readers.",
+                "fix": "Add an aria-label to the review star container indicating the specific rating value (e.g., 'Rated 4 out of 5 stars')."
+              }
+            ],
+            "critique": "The component is well-structured and follows the requirements closely, utilizing the design system tokens effectively. The layout is responsive and the state management for quantity and tabs is clean and functional.",
+            "inputTokens": 2418,
+            "outputTokens": 268
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The product image placeholder uses a generic user icon, which is confusing for an e-commerce context.",
+                "fix": "Use a shopping-bag or image-placeholder icon instead of the 'user' icon."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The quantity display lacks an explicit label, and the increment/decrement buttons could benefit from explicit aria-labels indicating the product name.",
+                "fix": "Use a descriptive aria-label like 'Increase quantity of {product.name}'."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The tab panel content for Specifications table renders in a standard table without specialized styling for key-value pairings.",
+                "fix": "Ensure the Table component uses a zebra-striping or a clean layout suitable for specifications."
+              }
+            ],
+            "critique": "The component is well-structured, follows the data contract precisely, and implements a clean responsive layout. The use of design system primitives is consistent, though minor improvements to icon selection and accessibility labels would enhance the professional feel.",
+            "inputTokens": 2418,
+            "outputTokens": 336
+          },
+          {
+            "passed": false,
+            "finalScore": 89,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The product image area uses a generic user icon placeholder instead of reflecting the product name as requested.",
+                "fix": "Replace the 'user' Icon inside the colored Box with a Text element displaying the product name for a more context-aware placeholder."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The quantity display lacks a proper aria-label or role to inform screen readers it is the current selection.",
+                "fix": "Add 'aria-label=\"Current quantity\"' to the Text component showing the quantity value."
+              }
+            ],
+            "critique": "The component is well-structured and follows the layout requirements accurately, with clean use of the provided primitive components. The state management for the quantity and tabs is handled correctly, and the responsive design effectively utilizes the flex-basis properties.",
+            "inputTokens": 2418,
+            "outputTokens": 268
+          },
+          {
+            "passed": true,
+            "finalScore": 91,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 90,
+              "interactivity": 90,
+              "accessibility": 85,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The product image placeholder lacks an alt attribute or accessible label.",
+                "fix": "Add aria-label=\"Product image placeholder\" to the container box or wrap it in a figure element with a figcaption."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "Hardcoded hex colors inside the star rating component bypass the design system token strategy despite available variables.",
+                "fix": "Use a theme-aware icon color token instead of the hardcoded #f59e0b."
+              }
+            ],
+            "critique": "This is a high-quality, production-ready component. The layout is clean and responsive, and it effectively uses the provided design system primitives. A few minor accessibility improvements and strict adherence to theme tokens for the custom star icon would elevate it to a perfect score.",
+            "inputTokens": 2573,
+            "outputTokens": 267
+          }
+        ],
+        "timing": {
+          "plannerMs": 3995,
+          "codingMs": 4783,
+          "evalMs": 68113,
+          "totalMs": 76904
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "finalScore": 91,
+        "dimensions": {
+          "completeness": 95,
+          "visualPolish": 90,
+          "interactivity": 90,
+          "accessibility": 85,
+          "codeQuality": 95
+        },
+        "issues": [
+          {
+            "dimension": "accessibility",
+            "severity": "minor",
+            "description": "The product image placeholder lacks an alt attribute or accessible label.",
+            "fix": "Add aria-label=\"Product image placeholder\" to the container box or wrap it in a figure element with a figcaption."
+          },
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "Hardcoded hex colors inside the star rating component bypass the design system token strategy despite available variables.",
+            "fix": "Use a theme-aware icon color token instead of the hardcoded #f59e0b."
+          }
+        ],
+        "critique": "This is a high-quality, production-ready component. The layout is clean and responsive, and it effectively uses the provided design system primitives. A few minor accessibility improvements and strict adherence to theme tokens for the custom star icon would elevate it to a perfect score.",
+        "inputTokens": 2573,
+        "outputTokens": 267
+      },
+      "estimatedCostUsd": 0.2578275,
+      "timestamp": "2026-03-19T18:01:44.317Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2949,
+        "sourceCodeBytes": 5805,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-single-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "single-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)",
+                "example": {}
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from",
+                "example": ["👤", "🧑‍💻", "🎨", "📊"]
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown",
+                "example": ["Developer", "Designer", "Manager", "Other"]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding",
+                "example": {
+                  "name": "Jane",
+                  "email": "jane@example.com",
+                  "avatar": "🧑‍💻",
+                  "role": "Developer",
+                  "emailNotifications": true,
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": {
+        "compiledCode": "var R=Object.defineProperty;var m=(n,r)=>R(n,\"name\",{value:r,configurable:!0});import{jsx as a,jsxs as i}from\"react/jsx-runtime\";import{useState as b,useMemo as y,useCallback as h}from\"react\";import{Container as P,Stack as s,Row as C,Box as k,Text as d,Heading as S,Button as x,Input as T,Select as w,Toggle as F,Progress as D}from\"@ggui-ai/design/primitives\";import{FormField as v}from\"@ggui-ai/design/components\";import{Clickable as A}from\"@ggui-ai/design/interact\";function E(n){const r=h(c=>{n.onComplete?.(c)},[n.onComplete]),[l,t]=b(1),[o,p]=b(n.initialProfile),u=h(c=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(c),[]),g=y(()=>l===1?!!(o.name.trim()&&u(o.email)):l===2?!!o.role:!0,[l,o]);return{currentStep:l,handleBack:m(()=>{l>1&&t(l-1)},\"handleBack\"),formData:o,updateField:m((c,B)=>{p(N=>({...N,[c]:B}))},\"updateField\"),isStepValid:g,handleNext:m(()=>{g&&(l<3?t(l+1):r(o))},\"handleNext\"),handleComplete:r,validateEmail:u}}m(E,\"useComponent\");function H(n){const{currentStep:r,handleBack:l,formData:t,updateField:o,isStepValid:p,handleNext:u,handleComplete:g,validateEmail:f}=E(n);return a(P,{maxWidth:\"md\",padding:24,children:i(s,{gap:24,children:[i(s,{gap:8,children:[a(S,{level:2,children:\"Welcome to Onboarding\"}),a(D,{value:r/3*100}),i(d,{variant:\"bodySmall\",children:[\"Step \",r,\" of 3\"]})]}),i(k,{padding:24,background:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"md\",children:[r===1&&i(s,{gap:16,children:[a(v,{label:\"Full Name\",required:!0,children:a(T,{value:t.name,placeholder:\"Jane Doe\",onChange:e=>o(\"name\",e)})}),a(v,{label:\"Email\",required:!0,error:t.email&&!f(t.email)?\"Invalid email format\":\"\",children:a(T,{type:\"email\",value:t.email,placeholder:\"jane@example.com\",onChange:e=>o(\"email\",e)})}),a(d,{variant:\"label\",children:\"Select Avatar\"}),a(C,{gap:16,children:n.avatarOptions.map(e=>a(k,{as:A,padding:12,background:t.avatar===e?\"var(--ggui-color-primary-200)\":\"var(--ggui-color-surface)\",borderRadius:\"md\",onClick:()=>o(\"avatar\",e),children:a(d,{children:e})},e))})]}),r===2&&i(s,{gap:16,children:[a(v,{label:\"Role\",required:!0,children:a(w,{value:t.role,onChange:e=>o(\"role\",e),options:n.roleOptions.map(e=>({value:e,label:e})),placeholder:\"Select a role\"})}),a(F,{label:\"Email Notifications\",checked:t.emailNotifications,onChange:e=>o(\"emailNotifications\",e)}),a(F,{label:\"Dark Theme\",checked:t.theme===\"dark\",onChange:e=>o(\"theme\",e?\"dark\":\"light\")})]}),r===3&&i(s,{gap:16,children:[a(S,{level:4,children:\"Review\"}),i(d,{variant:\"bodySmall\",children:[\"Name: \",t.name]}),i(d,{variant:\"bodySmall\",children:[\"Email: \",t.email]}),i(d,{variant:\"bodySmall\",children:[\"Role: \",t.role]}),i(d,{variant:\"bodySmall\",children:[\"Avatar: \",t.avatar||\"None\"]})]})]}),i(C,{justify:\"between\",children:[a(x,{variant:\"ghost\",disabled:r===1,onClick:l,children:\"Back\"}),a(x,{disabled:!p,onClick:u,children:r===3?\"Complete Setup\":\"Next\"})]})]})})}m(H,\"Component\");export{H as default};\n",
+        "sourceCode": "// ⚠️ DO NOT EDIT imports — all available components are pre-imported.\nimport React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n\n// ⚠️ DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  initialProfile: { name: string; email: string; avatar: string; role: string; emailNotifications: boolean; theme: string }; // Pre-filled profile data for editing (all fields optional)\n  avatarOptions: string[]; // Available avatar emojis to choose from\n  roleOptions: string[]; // Available role options for the dropdown\n  onComplete?: (data: Record<string, unknown>) => void; // Action: Complete Setup\n}\n\nfunction useComponent(props: Props) {\n  const handleComplete = useCallback((data: Record<string, unknown>) => {\n    props.onComplete?.(data);\n  }, [props.onComplete]);\n\n  const [currentStep, setCurrentStep] = useState(1);\n  const [formData, setFormData] = useState(props.initialProfile);\n\n  const validateEmail = useCallback((email: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email), []);\n\n  const isStepValid = useMemo(() => {\n    if (currentStep === 1) {\n      return !!(formData.name.trim() && validateEmail(formData.email));\n    }\n    if (currentStep === 2) {\n      return !!formData.role;\n    }\n    return true;\n  }, [currentStep, formData]);\n\n  const updateField = (field: string, value: any) => {\n    setFormData((prev) => ({ ...prev, [field]: value }));\n  };\n\n  const handleNext = () => {\n    if (isStepValid) {\n      if (currentStep < 3) setCurrentStep(currentStep + 1);\n      else handleComplete(formData);\n    }\n  };\n\n  const handleBack = () => {\n    if (currentStep > 1) setCurrentStep(currentStep - 1);\n  };\n\n  return { currentStep, handleBack, formData, updateField, isStepValid, handleNext, handleComplete, validateEmail };\n}\n\nexport default function Component(props: Props) {\n  const { currentStep, handleBack, formData, updateField, isStepValid, handleNext, handleComplete, validateEmail } = useComponent(props);\n\n  return (\n    <Container maxWidth=\"md\" padding={24}>\n      <Stack gap={24}>\n        <Stack gap={8}>\n          <Heading level={2}>Welcome to Onboarding</Heading>\n          <Progress value={(currentStep / 3) * 100} />\n          <Text variant=\"bodySmall\">Step {currentStep} of 3</Text>\n        </Stack>\n\n        <Box padding={24} background=\"var(--ggui-color-surfaceVariant)\" borderRadius=\"md\">\n          {currentStep === 1 && (\n            <Stack gap={16}>\n              <FormField label=\"Full Name\" required><Input value={formData.name} placeholder=\"Jane Doe\" onChange={(v) => updateField('name', v)} /></FormField>\n              <FormField label=\"Email\" required error={formData.email && !validateEmail(formData.email) ? 'Invalid email format' : ''}><Input type=\"email\" value={formData.email} placeholder=\"jane@example.com\" onChange={(v) => updateField('email', v)} /></FormField>\n              <Text variant=\"label\">Select Avatar</Text>\n              <Row gap={16}>\n                {props.avatarOptions.map(emoji => (\n                  <Box \n                    as={Clickable} \n                    key={emoji} \n                    role=\"button\"\n                    aria-label={`Choose avatar ${emoji}`}\n                    aria-pressed={formData.avatar === emoji}\n                    padding={12} \n                    background={formData.avatar === emoji ? 'var(--ggui-color-primary-200)' : 'var(--ggui-color-surface)'} \n                    borderRadius=\"md\" \n                    onClick={() => updateField('avatar', emoji)}\n                  >\n                    <Text size=\"xl\">{emoji}</Text>\n                  </Box>\n                ))}\n              </Row>\n            </Stack>\n          )}\n          {currentStep === 2 && (\n            <Stack gap={16}>\n              <FormField label=\"Role\" required><Select value={formData.role} onChange={(v) => updateField('role', v)} options={props.roleOptions.map(r => ({ value: r, label: r }))} placeholder=\"Select a role\" /></FormField>\n              <Toggle label=\"Email Notifications\" checked={formData.emailNotifications} onChange={(v) => updateField('emailNotifications', v)} />\n              <Toggle label=\"Dark Theme\" checked={formData.theme === 'dark'} onChange={(v) => updateField('theme', v ? 'dark' : 'light')} />\n            </Stack>\n          )}\n          {currentStep === 3 && (\n            <Stack gap={16}>\n              <Heading level={4}>Review</Heading>\n              <Stack gap={12} as=\"dl\">\n                <Row justify=\"between\"><Text variant=\"label\" as=\"dt\">Name</Text><Text as=\"dd\">{formData.name}</Text></Row>\n                <Row justify=\"between\"><Text variant=\"label\" as=\"dt\">Email</Text><Text as=\"dd\">{formData.email}</Text></Row>\n                <Row justify=\"between\"><Text variant=\"label\" as=\"dt\">Role</Text><Text as=\"dd\">{formData.role}</Text></Row>\n                <Row justify=\"between\"><Text variant=\"label\" as=\"dt\">Avatar</Text><Text as=\"dd\">{formData.avatar}</Text></Row>\n              </Stack>\n            </Stack>\n          )}\n        </Box>\n\n        <Row justify=\"between\">\n          <Button variant=\"ghost\" onClick={handleBack} disabled={currentStep === 1}>Back</Button>\n          <Button variant=\"primary\" disabled={!isStepValid} onClick={handleNext}>\n            {currentStep === 3 ? 'Complete Setup' : 'Next'}\n          </Button>\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 458678,
+          "output": 7113,
+          "total": 465791
+        },
+        "generationTimeMs": 44593,
+        "turnsUsed": 10,
+        "recipeName": "single-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The review section lacks clear visual grouping or labels for the boolean fields (Notifications/Theme).",
+                "fix": "Use a list or a grid layout to present the key-value pairs in the summary step to improve readability."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The avatar selection uses a clickable Box without explicit role='button' or aria-pressed states, making it unclear for screen readers.",
+                "fix": "Add role='button', aria-label='Choose avatar [emoji]', and aria-pressed={formData.avatar === emoji} to the avatar selection items."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "No transition animation between steps, making the wizard feel slightly static.",
+                "fix": "Wrap the step content in a simple CSS transition or use a motion component if available in the design system to smooth out the step switching."
+              }
+            ],
+            "critique": "The component is well-structured, follows the contract strictly, and correctly handles state management and validation. It is a highly functional piece of code that could be elevated to production-ready by improving the semantic accessibility of the custom interactive elements and adding slightly more polish to the summary view layout.",
+            "inputTokens": 2310,
+            "outputTokens": 367
+          },
+          {
+            "passed": false,
+            "finalScore": 88,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 85,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The avatar selection layout lacks focus indicators, making it hard to identify the keyboard-selected item.",
+                "fix": "Add a focus state style to the Clickable wrapper for the emoji avatars."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "Transition between steps is abrupt.",
+                "fix": "Consider wrapping the step content in a simple animation container if the design system supports it, or add CSS transitions to the opacity/transform properties of the content box."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The review summary uses generic Text components for labels and values, lacking proper semantic associations.",
+                "fix": "Use a description list (<dl>, <dt>, <dd>) or grid layout with appropriate ARIA roles to ensure the relationship between field labels and values is clear to assistive technologies."
+              }
+            ],
+            "critique": "The component is clean, well-structured, and fulfills all functional requirements effectively. It handles state transitions and validation logically; minor polish in visual feedback and semantic markup would elevate it to production-grade.",
+            "inputTokens": 2408,
+            "outputTokens": 337
+          },
+          {
+            "passed": true,
+            "finalScore": 90,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 90,
+              "interactivity": 85,
+              "accessibility": 85,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The 'Next' button does not visually indicate why it is disabled (e.g., no feedback when user tries to click while invalid).",
+                "fix": "Add a tooltip or temporary validation message when the user interacts with the disabled button."
+              },
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The review summary in Step 3 could use better visual grouping or a card component for improved readability.",
+                "fix": "Wrap the summary list in a Card or use a Divider component to separate the fields clearly."
+              }
+            ],
+            "critique": "The component is well-structured, follows all functional requirements, and uses the design system appropriately. The state management is clean and handles the multi-step flow effectively. Adding minor polish to the validation feedback loop would make the user experience more robust.",
+            "inputTokens": 2445,
+            "outputTokens": 270
+          }
+        ],
+        "timing": {
+          "plannerMs": 4186,
+          "codingMs": 25951,
+          "evalMs": 14442,
+          "totalMs": 44593
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "finalScore": 90,
+        "dimensions": {
+          "completeness": 95,
+          "visualPolish": 90,
+          "interactivity": 85,
+          "accessibility": 85,
+          "codeQuality": 90
+        },
+        "issues": [
+          {
+            "dimension": "interactivity",
+            "severity": "minor",
+            "description": "The 'Next' button does not visually indicate why it is disabled (e.g., no feedback when user tries to click while invalid).",
+            "fix": "Add a tooltip or temporary validation message when the user interacts with the disabled button."
+          },
+          {
+            "dimension": "visualDesign",
+            "severity": "minor",
+            "description": "The review summary in Step 3 could use better visual grouping or a card component for improved readability.",
+            "fix": "Wrap the summary list in a Card or use a Divider component to separate the fields clearly."
+          }
+        ],
+        "critique": "The component is well-structured, follows all functional requirements, and uses the design system appropriately. The state management is clean and handles the multi-step flow effectively. Adding minor polish to the validation feedback loop would make the user experience more robust.",
+        "inputTokens": 2445,
+        "outputTokens": 270
+      },
+      "estimatedCostUsd": 0.250678,
+      "timestamp": "2026-03-19T18:01:12.005Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 2891,
+        "sourceCodeBytes": 6080,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-single-component-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 89.8,
+      "avgTimeMs": 64042.4,
+      "avgCostUsd": 0.2638154,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 96,
+        "visualPolish": 88,
+        "interactivity": 87,
+        "accessibility": 83,
+        "codeQuality": 92
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 91,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 88,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "periodic-table",
+      "commitName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": 89,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "product-page",
+      "commitName": "E-Commerce Product Page",
+      "complexity": "complex",
+      "avgScore": 91,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    },
+    {
+      "commitId": "onboarding-wizard",
+      "commitName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": 90,
+      "bestVariantId": "google-single-component-0",
+      "worstVariantId": "google-single-component-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 89.8,
+        "avgTimeMs": 64042.4,
+        "avgCostUsd": 0.2638154,
+        "successRate": 1
+      }
+    }
+  }
+}

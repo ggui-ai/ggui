@@ -1,0 +1,445 @@
+--- a/ui.tsx
++++ b/ui.tsx
+@@ -14,11 +14,95 @@
+ 
+ function useComponent(props: Props) {
+   const handleTaskUpdate = useCallback((data: Record<string, unknown>) => {
+     props.onTaskUpdate?.(data);
+   }, [props.onTaskUpdate]);
+ 
+-  // TODO: add state and computed values
+-  return {};
++  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
++  const [editingTitle, setEditingTitle] = useState<string>('');
++  const [addingColumnId, setAddingColumnId] = useState<string | null>(null);
++  const [newTaskTitle, setNewTaskTitle] = useState<string>('');
++  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
++
++  const tasksByColumn = useMemo(() => {
++    const grouped: Record<string, typeof props.tasks> = {};
++    props.columns.forEach((col) => {
++      grouped[col.id || ''] = [];
++    });
++    props.tasks.forEach((task) => {
++      const colId = task.column || '';
++      if (grouped[colId]) {
++        grouped[colId].push(task);
++      }
++    });
++    return grouped;
++  }, [props.tasks, props.columns]);
++
++  const totalTasks = useMemo(() => props.tasks.length, [props.tasks]);
++  const completedTasks = useMemo(
++    () => props.tasks.filter((t) => t.column === 'done').length,
++    [props.tasks]
++  );
++
++  const handleEditTask = useCallback(
++    (taskId: string, currentTitle: string) => {
++      setEditingTaskId(taskId);
++      setEditingTitle(currentTitle || '');
++    },
++    []
++  );
++
++  const handleSaveEdit = useCallback(
++    (taskId: string) => {
++      if (editingTitle.trim()) {
++        const task = props.tasks.find((t) => t.id === taskId);
++        if (task) {
++          handleTaskUpdate({ ...task, title: editingTitle });
++        }
++      }
++      setEditingTaskId(null);
++      setEditingTitle('');
++    },
++    [editingTitle, props.tasks, handleTaskUpdate]
++  );
++
++  const handleCancelEdit = useCallback(() => {
++    setEditingTaskId(null);
++    setEditingTitle('');
++  }, []);
++
++  const handleMoveTask = useCallback(
++    (taskId: string, newColumn: string) => {
++      const task = props.tasks.find((t) => t.id === taskId);
++      if (task) {
++        handleTaskUpdate({ ...task, column: newColumn });
++      }
++    },
++    [props.tasks, handleTaskUpdate]
++  );
++
++  const handleAddTask = useCallback(
++    (columnId: string) => {
++      if (newTaskTitle.trim()) {
++        const newTask = {
++          id: `task-${Date.now()}`,
++          title: newTaskTitle,
++          priority: newTaskPriority,
++          column: columnId,
++        };
++        handleTaskUpdate(newTask);
++        setNewTaskTitle('');
++        setNewTaskPriority('medium');
++        setAddingColumnId(null);
++      }
++    },
++    [newTaskTitle, newTaskPriority, handleTaskUpdate]
++  );
++
++  return {
++    editingTaskId,
++    editingTitle,
++    addingColumnId,
++    newTaskTitle,
++    newTaskPriority,
++    tasksByColumn,
++    totalTasks,
++    completedTasks,
++    handleEditTask,
++    handleSaveEdit,
++    handleCancelEdit,
++    handleMoveTask,
++    handleAddTask,
++    setEditingTitle,
++    setNewTaskTitle,
++    setNewTaskPriority,
++    setAddingColumnId,
++  };
+ }
+ 
+ export default function Component(props: Props) {
+-  const state = useComponent(props);
++  const {
++    editingTaskId,
++    editingTitle,
++    addingColumnId,
++    newTaskTitle,
++    newTaskPriority,
++    tasksByColumn,
++    totalTasks,
++    completedTasks,
++    handleEditTask,
++    handleSaveEdit,
++    handleCancelEdit,
++    handleMoveTask,
++    handleAddTask,
++    setEditingTitle,
++    setNewTaskTitle,
++    setNewTaskPriority,
++    setAddingColumnId,
++  } = useComponent(props);
+ 
+-  return (<></>); // TODO: implement the UI here
++  const getPriorityColor = (priority?: string) => {
++    switch (priority) {
++      case 'low':
++        return 'success';
++      case 'high':
++        return 'error';
++      default:
++        return 'warning';
++    }
++  };
++
++  return (
++    <Container maxWidth="3xl" padding={24}>
++      <Stack gap={24}>
++        {/* Header */}
++        <Stack gap={8}>
++          <Heading level={1} color="var(--ggui-color-primary-600, #0284c7)">
++            Task Board
++          </Heading>
++          <Stack
++            direction="horizontal"
++            gap={16}
++            align="center"
++            aria-live="polite"
++          >
++            <Badge variant="primary" size="lg">
++              {totalTasks} Total
++            </Badge>
++            <Badge variant="success" size="lg">
++              {completedTasks} Completed
++            </Badge>
++          </Stack>
++        </Stack>
++
++        <Divider />
++
++        {/* Columns Grid */}
++        <Stack direction="horizontal" gap={24} align="start">
++          {props.columns.map((column) => {
++            const columnTasks = tasksByColumn[column.id || ''] || [];
++
++            return (
++              <Box
++                key={column.id}
++                style={{
++                  flex: 1,
++                  minWidth: '300px',
++                  display: 'flex',
++                  flexDirection: 'column',
++                  maxHeight: '700px',
++                }}
++              >
++                <Card
++                  padding={16}
++                  radius="lg"
++                  shadow="sm"
++                  border={true}
++                  style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
++                >
++                  {/* Column Header */}
++                  <Stack
++                    direction="horizontal"
++                    gap={8}
++                    justify="between"
++                    align="center"
++                    style={{ marginBottom: 'var(--ggui-spacing-4, 16px)' }}
++                  >
++                    <Heading
++                      level={3}
++                      color="var(--ggui-color-onSurface, #18181b)"
++                    >
++                      {column.name}
++                    </Heading>
++                    <Badge
++                      variant="default"
++                      size="sm"
++                      aria-label={`Task count: ${columnTasks.length}`}
++                    >
++                      {columnTasks.length}
++                    </Badge>
++                  </Stack>
+
++                  {/* Task List */}
++                  <Stack
++                    gap={8}
++                    style={{
++                      flex: 1,
++                      overflowY: 'auto',
++                      marginBottom: 'var(--ggui-spacing-4, 16px)',
++                    }}
++                    role="region"
++                    aria-label={`Column: ${column.name}`}
++                  >
++                    {columnTasks.map((task) => {
++                      const isEditing = editingTaskId === task.id;
++
++                      return (
++                        <Card
++                          key={task.id}
++                          padding={12}
++                          radius="md"
++                          shadow="sm"
++                          border={true}
++                          style={{
++                            backgroundColor: isEditing
++                              ? 'var(--ggui-color-primary-50, #f0f9ff)'
++                              : 'var(--ggui-color-surfaceVariant, #f4f4f5)',
++                            transition:
++                              'background-color 200ms ease-in-out, box-shadow 200ms ease-in-out',
++                          }}
++                        >
++                          {/* Task Title */}
++                          {isEditing ? (
++                            <Input
++                              label="Task Title"
++                              value={editingTitle}
++                              onChange={setEditingTitle}
++                              placeholder="Enter task title"
++                              autoFocus
++                              onBlur={() => handleSaveEdit(task.id || '')}
++                              onKeyDown={(e: any) => {
++                                if (e.key === 'Enter') {
++                                  handleSaveEdit(task.id || '');
++                                } else if (e.key === 'Escape') {
++                                  handleCancelEdit();
++                                }
++                              }}
++                            />
++                          ) : (
++                            <Text
++                              is="span"
++                              variant="body"
++                              style={{
++                                cursor: 'pointer',
++                                padding: 'var(--ggui-spacing-1, 4px)',
++                                borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
++                                display: 'block',
++                                marginBottom: 'var(--ggui-spacing-2, 8px)',
++                              }}
++                              as={Clickable}
++                              onClick={() =>
++                                handleEditTask(task.id || '', task.title || '')
++                              }
++                            >
++                              {task.title || '(No title)'}
++                            </Text>
++                          )}
+
++                          {/* Task Metadata */}
++                          <Stack gap={6} style={{ marginBottom: 'var(--ggui-spacing-2, 8px)' }}>
++                            {/* Priority Badge */}
++                            {task.priority && (
++                              <Badge
++                                variant={getPriorityColor(task.priority)}
++                                size="sm"
++                              >
++                                {task.priority}
++                              </Badge>
++                            )}
+
++                            {/* Assignee + Due Date */}
++                            {(task.assignee || task.dueDate) && (
++                              <Stack
++                                direction="horizontal"
++                                gap={8}
++                                align="center"
++                              >
++                                {task.assignee && (
++                                  <Avatar
++                                    name={task.assignee}
++                                    size="sm"
++                                  />
++                                )}
++                                {task.dueDate && (
++                                  <Text
++                                    variant="caption"
++                                    color="var(--ggui-color-onSurfaceVariant, #52525b)"
++                                  >
++                                    {new Date(task.dueDate).toLocaleDateString()}
++                                  </Text>
++                                )}
++                              </Stack>
++                            )}
++                          </Stack>
+
++                          {/* Task Actions */}
++                          {!isEditing && (
++                            <Stack
++                              direction="horizontal"
++                              gap={4}
++                              justify="between"
++                            >
++                              <Button
++                                variant="ghost"
++                                size="xs"
++                                leftIcon={<Icon name="edit-2" size={14} />}
++                                onClick={() =>
++                                  handleEditTask(task.id || '', task.title || '')
++                                }
++                              >
++                                Edit
++                              </Button>
++                              <Dropdown
++                                trigger={
++                                  <Button
++                                    variant="ghost"
++                                    size="xs"
++                                    leftIcon={<Icon name="arrow-right" size={14} />}
++                                  >
++                                    Move
++                                  </Button>
++                                }
++                                options={props.columns
++                                  .filter((c) => c.id !== column.id)
++                                  .map((c) => ({
++                                    value: c.id || '',
++                                    label: c.name || '',
++                                  }))}
++                                value={column.id || ''}
++                                onChange={(newColId) =>
++                                  handleMoveTask(task.id || '', newColId)
++                                }
++                                placement="bottom-end"
++                              />
++                            </Stack>
++                          )}
++                        </Card>
++                      );
++                    })}
++                  </Stack>
+
++                  {/* Add Task Form / Button */}
++                  {addingColumnId === column.id ? (
++                    <Card
++                      padding={12}
++                      radius="md"
++                      border={true}
++                      shadow="sm"
++                      style={{
++                        backgroundColor:
++                          'var(--ggui-color-primary-50, #f0f9ff)',
++                      }}
++                    >
++                      <Stack gap={8}>
++                        <Input
++                          label="Task Title"
++                          value={newTaskTitle}
++                          onChange={setNewTaskTitle}
++                          placeholder="Enter task title"
++                          autoFocus
++                        />
++                        <Select
++                          label="Priority"
++                          value={newTaskPriority}
++                          onChange={(v: any) =>
++                            setNewTaskPriority(
++                              v as 'low' | 'medium' | 'high'
++                            )
++                          }
++                          options={[
++                            { value: 'low', label: 'Low' },
++                            { value: 'medium', label: 'Medium' },
++                            { value: 'high', label: 'High' },
++                          ]}
++                        />
++                        <Stack
++                          direction="horizontal"
++                          gap={8}
++                          justify="end"
++                        >
++                          <Button
++                            variant="ghost"
++                            size="sm"
++                            onClick={() => setAddingColumnId(null)}
++                          >
++                            Cancel
++                          </Button>
++                          <Button
++                            variant="primary"
++                            size="sm"
++                            onClick={() =>
++                              handleAddTask(column.id || '')
++                            }
++                          >
++                            Add Task
++                          </Button>
++                        </Stack>
++                      </Stack>
++                    </Card>
++                  ) : (
++                    <Button
++                      variant="ghost"
++                      size="sm"
++                      leftIcon={<Icon name="plus" size={16} />}
++                      onClick={() => setAddingColumnId(column.id || '')}
++                      fullWidth
++                    >
++                      Add Task
++                    </Button>
++                  )}
++                </Card>
++              </Box>
++            );
++          })}
++        </Stack>
++      </Stack>
++    </Container>
++  );
+ }

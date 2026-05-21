@@ -1,0 +1,117 @@
+{
+  "name": "@ggui-ai/react",
+  "version": "0.1.0-rc.1",
+  "description": "React SDK for ggui — components and hooks for embedding agent-generated UIs in web apps.",
+  "keywords": [
+    "ggui",
+    "react",
+    "mcp",
+    "ai-agent",
+    "generative-ui",
+    "websocket",
+    "sdk"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/ggui-react",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/ggui-react"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./query": {
+      "import": "./dist/query/index.mjs",
+      "require": "./dist/query/index.js",
+      "types": "./dist/query/index.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/testing/index.mjs",
+      "require": "./dist/testing/index.js",
+      "types": "./dist/testing/index.d.ts"
+    },
+    "./shells": {
+      "import": "./dist/shells/index.mjs",
+      "require": "./dist/shells/index.js",
+      "types": "./dist/shells/index.d.ts"
+    },
+    "./chat-helpers": {
+      "import": "./dist/chat-helpers/index.mjs",
+      "require": "./dist/chat-helpers/index.js",
+      "types": "./dist/chat-helpers/index.d.ts"
+    },
+    "./chat-thread": {
+      "import": "./dist/chat-thread/index.mjs",
+      "require": "./dist/chat-thread/index.js",
+      "types": "./dist/chat-thread/index.d.ts"
+    },
+    "./chat-thread/shells/chat": {
+      "import": "./dist/chat-thread/shells/chat/index.mjs",
+      "require": "./dist/chat-thread/shells/chat/index.js",
+      "types": "./dist/chat-thread/shells/chat/index.d.ts"
+    },
+    "./chat-thread/shells/agent": {
+      "import": "./dist/chat-thread/shells/agent/index.mjs",
+      "require": "./dist/chat-thread/shells/agent/index.js",
+      "types": "./dist/chat-thread/shells/agent/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/iframe-runtime": "workspace:*",
+    "@ggui-ai/shared": "workspace:*",
+    "@ggui-ai/wire": "workspace:*",
+    "lucide-react": "^1.7.0"
+  },
+  "devDependencies": {
+    "@ggui-ai/design": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@tanstack/react-query": "^5.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^24.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  }
+}

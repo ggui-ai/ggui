@@ -1,0 +1,129 @@
+{
+  "name": "@ggui-ai/design",
+  "version": "0.1.0-rc.1",
+  "description": "ggui design system — themeable React primitives, components, compositions, blueprints, and design tokens. One bare-barrel import; runtime theming via DTCG token injection.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./primitives": {
+      "types": "./dist/primitives/index.d.ts",
+      "import": "./dist/primitives/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.js"
+    },
+    "./compositions": {
+      "types": "./dist/compositions/index.d.ts",
+      "import": "./dist/compositions/index.js"
+    },
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js"
+    },
+    "./inline": {
+      "types": "./dist/inline/index.d.ts",
+      "import": "./dist/inline/index.js"
+    },
+    "./themes": {
+      "types": "./dist/themes/index.d.ts",
+      "import": "./dist/themes/index.js"
+    },
+    "./themes/dtcg": {
+      "types": "./dist/themes/dtcg/index.d.ts",
+      "import": "./dist/themes/dtcg/index.js"
+    },
+    "./interact": {
+      "types": "./dist/interact/index.d.ts",
+      "import": "./dist/interact/index.js"
+    },
+    "./preview": {
+      "types": "./dist/preview/index.d.ts",
+      "import": "./dist/preview/index.js"
+    },
+    "./rendering": {
+      "types": "./dist/rendering/index.d.ts",
+      "import": "./dist/rendering/index.js"
+    },
+    "./module-loader": {
+      "types": "./dist/rendering/module-loader.d.ts",
+      "import": "./dist/rendering/module-loader.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.stories.tsx",
+    "ggui.primitives.json"
+  ],
+  "scripts": {
+    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && npm run generate:docs && npm run generate:docs-ts",
+    "build:inline": "node scripts/generate-inline-modules.mjs",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "storybook": "storybook dev -p 6006 --config-dir storybook",
+    "build-storybook": "storybook build --config-dir storybook",
+    "chromatic": "chromatic --exit-zero-on-changes",
+    "test": "vitest run",
+    "generate:docs": "node --experimental-strip-types scripts/generate-primitives-docs.ts",
+    "generate:docs-ts": "node --experimental-strip-types scripts/generate-primitives-docs-ts.ts",
+    "generate:icons": "node scripts/generate-icon-data.mjs"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@ggui-ai/wire": "workspace:*"
+  },
+  "devDependencies": {
+    "@chromatic-com/storybook": "^3.2.0",
+    "@storybook/addon-essentials": "^8.4.0",
+    "@storybook/addon-interactions": "^8.4.0",
+    "@storybook/addon-links": "^8.4.0",
+    "@storybook/blocks": "^8.4.0",
+    "@storybook/react": "^8.4.0",
+    "@storybook/react-vite": "^8.4.0",
+    "@storybook/test": "^8.4.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "chromatic": "^11.0.0",
+    "esbuild": "^0.25.0",
+    "lucide": "^0.577.0",
+    "storybook": "^8.4.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.4.2",
+    "vitest": "^2.1.9"
+  },
+  "keywords": [
+    "ggui",
+    "design-system",
+    "react",
+    "components",
+    "primitives",
+    "ui",
+    "design-tokens",
+    "theming",
+    "dtcg"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/design"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/design",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

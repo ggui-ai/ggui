@@ -1,0 +1,1795 @@
+{
+  "meta": {
+    "timestamp": "2026-03-22T16:29:58.165Z",
+    "totalDurationMs": 91712,
+    "totalVariants": 1,
+    "totalCommits": 4,
+    "totalRuns": 4,
+    "successCount": 4,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "survey-form",
+        "name": "Multi-Step Survey Form",
+        "description": "Multi-step form with validation, progress tracking, and review",
+        "complexity": "medium",
+        "expectedMinScore": 65,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a multi-step survey form with 4 steps:\n- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation\n- Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)\n- Step 3: Checkbox group for feature interests (options from props)\n- Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)\n\nRequirements:\n- Progress bar at the top showing current step (e.g., \"Step 2 of 4\")\n- Back/Next navigation buttons (Next disabled until required fields valid)\n- Final review step showing all answers before submission\n- Call props.onSubmit with all collected answers as a structured object\n- All option labels and feature lists must come from props\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "featureOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available feature options for the checkbox step",
+                "example": [
+                  "Dashboard Analytics",
+                  "Team Collaboration",
+                  "API Integration",
+                  "Custom Workflows",
+                  "Mobile App",
+                  "AI Assistance"
+                ]
+              },
+              "satisfactionLabels": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)",
+                "example": [
+                  "Very Unsatisfied",
+                  "Unsatisfied",
+                  "Neutral",
+                  "Satisfied",
+                  "Very Satisfied"
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "submit": {
+                "label": "Submit Survey",
+                "description": "Called with all collected answers as a structured object",
+                "example": {
+                  "name": "John",
+                  "email": "john@example.com",
+                  "satisfaction": 4,
+                  "features": ["API Integration", "Mobile App"],
+                  "comments": "Great product!"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "featureOptions": [
+            "Dashboard Analytics",
+            "Team Collaboration",
+            "API Integration",
+            "Custom Workflows",
+            "Mobile App",
+            "AI Assistance"
+          ],
+          "satisfactionLabels": [
+            "Very Unsatisfied",
+            "Unsatisfied",
+            "Neutral",
+            "Satisfied",
+            "Very Satisfied"
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var E=Object.defineProperty;var s=(d,b)=>E(d,\"name\",{value:b,configurable:!0});import{jsx as a,jsxs as o}from\"react/jsx-runtime\";import{useState as S}from\"react\";import{Container as I,Card as m,Stack as l,Row as F,Box as c,Divider as x,Text as n,Heading as u,Button as y,Input as w,TextArea as D,Checkbox as L,RadioGroup as q,Progress as M}from\"@ggui-ai/design/primitives\";import{useAction as O}from\"@ggui-ai/wire\";function W(d){const b=O(\"submit\"),[r,h]=S(1),[t,p]=S({name:\"\",email:\"\",satisfaction:0,features:[],comments:\"\"}),[v,C]=S({}),B=s(e=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(e),\"isValidEmail\"),P=s(e=>{const i={};return e===1?(t.name.trim()||(i.name=\"Name is required\"),t.email.trim()||(i.email=\"Email is required\"),t.email&&!B(t.email)&&(i.email=\"Invalid email format\")):e===2&&t.satisfaction===0&&(i.satisfaction=\"Please select a satisfaction rating\"),C(i),Object.keys(i).length===0},\"validateStep\"),T=s(()=>P(r),\"canProceedToNext\"),R=s(()=>{T()&&h(r+1)},\"handleNext\"),A=s(()=>{h(r-1)},\"handleBack\"),k=s((e,i)=>{p(g=>({...g,[e]:i})),v[e]&&C(g=>{const f={...g};return delete f[e],f})},\"handleInputChange\"),H=s((e,i)=>{p(g=>({...g,features:i?[...g.features,e]:g.features.filter(f=>f!==e)}))},\"handleCheckboxChange\"),N=s(()=>{b(t)},\"handleSubmit\"),V=r/5*100;return a(I,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:o(l,{gap:\"var(--ggui-spacing-6)\",children:[o(c,{children:[o(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[\"Step \",r===5?\"Final Review\":`${r} of 5`]}),a(M,{value:V,max:100,size:\"md\"})]}),a(x,{margin:\"var(--ggui-spacing-2)\"}),r===1&&a(m,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:o(l,{gap:\"var(--ggui-spacing-4)\",children:[a(u,{level:2,children:\"Your Information\"}),a(w,{label:\"Name\",placeholder:\"Enter your full name\",value:t.name,onChange:e=>k(\"name\",e),error:v.name,required:!0}),a(w,{label:\"Email\",type:\"email\",placeholder:\"your@email.com\",value:t.email,onChange:e=>k(\"email\",e),error:v.email,required:!0})]})}),r===2&&a(m,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:o(l,{gap:\"var(--ggui-spacing-4)\",children:[a(u,{level:2,children:\"How satisfied are you?\"}),a(q,{label:\"Satisfaction Rating\",value:t.satisfaction.toString(),onChange:e=>p(i=>({...i,satisfaction:parseInt(e)})),error:v.satisfaction,options:d.satisfactionLabels.map((e,i)=>({value:(i+1).toString(),label:e}))})]})}),r===3&&a(m,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:o(l,{gap:\"var(--ggui-spacing-4)\",children:[a(u,{level:2,children:\"What features interest you?\"}),a(l,{gap:\"var(--ggui-spacing-3)\",children:d.featureOptions.map(e=>a(L,{label:e,checked:t.features.includes(e),onChange:i=>H(e,i)},e))})]})}),r===4&&a(m,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:o(l,{gap:\"var(--ggui-spacing-4)\",children:[a(u,{level:2,children:\"Additional Comments\"}),a(n,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Help us understand your feedback better. This field is optional.\"}),a(D,{label:\"Comments\",placeholder:\"Tell us more (optional)\",value:t.comments,onChange:e=>p(i=>({...i,comments:e})),maxLength:500,showCount:!0,rows:6})]})}),r===5&&a(m,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:o(l,{gap:\"var(--ggui-spacing-4)\",children:[a(u,{level:2,children:\"Review Your Answers\"}),a(n,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Please review all your information before submitting.\"}),a(x,{margin:\"var(--ggui-spacing-2)\"}),o(c,{children:[a(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Name\"}),a(n,{variant:\"body\",children:t.name})]}),o(c,{children:[a(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Email\"}),a(n,{variant:\"body\",children:t.email})]}),o(c,{children:[a(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Satisfaction Rating\"}),a(n,{variant:\"body\",children:d.satisfactionLabels[t.satisfaction-1]})]}),o(c,{children:[a(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Features of Interest\"}),a(l,{gap:\"var(--ggui-spacing-1)\",children:t.features.length>0?t.features.map(e=>o(n,{variant:\"body\",children:[\"\\u2022 \",e]},e)):a(n,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"None selected\"})})]}),o(c,{children:[a(n,{variant:\"label\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Additional Comments\"}),a(n,{variant:\"body\",children:t.comments||\"(None provided)\"})]})]})}),a(x,{margin:\"var(--ggui-spacing-2)\"}),o(F,{gap:\"var(--ggui-spacing-4)\",justify:\"between\",children:[a(y,{variant:\"outline\",onClick:A,disabled:r===1,children:\"Back\"}),a(y,{variant:\"primary\",onClick:r===5?N:R,disabled:r>1&&r<5&&!T(),children:r===5?\"Submit\":\"Next\"})]})]})})}s(W,\"Component\");export{W as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  featureOptions: string[]; // Available feature options for the checkbox step\n  satisfactionLabels: string[]; // Labels for satisfaction rating (e.g., Very Unsatisfied to Very Satisfied)\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called with all collected answers as a structured object */\ntype ActionSubmitPayload = { name: string; email: string; satisfaction: number; features: string[]; comments: string };\n\n\n\n\n\n// Place helper components here if needed\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  // Actions — fire-and-forget to agent\n  const submit = useAction<ActionSubmitPayload>('submit'); // Called with all collected answers as a structured object\n\n  // State management\n  const [currentStep, setCurrentStep] = useState(1);\n  const [formData, setFormData] = useState({\n    name: '',\n    email: '',\n    satisfaction: 0,\n    features: [] as string[],\n    comments: '',\n  });\n  const [errors, setErrors] = useState<Record<string, string>>({});\n\n  // Validation helpers\n  const isValidEmail = (email: string): boolean => {\n    const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n    return emailRegex.test(email);\n  };\n\n  const validateStep = (step: number): boolean => {\n    const newErrors: Record<string, string> = {};\n\n    if (step === 1) {\n      if (!formData.name.trim()) newErrors.name = 'Name is required';\n      if (!formData.email.trim()) newErrors.email = 'Email is required';\n      if (formData.email && !isValidEmail(formData.email)) newErrors.email = 'Invalid email format';\n    } else if (step === 2) {\n      if (formData.satisfaction === 0) newErrors.satisfaction = 'Please select a satisfaction rating';\n    }\n\n    setErrors(newErrors);\n    return Object.keys(newErrors).length === 0;\n  };\n\n  const canProceedToNext = (): boolean => {\n    return validateStep(currentStep);\n  };\n\n  const handleNext = (): void => {\n    if (canProceedToNext()) {\n      setCurrentStep(currentStep + 1);\n    }\n  };\n\n  const handleBack = (): void => {\n    setCurrentStep(currentStep - 1);\n  };\n\n  const handleInputChange = (field: string, value: string): void => {\n    setFormData(prev => ({ ...prev, [field]: value }));\n    if (errors[field]) {\n      setErrors(prev => {\n        const newErrors = { ...prev };\n        delete newErrors[field];\n        return newErrors;\n      });\n    }\n  };\n\n  const handleCheckboxChange = (feature: string, checked: boolean): void => {\n    setFormData(prev => ({\n      ...prev,\n      features: checked\n        ? [...prev.features, feature]\n        : prev.features.filter(f => f !== feature),\n    }));\n  };\n\n  const handleSubmit = (): void => {\n    submit(formData);\n  };\n\nconst progressPercentage = (currentStep / 5) * 100;\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Progress bar */}\n        <Box>\n          <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">\n            Step {currentStep === 5 ? 'Final Review' : `${currentStep} of 5`}\n          </Text>\n          <Progress value={progressPercentage} max={100} size=\"md\" />\n        </Box>\n        <Divider margin=\"var(--ggui-spacing-2)\" />\n\n        {/* Step 1: Name and Email */}\n        {currentStep === 1 && (\n          <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={2}>Your Information</Heading>\n              <Input\n                label=\"Name\"\n                placeholder=\"Enter your full name\"\n                value={formData.name}\n                onChange={(value) => handleInputChange('name', value)}\n                error={errors.name}\n                required\n              />\n              <Input\n                label=\"Email\"\n                type=\"email\"\n                placeholder=\"your@email.com\"\n                value={formData.email}\n                onChange={(value) => handleInputChange('email', value)}\n                error={errors.email}\n                required\n              />\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 2: Satisfaction Rating */}\n        {currentStep === 2 && (\n          <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={2}>How satisfied are you?</Heading>\n              <RadioGroup\n                label=\"Satisfaction Rating\"\n                value={formData.satisfaction.toString()}\n                onChange={(value) => setFormData(prev => ({ ...prev, satisfaction: parseInt(value) }))}\n                error={errors.satisfaction}\n                options={props.satisfactionLabels.map((label, index) => ({\n                  value: (index + 1).toString(),\n                  label: label,\n                }))}\n              />\n            </Stack>\n          </Card>\n        )}\n\n        {/* Step 3: Feature Interests */}\n        {currentStep === 3 && (\n          <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={2}>What features interest you?</Heading>\n              <Stack gap=\"var(--ggui-spacing-3)\">\n                {props.featureOptions.map((feature) => (\n                  <Checkbox\n                    key={feature}\n                    label={feature}\n                    checked={formData.features.includes(feature)}\n                    onChange={(checked) => handleCheckboxChange(feature, checked)}\n                  />\n                ))}\n              </Stack>\n            </Stack>\n          </Card>\n        )}\n\n         {/* Step 4: Comments */}\n         {currentStep === 4 && (\n           <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n             <Stack gap=\"var(--ggui-spacing-4)\">\n               <Heading level={2}>Additional Comments</Heading>\n               <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                 Help us understand your feedback better. This field is optional.\n               </Text>\n               <TextArea\n                 label=\"Comments\"\n                 placeholder=\"Tell us more (optional)\"\n                 value={formData.comments}\n                 onChange={(value) => setFormData(prev => ({ ...prev, comments: value }))}\n                 maxLength={500}\n                 showCount\n                 rows={6}\n               />\n             </Stack>\n           </Card>\n         )}\n\n        {/* Step 5: Final Review */}\n        {currentStep === 5 && (\n          <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n            <Stack gap=\"var(--ggui-spacing-4)\">\n              <Heading level={2}>Review Your Answers</Heading>\n              <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n                Please review all your information before submitting.\n              </Text>\n              <Divider margin=\"var(--ggui-spacing-2)\" />\n              <Box>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Name</Text>\n                <Text variant=\"body\">{formData.name}</Text>\n              </Box>\n              <Box>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Email</Text>\n                <Text variant=\"body\">{formData.email}</Text>\n              </Box>\n              <Box>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Satisfaction Rating</Text>\n                <Text variant=\"body\">{props.satisfactionLabels[formData.satisfaction - 1]}</Text>\n              </Box>\n              <Box>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Features of Interest</Text>\n                <Stack gap=\"var(--ggui-spacing-1)\">\n                  {formData.features.length > 0 ? (\n                    formData.features.map((feature) => (\n                      <Text key={feature} variant=\"body\">• {feature}</Text>\n                    ))\n                  ) : (\n                    <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">None selected</Text>\n                  )}\n                </Stack>\n              </Box>\n              <Box>\n                <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Additional Comments</Text>\n                <Text variant=\"body\">{formData.comments || '(None provided)'}</Text>\n              </Box>\n            </Stack>\n          </Card>\n        )}\n\n        <Divider margin=\"var(--ggui-spacing-2)\" />\n        {/* Navigation buttons */}\n        <Row gap=\"var(--ggui-spacing-4)\" justify=\"between\">\n          <Button\n            variant=\"outline\"\n            onClick={handleBack}\n            disabled={currentStep === 1}\n          >\n            Back\n          </Button>\n          <Button\n            variant=\"primary\"\n            onClick={currentStep === 5 ? handleSubmit : handleNext}\n            disabled={currentStep > 1 && currentStep < 5 && !canProceedToNext()}\n          >\n            {currentStep === 5 ? 'Submit' : 'Next'}\n          </Button>\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 143460,
+          "output": 11493,
+          "total": 154953
+        },
+        "generationTimeMs": 71816,
+        "turnsUsed": 6,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Progress bar text shows 'Step Final Review' instead of 'Step 4 of 4' for the final review step — the step count should display '4 of 4' for consistency, not 'Final Review'",
+              "fix": "Progress bar text shows 'Step Final Review' instead of 'Step 4 of 4' for the final review step — the step count should display '4 of 4' for consistency, not 'Final Review'"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Progress bar calculation uses hardcoded value of 5 steps (line 109) but the component only renders 4 content steps (steps 1-4) before the review; this causes incorrect percentage display",
+              "fix": "Progress bar calculation uses hardcoded value of 5 steps (line 109) but the component only renders 4 content steps (steps 1-4) before the review; this causes incorrect percentage display"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "crash",
+              "severity": "critical",
+              "description": "Line 227: props.satisfactionLabels[formData.satisfaction - 1] — formData.satisfaction is initialized as 0, and when currentStep === 5 on first render before any selection, accessing index -1 will crash or return undefined. If user navigates to review without selecting a satisfaction rating, this array access is out of bounds.",
+              "fix": "Line 227: props.satisfactionLabels[formData.satisfaction - 1] — formData.satisfaction is initialized as 0, and when currentStep === 5 on first render before any selection, accessing index -1 will crash or return undefined. If user navigates to review without selecting a satisfaction rating, this array access is out of bounds."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Review step uses individual Box containers without visual grouping — wrap each review field in a consistent card or section structure for better visual organization",
+              "fix": "Review step uses individual Box containers without visual grouping — wrap each review field in a consistent card or section structure for better visual organization"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Review step has uneven visual weight — consider using a two-column layout (label + value) instead of stacked Box elements for improved readability",
+              "fix": "Review step has uneven visual weight — consider using a two-column layout (label + value) instead of stacked Box elements for improved readability"
+            }
+          ],
+          "pass": ["interactivity", "accessibility", "loading", "visual"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 71771,
+          "evalMs": 0,
+          "totalMs": 71816
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 78,
+        "finalScore": 78,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 85,
+          "hierarchy": 80,
+          "polish": 70,
+          "dataPresentation": 80,
+          "completeness": 80,
+          "visualPolish": 78,
+          "interactivity": 70,
+          "accessibility": 78,
+          "codeQuality": 85
+        },
+        "critique": "The component has a solid foundation with proper use of design tokens and semantic spacing. However, there are inconsistencies: the progress bar incorrectly calculates 5 steps instead of 4, the code is truncated mid-function preventing full evaluation, and missing character counter display for the textarea limits functionality completeness. The layout and hierarchy are clean, but polish could be improved with better error state feedback and smoother transitions between steps.",
+        "evalTimeMs": 3079
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Progress bar text shows 'Step Final Review' instead of 'Step 4 of 4' for the final review step — the step count should display '4 of 4' for consistency, not 'Final Review'",
+            "fix": "Progress bar text shows 'Step Final Review' instead of 'Step 4 of 4' for the final review step — the step count should display '4 of 4' for consistency, not 'Final Review'"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Progress bar calculation uses hardcoded value of 5 steps (line 109) but the component only renders 4 content steps (steps 1-4) before the review; this causes incorrect percentage display",
+            "fix": "Progress bar calculation uses hardcoded value of 5 steps (line 109) but the component only renders 4 content steps (steps 1-4) before the review; this causes incorrect percentage display"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "crash",
+            "severity": "critical",
+            "description": "Line 227: props.satisfactionLabels[formData.satisfaction - 1] — formData.satisfaction is initialized as 0, and when currentStep === 5 on first render before any selection, accessing index -1 will crash or return undefined. If user navigates to review without selecting a satisfaction rating, this array access is out of bounds.",
+            "fix": "Line 227: props.satisfactionLabels[formData.satisfaction - 1] — formData.satisfaction is initialized as 0, and when currentStep === 5 on first render before any selection, accessing index -1 will crash or return undefined. If user navigates to review without selecting a satisfaction rating, this array access is out of bounds."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Review step uses individual Box containers without visual grouping — wrap each review field in a consistent card or section structure for better visual organization",
+            "fix": "Review step uses individual Box containers without visual grouping — wrap each review field in a consistent card or section structure for better visual organization"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Review step has uneven visual weight — consider using a two-column layout (label + value) instead of stacked Box elements for improved readability",
+            "fix": "Review step has uneven visual weight — consider using a two-column layout (label + value) instead of stacked Box elements for improved readability"
+          }
+        ],
+        "pass": ["interactivity", "accessibility", "loading", "visual"]
+      },
+      "estimatedCostUsd": 0.20092500000000002,
+      "timestamp": "2026-03-22T16:29:41.536Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4734,
+        "sourceCodeBytes": 10841,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "kanban-board",
+        "name": "Kanban Task Board",
+        "description": "Column-based task board with task cards and state management",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "shellType": "fullscreen",
+        "screen": "desktop",
+        "prompt": "Build a Kanban-style task board with 3 columns: To Do, In Progress, Done.\n\nEach column:\n- Has a header with column name and task count\n- Contains a vertical list of task cards\n- Has an \"Add Task\" button at the bottom\n\nEach task card displays:\n- Task title (editable on double-click or via edit button)\n- Priority badge (low/medium/high with color coding from design tokens)\n- Assignee avatar or initials\n- Due date (if set)\n- A move button or dropdown to move the task to another column\n\nRequirements:\n- Tasks can be moved between columns via move controls (buttons or select dropdown)\n- New tasks start in \"To Do\" column\n- \"Add Task\" shows an inline form with title input and priority selector\n- Track total tasks and completed count in a summary bar at the top\n- Initial tasks come from props; real-time updates from other team members arrive via stream\n- Call the taskUpdate action when a task is moved, edited, or created\n- Use design system CSS variables for all colors, spacing, and shadows",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "tasks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high"]
+                      },
+                      "assignee": {
+                        "type": "string"
+                      },
+                      "column": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate",
+                "example": [
+                  {
+                    "id": "1",
+                    "title": "Design landing page",
+                    "priority": "high",
+                    "assignee": "AS",
+                    "column": "todo",
+                    "dueDate": "2026-03-20"
+                  },
+                  {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "in-progress",
+                    "dueDate": "2026-03-18"
+                  }
+                ]
+              },
+              "columns": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]",
+                "example": [
+                  {
+                    "id": "todo",
+                    "name": "To Do"
+                  },
+                  {
+                    "id": "in-progress",
+                    "name": "In Progress"
+                  },
+                  {
+                    "id": "done",
+                    "name": "Done"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "taskUpdate": {
+                "label": "Task Updated",
+                "description": "Called when a task is moved, edited, or created. Payload: { action, taskId, data }",
+                "example": {
+                  "action": "move",
+                  "taskId": "1",
+                  "data": {
+                    "column": "in-progress"
+                  }
+                }
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time task updates from other team members",
+            "events": {
+              "taskChanged": {
+                "description": "A task was moved, edited, or created by another user — update it in the board",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": ["create", "move", "edit", "delete"]
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": ["low", "medium", "high"]
+                        },
+                        "assignee": {
+                          "type": "string"
+                        },
+                        "column": {
+                          "type": "string"
+                        },
+                        "dueDate": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "action": "move",
+                  "task": {
+                    "id": "2",
+                    "title": "Implement auth flow",
+                    "priority": "high",
+                    "assignee": "BK",
+                    "column": "done"
+                  }
+                }
+              }
+            }
+          },
+          "clientTools": {
+            "tools": {
+              "getBoardState": {
+                "description": "Current board state including any unsaved edits",
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "column": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "editingTaskId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "tasks": [
+                    {
+                      "id": "1",
+                      "column": "in-progress",
+                      "title": "Design page"
+                    }
+                  ],
+                  "editingTaskId": null
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "tasks": [
+            {
+              "id": "1",
+              "title": "Design landing page",
+              "priority": "high",
+              "assignee": "AS",
+              "column": "todo",
+              "dueDate": "2026-03-20"
+            },
+            {
+              "id": "2",
+              "title": "Implement auth flow",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "in-progress",
+              "dueDate": "2026-03-18"
+            },
+            {
+              "id": "3",
+              "title": "Write API docs",
+              "priority": "medium",
+              "assignee": "CL",
+              "column": "todo"
+            },
+            {
+              "id": "4",
+              "title": "Fix navigation bug",
+              "priority": "low",
+              "assignee": "AS",
+              "column": "done"
+            },
+            {
+              "id": "5",
+              "title": "Add dark mode",
+              "priority": "medium",
+              "assignee": "DM",
+              "column": "in-progress"
+            },
+            {
+              "id": "6",
+              "title": "Deploy staging",
+              "priority": "high",
+              "assignee": "BK",
+              "column": "done",
+              "dueDate": "2026-03-15"
+            }
+          ],
+          "columns": [
+            {
+              "id": "todo",
+              "name": "To Do"
+            },
+            {
+              "id": "in-progress",
+              "name": "In Progress"
+            },
+            {
+              "id": "done",
+              "name": "Done"
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var G=Object.defineProperty;var v=(r,d)=>G(r,\"name\",{value:d,configurable:!0});import{jsx as e,jsxs as o}from\"react/jsx-runtime\";import{useState as h,useCallback as y,useEffect as E}from\"react\";import{Container as $,Card as k,Stack as m,Row as l,Box as M,Divider as O,Text as w,Heading as X,Button as u,Input as U,Select as q,Badge as b,Avatar as H}from\"@ggui-ai/design/primitives\";import{Dropdown as J}from\"@ggui-ai/design/components\";import{Hoverable as K}from\"@ggui-ai/design/interact\";import{useAction as Q,useStream as Y}from\"@ggui-ai/wire\";function Ke({task:r,onMove:d,onEdit:f}){const c=v(g=>{switch(g){case\"high\":return\"var(--ggui-color-error-600)\";case\"medium\":return\"var(--ggui-color-warning-600)\";case\"low\":return\"var(--ggui-color-success-600)\";default:return\"var(--ggui-color-primary-600)\"}},\"getPriorityColor\"),s=v(g=>{switch(g){case\"high\":return\"error\";case\"medium\":return\"warning\";case\"low\":return\"success\";default:return\"default\"}},\"getPriorityVariant\"),S=v(g=>g?new Date(g).toLocaleDateString(\"en-US\",{month:\"short\",day:\"numeric\"}):null,\"formatDueDate\");return e(k,{padding:\"var(--ggui-spacing-3)\",shadow:\"sm\",border:!0,children:o(m,{gap:\"var(--ggui-spacing-2)\",children:[o(l,{justify:\"between\",align:\"center\",children:[e(w,{variant:\"body\",weight:\"medium\",style:{flex:1},children:r.title||\"Untitled\"}),e(u,{variant:\"ghost\",size:\"xs\",onClick:f,children:\"Edit\"})]}),o(l,{gap:\"var(--ggui-spacing-2)\",align:\"center\",wrap:!0,children:[r.priority&&e(b,{variant:s(r.priority),size:\"sm\",children:r.priority}),r.assignee&&e(H,{name:r.assignee,size:\"sm\",shape:\"circle\"}),r.dueDate&&e(w,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:S(r.dueDate)})]})]})})}v(Ke,\"TaskCard\");function Z(r){const d=Q(\"taskUpdate\"),f=Y(\"taskChanged\"),[c,s]=h(r.tasks||[]),[S,g]=h(null),[T,C]=h(\"\"),[j,x]=h(null),[B,D]=h(\"\"),[z,A]=h(\"medium\");E(()=>{s(r.tasks||[])},[r.tasks]),E(()=>{if(f.latest){const{action:t,task:a}=f.latest;t===\"create\"&&a?s(n=>[...n,{...a,id:a.id||`task-${Date.now()}`}]):t===\"move\"&&a?s(n=>n.map(i=>i.id===a.id?{...i,column:a.column}:i)):t===\"edit\"&&a?s(n=>n.map(i=>i.id===a.id?{...i,...a}:i)):t===\"delete\"&&a&&s(n=>n.filter(i=>i.id!==a.id))}},[f.latest]);const P=c.length,R=c.filter(t=>t.column===\"done\").length,F=y((t,a)=>{d({action:\"move\",taskId:t,data:{column:a}}),s(n=>n.map(i=>i.id===t?{...i,column:a}:i))},[d]),N=y(t=>{const a=c.find(n=>n.id===t);a&&(g(t),C(a.title||\"\"))},[c]),V=y(t=>{d({action:\"edit\",taskId:t,data:{column:c.find(a=>a.id===t)?.column||\"todo\"}}),s(a=>a.map(n=>n.id===t?{...n,title:T}:n)),g(null),C(\"\")},[T,d,c]),W=y(t=>{const a=`task-${Date.now()}`,n={id:a,title:B||\"New Task\",priority:z,column:t,assignee:\"\",dueDate:\"\"};d({action:\"create\",taskId:a,data:{column:t}}),s(i=>[...i,n]),D(\"\"),A(\"medium\"),x(null)},[B,z,d]),I=y(t=>c.filter(a=>a.column===t),[c]),L=[{value:\"low\",label:\"Low\"},{value:\"medium\",label:\"Medium\"},{value:\"high\",label:\"High\"}];return e($,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:o(m,{gap:\"var(--ggui-spacing-6)\",children:[e(k,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",children:o(l,{justify:\"between\",align:\"center\",children:[o(w,{variant:\"body\",children:[e(\"strong\",{children:P}),\" total tasks \\u2014 \",e(\"strong\",{children:R}),\" completed\"]}),o(b,{variant:\"primary\",size:\"md\",children:[Math.round(R/Math.max(1,P)*100),\"% Complete\"]})]})}),e(l,{gap:\"var(--ggui-spacing-4)\",align:\"start\",wrap:!1,style:{overflowX:\"auto\",paddingBottom:\"var(--ggui-spacing-4)\"},children:r.columns&&r.columns.map(t=>{const a=I(t.id),n=j===t.id;return e(k,{padding:\"var(--ggui-spacing-4)\",shadow:\"sm\",style:{minWidth:\"300px\",maxWidth:\"350px\",flex:\"0 0 auto\"},children:o(m,{gap:\"var(--ggui-spacing-3)\",style:{height:\"100%\"},children:[e(M,{children:o(l,{justify:\"between\",align:\"center\",children:[e(X,{level:4,children:t.name}),e(b,{variant:\"secondary\",size:\"sm\",children:a.length})]})}),e(O,{orientation:\"horizontal\",margin:\"var(--ggui-spacing-2)\",color:\"var(--ggui-color-outline)\"}),e(m,{gap:\"var(--ggui-spacing-2)\",style:{flex:1,minHeight:\"200px\"},children:a.length>0?a.map(i=>S===i.id?e(k,{padding:\"var(--ggui-spacing-3)\",shadow:\"sm\",border:!0,children:o(m,{gap:\"var(--ggui-spacing-2)\",children:[e(U,{label:\"Task title\",value:T,onChange:C,placeholder:\"Enter task title\"}),o(l,{gap:\"var(--ggui-spacing-2)\",justify:\"end\",children:[e(u,{variant:\"ghost\",size:\"sm\",onClick:()=>{g(null),C(\"\")},children:\"Cancel\"}),e(u,{variant:\"primary\",size:\"sm\",onClick:()=>V(i.id),children:\"Save\"})]})]})},i.id):e(M,{as:K,hoverStyle:{opacity:.8,background:\"var(--ggui-color-surfaceVariant)\"},children:e(k,{padding:\"var(--ggui-spacing-3)\",shadow:\"sm\",border:!0,children:o(m,{gap:\"var(--ggui-spacing-2)\",children:[o(l,{justify:\"between\",align:\"start\",children:[e(w,{variant:\"body\",weight:\"medium\",style:{flex:1},children:i.title||\"Untitled\"}),e(J,{trigger:e(u,{variant:\"ghost\",size:\"xs\",children:\"Move\"}),options:r.columns?.filter(p=>p.id!==t.id).map(p=>({value:p.id,label:p.name||\"\"}))||[],value:\"\",onChange:p=>F(i.id,p)})]}),o(l,{gap:\"var(--ggui-spacing-2)\",align:\"center\",wrap:!0,children:[i.priority&&e(b,{variant:i.priority===\"high\"?\"error\":i.priority===\"medium\"?\"warning\":\"success\",size:\"sm\",children:i.priority}),i.assignee&&e(H,{name:i.assignee,size:\"sm\",shape:\"circle\"}),i.dueDate&&e(w,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(i.dueDate).toLocaleDateString(\"en-US\",{month:\"short\",day:\"numeric\"})})]}),e(l,{gap:\"var(--ggui-spacing-2)\",justify:\"end\",children:e(u,{variant:\"ghost\",size:\"xs\",onClick:()=>N(i.id),children:\"Edit\"})})]})})},i.id)):e(w,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",align:\"center\",children:\"No tasks yet\"})}),n?o(m,{gap:\"var(--ggui-spacing-2)\",children:[e(U,{label:\"Task title\",value:B,onChange:D,placeholder:\"Enter task title\"}),e(q,{label:\"Priority\",value:z,onChange:i=>A(i),options:L}),o(l,{gap:\"var(--ggui-spacing-2)\",justify:\"end\",children:[e(u,{variant:\"ghost\",size:\"sm\",onClick:()=>{x(null),D(\"\"),A(\"medium\")},children:\"Cancel\"}),e(u,{variant:\"primary\",size:\"sm\",onClick:()=>W(t.id),children:\"Add\"})]})]}):e(u,{variant:\"outline\",size:\"sm\",fullWidth:!0,onClick:()=>x(t.id),children:\"+ Add Task\"})]})},t.id)})})]})})}v(Z,\"Component\");export{Z as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction, useStream } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  tasks: Array<{ id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string }>; // Array of tasks with id, title, priority (low/medium/high), assignee initials, column ID, and optional dueDate\n  columns: Array<{ id?: string; name?: string }>; // Column definitions: [{id: \"todo\", name: \"To Do\"}, {id: \"in-progress\", name: \"In Progress\"}, {id: \"done\", name: \"Done\"}]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when a task is moved, edited, or created. Payload: { action, taskId, data } */\ntype ActionTaskUpdatePayload = { action: string; taskId: string; data: { column?: string; title?: string; assignee?: string; dueDate?: string } };\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: A task was moved, edited, or created by another user — update it in the board */\ntype StreamTaskChanged = { action?: 'create' | 'move' | 'edit' | 'delete'; task?: { id?: string; title?: string; priority?: 'low' | 'medium' | 'high'; assignee?: string; column?: string; dueDate?: string } };\n\n\n\n\n// Helper component for individual task card\nfunction TaskCard({ task, onMove, onEdit }: { task: Props['tasks'][0]; onMove: (column: string) => void; onEdit: () => void }) {\n  const getPriorityColor = (priority?: string) => {\n    switch (priority) {\n      case 'high':\n        return 'var(--ggui-color-error-600)';\n      case 'medium':\n        return 'var(--ggui-color-warning-600)';\n      case 'low':\n        return 'var(--ggui-color-success-600)';\n      default:\n        return 'var(--ggui-color-primary-600)';\n    }\n  };\n\n  const getPriorityVariant = (priority?: string): 'error' | 'warning' | 'success' | 'default' => {\n    switch (priority) {\n      case 'high':\n        return 'error';\n      case 'medium':\n        return 'warning';\n      case 'low':\n        return 'success';\n      default:\n        return 'default';\n    }\n  };\n\n  const formatDueDate = (date?: string) => {\n    if (!date) return null;\n    const d = new Date(date);\n    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });\n  };\n\n  return (\n    <Card padding=\"var(--ggui-spacing-3)\" shadow=\"sm\" border={true}>\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        <Row justify=\"between\" align=\"center\">\n          <Text variant=\"body\" weight=\"medium\" style={{ flex: 1 }}>{task.title || 'Untitled'}</Text>\n          <Button variant=\"ghost\" size=\"xs\" onClick={onEdit}>Edit</Button>\n        </Row>\n        <Row gap=\"var(--ggui-spacing-2)\" align=\"center\" wrap={true}>\n          {task.priority && <Badge variant={getPriorityVariant(task.priority)} size=\"sm\">{task.priority}</Badge>}\n          {task.assignee && <Avatar name={task.assignee} size=\"sm\" shape=\"circle\" />}\n          {task.dueDate && <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{formatDueDate(task.dueDate)}</Text>}\n        </Row>\n      </Stack>\n    </Card>\n  );\n}\n\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  const taskUpdate = useAction<ActionTaskUpdatePayload>('taskUpdate');\n  const taskChanged = useStream<StreamTaskChanged>('taskChanged');\n\n  // Local state\n  const [tasks, setTasks] = useState(props.tasks || []);\n  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);\n  const [editingTitle, setEditingTitle] = useState('');\n  const [editingAssignee, setEditingAssignee] = useState('');\n  const [editingDueDate, setEditingDueDate] = useState('');\n  const [addingColumn, setAddingColumn] = useState<string | null>(null);\n  const [newTaskTitle, setNewTaskTitle] = useState('');\n  const [newTaskAssignee, setNewTaskAssignee] = useState('');\n  const [newTaskDueDate, setNewTaskDueDate] = useState('');\n  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');\n\n  // Sync props tasks to local state\n  useEffect(() => {\n    setTasks(props.tasks || []);\n  }, [props.tasks]);\n\n  // Handle real-time updates from other users\n  useEffect(() => {\n    if (taskChanged.latest) {\n      const { action, task } = taskChanged.latest;\n      if (action === 'create' && task) {\n        setTasks((prev) => [...prev, { ...task, id: task.id || `task-${Date.now()}` }]);\n      } else if (action === 'move' && task) {\n        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, column: task.column } : t)));\n      } else if (action === 'edit' && task) {\n        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, ...task } : t)));\n      } else if (action === 'delete' && task) {\n        setTasks((prev) => prev.filter((t) => t.id !== task.id));\n      }\n    }\n  }, [taskChanged.latest]);\n\n  // Compute totals\n  const totalTasks = tasks.length;\n  const completedCount = tasks.filter((t) => t.column === 'done').length;\n\n  // Handle task move\n  const handleMoveTask = useCallback((taskId: string, targetColumn: string) => {\n    taskUpdate({ action: 'move', taskId, data: { column: targetColumn } });\n    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, column: targetColumn } : t)));\n  }, [taskUpdate]);\n\n  // Handle task edit start\n  const handleEditTask = useCallback((taskId: string) => {\n    const task = tasks.find((t) => t.id === taskId);\n    if (task) {\n      setEditingTaskId(taskId);\n      setEditingTitle(task.title || '');\n      setEditingAssignee(task.assignee || '');\n      setEditingDueDate(task.dueDate || '');\n    }\n  }, [tasks]);\n\n  // Handle task edit save\n  const handleSaveEdit = useCallback((taskId: string) => {\n    taskUpdate({\n      action: 'edit',\n      taskId,\n      data: {\n        column: tasks.find((t) => t.id === taskId)?.column || 'todo',\n        title: editingTitle,\n        assignee: editingAssignee,\n        dueDate: editingDueDate,\n      }\n    });\n    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, title: editingTitle, assignee: editingAssignee, dueDate: editingDueDate } : t)));\n    setEditingTaskId(null);\n    setEditingTitle('');\n    setEditingAssignee('');\n    setEditingDueDate('');\n  }, [editingTitle, editingAssignee, editingDueDate, taskUpdate, tasks]);\n\n  // Handle add task\n  const handleAddTask = useCallback((columnId: string) => {\n    const newTaskId = `task-${Date.now()}`;\n    const newTask = {\n      id: newTaskId,\n      title: newTaskTitle || 'New Task',\n      priority: newTaskPriority,\n      column: columnId,\n      assignee: newTaskAssignee,\n      dueDate: newTaskDueDate,\n    };\n    taskUpdate({\n      action: 'create',\n      taskId: newTaskId,\n      data: {\n        column: columnId,\n        title: newTask.title,\n        assignee: newTaskAssignee,\n        dueDate: newTaskDueDate,\n      }\n    });\n    setTasks((prev) => [...prev, newTask]);\n    setNewTaskTitle('');\n    setNewTaskAssignee('');\n    setNewTaskDueDate('');\n    setNewTaskPriority('medium');\n    setAddingColumn(null);\n  }, [newTaskTitle, newTaskAssignee, newTaskDueDate, newTaskPriority, taskUpdate]);\n\n  // Get tasks for a column\n  const getTasksForColumn = useCallback((columnId?: string) => {\n    return tasks.filter((t) => t.column === columnId);\n  }, [tasks]);\n\n  // Priority options for Select\n  const priorityOptions = [\n    { value: 'low', label: 'Low' },\n    { value: 'medium', label: 'Medium' },\n    { value: 'high', label: 'High' },\n  ];\n\nreturn (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\" as=\"main\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Summary bar */}\n        <Card padding=\"var(--ggui-spacing-4)\" shadow=\"sm\">\n          <Row justify=\"between\" align=\"center\">\n            <Text variant=\"body\">\n              <strong>{totalTasks}</strong> total tasks — <strong>{completedCount}</strong> completed\n            </Text>\n            <Badge variant=\"primary\" size=\"md\">{Math.round((completedCount / Math.max(1, totalTasks)) * 100)}% Complete</Badge>\n          </Row>\n        </Card>\n\n        {/* Kanban board */}\n         <Row gap=\"var(--ggui-spacing-4)\" align=\"start\" wrap={false} style={{ overflowX: 'auto' }}>\n          {props.columns && props.columns.map((column) => {\n            const columnTasks = getTasksForColumn(column.id);\n            const isAdding = addingColumn === column.id;\n\n            return (\n              <Card\n                key={column.id}\n                padding=\"var(--ggui-spacing-4)\"\n                shadow=\"sm\"\n                 style={{ minWidth: 'var(--ggui-spacing-12)', maxWidth: 'var(--ggui-spacing-12)', flex: '0 0 auto' }}\n              >\n                 <Stack gap=\"var(--ggui-spacing-3)\">\n                  {/* Column header */}\n                  <Box>\n                    <Row justify=\"between\" align=\"center\">\n                      <Heading level={4}>{column.name}</Heading>\n                      <Badge variant=\"secondary\" size=\"sm\">{columnTasks.length}</Badge>\n                    </Row>\n                  </Box>\n                  <Divider orientation=\"horizontal\" margin=\"var(--ggui-spacing-2)\" color=\"var(--ggui-color-outline)\" />\n\n                  {/* Task list */}\n                   <Stack gap=\"var(--ggui-spacing-2)\" style={{ flex: 1, minHeight: 'var(--ggui-spacing-12)' }}>\n                    {columnTasks.length > 0 ? (\n                      columnTasks.map((task) =>\n                        editingTaskId === task.id ? (\n                            <Card\n                              key={task.id}\n                              padding=\"var(--ggui-spacing-3)\"\n                              shadow=\"sm\"\n                              border={true}\n                              style={{ background: 'var(--ggui-color-primary-50)' }}\n                            >\n                              <Stack gap=\"var(--ggui-spacing-2)\">\n                                <Input\n                                  label=\"Task title\"\n                                  value={editingTitle}\n                                  onChange={setEditingTitle}\n                                  placeholder=\"Enter task title\"\n                                />\n                                <Input\n                                  label=\"Assignee\"\n                                  value={editingAssignee}\n                                  onChange={setEditingAssignee}\n                                  placeholder=\"Enter assignee initials\"\n                                />\n                                <Input\n                                  label=\"Due date\"\n                                  type=\"text\"\n                                  value={editingDueDate}\n                                  onChange={setEditingDueDate}\n                                  placeholder=\"YYYY-MM-DD\"\n                                />\n                                <Row gap=\"var(--ggui-spacing-2)\" justify=\"end\">\n                                  <Button\n                                    variant=\"ghost\"\n                                    size=\"sm\"\n                                    aria-label=\"Cancel task edit\"\n                                    onClick={() => {\n                                      setEditingTaskId(null);\n                                      setEditingTitle('');\n                                      setEditingAssignee('');\n                                      setEditingDueDate('');\n                                    }}\n                                  >\n                                    Cancel\n                                  </Button>\n                                  <Button\n                                    variant=\"primary\"\n                                    size=\"sm\"\n                                    aria-label=\"Save task edit\"\n                                    onClick={() => handleSaveEdit(task.id!)}\n                                  >\n                                    Save\n                                  </Button>\n                                </Row>\n                              </Stack>\n                            </Card>\n                         ) : (\n                            <Box\n                              key={task.id}\n                              as={Hoverable}\n                              tabIndex={0}\n                              onKeyDown={(e) => {\n                                if (e.key === 'Enter' || e.key === ' ') {\n                                  e.preventDefault();\n                                  handleEditTask(task.id!);\n                                }\n                              }}\n                              style={{ outline: 'none', borderRadius: 'var(--ggui-shape-radius-lg)' }}\n                              hoverStyle={{ opacity: 0.8, background: 'var(--ggui-color-surfaceVariant)' }}\n                            >\n                              <Card\n                                padding=\"var(--ggui-spacing-3)\"\n                                shadow=\"sm\"\n                                border={true}\n                                style={{ cursor: 'pointer' }}\n                              >\n                                <Stack gap=\"var(--ggui-spacing-2)\">\n                                  <Row justify=\"between\" align=\"start\">\n                                    <Text variant=\"body\" weight=\"medium\" style={{ flex: 1, cursor: 'pointer' }}>\n                                      {task.title || 'Untitled'}\n                                    </Text>\n                                     <Dropdown\n                                       trigger={<Button variant=\"ghost\" size=\"xs\" aria-label={`Move task: ${task.title} to another column`}>Move</Button>}\n                                       options={props.columns\n                                         ?.filter((c) => c.id !== column.id)\n                                         .map((c) => ({\n                                           value: c.id!,\n                                           label: c.name || '',\n                                         })) || []}\n                                       value=\"\"\n                                       onChange={(targetColumn) => handleMoveTask(task.id!, targetColumn)}\n                                     />\n                                  </Row>\n                                  <Row gap=\"var(--ggui-spacing-2)\" align=\"center\" wrap={true}>\n                                    {task.priority && (\n                                      <Badge\n                                        variant={\n                                          task.priority === 'high'\n                                            ? 'error'\n                                            : task.priority === 'medium'\n                                            ? 'warning'\n                                            : 'success'\n                                        }\n                                        size=\"sm\"\n                                      >\n                                        {task.priority}\n                                      </Badge>\n                                    )}\n                                    {task.assignee && <Avatar name={task.assignee} size=\"sm\" shape=\"circle\" aria-label={`Assigned to ${task.assignee}`} />}\n                                    {task.dueDate && (\n                                      <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\" aria-label={`Due: ${new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}>\n                                        {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n                                      </Text>\n                                    )}\n                                  </Row>\n                                  <Row gap=\"var(--ggui-spacing-2)\" justify=\"end\">\n                                    <Button variant=\"ghost\" size=\"xs\" aria-label={`Edit task: ${task.title}`} onClick={() => handleEditTask(task.id!)}>\n                                      Edit\n                                    </Button>\n                                  </Row>\n                                </Stack>\n                              </Card>\n                            </Box>\n                         )\n                       )\n                     ) : (\n                      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'var(--ggui-spacing-12)', padding: 'var(--ggui-spacing-4)' }}>\n                        <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\" align=\"center\">\n                          No tasks yet\n                        </Text>\n                      </Box>\n                     )}\n                  </Stack>\n\n                  {/* Add task form or button */}\n                    {isAdding ? (\n                      <Stack gap=\"var(--ggui-spacing-2)\">\n                        <Input\n                          label=\"Task title\"\n                          value={newTaskTitle}\n                          onChange={setNewTaskTitle}\n                          placeholder=\"Enter task title\"\n                        />\n                        <Input\n                          label=\"Assignee\"\n                          value={newTaskAssignee}\n                          onChange={setNewTaskAssignee}\n                          placeholder=\"Enter assignee initials\"\n                        />\n                        <Input\n                          label=\"Due date\"\n                          type=\"text\"\n                          value={newTaskDueDate}\n                          onChange={setNewTaskDueDate}\n                          placeholder=\"YYYY-MM-DD\"\n                        />\n                        <Select\n                          label=\"Priority\"\n                          value={newTaskPriority}\n                          onChange={(val) => setNewTaskPriority(val as 'low' | 'medium' | 'high')}\n                          options={priorityOptions}\n                        />\n                        <Row gap=\"var(--ggui-spacing-2)\" justify=\"end\">\n                          <Button\n                            variant=\"ghost\"\n                            size=\"sm\"\n                            aria-label=\"Cancel task creation\"\n                            onClick={() => {\n                              setAddingColumn(null);\n                              setNewTaskTitle('');\n                              setNewTaskAssignee('');\n                              setNewTaskDueDate('');\n                              setNewTaskPriority('medium');\n                            }}\n                          >\n                            Cancel\n                          </Button>\n                          <Button\n                            variant=\"primary\"\n                            size=\"sm\"\n                            aria-label=\"Create new task\"\n                            onClick={() => handleAddTask(column.id!)}\n                          >\n                            Add\n                          </Button>\n                        </Row>\n                      </Stack>\n                    ) : (\n                      <Button\n                        variant=\"outline\"\n                        size=\"sm\"\n                        fullWidth\n                        aria-label={`Add task to ${column.name}`}\n                        onClick={() => setAddingColumn(column.id!)}\n                      >\n                        + Add Task\n                      </Button>\n                    )}\n                   ) : (\n                     <Button\n                       variant=\"outline\"\n                       size=\"sm\"\n                       fullWidth\n                       aria-label={`Add task to ${column.name}`}\n                       onClick={() => setAddingColumn(column.id!)}\n                     >\n                       + Add Task\n                     </Button>\n                   )}\n                </Stack>\n              </Card>\n            );\n          })}\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 110944,
+          "output": 14826,
+          "total": 125770
+        },
+        "generationTimeMs": 87462,
+        "turnsUsed": 8,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Task editing does not support double-click triggering — edit form requires clicking Edit button; double-click requirement specified in request is not implemented",
+              "fix": "Task editing does not support double-click triggering — edit form requires clicking Edit button; double-click requirement specified in request is not implemented"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Edit action does not update the full task object in taskUpdate payload — only sends column data, not the edited title; taskUpdate should include the new title in the data object",
+              "fix": "Edit action does not update the full task object in taskUpdate payload — only sends column data, not the edited title; taskUpdate should include the new title in the data object"
+            },
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "Add Task form does not accept all required input — missing assignee input field and due date input field that should be available when creating new tasks",
+              "fix": "Add Task form does not accept all required input — missing assignee input field and due date input field that should be available when creating new tasks"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "Task cards lack visual focus feedback when using keyboard navigation — users tabbing through the board have no clear indication of which card is focused",
+              "fix": "Task cards lack visual focus feedback when using keyboard navigation — users tabbing through the board have no clear indication of which card is focused"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "Add Task button and form lack keyboard support beyond Tab — users cannot submit the inline form using Enter key without mouse click",
+              "fix": "Add Task button and form lack keyboard support beyond Tab — users cannot submit the inline form using Enter key without mouse click"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Avatar component for assignee has no aria-label or title attribute to describe the initials shown — add aria-label={`Assigned to ${task.assignee}`} to Avatar on line 288",
+              "fix": "Avatar component for assignee has no aria-label or title attribute to describe the initials shown — add aria-label={`Assigned to ${task.assignee}`} to Avatar on line 288"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Edit button on task card (line 296) has no aria-label — should indicate it edits the specific task, e.g., aria-label={`Edit task: ${task.title}`}",
+              "fix": "Edit button on task card (line 296) has no aria-label — should indicate it edits the specific task, e.g., aria-label={`Edit task: ${task.title}`}"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Move button in dropdown trigger (line 262) has no aria-label or context — should clarify it moves the task, e.g., aria-label={`Move task: ${task.title} to another column`}",
+              "fix": "Move button in dropdown trigger (line 262) has no aria-label or context — should clarify it moves the task, e.g., aria-label={`Move task: ${task.title} to another column`}"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The '+ Add Task' button (line 355) does not have aria-label to clarify its purpose for screen reader users",
+              "fix": "The '+ Add Task' button (line 355) does not have aria-label to clarify its purpose for screen reader users"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Cancel buttons (lines 237, 330) lack aria-label to specify which action they cancel — e.g., aria-label='Cancel task edit'",
+              "fix": "Cancel buttons (lines 237, 330) lack aria-label to specify which action they cancel — e.g., aria-label='Cancel task edit'"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Save button (line 244) lacks aria-label specifying it saves the task edit",
+              "fix": "Save button (line 244) lacks aria-label specifying it saves the task edit"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Add button (line 344) lacks aria-label specifying it creates a new task",
+              "fix": "Add button (line 344) lacks aria-label specifying it creates a new task"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "No Skip to content or main landmark — consider using a <main> semantic element or data-landmark for the Kanban board",
+              "fix": "No Skip to content or main landmark — consider using a <main> semantic element or data-landmark for the Kanban board"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Task date display (line 291, 80) has no aria-label — formatted date should have accessible label like aria-label={`Due: ${formatted date}`}",
+              "fix": "Task date display (line 291, 80) has no aria-label — formatted date should have accessible label like aria-label={`Due: ${formatted date}`}"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Kanban board Row uses inline paddingBottom style (line 193) instead of design token for consistent spacing — should use gap or margin",
+              "fix": "Kanban board Row uses inline paddingBottom style (line 193) instead of design token for consistent spacing — should use gap or margin"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Empty state text (line 306) is center-aligned and uses caption variant but has no vertical centering or padding within the 200px minHeight container, making it appear cramped",
+              "fix": "Empty state text (line 306) is center-aligned and uses caption variant but has no vertical centering or padding within the 200px minHeight container, making it appear cramped"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Edit task form within task card (lines 220-248) lacks visual distinction from regular card display — consider a different background or border treatment to indicate edit mode",
+              "fix": "Edit task form within task card (lines 220-248) lacks visual distinction from regular card display — consider a different background or border treatment to indicate edit mode"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Move button and Edit button on task card are both right-aligned but share the same Row (line 257-299), causing potential crowding when both are visible",
+              "fix": "Move button and Edit button on task card are both right-aligned but share the same Row (line 257-299), causing potential crowding when both are visible"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 193: inline style with `paddingBottom: 'var(--ggui-spacing-4)'` is correct, but `overflowX: 'auto'` is a non-design-system style; consider wrapping this in a component or using a design system class if available",
+              "fix": "Line 193: inline style with `paddingBottom: 'var(--ggui-spacing-4)'` is correct, but `overflowX: 'auto'` is a non-design-system style; consider wrapping this in a component or using a design system class if available"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 203: inline style with `minWidth: '300px', maxWidth: '350px', flex: '0 0 auto'` uses hardcoded pixel values instead of design tokens for column sizing; should use spacing or size tokens",
+              "fix": "Line 203: inline style with `minWidth: '300px', maxWidth: '350px', flex: '0 0 auto'` uses hardcoded pixel values instead of design tokens for column sizing; should use spacing or size tokens"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 205: inline style with `height: '100%'` bypasses design system; use design system layout props if available",
+              "fix": "Line 205: inline style with `height: '100%'` bypasses design system; use design system layout props if available"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 216: inline style with `flex: 1, minHeight: '200px'` uses hardcoded pixel value; should use var(--ggui-spacing-*) or design token for minimum height",
+              "fix": "Line 216: inline style with `flex: 1, minHeight: '200px'` uses hardcoded pixel value; should use var(--ggui-spacing-*) or design token for minimum height"
+            }
+          ],
+          "pass": ["crash", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 87397,
+          "evalMs": 0,
+          "totalMs": 87462
+        }
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 55.4,
+        "finalScore": 55.4,
+        "issues": [],
+        "dimensions": {
+          "layout": 42,
+          "designTokens": 75,
+          "hierarchy": 55,
+          "polish": 45,
+          "dataPresentation": 60,
+          "completeness": 60,
+          "visualPolish": 49,
+          "interactivity": 45,
+          "accessibility": 49,
+          "codeQuality": 75
+        },
+        "critique": "The component is incomplete (truncated mid-function) and has significant implementation gaps. While it attempts to use design tokens for colors and spacing, the layout lacks a proper multi-column grid structure needed for a Kanban board, and critical features like the column rendering, drag-and-drop functionality, and complete task card UI are missing or unfinished. The code shows good intent with semantic token usage but fails on polish (no drag interactions, incomplete hover states) and lacks complete data presentation logic.",
+        "evalTimeMs": 2961
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Task editing does not support double-click triggering — edit form requires clicking Edit button; double-click requirement specified in request is not implemented",
+            "fix": "Task editing does not support double-click triggering — edit form requires clicking Edit button; double-click requirement specified in request is not implemented"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Edit action does not update the full task object in taskUpdate payload — only sends column data, not the edited title; taskUpdate should include the new title in the data object",
+            "fix": "Edit action does not update the full task object in taskUpdate payload — only sends column data, not the edited title; taskUpdate should include the new title in the data object"
+          },
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "Add Task form does not accept all required input — missing assignee input field and due date input field that should be available when creating new tasks",
+            "fix": "Add Task form does not accept all required input — missing assignee input field and due date input field that should be available when creating new tasks"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "Task cards lack visual focus feedback when using keyboard navigation — users tabbing through the board have no clear indication of which card is focused",
+            "fix": "Task cards lack visual focus feedback when using keyboard navigation — users tabbing through the board have no clear indication of which card is focused"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "Add Task button and form lack keyboard support beyond Tab — users cannot submit the inline form using Enter key without mouse click",
+            "fix": "Add Task button and form lack keyboard support beyond Tab — users cannot submit the inline form using Enter key without mouse click"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Avatar component for assignee has no aria-label or title attribute to describe the initials shown — add aria-label={`Assigned to ${task.assignee}`} to Avatar on line 288",
+            "fix": "Avatar component for assignee has no aria-label or title attribute to describe the initials shown — add aria-label={`Assigned to ${task.assignee}`} to Avatar on line 288"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Edit button on task card (line 296) has no aria-label — should indicate it edits the specific task, e.g., aria-label={`Edit task: ${task.title}`}",
+            "fix": "Edit button on task card (line 296) has no aria-label — should indicate it edits the specific task, e.g., aria-label={`Edit task: ${task.title}`}"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Move button in dropdown trigger (line 262) has no aria-label or context — should clarify it moves the task, e.g., aria-label={`Move task: ${task.title} to another column`}",
+            "fix": "Move button in dropdown trigger (line 262) has no aria-label or context — should clarify it moves the task, e.g., aria-label={`Move task: ${task.title} to another column`}"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The '+ Add Task' button (line 355) does not have aria-label to clarify its purpose for screen reader users",
+            "fix": "The '+ Add Task' button (line 355) does not have aria-label to clarify its purpose for screen reader users"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Cancel buttons (lines 237, 330) lack aria-label to specify which action they cancel — e.g., aria-label='Cancel task edit'",
+            "fix": "Cancel buttons (lines 237, 330) lack aria-label to specify which action they cancel — e.g., aria-label='Cancel task edit'"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Save button (line 244) lacks aria-label specifying it saves the task edit",
+            "fix": "Save button (line 244) lacks aria-label specifying it saves the task edit"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Add button (line 344) lacks aria-label specifying it creates a new task",
+            "fix": "Add button (line 344) lacks aria-label specifying it creates a new task"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "No Skip to content or main landmark — consider using a <main> semantic element or data-landmark for the Kanban board",
+            "fix": "No Skip to content or main landmark — consider using a <main> semantic element or data-landmark for the Kanban board"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Task date display (line 291, 80) has no aria-label — formatted date should have accessible label like aria-label={`Due: ${formatted date}`}",
+            "fix": "Task date display (line 291, 80) has no aria-label — formatted date should have accessible label like aria-label={`Due: ${formatted date}`}"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Kanban board Row uses inline paddingBottom style (line 193) instead of design token for consistent spacing — should use gap or margin",
+            "fix": "Kanban board Row uses inline paddingBottom style (line 193) instead of design token for consistent spacing — should use gap or margin"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Empty state text (line 306) is center-aligned and uses caption variant but has no vertical centering or padding within the 200px minHeight container, making it appear cramped",
+            "fix": "Empty state text (line 306) is center-aligned and uses caption variant but has no vertical centering or padding within the 200px minHeight container, making it appear cramped"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Edit task form within task card (lines 220-248) lacks visual distinction from regular card display — consider a different background or border treatment to indicate edit mode",
+            "fix": "Edit task form within task card (lines 220-248) lacks visual distinction from regular card display — consider a different background or border treatment to indicate edit mode"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Move button and Edit button on task card are both right-aligned but share the same Row (line 257-299), causing potential crowding when both are visible",
+            "fix": "Move button and Edit button on task card are both right-aligned but share the same Row (line 257-299), causing potential crowding when both are visible"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 193: inline style with `paddingBottom: 'var(--ggui-spacing-4)'` is correct, but `overflowX: 'auto'` is a non-design-system style; consider wrapping this in a component or using a design system class if available",
+            "fix": "Line 193: inline style with `paddingBottom: 'var(--ggui-spacing-4)'` is correct, but `overflowX: 'auto'` is a non-design-system style; consider wrapping this in a component or using a design system class if available"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 203: inline style with `minWidth: '300px', maxWidth: '350px', flex: '0 0 auto'` uses hardcoded pixel values instead of design tokens for column sizing; should use spacing or size tokens",
+            "fix": "Line 203: inline style with `minWidth: '300px', maxWidth: '350px', flex: '0 0 auto'` uses hardcoded pixel values instead of design tokens for column sizing; should use spacing or size tokens"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 205: inline style with `height: '100%'` bypasses design system; use design system layout props if available",
+            "fix": "Line 205: inline style with `height: '100%'` bypasses design system; use design system layout props if available"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 216: inline style with `flex: 1, minHeight: '200px'` uses hardcoded pixel value; should use var(--ggui-spacing-*) or design token for minimum height",
+            "fix": "Line 216: inline style with `flex: 1, minHeight: '200px'` uses hardcoded pixel value; should use var(--ggui-spacing-*) or design token for minimum height"
+          }
+        ],
+        "pass": ["crash", "loading"]
+      },
+      "estimatedCostUsd": 0.18507400000000002,
+      "timestamp": "2026-03-22T16:29:57.067Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 6203,
+        "sourceCodeBytes": 21706,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"todo\" found — should be a prop default",
+            "Hardcoded string \"To Do\" found — should be a prop default",
+            "Hardcoded string \"in-progress\" found — should be a prop default",
+            "Hardcoded string \"In Progress\" found — should be a prop default",
+            "Hardcoded string \"Done\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "product-page",
+        "name": "E-Commerce Product Page",
+        "description": "Product detail page with image, tabs, quantity selector, and cart",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "shellType": "fullscreen",
+        "screen": "universal",
+        "prompt": "Build an e-commerce product detail page. Layout:\n\nTop section:\n- Product image placeholder (use a colored box with the product name)\n- Product title, price (with currency from props), and rating stars (1-5)\n- Stock status badge (\"In Stock\" green or \"Low Stock\" warning)\n\nMiddle section — Tab navigation with 3 tabs:\n- \"Description\" tab: renders product description text from props\n- \"Specifications\" tab: renders key-value pairs from props as a table\n- \"Reviews\" tab: renders a list of reviews (author, rating, text, date) from props\n\nBottom section:\n- Quantity selector (increment/decrement buttons, min 1, max from stock)\n- \"Add to Cart\" button (disabled if out of stock)\n- Call props.onAddToCart with { productId, quantity } when clicked\n\nRequirements:\n- All product data from props — nothing hardcoded\n- Use design system tokens for all colors, spacing, typography\n- Price should format with currency symbol from props\n- Rating stars should be visual (filled/empty)\n- Responsive: stack image above details on mobile widths",
+        "contract": {
+          "interaction": "collect",
+          "props": {
+            "properties": {
+              "product": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "number"
+                    },
+                    "reviewCount": {
+                      "type": "number"
+                    },
+                    "stock": {
+                      "type": "number"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "specifications": {
+                      "type": "array"
+                    },
+                    "reviews": {
+                      "type": "array"
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Product object with id, name, price, currency, rating, stock, description, specifications[], reviews[]",
+                "example": {
+                  "id": "prod-001",
+                  "name": "Wireless Noise-Cancelling Headphones",
+                  "price": 249.99,
+                  "currency": "USD",
+                  "rating": 4.3,
+                  "reviewCount": 128,
+                  "stock": 12,
+                  "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+                  "specifications": [
+                    {
+                      "key": "Brand",
+                      "value": "AudioMax"
+                    },
+                    {
+                      "key": "Battery Life",
+                      "value": "30 hours"
+                    }
+                  ],
+                  "reviews": [
+                    {
+                      "author": "Alex M.",
+                      "rating": 5,
+                      "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                      "date": "2026-03-01"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "addToCart": {
+                "label": "Add to Cart",
+                "description": "Called when user clicks Add to Cart. Payload: { productId, quantity }",
+                "example": {
+                  "productId": "prod-001",
+                  "quantity": 2
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "product": {
+            "id": "prod-001",
+            "name": "Wireless Noise-Cancelling Headphones",
+            "price": 249.99,
+            "currency": "USD",
+            "rating": 4.3,
+            "reviewCount": 128,
+            "stock": 12,
+            "description": "Premium wireless headphones with adaptive noise cancellation, 30-hour battery life, and ultra-comfortable memory foam ear cushions.",
+            "specifications": [
+              {
+                "key": "Brand",
+                "value": "AudioMax"
+              },
+              {
+                "key": "Battery Life",
+                "value": "30 hours"
+              },
+              {
+                "key": "Connectivity",
+                "value": "Bluetooth 5.3"
+              },
+              {
+                "key": "Weight",
+                "value": "250g"
+              },
+              {
+                "key": "Driver Size",
+                "value": "40mm"
+              },
+              {
+                "key": "Noise Cancellation",
+                "value": "Adaptive ANC"
+              }
+            ],
+            "reviews": [
+              {
+                "author": "Alex M.",
+                "rating": 5,
+                "text": "Best headphones I have ever owned. The noise cancellation is incredible.",
+                "date": "2026-03-01"
+              },
+              {
+                "author": "Sarah K.",
+                "rating": 4,
+                "text": "Great sound quality. A bit tight for my head but breaks in after a week.",
+                "date": "2026-02-15"
+              },
+              {
+                "author": "James P.",
+                "rating": 4,
+                "text": "Battery life is exactly as advertised. Very impressed.",
+                "date": "2026-01-28"
+              }
+            ]
+          }
+        }
+      },
+      "generation": {
+        "compiledCode": "var S=Object.defineProperty;var y=(t,u)=>S(t,\"name\",{value:u,configurable:!0});import{jsx as a,jsxs as i}from\"react/jsx-runtime\";import{useState as h}from\"react\";import{Container as x,Card as b,Stack as r,Row as l,Box as g,Divider as k,Text as n,Heading as f,Button as s,Input as C,Badge as w,Icon as p,Table as T,Tabs as A}from\"@ggui-ai/design/primitives\";import{useAction as B}from\"@ggui-ai/wire\";function I(t){const u=B(\"addToCart\"),[c,d]=h(1),m=t.product.stock||0;return a(x,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:i(r,{gap:\"var(--ggui-spacing-6)\",children:[i(r,{gap:\"var(--ggui-spacing-6)\",direction:\"vertical\",children:[a(g,{role:\"img\",\"aria-label\":`${t.product.name||\"Product\"} image`,background:\"var(--ggui-color-primary-100)\",borderRadius:\"var(--ggui-shape-radius-lg)\",padding:\"var(--ggui-spacing-6)\",style:{width:\"100%\",maxWidth:\"400px\",height:\"300px\",display:\"flex\",alignItems:\"center\",justifyContent:\"center\"},children:i(r,{align:\"center\",justify:\"center\",gap:\"var(--ggui-spacing-2)\",children:[a(p,{name:\"image\",size:48,color:\"var(--ggui-color-primary-600)\"}),a(n,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:t.product.name||\"Product Image\"})]})}),a(b,{padding:\"var(--ggui-spacing-4)\",shadow:\"md\",children:i(r,{gap:\"var(--ggui-spacing-4)\",children:[i(r,{gap:\"var(--ggui-spacing-2)\",children:[a(f,{level:1,children:t.product.name}),i(f,{level:4,color:\"var(--ggui-color-primary-600)\",\"aria-label\":\"price\",children:[a(\"span\",{\"aria-label\":\"currency\",children:t.product.currency||\"$\"}),t.product.price]})]}),i(l,{gap:\"var(--ggui-spacing-1)\",align:\"center\",\"aria-label\":`Rated ${t.product.rating||0} out of 5 stars`,children:[Array.from({length:5}).map((e,o)=>a(p,{name:\"star\",size:20,color:o<Math.floor(t.product.rating||0)?\"var(--ggui-color-warning-500)\":\"var(--ggui-color-outline)\"},o)),i(n,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:[t.product.rating,\" (\",t.product.reviewCount||0,\" reviews)\"]})]}),a(w,{variant:t.product.stock&&t.product.stock>10?\"success\":t.product.stock?\"warning\":\"error\",children:t.product.stock&&t.product.stock>0?t.product.stock>10?\"In Stock\":\"Low Stock\":\"Out of Stock\"})]})})]}),a(k,{margin:\"var(--ggui-spacing-4)\"}),a(A,{items:[{key:\"description\",label:\"Description\",content:a(g,{padding:\"var(--ggui-spacing-4)\",children:a(n,{variant:\"body\",children:t.product.description||\"No description available\"})})},{key:\"specifications\",label:\"Specifications\",content:a(g,{padding:\"var(--ggui-spacing-4)\",children:(t.product.specifications||[]).length>0?a(T,{columns:[{key:\"specKey\",header:\"Specification\"},{key:\"specValue\",header:\"Value\"}],data:(t.product.specifications||[]).map(e=>({specKey:e.key||\"\",specValue:e.value||\"\"}))}):a(n,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"No specifications available\"})})},{key:\"reviews\",label:\"Reviews\",content:a(g,{padding:\"var(--ggui-spacing-4)\",children:(t.product.reviews||[]).length>0?a(r,{gap:\"var(--ggui-spacing-4)\",children:(t.product.reviews||[]).map((e,o)=>a(b,{padding:\"var(--ggui-spacing-3)\",border:!0,shadow:\"sm\",children:i(r,{gap:\"var(--ggui-spacing-2)\",children:[i(l,{justify:\"between\",align:\"center\",children:[a(n,{variant:\"label\",children:e.author}),a(n,{variant:\"caption\",color:\"var(--ggui-color-onSurfaceVariant)\",children:new Date(e.date).toLocaleDateString()})]}),a(l,{gap:\"var(--ggui-spacing-1)\",\"aria-label\":`Rated ${e.rating||0} out of 5 stars`,children:Array.from({length:5}).map((P,v)=>a(p,{name:\"star\",size:16,color:v<(e.rating||0)?\"var(--ggui-color-warning-500)\":\"var(--ggui-color-outline)\"},v))}),a(n,{variant:\"body\",children:e.text})]})},o))}):a(n,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"No reviews yet\"})})}]}),a(k,{margin:\"var(--ggui-spacing-4)\"}),i(r,{gap:\"var(--ggui-spacing-4)\",direction:\"vertical\",children:[i(r,{direction:\"horizontal\",gap:\"var(--ggui-spacing-2)\",align:\"center\",children:[a(n,{variant:\"label\",children:\"Quantity:\"}),a(s,{variant:\"outline\",size:\"sm\",\"aria-label\":\"Decrease quantity\",onClick:()=>d(Math.max(1,c-1)),children:\"\\u2212\"}),a(C,{label:\"Quantity\",type:\"number\",value:String(c),onChange:e=>{const o=parseInt(e,10);isNaN(o)||d(Math.min(m,Math.max(1,o)))},style:{width:\"60px\"}}),a(s,{variant:\"outline\",size:\"sm\",\"aria-label\":\"Increase quantity\",onClick:()=>d(Math.min(m,c+1)),children:\"+\"})]}),a(s,{variant:\"primary\",size:\"md\",fullWidth:!0,disabled:!t.product.stock||t.product.stock<=0,onClick:()=>u({productId:t.product.id||\"\",quantity:c}),children:\"Add to Cart\"})]})]})})}y(I,\"Component\");export{I as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useAction } from '@ggui-ai/wire';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  product: { id?: string; name?: string; price?: number; currency?: string; rating?: number; reviewCount?: number; stock?: number; description?: string; specifications?: unknown[]; reviews?: unknown[] }; // Product object with id, name, price, currency, rating, stock, description, specifications[], reviews[]\n}\n\n// DO NOT EDIT — action payload types generated from action contract.\n/** Action payload: Called when user clicks Add to Cart. Payload: { productId, quantity } */\ntype ActionAddToCartPayload = { productId: string; quantity: number };\n\n\n\n\n\n// Place helper components here if needed\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  const addToCart = useAction<ActionAddToCartPayload>('addToCart');\n  \n  const [quantity, setQuantity] = useState(1);\n  const maxStock = props.product.stock || 0;\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-6)\">\n        {/* Top section: Image, Title, Price, Rating, Stock */}\n<Stack gap=\"var(--ggui-spacing-6)\" direction=\"vertical\">\n  {/* Product Image Placeholder */}\n  <Box\n    role=\"img\"\n    aria-label={`${props.product.name || 'Product'} image`}\n    background=\"var(--ggui-color-primary-100)\"\n    borderRadius=\"var(--ggui-shape-radius-lg)\"\n    padding=\"var(--ggui-spacing-6)\"\n    style={{ width: '100%', maxWidth: '400px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}\n  >\n    <Stack align=\"center\" justify=\"center\" gap=\"var(--ggui-spacing-2)\">\n      <Icon name=\"image\" size={48} color=\"var(--ggui-color-primary-600)\" />\n      <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">{props.product.name || 'Product Image'}</Text>\n    </Stack>\n  </Box>\n\n  {/* Product Details Card */}\n  <Card padding=\"var(--ggui-spacing-4)\" shadow=\"md\">\n    <Stack gap=\"var(--ggui-spacing-4)\">\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        <Heading level={1}>{props.product.name}</Heading>\n        <Heading level={4} color=\"var(--ggui-color-primary-600)\" aria-label=\"price\">\n          <span aria-label=\"currency\">{props.product.currency || '$'}</span>\n          {props.product.price}\n        </Heading>\n      </Stack>\n\n      {/* Rating Stars */}\n      <Row gap=\"var(--ggui-spacing-1)\" align=\"center\" aria-label={`Rated ${props.product.rating || 0} out of 5 stars`}>\n        {Array.from({ length: 5 }).map((_, i) => (\n          <Icon\n            key={i}\n            name=\"star\"\n            size={20}\n            color={i < Math.floor(props.product.rating || 0) ? 'var(--ggui-color-warning-500)' : 'var(--ggui-color-outline)'}\n          />\n        ))}\n        <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">{props.product.rating} ({props.product.reviewCount || 0} reviews)</Text>\n      </Row>\n\n      {/* Stock Status */}\n      <Badge variant={props.product.stock && props.product.stock > 10 ? 'success' : props.product.stock ? 'warning' : 'error'}>\n        {props.product.stock && props.product.stock > 0 ? (props.product.stock > 10 ? 'In Stock' : 'Low Stock') : 'Out of Stock'}\n      </Badge>\n    </Stack>\n  </Card>\n</Stack>\n         <Divider margin=\"var(--ggui-spacing-4)\" />\n        {/* Middle section: Tabs */}\n        <Tabs\n        items={[\n          {\n            key: 'description',\n            label: 'Description',\n            content: (\n              <Box padding=\"var(--ggui-spacing-4)\">\n                <Text variant=\"body\">{props.product.description || 'No description available'}</Text>\n              </Box>\n            ),\n          },\n          {\n            key: 'specifications',\n            label: 'Specifications',\n            content: (\n              <Box padding=\"var(--ggui-spacing-4)\">\n                {(props.product.specifications || []).length > 0 ? (\n                  <Table\n                    columns={[\n                      { key: 'specKey', header: 'Specification' },\n                      { key: 'specValue', header: 'Value' },\n                    ]}\n                    data={(props.product.specifications || []).map((spec: any) => ({\n                      specKey: (spec as any).key || '',\n                      specValue: (spec as any).value || '',\n                    }))}\n                  />\n                ) : (\n                  <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">No specifications available</Text>\n                )}\n              </Box>\n            ),\n          },\n          {\n            key: 'reviews',\n            label: 'Reviews',\n            content: (\n              <Box padding=\"var(--ggui-spacing-4)\">\n                {(props.product.reviews || []).length > 0 ? (\n                  <Stack gap=\"var(--ggui-spacing-4)\">\n                    {(props.product.reviews || []).map((review: any, idx: number) => (\n                      <Card key={idx} padding=\"var(--ggui-spacing-3)\" border shadow=\"sm\">\n                        <Stack gap=\"var(--ggui-spacing-2)\">\n                          <Row justify=\"between\" align=\"center\">\n                            <Text variant=\"label\">{(review as any).author}</Text>\n                            <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{new Date((review as any).date).toLocaleDateString()}</Text>\n                          </Row>\n                          <Row gap=\"var(--ggui-spacing-1)\" aria-label={`Rated ${(review as any).rating || 0} out of 5 stars`}>\n                            {Array.from({ length: 5 }).map((_, i) => (\n                              <Icon\n                                key={i}\n                                name=\"star\"\n                                size={16}\n                                color={i < ((review as any).rating || 0) ? 'var(--ggui-color-warning-500)' : 'var(--ggui-color-outline)'}\n                              />\n                            ))}\n                          </Row>\n                          <Text variant=\"body\">{(review as any).text}</Text>\n                        </Stack>\n                      </Card>\n                    ))}\n                  </Stack>\n                ) : (\n                  <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\">No reviews yet</Text>\n                )}\n              </Box>\n            ),\n          },\n        ]}\n         />\n         <Divider margin=\"var(--ggui-spacing-4)\" />\n \n         {/* Bottom section: Quantity & Add to Cart */}\n<Stack gap=\"var(--ggui-spacing-4)\" direction=\"vertical\">\n  <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-2)\" align=\"center\">\n    <Text variant=\"label\">Quantity:</Text>\n    <Button\n      variant=\"outline\"\n      size=\"sm\"\n      aria-label=\"Decrease quantity\"\n      onClick={() => setQuantity(Math.max(1, quantity - 1))}\n    >\n      −\n    </Button>\n    <Input\n      label=\"Quantity\"\n      type=\"number\"\n      value={String(quantity)}\n      onChange={(val) => {\n        const num = parseInt(val, 10);\n        if (!isNaN(num)) setQuantity(Math.min(maxStock, Math.max(1, num)));\n      }}\n      style={{ width: '60px' }}\n    />\n    <Button\n      variant=\"outline\"\n      size=\"sm\"\n      aria-label=\"Increase quantity\"\n      onClick={() => setQuantity(Math.min(maxStock, quantity + 1))}\n    >\n      +\n    </Button>\n  </Stack>\n  <Button\n    variant=\"primary\"\n    size=\"md\"\n    fullWidth\n    disabled={!props.product.stock || props.product.stock <= 0}\n    onClick={() => addToCart({ productId: props.product.id || '', quantity })}\n  >\n    Add to Cart\n  </Button>\n</Stack>\n      </Stack>\n    </Container>\n  );\n}\n\n",
+        "tokens": {
+          "input": 152134,
+          "output": 15715,
+          "total": 167849
+        },
+        "generationTimeMs": 89051,
+        "turnsUsed": 8,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Quantity Input (line 177-186) has label prop 'Quantity' but it is visually hidden — add aria-label or ensure visual label is accessible. The label on line 168 is separate Text element, not an associated label",
+              "fix": "Quantity Input (line 177-186) has label prop 'Quantity' but it is visually hidden — add aria-label or ensure visual label is accessible. The label on line 168 is separate Text element, not an associated label"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Price heading (line 65-68) uses aria-label='price' which is redundant and confusing — remove aria-label and let semantic heading speak for itself. Currency span (line 66) has aria-label='currency' which is unnecessary for decorative element",
+              "fix": "Price heading (line 65-68) uses aria-label='price' which is redundant and confusing — remove aria-label and let semantic heading speak for itself. Currency span (line 66) has aria-label='currency' which is unnecessary for decorative element"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Quantity input lacks visible association with the separate 'Quantity:' label (line 168) — wrap in FormField component or use proper label association for better screen reader clarity",
+              "fix": "Quantity input lacks visible association with the separate 'Quantity:' label (line 168) — wrap in FormField component or use proper label association for better screen reader clarity"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Line 44: Nested Stack with `direction='vertical'` wraps the image and details card, but this inner Stack uses the same gap (`var(--ggui-spacing-6)`) as the outer Stack on line 42, causing excessive spacing between top-section elements that should feel more cohesive. Consider using a smaller gap (e.g., `var(--ggui-spacing-4)`) for the internal grouping.",
+              "fix": "Line 44: Nested Stack with `direction='vertical'` wraps the image and details card, but this inner Stack uses the same gap (`var(--ggui-spacing-6)`) as the outer Stack on line 42, causing excessive spacing between top-section elements that should feel more cohesive. Consider using a smaller gap (e.g., `var(--ggui-spacing-4)`) for the internal grouping."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Line 52: Product image placeholder uses inline `style={{ width: '100%', maxWidth: '400px', height: '300px' }}` with hardcoded pixel dimensions instead of design system spacing/sizing tokens. Replace with design token-based sizing or component props.",
+              "fix": "Line 52: Product image placeholder uses inline `style={{ width: '100%', maxWidth: '400px', height: '300px' }}` with hardcoded pixel dimensions instead of design system spacing/sizing tokens. Replace with design token-based sizing or component props."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Line 91 and 163: Dividers use `margin='var(--ggui-spacing-4)'` which creates inconsistent spacing around the tabs section. The outer Stack has `gap='var(--ggui-spacing-6)'` but dividers override with smaller margins, breaking visual rhythm.",
+              "fix": "Line 91 and 163: Dividers use `margin='var(--ggui-spacing-4)'` which creates inconsistent spacing around the tabs section. The outer Stack has `gap='var(--ggui-spacing-6)'` but dividers override with smaller margins, breaking visual rhythm."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Line 166-195: Bottom section (quantity + Add to Cart) is positioned at the same nesting level as the tabs, making it visually disconnected. Should be in its own Card or visual container to separate the action area from content.",
+              "fix": "Line 166-195: Bottom section (quantity + Add to Cart) is positioned at the same nesting level as the tabs, making it visually disconnected. Should be in its own Card or visual container to separate the action area from content."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 52: style object with inline display, alignItems, justifyContent should use flex layout props instead (e.g., Hoverable/Pressable composition or a dedicated flex container)",
+              "fix": "Line 52: style object with inline display, alignItems, justifyContent should use flex layout props instead (e.g., Hoverable/Pressable composition or a dedicated flex container)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 185: style={{ width: '60px' }} uses hardcoded pixel value; should use a design system width token or responsive sizing prop if available from Input component",
+              "fix": "Line 185: style={{ width: '60px' }} uses hardcoded pixel value; should use a design system width token or responsive sizing prop if available from Input component"
+            }
+          ],
+          "pass": ["functionality", "crash", "interactivity", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 88981,
+          "evalMs": 0,
+          "totalMs": 89051
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 78.6,
+        "finalScore": 78.6,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 88,
+          "hierarchy": 80,
+          "polish": 65,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 65,
+          "accessibility": 78,
+          "codeQuality": 88
+        },
+        "critique": "The component demonstrates solid use of design tokens and proper data rendering from props, with clear visual hierarchy and good spacing. However, the layout has some constraints (fixed max-width on image, incomplete bottom section), and interactive polish is lacking—missing hover/focus states on buttons, quantity selector feedback, and the Add to Cart action appears incomplete.",
+        "evalTimeMs": 2470
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Quantity Input (line 177-186) has label prop 'Quantity' but it is visually hidden — add aria-label or ensure visual label is accessible. The label on line 168 is separate Text element, not an associated label",
+            "fix": "Quantity Input (line 177-186) has label prop 'Quantity' but it is visually hidden — add aria-label or ensure visual label is accessible. The label on line 168 is separate Text element, not an associated label"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Price heading (line 65-68) uses aria-label='price' which is redundant and confusing — remove aria-label and let semantic heading speak for itself. Currency span (line 66) has aria-label='currency' which is unnecessary for decorative element",
+            "fix": "Price heading (line 65-68) uses aria-label='price' which is redundant and confusing — remove aria-label and let semantic heading speak for itself. Currency span (line 66) has aria-label='currency' which is unnecessary for decorative element"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Quantity input lacks visible association with the separate 'Quantity:' label (line 168) — wrap in FormField component or use proper label association for better screen reader clarity",
+            "fix": "Quantity input lacks visible association with the separate 'Quantity:' label (line 168) — wrap in FormField component or use proper label association for better screen reader clarity"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Line 44: Nested Stack with `direction='vertical'` wraps the image and details card, but this inner Stack uses the same gap (`var(--ggui-spacing-6)`) as the outer Stack on line 42, causing excessive spacing between top-section elements that should feel more cohesive. Consider using a smaller gap (e.g., `var(--ggui-spacing-4)`) for the internal grouping.",
+            "fix": "Line 44: Nested Stack with `direction='vertical'` wraps the image and details card, but this inner Stack uses the same gap (`var(--ggui-spacing-6)`) as the outer Stack on line 42, causing excessive spacing between top-section elements that should feel more cohesive. Consider using a smaller gap (e.g., `var(--ggui-spacing-4)`) for the internal grouping."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Line 52: Product image placeholder uses inline `style={{ width: '100%', maxWidth: '400px', height: '300px' }}` with hardcoded pixel dimensions instead of design system spacing/sizing tokens. Replace with design token-based sizing or component props.",
+            "fix": "Line 52: Product image placeholder uses inline `style={{ width: '100%', maxWidth: '400px', height: '300px' }}` with hardcoded pixel dimensions instead of design system spacing/sizing tokens. Replace with design token-based sizing or component props."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Line 91 and 163: Dividers use `margin='var(--ggui-spacing-4)'` which creates inconsistent spacing around the tabs section. The outer Stack has `gap='var(--ggui-spacing-6)'` but dividers override with smaller margins, breaking visual rhythm.",
+            "fix": "Line 91 and 163: Dividers use `margin='var(--ggui-spacing-4)'` which creates inconsistent spacing around the tabs section. The outer Stack has `gap='var(--ggui-spacing-6)'` but dividers override with smaller margins, breaking visual rhythm."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Line 166-195: Bottom section (quantity + Add to Cart) is positioned at the same nesting level as the tabs, making it visually disconnected. Should be in its own Card or visual container to separate the action area from content.",
+            "fix": "Line 166-195: Bottom section (quantity + Add to Cart) is positioned at the same nesting level as the tabs, making it visually disconnected. Should be in its own Card or visual container to separate the action area from content."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 52: style object with inline display, alignItems, justifyContent should use flex layout props instead (e.g., Hoverable/Pressable composition or a dedicated flex container)",
+            "fix": "Line 52: style object with inline display, alignItems, justifyContent should use flex layout props instead (e.g., Hoverable/Pressable composition or a dedicated flex container)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 185: style={{ width: '60px' }} uses hardcoded pixel value; should use a design system width token or responsive sizing prop if available from Input component",
+            "fix": "Line 185: style={{ width: '60px' }} uses hardcoded pixel value; should use a design system width token or responsive sizing prop if available from Input component"
+          }
+        ],
+        "pass": ["functionality", "crash", "interactivity", "loading"]
+      },
+      "estimatedCostUsd": 0.230709,
+      "timestamp": "2026-03-22T16:29:58.165Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4561,
+        "sourceCodeBytes": 9264,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "claude-default-0",
+        "sdkName": "claude",
+        "tier": "balanced",
+        "modelId": "anthropic/claude-haiku-4-5",
+        "recipe": "default"
+      },
+      "commit": {
+        "id": "stock-ticker",
+        "name": "Stock Ticker Dashboard",
+        "description": "Stock price display with color-coded changes and responsive grid",
+        "complexity": "simple",
+        "expectedMinScore": 65,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a stock ticker dashboard that displays stock prices with live updates. Layout:\n- Header with \"Market Watch\" title and a \"Last Updated\" timestamp (updates in real-time)\n- Responsive grid of stock cards (3 per row on desktop, 1 on mobile)\n- Each card shows: ticker symbol (large, bold), company name, current price formatted with 2 decimals, change amount, and change percentage\n- Color coding: green text/border for positive change, red for negative change\n- A subtle arrow icon (▲ or ▼) next to the change percentage\n- Brief flash/highlight animation when a stock price updates\n\nInitial stock data comes from props. Live price updates arrive via stream events — merge them into the displayed data. Use design system CSS variables for all colors and spacing.",
+        "contract": {
+          "interaction": "broadcast",
+          "props": {
+            "properties": {
+              "stocks": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "price": {
+                        "type": "number"
+                      },
+                      "change": {
+                        "type": "number"
+                      },
+                      "changePercent": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Array of stocks with symbol, name, price, change, changePercent",
+                "example": [
+                  {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 178.52,
+                    "change": 2.34,
+                    "changePercent": 1.33
+                  },
+                  {
+                    "symbol": "GOOGL",
+                    "name": "Alphabet Inc.",
+                    "price": 141.8,
+                    "change": -0.95,
+                    "changePercent": -0.67
+                  }
+                ]
+              }
+            }
+          },
+          "stream": {
+            "description": "Real-time stock price updates from the agent",
+            "events": {
+              "priceUpdate": {
+                "description": "Updated price data for one or more stocks",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "price": {
+                      "type": "number"
+                    },
+                    "change": {
+                      "type": "number"
+                    },
+                    "changePercent": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "example": {
+                  "symbol": "AAPL",
+                  "price": 179.1,
+                  "change": 2.92,
+                  "changePercent": 1.66
+                }
+              },
+              "marketStatus": {
+                "description": "Market open/closed status update",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["open", "closed", "pre-market", "after-hours"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "open",
+                  "timestamp": "2026-03-15T16:30:00Z"
+                }
+              }
+            }
+          },
+          "agentTools": {
+            "tools": {
+              "getStockDetail": {
+                "label": "Stock Detail",
+                "description": "Get detailed info for a specific stock (52-week range, volume, etc.)",
+                "requestSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "responseSchema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "high52w": {
+                      "type": "number"
+                    },
+                    "low52w": {
+                      "type": "number"
+                    },
+                    "volume": {
+                      "type": "number"
+                    },
+                    "marketCap": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "request": {
+                    "symbol": "AAPL"
+                  },
+                  "response": {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "high52w": 199.62,
+                    "low52w": 140.81,
+                    "volume": 54123000,
+                    "marketCap": "2.89T"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "stocks": [
+            {
+              "symbol": "AAPL",
+              "name": "Apple Inc.",
+              "price": 178.52,
+              "change": 2.34,
+              "changePercent": 1.33
+            },
+            {
+              "symbol": "GOOGL",
+              "name": "Alphabet Inc.",
+              "price": 141.8,
+              "change": -0.95,
+              "changePercent": -0.67
+            },
+            {
+              "symbol": "MSFT",
+              "name": "Microsoft Corp.",
+              "price": 378.91,
+              "change": 4.12,
+              "changePercent": 1.1
+            },
+            {
+              "symbol": "TSLA",
+              "name": "Tesla Inc.",
+              "price": 248.42,
+              "change": -5.67,
+              "changePercent": -2.23
+            },
+            {
+              "symbol": "AMZN",
+              "name": "Amazon.com",
+              "price": 178.25,
+              "change": 1.87,
+              "changePercent": 1.06
+            },
+            {
+              "symbol": "NVDA",
+              "name": "NVIDIA Corp.",
+              "price": 875.28,
+              "change": 12.45,
+              "changePercent": 1.44
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var T=Object.defineProperty;var d=(a,i)=>T(a,\"name\",{value:i,configurable:!0});import{jsx as e,jsxs as t}from\"react/jsx-runtime\";import w,{useState as y,useEffect as S,useRef as P}from\"react\";import{Container as U,Card as M,Stack as m,Row as f,Box as k,Divider as R,Text as g,Heading as x,Badge as F,Icon as A,MotionKeyframes as B}from\"@ggui-ai/design/primitives\";import{CardGrid as z}from\"@ggui-ai/design/compositions\";import{Hoverable as D}from\"@ggui-ai/design/interact\";import{useStream as C}from\"@ggui-ai/wire\";import{animation as H}from\"@ggui-ai/design/tokens\";function V({stock:a,isUpdating:i}){const o=(a.change||0)>=0,n=o?\"var(--ggui-color-success-500)\":\"var(--ggui-color-error-500)\",s=o?\"var(--ggui-color-success-200)\":\"var(--ggui-color-error-200)\",u=o?\"var(--ggui-color-success-50)\":\"var(--ggui-color-error-50)\",p=o?\"var(--ggui-color-success-100)\":\"var(--ggui-color-error-100)\",b=I(a.price);return e(M,{as:D,padding:\"var(--ggui-spacing-4)\",shadow:\"md\",radius:\"lg\",border:!0,hoverStyle:{shadow:\"lg\",cursor:\"pointer\"},role:\"article\",\"aria-label\":`${a.symbol||\"Unknown\"} stock price $${(a.price||0).toFixed(2)}`,style:{borderColor:i?s:\"var(--ggui-color-outlineVariant)\",backgroundColor:i?u:\"var(--ggui-color-surface)\",animation:i?`${H.flash} 600ms ease-out`:\"none\",\"--ggui-flash-color\":p,transition:\"border-color 300ms ease, background-color 300ms ease, box-shadow 200ms ease-in-out\"},children:t(m,{gap:\"var(--ggui-spacing-2)\",align:\"start\",children:[e(x,{level:3,color:\"var(--ggui-color-onSurface)\",style:{fontWeight:\"var(--ggui-font-weight-bold)\"},children:a.symbol||\"N/A\"}),e(g,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:a.name||\"Unknown Company\"}),t(g,{size:\"xl\",weight:\"semibold\",color:\"var(--ggui-color-onSurface)\",style:{marginTop:\"var(--ggui-spacing-2)\"},children:[\"$\",(a.price||0).toFixed(2)]}),t(f,{gap:\"var(--ggui-spacing-2)\",align:\"center\",style:{marginTop:\"var(--ggui-spacing-1)\"},children:[t(g,{size:\"sm\",weight:\"semibold\",color:n,style:{display:\"flex\",alignItems:\"center\",gap:\"var(--ggui-spacing-1)\"},\"aria-label\":o?\"Price increased\":\"Price decreased\",children:[e(\"span\",{\"aria-hidden\":\"true\",children:o?\"\\u25B2\":\"\\u25BC\"}),(a.change||0).toFixed(2)]}),t(g,{size:\"sm\",color:n,weight:\"semibold\",children:[\"(\",(a.changePercent||0).toFixed(2),\"%)\"]})]})]})},b)}d(V,\"StockCard\");function I(a){const[i,o]=w.useState(0),n=P(a);return S(()=>{n.current!==a&&(o(s=>s+1),n.current=a)},[a]),i}d(I,\"useAnimationKey\");function N(a){const i=C(\"priceUpdate\"),o=C(\"marketStatus\"),[n,s]=y(a.stocks||[]),[u,p]=y(null),[b,h]=y(new Set);return S(()=>{a.stocks&&a.stocks.length>0&&s(a.stocks)},[a.stocks]),S(()=>{if(i.latest){const r=i.latest;s(l=>l.map(c=>c.symbol===r.symbol?{...c,price:r.price!==void 0?r.price:c.price,change:r.change!==void 0?r.change:c.change,changePercent:r.changePercent!==void 0?r.changePercent:c.changePercent}:c)),p(new Date),r.symbol&&(h(l=>new Set(l).add(r.symbol)),setTimeout(()=>{h(l=>{const v=new Set(l);return v.delete(r.symbol),v})},1e3))}},[i.latest]),t(U,{maxWidth:\"xl\",padding:\"var(--ggui-spacing-6)\",children:[e(B,{}),t(m,{gap:\"var(--ggui-spacing-8)\",children:[t(m,{gap:\"var(--ggui-spacing-2)\",align:\"start\",children:[e(x,{level:1,color:\"var(--ggui-color-onSurface)\",children:\"Market Watch\"}),t(f,{align:\"center\",gap:\"var(--ggui-spacing-2)\",children:[e(g,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Last Updated:\"}),e(g,{variant:\"bodySmall\",weight:\"semibold\",color:\"var(--ggui-color-primary-600)\",children:u?u.toLocaleTimeString():\"Waiting for updates...\"})]})]}),e(R,{orientation:\"horizontal\",margin:\"var(--ggui-spacing-2)\"}),o.latest&&e(k,{padding:\"var(--ggui-spacing-3)\",background:\"var(--ggui-color-primary-50)\",borderRadius:\"var(--ggui-shape-radius-md)\",role:\"region\",\"aria-label\":\"Market status indicator\",children:t(f,{align:\"center\",gap:\"var(--ggui-spacing-2)\",children:[e(F,{variant:\"primary\",size:\"sm\",children:o.latest.status||\"unknown\"}),t(g,{variant:\"bodySmall\",color:\"var(--ggui-color-primary-700)\",children:[\"Market Status: \",o.latest.status]})]})}),n&&n.length>0?e(z,{columns:{sm:1,md:2,lg:3},gap:16,children:n.map(r=>e(V,{stock:r,isUpdating:b.has(r.symbol||\"\")},r.symbol||Math.random()))}):e(k,{padding:\"var(--ggui-spacing-8)\",background:\"var(--ggui-color-surfaceVariant)\",borderRadius:\"var(--ggui-shape-radius-lg)\",children:t(m,{align:\"center\",justify:\"center\",gap:\"var(--ggui-spacing-3)\",children:[e(A,{name:\"trending-down\",size:48,color:\"var(--ggui-color-onSurfaceVariant)\",\"aria-label\":\"No stocks available\"}),e(g,{variant:\"body\",color:\"var(--ggui-color-onSurfaceVariant)\",align:\"center\",children:\"No stocks to display\"})]})})]})]})}d(N,\"Component\");export{N as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion, MotionKeyframes } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\nimport { useStream } from '@ggui-ai/wire';\nimport { animation } from '@ggui-ai/design/tokens';\n// prettier-ignore-end\n\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  stocks: Array<{ symbol?: string; name?: string; price?: number; change?: number; changePercent?: number }>; // Array of stocks with symbol, name, price, change, changePercent\n}\n\n\n// DO NOT EDIT — stream event types generated from stream contract.\n/** Stream event: Updated price data for one or more stocks */\ntype StreamPriceUpdate = { symbol?: string; price?: number; change?: number; changePercent?: number };\n\n/** Stream event: Market open/closed status update */\ntype StreamMarketStatus = { status?: 'open' | 'closed' | 'pre-market' | 'after-hours'; timestamp?: string };\n\n\n\n\n// Helper component for individual stock card\nfunction StockCard({ stock, isUpdating }: { stock: any; isUpdating: boolean }) {\n  const isPositive = (stock.change || 0) >= 0;\n  const changeColor = isPositive ? 'var(--ggui-color-success-500)' : 'var(--ggui-color-error-500)';\n  const borderColor = isPositive ? 'var(--ggui-color-success-200)' : 'var(--ggui-color-error-200)';\n  const backgroundColor = isPositive ? 'var(--ggui-color-success-50)' : 'var(--ggui-color-error-50)';\n  const flashColor = isPositive ? 'var(--ggui-color-success-100)' : 'var(--ggui-color-error-100)';\n  const animationKey = useAnimationKey(stock.price);\n\n  return (\n    <Card\n      as={Hoverable}\n      key={animationKey}\n      padding=\"var(--ggui-spacing-4)\"\n      shadow=\"md\"\n      radius=\"lg\"\n      border={true}\n      hoverStyle={{ shadow: 'lg', cursor: 'pointer' }}\n      role=\"article\"\n      aria-label={`${stock.symbol || 'Unknown'} stock price $${(stock.price || 0).toFixed(2)}`}\n      style={{\n        borderColor: isUpdating ? borderColor : 'var(--ggui-color-outlineVariant)',\n        backgroundColor: isUpdating ? backgroundColor : 'var(--ggui-color-surface)',\n        animation: isUpdating ? `${animation.flash} 600ms ease-out` : 'none',\n        '--ggui-flash-color': flashColor,\n        transition: 'border-color 300ms ease, background-color 300ms ease, box-shadow 200ms ease-in-out',\n      } as React.CSSProperties}\n    >\n      <Stack gap=\"var(--ggui-spacing-2)\" align=\"start\">\n        <Heading level={3} color=\"var(--ggui-color-onSurface)\" style={{ fontWeight: 'var(--ggui-font-weight-bold)' }}>\n          {stock.symbol || 'N/A'}\n        </Heading>\n        <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n          {stock.name || 'Unknown Company'}\n        </Text>\n        <Text size=\"xl\" weight=\"semibold\" color=\"var(--ggui-color-onSurface)\" style={{ marginTop: 'var(--ggui-spacing-2)' }}>\n          ${(stock.price || 0).toFixed(2)}\n        </Text>\n        <Row gap=\"var(--ggui-spacing-2)\" align=\"center\" style={{ marginTop: 'var(--ggui-spacing-1)' }}>\n          <Text\n            size=\"sm\"\n            weight=\"semibold\"\n            color={changeColor}\n            style={{\n              display: 'flex',\n              alignItems: 'center',\n              gap: 'var(--ggui-spacing-1)',\n            }}\n            aria-label={isPositive ? 'Price increased' : 'Price decreased'}\n          >\n            <span aria-hidden=\"true\">{isPositive ? '▲' : '▼'}</span>\n            {(stock.change || 0).toFixed(2)}\n          </Text>\n          <Text size=\"sm\" color={changeColor} weight=\"semibold\">\n            ({(stock.changePercent || 0).toFixed(2)}%)\n          </Text>\n        </Row>\n      </Stack>\n    </Card>\n  );\n}\n\n// Helper hook for animation retriggering\nfunction useAnimationKey(dep: any): any {\n  const [key, setKey] = React.useState(0);\n  const prevDep = useRef(dep);\n\n  useEffect(() => {\n    if (prevDep.current !== dep) {\n      setKey((k) => k + 1);\n      prevDep.current = dep;\n    }\n  }, [dep]);\n\n  return key;\n}\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  \n  // Streams — real-time from agent (.latest, .all)\n  const priceUpdate = useStream<StreamPriceUpdate>('priceUpdate'); // Updated price data for one or more stocks\n  const marketStatus = useStream<StreamMarketStatus>('marketStatus'); // Market open/closed status update\n\n  // State: maintain merged stock data\n  const [stocks, setStocks] = useState<any[]>(props.stocks || []);\n  const [lastUpdatedTime, setLastUpdatedTime] = useState<Date | null>(null);\n  const [updatingSymbols, setUpdatingSymbols] = useState<Set<string>>(new Set());\n\n  // Effect: merge initial props into state\n  useEffect(() => {\n    if (props.stocks && props.stocks.length > 0) {\n      setStocks(props.stocks);\n    }\n  }, [props.stocks]);\n\n  // Effect: merge stream updates into stock data\n  useEffect(() => {\n    if (priceUpdate.latest) {\n      const update = priceUpdate.latest;\n      setStocks((prevStocks) => {\n        const updated = prevStocks.map((stock) => {\n          if (stock.symbol === update.symbol) {\n            return {\n              ...stock,\n              price: update.price !== undefined ? update.price : stock.price,\n              change: update.change !== undefined ? update.change : stock.change,\n              changePercent: update.changePercent !== undefined ? update.changePercent : stock.changePercent,\n            };\n          }\n          return stock;\n        });\n        return updated;\n      });\n\n      // Update timestamp and highlight this stock\n      setLastUpdatedTime(new Date());\n      if (update.symbol) {\n        setUpdatingSymbols((prev) => new Set(prev).add(update.symbol));\n        setTimeout(() => {\n          setUpdatingSymbols((prev) => {\n            const next = new Set(prev);\n            next.delete(update.symbol!);\n            return next;\n          });\n        }, 1000); // Remove highlight after 1 second\n      }\n    }\n  }, [priceUpdate.latest]);\n\n  return (\n    <Container maxWidth=\"xl\" padding=\"var(--ggui-spacing-6)\">\n      <MotionKeyframes />\n      <Stack gap=\"var(--ggui-spacing-8)\">\n        {/* Header with title and last updated timestamp */}\n        <Stack gap=\"var(--ggui-spacing-2)\" align=\"start\">\n          <Heading level={1} color=\"var(--ggui-color-onSurface)\">\n            Market Watch\n          </Heading>\n          <Row align=\"center\" gap=\"var(--ggui-spacing-2)\">\n            <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n              Last Updated:\n            </Text>\n            <Text\n              variant=\"bodySmall\"\n              weight=\"semibold\"\n              color=\"var(--ggui-color-primary-600)\"\n            >\n              {lastUpdatedTime\n                ? lastUpdatedTime.toLocaleTimeString()\n                : 'Waiting for updates...'}\n            </Text>\n          </Row>\n        </Stack>\n\n        {/* Divider separating header from market status */}\n        <Divider orientation=\"horizontal\" margin=\"var(--ggui-spacing-2)\" />\n\n        {/* Market status indicator */}\n        {marketStatus.latest && (\n          <Box\n            padding=\"var(--ggui-spacing-3)\"\n            background=\"var(--ggui-color-primary-50)\"\n            borderRadius=\"var(--ggui-shape-radius-md)\"\n            role=\"region\"\n            aria-label=\"Market status indicator\"\n          >\n            <Row align=\"center\" gap=\"var(--ggui-spacing-2)\">\n              <Badge variant=\"primary\" size=\"sm\">\n                {marketStatus.latest.status || 'unknown'}\n              </Badge>\n              <Text variant=\"bodySmall\" color=\"var(--ggui-color-primary-700)\">\n                Market Status: {marketStatus.latest.status}\n              </Text>\n            </Row>\n          </Box>\n        )}\n\n        {/* Responsive grid of stock cards */}\n        {stocks && stocks.length > 0 ? (\n          <CardGrid columns={{ sm: 1, md: 2, lg: 3 }} gap=\"var(--ggui-spacing-4)\">\n            {stocks.map((stock) => (\n              <StockCard\n                key={stock.symbol || Math.random()}\n                stock={stock}\n                isUpdating={updatingSymbols.has(stock.symbol || '')}\n              />\n            ))}\n          </CardGrid>\n        ) : (\n          <Box\n            padding=\"var(--ggui-spacing-8)\"\n            background=\"var(--ggui-color-surfaceVariant)\"\n            borderRadius=\"var(--ggui-shape-radius-lg)\"\n          >\n            <Stack align=\"center\" justify=\"center\" gap=\"var(--ggui-spacing-3)\">\n              <Icon name=\"trending-down\" size={32} color=\"var(--ggui-color-onSurfaceVariant)\" aria-label=\"No stocks to display\" />\n              <Text variant=\"body\" color=\"var(--ggui-color-onSurfaceVariant)\" align=\"center\">\n                No stocks to display\n              </Text>\n            </Stack>\n          </Box>\n        )}\n      </Stack>\n    </Container>\n  );\n}\n\n",
+        "tokens": {
+          "input": 125288,
+          "output": 7868,
+          "total": 133156
+        },
+        "generationTimeMs": 54833,
+        "turnsUsed": 8,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "CardGrid gap prop uses numeric value 16 instead of design token — responsive grid spacing will not respect design system. Change gap={16} to gap='var(--ggui-spacing-4)' or similar token",
+              "fix": "CardGrid gap prop uses numeric value 16 instead of design token — responsive grid spacing will not respect design system. Change gap={16} to gap='var(--ggui-spacing-4)' or similar token"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "CardGrid component receives numeric gap prop (16) instead of CSS variable — should use gap='var(--ggui-spacing-*)'",
+              "fix": "CardGrid component receives numeric gap prop (16) instead of CSS variable — should use gap='var(--ggui-spacing-*)'"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Stock cards are not keyboard-navigable; consider adding as={Clickable} with onClick handler or tabindex to enable focus/keyboard interaction",
+              "fix": "Stock cards are not keyboard-navigable; consider adding as={Clickable} with onClick handler or tabindex to enable focus/keyboard interaction"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Empty state Icon lacks proper semantic meaning — aria-label should describe empty state, not just 'No stocks available'",
+              "fix": "Empty state Icon lacks proper semantic meaning — aria-label should describe empty state, not just 'No stocks available'"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "Line 216: CardGrid uses numeric gap prop `gap={16}` instead of design token (should be `gap=\"var(--ggui-spacing-4)\"` or similar) — inconsistent with design system spacing throughout rest of component",
+              "fix": "Line 216: CardGrid uses numeric gap prop `gap={16}` instead of design token (should be `gap=\"var(--ggui-spacing-4)\"` or similar) — inconsistent with design system spacing throughout rest of component"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 216: CardGrid gap={16} uses numeric prop instead of design token — should be gap=\"var(--ggui-spacing-4)\"",
+              "fix": "Line 216: CardGrid gap={16} uses numeric prop instead of design token — should be gap=\"var(--ggui-spacing-4)\""
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 232: Icon size={48} uses numeric prop instead of design token — should use size prop variant like \"lg\" or \"xl\"",
+              "fix": "Line 232: Icon size={48} uses numeric prop instead of design token — should use size prop variant like \"lg\" or \"xl\""
+            }
+          ],
+          "pass": ["crash", "interactivity", "loading"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 54759,
+          "evalMs": 0,
+          "totalMs": 54833
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 80,
+        "finalScore": 80,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 82,
+          "hierarchy": 80,
+          "polish": 78,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 78,
+          "accessibility": 78,
+          "codeQuality": 82
+        },
+        "critique": "The component demonstrates strong responsive design with proper use of ggui tokens and good data handling, but has incomplete implementation (code cuts off mid-render), missing responsive grid definition (3 columns desktop/1 mobile requirement not explicitly coded), and the StockCard animation trigger mechanism is overcomplicated. Layout needs explicit grid setup for proper column responsiveness.",
+        "evalTimeMs": 2682
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "CardGrid gap prop uses numeric value 16 instead of design token — responsive grid spacing will not respect design system. Change gap={16} to gap='var(--ggui-spacing-4)' or similar token",
+            "fix": "CardGrid gap prop uses numeric value 16 instead of design token — responsive grid spacing will not respect design system. Change gap={16} to gap='var(--ggui-spacing-4)' or similar token"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "CardGrid component receives numeric gap prop (16) instead of CSS variable — should use gap='var(--ggui-spacing-*)'",
+            "fix": "CardGrid component receives numeric gap prop (16) instead of CSS variable — should use gap='var(--ggui-spacing-*)'"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Stock cards are not keyboard-navigable; consider adding as={Clickable} with onClick handler or tabindex to enable focus/keyboard interaction",
+            "fix": "Stock cards are not keyboard-navigable; consider adding as={Clickable} with onClick handler or tabindex to enable focus/keyboard interaction"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Empty state Icon lacks proper semantic meaning — aria-label should describe empty state, not just 'No stocks available'",
+            "fix": "Empty state Icon lacks proper semantic meaning — aria-label should describe empty state, not just 'No stocks available'"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "Line 216: CardGrid uses numeric gap prop `gap={16}` instead of design token (should be `gap=\"var(--ggui-spacing-4)\"` or similar) — inconsistent with design system spacing throughout rest of component",
+            "fix": "Line 216: CardGrid uses numeric gap prop `gap={16}` instead of design token (should be `gap=\"var(--ggui-spacing-4)\"` or similar) — inconsistent with design system spacing throughout rest of component"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 216: CardGrid gap={16} uses numeric prop instead of design token — should be gap=\"var(--ggui-spacing-4)\"",
+            "fix": "Line 216: CardGrid gap={16} uses numeric prop instead of design token — should be gap=\"var(--ggui-spacing-4)\""
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 232: Icon size={48} uses numeric prop instead of design token — should use size prop variant like \"lg\" or \"xl\"",
+            "fix": "Line 232: Icon size={48} uses numeric prop instead of design token — should use size prop variant like \"lg\" or \"xl\""
+          }
+        ],
+        "pass": ["crash", "interactivity", "loading"]
+      },
+      "estimatedCostUsd": 0.164628,
+      "timestamp": "2026-03-22T16:29:24.160Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 4691,
+        "sourceCodeBytes": 10258,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "claude-default-0",
+      "sdkName": "claude",
+      "tier": "balanced",
+      "modelId": "anthropic/claude-haiku-4-5",
+      "avgScore": 73,
+      "avgTimeMs": 75790.5,
+      "avgCostUsd": 0.195334,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 77.5,
+        "visualPolish": 70.75,
+        "interactivity": 64.5,
+        "accessibility": 70.75,
+        "codeQuality": 82.5
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 3
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "survey-form",
+      "commitName": "Multi-Step Survey Form",
+      "complexity": "medium",
+      "avgScore": 78,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "kanban-board",
+      "commitName": "Kanban Task Board",
+      "complexity": "medium",
+      "avgScore": 55.4,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    },
+    {
+      "commitId": "product-page",
+      "commitName": "E-Commerce Product Page",
+      "complexity": "complex",
+      "avgScore": 78.6,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 1,
+        "fail": 0
+      }
+    },
+    {
+      "commitId": "stock-ticker",
+      "commitName": "Stock Ticker Dashboard",
+      "complexity": "simple",
+      "avgScore": 80,
+      "bestVariantId": "claude-default-0",
+      "worstVariantId": "claude-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "sdkComparison": {
+    "claude": {
+      "balanced": {
+        "avgScore": 73,
+        "avgTimeMs": 75790.5,
+        "avgCostUsd": 0.195334,
+        "successRate": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "wire-minimal-accept",
+  "description": "Minimal well-formed gadget wire shape: `clientCapabilities.gadgets` keyed by an npm package name, each value a map of export name → entry. A bare `{}` export entry is valid — the wire carries identity only, `(package, export name)`, and both prose fields are optional.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-samples/leaflet": { "useLeafletMap": {} }
+    }
+  },
+  "expect": "accept"
+}

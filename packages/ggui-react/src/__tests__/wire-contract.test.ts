@@ -1,0 +1,230 @@
+/**
+ * Pure-helper tests for client contract validators. Mirrors the
+ * protocol-validator invariants pinned by the
+ * `channelEnforcementContract` suite from
+ * `@ggui-ai/mcp-server-core/contract-tests`, but from the CLIENT
+ * boundary-point perspective:
+ *
+ *   - server inbound action (`assertActionContract`) ⇔ client
+ *     outbound action (`validateOutboundActionPayload`)
+ *   - server outbound fan-out (`assertStreamContract`) ⇔ client
+ *     inbound stream (`validateInboundStreamPayload`)
+ *   - (new) client inbound props — no server contract-suite case
+ *     today, but the validator's semantics match the server's
+ *     `assertPropsContract` used in `ggui_update`.
+ *
+ * The allowlist gate (`EVENT_NOT_ALLOWED`) has NO client equivalent in
+ * this slice — client dispatch only emits `data:submit` (always in
+ * DEFAULT_SUBSCRIPTION), so the allowlist would be trivially
+ * satisfied. If a future client hook surfaces arbitrary event types
+ * to dev code, a client-side allowlist check can be added without
+ * changing these three helpers.
+ */
+import { describe, expect, it } from 'vitest';
+import type { ActionSpec, PropsSpec, StreamSpec } from '@ggui-ai/protocol';
+import {
+  ClientContractViolationError,
+  validateInboundPropsPayload,
+  validateInboundStreamPayload,
+  validateOutboundActionPayload,
+} from '@ggui-ai/wire';
+
+const ACTIONS: ActionSpec = {
+  submit: {
+    label: 'Submit',
+    schema: {
+      type: 'object',
+      properties: { text: { type: 'string' } },
+      required: ['text'],
+    },
+  },
+  archive: { label: 'Archive' }, // void-payload
+};
+
+const STREAM: StreamSpec = {
+  tick: {
+    schema: {
+      type: 'object',
+      properties: { count: { type: 'number' } },
+      required: ['count'],
+    },
+  },
+};
+
+const PROPS: PropsSpec = {
+  properties: {
+    city: { required: true, schema: { type: 'string' } },
+    temp: { schema: { type: 'number' } },
+  },
+};
+
+describe('validateOutboundActionPayload', () => {
+  it('permissive when actionSpec is undefined (no contract = nothing to enforce)', () => {
+    const r = validateOutboundActionPayload(undefined, 'anything', { x: 1 });
+    expect(r.valid).toBe(true);
+  });
+
+  it('passes for declared action with matching payload', () => {
+    const r = validateOutboundActionPayload(ACTIONS, 'submit', { text: 'hi' });
+    expect(r.valid).toBe(true);
+  });
+
+  it('passes for declared void-payload action (no schema)', () => {
+    const r = validateOutboundActionPayload(ACTIONS, 'archive', undefined);
+    expect(r.valid).toBe(true);
+  });
+
+  it('tolerates forward-compat metadata on a void-payload action', () => {
+    const r = validateOutboundActionPayload(ACTIONS, 'archive', { meta: 'x' });
+    expect(r.valid).toBe(true);
+  });
+
+  it('rejects undeclared action id', () => {
+    const r = validateOutboundActionPayload(ACTIONS, 'deleteAccount', {});
+    expect(r.valid).toBe(false);
+    expect(r.violations[0].field).toBe('action');
+  });
+
+  it('rejects malformed data for a declared action', () => {
+    const r = validateOutboundActionPayload(ACTIONS, 'submit', 'not-an-object');
+    expect(r.valid).toBe(false);
+  });
+});
+
+describe('validateInboundStreamPayload', () => {
+  it('permissive when streamSpec is undefined', () => {
+    const r = validateInboundStreamPayload(undefined, 'anything', {});
+    expect(r.valid).toBe(true);
+  });
+
+  it('passes for declared channel with matching payload', () => {
+    const r = validateInboundStreamPayload(STREAM, 'tick', { count: 3 });
+    expect(r.valid).toBe(true);
+  });
+
+  it('rejects undeclared channel with declared-channels list in message', () => {
+    const r = validateInboundStreamPayload(STREAM, 'mystery', {});
+    expect(r.valid).toBe(false);
+    expect(r.violations[0].message).toContain('tick');
+  });
+
+  // ── Item 4 reserved-channel injection ────────────────────────────
+  describe('reserved-channel injection (Item 4)', () => {
+    it('runs BUILTIN validator on _ggui:contract-error without an injected extras map', () => {
+      // A malformed contract-error payload fails even with no
+      // streamSpec AND no extras — the protocol ships the BUILTIN.
+      const r = validateInboundStreamPayload(
+        undefined,
+        '_ggui:contract-error',
+        { toolName: 'x' /* missing error + timestamp */ },
+      );
+      expect(r.valid).toBe(false);
+      expect(r.violations.map((v) => v.field)).toEqual(
+        expect.arrayContaining(['error', 'timestamp']),
+      );
+    });
+
+    it('accepts a canonical contract-error payload via BUILTIN', () => {
+      const r = validateInboundStreamPayload(
+        undefined,
+        '_ggui:contract-error',
+        {
+          toolName: 'my-tool',
+          error: { code: 'TOOL_THREW', message: 'boom' },
+          timestamp: '2026-04-23T00:00:00.000Z',
+        },
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('falls through to valid on _ggui:preview when no injection provided', () => {
+      // No protocol-shipped validator for PREVIEW_CHANNEL — consumers
+      // that want A2UI enforcement compose the validator via
+      // `GguiSession.extraReservedValidators` (default) or pass
+      // their own map here.
+      const r = validateInboundStreamPayload(
+        STREAM,
+        '_ggui:preview',
+        { anything: 'goes' },
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('fires an injected _ggui:preview validator', () => {
+      const reject: (p: unknown) => {
+        valid: boolean;
+        violations: Array<{ field: string; message: string }>;
+      } = () => ({
+        valid: false,
+        violations: [
+          { field: 'payload', message: 'malformed' },
+        ],
+      });
+      const r = validateInboundStreamPayload(
+        STREAM,
+        '_ggui:preview',
+        { not: 'a2ui' },
+        new Map([['_ggui:preview', reject]]),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.violations[0].field).toBe('payload');
+    });
+
+    it('rejects reserved-prefix typos via the F10 closed-set rule', () => {
+      // `_ggui:preveiw` is NOT in KNOWN_RESERVED_CHANNELS; the
+      // typo falls through to the declared-channel check even with
+      // a validator keyed on the correct name.
+      const pass: (p: unknown) => { valid: boolean; violations: never[] } = () => ({
+        valid: true,
+        violations: [],
+      });
+      const r = validateInboundStreamPayload(
+        STREAM,
+        '_ggui:preveiw',
+        { not: 'recognized' },
+        new Map([['_ggui:preview', pass]]),
+      );
+      expect(r.valid).toBe(false);
+      expect(r.violations[0].field).toBe('channel');
+    });
+  });
+});
+
+describe('validateInboundPropsPayload', () => {
+  it('permissive when propsSpec is undefined', () => {
+    const r = validateInboundPropsPayload(undefined, { city: 'Seoul' });
+    expect(r.valid).toBe(true);
+  });
+
+  it('passes when required props present', () => {
+    const r = validateInboundPropsPayload(PROPS, { city: 'Seoul', temp: 15 });
+    expect(r.valid).toBe(true);
+  });
+
+  it('rejects when required prop missing', () => {
+    const r = validateInboundPropsPayload(PROPS, { temp: 15 });
+    expect(r.valid).toBe(false);
+    expect(r.violations[0].field).toBe('city');
+  });
+});
+
+describe('ClientContractViolationError', () => {
+  it('carries direction + violations + is throwable as Error', () => {
+    const err = new ClientContractViolationError('outbound-action', [
+      { field: 'action', message: 'bad' },
+    ]);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.direction).toBe('outbound-action');
+    expect(err.violations).toHaveLength(1);
+    expect(err.name).toBe('ClientContractViolationError');
+  });
+
+  it('accepts all three direction codes', () => {
+    const a = new ClientContractViolationError('outbound-action', []);
+    const b = new ClientContractViolationError('inbound-stream', []);
+    const c = new ClientContractViolationError('inbound-props', []);
+    expect(a.direction).toBe('outbound-action');
+    expect(b.direction).toBe('inbound-stream');
+    expect(c.direction).toBe('inbound-props');
+  });
+});

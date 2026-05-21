@@ -1,0 +1,50 @@
+{
+  "name": "SearchField",
+  "level": "component",
+  "category": "inputs",
+  "description": "A search input with an integrated search button or icon for quick searches",
+  "visual": {
+    "description": "Horizontal row with input field and search button. Input has search icon placeholder, button is primary colored. Optional clear button appears when text is entered.",
+    "layout": "horizontal row",
+    "tokens": [
+      "color.primary.600",
+      "color.neutral.200",
+      "spacing.2",
+      "spacing.3",
+      "borderRadius.md"
+    ]
+  },
+  "interface": {
+    "props": [
+      {
+        "name": "placeholder",
+        "type": "string",
+        "required": false,
+        "description": "Placeholder text for the input",
+        "defaultValue": "Search..."
+      },
+      {
+        "name": "value",
+        "type": "string",
+        "required": false,
+        "description": "Controlled value for the input"
+      },
+      {
+        "name": "showClear",
+        "type": "boolean",
+        "required": false,
+        "description": "Show clear button when there is text",
+        "defaultValue": true
+      }
+    ],
+    "callbacks": ["onChange", "onSearch", "onClear"],
+    "slots": []
+  },
+  "examples": [
+    { "prompt": "search field", "match": 0.95 },
+    { "prompt": "search input with button", "match": 0.9 },
+    { "prompt": "search bar", "match": 0.9 },
+    { "prompt": "search box", "match": 0.85 }
+  ],
+  "tags": ["search", "input", "filter", "query"]
+}

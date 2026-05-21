@@ -1,0 +1,356 @@
+{
+  "meta": {
+    "timestamp": "2026-03-18T13:00:31.207Z",
+    "totalDurationMs": 70483,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-raw-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "mode": "raw",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "import{jsx as i,jsxs as t}from\"react/jsx-runtime\";import{Card as b,Stack as a,Text as e,Heading as r,Divider as h,Box as x}from\"@ggui-ai/design/primitives\";function k(o){const{city:c=\"Unknown City\",temperature:g=0,condition:l=\"N/A\",humidity:d=0,windSpeed:u=0,unit:p=\"\\xB0C\",forecast:m=[]}=o;return i(b,{padding:24,shadow:\"md\",radius:\"lg\",border:!0,children:t(a,{gap:16,children:[t(a,{gap:4,align:\"center\",children:[i(r,{level:2,children:c}),i(e,{variant:\"bodySmall\",color:\"var(--ggui-color-neutral-500, #6b7280)\",children:\"Current Conditions\"})]}),t(a,{direction:\"horizontal\",justify:\"center\",align:\"center\",gap:16,children:[t(r,{level:1,children:[g,p]}),t(a,{gap:0,align:\"center\",children:[i(e,{size:\"3xl\",children:\"\\u{1F324}\\uFE0F\"}),i(e,{variant:\"label\",children:l})]})]}),i(x,{paddingY:8,children:t(a,{direction:\"horizontal\",justify:\"between\",children:[t(a,{gap:4,align:\"center\",children:[i(e,{variant:\"caption\",color:\"var(--ggui-color-neutral-500, #6b7280)\",children:\"Humidity\"}),t(e,{weight:\"semibold\",children:[d,\"%\"]})]}),t(a,{gap:4,align:\"center\",children:[i(e,{variant:\"caption\",color:\"var(--ggui-color-neutral-500, #6b7280)\",children:\"Wind\"}),t(e,{weight:\"semibold\",children:[u,\" km/h\"]})]})]})}),i(h,{margin:8}),i(a,{direction:\"horizontal\",justify:\"between\",align:\"center\",gap:8,children:m.map((n,s)=>t(a,{gap:4,align:\"center\",children:[i(e,{variant:\"caption\",weight:\"medium\",children:n.day??\"-\"}),i(e,{size:\"xl\",children:n.icon??\"\\u2601\\uFE0F\"}),t(a,{direction:\"horizontal\",gap:4,children:[t(e,{variant:\"caption\",weight:\"bold\",children:[n.high??0,\"\\xB0\"]}),t(e,{variant:\"caption\",color:\"var(--ggui-color-neutral-500, #6b7280)\",children:[n.low??0,\"\\xB0\"]})]})]},s))})]})})}export{k as default};\n",
+        "sourceCode": "import React from 'react';\nimport { Card, Stack, Text, Heading, Divider, Box } from '@ggui-ai/design/primitives';\n\ninterface Props {\n  city?: string;\n  temperature?: number;\n  condition?: string;\n  humidity?: number;\n  windSpeed?: number;\n  unit?: string;\n  forecast?: Array<{ day?: string; icon?: string; high?: number; low?: number }>;\n}\n\nexport default function WeatherCard(props: Props) {\n  const {\n    city = \"Unknown City\",\n    temperature = 0,\n    condition = \"N/A\",\n    humidity = 0,\n    windSpeed = 0,\n    unit = \"°C\",\n    forecast = []\n  } = props;\n\n  return (\n    <Card padding={24} shadow=\"md\" radius=\"lg\" border={true}>\n      <Stack gap={16}>\n        {/* Header: City & Main Temp */}\n        <Stack gap={4} align=\"center\">\n          <Heading level={2}>{city}</Heading>\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-neutral-500, #6b7280)\">Current Conditions</Text>\n        </Stack>\n\n        <Stack direction=\"horizontal\" justify=\"center\" align=\"center\" gap={16}>\n          <Heading level={1}>{temperature}{unit}</Heading>\n          <Stack gap={0} align=\"center\">\n             <Text size=\"3xl\">🌤️</Text>\n             <Text variant=\"label\">{condition}</Text>\n          </Stack>\n        </Stack>\n\n        {/* Details: Humidity & Wind */}\n        <Box paddingY={8}>\n          <Stack direction=\"horizontal\" justify=\"between\">\n            <Stack gap={4} align=\"center\">\n              <Text variant=\"caption\" color=\"var(--ggui-color-neutral-500, #6b7280)\">Humidity</Text>\n              <Text weight=\"semibold\">{humidity}%</Text>\n            </Stack>\n            <Stack gap={4} align=\"center\">\n              <Text variant=\"caption\" color=\"var(--ggui-color-neutral-500, #6b7280)\">Wind</Text>\n              <Text weight=\"semibold\">{windSpeed} km/h</Text>\n            </Stack>\n          </Stack>\n        </Box>\n\n        <Divider margin={8} />\n\n        {/* Forecast Strip */}\n        <Stack direction=\"horizontal\" justify=\"between\" align=\"center\" gap={8}>\n          {forecast.map((item, index) => (\n            <Stack key={index} gap={4} align=\"center\">\n              <Text variant=\"caption\" weight=\"medium\">{item.day ?? '-'}</Text>\n              <Text size=\"xl\">{item.icon ?? '☁️'}</Text>\n              <Stack direction=\"horizontal\" gap={4}>\n                <Text variant=\"caption\" weight=\"bold\">{item.high ?? 0}°</Text>\n                <Text variant=\"caption\" color=\"var(--ggui-color-neutral-500, #6b7280)\">{item.low ?? 0}°</Text>\n              </Stack>\n            </Stack>\n          ))}\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}",
+        "tokens": {
+          "input": 957445,
+          "output": 10224,
+          "total": 967669
+        },
+        "generationTimeMs": 8794,
+        "turnsUsed": 2,
+        "recipeName": "iterative",
+        "iterations": 3,
+        "passesUsed": 3,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 83,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 75,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The weather icon is hardcoded as a static emoji (🌤️), ignoring the 'condition' prop input.",
+                "fix": "Create a mapping function or object to return appropriate icons based on the condition string passed in the props."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "Component lacks any hover states or interactive feedback, even though it represents data that might typically be clickable or refreshed.",
+                "fix": "Add a subtle hover transition or cursor pointer if the card is intended to be interactive."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "The weather icons (emojis) lack aria-labels or roles, making them confusing for screen reader users.",
+                "fix": "Add 'aria-label' or 'role=\"img\"' to the text containers holding the icons, describing the weather condition."
+              }
+            ],
+            "critique": "The component is well-structured, uses the design system primitives effectively, and provides a clean, readable layout. It could be improved by dynamically mapping icons to weather conditions rather than using a static emoji and ensuring that decorative elements like icons are properly announced for screen readers."
+          },
+          {
+            "passed": false,
+            "finalScore": 83,
+            "dimensions": {
+              "completeness": 90,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 75,
+              "codeQuality": 95
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The current condition icon is hardcoded as 🌤️ regardless of the 'condition' prop value.",
+                "fix": "Create a mapping function or object to return an appropriate icon based on the 'condition' string prop."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "major",
+                "description": "Missing semantic roles and ARIA labels. Icons (emojis) are decorative but need to be hidden from screen readers if they lack descriptive text.",
+                "fix": "Add aria-hidden='true' to icon elements and provide an aria-label on the card or specific elements to summarize the weather state."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The card is purely static; no hover effects or subtle animations on the forecast strip items.",
+                "fix": "Add a simple transition/transform effect on the forecast items when hovered to improve engagement."
+              }
+            ],
+            "critique": "The component is well-structured, uses the design system primitives correctly, and handles default props safely. The visual presentation is clean, but it lacks dynamic logic for the weather icons and could benefit from improved ARIA attributes to be truly production-ready."
+          },
+          {
+            "passed": true,
+            "finalScore": 85,
+            "dimensions": {
+              "completeness": 95,
+              "visualPolish": 85,
+              "interactivity": 70,
+              "accessibility": 80,
+              "codeQuality": 90
+            },
+            "issues": [
+              {
+                "dimension": "visualDesign",
+                "severity": "minor",
+                "description": "The weather icon is hardcoded as a static emoji regardless of the 'condition' prop value.",
+                "fix": "Create a mapping function or object to render the icon corresponding to the 'condition' prop string."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "No hover or active states provided for the component container, even though it acts as a summary card.",
+                "fix": "Add a subtle hover scale or shadow lift to indicate interactivity if the user interacts with the weather card."
+              },
+              {
+                "dimension": "accessibility",
+                "severity": "minor",
+                "description": "The weather icons lack ARIA labels to describe their meaning to screen reader users.",
+                "fix": "Add 'aria-label' attributes to the icon text elements describing the weather condition."
+              }
+            ],
+            "critique": "The component is well-structured and follows design system principles effectively. While it fulfills the functional requirements, the icon logic needs to be dynamic based on props rather than hardcoded, and adding screen reader support for the weather visuals would improve accessibility significantly."
+          }
+        ],
+        "modelRolesUsed": {
+          "thinking": "gemini-3.1-flash-lite-preview",
+          "coding": "gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini-3.1-flash-lite-preview"
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 72,
+        "finalScore": 72,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 55,
+          "hierarchy": 80,
+          "polish": 65,
+          "dataPresentation": 85,
+          "completeness": 85,
+          "visualPolish": 78,
+          "interactivity": 65,
+          "accessibility": 78,
+          "codeQuality": 55
+        },
+        "critique": "The component has good data handling and clear visual hierarchy, but inconsistently uses design tokens—mixing var() references with hardcoded hex fallbacks and missing spacing token usage throughout. Layout is solid but could benefit from better responsive considerations for the forecast strip on smaller screens.",
+        "evalTimeMs": 1996
+      },
+      "estimatedCostUsd": 0.5093945,
+      "timestamp": "2026-03-18T13:00:31.206Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1707,
+        "sourceCodeBytes": 2556,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-raw-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 72,
+      "avgTimeMs": 8794,
+      "avgCostUsd": 0.5093945,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 85,
+        "visualPolish": 78,
+        "interactivity": 65,
+        "accessibility": 78,
+        "codeQuality": 55
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 72,
+      "bestVariantId": "google-raw-0",
+      "worstVariantId": "google-raw-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 72,
+        "avgTimeMs": 8794,
+        "avgCostUsd": 0.5093945,
+        "successRate": 1
+      }
+    }
+  }
+}

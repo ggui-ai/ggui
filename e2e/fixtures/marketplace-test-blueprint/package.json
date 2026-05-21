@@ -1,0 +1,10 @@
+{
+  "name": "@my-org/marketplace-test-blueprint",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Workspace-private test blueprint consumed by registry e2e scenarios — a minimal valid blueprint manifest with inline TSX emitting a `data-testid='blueprint-probe'` div so Playwright can assert by semantic selector.",
+  "type": "module",
+  "files": [
+    "ggui.blueprint.json"
+  ]
+}

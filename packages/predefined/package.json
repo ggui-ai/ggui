@@ -1,0 +1,48 @@
+{
+  "name": "@ggui-ai/predefined",
+  "version": "0.1.0-rc.1",
+  "description": "ggui's official reference component library — components, composites, and blueprints the UI generator consults on its predefined-match path. Pure data plus reference React TSX; no JavaScript entry point.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/predefined",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/predefined"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "keywords": [
+    "ggui",
+    "design-system",
+    "react",
+    "components",
+    "blueprints",
+    "ui"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "files": [
+    "blueprints",
+    "components",
+    "composites",
+    "schema",
+    "tokens",
+    "package.json",
+    "README.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "esbuild": "^0.25.0",
+    "vitest": "^3.0.0"
+  }
+}

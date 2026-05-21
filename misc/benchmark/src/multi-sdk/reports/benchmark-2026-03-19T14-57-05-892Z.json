@@ -1,0 +1,1704 @@
+{
+  "meta": {
+    "timestamp": "2026-03-19T14:57:05.891Z",
+    "totalDurationMs": 41534,
+    "totalVariants": 1,
+    "totalCommits": 3,
+    "totalRuns": 3,
+    "successCount": 3,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-multi-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "",
+        "sourceCode": "// --- types.d.ts ---\n// Path: /virtual/types.d.tsx\nimport type { types.dProps } from '/virtual/types';\nimport React from 'react';\nimport { Box, Stack, Text, Divider } from '@ggui-ai/design/primitives';\n\nexport function WeatherCard({ city, temperature, condition, humidity, windSpeed, unit = 'C', forecast }: Props) {\n  return (\n    <Box\n      style={{\n        background: 'var(--color-surface)',\n        borderRadius: 'var(--radius-lg)',\n        padding: 'var(--spacing-md)',\n        boxShadow: 'var(--shadow-md)',\n        maxWidth: '400px',\n        width: '100%'\n      }}\n    >\n      <Stack style={{ gap: 'var(--spacing-md)' }}>\n        <CurrentWeather city={city} temperature={temperature} condition={condition} unit={unit} />\n\n        <Stack style={{ flexDirection: 'row', gap: 'var(--spacing-sm)' }}>\n          <Text style={{ color: 'var(--color-text-muted)' }}>Humidity: {humidity}%</Text>\n          <Text style={{ color: 'var(--color-text-muted)' }}>Wind: {windSpeed} km/h</Text>\n        </Stack>\n\n        <Divider style={{ marginTop: 'var(--spacing-md)' }} />\n        <ForecastStrip forecast={forecast} unit={unit} />\n      </Stack>\n    </Box>\n  );\n}\n\n\n// --- constants.ts ---\n// Path: /virtual/constants.ts\n// constants.ts — static data, mappings, configurations\n// No React, no design system imports. Pure data only.\n\nexport const CONDITION_ICONS: Record<string, string> = {\n  Sunny: '☀️',\n  Cloudy: '☁️',\n  Rainy: '🌧️',\n  Stormy: '⛈️',\n  Snowy: '❄️',\n  Clear: '🌙',\n};\n\nexport const UNIT_SYMBOLS: Record<'C' | 'F', string> = {\n  C: '°C',\n  F: '°F',\n};\n\nexport const PERCENT_SYMBOL = '%';\n\nexport const SPEED_UNIT = 'km/h';\n\nexport const FORECAST_COUNT = 5;\n\n// --- hooks.ts ---\n// Path: /virtual/hooks.ts\nimport type { Props, HookReturn } from '/virtual/types';\nimport * as constants from '/virtual/constants';\n// hooks.ts — state, handlers, data transformations\nimport { useState, useEffect, useMemo, useCallback, useRef } from 'react';\n\nexport function useComponent(props: Props): HookReturn {\n  const { city, temperature, condition, humidity, windSpeed, unit, forecast } = props;\n\n  const formattedTemperature = useMemo(() => {\n    return `${temperature}°${unit || 'C'}`;\n  }, [temperature, unit]);\n\n  const formattedHumidity = useMemo(() => {\n    return `${humidity}%`;\n  }, [humidity]);\n\n  const formattedWindSpeed = useMemo(() => {\n    return `${windSpeed} km/h`;\n  }, [windSpeed]);\n\n  return { formattedTemperature, formattedHumidity, formattedWindSpeed };\n}\n\n\n// --- components/CurrentWeather.tsx ---\n// Path: /virtual/components/CurrentWeather.tsx\nimport type { CurrentWeatherProps } from '/virtual/types';\n// components/CurrentWeather.tsx — reusable sub-component\nimport React from 'react';\nimport { Card, Stack, Box, Divider, Text, Heading, Icon } from '@ggui-ai/design/primitives';\n\nexport function CurrentWeather(props: Props) {\n  const { city, temperature, condition, humidity, windSpeed, unit, forecast } = props;\n\n  return (\n    <Card padding=\"var(--ggui-spacing-6)\" radius=\"lg\">\n      <Stack gap=\"var(--ggui-spacing-4)\">\n        <Heading level={1}>{city}</Heading>\n        <Stack direction=\"horizontal\" align=\"center\" gap=\"var(--ggui-spacing-4)\">\n          <Heading level={2}>{temperature}°{unit}</Heading>\n          <Text variant=\"bodyLarge\" color=\"var(--ggui-color-onSurfaceVariant)\">{condition}</Text>\n        </Stack>\n        <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-6)\">\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">Humidity: {humidity}%</Text>\n          <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">Wind: {windSpeed} km/h</Text>\n        </Stack>\n        <Divider />\n        <Stack direction=\"horizontal\" justify=\"between\" wrap>\n          {forecast.map((day) => (\n            <Stack key={day.day} align=\"center\" gap=\"var(--ggui-spacing-2)\">\n              <Text variant=\"caption\">{day.day}</Text>\n              <Icon name={day.icon} size={24} />\n              <Text variant=\"bodySmall\">\n                {day.high}° / {day.low}°\n              </Text>\n            </Stack>\n          ))}\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}\n\n// --- components/ForecastStrip.tsx ---\n// Path: /virtual/components/ForecastStrip.tsx\nimport type { ForecastStripProps } from '/virtual/types';\n// components/ForecastStrip.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function ForecastStrip(props: ForecastStripProps) {\n  const { forecast, unit } = props;\n\n  return (\n    <Row gap=\"var(--ggui-spacing-4)\" style={{ overflowX: 'auto', paddingBottom: 'var(--ggui-spacing-2)' }}>\n      {forecast.map((item) => (\n        <Stack key={item.day} align=\"center\" gap=\"var(--ggui-spacing-2)\" style={{ minWidth: '64px' }}>\n          <Text variant=\"bodySmall\">{item.day}</Text>\n          <Icon name={item.icon} size={24} />\n          <Text variant=\"bodySmall\" style={{ color: 'var(--ggui-color-onSurfaceVariant, #52525b)' }}>\n            {item.high}°{unit} / {item.low}°{unit}\n          </Text>\n        </Stack>\n      ))}\n    </Row>\n  );\n}\n\n\n// --- components/index.tsx ---\n// Path: /virtual/components/index.tsx\nimport type { Props, HookReturn } from '/virtual/types';\nimport { CurrentWeather } from '/virtual/components/CurrentWeather.tsx';\nimport { ForecastStrip } from '/virtual/components/ForecastStrip.tsx';\n// components/index.tsx — main component composing sub-components\nimport React from 'react';\nimport { Container, Card, Stack, Box, Divider, Text } from '@ggui-ai/design/primitives';\n\nexport function WeatherCard(props: Props & HookReturn) {\n  const { city, temperature, condition, humidity, windSpeed, unit, forecast, formattedTemperature, formattedHumidity, formattedWindSpeed } = props;\n\n  return (\n    <Container>\n      <Card padding=\"var(--ggui-spacing-4)\">\n        <Stack gap=\"var(--ggui-spacing-4)\">\n          <CurrentWeather city={city} temperature={temperature} condition={condition} unit={unit || 'C'} />\n          <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4)\">\n            <Box padding=\"var(--ggui-spacing-2)\">\n              <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Humidity</Text>\n              <Text color=\"var(--ggui-color-onSurface)\">{formattedHumidity}</Text>\n            </Box>\n            <Box padding=\"var(--ggui-spacing-2)\">\n              <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Wind</Text>\n              <Text color=\"var(--ggui-color-onSurface)\">{formattedWindSpeed}</Text>\n            </Box>\n          </Stack>\n          <Divider margin=\"var(--ggui-spacing-2)\" />\n          <ForecastStrip forecast={forecast} unit={unit || 'C'} />\n        </Stack>\n      </Card>\n    </Container>\n  );\n}\n\n\n// --- entrypoint.tsx ---\n// Path: /virtual/entrypoint.tsx\n// entrypoint.tsx — wires hooks + component, export default\nimport React from 'react';\nimport type { Props } from '/virtual/types';\nimport { useComponent } from '/virtual/hooks';\nimport { MainView } from '/virtual/components/index';\n\nexport default function Entrypoint(props: Props) {\n  const state = useComponent(props);\n  return <MainView {...props} {...state} />;\n}\n",
+        "tokens": {
+          "input": 227217,
+          "output": 6770,
+          "total": 233987
+        },
+        "generationTimeMs": 38709,
+        "turnsUsed": 9,
+        "recipeName": "multi-component",
+        "passesUsed": 1
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 55,
+        "finalScore": 55,
+        "issues": [],
+        "dimensions": {
+          "layout": 62,
+          "designTokens": 45,
+          "hierarchy": 58,
+          "polish": 40,
+          "dataPresentation": 70,
+          "completeness": 70,
+          "visualPolish": 60,
+          "interactivity": 40,
+          "accessibility": 60,
+          "codeQuality": 45
+        },
+        "critique": "The component has significant structural issues: multiple conflicting implementations (types.d.ts vs entrypoint.tsx), inconsistent design token usage with some hardcoded fallbacks like '#52525b', missing weather condition icons/emojis that were promised in the requirements, and no interactive polish (hover states, transitions, loading states). The forecast strip is well-implemented but CurrentWeather component duplicates data already shown in the main card, creating redundancy.",
+        "evalTimeMs": 2702
+      },
+      "estimatedCostUsd": 0.1339185,
+      "timestamp": "2026-03-19T14:57:05.890Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 0,
+        "sourceCodeBytes": 7522,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-multi-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "periodic-table",
+        "name": "Interactive Periodic Table",
+        "description": "CSS Grid periodic table with category coloring, search, and detail panel",
+        "complexity": "complex",
+        "expectedMinScore": 55,
+        "prompt": "Build an interactive periodic table of elements.\n\nLayout:\n- CSS Grid: 18 columns. Place each element using gridRow and gridColumn from its data.\n- Each cell: symbol (large, centered), atomic number (small, top-left)\n- Color-code by category using design tokens (e.g., noble-gas → one color, halogen → another)\n- Search input at top — filters by name or symbol (case-insensitive)\n- Click an element → detail panel below grid shows: name, symbol, atomicNumber, atomicWeight, category\n- Legend showing each category with its color\n\nAll element data comes from props.elements. Use design system CSS variables.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "elements": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "atomicNumber": {
+                        "type": "number"
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "atomicWeight": {
+                        "type": "number"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "row": {
+                        "type": "number"
+                      },
+                      "col": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "Full periodic table element data",
+                "example": [
+                  {
+                    "atomicNumber": 1,
+                    "symbol": "H",
+                    "name": "Hydrogen",
+                    "atomicWeight": 1.008,
+                    "category": "nonmetal",
+                    "row": 1,
+                    "col": 1
+                  },
+                  {
+                    "atomicNumber": 2,
+                    "symbol": "He",
+                    "name": "Helium",
+                    "atomicWeight": 4.003,
+                    "category": "noble-gas",
+                    "row": 1,
+                    "col": 18
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "elements": [
+            {
+              "atomicNumber": 1,
+              "symbol": "H",
+              "name": "Hydrogen",
+              "atomicWeight": 1.008,
+              "category": "nonmetal",
+              "row": 1,
+              "col": 1
+            },
+            {
+              "atomicNumber": 2,
+              "symbol": "He",
+              "name": "Helium",
+              "atomicWeight": 4.003,
+              "category": "noble-gas",
+              "row": 1,
+              "col": 18
+            },
+            {
+              "atomicNumber": 3,
+              "symbol": "Li",
+              "name": "Lithium",
+              "atomicWeight": 6.941,
+              "category": "alkali-metal",
+              "row": 2,
+              "col": 1
+            },
+            {
+              "atomicNumber": 4,
+              "symbol": "Be",
+              "name": "Beryllium",
+              "atomicWeight": 9.012,
+              "category": "alkaline-earth",
+              "row": 2,
+              "col": 2
+            },
+            {
+              "atomicNumber": 5,
+              "symbol": "B",
+              "name": "Boron",
+              "atomicWeight": 10.81,
+              "category": "metalloid",
+              "row": 2,
+              "col": 13
+            },
+            {
+              "atomicNumber": 6,
+              "symbol": "C",
+              "name": "Carbon",
+              "atomicWeight": 12.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 14
+            },
+            {
+              "atomicNumber": 7,
+              "symbol": "N",
+              "name": "Nitrogen",
+              "atomicWeight": 14.01,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 15
+            },
+            {
+              "atomicNumber": 8,
+              "symbol": "O",
+              "name": "Oxygen",
+              "atomicWeight": 16,
+              "category": "nonmetal",
+              "row": 2,
+              "col": 16
+            },
+            {
+              "atomicNumber": 9,
+              "symbol": "F",
+              "name": "Fluorine",
+              "atomicWeight": 19,
+              "category": "halogen",
+              "row": 2,
+              "col": 17
+            },
+            {
+              "atomicNumber": 10,
+              "symbol": "Ne",
+              "name": "Neon",
+              "atomicWeight": 20.18,
+              "category": "noble-gas",
+              "row": 2,
+              "col": 18
+            },
+            {
+              "atomicNumber": 11,
+              "symbol": "Na",
+              "name": "Sodium",
+              "atomicWeight": 22.99,
+              "category": "alkali-metal",
+              "row": 3,
+              "col": 1
+            },
+            {
+              "atomicNumber": 12,
+              "symbol": "Mg",
+              "name": "Magnesium",
+              "atomicWeight": 24.31,
+              "category": "alkaline-earth",
+              "row": 3,
+              "col": 2
+            },
+            {
+              "atomicNumber": 13,
+              "symbol": "Al",
+              "name": "Aluminium",
+              "atomicWeight": 26.98,
+              "category": "post-transition-metal",
+              "row": 3,
+              "col": 13
+            },
+            {
+              "atomicNumber": 14,
+              "symbol": "Si",
+              "name": "Silicon",
+              "atomicWeight": 28.09,
+              "category": "metalloid",
+              "row": 3,
+              "col": 14
+            },
+            {
+              "atomicNumber": 15,
+              "symbol": "P",
+              "name": "Phosphorus",
+              "atomicWeight": 30.97,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 15
+            },
+            {
+              "atomicNumber": 16,
+              "symbol": "S",
+              "name": "Sulfur",
+              "atomicWeight": 32.07,
+              "category": "nonmetal",
+              "row": 3,
+              "col": 16
+            },
+            {
+              "atomicNumber": 17,
+              "symbol": "Cl",
+              "name": "Chlorine",
+              "atomicWeight": 35.45,
+              "category": "halogen",
+              "row": 3,
+              "col": 17
+            },
+            {
+              "atomicNumber": 18,
+              "symbol": "Ar",
+              "name": "Argon",
+              "atomicWeight": 39.95,
+              "category": "noble-gas",
+              "row": 3,
+              "col": 18
+            },
+            {
+              "atomicNumber": 19,
+              "symbol": "K",
+              "name": "Potassium",
+              "atomicWeight": 39.1,
+              "category": "alkali-metal",
+              "row": 4,
+              "col": 1
+            },
+            {
+              "atomicNumber": 20,
+              "symbol": "Ca",
+              "name": "Calcium",
+              "atomicWeight": 40.08,
+              "category": "alkaline-earth",
+              "row": 4,
+              "col": 2
+            },
+            {
+              "atomicNumber": 21,
+              "symbol": "Sc",
+              "name": "Scandium",
+              "atomicWeight": 44.96,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 3
+            },
+            {
+              "atomicNumber": 22,
+              "symbol": "Ti",
+              "name": "Titanium",
+              "atomicWeight": 47.87,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 4
+            },
+            {
+              "atomicNumber": 23,
+              "symbol": "V",
+              "name": "Vanadium",
+              "atomicWeight": 50.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 5
+            },
+            {
+              "atomicNumber": 24,
+              "symbol": "Cr",
+              "name": "Chromium",
+              "atomicWeight": 52,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 6
+            },
+            {
+              "atomicNumber": 25,
+              "symbol": "Mn",
+              "name": "Manganese",
+              "atomicWeight": 54.94,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 7
+            },
+            {
+              "atomicNumber": 26,
+              "symbol": "Fe",
+              "name": "Iron",
+              "atomicWeight": 55.85,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 8
+            },
+            {
+              "atomicNumber": 27,
+              "symbol": "Co",
+              "name": "Cobalt",
+              "atomicWeight": 58.93,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 9
+            },
+            {
+              "atomicNumber": 28,
+              "symbol": "Ni",
+              "name": "Nickel",
+              "atomicWeight": 58.69,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 10
+            },
+            {
+              "atomicNumber": 29,
+              "symbol": "Cu",
+              "name": "Copper",
+              "atomicWeight": 63.55,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 11
+            },
+            {
+              "atomicNumber": 30,
+              "symbol": "Zn",
+              "name": "Zinc",
+              "atomicWeight": 65.38,
+              "category": "transition-metal",
+              "row": 4,
+              "col": 12
+            },
+            {
+              "atomicNumber": 31,
+              "symbol": "Ga",
+              "name": "Gallium",
+              "atomicWeight": 69.72,
+              "category": "post-transition-metal",
+              "row": 4,
+              "col": 13
+            },
+            {
+              "atomicNumber": 32,
+              "symbol": "Ge",
+              "name": "Germanium",
+              "atomicWeight": 72.63,
+              "category": "metalloid",
+              "row": 4,
+              "col": 14
+            },
+            {
+              "atomicNumber": 33,
+              "symbol": "As",
+              "name": "Arsenic",
+              "atomicWeight": 74.92,
+              "category": "metalloid",
+              "row": 4,
+              "col": 15
+            },
+            {
+              "atomicNumber": 34,
+              "symbol": "Se",
+              "name": "Selenium",
+              "atomicWeight": 78.97,
+              "category": "nonmetal",
+              "row": 4,
+              "col": 16
+            },
+            {
+              "atomicNumber": 35,
+              "symbol": "Br",
+              "name": "Bromine",
+              "atomicWeight": 79.9,
+              "category": "halogen",
+              "row": 4,
+              "col": 17
+            },
+            {
+              "atomicNumber": 36,
+              "symbol": "Kr",
+              "name": "Krypton",
+              "atomicWeight": 83.8,
+              "category": "noble-gas",
+              "row": 4,
+              "col": 18
+            },
+            {
+              "atomicNumber": 37,
+              "symbol": "Rb",
+              "name": "Rubidium",
+              "atomicWeight": 85.47,
+              "category": "alkali-metal",
+              "row": 5,
+              "col": 1
+            },
+            {
+              "atomicNumber": 38,
+              "symbol": "Sr",
+              "name": "Strontium",
+              "atomicWeight": 87.62,
+              "category": "alkaline-earth",
+              "row": 5,
+              "col": 2
+            },
+            {
+              "atomicNumber": 39,
+              "symbol": "Y",
+              "name": "Yttrium",
+              "atomicWeight": 88.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 3
+            },
+            {
+              "atomicNumber": 40,
+              "symbol": "Zr",
+              "name": "Zirconium",
+              "atomicWeight": 91.22,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 4
+            },
+            {
+              "atomicNumber": 41,
+              "symbol": "Nb",
+              "name": "Niobium",
+              "atomicWeight": 92.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 5
+            },
+            {
+              "atomicNumber": 42,
+              "symbol": "Mo",
+              "name": "Molybdenum",
+              "atomicWeight": 95.95,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 6
+            },
+            {
+              "atomicNumber": 43,
+              "symbol": "Tc",
+              "name": "Technetium",
+              "atomicWeight": 98,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 7
+            },
+            {
+              "atomicNumber": 44,
+              "symbol": "Ru",
+              "name": "Ruthenium",
+              "atomicWeight": 101.07,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 8
+            },
+            {
+              "atomicNumber": 45,
+              "symbol": "Rh",
+              "name": "Rhodium",
+              "atomicWeight": 102.91,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 9
+            },
+            {
+              "atomicNumber": 46,
+              "symbol": "Pd",
+              "name": "Palladium",
+              "atomicWeight": 106.42,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 10
+            },
+            {
+              "atomicNumber": 47,
+              "symbol": "Ag",
+              "name": "Silver",
+              "atomicWeight": 107.87,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 11
+            },
+            {
+              "atomicNumber": 48,
+              "symbol": "Cd",
+              "name": "Cadmium",
+              "atomicWeight": 112.41,
+              "category": "transition-metal",
+              "row": 5,
+              "col": 12
+            },
+            {
+              "atomicNumber": 49,
+              "symbol": "In",
+              "name": "Indium",
+              "atomicWeight": 114.82,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 13
+            },
+            {
+              "atomicNumber": 50,
+              "symbol": "Sn",
+              "name": "Tin",
+              "atomicWeight": 118.71,
+              "category": "post-transition-metal",
+              "row": 5,
+              "col": 14
+            },
+            {
+              "atomicNumber": 51,
+              "symbol": "Sb",
+              "name": "Antimony",
+              "atomicWeight": 121.76,
+              "category": "metalloid",
+              "row": 5,
+              "col": 15
+            },
+            {
+              "atomicNumber": 52,
+              "symbol": "Te",
+              "name": "Tellurium",
+              "atomicWeight": 127.6,
+              "category": "metalloid",
+              "row": 5,
+              "col": 16
+            },
+            {
+              "atomicNumber": 53,
+              "symbol": "I",
+              "name": "Iodine",
+              "atomicWeight": 126.9,
+              "category": "halogen",
+              "row": 5,
+              "col": 17
+            },
+            {
+              "atomicNumber": 54,
+              "symbol": "Xe",
+              "name": "Xenon",
+              "atomicWeight": 131.29,
+              "category": "noble-gas",
+              "row": 5,
+              "col": 18
+            },
+            {
+              "atomicNumber": 55,
+              "symbol": "Cs",
+              "name": "Cesium",
+              "atomicWeight": 132.91,
+              "category": "alkali-metal",
+              "row": 6,
+              "col": 1
+            },
+            {
+              "atomicNumber": 56,
+              "symbol": "Ba",
+              "name": "Barium",
+              "atomicWeight": 137.33,
+              "category": "alkaline-earth",
+              "row": 6,
+              "col": 2
+            },
+            {
+              "atomicNumber": 72,
+              "symbol": "Hf",
+              "name": "Hafnium",
+              "atomicWeight": 178.49,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 4
+            },
+            {
+              "atomicNumber": 73,
+              "symbol": "Ta",
+              "name": "Tantalum",
+              "atomicWeight": 180.95,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 5
+            },
+            {
+              "atomicNumber": 74,
+              "symbol": "W",
+              "name": "Tungsten",
+              "atomicWeight": 183.84,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 6
+            },
+            {
+              "atomicNumber": 75,
+              "symbol": "Re",
+              "name": "Rhenium",
+              "atomicWeight": 186.21,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 7
+            },
+            {
+              "atomicNumber": 76,
+              "symbol": "Os",
+              "name": "Osmium",
+              "atomicWeight": 190.23,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 8
+            },
+            {
+              "atomicNumber": 77,
+              "symbol": "Ir",
+              "name": "Iridium",
+              "atomicWeight": 192.22,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 9
+            },
+            {
+              "atomicNumber": 78,
+              "symbol": "Pt",
+              "name": "Platinum",
+              "atomicWeight": 195.08,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 10
+            },
+            {
+              "atomicNumber": 79,
+              "symbol": "Au",
+              "name": "Gold",
+              "atomicWeight": 196.97,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 11
+            },
+            {
+              "atomicNumber": 80,
+              "symbol": "Hg",
+              "name": "Mercury",
+              "atomicWeight": 200.59,
+              "category": "transition-metal",
+              "row": 6,
+              "col": 12
+            },
+            {
+              "atomicNumber": 81,
+              "symbol": "Tl",
+              "name": "Thallium",
+              "atomicWeight": 204.38,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 13
+            },
+            {
+              "atomicNumber": 82,
+              "symbol": "Pb",
+              "name": "Lead",
+              "atomicWeight": 207.2,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 14
+            },
+            {
+              "atomicNumber": 83,
+              "symbol": "Bi",
+              "name": "Bismuth",
+              "atomicWeight": 208.98,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 15
+            },
+            {
+              "atomicNumber": 84,
+              "symbol": "Po",
+              "name": "Polonium",
+              "atomicWeight": 209,
+              "category": "post-transition-metal",
+              "row": 6,
+              "col": 16
+            },
+            {
+              "atomicNumber": 85,
+              "symbol": "At",
+              "name": "Astatine",
+              "atomicWeight": 210,
+              "category": "halogen",
+              "row": 6,
+              "col": 17
+            },
+            {
+              "atomicNumber": 86,
+              "symbol": "Rn",
+              "name": "Radon",
+              "atomicWeight": 222,
+              "category": "noble-gas",
+              "row": 6,
+              "col": 18
+            },
+            {
+              "atomicNumber": 87,
+              "symbol": "Fr",
+              "name": "Francium",
+              "atomicWeight": 223,
+              "category": "alkali-metal",
+              "row": 7,
+              "col": 1
+            },
+            {
+              "atomicNumber": 88,
+              "symbol": "Ra",
+              "name": "Radium",
+              "atomicWeight": 226,
+              "category": "alkaline-earth",
+              "row": 7,
+              "col": 2
+            },
+            {
+              "atomicNumber": 104,
+              "symbol": "Rf",
+              "name": "Rutherfordium",
+              "atomicWeight": 267,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 4
+            },
+            {
+              "atomicNumber": 105,
+              "symbol": "Db",
+              "name": "Dubnium",
+              "atomicWeight": 268,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 5
+            },
+            {
+              "atomicNumber": 106,
+              "symbol": "Sg",
+              "name": "Seaborgium",
+              "atomicWeight": 269,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 6
+            },
+            {
+              "atomicNumber": 107,
+              "symbol": "Bh",
+              "name": "Bohrium",
+              "atomicWeight": 270,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 7
+            },
+            {
+              "atomicNumber": 108,
+              "symbol": "Hs",
+              "name": "Hassium",
+              "atomicWeight": 277,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 8
+            },
+            {
+              "atomicNumber": 109,
+              "symbol": "Mt",
+              "name": "Meitnerium",
+              "atomicWeight": 278,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 9
+            },
+            {
+              "atomicNumber": 110,
+              "symbol": "Ds",
+              "name": "Darmstadtium",
+              "atomicWeight": 281,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 10
+            },
+            {
+              "atomicNumber": 111,
+              "symbol": "Rg",
+              "name": "Roentgenium",
+              "atomicWeight": 282,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 11
+            },
+            {
+              "atomicNumber": 112,
+              "symbol": "Cn",
+              "name": "Copernicium",
+              "atomicWeight": 285,
+              "category": "transition-metal",
+              "row": 7,
+              "col": 12
+            },
+            {
+              "atomicNumber": 113,
+              "symbol": "Nh",
+              "name": "Nihonium",
+              "atomicWeight": 286,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 13
+            },
+            {
+              "atomicNumber": 114,
+              "symbol": "Fl",
+              "name": "Flerovium",
+              "atomicWeight": 289,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 14
+            },
+            {
+              "atomicNumber": 115,
+              "symbol": "Mc",
+              "name": "Moscovium",
+              "atomicWeight": 290,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 15
+            },
+            {
+              "atomicNumber": 116,
+              "symbol": "Lv",
+              "name": "Livermorium",
+              "atomicWeight": 293,
+              "category": "post-transition-metal",
+              "row": 7,
+              "col": 16
+            },
+            {
+              "atomicNumber": 117,
+              "symbol": "Ts",
+              "name": "Tennessine",
+              "atomicWeight": 294,
+              "category": "halogen",
+              "row": 7,
+              "col": 17
+            },
+            {
+              "atomicNumber": 118,
+              "symbol": "Og",
+              "name": "Oganesson",
+              "atomicWeight": 294,
+              "category": "noble-gas",
+              "row": 7,
+              "col": 18
+            },
+            {
+              "atomicNumber": 57,
+              "symbol": "La",
+              "name": "Lanthanum",
+              "atomicWeight": 138.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 3
+            },
+            {
+              "atomicNumber": 58,
+              "symbol": "Ce",
+              "name": "Cerium",
+              "atomicWeight": 140.12,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 4
+            },
+            {
+              "atomicNumber": 59,
+              "symbol": "Pr",
+              "name": "Praseodymium",
+              "atomicWeight": 140.91,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 5
+            },
+            {
+              "atomicNumber": 60,
+              "symbol": "Nd",
+              "name": "Neodymium",
+              "atomicWeight": 144.24,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 6
+            },
+            {
+              "atomicNumber": 61,
+              "symbol": "Pm",
+              "name": "Promethium",
+              "atomicWeight": 145,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 7
+            },
+            {
+              "atomicNumber": 62,
+              "symbol": "Sm",
+              "name": "Samarium",
+              "atomicWeight": 150.36,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 8
+            },
+            {
+              "atomicNumber": 63,
+              "symbol": "Eu",
+              "name": "Europium",
+              "atomicWeight": 151.96,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 9
+            },
+            {
+              "atomicNumber": 64,
+              "symbol": "Gd",
+              "name": "Gadolinium",
+              "atomicWeight": 157.25,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 10
+            },
+            {
+              "atomicNumber": 65,
+              "symbol": "Tb",
+              "name": "Terbium",
+              "atomicWeight": 158.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 11
+            },
+            {
+              "atomicNumber": 66,
+              "symbol": "Dy",
+              "name": "Dysprosium",
+              "atomicWeight": 162.5,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 12
+            },
+            {
+              "atomicNumber": 67,
+              "symbol": "Ho",
+              "name": "Holmium",
+              "atomicWeight": 164.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 13
+            },
+            {
+              "atomicNumber": 68,
+              "symbol": "Er",
+              "name": "Erbium",
+              "atomicWeight": 167.26,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 14
+            },
+            {
+              "atomicNumber": 69,
+              "symbol": "Tm",
+              "name": "Thulium",
+              "atomicWeight": 168.93,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 15
+            },
+            {
+              "atomicNumber": 70,
+              "symbol": "Yb",
+              "name": "Ytterbium",
+              "atomicWeight": 173.05,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 16
+            },
+            {
+              "atomicNumber": 71,
+              "symbol": "Lu",
+              "name": "Lutetium",
+              "atomicWeight": 174.97,
+              "category": "lanthanide",
+              "row": 8,
+              "col": 17
+            },
+            {
+              "atomicNumber": 89,
+              "symbol": "Ac",
+              "name": "Actinium",
+              "atomicWeight": 227,
+              "category": "actinide",
+              "row": 9,
+              "col": 3
+            },
+            {
+              "atomicNumber": 90,
+              "symbol": "Th",
+              "name": "Thorium",
+              "atomicWeight": 232.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 4
+            },
+            {
+              "atomicNumber": 91,
+              "symbol": "Pa",
+              "name": "Protactinium",
+              "atomicWeight": 231.04,
+              "category": "actinide",
+              "row": 9,
+              "col": 5
+            },
+            {
+              "atomicNumber": 92,
+              "symbol": "U",
+              "name": "Uranium",
+              "atomicWeight": 238.03,
+              "category": "actinide",
+              "row": 9,
+              "col": 6
+            },
+            {
+              "atomicNumber": 93,
+              "symbol": "Np",
+              "name": "Neptunium",
+              "atomicWeight": 237,
+              "category": "actinide",
+              "row": 9,
+              "col": 7
+            },
+            {
+              "atomicNumber": 94,
+              "symbol": "Pu",
+              "name": "Plutonium",
+              "atomicWeight": 244,
+              "category": "actinide",
+              "row": 9,
+              "col": 8
+            },
+            {
+              "atomicNumber": 95,
+              "symbol": "Am",
+              "name": "Americium",
+              "atomicWeight": 243,
+              "category": "actinide",
+              "row": 9,
+              "col": 9
+            },
+            {
+              "atomicNumber": 96,
+              "symbol": "Cm",
+              "name": "Curium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 10
+            },
+            {
+              "atomicNumber": 97,
+              "symbol": "Bk",
+              "name": "Berkelium",
+              "atomicWeight": 247,
+              "category": "actinide",
+              "row": 9,
+              "col": 11
+            },
+            {
+              "atomicNumber": 98,
+              "symbol": "Cf",
+              "name": "Californium",
+              "atomicWeight": 251,
+              "category": "actinide",
+              "row": 9,
+              "col": 12
+            },
+            {
+              "atomicNumber": 99,
+              "symbol": "Es",
+              "name": "Einsteinium",
+              "atomicWeight": 252,
+              "category": "actinide",
+              "row": 9,
+              "col": 13
+            },
+            {
+              "atomicNumber": 100,
+              "symbol": "Fm",
+              "name": "Fermium",
+              "atomicWeight": 257,
+              "category": "actinide",
+              "row": 9,
+              "col": 14
+            },
+            {
+              "atomicNumber": 101,
+              "symbol": "Md",
+              "name": "Mendelevium",
+              "atomicWeight": 258,
+              "category": "actinide",
+              "row": 9,
+              "col": 15
+            },
+            {
+              "atomicNumber": 102,
+              "symbol": "No",
+              "name": "Nobelium",
+              "atomicWeight": 259,
+              "category": "actinide",
+              "row": 9,
+              "col": 16
+            },
+            {
+              "atomicNumber": 103,
+              "symbol": "Lr",
+              "name": "Lawrencium",
+              "atomicWeight": 266,
+              "category": "actinide",
+              "row": 9,
+              "col": 17
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "",
+        "sourceCode": "// --- types.d.ts ---\nimport type { types.dProps } from '/virtual/types';\nexport interface ElementData {\n  atomicNumber: number;\n  symbol: string;\n  name: string;\n  atomicWeight: number;\n  category: string;\n  row: number;\n  col: number;\n}\n\nexport interface Props {\n  elements: ElementData[];\n}\n\nexport interface HookReturn {\n  searchQuery: string;\n  setSearchQuery: (val: string) => void;\n  selectedElement: ElementData | null;\n  setSelectedElement: (el: ElementData | null) => void;\n  filteredElements: ElementData[];\n  categories: string[];\n  getCategoryColor: (category: string) => string;\n}\n\nexport interface ElementCellProps {\n  element: ElementData;\n  color: string;\n  onClick: () => void;\n  isFaded: boolean;\n}\n\nexport interface DetailPanelProps {\n  element: ElementData;\n}\n\nexport interface LegendProps {\n  categories: string[];\n  getColor: (category: string) => string;\n}\n\n\n// --- constants.ts ---\n// Path: /virtual/constants.ts\n// constants.ts — static data, mappings, configurations\n// No React, no design system imports. Pure data only.\n\nexport const CATEGORY_COLORS: Record<string, string> = {\n  \"alkali metal\": \"var(--ggui-color-brand-primary)\",\n  \"alkaline earth metal\": \"var(--ggui-color-brand-secondary)\",\n  \"transition metal\": \"var(--ggui-color-accent-blue)\",\n  \"post-transition metal\": \"var(--ggui-color-accent-green)\",\n  \"metalloid\": \"var(--ggui-color-accent-purple)\",\n  \"reactive nonmetal\": \"var(--ggui-color-accent-orange)\",\n  \"noble gas\": \"var(--ggui-color-accent-red)\",\n  \"lanthanide\": \"var(--ggui-color-neutral-subtle)\",\n  \"actinide\": \"var(--ggui-color-neutral-muted)\",\n  \"unknown\": \"var(--ggui-color-neutral-base)\",\n};\n\nexport const GRID_COLUMNS = 18;\n\nexport const DEFAULT_COLOR = \"var(--ggui-color-neutral-base)\";\n\n// --- hooks.ts ---\n// Path: /virtual/hooks.ts\nimport type { Props, HookReturn } from '/virtual/types';\nimport * as constants from '/virtual/constants';\n// hooks.ts — state, handlers, data transformations\nimport { useState, useEffect, useMemo, useCallback, useRef } from 'react';\n\nexport function useComponent(props: Props): HookReturn {\n  const { elements } = props;\n\n  const [searchQuery, setSearchQuery] = useState('');\n  const [selectedElement, setSelectedElement] = useState<ElementData | null>(null);\n\n  const filteredElements = useMemo(() => {\n    const lowerQuery = searchQuery.toLowerCase();\n    return elements.filter(\n      (el) =>\n        el.name.toLowerCase().includes(lowerQuery) ||\n        el.symbol.toLowerCase().includes(lowerQuery)\n    );\n  }, [elements, searchQuery]);\n\n  const categories = useMemo(() => {\n    return Array.from(new Set(elements.map((el) => el.category)));\n  }, [elements]);\n\n  const getCategoryColor = useCallback((category: string) => {\n    const CATEGORY_COLORS: Record<string, string> = {\n      'diatomic nonmetal': 'var(--ggui-color-blue-500)',\n      'noble gas': 'var(--ggui-color-indigo-500)',\n      'alkali metal': 'var(--ggui-color-red-500)',\n      'alkaline earth metal': 'var(--ggui-color-orange-500)',\n      'metalloid': 'var(--ggui-color-teal-500)',\n      'polyatomic nonmetal': 'var(--ggui-color-cyan-500)',\n      'post-transition metal': 'var(--ggui-color-green-500)',\n      'transition metal': 'var(--ggui-color-yellow-500)',\n      'lanthanide': 'var(--ggui-color-purple-500)',\n      'actinide': 'var(--ggui-color-pink-500)',\n    };\n    return CATEGORY_COLORS[category] || 'var(--ggui-color-gray-500)';\n  }, []);\n\n  return {\n    searchQuery,\n    setSearchQuery,\n    selectedElement,\n    setSelectedElement,\n    filteredElements,\n    categories,\n    getCategoryColor,\n  };\n}\n\n\n// --- components/ElementCell.tsx ---\n// Path: /virtual/components/ElementCell.tsx\nimport type { ElementCellProps } from '/virtual/types';\n// components/ElementCell.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function ElementCell(props: ElementCellProps) {\n  const { element, color, onClick, isFaded } = props;\n\n  return (\n    <div\n      onClick={onClick}\n      style={{\n        gridColumn: element.col,\n        gridRow: element.row,\n        backgroundColor: 'var(--ggui-color-surfaceVariant)',\n        border: `2px solid ${color}`,\n        borderRadius: 'var(--ggui-shape-radius-md)',\n        padding: 'var(--ggui-spacing-2)',\n        opacity: isFaded ? 0.3 : 1,\n        cursor: 'pointer',\n        display: 'flex',\n        flexDirection: 'column',\n        justifyContent: 'space-between',\n        transition: 'transform 0.2s ease-in-out, background-color 0.2s ease-in-out',\n      }}\n      onMouseEnter={(e) => {\n        e.currentTarget.style.transform = 'scale(1.05)';\n        e.currentTarget.style.backgroundColor = 'var(--ggui-color-surface)';\n      }}\n      onMouseLeave={(e) => {\n        e.currentTarget.style.transform = 'scale(1)';\n        e.currentTarget.style.backgroundColor = 'var(--ggui-color-surfaceVariant)';\n      }}\n    >\n      <Text variant=\"caption\" color=\"var(--ggui-color-onSurfaceVariant)\">{element.atomicNumber}</Text>\n      <Heading level={4} style={{ textAlign: 'center' }}>{element.symbol}</Heading>\n    </div>\n  );\n}\n\n\n// --- components/DetailPanel.tsx ---\n// Path: /virtual/components/DetailPanel.tsx\nimport type { DetailPanelProps } from '/virtual/types';\n// components/DetailPanel.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function DetailPanel(props: DetailPanelProps) {\n  if (!props.element) return null;\n\n  const { element } = props;\n\n  return (\n    <Card padding={24} radius=\"lg\">\n      <Stack gap={16}>\n        <Stack direction=\"horizontal\" justify=\"between\" align=\"center\">\n          <Heading level={3} color=\"var(--ggui-color-onSurface)\">{element.name}</Heading>\n          <Badge variant=\"primary\">{element.symbol}</Badge>\n        </Stack>\n        <Divider margin={0} />\n        <Stack gap={8}>\n          <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Atomic Number</Text>\n          <Text variant=\"body\">{element.atomicNumber}</Text>\n          <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Atomic Weight</Text>\n          <Text variant=\"body\">{element.atomicWeight}</Text>\n          <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">Category</Text>\n          <Text variant=\"body\">{element.category}</Text>\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}\n\n\n// --- components/Legend.tsx ---\n// Path: /virtual/components/Legend.tsx\nimport type { LegendProps } from '/virtual/types';\n// components/Legend.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function Legend(props: LegendProps) {\n  return (\n    <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4)\" wrap>\n      {props.categories.map((category) => (\n        <Stack key={category} direction=\"horizontal\" align=\"center\" gap=\"var(--ggui-spacing-2)\">\n          <Box\n            background={props.getColor(category)}\n            borderRadius=\"var(--ggui-shape-radius-sm, 4px)\"\n            style={{ width: '16px', height: '16px' }}\n            aria-hidden=\"true\"\n          />\n          <Text variant=\"bodySmall\">{category}</Text>\n        </Stack>\n      ))}\n    </Stack>\n  );\n}\n\n\n// --- components/index.tsx ---\n// Path: /virtual/components/index.tsx\nimport type { Props, HookReturn } from '/virtual/types';\nimport { ElementCell } from '/virtual/components/ElementCell.tsx';\nimport { DetailPanel } from '/virtual/components/DetailPanel.tsx';\nimport { Legend } from '/virtual/components/Legend.tsx';\n// components/index.tsx — main component composing sub-components\nimport React from 'react';\nimport { Container, Stack, Box, Heading } from '@ggui-ai/design/primitives';\nimport { SearchField } from '@ggui-ai/design/components';\n\nexport function Component(props: Props & HookReturn) {\n  const { elements, searchQuery, setSearchQuery, selectedElement, setSelectedElement, filteredElements, categories, getCategoryColor } = props;\n\n  return (\n    <Container>\n      <Stack gap={16}>\n        <Heading level={2}>Periodic Table of Elements</Heading>\n        <SearchField \n          value={searchQuery} \n          onChange={setSearchQuery} \n          placeholder=\"Search by name or symbol...\"\n        />\n        <Legend \n          categories={categories} \n          getColor={getCategoryColor} \n        />\n        <Box style={{ \n          display: 'grid', \n          gridTemplateColumns: 'repeat(18, 1fr)', \n          gap: 'var(--ggui-spacing-1, 4px)',\n          overflowX: 'auto'\n        }}>\n          {elements.map((el) => (\n            <ElementCell\n              key={el.symbol}\n              element={el}\n              color={getCategoryColor(el.category)}\n              onClick={() => setSelectedElement(el)}\n              isFaded={!filteredElements.includes(el)}\n              // Assuming the ElementCell component doesn't accept style prop directly\n            />\n          ))}\n        </Box>\n        {selectedElement && <DetailPanel element={selectedElement} />}\n      </Stack>\n    </Container>\n  );\n}\n\n\n// --- entrypoint.tsx ---\n// Path: /virtual/entrypoint.tsx\n// entrypoint.tsx — wires hooks + component, export default\nimport React from 'react';\nimport type { Props } from '/virtual/types';\nimport { useComponent } from '/virtual/hooks';\nimport { MainView } from '/virtual/components/index';\n\nexport default function Entrypoint(props: Props) {\n  const state = useComponent(props);\n  return <MainView {...props} {...state} />;\n}\n",
+        "tokens": {
+          "input": 319029,
+          "output": 8275,
+          "total": 327304
+        },
+        "generationTimeMs": 20831,
+        "turnsUsed": 12,
+        "recipeName": "multi-component",
+        "passesUsed": 1
+      },
+      "evaluation": {
+        "passed": false,
+        "score": 59,
+        "finalScore": 59,
+        "issues": [],
+        "dimensions": {
+          "layout": 45,
+          "designTokens": 65,
+          "hierarchy": 55,
+          "polish": 70,
+          "dataPresentation": 60,
+          "completeness": 60,
+          "visualPolish": 50,
+          "interactivity": 70,
+          "accessibility": 50,
+          "codeQuality": 65
+        },
+        "critique": "The component has a solid foundation with proper CSS Grid setup and good use of design tokens in most places, but suffers from incomplete implementation (Legend.tsx is cut off mid-code), inconsistent color token usage (hooks.ts redefines CATEGORY_COLORS with non-standard token names), and missing key features like the search input UI and grid container styling. The ElementCell has nice hover states but lacks focus states for keyboard accessibility.",
+        "evalTimeMs": 2884
+      },
+      "estimatedCostUsd": 0.1843395,
+      "timestamp": "2026-03-19T14:56:48.200Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 0,
+        "sourceCodeBytes": 10544,
+        "dataFreeCheck": {
+          "isDataFree": false,
+          "violations": [
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"metalloid\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"lanthanide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default",
+            "Hardcoded string \"actinide\" found — should be a prop default"
+          ]
+        }
+      }
+    },
+    {
+      "variant": {
+        "id": "google-multi-component-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "multi-component",
+        "modelRoles": {
+          "thinking": "gemini/gemini-3.1-flash-lite-preview",
+          "coding": "gemini/gemini-3.1-flash-lite-preview",
+          "evaluation": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "onboarding-wizard",
+        "name": "Onboarding Wizard",
+        "description": "Multi-step onboarding flow with step indicator and validation",
+        "complexity": "medium",
+        "expectedMinScore": 60,
+        "prompt": "Build a 3-step onboarding wizard. Steps:\n\nStep 1 - Profile Setup:\n- Name input (required)\n- Email input (required, validate email format)\n- Avatar selection (choose from 4 emoji avatars)\n\nStep 2 - Preferences:\n- Role selection (dropdown: Developer, Designer, Manager, Other)\n- Notification toggle (email notifications on/off)\n- Theme preference (light/dark toggle)\n\nStep 3 - Review & Confirm:\n- Summary of all selections from steps 1-2\n- \"Go Back\" button to edit\n- \"Complete Setup\" button to submit\n\nRequirements:\n- Step indicator at top showing current step (1/2/3) with progress bar\n- Back/Next navigation (Next disabled until required fields valid)\n- Smooth transition between steps\n- Call props.onComplete with all collected data on final submit\n- All initial values from props (for editing existing profile)\n- Use design system CSS variables for all styling",
+        "contract": {
+          "interaction": "flow",
+          "props": {
+            "properties": {
+              "initialProfile": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "avatar": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "emailNotifications": {
+                      "type": "boolean"
+                    },
+                    "theme": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "description": "Pre-filled profile data for editing (all fields optional)",
+                "example": {}
+              },
+              "avatarOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available avatar emojis to choose from",
+                "example": ["👤", "🧑‍💻", "🎨", "📊"]
+              },
+              "roleOptions": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "required": true,
+                "description": "Available role options for the dropdown",
+                "example": ["Developer", "Designer", "Manager", "Other"]
+              }
+            }
+          },
+          "actions": {
+            "actions": {
+              "complete": {
+                "label": "Complete Setup",
+                "description": "Called with all profile data when user completes onboarding",
+                "example": {
+                  "name": "Jane",
+                  "email": "jane@example.com",
+                  "avatar": "🧑‍💻",
+                  "role": "Developer",
+                  "emailNotifications": true,
+                  "theme": "dark"
+                }
+              }
+            }
+          }
+        },
+        "props": {
+          "initialProfile": {},
+          "avatarOptions": ["👤", "🧑‍💻", "🎨", "📊"],
+          "roleOptions": ["Developer", "Designer", "Manager", "Other"]
+        }
+      },
+      "generation": {
+        "compiledCode": "var z=Object.defineProperty;var i=(t,e)=>z(t,\"name\",{value:e,configurable:!0});import{useState as x,useMemo as L,useCallback as k}from\"react\";var K=i(t=>/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(t),\"validateEmail\");function F(t){let{initialProfile:e}=t,l=3,[r,o]=x(0),[a,p]=x(()=>({name:e?.name??\"\",email:e?.email??\"\",avatar:e?.avatar??\"\",role:e?.role??\"\",emailNotifications:e?.emailNotifications??!1,theme:e?.theme??\"light\"})),m=k((s,M)=>{p(E=>({...E,[s]:M}))},[]),v=k(()=>{o(s=>Math.min(s+1,l-1))},[]),h=k(()=>{o(s=>Math.max(s-1,0))},[]),C=L(()=>{switch(r){case 0:return a.name.trim()!==\"\"&&K(a.email);case 1:return a.role!==\"\";case 2:return!0;default:return!1}},[r,a]);return{currentStep:r,formData:a,updateField:m,nextStep:v,prevStep:h,isStepValid:C,totalSteps:l}}i(F,\"useComponent\");import{useState as B}from\"react\";import{Container as W,Card as G,Stack as $,Button as y,Progress as Y}from\"@ggui-ai/design/primitives\";import{jsx as c,jsxs as b}from\"react/jsx-runtime\";function D(t){let[e,l]=B(1),[r,o]=B({name:t.initialProfile?.name||\"\",email:t.initialProfile?.email||\"\",avatar:t.initialProfile?.avatar||t.avatarOptions[0],role:t.initialProfile?.role||t.roleOptions[0],emailNotifications:t.initialProfile?.emailNotifications||!1,theme:t.initialProfile?.theme||\"light\"}),a=i(m=>{o(v=>({...v,...m}))},\"updateData\"),p=e===1?r.name!==\"\"&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(r.email):!0;return c(W,{maxWidth:\"sm\",padding:24,children:b($,{gap:16,children:[c(StepIndicator,{currentStep:e,totalSteps:3}),c(Y,{value:e/3*100,variant:\"default\",size:\"md\"}),b(G,{padding:24,shadow:\"md\",children:[e===1&&c(ProfileSetupForm,{data:r,onChange:a,avatarOptions:t.avatarOptions}),e===2&&c(PreferencesForm,{data:r,onChange:a,roleOptions:t.roleOptions}),e===3&&c(ReviewSummary,{data:r})]}),b(\"div\",{style:{display:\"flex\",justifyContent:\"space-between\",marginTop:\"var(--ggui-spacing-4)\"},children:[c(y,{variant:\"ghost\",onClick:()=>l(m=>m-1),disabled:e===1,children:\"Back\"}),e<3?c(y,{variant:\"primary\",onClick:()=>l(m=>m+1),disabled:!p,children:\"Next\"}):c(y,{variant:\"primary\",onClick:()=>t.onComplete(r),children:\"Complete Setup\"})]})]})})}i(D,\"ProfileForm\");import{Stack as j,Text as q,Select as J,Toggle as O}from\"@ggui-ai/design/primitives\";import{FormField as w}from\"@ggui-ai/design/components\";import{jsx as g,jsxs as I}from\"react/jsx-runtime\";function N(t){let{data:e,onChange:l,roleOptions:r}=t;return I(j,{gap:\"var(--ggui-spacing-4)\",children:[g(w,{label:\"Professional Role\",children:g(J,{value:e.role,onChange:o=>l({role:o}),placeholder:\"Select a role\",options:r.map(o=>({value:o,label:o}))})}),I(w,{label:\"Email Notifications\",children:[g(O,{label:\"Receive email notifications\",checked:e.emailNotifications,onChange:o=>l({emailNotifications:o})}),g(q,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Stay updated with product news and announcements.\"})]}),g(w,{label:\"Interface Theme\",children:g(O,{label:e.theme===\"dark\"?\"Dark Mode\":\"Light Mode\",checked:e.theme===\"dark\",onChange:o=>l({theme:o?\"dark\":\"light\"})})})]})}i(N,\"PreferencesForm\");import{Card as Q,Stack as P,Row as R,Divider as U,Text as u,Heading as X,Badge as Z,Avatar as _}from\"@ggui-ai/design/primitives\";import{jsx as n,jsxs as f}from\"react/jsx-runtime\";function A(t){let{data:e}=t;return n(Q,{padding:24,shadow:\"sm\",children:f(P,{gap:24,children:[n(X,{level:3,children:\"Review Your Profile\"}),f(P,{direction:\"horizontal\",gap:16,align:\"center\",children:[n(_,{name:e.name,src:e.avatar,size:\"lg\"}),f(P,{gap:4,children:[n(u,{variant:\"bodyLarge\",weight:\"semibold\",children:e.name}),n(u,{variant:\"bodySmall\",color:\"var(--ggui-color-onSurfaceVariant)\",children:e.email})]})]}),n(U,{}),f(P,{gap:16,children:[f(R,{justify:\"between\",children:[n(u,{color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Role\"}),n(u,{children:e.role})]}),f(R,{justify:\"between\",children:[n(u,{color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Theme\"}),n(u,{children:e.theme})]}),f(R,{justify:\"between\",children:[n(u,{color:\"var(--ggui-color-onSurfaceVariant)\",children:\"Email Notifications\"}),n(Z,{variant:e.emailNotifications?\"success\":\"secondary\",children:e.emailNotifications?\"Enabled\":\"Disabled\"})]})]})]})})}i(A,\"ReviewSummary\");import{Container as ee,Card as te,Stack as T,Heading as ae,Button as V,Progress as oe}from\"@ggui-ai/design/primitives\";import{Row as re}from\"@ggui-ai/design/primitives\";import{jsx as d,jsxs as S}from\"react/jsx-runtime\";function H(t){let{initialProfile:e,avatarOptions:l,roleOptions:r,onComplete:o,currentStep:a,formData:p,updateField:m,nextStep:v,prevStep:h,isStepValid:C,totalSteps:s}=t;return d(ee,{maxWidth:\"sm\",padding:\"var(--ggui-spacing-6)\",children:S(T,{gap:\"var(--ggui-spacing-4)\",children:[S(T,{gap:\"var(--ggui-spacing-2)\",children:[S(ae,{level:3,children:[\"Onboarding Wizard - Step \",a,\" / \",s]}),d(oe,{value:a/s*100,size:\"md\"})]}),d(te,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",radius:\"lg\",children:S(T,{gap:\"var(--ggui-spacing-6)\",children:[a===1&&d(D,{data:p,onChange:m,avatarOptions:l}),a===2&&d(N,{data:p,onChange:m,roleOptions:r}),a===3&&d(A,{data:p})]})}),S(re,{justify:\"between\",children:[d(V,{variant:\"ghost\",onClick:h,disabled:a===1,children:\"Back\"}),d(V,{variant:\"primary\",onClick:a===s?()=>o(p):v,disabled:!C,children:a===s?\"Complete Setup\":\"Next\"})]})]})})}i(H,\"MainView\");import{jsx as ne}from\"react/jsx-runtime\";function ie(t){let e=F(t);return ne(H,{...t,...e})}i(ie,\"Entrypoint\");export{ie as default};\n",
+        "sourceCode": "// --- types.d.ts ---\nimport type { types.dProps } from '/virtual/types';\nexport interface ProfileData {\n  name: string;\n  email: string;\n  avatar: string;\n  role: string;\n  emailNotifications: boolean;\n  theme: 'light' | 'dark';\n}\n\nexport interface Props {\n  initialProfile?: Partial<ProfileData>;\n  avatarOptions: string[];\n  roleOptions: string[];\n  onComplete: (data: ProfileData) => void;\n}\n\nexport interface HookReturn {\n  currentStep: number;\n  formData: ProfileData;\n  updateField: <K extends keyof ProfileData>(key: K, value: ProfileData[K]) => void;\n  nextStep: () => void;\n  prevStep: () => void;\n  isStepValid: boolean;\n  totalSteps: number;\n}\n\nexport interface StepIndicatorProps {\n  currentStep: number;\n  totalSteps: number;\n}\n\nexport interface ProfileFormProps {\n  data: ProfileData;\n  onChange: (data: Partial<ProfileData>) => void;\n  avatarOptions: string[];\n}\n\nexport interface PreferencesFormProps {\n  data: ProfileData;\n  onChange: (data: Partial<ProfileData>) => void;\n  roleOptions: string[];\n}\n\nexport interface ReviewSummaryProps {\n  data: ProfileData;\n}\n\n\n// --- constants.ts ---\n// Path: /virtual/constants.ts\n// constants.ts — static data, mappings, configurations\n// No React, no design system imports. Pure data only.\nimport { ProfileData } from '/virtual/types';\n\nexport const INITIAL_PROFILE_DATA: ProfileData = {\n  name: '',\n  email: '',\n  avatar: '',\n  role: '',\n  emailNotifications: false,\n  theme: 'light',\n};\n\nexport const EMAIL_REGEX = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nexport const TOTAL_STEPS = 3;\n\nexport const STEP_METADATA = [\n  { id: 1, label: 'Profile Information' },\n  { id: 2, label: 'Preferences' },\n  { id: 3, label: 'Review & Confirm' },\n];\n\n\n\n// --- hooks.ts ---\n// Path: /virtual/hooks.ts\nimport type { Props, HookReturn } from '/virtual/types';\nimport * as constants from '/virtual/constants';\n// hooks.ts — state, handlers, data transformations\nimport { useState, useEffect, useMemo, useCallback, useRef } from 'react';\n\nconst validateEmail = (email: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\n\nexport function useComponent(props: Props): HookReturn {\n  const { initialProfile } = props;\n  const totalSteps = 3;\n\n  const [currentStep, setCurrentStep] = useState(0);\n  const [formData, setFormData] = useState<ProfileData>(() => ({\n    name: initialProfile?.name ?? '',\n    email: initialProfile?.email ?? '',\n    avatar: initialProfile?.avatar ?? '',\n    role: initialProfile?.role ?? '',\n    emailNotifications: initialProfile?.emailNotifications ?? false,\n    theme: initialProfile?.theme ?? 'light',\n  }));\n\n  const updateField = useCallback(<K extends keyof ProfileData>(key: K, value: ProfileData[K]) => {\n    setFormData((prev) => ({ ...prev, [key]: value }));\n  }, []);\n\n  const nextStep = useCallback(() => {\n    setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));\n  }, []);\n\n  const prevStep = useCallback(() => {\n    setCurrentStep((prev) => Math.max(prev - 1, 0));\n  }, []);\n\n  const isStepValid = useMemo(() => {\n    switch (currentStep) {\n      case 0:\n        return formData.name.trim() !== '' && validateEmail(formData.email);\n      case 1:\n        return formData.role !== '';\n      case 2:\n        return true;\n      default:\n        return false;\n    }\n  }, [currentStep, formData]);\n\n  return {\n    currentStep,\n    formData,\n    updateField,\n    nextStep,\n    prevStep,\n    isStepValid,\n    totalSteps,\n  };\n}\n\n\n// --- components/StepIndicator.tsx ---\n// Path: /virtual/components/StepIndicator.tsx\nimport type { StepIndicatorProps } from '/virtual/types';\n// components/StepIndicator.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function StepIndicator(props: StepIndicatorProps) {\n  const { currentStep, totalSteps } = props;\n  const percentage = (currentStep / totalSteps) * 100;\n\n  return (\n    <Box padding=\"var(--ggui-spacing-4)\">\n      <Stack gap=\"var(--ggui-spacing-2)\">\n        <Text variant=\"label\" color=\"var(--ggui-color-onSurfaceVariant)\">\n          Step {currentStep} of {totalSteps}\n        </Text>\n        <Progress value={percentage} max={100} />\n      </Stack>\n    </Box>\n  );\n}\n\n\n// --- components/ProfileForm.tsx ---\n// Path: /virtual/components/ProfileForm.tsx\nimport type { ProfileFormProps } from '/virtual/types';\n// components/ProfileForm.tsx — reusable sub-component\nimport React, { useState } from 'react';\nimport { Container, Card, Stack, Button, Progress } from '@ggui-ai/design/primitives';\n\nexport function ProfileForm(props: ProfileFormProps) {\n  const [currentStep, setCurrentStep] = useState(1);\n  const [formData, setFormData] = useState<ProfileData>({\n    name: props.initialProfile?.name || '',\n    email: props.initialProfile?.email || '',\n    avatar: props.initialProfile?.avatar || props.avatarOptions[0],\n    role: props.initialProfile?.role || props.roleOptions[0],\n    emailNotifications: props.initialProfile?.emailNotifications || false,\n    theme: props.initialProfile?.theme || 'light',\n  });\n\n  const updateData = (data: Partial<ProfileData>) => {\n    setFormData((prev) => ({ ...prev, ...data }));\n  };\n\n  const isValid = currentStep === 1 ? formData.name !== '' && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(formData.email) : true;\n\n  return (\n    <Container maxWidth=\"sm\" padding={24}>\n      <Stack gap={16}>\n        <StepIndicator currentStep={currentStep} totalSteps={3} />\n        <Progress value={(currentStep / 3) * 100} variant=\"default\" size=\"md\" />\n\n        <Card padding={24} shadow=\"md\">\n          {currentStep === 1 && (\n            <ProfileSetupForm data={formData} onChange={updateData} avatarOptions={props.avatarOptions} />\n          )}\n          {currentStep === 2 && (\n            <PreferencesForm data={formData} onChange={updateData} roleOptions={props.roleOptions} />\n          )}\n          {currentStep === 3 && <ReviewSummary data={formData} />}\n        </Card>\n\n        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--ggui-spacing-4)' }}>\n          <Button \n            variant=\"ghost\" \n            onClick={() => setCurrentStep((s) => s - 1)} \n            disabled={currentStep === 1}\n          >\n            Back\n          </Button>\n          \n          {currentStep < 3 ? (\n            <Button \n              variant=\"primary\" \n              onClick={() => setCurrentStep((s) => s + 1)} \n              disabled={!isValid}\n            >\n              Next\n            </Button>\n          ) : (\n            <Button variant=\"primary\" onClick={() => props.onComplete(formData)}>Complete Setup</Button>\n          )}\n        </div>\n      </Stack>\n    </Container>\n  );\n}\n\n// --- components/PreferencesForm.tsx ---\n// Path: /virtual/components/PreferencesForm.tsx\nimport type { PreferencesFormProps } from '/virtual/types';\n// components/PreferencesForm.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function PreferencesForm(props: PreferencesFormProps) {\n  const { data, onChange, roleOptions } = props;\n\n  return (\n    <Stack gap=\"var(--ggui-spacing-4)\">\n      <FormField label=\"Professional Role\">\n        <Select\n          value={data.role}\n          onChange={(role) => onChange({ role })}\n          placeholder=\"Select a role\"\n          options={roleOptions.map((r) => ({ value: r, label: r }))}\n        />\n      </FormField>\n\n      <FormField label=\"Email Notifications\">\n        <Toggle\n          label=\"Receive email notifications\"\n          checked={data.emailNotifications}\n          onChange={(emailNotifications) => onChange({ emailNotifications })}\n        />\n        <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">\n          Stay updated with product news and announcements.\n        </Text>\n      </FormField>\n\n      <FormField label=\"Interface Theme\">\n        <Toggle\n          label={data.theme === 'dark' ? 'Dark Mode' : 'Light Mode'}\n          checked={data.theme === 'dark'}\n          onChange={(isDark) => onChange({ theme: isDark ? 'dark' : 'light' })}\n        />\n      </FormField>\n    </Stack>\n  );\n}\n\n\n// --- components/ReviewSummary.tsx ---\n// Path: /virtual/components/ReviewSummary.tsx\nimport type { ReviewSummaryProps } from '/virtual/types';\n// components/ReviewSummary.tsx — reusable sub-component\nimport React from 'react';\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n\nexport function ReviewSummary(props: ReviewSummaryProps) {\n  const { data } = props;\n\n  return (\n    <Card padding={24} shadow=\"sm\">\n      <Stack gap={24}>\n        <Heading level={3}>Review Your Profile</Heading>\n        \n        <Stack direction=\"horizontal\" gap={16} align=\"center\">\n          <Avatar name={data.name} src={data.avatar} size=\"lg\" />\n          <Stack gap={4}>\n            <Text variant=\"bodyLarge\" weight=\"semibold\">{data.name}</Text>\n            <Text variant=\"bodySmall\" color=\"var(--ggui-color-onSurfaceVariant)\">{data.email}</Text>\n          </Stack>\n        </Stack>\n\n        <Divider />\n\n        <Stack gap={16}>\n          <Row justify=\"between\"><Text color=\"var(--ggui-color-onSurfaceVariant)\">Role</Text><Text>{data.role}</Text></Row>\n          <Row justify=\"between\"><Text color=\"var(--ggui-color-onSurfaceVariant)\">Theme</Text><Text>{data.theme}</Text></Row>\n          <Row justify=\"between\"><Text color=\"var(--ggui-color-onSurfaceVariant)\">Email Notifications</Text>\n            <Badge variant={data.emailNotifications ? 'success' : 'secondary'}>{data.emailNotifications ? 'Enabled' : 'Disabled'}</Badge>\n          </Row>\n        </Stack>\n      </Stack>\n    </Card>\n  );\n}\n\n\n// --- components/index.tsx ---\n// Path: /virtual/components/index.tsx\nimport type { Props, HookReturn } from '/virtual/types';\nimport { StepIndicator } from '/virtual/components/StepIndicator.tsx';\nimport { ProfileForm } from '/virtual/components/ProfileForm.tsx';\nimport { PreferencesForm } from '/virtual/components/PreferencesForm.tsx';\nimport { ReviewSummary } from '/virtual/components/ReviewSummary.tsx';\n// components/index.tsx — main component composing sub-components\nimport React from 'react';\nimport { Container, Card, Stack, Heading, Button, Progress } from '@ggui-ai/design/primitives';\nimport { Row } from '@ggui-ai/design/primitives'; // Assuming Row is exported from primitives\n\nexport function MainView(props: Props & HookReturn) {\n  const { initialProfile, avatarOptions, roleOptions, onComplete, currentStep, formData, updateField, nextStep, prevStep, isStepValid, totalSteps } = props;\n\n  return (\n    <Container maxWidth=\"sm\" padding=\"var(--ggui-spacing-6)\">\n      <Stack gap=\"var(--ggui-spacing-4)\">\n        <Stack gap=\"var(--ggui-spacing-2)\">\n          <Heading level={3}>Onboarding Wizard - Step {currentStep} / {totalSteps}</Heading>\n          <Progress value={(currentStep / totalSteps) * 100} size=\"md\" />\n        </Stack>\n\n        <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\" radius=\"lg\">\n          <Stack gap=\"var(--ggui-spacing-6)\">\n            {currentStep === 1 && <ProfileForm data={formData} onChange={updateField} avatarOptions={avatarOptions} />}\n            {currentStep === 2 && <PreferencesForm data={formData} onChange={updateField} roleOptions={roleOptions} />}\n            {currentStep === 3 && <ReviewSummary data={formData} />}\n          </Stack>\n        </Card>\n\n        <Row justify=\"between\">\n          <Button variant=\"ghost\" onClick={prevStep} disabled={currentStep === 1}>\n            Back\n          </Button>\n          <Button \n            variant=\"primary\" \n            onClick={currentStep === totalSteps ? () => onComplete(formData) : nextStep} \n            disabled={!isStepValid}\n          >\n            {currentStep === totalSteps ? 'Complete Setup' : 'Next'}\n          </Button>\n        </Row>\n      </Stack>\n    </Container>\n  );\n}\n\n\n// --- entrypoint.tsx ---\n// Path: /virtual/entrypoint.tsx\n// entrypoint.tsx — wires hooks + component, export default\nimport React from 'react';\nimport type { Props } from '/virtual/types';\nimport { useComponent } from '/virtual/hooks';\nimport { MainView } from '/virtual/components/index';\n\nexport default function Entrypoint(props: Props) {\n  const state = useComponent(props);\n  return <MainView {...props} {...state} />;\n}\n",
+        "tokens": {
+          "input": 368245,
+          "output": 10749,
+          "total": 378994
+        },
+        "generationTimeMs": 23242,
+        "turnsUsed": 12,
+        "recipeName": "multi-component",
+        "passesUsed": 1,
+        "evaluations": [
+          {
+            "passed": false,
+            "finalScore": 65,
+            "dimensions": {
+              "completeness": 65,
+              "visualPolish": 75,
+              "interactivity": 60,
+              "accessibility": 65,
+              "codeQuality": 55
+            },
+            "issues": [
+              {
+                "dimension": "completeness",
+                "severity": "critical",
+                "description": "The component ignores the custom hook provided in the boilerplate and reimplements state internally, leading to synchronization issues and breaking the requirements.",
+                "fix": "Remove local state from the main component and integrate the `useComponent` hook provided in the code provided."
+              },
+              {
+                "dimension": "completeness",
+                "severity": "major",
+                "description": "The ProfileSetupForm component and other sub-components referenced in the main wrapper are missing from the provided code block.",
+                "fix": "Include the implementation for ProfileSetupForm, PreferencesForm, and ReviewSummary within the final component structure."
+              },
+              {
+                "dimension": "codeQuality",
+                "severity": "critical",
+                "description": "Code is fragmented and incomplete; the source code ends abruptly inside the ReviewSummary component.",
+                "fix": "Ensure all files are complete and correctly import from the provided virtual types/hooks."
+              },
+              {
+                "dimension": "interactivity",
+                "severity": "minor",
+                "description": "The progress bar calculation is hardcoded and misaligned with the actual step count logic.",
+                "fix": "Use the hook's `currentStep` and `totalSteps` to calculate percentage dynamically."
+              }
+            ],
+            "critique": "The submission fails to integrate the provided hook architecture, resulting in disconnected code that doesn't function as a cohesive wizard. The implementation is incomplete and lacks the core sub-components required for the individual steps.",
+            "inputTokens": 3617,
+            "outputTokens": 407
+          }
+        ]
+      },
+      "evaluation": {
+        "passed": false,
+        "finalScore": 65,
+        "dimensions": {
+          "completeness": 65,
+          "visualPolish": 75,
+          "interactivity": 60,
+          "accessibility": 65,
+          "codeQuality": 55
+        },
+        "issues": [
+          {
+            "dimension": "completeness",
+            "severity": "critical",
+            "description": "The component ignores the custom hook provided in the boilerplate and reimplements state internally, leading to synchronization issues and breaking the requirements.",
+            "fix": "Remove local state from the main component and integrate the `useComponent` hook provided in the code provided."
+          },
+          {
+            "dimension": "completeness",
+            "severity": "major",
+            "description": "The ProfileSetupForm component and other sub-components referenced in the main wrapper are missing from the provided code block.",
+            "fix": "Include the implementation for ProfileSetupForm, PreferencesForm, and ReviewSummary within the final component structure."
+          },
+          {
+            "dimension": "codeQuality",
+            "severity": "critical",
+            "description": "Code is fragmented and incomplete; the source code ends abruptly inside the ReviewSummary component.",
+            "fix": "Ensure all files are complete and correctly import from the provided virtual types/hooks."
+          },
+          {
+            "dimension": "interactivity",
+            "severity": "minor",
+            "description": "The progress bar calculation is hardcoded and misaligned with the actual step count logic.",
+            "fix": "Use the hook's `currentStep` and `totalSteps` to calculate percentage dynamically."
+          }
+        ],
+        "critique": "The submission fails to integrate the provided hook architecture, resulting in disconnected code that doesn't function as a cohesive wizard. The implementation is incomplete and lacks the core sub-components required for the individual steps.",
+        "inputTokens": 3617,
+        "outputTokens": 407
+      },
+      "estimatedCostUsd": 0.2163695,
+      "timestamp": "2026-03-19T14:56:47.721Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 5415,
+        "sourceCodeBytes": 13275,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-multi-component-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 59.666666666666664,
+      "avgTimeMs": 27594,
+      "avgCostUsd": 0.17820916666666667,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 65,
+        "visualPolish": 61.666666666666664,
+        "interactivity": 56.666666666666664,
+        "accessibility": 58.333333333333336,
+        "codeQuality": 55
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 55,
+      "bestVariantId": "google-multi-component-0",
+      "worstVariantId": "google-multi-component-0"
+    },
+    {
+      "commitId": "periodic-table",
+      "commitName": "Interactive Periodic Table",
+      "complexity": "complex",
+      "avgScore": 59,
+      "bestVariantId": "google-multi-component-0",
+      "worstVariantId": "google-multi-component-0"
+    },
+    {
+      "commitId": "onboarding-wizard",
+      "commitName": "Onboarding Wizard",
+      "complexity": "medium",
+      "avgScore": 65,
+      "bestVariantId": "google-multi-component-0",
+      "worstVariantId": "google-multi-component-0"
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 59.666666666666664,
+        "avgTimeMs": 27594,
+        "avgCostUsd": 0.17820916666666667,
+        "successRate": 1
+      }
+    }
+  }
+}

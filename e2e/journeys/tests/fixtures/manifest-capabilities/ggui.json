@@ -1,0 +1,16 @@
+{
+  "schema": "1",
+  "protocol": "1.1",
+  "app": {
+    "slug": "manifest-capabilities-fixture",
+    "name": "Manifest Capabilities Fixture"
+  },
+  "blueprints": {
+    "include": ["ui/**/ggui.ui.json"]
+  },
+  "primitives": {
+    "packages": [],
+    "local": ["ui/primitives/ggui.primitives.json"]
+  },
+  "theme": { "file": "./theme.json" }
+}

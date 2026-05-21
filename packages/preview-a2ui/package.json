@@ -1,0 +1,58 @@
+{
+  "name": "@ggui-ai/preview-a2ui",
+  "version": "0.1.0-rc.1",
+  "description": "Narrow A2UI boundary for ggui's provisional UI assembly channel. Framework-neutral types and validators for the server-write subset (createSurface / updateComponents / deleteSurface) used to paint shimmering placeholder UI before the final generated interface arrives.",
+  "keywords": [
+    "ggui",
+    "a2ui",
+    "ui",
+    "preview",
+    "validation"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/preview-a2ui",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/preview-a2ui"
+  },
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./emitters": {
+      "types": "./dist/emitters/index.d.ts",
+      "import": "./dist/emitters/index.js",
+      "default": "./dist/emitters/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

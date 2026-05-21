@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "protocol": "1.1",
+  "app": {
+    "slug": "tasks-mount-via-serve",
+    "name": "Tasks Mount via ggui serve"
+  },
+  "blueprints": { "include": [] },
+  "primitives": { "packages": [], "local": [] },
+  "mcpMounts": ["./tasks-mount.mjs"]
+}

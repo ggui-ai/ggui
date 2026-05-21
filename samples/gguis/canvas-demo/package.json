@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-samples/ggui-canvas-demo",
+  "version": "0.0.1",
+  "description": "Reference sample: ggui serve with `defaultMcpAppsMode: 'canvas'`. The MCP host mints one session-scoped iframe (`ui://ggui/session/<sessionId>`) instead of per-push iframes; subsequent pushes route through the session WebSocket channel. Used by the e2e suite to exercise the canvas-mode wire contract.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6786}",
+    "start:default-port": "ggui serve --mcp-only --dev-allow-all",
+    "start:secure": "ggui serve --mcp-only --port ${PORT:-6786}"
+  },
+  "dependencies": {
+    "@ggui-ai/cli": "workspace:*"
+  }
+}

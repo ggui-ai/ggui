@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "//": "Scope `.ts` files in this dir as ESM so the `tasks-backed-launcher.mts` (one dir up, plain-ESM via .mts extension) can import `./seed.js` / `./store.js` / `./handlers.js` through a real ESM resolver. Vitest uses its own Vite-backed resolver (esbuild + ESM by construction) and is unaffected by this nested package.json. The sibling `.spec.ts` files under ../../../ stay CJS because that's where their nearest package.json sits — e2e/ggui-oss/package.json has no `type` field, which is the CJS default."
+}

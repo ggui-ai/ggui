@@ -1,0 +1,59 @@
+{
+  "name": "@ggui-ai/benchmark",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Benchmark suite for the ggui generation protocol — triad-iteration tooling. Monorepo-only.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "src",
+    "scripts",
+    "litellm_config.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/benchmark"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "node --import tsx scripts/bench.mjs",
+    "bench:n": "node --import tsx scripts/bench-n.mjs",
+    "bench:slo": "node --import tsx scripts/bench-slo.mjs",
+    "bench:a2ui": "node --import tsx scripts/bench-a2ui.mjs",
+    "bench:blueprint-negotiation": "node --import tsx scripts/bench-blueprint-negotiation.mjs",
+    "bench:baseline": "node --import tsx scripts/bench-baseline.mjs",
+    "bench:baseline-diff": "node --import tsx scripts/bench-baseline-diff.mjs",
+    "bench:baseline-diff-triage": "node --import tsx scripts/bench-baseline-diff-triage.mjs",
+    "probe": "node --import tsx scripts/probe-it.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/mcp-server-handlers": "workspace:*",
+    "@ggui-ai/negotiator": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@ggui-ai/shared": "workspace:*",
+    "@ggui-ai/ui-gen": "workspace:*",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "dotenv": "^16.4.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}

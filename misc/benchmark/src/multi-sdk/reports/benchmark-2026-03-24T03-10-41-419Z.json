@@ -1,0 +1,470 @@
+{
+  "meta": {
+    "timestamp": "2026-03-24T03:10:41.418Z",
+    "totalDurationMs": 19948,
+    "totalVariants": 1,
+    "totalCommits": 1,
+    "totalRuns": 1,
+    "successCount": 1,
+    "failureCount": 0,
+    "successRate": 1
+  },
+  "results": [
+    {
+      "variant": {
+        "id": "google-default-0",
+        "sdkName": "google",
+        "tier": "balanced",
+        "modelId": "gemini/gemini-3-flash-preview",
+        "recipe": "default",
+        "modelRoles": {
+          "coding": "gemini/gemini-3.1-flash-lite-preview"
+        }
+      },
+      "commit": {
+        "id": "weather-card",
+        "name": "Weather Card",
+        "description": "Data display with props, design tokens, and responsive layout",
+        "complexity": "simple",
+        "expectedMinScore": 70,
+        "shellType": "chat",
+        "screen": "universal",
+        "prompt": "Build a weather card component. It should display:\n- Current temperature (large, prominent)\n- Weather condition with an appropriate icon/emoji (sunny, cloudy, rainy, etc.)\n- Humidity percentage\n- Wind speed\n- A 5-day forecast strip at the bottom showing day name, icon, and high/low temps\n\nAll data must come from props — never hardcode weather data. Use CSS variables from the design system for all colors and spacing.",
+        "contract": {
+          "interaction": "display",
+          "props": {
+            "properties": {
+              "city": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "City name",
+                "example": "Tokyo"
+              },
+              "temperature": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Current temperature",
+                "example": 28
+              },
+              "condition": {
+                "schema": {
+                  "type": "string"
+                },
+                "required": true,
+                "description": "Weather condition (Sunny, Cloudy, Rainy, etc.)",
+                "example": "Sunny"
+              },
+              "humidity": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Humidity percentage",
+                "example": 45
+              },
+              "windSpeed": {
+                "schema": {
+                  "type": "number"
+                },
+                "required": true,
+                "description": "Wind speed",
+                "example": 8
+              },
+              "unit": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Temperature unit (C or F)",
+                "example": "C"
+              },
+              "forecast": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "day": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "number"
+                      },
+                      "low": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": true,
+                "description": "5-day forecast array",
+                "example": [
+                  {
+                    "day": "Mon",
+                    "icon": "☀️",
+                    "high": 30,
+                    "low": 22
+                  },
+                  {
+                    "day": "Tue",
+                    "icon": "⛅",
+                    "high": 27,
+                    "low": 20
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "props": {
+          "city": "Tokyo",
+          "temperature": 28,
+          "condition": "Sunny",
+          "humidity": 45,
+          "windSpeed": 8,
+          "unit": "C",
+          "forecast": [
+            {
+              "day": "Mon",
+              "icon": "☀️",
+              "high": 30,
+              "low": 22
+            },
+            {
+              "day": "Tue",
+              "icon": "⛅",
+              "high": 27,
+              "low": 20
+            },
+            {
+              "day": "Wed",
+              "icon": "🌧️",
+              "high": 23,
+              "low": 18
+            },
+            {
+              "day": "Thu",
+              "icon": "⛈️",
+              "high": 21,
+              "low": 17
+            },
+            {
+              "day": "Fri",
+              "icon": "☀️",
+              "high": 29,
+              "low": 21
+            }
+          ]
+        }
+      },
+      "generation": {
+        "compiledCode": "var m=Object.defineProperty;var o=(e,r)=>m(e,\"name\",{value:r,configurable:!0});import{jsx as a,jsxs as i}from\"react/jsx-runtime\";import{Container as s,Card as p,Stack as d,Row as c,Divider as b,Text as n,Heading as g,Icon as u}from\"@ggui-ai/design/primitives\";function h(e){const r=o(t=>{switch(t.toLowerCase()){case\"sunny\":return\"sun\";case\"cloudy\":return\"cloud\";case\"rainy\":return\"cloud-rain\";default:return\"cloud\"}},\"getIcon\");return a(s,{maxWidth:\"md\",padding:\"var(--ggui-spacing-6)\",children:a(p,{padding:\"var(--ggui-spacing-6)\",shadow:\"md\",children:i(d,{gap:\"var(--ggui-spacing-4)\",align:\"center\",children:[a(g,{level:1,children:e.city}),i(c,{align:\"center\",gap:\"var(--ggui-spacing-2)\",children:[a(u,{name:r(e.condition),size:48}),i(g,{level:2,children:[e.temperature,\"\\xB0\",e.unit]})]}),a(n,{variant:\"bodyLarge\",children:e.condition}),i(c,{gap:\"var(--ggui-spacing-6)\",children:[i(n,{children:[\"Humidity: \",e.humidity,\"%\"]}),i(n,{children:[\"Wind: \",e.windSpeed,\" mph\"]})]}),a(b,{}),a(d,{direction:\"horizontal\",gap:\"var(--ggui-spacing-4)\",justify:\"between\",style:{width:\"100%\"},children:(e.forecast||[]).map((t,l)=>i(d,{align:\"center\",gap:\"var(--ggui-spacing-1)\",children:[a(n,{variant:\"caption\",children:t.day}),a(u,{name:t.icon||\"cloud\",size:24}),i(n,{variant:\"caption\",children:[t.high,\"\\xB0 / \",t.low,\"\\xB0\"]})]},l))})]})})})}o(h,\"Component\");export{h as default};\n",
+        "sourceCode": "// DO NOT EDIT imports — all available components are pre-imported.\n// prettier-ignore-start\nimport React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';\n// Layout: Container, Card, Stack, Row, Box, Divider, Spacer\n// Typography: Text, Heading | Inputs: Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider\n// Display: Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip | Data: Table, Tabs, Accordion\nimport { Container, Card, Stack, Row, Box, Divider, Spacer, Text, Heading, Button, Input, TextArea, Select, Checkbox, Toggle, RadioGroup, Slider, Badge, Spinner, Avatar, Alert, Progress, Image, Icon, Link, Tooltip, Table, Tabs, Toast, Accordion } from '@ggui-ai/design/primitives';\n// Components: SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination\nimport { SearchField, FormField, MenuItem, Tag, Dropdown, Autocomplete, Breadcrumb, Pagination } from '@ggui-ai/design/components';\n// Compositions: Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, Modal, Footer, Hero\nimport { Header, Sidebar, CardGrid, CommentThread, DataTable, ChatWindow, NavigationBar, FileUploader, UserProfileCard, NotificationCenter, Modal, CommandPalette, Footer, Hero } from '@ggui-ai/design/compositions';\n// Interaction wrappers: use as={Clickable} on primitives for onClick, as={Hoverable} for hover, as={Pressable} for press\nimport { Clickable, Hoverable, Pressable } from '@ggui-ai/design/interact';\n// prettier-ignore-end\n\n// DO NOT EDIT Props — auto-generated from the data contract\n// DO NOT EDIT — generated from data contract. Changing this will fail validation.\ninterface Props {\n  city: string; // City name\n  temperature: number; // Current temperature\n  condition: string; // Weather condition (Sunny, Cloudy, Rainy, etc.)\n  humidity: number; // Humidity percentage\n  windSpeed: number; // Wind speed\n  unit: string; // Temperature unit (C or F)\n  forecast: Array<{ day?: string; icon?: string; high?: number; low?: number }>; // 5-day forecast array\n}\n\n\n\n\n\n// Place helper components here if needed\n\nexport default function Component(props: Props) {\n  // DO NOT EDIT wire hooks — auto-generated from the data contract\n  const getIcon = (condition: string) => {\n    switch (condition.toLowerCase()) {\n      case 'sunny': return 'sun';\n      case 'cloudy': return 'cloud';\n      case 'rainy': return 'cloud-rain';\n      default: return 'cloud';\n    }\n  };\n\n  return (\n    <Container maxWidth=\"md\" padding=\"var(--ggui-spacing-6)\">\n      <Card padding=\"var(--ggui-spacing-6)\" shadow=\"md\">\n        <Stack gap=\"var(--ggui-spacing-4)\" align=\"center\">\n          <Heading level={1}>{props.city}</Heading>\n          <Row align=\"center\" gap=\"var(--ggui-spacing-2)\">\n            <Icon name={getIcon(props.condition)} size={48} />\n            <Heading level={2}>{props.temperature}°{props.unit}</Heading>\n          </Row>\n          <Text variant=\"bodyLarge\">{props.condition}</Text>\n          <Row gap=\"var(--ggui-spacing-6)\">\n            <Text>Humidity: {props.humidity}%</Text>\n            <Text>Wind: {props.windSpeed} mph</Text>\n          </Row>\n          <Divider />\n          <Stack direction=\"horizontal\" gap=\"var(--ggui-spacing-4)\" justify=\"between\" style={{ width: '100%' }}>\n            {(props.forecast || []).map((f, i) => (\n              <Stack key={i} align=\"center\" gap=\"var(--ggui-spacing-1)\">\n                <Text variant=\"caption\">{f.day}</Text>\n                <Icon name={f.icon || 'cloud'} size={24} />\n                <Text variant=\"caption\">{f.high}° / {f.low}°</Text>\n              </Stack>\n            ))}\n          </Stack>\n        </Stack>\n      </Card>\n    </Container>\n  );\n}\n",
+        "tokens": {
+          "input": 112215,
+          "output": 2059,
+          "total": 114274
+        },
+        "generationTimeMs": 15371,
+        "turnsUsed": 2,
+        "recipeName": "default",
+        "passesUsed": 1,
+        "evalResult": {
+          "issues": [
+            {
+              "tier": 1,
+              "result": "fail",
+              "category": "functionality",
+              "severity": "critical",
+              "description": "The forecast strip uses 'Icon' component with an emoji string from the props data (e.g., '☀️'), but the 'Icon' component expects a name string identifier (e.g., 'sun'). Emojis are not valid icon names for the component.",
+              "fix": "The forecast strip uses 'Icon' component with an emoji string from the props data (e.g., '☀️'), but the 'Icon' component expects a name string identifier (e.g., 'sun'). Emojis are not valid icon names for the component."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The 5-day forecast items represent daily data that users might expect to click for more details; consider wrapping these in a Clickable container with appropriate hover feedback.",
+              "fix": "The 5-day forecast items represent daily data that users might expect to click for more details; consider wrapping these in a Clickable container with appropriate hover feedback."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "interactivity",
+              "severity": "major",
+              "description": "The current component is entirely static; consider adding a 'Refresh' button to allow users to update the weather data.",
+              "fix": "The current component is entirely static; consider adding a 'Refresh' button to allow users to update the weather data."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "Weather condition icons at lines 51 and 64 lack descriptive labels, making them inaccessible to screen reader users. Add aria-label props or screen-reader-only labels.",
+              "fix": "Weather condition icons at lines 51 and 64 lack descriptive labels, making them inaccessible to screen reader users. Add aria-label props or screen-reader-only labels."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "accessibility",
+              "severity": "major",
+              "description": "The forecast icons in the map at line 64 represent weather data but provide no context to assistive technologies.",
+              "fix": "The forecast icons in the map at line 64 represent weather data but provide no context to assistive technologies."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The icon names for the forecast are passed as emojis in the data contract (e.g., '☀️'), but the `Icon` component expects string identifiers like 'cloud-rain'. This will result in missing icons in the layout.",
+              "fix": "The icon names for the forecast are passed as emojis in the data contract (e.g., '☀️'), but the `Icon` component expects string identifiers like 'cloud-rain'. This will result in missing icons in the layout."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The `Icon` size={48} and size={24} props are numeric literals. Per design system rules, sizing should use design tokens (e.g., 'md', 'lg') if supported by the component, or strictly CSS variables. Please verify if the `Icon` component accepts design tokens for sizing.",
+              "fix": "The `Icon` size={48} and size={24} props are numeric literals. Per design system rules, sizing should use design tokens (e.g., 'md', 'lg') if supported by the component, or strictly CSS variables. Please verify if the `Icon` component accepts design tokens for sizing."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "layout",
+              "severity": "major",
+              "description": "The `Row` on line 55 containing Humidity and Wind speed lacks visual grouping or separators, making it difficult to distinguish between the two data points in a compact view.",
+              "fix": "The `Row` on line 55 containing Humidity and Wind speed lacks visual grouping or separators, making it difficult to distinguish between the two data points in a compact view."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "loading",
+              "severity": "major",
+              "description": "No empty state for the forecast array when it is empty — should display an 'No forecast data available' message or indicator.",
+              "fix": "No empty state for the forecast array when it is empty — should display an 'No forecast data available' message or indicator."
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 51: size={48} bypasses the design system; use a standard token-based size (e.g., 'lg' or specific token)",
+              "fix": "Line 51: size={48} bypasses the design system; use a standard token-based size (e.g., 'lg' or specific token)"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 60: style={{ width: '100%' }} bypasses the design system; use a Box component with appropriate width prop or layout utility",
+              "fix": "Line 60: style={{ width: '100%' }} bypasses the design system; use a Box component with appropriate width prop or layout utility"
+            },
+            {
+              "tier": 2,
+              "result": "warn",
+              "category": "visual",
+              "severity": "major",
+              "description": "Line 64: size={24} bypasses the design system; use a standard token-based size (e.g., 'md' or specific token)",
+              "fix": "Line 64: size={24} bypasses the design system; use a standard token-based size (e.g., 'md' or specific token)"
+            }
+          ],
+          "pass": ["crash"]
+        },
+        "needsBackgroundImprovement": false,
+        "timing": {
+          "codingMs": 13418,
+          "evalMs": 1,
+          "totalMs": 15371
+        }
+      },
+      "evaluation": {
+        "passed": true,
+        "score": 78,
+        "finalScore": 78,
+        "issues": [],
+        "dimensions": {
+          "layout": 75,
+          "designTokens": 85,
+          "hierarchy": 80,
+          "polish": 60,
+          "dataPresentation": 90,
+          "completeness": 90,
+          "visualPolish": 78,
+          "interactivity": 60,
+          "accessibility": 78,
+          "codeQuality": 85
+        },
+        "critique": "The component correctly renders all data from props with proper formatting and no hardcoding. Design tokens are used consistently for spacing and the layout is responsive with proper flex usage. However, interactive polish is missing—there are no hover/focus states, transitions, or visual feedback on interactive elements, and the forecast strip could benefit from better horizontal scrolling/responsiveness on smaller screens.",
+        "evalTimeMs": 3277
+      },
+      "tierEvaluation": {
+        "issues": [
+          {
+            "tier": 1,
+            "result": "fail",
+            "category": "functionality",
+            "severity": "critical",
+            "description": "The forecast strip uses 'Icon' component with an emoji string from the props data (e.g., '☀️'), but the 'Icon' component expects a name string identifier (e.g., 'sun'). Emojis are not valid icon names for the component.",
+            "fix": "The forecast strip uses 'Icon' component with an emoji string from the props data (e.g., '☀️'), but the 'Icon' component expects a name string identifier (e.g., 'sun'). Emojis are not valid icon names for the component."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The 5-day forecast items represent daily data that users might expect to click for more details; consider wrapping these in a Clickable container with appropriate hover feedback.",
+            "fix": "The 5-day forecast items represent daily data that users might expect to click for more details; consider wrapping these in a Clickable container with appropriate hover feedback."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "interactivity",
+            "severity": "major",
+            "description": "The current component is entirely static; consider adding a 'Refresh' button to allow users to update the weather data.",
+            "fix": "The current component is entirely static; consider adding a 'Refresh' button to allow users to update the weather data."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "Weather condition icons at lines 51 and 64 lack descriptive labels, making them inaccessible to screen reader users. Add aria-label props or screen-reader-only labels.",
+            "fix": "Weather condition icons at lines 51 and 64 lack descriptive labels, making them inaccessible to screen reader users. Add aria-label props or screen-reader-only labels."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "accessibility",
+            "severity": "major",
+            "description": "The forecast icons in the map at line 64 represent weather data but provide no context to assistive technologies.",
+            "fix": "The forecast icons in the map at line 64 represent weather data but provide no context to assistive technologies."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The icon names for the forecast are passed as emojis in the data contract (e.g., '☀️'), but the `Icon` component expects string identifiers like 'cloud-rain'. This will result in missing icons in the layout.",
+            "fix": "The icon names for the forecast are passed as emojis in the data contract (e.g., '☀️'), but the `Icon` component expects string identifiers like 'cloud-rain'. This will result in missing icons in the layout."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The `Icon` size={48} and size={24} props are numeric literals. Per design system rules, sizing should use design tokens (e.g., 'md', 'lg') if supported by the component, or strictly CSS variables. Please verify if the `Icon` component accepts design tokens for sizing.",
+            "fix": "The `Icon` size={48} and size={24} props are numeric literals. Per design system rules, sizing should use design tokens (e.g., 'md', 'lg') if supported by the component, or strictly CSS variables. Please verify if the `Icon` component accepts design tokens for sizing."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "layout",
+            "severity": "major",
+            "description": "The `Row` on line 55 containing Humidity and Wind speed lacks visual grouping or separators, making it difficult to distinguish between the two data points in a compact view.",
+            "fix": "The `Row` on line 55 containing Humidity and Wind speed lacks visual grouping or separators, making it difficult to distinguish between the two data points in a compact view."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "loading",
+            "severity": "major",
+            "description": "No empty state for the forecast array when it is empty — should display an 'No forecast data available' message or indicator.",
+            "fix": "No empty state for the forecast array when it is empty — should display an 'No forecast data available' message or indicator."
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 51: size={48} bypasses the design system; use a standard token-based size (e.g., 'lg' or specific token)",
+            "fix": "Line 51: size={48} bypasses the design system; use a standard token-based size (e.g., 'lg' or specific token)"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 60: style={{ width: '100%' }} bypasses the design system; use a Box component with appropriate width prop or layout utility",
+            "fix": "Line 60: style={{ width: '100%' }} bypasses the design system; use a Box component with appropriate width prop or layout utility"
+          },
+          {
+            "tier": 2,
+            "result": "warn",
+            "category": "visual",
+            "severity": "major",
+            "description": "Line 64: size={24} bypasses the design system; use a standard token-based size (e.g., 'md' or specific token)",
+            "fix": "Line 64: size={24} bypasses the design system; use a standard token-based size (e.g., 'md' or specific token)"
+          }
+        ],
+        "pass": ["crash"]
+      },
+      "estimatedCostUsd": 0.0622845,
+      "timestamp": "2026-03-24T03:10:41.418Z",
+      "postGeneration": {
+        "hasStreamSpec": false,
+        "hasGeneratorMeta": false,
+        "compiledCodeBytes": 1373,
+        "sourceCodeBytes": 3704,
+        "dataFreeCheck": {
+          "isDataFree": true,
+          "violations": []
+        }
+      }
+    }
+  ],
+  "variantSummaries": [
+    {
+      "variantId": "google-default-0",
+      "sdkName": "google",
+      "tier": "balanced",
+      "modelId": "gemini/gemini-3-flash-preview",
+      "avgScore": 78,
+      "avgTimeMs": 15371,
+      "avgCostUsd": 0.0622845,
+      "successRate": 1,
+      "dimensionAvgs": {
+        "completeness": 90,
+        "visualPolish": 78,
+        "interactivity": 60,
+        "accessibility": 78,
+        "codeQuality": 85
+      },
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "commitSummaries": [
+    {
+      "commitId": "weather-card",
+      "commitName": "Weather Card",
+      "complexity": "simple",
+      "avgScore": 78,
+      "bestVariantId": "google-default-0",
+      "worstVariantId": "google-default-0",
+      "tierOutcomes": {
+        "pass": 0,
+        "warn": 0,
+        "fail": 1
+      }
+    }
+  ],
+  "sdkComparison": {
+    "google": {
+      "balanced": {
+        "avgScore": 78,
+        "avgTimeMs": 15371,
+        "avgCostUsd": 0.0622845,
+        "successRate": 1
+      }
+    }
+  }
+}

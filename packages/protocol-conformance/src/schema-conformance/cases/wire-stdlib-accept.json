@@ -1,0 +1,10 @@
+{
+  "name": "wire-stdlib-accept",
+  "description": "The first-party `@ggui-ai/gadgets` stdlib package is referenced on the wire exactly like any other gadget package — by its npm package name keying a map of export names. A stdlib browser-capability hook (`useGeolocation`) is a valid wire reference; the stdlib enjoys no special wire shape.",
+  "clientCapabilities": {
+    "gadgets": {
+      "@ggui-ai/gadgets": { "useGeolocation": {} }
+    }
+  },
+  "expect": "accept"
+}

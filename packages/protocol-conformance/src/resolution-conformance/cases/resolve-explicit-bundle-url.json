@@ -1,0 +1,12 @@
+{
+  "name": "resolve-explicit-bundle-url",
+  "description": "A descriptor with an explicit full `bundleUrl` — the escape hatch for wrappers shipped via a non-registry CDN (esm.sh, jsdelivr, …). The resolver MUST use `bundleUrl` verbatim and MUST NOT auto-synthesize a `styleUrl`: an operator who escape-hatched the bundle declares `styleUrl` themselves, and a synthesized `registry.ggui.ai/.../style.css` would 404 and pollute the iframe CSP `style-src`.",
+  "entry": {
+    "package": "@acme/leaflet-wrapper",
+    "version": "2.3.1",
+    "bundleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/bundle.js"
+  },
+  "expect": {
+    "bundleUrl": "https://esm.sh/@acme/leaflet-wrapper@2.3.1/bundle.js"
+  }
+}
