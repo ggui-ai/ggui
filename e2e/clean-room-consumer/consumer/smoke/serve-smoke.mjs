@@ -48,7 +48,7 @@ writeFileSync(
     {
       schema: '1',
       protocol: PROTOCOL_VERSION,
-      app: { slug: 'publish-gate-serve-smoke', name: 'Publish Gate Serve Smoke' },
+      app: { slug: 'clean-room-consumer-serve-smoke', name: 'Clean-room Consumer Serve Smoke' },
     },
     null,
     2,
@@ -145,7 +145,7 @@ try {
             params: {
               protocolVersion: '2025-06-18',
               capabilities: {},
-              clientInfo: { name: 'publish-gate', version: '0' },
+              clientInfo: { name: 'clean-room-consumer', version: '0' },
             },
           }),
         });

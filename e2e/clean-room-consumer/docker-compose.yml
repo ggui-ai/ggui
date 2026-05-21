@@ -1,15 +1,15 @@
-# ggui publish gate — verifies every @ggui-ai/* package works when
+# ggui clean-room consumer — verifies every @ggui-ai/* package works when
 # installed from a registry, exactly as an external npm consumer gets
 # them. Run it with:
 #
-#   make test-publish-gate
+#   make test-clean-room-consumer
 #
 # Two services:
 #   verdaccio    — throwaway local npm registry (storage in an anonymous
 #                  volume, dropped by `docker compose down -v`)
 #   gate-runner  — builds + publishes all 38 packages, then installs
 #                  them into a clean-room consumer and runs the smokes
-name: ggui-publish-gate
+name: ggui-clean-room-consumer
 
 services:
   verdaccio:
@@ -33,12 +33,12 @@ services:
   gate-runner:
     build:
       # Context is the oss/ workspace root; the Dockerfile lives under
-      # e2e/publish-gate/ (relative to that context).
+      # e2e/clean-room-consumer/ (relative to that context).
       context: ../../
-      dockerfile: e2e/publish-gate/Dockerfile
+      dockerfile: e2e/clean-room-consumer/Dockerfile
       args:
         # Default --frozen-lockfile; override during active refactoring:
-        #   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-publish-gate
+        #   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-clean-room-consumer
         PNPM_INSTALL_FLAGS: ${PNPM_INSTALL_FLAGS:---frozen-lockfile}
     depends_on:
       verdaccio:

@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # the npm/pnpm CLI still requires _authToken to be set to attempt a publish.
 HOST_PORT="${REGISTRY#http://}"
 HOST_PORT="${HOST_PORT%/}"
-npm config set "//${HOST_PORT}/:_authToken" "publish-gate-token"
+npm config set "//${HOST_PORT}/:_authToken" "clean-room-consumer-token"
 
 ORDER_JSON="$(node "$SCRIPT_DIR/compute-order.mjs" "$PACKAGES_ROOT")"
 COUNT="$(node -e 'process.stdin.once("data",b=>console.log(JSON.parse(b).length))' <<<"$ORDER_JSON")"
@@ -39,7 +39,7 @@ emit() {
 }
 
 # Idempotent reruns: drop any existing versions first. A no-op on a
-# fresh Verdaccio volume (the normal case under `make test-publish-gate`).
+# fresh Verdaccio volume (the normal case under `make test-clean-room-consumer`).
 echo "  unpublishing any existing versions…"
 emit reverse <<<"$ORDER_JSON" | while IFS=$'\t' read -r dir name version; do
   npm unpublish "$name@$version" --registry "$REGISTRY" --force >/dev/null 2>&1 \

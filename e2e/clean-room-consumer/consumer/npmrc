@@ -5,6 +5,6 @@
 # local storage (freshly published this run) and proxies everything
 # else from npmjs via its uplink.
 registry=http://verdaccio:4873/
-//verdaccio:4873/:_authToken=publish-gate-token
+//verdaccio:4873/:_authToken=clean-room-consumer-token
 audit=false
 fund=false

@@ -1,0 +1,84 @@
+name: Publish Gate
+
+# Pre-publish verification for github.com/ggui-ai/ggui. Runs the full
+# gate before an npm release, in two complementary halves:
+#
+#   - SOURCE verification — install / build / typecheck / unit / e2e
+#     against workspace source.
+#   - PACKAGING verification — the clean-room-consumer registry
+#     round-trip: build tarballs, publish to a throwaway Verdaccio,
+#     install into a fresh consumer with zero workspace linkage, run
+#     import / cli / serve smokes. This is the ONLY check that
+#     exercises the published artifacts; source build/test cannot
+#     catch packaging bugs.
+#
+# Manual `workflow_dispatch` for now. Once proven by dispatch runs,
+# this becomes a required prerequisite of release.yml (add a
+# `workflow_call` trigger + a `uses:` from release.yml's preflight).
+#
+# Lives under `oss/.github/workflows/` in the monorepo; the subtree
+# split strips the `oss/` prefix, so it runs as
+# `.github/workflows/publish-gate.yml` in the public repo — where the
+# repo root holds `packages/`, `e2e/`, `samples/`, `misc/`.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: publish-gate
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: Source — install / build / typecheck / unit / e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `@ggui-ai/ui-gen` emits an 8 MB+ adapters bundle; tsup's worker
+      # OOMs on the default runner heap. Bump for the build phase.
+      - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: pnpm -r --filter "./packages/*" build
+
+      - name: Typecheck
+        run: pnpm -r --filter "./packages/*" typecheck
+
+      - name: Unit tests
+        run: pnpm -r --filter "./packages/*" test
+
+      # Wire-contract scenarios + the Tier-2 MCP Apps host simulator.
+      # Both are vitest (no browser). The journeys Playwright suite
+      # (e2e/journeys) is NOT wired here yet — its harness resolves
+      # workspace paths in a monorepo-specific way and needs a
+      # context-independent rework before it can run in this repo.
+      - name: E2E — wire scenarios + MCP host simulator
+        run: pnpm -r --filter "./e2e/scenarios" --filter "./e2e/mcp-host-simulator" test
+
+  clean-room-consumer:
+    name: Packaging — clean-room-consumer registry round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tarballs → publish to Verdaccio → install clean-room → smoke
+        run: |
+          cd e2e/clean-room-consumer
+          docker compose build
+          docker compose up --abort-on-container-exit --exit-code-from gate-runner
+
+      - name: Tear down
+        if: always()
+        run: cd e2e/clean-room-consumer && docker compose down -v --remove-orphans

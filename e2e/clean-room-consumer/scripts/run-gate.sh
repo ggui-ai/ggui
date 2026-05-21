@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Publish-gate orchestrator. Runs inside the gate-runner container.
+# Clean-room-consumer orchestrator. Runs inside the gate-runner container.
 #
 #   [1] wait for Verdaccio
 #   [2] publish all 38 @ggui-ai/* packages to Verdaccio (leaf-first)
@@ -17,7 +17,7 @@ GATE=/gate
 CONSUMER=/tmp/consumer
 
 echo "════════════════════════════════════════════════════════════"
-echo "  ggui publish gate"
+echo "  ggui clean-room consumer"
 echo "════════════════════════════════════════════════════════════"
 
 echo
@@ -62,5 +62,5 @@ node smoke/serve-smoke.mjs
 
 echo
 echo "════════════════════════════════════════════════════════════"
-echo "  PUBLISH GATE PASSED"
+echo "  CLEAN-ROOM CONSUMER PASSED"
 echo "════════════════════════════════════════════════════════════"

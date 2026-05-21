@@ -1,11 +1,11 @@
-# Publish Gate
+# Clean-room Consumer
 
 > **The release blocker.** Verifies every `@ggui-ai/*` package actually
 > works when installed from a registry — exactly as an external npm
 > consumer gets it — _before_ the immutable npm publish.
 
 ```bash
-make test-publish-gate
+make test-clean-room-consumer
 ```
 
 Exit 0 → safe to publish. Non-zero → **do not publish**, something is
@@ -43,16 +43,16 @@ after 72h). The gate runs _before_ that point of no return.
 
 The repo has three e2e surfaces. They are **not interchangeable**:
 
-| Surface                 | Package                 | Tests                                                             | When to run                                                                                                                                                                         |
-| ----------------------- | ----------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`e2e/`**              | `@ggui-private/e2e`     | ggui.ai hosted journeys, MCP/render/oauth contracts, ops, quality | You changed the **hosted product** (console, api.ggui.ai, render endpoint). Needs a deployed Amplify sandbox.                                                                       |
-| **`e2e/oss/`**          | `@ggui-private/e2e-oss` | Solo-builder OSS flows — `ggui serve`, generation, pairing        | You changed **OSS CLI / server / SDK behavior**. Runs against **workspace** packages.                                                                                               |
-| **`e2e/publish-gate/`** | _(this)_                | Every `@ggui-ai/*` package installs + runs from a registry        | You changed **anything that affects packaging** — `package.json` `files`/`exports`/`main`/`deps`, or you're about to **npm publish**. Runs against **registry-installed** packages. |
+| Surface                        | Package                 | Tests                                                             | When to run                                                                                                                                                                         |
+| ------------------------------ | ----------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`e2e/`**                     | `@ggui-private/e2e`     | ggui.ai hosted journeys, MCP/render/oauth contracts, ops, quality | You changed the **hosted product** (console, api.ggui.ai, render endpoint). Needs a deployed Amplify sandbox.                                                                       |
+| **`e2e/oss/`**                 | `@ggui-private/e2e-oss` | Solo-builder OSS flows — `ggui serve`, generation, pairing        | You changed **OSS CLI / server / SDK behavior**. Runs against **workspace** packages.                                                                                               |
+| **`e2e/clean-room-consumer/`** | _(this)_                | Every `@ggui-ai/*` package installs + runs from a registry        | You changed **anything that affects packaging** — `package.json` `files`/`exports`/`main`/`deps`, or you're about to **npm publish**. Runs against **registry-installed** packages. |
 
 Rule of thumb:
 
 - **`e2e/oss/` answers** "does the code behave correctly?"
-- **`e2e/publish-gate/` answers** "do the _published artifacts_ even load?"
+- **`e2e/clean-room-consumer/` answers** "do the _published artifacts_ even load?"
 
 They are complementary. `e2e/oss/` can be 100% green while the gate
 fails — that is precisely the bug class the gate exists for.
@@ -113,7 +113,7 @@ tarball is fetchable and every declared dependency resolves.
 ## Files
 
 ```
-e2e/publish-gate/
+e2e/clean-room-consumer/
 ├── README.md             — this file
 ├── docker-compose.yml    — verdaccio + gate-runner services
 ├── Dockerfile            — gate-runner image (builds every package)
@@ -140,7 +140,7 @@ build context so the image build is hermetic.
 ## Running it
 
 ```bash
-make test-publish-gate
+make test-clean-room-consumer
 ```
 
 This will `docker compose build` (fresh build of every package), `up`
@@ -161,7 +161,7 @@ publish should never happen off a lockfile that has drifted from the
 intentionally stale, override it:
 
 ```bash
-PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-publish-gate
+PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-clean-room-consumer
 ```
 
 Switch back to the default (frozen) before treating a gate run as a

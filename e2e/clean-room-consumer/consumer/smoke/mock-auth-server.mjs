@@ -1,5 +1,5 @@
 /**
- * Mock ggui.ai auth server for the publish gate.
+ * Mock ggui.ai auth server for the clean-room consumer.
  *
  * `ggui login` is an RFC 8628 device-flow client; its endpoints live on
  * api.ggui.ai. The gate is hermetic (no outbound network), so instead
@@ -64,7 +64,7 @@ const server = createServer((req, res) => {
       return send({
         userId: 'mock-user-id',
         sessionId: 'mock-session-id',
-        clientName: 'ggui CLI (publish-gate)',
+        clientName: 'ggui CLI (clean-room-consumer)',
         accessExpiresAt: Date.now() + 3600_000,
       });
     }

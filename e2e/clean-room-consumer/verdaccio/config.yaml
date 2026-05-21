@@ -1,11 +1,11 @@
-# Throwaway local npm registry for the publish gate.
+# Throwaway local npm registry for the clean-room consumer.
 #
 # `@ggui-ai/*` are served locally (published fresh each run); every
 # other dependency is proxied from npmjs through the `npmjs` uplink so
 # the clean-room consumer's `npm install` resolves its full tree
 # without touching the public registry directly.
 #
-# Storage is wiped between runs — `make test-publish-gate` runs
+# Storage is wiped between runs — `make test-clean-room-consumer` runs
 # `docker compose down -v`, which drops the anonymous volume.
 storage: /verdaccio/storage
 

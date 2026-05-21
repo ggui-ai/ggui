@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Leaf-first publish order for the publish gate.
+ * Leaf-first publish order for the clean-room consumer.
  *
  * Reads every publishable `@ggui-ai/*` package under <packages-root>
  * and topologically sorts them so a package always appears AFTER the

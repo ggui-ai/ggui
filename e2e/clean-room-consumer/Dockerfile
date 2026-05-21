@@ -1,4 +1,4 @@
-# Publish-gate runner image.
+# Clean-room-consumer runner image.
 #
 # Builds every publishable @ggui-ai/* package from source. At runtime
 # `run-gate.sh` publishes them to Verdaccio, then installs them into a
@@ -26,7 +26,7 @@ COPY . /build/
 # Default is --frozen-lockfile: a publish should never happen off a
 # lockfile that drifted from the package.jsons. During active
 # refactoring, override with:
-#   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-publish-gate
+#   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-clean-room-consumer
 ARG PNPM_INSTALL_FLAGS=--frozen-lockfile
 RUN pnpm install ${PNPM_INSTALL_FLAGS}
 RUN pnpm -r --filter "./packages/*" build
