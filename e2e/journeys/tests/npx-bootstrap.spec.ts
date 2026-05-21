@@ -68,22 +68,18 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { WebSocket as NodeWebSocket } from 'ws';
+import { OUTERMOST_ROOT, packagePath } from './workspace-paths';
 
-// `tests/` sits 4 levels deep: /<workspace>/oss/e2e/journeys/tests/,
-// so `../../../..` is the workspace root. Keep in sync with
-// `ggui-serve-harness.ts` and `tarball-install-harness.ts` — all
-// three carry the same four-segment form.
-const WORKSPACE_ROOT = resolve(__dirname, '../../../..');
-const GGUI_CLI_DIST = resolve(
-  WORKSPACE_ROOT,
-  'oss/packages/ggui-cli/dist/cli.js',
-);
-const DEVTOOL_DIST = resolve(
-  WORKSPACE_ROOT,
-  'oss/packages/console/dist/index.html',
-);
+// Publishable-package paths resolve CONTEXT-INDEPENDENTLY via
+// `workspace-paths.ts` (walks up to the nearest `pnpm-workspace.yaml`).
+// A fixed `../../../..` would be correct in only one of the two
+// supported layouts — `oss/e2e/journeys/` in the monorepo vs
+// `e2e/journeys/` in the OSS standalone repo — and silently wrong in
+// the other. Shared with `ggui-serve-harness.ts` and
+// `tarball-install-harness.ts`.
+const GGUI_CLI_DIST = packagePath('ggui-cli', 'dist', 'cli.js');
+const DEVTOOL_DIST = packagePath('console', 'dist', 'index.html');
 
 /** How long we wait for `ggui serve` to print `READY`. */
 const READY_TIMEOUT_MS = 15_000;
@@ -130,9 +126,10 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // Spawn the real CLI bin. `--port 0` asks the CLI to resolve a
     // free ephemeral port via its own `pickFreePort` path; `--mcp-only`
     // skips agent supervision so we don't need a `ggui.json` /
-    // `agent.entry` in the test cwd. CWD is deliberately an empty
-    // workspace directory so the serve fallback matrix reports
-    // "disabled (no ggui.json)" rather than trying to load one.
+    // `agent.entry` in the test cwd. CWD is `OUTERMOST_ROOT` — the
+    // workspace root, which carries no `ggui.json`, so the serve
+    // fallback matrix reports "disabled (no ggui.json)" rather than
+    // trying to load one.
     // Hero-path identity: "no account, no cloud, no BYOK". The spec
     // deliberately proves `codeReady:false` + the truthful empty-state
     // in the SessionViewer. We strip BYOK provider keys from the
@@ -157,7 +154,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
       delete heroEnv[k];
     }
     serveProc = spawn('node', [GGUI_CLI_DIST, 'serve', '--port', '0', '--mcp-only'], {
-      cwd: WORKSPACE_ROOT,
+      cwd: OUTERMOST_ROOT,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: heroEnv,
     }) as ChildProcessWithoutNullStreams;

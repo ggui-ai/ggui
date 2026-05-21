@@ -53,8 +53,15 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { allowlistedEnv, assertNoBannedEnv } from './ggui-serve-harness';
+import { PACKAGES_ROOT, packageDir } from './workspace-paths';
 
-const WORKSPACE_ROOT = resolve(__dirname, '../../../..');
+// `PACKAGES_ROOT` is the dir that CONTAINS `packages/` — derived
+// context-independently by `workspace-paths.ts` (the nearest
+// `pnpm-workspace.yaml` ancestor). It is `oss/` in the monorepo and the
+// repo root in the OSS standalone repo, so `<PACKAGES_ROOT>/packages/`
+// is the publishable-package directory in both layouts. A fixed
+// `../../../..` + literal `oss/packages` would only be correct in the
+// monorepo.
 
 /**
  * Every `@ggui-ai/*` workspace package in the transitive dep graph
@@ -151,9 +158,9 @@ export interface TransitiveGraphEntry {
 }
 
 export function computeExpectedTarballTransitives(
-  workspaceRoot: string = WORKSPACE_ROOT,
+  packagesRoot: string = PACKAGES_ROOT,
 ): readonly TransitiveGraphEntry[] {
-  const packagesDir = resolve(workspaceRoot, 'oss', 'packages');
+  const packagesDir = resolve(packagesRoot, 'packages');
   // Build dir→pkgName map + pkgName→runtime-deps map in one scan.
   const pkgDirs = readdirSyncSafe(packagesDir);
   const nameToDir = new Map<string, string>();
@@ -210,12 +217,12 @@ export function computeExpectedTarballTransitives(
  * in one actionable error.
  */
 export function diffTarballTransitiveGraph(
-  workspaceRoot: string = WORKSPACE_ROOT,
+  packagesRoot: string = PACKAGES_ROOT,
 ): {
   readonly missing: readonly TransitiveGraphEntry[];
   readonly extra: readonly TransitiveGraphEntry[];
 } {
-  const expected = computeExpectedTarballTransitives(workspaceRoot);
+  const expected = computeExpectedTarballTransitives(packagesRoot);
   const declared = TRANSITIVE_PACKAGES;
   const expectedNames = new Set(expected.map((e) => e.pkgName));
   const declaredNames = new Set(declared.map((e) => e.pkgName));
@@ -272,11 +279,11 @@ export interface TarballInstallHandle {
  * `file:` overrides.
  */
 function readPackageVersion(pkgDir: string): string {
-  const path = resolve(WORKSPACE_ROOT, 'oss', 'packages', pkgDir, 'package.json');
+  const path = resolve(packageDir(pkgDir), 'package.json');
   const raw = readFileSync(path, 'utf8');
   const json = JSON.parse(raw) as { version?: string };
   if (!json.version) {
-    throw new Error(`oss/packages/${pkgDir}/package.json has no version`);
+    throw new Error(`${path} has no version`);
   }
   return json.version;
 }
@@ -292,7 +299,7 @@ function packOne(pkgDir: string, tarballsDir: string): Promise<void> {
       'pnpm',
       ['pack', '--pack-destination', tarballsDir],
       {
-        cwd: resolve(WORKSPACE_ROOT, 'oss', 'packages', pkgDir),
+        cwd: packageDir(pkgDir),
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );

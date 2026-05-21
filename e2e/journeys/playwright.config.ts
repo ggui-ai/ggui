@@ -18,12 +18,23 @@
  */
 import { defineConfig, devices } from '@playwright/test';
 import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
+import { PACKAGES_ROOT, envFileCandidates } from './tests/workspace-paths';
 
-// Load repo-root `.env` so specs inherit BYOK keys + CLI paths without
-// needing a per-package `.env.local`. Missing file is fine — every
-// honest spec skips cleanly when its gating env var is absent.
-loadEnv({ path: resolve(__dirname, '../../../.env') });
+// Load the repo-root `.env` so specs inherit BYOK keys without needing
+// a per-package `.env.local`. The file's location is layout-dependent
+// — the true monorepo root (one above `oss/`) vs the single OSS
+// standalone repo root — so `envFileCandidates()` returns both
+// possibilities, nearest-first, and we load the first one that exists.
+// A missing file at every candidate is fine: every honest spec skips
+// cleanly when its gating env var is absent.
+for (const candidate of envFileCandidates()) {
+  if (existsSync(candidate)) {
+    loadEnv({ path: candidate });
+    break;
+  }
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -33,7 +44,12 @@ export default defineConfig({
   // this gate, Playwright tries to load them and blows up on the
   // vitest CJS/ESM surface.
   testMatch: '**/*.spec.ts',
-  outputDir: '../../../e2e-results/ggui-oss',
+  // Test artifacts + the HTML report land under `<workspace>/e2e-results/`
+  // — `PACKAGES_ROOT` is `oss/` in the monorepo and the repo root in the
+  // OSS standalone repo, so both layouts get a sane, git-ignored output
+  // tree (`.gitignore` ignores `e2e-results/` unanchored at any depth).
+  // Absolute paths so the location is independent of Playwright's cwd.
+  outputDir: resolve(PACKAGES_ROOT, 'e2e-results', 'ggui-oss'),
 
   // OSS specs are fast (<60s each on the blocking subset). No retries
   // so flakes surface as real signal, not as silenced warnings.
@@ -48,7 +64,12 @@ export default defineConfig({
     [
       'html',
       {
-        outputFolder: '../../../playwright-report/ggui-oss',
+        // Nested under the same git-ignored `e2e-results/` tree as
+        // `outputDir` so the HTML report stays untracked in both
+        // layouts (`/playwright-report/` is root-anchored in
+        // `.gitignore`, so a sibling `playwright-report/` would be
+        // committed in the OSS standalone repo).
+        outputFolder: resolve(PACKAGES_ROOT, 'e2e-results', 'ggui-oss-report'),
         open: 'never',
       },
     ],

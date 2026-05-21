@@ -40,24 +40,22 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
+import { hoistedBin, packagePath } from './workspace-paths';
 
-// `tests/` sits 4 levels deep under the monorepo root:
-//   /<workspace>/oss/e2e/journeys/tests/
-// so `../../../..` resolves to the workspace root.
-const WORKSPACE_ROOT = resolve(__dirname, '../../../..');
+// Publishable-package paths are resolved CONTEXT-INDEPENDENTLY via
+// `workspace-paths.ts` — it walks up to the nearest `pnpm-workspace.yaml`
+// (which is `oss/` in the monorepo and the repo root in the OSS
+// standalone repo) and roots `packages/<pkg>/` off it. A fixed
+// `../../../..` would be correct in exactly one layout and silently
+// wrong in the other.
 
 /**
- * Exported so specs can print the resolved path in error messages without
- * having to re-derive `../../../..`.
+ * Exported so specs can print the resolved path in error messages.
+ * Resolves to `<oss>/packages/ggui-cli/dist/cli.js` in the monorepo and
+ * `<repo>/packages/ggui-cli/dist/cli.js` in the OSS standalone repo.
  */
-export const GGUI_CLI_DIST = resolve(
-  WORKSPACE_ROOT,
-  'oss/packages/ggui-cli/dist/cli.js',
-);
-export const DEVTOOL_DIST = resolve(
-  WORKSPACE_ROOT,
-  'oss/packages/console/dist/index.html',
-);
+export const GGUI_CLI_DIST = packagePath('ggui-cli', 'dist', 'cli.js');
+export const DEVTOOL_DIST = packagePath('console', 'dist', 'index.html');
 
 /**
  * Canonical env-var name that lets an operator explicitly opt out of
@@ -754,8 +752,13 @@ export const TASKS_BACKED_LAUNCHER = resolve(
   'tasks-backed-launcher.mts',
 );
 
-/** Absolute path to `tsx`'s ESM loader at the workspace root. */
-const TSX_BIN = resolve(WORKSPACE_ROOT, 'node_modules/.bin/tsx');
+/**
+ * Absolute path to `tsx`'s ESM loader. pnpm hoists shared dev deps to
+ * the OUTERMOST workspace root — the true monorepo root (one above
+ * `oss/`) in the monorepo, the single repo root in the OSS standalone
+ * repo — so `hoistedBin` resolves against that, not the nearer `oss/`.
+ */
+const TSX_BIN = hoistedBin('tsx');
 
 /**
  * Spawn a `createGguiServer({ mcpMounts: [tasks], ... })` child process
