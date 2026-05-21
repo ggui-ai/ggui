@@ -39,10 +39,10 @@
  *
  * `outermostRoot()` — the FARTHEST ancestor of this file that contains
  *   a `pnpm-workspace.yaml`. In the monorepo that's the true repo root
- *   (one above `oss/`), where pnpm hoists the shared `node_modules` and
- *   where the repo-root `.env` lives. In the OSS standalone repo there
- *   is only one workspace file, so `outermostRoot()` === `packagesRoot()`.
- *   Use this for the hoisted `node_modules/.bin/tsx` binary and `.env`.
+ *   (one above `oss/`), where pnpm hoists the shared `node_modules`. In
+ *   the OSS standalone repo there is only one workspace file, so
+ *   `outermostRoot()` === `packagesRoot()`. Use this for the hoisted
+ *   `node_modules/.bin/tsx` binary.
  *
  * The two coincide in the standalone layout and diverge in the
  * monorepo — resolving each path against the correct root is the whole
@@ -137,20 +137,15 @@ export function hoistedBin(name: string): string {
 }
 
 /**
- * Candidate locations for the optional repo-root `.env`, nearest-first.
- * In the monorepo the `.env` sits at the true root (one above `oss/`);
- * in the OSS standalone repo it sits at the single workspace root. We
- * return BOTH the outermost and the nearest workspace root so the
- * lookup is tolerant of either placement — a missing file at every
- * candidate is fine, every honest spec skips cleanly when its gating
- * env var is absent.
+ * The optional dev `.env.local`, at the OSS-subtree root — `oss/` in
+ * the monorepo (= {@link PACKAGES_ROOT}), the repo root in the
+ * OSS-standalone checkout. Gitignored, so each dev keeps their own.
  *
- * De-duplicated when the two roots coincide (the standalone layout).
+ * A missing file is fine: every honest spec skips cleanly when its
+ * gating env var is absent, and CI supplies the keys directly via
+ * GitHub Actions secrets (no file on disk). Shared with the scenarios
+ * suite's loaders, which resolve the same `<OSS-root>/.env.local`.
  */
-export function envFileCandidates(): readonly string[] {
-  const candidates = [
-    resolve(OUTERMOST_ROOT, '.env'),
-    resolve(PACKAGES_ROOT, '.env'),
-  ];
-  return Array.from(new Set(candidates));
+export function envFilePath(): string {
+  return resolve(PACKAGES_ROOT, '.env.local');
 }

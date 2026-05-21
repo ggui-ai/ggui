@@ -18,23 +18,15 @@
  */
 import { defineConfig, devices } from '@playwright/test';
 import { resolve } from 'node:path';
-import { existsSync } from 'node:fs';
 import { config as loadEnv } from 'dotenv';
-import { PACKAGES_ROOT, envFileCandidates } from './tests/workspace-paths';
+import { PACKAGES_ROOT, envFilePath } from './tests/workspace-paths';
 
-// Load the repo-root `.env` so specs inherit BYOK keys without needing
-// a per-package `.env.local`. The file's location is layout-dependent
-// — the true monorepo root (one above `oss/`) vs the single OSS
-// standalone repo root — so `envFileCandidates()` returns both
-// possibilities, nearest-first, and we load the first one that exists.
-// A missing file at every candidate is fine: every honest spec skips
-// cleanly when its gating env var is absent.
-for (const candidate of envFileCandidates()) {
-  if (existsSync(candidate)) {
-    loadEnv({ path: candidate });
-    break;
-  }
-}
+// Load the OSS-subtree-root `.env.local` so specs inherit BYOK keys
+// without a per-package env file. `.env.local` is gitignored — each dev
+// keeps their own; CI injects the keys via GitHub Actions secrets
+// instead. A missing file is fine: dotenv no-ops and every honest spec
+// skips cleanly when its gating env var is absent.
+loadEnv({ path: envFilePath() });
 
 export default defineConfig({
   testDir: './tests',

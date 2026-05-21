@@ -17,54 +17,30 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createConnection } from 'node:net';
-import { readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { config as loadEnv } from 'dotenv';
 
 /**
- * Load `.env.local` from the workspace root into process.env BEFORE
- * any services boot. Vitest's built-in dotenv loader is opt-in via
- * `test.env`/`test.envPrefix` and doesn't pick up `.env.local` for
- * arbitrary keys (`ANTHROPIC_API_KEY` isn't `VITE_`-prefixed). Hand-
- * rolling the parse is one file + zero deps.
+ * Load `.env.local` into process.env BEFORE any services boot.
+ * Vitest's built-in dotenv loader is opt-in via `test.env`/
+ * `test.envPrefix` and doesn't pick up `.env.local` for arbitrary keys
+ * (`ANTHROPIC_API_KEY` isn't `VITE_`-prefixed). Hand-rolling the parse
+ * is one file + zero deps.
  *
- * Lookup tries the monorepo root first (oss/e2e/scenarios/fixtures →
- * 4 parents up = /workspaces/ggui-workspace), then the oss/ subtree
- * root (3 up) — the latter is the repo root in the OSS-standalone
- * checkout.
+ * `.env.local` lives at the OSS-subtree root — `oss/` in the monorepo,
+ * the repo root in the OSS-standalone checkout — gitignored so each dev
+ * keeps their own. `fixtures/` sits exactly three levels below that
+ * root in both layouts. Kept in lockstep with the twin loader in
+ * `../vitest.config.ts`.
  */
 function loadDotenvLocal(): void {
-  const candidates = [
-    resolve(import.meta.dirname, '..', '..', '..', '..', '.env.local'),
-    resolve(import.meta.dirname, '..', '..', '..', '.env.local'),
-  ];
-  for (const path of candidates) {
-    try {
-      const raw = readFileSync(path, 'utf-8');
-      for (const line of raw.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq <= 0) continue;
-        const key = trimmed.slice(0, eq).trim();
-        let value = trimmed.slice(eq + 1).trim();
-        // Strip surrounding quotes if present.
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        if (key.length > 0 && process.env[key] === undefined) {
-          process.env[key] = value;
-        }
-      }
-      // eslint-disable-next-line no-console
-      console.log(`[e2e/scenarios] loaded ${path}`);
-      return;
-    } catch {
-      /* try next */
-    }
+  const path = resolve(import.meta.dirname, '..', '..', '..', '.env.local');
+  const result = loadEnv({ path });
+  if (!result.error) {
+    // eslint-disable-next-line no-console
+    console.log(`[e2e/scenarios] loaded ${path}`);
   }
 }
 

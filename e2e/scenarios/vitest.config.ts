@@ -1,52 +1,23 @@
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { config as loadEnv } from 'dotenv';
 import { defineConfig } from 'vitest/config';
 
-// Load .env.local from the repo root BEFORE workers fork so
-// module-level `HAS_KEY = !!process.env.ANTHROPIC_API_KEY` evaluates
-// correctly in each test file. Inheritance handles the rest.
+// Load `.env.local` BEFORE workers fork so module-level
+// `HAS_KEY = !!process.env.ANTHROPIC_API_KEY` evaluates correctly in
+// each test file. Inheritance handles the rest.
 //
-// Hand-rolled to keep the package dep-free (no dotenv).
+// `.env.local` lives at the OSS-subtree root — `oss/` in the monorepo,
+// the repo root in the OSS-standalone checkout — gitignored, so every
+// dev keeps their own. `scenarios/` sits exactly two levels below that
+// root in BOTH layouts (`oss/e2e/scenarios` / `e2e/scenarios`), so the
+// path is a single context-independent `../../`. Kept in lockstep with
+// the twin load in `fixtures/global-setup.ts`.
 //
-// The repo-root depth is layout-dependent — `scenarios/` sits at
-// `oss/e2e/scenarios/` in the monorepo (root is 3 up) and at
-// `e2e/scenarios/` in the OSS-standalone checkout (root is 2 up). Both
-// candidates are tried, monorepo-first. Kept in lockstep with the twin
-// loader in `fixtures/global-setup.ts` — the two MUST resolve the same
-// file or `HAS_KEY` disagrees between config-eval and globalSetup.
-function loadDotenvLocal(): void {
-  const here = resolve(import.meta.dirname);
-  const candidates = [
-    resolve(here, '..', '..', '..', '.env.local'),
-    resolve(here, '..', '..', '.env.local'),
-  ];
-  for (const path of candidates) {
-    try {
-      const raw = readFileSync(path, 'utf-8');
-      for (const line of raw.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq <= 0) continue;
-        const key = trimmed.slice(0, eq).trim();
-        let value = trimmed.slice(eq + 1).trim();
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        if (key.length > 0 && process.env[key] === undefined) {
-          process.env[key] = value;
-        }
-      }
-      return;
-    } catch {
-      /* try next */
-    }
-  }
-}
-loadDotenvLocal();
+// A missing file is fine: dotenv no-ops, honest specs skip when their
+// gating env var is absent, and CI injects keys via GitHub Actions
+// secrets (no file on disk). dotenv won't override an already-set
+// `process.env` var, so a CI-injected value always wins.
+loadEnv({ path: resolve(import.meta.dirname, '..', '..', '.env.local') });
 
 export default defineConfig({
   test: {

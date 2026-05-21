@@ -59,9 +59,14 @@ jobs:
       - name: Unit tests
         run: pnpm -r --filter "./packages/*" test
 
-      # Wire-contract scenarios + the Tier-2 MCP Apps host simulator.
-      # Both are vitest (no browser).
+      # Wire-contract scenarios + the Tier-2 MCP Apps host simulator
+      # (both vitest). `ANTHROPIC_API_KEY` is a repo secret — set it in
+      # ggui-ai/ggui → Settings → Secrets and variables → Actions. With
+      # it, the real-LLM scenarios (06/07) run; without it they
+      # self-skip and the gate still passes.
       - name: E2E — wire scenarios + MCP host simulator
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: pnpm -r --filter "./e2e/scenarios" --filter "./e2e/mcp-host-simulator" test
 
       # The journeys suite drives a real Desktop-Chrome browser, so it
@@ -73,8 +78,11 @@ jobs:
       # `pnpm pack` tarball-install round-trips. Its harness resolves
       # workspace paths context-independently (tests/workspace-paths.ts
       # walks up to `pnpm-workspace.yaml`), so it runs unchanged in this
-      # subtree-split repo. Live-BYOK specs self-skip with no API key.
+      # subtree-split repo. `ANTHROPIC_API_KEY` un-skips the live-BYOK
+      # specs; without it they self-skip.
       - name: E2E — journeys (real CLI + tarball install)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: pnpm -r --filter "./e2e/journeys" test
 
   clean-room-consumer:

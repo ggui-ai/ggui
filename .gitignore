@@ -3,6 +3,13 @@ dist/
 .turbo/
 *.tsbuildinfo
 
+# Local dev / e2e secrets. The e2e suites (scenarios + journeys) read
+# ANTHROPIC_API_KEY etc. from a repo-root `.env.local` — each dev keeps
+# their own. Never commit it.
+.env
+.env.local
+.env.*.local
+
 # Playwright / e2e artifacts — the journeys suite roots its outputDir +
 # HTML report under `e2e-results/` (see e2e/journeys/playwright.config.ts).
 e2e-results/
