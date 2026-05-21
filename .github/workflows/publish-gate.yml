@@ -60,12 +60,22 @@ jobs:
         run: pnpm -r --filter "./packages/*" test
 
       # Wire-contract scenarios + the Tier-2 MCP Apps host simulator.
-      # Both are vitest (no browser). The journeys Playwright suite
-      # (e2e/journeys) is NOT wired here yet — its harness resolves
-      # workspace paths in a monorepo-specific way and needs a
-      # context-independent rework before it can run in this repo.
+      # Both are vitest (no browser).
       - name: E2E — wire scenarios + MCP host simulator
         run: pnpm -r --filter "./e2e/scenarios" --filter "./e2e/mcp-host-simulator" test
+
+      # The journeys suite drives a real Desktop-Chrome browser, so it
+      # needs the Playwright chromium binary + its system libs.
+      - name: Install Playwright browsers
+        run: pnpm -r --filter "./e2e/journeys" exec playwright install --with-deps chromium
+
+      # The journeys Playwright suite — real `ggui serve` spawns + local
+      # `pnpm pack` tarball-install round-trips. Its harness resolves
+      # workspace paths context-independently (tests/workspace-paths.ts
+      # walks up to `pnpm-workspace.yaml`), so it runs unchanged in this
+      # subtree-split repo. Live-BYOK specs self-skip with no API key.
+      - name: E2E — journeys (real CLI + tarball install)
+        run: pnpm -r --filter "./e2e/journeys" test
 
   clean-room-consumer:
     name: Packaging — clean-room-consumer registry round-trip
