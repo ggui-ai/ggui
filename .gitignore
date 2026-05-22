@@ -3,6 +3,13 @@ dist/
 .turbo/
 *.tsbuildinfo
 
+# e2e registry fixtures ship a committed gadget bundle: dist/index.js is
+# a hand-authored fixture artifact (a known-good gadget the marketplace-
+# lifecycle e2e publishes as-is) — not build output, so it is exempt
+# from the dist/ ignore above.
+!e2e/fixtures/*/dist/
+!e2e/fixtures/*/dist/**
+
 # Local dev / e2e secrets. The e2e suites (scenarios + journeys) read
 # ANTHROPIC_API_KEY etc. from a repo-root `.env.local` — each dev keeps
 # their own. Never commit it.
