@@ -186,7 +186,7 @@ describe('createAdvancedUiGenerator — missing-Playwright error', () => {
     ).not.toThrow();
   });
 
-  it('PlaywrightNotAvailableError message names the advanced pod', async () => {
+  it('PlaywrightNotAvailableError message explains the missing Playwright dep', async () => {
     const gen = createAdvancedUiGenerator({
       playwright: undefined,
       innerGenerator: makeStubGenerator([
@@ -202,7 +202,8 @@ describe('createAdvancedUiGenerator — missing-Playwright error', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(PlaywrightNotAvailableError);
       const e = err as PlaywrightNotAvailableError;
-      expect(e.message).toContain('ggui-protocol-pod-advanced');
+      expect(e.message).toContain('Playwright module is required');
+      expect(e.message).toContain('playwright-core');
     }
   });
 });
