@@ -593,7 +593,17 @@ export class HostSimulator {
         'subscribeWith: bootstrap.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
       );
     }
-    const ws = new WebSocket(bootstrap.wsUrl);
+    // Thread the bootstrap token on the upgrade URL as `?bootstrap=`.
+    // Servers that authenticate the WS upgrade (the cloud pod's
+    // live-channel `resolveIdentityFromUpgrade`) read the token from
+    // the query string — the post-connect `subscribe` frame below is
+    // too late to gate the HTTP upgrade and would 401. Mirrors the
+    // iframe-runtime's `composeWsUrl`; the token also stays in the
+    // subscribe payload for servers that consume it there.
+    const upgradeUrl = bootstrap.token
+      ? `${bootstrap.wsUrl}${bootstrap.wsUrl.includes('?') ? '&' : '?'}bootstrap=${encodeURIComponent(bootstrap.token)}`
+      : bootstrap.wsUrl;
+    const ws = new WebSocket(upgradeUrl);
     const ackPromise = new Promise<SubscribeAck>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error('WS ack timeout (5s)')),
