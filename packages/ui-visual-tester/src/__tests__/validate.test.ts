@@ -158,11 +158,11 @@ describe('validateContractBehavior — missing-Playwright error', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('error message points operators at the advanced-pod opt-in', () => {
+  it('error message explains how to enable behavioral validation', () => {
     const err = new PlaywrightNotAvailableError();
-    expect(err.message).toContain('playwright module is required');
-    expect(err.message).toContain('ggui-protocol-pod-advanced');
-    expect(err.message).toContain('Default OSS pods do NOT ship Playwright');
+    expect(err.message).toContain('Playwright module is required');
+    expect(err.message).toContain('playwright-core');
+    expect(err.message).toContain('optional peer dependency');
   });
 });
 
