@@ -75,9 +75,13 @@ describe.skipIf(!HAS_KEY)(
           detached: true,
         },
       );
-      sampleAgent.stdout?.on('data', () => undefined);
-      // Pipe the agent's stderr through so a boot failure is actionable
-      // in the test log instead of a bare `waitForUrl` timeout.
+      // Pipe both streams through. stderr surfaces boot failures;
+      // stdout surfaces the agent's turn-by-turn activity — without it
+      // a stalled round-trip is just a bare poll timeout with no clue
+      // whether the agent called its tools.
+      sampleAgent.stdout?.on('data', (chunk: Buffer) => {
+        process.stdout.write(`[sample-agent] ${chunk.toString()}`);
+      });
       sampleAgent.stderr?.on('data', (chunk: Buffer) => {
         process.stderr.write(`[sample-agent] ${chunk.toString()}`);
       });
