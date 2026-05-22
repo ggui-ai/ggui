@@ -39,11 +39,14 @@ const COMPILED_OUTPUT = '/* compiled JS output */';
 // =============================================================================
 
 describe('runTier0Checks', () => {
+  // The first runTier0Checks call in the file bears a one-time
+  // cold-start cost (module + check-harness warm-up). The default 5s
+  // timeout flakes under CI load — give it generous headroom.
   it('clean code produces no fail issues', async () => {
     const issues = await runTier0Checks(CLEAN_SOURCE, COMPILED_OUTPUT);
     const fails = issues.filter(i => i.result === 'fail');
     expect(fails).toHaveLength(0);
-  });
+  }, 30_000);
 
   // ── Security ────────────────────────────────────────────
 
