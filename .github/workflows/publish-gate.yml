@@ -38,13 +38,13 @@ jobs:
     # other workflows or to PR/fork runs.
     environment: with-llm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -96,7 +96,7 @@ jobs:
     name: Packaging — clean-room-consumer registry round-trip
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build tarballs → publish to Verdaccio → install clean-room → smoke
         run: |

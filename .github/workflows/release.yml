@@ -68,13 +68,13 @@ jobs:
       filter: ${{ steps.resolve.outputs.filter }}
       effective_dry_run: ${{ steps.route.outputs.effective_dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -371,13 +371,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-publish
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -423,7 +423,7 @@ jobs:
     if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
