@@ -23,11 +23,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Scope CI to the publishable packages/ tree. The e2e suites,
-      # samples, and misc/ tooling are workspace members (so their
-      # `@ggui-ai/*` imports resolve) but are exercised by their own
-      # suites — running their Playwright projects here would need
-      # browsers + a live server.
+      # `@ggui-ai/ui-visual-tester` is a publishable package whose unit
+      # tests launch a headless Chromium for behavioral contract
+      # validation. Install the browser before the Test step or those 6
+      # tests fail with "browserType.launch: Executable doesn't exist".
+      # The binary lands in the shared ~/.cache/ms-playwright.
+      - name: Install Playwright Chromium
+        run: pnpm -r --filter "./e2e/journeys" exec playwright install --with-deps chromium
+
+      # Scope CI build/typecheck/test to the publishable packages/ tree.
+      # The e2e suites, samples, and misc/ tooling are workspace members
+      # (so their `@ggui-ai/*` imports resolve) but are exercised by
+      # their own suites / the publish gate.
       #
       # `@ggui-ai/ui-gen` emits an 8 MB+ adapters bundle; tsup's worker
       # OOMs on the 7 GB default GitHub runner with Node's default

@@ -46,6 +46,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Install Playwright Chromium up front: `ui-visual-tester`'s
+      # behavioral-validation unit tests (in the Unit step below) AND
+      # the journeys e2e suite both launch a headless browser. One
+      # install (shared ~/.cache/ms-playwright) covers every package.
+      - name: Install Playwright Chromium
+        run: pnpm -r --filter "./e2e/journeys" exec playwright install --with-deps chromium
+
       # `@ggui-ai/ui-gen` emits an 8 MB+ adapters bundle; tsup's worker
       # OOMs on the default runner heap. Bump for the build phase.
       - name: Build
@@ -68,11 +75,6 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: pnpm -r --filter "./e2e/scenarios" --filter "./e2e/mcp-host-simulator" test
-
-      # The journeys suite drives a real Desktop-Chrome browser, so it
-      # needs the Playwright chromium binary + its system libs.
-      - name: Install Playwright browsers
-        run: pnpm -r --filter "./e2e/journeys" exec playwright install --with-deps chromium
 
       # The journeys Playwright suite — real `ggui serve` spawns + local
       # `pnpm pack` tarball-install round-trips. Its harness resolves
