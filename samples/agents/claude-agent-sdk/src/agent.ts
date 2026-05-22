@@ -10,8 +10,26 @@
  * This is what "Zero Agent Code" looks like in practice — the only
  * ggui-specific thing here is the MCP server URL.
  */
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
+
+/**
+ * Absolute path to the Claude Agent SDK's bundled `cli.js`.
+ *
+ * The SDK ships a portable `#!/usr/bin/env node` `cli.js` AND optional
+ * platform-native `claude` binaries (`@anthropic-ai/claude-agent-sdk-<plat>`).
+ * Its default lookup prefers the native binary and hard-errors when the
+ * matching optional package didn't install — which happens in CI / any
+ * environment where the libc-specific variant isn't resolved. Pinning
+ * `pathToClaudeCodeExecutable` at the bundled `cli.js` runs the agent
+ * loop on plain Node everywhere, with no native-binary dependency.
+ */
+const CLAUDE_CLI_PATH = join(
+  dirname(createRequire(import.meta.url).resolve('@anthropic-ai/claude-agent-sdk')),
+  'cli.js',
+);
 
 export interface RunAgentOptions {
   /** The user prompt to feed the agent. */
@@ -161,6 +179,11 @@ export async function* runAgent(
       // (handshake + push + consume + handshake + push…).
       maxTurns: opts.maxTurns ?? 50,
       env: { ANTHROPIC_API_KEY: apiKey },
+      // Run the agent loop via the SDK's bundled portable `cli.js` — see
+      // CLAUDE_CLI_PATH. Avoids the native-binary lookup that hard-errors
+      // when the platform-specific optional package isn't installed.
+      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+      executable: 'node',
       // Surface the bundled `claude` CLI subprocess's own stderr. The
       // agent loop runs inside that child process; without this a CLI
       // boot / MCP-connect / auth failure is an invisible hang on the
