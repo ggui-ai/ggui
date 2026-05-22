@@ -32,6 +32,11 @@ jobs:
   source:
     name: Source — install / build / typecheck / unit / e2e
     runs-on: ubuntu-latest
+    # The `with-llm` environment holds ANTHROPIC_API_KEY (for the
+    # real-LLM e2e). It's branch-restricted to `main` and only jobs
+    # that opt in here can read it — so the key is never exposed to
+    # other workflows or to PR/fork runs.
+    environment: with-llm
     steps:
       - uses: actions/checkout@v4
 
