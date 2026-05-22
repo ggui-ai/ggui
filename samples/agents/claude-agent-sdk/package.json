@@ -5,10 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "pnpm run build:ui && tsx src/index.ts",
-    "dev": "pnpm run build:ui && tsx watch src/index.ts",
+    "start": "vite build && tsx src/index.ts",
+    "dev": "vite build && tsx watch src/index.ts",
     "build:ui": "vite build",
-    "build": "pnpm run build:ui && tsc -b",
+    "build": "vite build && tsc -b",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

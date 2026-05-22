@@ -42,6 +42,7 @@ import {
 import { callTool } from '../fixtures/mcp-client.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { cleanEnv } from '../fixtures/clean-env.js';
+import { OUTERMOST_WORKSPACE_ROOT } from '../fixtures/workspace-root.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const TODO_PORT = Number.parseInt(process.env.TODO_PORT ?? '6782', 10);
@@ -109,6 +110,12 @@ describe.skipIf(!HAS_KEY)(
         'pnpm',
         ['--filter', '@ggui-samples/agent-claude-sdk', 'start'],
         {
+          // Spawn from the outermost workspace root: `oss/` carries a
+          // nested `pnpm-workspace.yaml`, so a `pnpm` run with CWD
+          // inside `oss/` resolves the empty `oss/node_modules` and
+          // can't find the hoisted `vite` bin. See
+          // fixtures/workspace-root.ts.
+          cwd: OUTERMOST_WORKSPACE_ROOT,
           env: {
             ...cleanEnv(),
             PORT: String(SAMPLE_PORT),
@@ -116,17 +123,33 @@ describe.skipIf(!HAS_KEY)(
             GGUI_TODO_MCP_URL: TODO_MCP,
           },
           stdio: 'pipe',
+          // Own process group so afterAll can SIGTERM the whole tree
+          // (the `pnpm` wrapper + its `tsx`/node child). A bare kill on
+          // the wrapper leaves the server child orphaned on its port,
+          // which EADDRINUSE-crashes the next run.
+          detached: true,
         },
       );
       sampleAgent.stdout?.on('data', () => undefined);
-      sampleAgent.stderr?.on('data', () => undefined);
+      // Pipe the agent's stderr through so a boot failure is actionable
+      // in the test log instead of a bare `waitForUrl` timeout.
+      sampleAgent.stderr?.on('data', (chunk: Buffer) => {
+        process.stderr.write(`[sample-agent] ${chunk.toString()}`);
+      });
 
       await waitForUrl(`http://localhost:${SAMPLE_PORT}/`, 30_000);
     }, 60_000);
 
     afterAll(async () => {
-      if (sampleAgent && !sampleAgent.killed) {
-        sampleAgent.kill('SIGTERM');
+      if (sampleAgent?.pid !== undefined && !sampleAgent.killed) {
+        // SIGTERM the whole process group (negative pid) so the `pnpm`
+        // wrapper AND its `tsx`/node child both die. Fall back to a
+        // direct kill if the group signal fails.
+        try {
+          process.kill(-sampleAgent.pid, 'SIGTERM');
+        } catch {
+          sampleAgent.kill('SIGTERM');
+        }
         await new Promise((r) => setTimeout(r, 500));
       }
     });
