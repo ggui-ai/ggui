@@ -161,6 +161,13 @@ export async function* runAgent(
       // (handshake + push + consume + handshake + push…).
       maxTurns: opts.maxTurns ?? 50,
       env: { ANTHROPIC_API_KEY: apiKey },
+      // Surface the bundled `claude` CLI subprocess's own stderr. The
+      // agent loop runs inside that child process; without this a CLI
+      // boot / MCP-connect / auth failure is an invisible hang on the
+      // caller side.
+      stderr: (data: string) => {
+        process.stderr.write(`[agent-cli] ${data}`);
+      },
       ...(systemPrompt ? { systemPrompt } : {}),
       // Cancellation. When the caller aborts (e.g. the chat server's
       // SSE listener detects the browser tab closed), the SDK stops

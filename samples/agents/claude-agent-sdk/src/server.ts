@@ -180,6 +180,10 @@ async function handleRequest(
       return;
     }
 
+    console.log(
+      `[sample-agent] /chat received — prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
+    );
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -202,6 +206,8 @@ async function handleRequest(
     };
     req.on('close', onClientClose);
 
+    const startedAt = Date.now();
+    let msgCount = 0;
     try {
       for await (const msg of runAgent({
         prompt,
@@ -215,12 +221,17 @@ async function handleRequest(
           ? { systemPrompt: opts.systemPrompt }
           : {}),
       })) {
+        msgCount += 1;
+        console.log(`[sample-agent] sdk message #${msgCount}: ${msg.type}`);
         // Check abort BEFORE writing — otherwise the first
         // post-abort iteration writes one message to an
         // already-closed SSE socket and Node logs an EPIPE.
         if (aborted) break;
         res.write(`data: ${JSON.stringify(msg)}\n\n`);
       }
+      console.log(
+        `[sample-agent] /chat complete — ${msgCount} messages in ${Date.now() - startedAt}ms`,
+      );
     } catch (err) {
       // AbortError is the expected outcome of client disconnect —
       // don't propagate it as a tool error to a now-dead SSE.
@@ -228,6 +239,10 @@ async function handleRequest(
         err instanceof Error &&
         (err.name === 'AbortError' || abortController.signal.aborted);
       if (!isAbort) {
+        console.error(
+          `[sample-agent] /chat agent error after ${Date.now() - startedAt}ms (${msgCount} messages):`,
+          err,
+        );
         const message = err instanceof Error ? err.message : String(err);
         res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
       }
