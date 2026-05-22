@@ -25,7 +25,9 @@ import type {
 } from '@google/genai';
 import type { JsonObject } from '@ggui-ai/protocol';
 import type { LLMToolDef } from '../llm.js';
+import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
+import { getBedrockModelId } from '../adapters/provider-router.js';
 import {
   emitLlmTraceEvent,
   newLlmTraceId,
@@ -293,12 +295,31 @@ export class AnthropicAgent extends LLMAgent {
   readonly provider = 'anthropic' as const;
 
   protected resolveModel(model: string): string {
+    // Bedrock IAM path — the upstream model id must be the cross-region
+    // inference-profile form (`us.anthropic.*`), not the bare API id.
+    if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+      return getBedrockModelId(model);
+    }
     return model.startsWith('anthropic/')
       ? model.slice('anthropic/'.length)
       : model;
   }
 
-  protected async createClient(): Promise<Anthropic> {
+  protected async createClient(): Promise<Anthropic | AnthropicBedrock> {
+    // Bedrock IAM path: `resolveRoute` (provider-router) sets
+    // CLAUDE_CODE_USE_BEDROCK=1 and clears ANTHROPIC_API_KEY for the
+    // pool-funded cloud pod. Auth is the pod's IRSA role — no API key.
+    // `AnthropicBedrock` is wire-compatible with `Anthropic` for the
+    // `.messages` API this agent uses.
+    if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+      const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk');
+      return new AnthropicBedrock({
+        awsRegion:
+          process.env.AWS_REGION ??
+          process.env.AWS_DEFAULT_REGION ??
+          'us-east-1',
+      });
+    }
     // SDK construction lives in `adapters/claude/client.ts`. The BYOK
     // resolver writes the raw key into `process.env.ANTHROPIC_API_KEY`
     // before this runs (see `applyRouteToEnv` in provider-router).
