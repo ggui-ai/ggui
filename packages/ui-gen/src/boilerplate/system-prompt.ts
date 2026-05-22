@@ -393,6 +393,8 @@ Structural primitives (\`Box\`, \`Stack\`, \`Row\`, \`Card\`) have NO \`onClick\
 
 **Semantic components are already interactive** — \`Button\` (\`onClick\`), \`Link\` (\`href\`), \`Input\` / \`Select\` (\`onChange\`). Use their own props; never put \`as\` on them. \`Text\` picks its element with \`is\` (\`<Text is="label">\`), not \`as\`.
 
+**Never nest two interactive elements.** Interactive content MUST NOT contain other interactive content — a gesture on the inner control bubbles to the outer one and fires BOTH handlers (one user click → the action dispatched twice). Do NOT put a \`Button\`, \`Checkbox\`, \`Input\`, \`Select\`, \`Link\`, or another \`as={Clickable}\` primitive inside a \`Card\` / \`Box\` / \`Row\` / \`Stack\` that is itself \`as={Clickable}\`. Wire each \`useAction\` callback to exactly ONE surface: EITHER the whole card is the trigger (interactive container, no interactive children) OR an inner control is the trigger (plain container, no \`as={Clickable}\`) — never both. A row with a checkbox: put the action on the \`Checkbox onChange\` and leave the row plain.
+
 **\`Text\` / \`Heading\` accept NO event handlers and NO \`as\` — only \`style\` / \`className\` plus their own typed props.** \`onClick\`, \`onDoubleClick\`, \`as={Clickable}\`, \`color\` are all type errors on \`Text\`. When the request says a label is "clickable", "editable", "edit on click / double-click", or "tap to …", do ONE of these — never put the handler on \`Text\`:
 
 \`\`\`tsx

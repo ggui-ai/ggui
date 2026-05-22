@@ -480,6 +480,33 @@ export async function runTier0Checks(
     }
   }
 
+  // ── Double-wired action check ───────────────────────────────
+  // A useAction callback dispatched from 2+ call sites fires the action
+  // more than once per gesture when an interactive element nests inside
+  // another (the inner gesture bubbles to the outer handler). Captured
+  // in scenario-07: a `Card as={Clickable} onClick` row containing a
+  // `Checkbox onChange`, both calling the same action → double-toggle.
+  const actionBindings = [
+    ...sourceCode.matchAll(/(?:const|let)\s+(\w+)\s*=\s*useAction\s*\(/g),
+  ]
+    .map((m) => m[1])
+    .filter((name): name is string => typeof name === 'string');
+  for (const binding of actionBindings) {
+    const callSites = (
+      sourceCode.match(new RegExp(`\\b${binding}\\s*\\(`, 'g')) ?? []
+    ).length;
+    if (callSites >= 2) {
+      issues.push({
+        tier: 0,
+        result: 'warn',
+        category: 'interactivity',
+        subcategory: 'double-wired-action',
+        description: `Action '${binding}' is dispatched from ${callSites} call sites — if an interactive element nests inside another, one gesture fires the action twice (the inner gesture bubbles to the outer handler).`,
+        fix: `Wire each useAction callback to exactly ONE interactive surface; never nest interactive elements (e.g. a Checkbox inside a Card as={Clickable}).`,
+      });
+    }
+  }
+
   // ── Optional props accessed without guard ──────────────────
   // Check if Props interface has optional fields that are accessed without ?. or ?? or &&
   const propsInterfaceMatch = sourceCode.match(/interface Props\s*\{([^}]+)\}/);

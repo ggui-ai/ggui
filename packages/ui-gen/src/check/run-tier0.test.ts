@@ -187,6 +187,51 @@ export default function C(props: Props) {
     expect(pxIssues[0].result).toBe('warn');
   });
 
+  it('warns when one useAction callback is wired to 2+ surfaces (double-wired)', async () => {
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { todos: Array<{ id: string }> }
+export default function C(props: Props) {
+  const toggle = useAction('toggleTodo');
+  return (
+    <Stack>
+      {props.todos.map((t) => (
+        <Card as={Clickable} onClick={() => toggle({ id: t.id })} key={t.id}>
+          <Checkbox checked={false} onChange={() => toggle({ id: t.id })} />
+        </Card>
+      ))}
+    </Stack>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dw = issues.filter((i) => i.subcategory === 'double-wired-action');
+    expect(dw).toHaveLength(1);
+    expect(dw[0].result).toBe('warn');
+    expect(dw[0].category).toBe('interactivity');
+  });
+
+  it('does NOT flag a useAction callback wired to exactly one surface', async () => {
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { todos: Array<{ id: string }> }
+export default function C(props: Props) {
+  const toggle = useAction('toggleTodo');
+  return (
+    <Stack>
+      {props.todos.map((t) => (
+        <Card key={t.id}>
+          <Checkbox checked={false} onChange={() => toggle({ id: t.id })} />
+        </Card>
+      ))}
+    </Stack>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    expect(
+      issues.filter((i) => i.subcategory === 'double-wired-action'),
+    ).toHaveLength(0);
+  });
+
   it('FAILS self-check on hardcoded rgba()/hsl() color functions (promoted from warn 2026-05-07)', async () => {
     const code = `
 interface Props { x: string }
