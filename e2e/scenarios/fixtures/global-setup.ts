@@ -138,6 +138,24 @@ const children: ChildProcess[] = [];
 const CACHE_DIR = join(tmpdir(), 'ggui-e2e-cache');
 const PERSISTENT_DIR = join(tmpdir(), 'ggui-e2e-persistent');
 
+/**
+ * Per-service embedding-model cache root. Every ggui server lazily
+ * warms the `bge-small-en-v1.5` embedding model via
+ * `@huggingface/transformers` on boot. Pointed at ONE shared dir, the
+ * N servers booted below issue N concurrent cold downloads of the same
+ * `model_quantized.onnx`; the interleaved writes corrupt the file
+ * ("Protobuf parsing failed"), which silently disables
+ * `safelyRegisterBlueprint` and breaks every cache / warm-path
+ * scenario.
+ *
+ * Fix: give each server its OWN subdirectory (`<MODELS_DIR>/<svc.name>`)
+ * via `GGUI_EMBEDDING_CACHE_DIR` — separate files, zero download
+ * contention. Stable path, NOT wiped between runs — model weights are
+ * a static asset, not per-run test state (unlike CACHE_DIR /
+ * PERSISTENT_DIR), so a local dev's second run reuses the download.
+ */
+const MODELS_DIR = join(tmpdir(), 'ggui-e2e-models');
+
 async function isPortListening(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = createConnection({ port, host: '127.0.0.1' });
@@ -235,7 +253,12 @@ export async function setup(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`[e2e/scenarios] starting ${svc.name} on :${svc.port}`);
     const child = spawn('pnpm', ['--filter', svc.pkg, 'start'], {
-      env: { ...process.env, PORT: String(svc.port) },
+      env: {
+        ...process.env,
+        PORT: String(svc.port),
+        // Own embedding-model cache dir per service — see MODELS_DIR.
+        GGUI_EMBEDDING_CACHE_DIR: join(MODELS_DIR, svc.name),
+      },
       stdio: 'pipe',
       // Own process group so teardown can SIGKILL the whole tree
       // (pnpm wrapper + ggui CLI + node).
