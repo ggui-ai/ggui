@@ -1221,7 +1221,7 @@ importers:
         specifier: workspace:*
         version: link:../ui-visual-tester
       '@ggui-ai/wire':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../wire
       '@google/genai':
         specifier: ^1.45.0
