@@ -90,6 +90,19 @@ export const lightTheme: DtcgTheme = {
     onContainer: { $type: 'color', $value: '#111827' },
     outline: { $type: 'color', $value: '#9ca3af' },
     outlineVariant: { $type: 'color', $value: '#d1d5db' },
+    // Primary role pair — text/icons on primary CTAs, plus tinted container.
+    onPrimary: { $type: 'color', $value: '#ffffff' },
+    primaryContainer: { $type: 'color', $value: '#e0f2fe' }, // primary-100
+    onPrimaryContainer: { $type: 'color', $value: '#0c4a6e' }, // primary-900
+    // Error role pair — text/icons on error surfaces, plus softer container.
+    onError: { $type: 'color', $value: '#ffffff' },
+    errorContainer: { $type: 'color', $value: '#fee2e2' }, // error-100
+    onErrorContainer: { $type: 'color', $value: '#991b1b' }, // error-800 (no 900 stop)
+    // Tertiary role — teal complement to the sky-blue primary.
+    tertiary: { $type: 'color', $value: '#0d9488' }, // teal-600
+    onTertiary: { $type: 'color', $value: '#ffffff' },
+    tertiaryContainer: { $type: 'color', $value: '#ccfbf1' }, // teal-100
+    onTertiaryContainer: { $type: 'color', $value: '#134e4a' }, // teal-900
   },
 
   font: {

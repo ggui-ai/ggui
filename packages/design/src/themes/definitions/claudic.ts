@@ -280,6 +280,21 @@ const claudicLight: DtcgTheme = {
     onContainer: { $value: '#4d2920', $type: 'color' }, // primary-900
     outline: { $value: '#dad8cc', $type: 'color' },
     outlineVariant: { $value: '#ebe9df', $type: 'color' },
+    // Primary role pair — text on Crail CTAs is ivory, container is Crail-50.
+    onPrimary: { $value: '#faf9f5', $type: 'color' }, // Ivory
+    primaryContainer: { $value: '#fbf2ee', $type: 'color' }, // primary-50
+    onPrimaryContainer: { $value: '#4d2920', $type: 'color' }, // primary-900
+    // Error role pair — onError reads ivory on the brick brand hex.
+    onError: { $value: '#faf9f5', $type: 'color' },
+    errorContainer: { $value: '#f9ebe7', $type: 'color' }, // error-50
+    onErrorContainer: { $value: '#57211a', $type: 'color' }, // error-800
+    // Tertiary role — muted sage/olive complementary to Crail terracotta.
+    // Echoes Claudic's success scale (olive 500=#6b8e3d) so the warm-earthy
+    // family identity holds.
+    tertiary: { $value: '#6b8e3d', $type: 'color' },
+    onTertiary: { $value: '#faf9f5', $type: 'color' },
+    tertiaryContainer: { $value: '#f4f7ec', $type: 'color' },
+    onTertiaryContainer: { $value: '#33431e', $type: 'color' },
   },
 
   font: shared.font,
@@ -403,6 +418,20 @@ const claudicDark: DtcgTheme = {
     onContainer: { $value: '#fbf2ee', $type: 'color' },
     outline: { $value: '#3d3b39', $type: 'color' },
     outlineVariant: { $value: '#2d2c2a', $type: 'color' },
+    // Primary role pair — dark: onPrimary is charcoal so text reads on the
+    // lifted Crail; container/onContainer ladder along the inverted scale.
+    onPrimary: { $value: '#262624', $type: 'color' }, // Charcoal
+    primaryContainer: { $value: '#723e30', $type: 'color' }, // dark primary-100
+    onPrimaryContainer: { $value: '#f5dfd4', $type: 'color' }, // dark primary-800
+    // Error role pair — same inversion against the lifted brick.
+    onError: { $value: '#2a1410', $type: 'color' },
+    errorContainer: { $value: '#52271f', $type: 'color' }, // dark error-100
+    onErrorContainer: { $value: '#f1cec5', $type: 'color' }, // dark error-800
+    // Tertiary role — muted sage lifted to read against Charcoal.
+    tertiary: { $value: '#9bb56b', $type: 'color' }, // matches dark success 500
+    onTertiary: { $value: '#1c2412', $type: 'color' },
+    tertiaryContainer: { $value: '#34461e', $type: 'color' },
+    onTertiaryContainer: { $value: '#e3ecd0', $type: 'color' },
   },
 
   font: shared.font,

@@ -183,6 +183,21 @@ const botanicalLight: DtcgTheme = {
     onContainer: { $value: '#14532d', $type: 'color' },
     outline: { $value: '#f0e4c9', $type: 'color' },
     outlineVariant: { $value: '#f8f0df', $type: 'color' },
+    // Primary role pair — onPrimary is cream for the leaf-green brand hex.
+    onPrimary: { $value: '#fefcf8', $type: 'color' },
+    primaryContainer: { $value: '#dcfce7', $type: 'color' }, // primary-100
+    onPrimaryContainer: { $value: '#14532d', $type: 'color' }, // primary-900
+    // Error role pair — uses the shared standardSemantic error ladder.
+    onError: { $value: '#fefcf8', $type: 'color' },
+    errorContainer: { $value: '#fee2e2', $type: 'color' },
+    onErrorContainer: { $value: '#7f1d1d', $type: 'color' },
+    // Tertiary role — warm amber (honey/bark) complements the leaf-green
+    // primary. Stays in the botanical earth-tone family rather than
+    // introducing a vivid contrast hue.
+    tertiary: { $value: '#b45309', $type: 'color' }, // amber-700, warm bark
+    onTertiary: { $value: '#fefcf8', $type: 'color' },
+    tertiaryContainer: { $value: '#fef3c7', $type: 'color' }, // amber-100
+    onTertiaryContainer: { $value: '#451a03', $type: 'color' }, // amber-950
   },
 
   font: shared.font,
@@ -270,6 +285,19 @@ const botanicalDark: DtcgTheme = {
     onContainer: { $value: '#dcfce7', $type: 'color' },
     outline: { $value: '#504530', $type: 'color' },
     outlineVariant: { $value: '#352e20', $type: 'color' },
+    // Primary role pair — dark: lifted leaf-green, onPrimary = forest soil.
+    onPrimary: { $value: '#141210', $type: 'color' }, // forest-soil base
+    primaryContainer: { $value: '#166534', $type: 'color' }, // deep forest
+    onPrimaryContainer: { $value: '#dcfce7', $type: 'color' },
+    // Error role pair — uses dark standardSemantic error.
+    onError: { $value: '#450a0a', $type: 'color' },
+    errorContainer: { $value: '#7f1d1d', $type: 'color' },
+    onErrorContainer: { $value: '#fecaca', $type: 'color' },
+    // Tertiary role — amber/honey lifted for AA on forest soil.
+    tertiary: { $value: '#fbbf24', $type: 'color' }, // amber-400 lifted
+    onTertiary: { $value: '#451a03', $type: 'color' }, // amber-950
+    tertiaryContainer: { $value: '#78350f', $type: 'color' }, // amber-900
+    onTertiaryContainer: { $value: '#fef3c7', $type: 'color' }, // amber-100
   },
 
   font: shared.font,

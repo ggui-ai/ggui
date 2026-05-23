@@ -241,6 +241,22 @@ const cyberpunkLight: DtcgTheme = {
     onContainer: { $value: '#cffafe', $type: 'color' },
     outline: { $value: '#3a3a48', $type: 'color' },
     outlineVariant: { $value: '#25252f', $type: 'color' },
+    // Primary role pair — onPrimary is the deep night chrome, container
+    // is the same teal as the canonical container (cyan-800).
+    onPrimary: { $value: '#0a0a0f', $type: 'color' },
+    primaryContainer: { $value: '#155e75', $type: 'color' }, // cyan-800
+    onPrimaryContainer: { $value: '#cffafe', $type: 'color' }, // cyan-100
+    // Error role pair — onError reads near-black on neon magenta.
+    onError: { $value: '#0a0a0f', $type: 'color' },
+    errorContainer: { $value: '#660d22', $type: 'color' }, // error-800
+    onErrorContainer: { $value: '#ffe0e8', $type: 'color' }, // error-50
+    // Tertiary role — neon lime, the canonical cyberpunk third-color
+    // accent. Reuses the success singleton (#00ff88) for brand coherence
+    // with on-brand "MATRIX-green" glow.
+    tertiary: { $value: '#00ff88', $type: 'color' }, // neon lime
+    onTertiary: { $value: '#0a0a0f', $type: 'color' },
+    tertiaryContainer: { $value: '#006638', $type: 'color' }, // success-800
+    onTertiaryContainer: { $value: '#e0fff1', $type: 'color' }, // success-50
   },
 
   font: shared.font,
@@ -367,6 +383,19 @@ const cyberpunkDark: DtcgTheme = {
     onContainer: { $value: '#cffafe', $type: 'color' },
     outline: { $value: '#1a1a24', $type: 'color' },
     outlineVariant: { $value: '#111118', $type: 'color' },
+    // Primary role pair — dark: onPrimary is pure-black-ish, container = deeper teal.
+    onPrimary: { $value: '#000005', $type: 'color' },
+    primaryContainer: { $value: '#0e7490', $type: 'color' }, // deeper teal
+    onPrimaryContainer: { $value: '#cffafe', $type: 'color' },
+    // Error role pair — lifted neon magenta against pure-black surface.
+    onError: { $value: '#000005', $type: 'color' },
+    errorContainer: { $value: '#991e45', $type: 'color' }, // dark error-200
+    onErrorContainer: { $value: '#ffc1cf', $type: 'color' }, // dark error-800
+    // Tertiary role — neon lime lifted for AA on pure-black.
+    tertiary: { $value: '#33ffaa', $type: 'color' }, // brighter mint for dark
+    onTertiary: { $value: '#000005', $type: 'color' },
+    tertiaryContainer: { $value: '#006633', $type: 'color' }, // dark success-100
+    onTertiaryContainer: { $value: '#ccffea', $type: 'color' }, // dark success-800
   },
 
   font: shared.font,

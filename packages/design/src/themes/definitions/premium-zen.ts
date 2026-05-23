@@ -222,6 +222,21 @@ const zenLight: DtcgTheme = {
     onContainer: { $value: '#33392e', $type: 'color' },
     outline: { $value: '#d5d0c8', $type: 'color' },
     outlineVariant: { $value: '#e7e4de', $type: 'color' },
+    // Primary role pair — onPrimary is stone ivory on moss.
+    onPrimary: { $value: '#faf9f7', $type: 'color' },
+    primaryContainer: { $value: '#e8ebe2', $type: 'color' }, // primary-100
+    onPrimaryContainer: { $value: '#33392e', $type: 'color' }, // primary-900
+    // Error role pair — muted clay (zen-custom).
+    onError: { $value: '#faf9f7', $type: 'color' },
+    errorContainer: { $value: '#f8edec', $type: 'color' }, // error-50
+    onErrorContainer: { $value: '#522423', $type: 'color' }, // error-800
+    // Tertiary role — muted plum/mauve. Stays low-saturation per zen
+    // philosophy ("Beauty in imperfection. Stillness as presence.") while
+    // complementing the moss primary with a quiet earthy violet.
+    tertiary: { $value: '#7d5e6e', $type: 'color' }, // muted plum/mauve
+    onTertiary: { $value: '#faf9f7', $type: 'color' },
+    tertiaryContainer: { $value: '#ebe2e6', $type: 'color' }, // soft mauve wash
+    onTertiaryContainer: { $value: '#3a2a32', $type: 'color' }, // deep plum
   },
 
   font: shared.font,
@@ -342,6 +357,20 @@ const zenDark: DtcgTheme = {
     onContainer: { $value: '#e8ebe2', $type: 'color' }, // primary-100 in dark tree
     outline: { $value: '#5e5650', $type: 'color' },
     outlineVariant: { $value: '#3e3a36', $type: 'color' },
+    // Primary role pair — dark: onPrimary is deep stone; container = deep moss.
+    onPrimary: { $value: '#1a1816', $type: 'color' }, // deep stone base
+    primaryContainer: { $value: '#3b4434', $type: 'color' }, // deep moss
+    onPrimaryContainer: { $value: '#e8ebe2', $type: 'color' },
+    // Error role pair — muted clay lifted for dark stone surface.
+    onError: { $value: '#1a1816', $type: 'color' },
+    errorContainer: { $value: '#552a27', $type: 'color' }, // dark error-800
+    onErrorContainer: { $value: '#f1cac8', $type: 'color' }, // dark error-100
+    // Tertiary role — muted plum lifted for AA on dusk stone. Saturation
+    // stays low — zen never goes vivid in dark mode.
+    tertiary: { $value: '#a98899', $type: 'color' }, // dusty plum lifted
+    onTertiary: { $value: '#1a1816', $type: 'color' },
+    tertiaryContainer: { $value: '#4e3a44', $type: 'color' }, // deep plum
+    onTertiaryContainer: { $value: '#ebe2e6', $type: 'color' },
   },
 
   font: shared.font,

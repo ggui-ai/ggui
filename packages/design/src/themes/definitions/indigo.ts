@@ -262,6 +262,21 @@ const indigoLight: DtcgTheme = {
     onContainer: { $value: '#1e1b4b', $type: 'color' }, // primary-900
     outline: { $value: '#d4d3cf', $type: 'color' },
     outlineVariant: { $value: '#e8e7e3', $type: 'color' },
+    // Primary role pair — text on indigo CTAs is paper, container = primary-50.
+    onPrimary: { $value: '#fafaf7', $type: 'color' }, // Paper
+    primaryContainer: { $value: '#eef2ff', $type: 'color' }, // primary-50
+    onPrimaryContainer: { $value: '#1e1b4b', $type: 'color' }, // primary-900
+    // Error role pair — onError reads paper on brand rose.
+    onError: { $value: '#fafaf7', $type: 'color' },
+    errorContainer: { $value: '#fde2e7', $type: 'color' }, // error-100
+    onErrorContainer: { $value: '#701222', $type: 'color' }, // error-800
+    // Tertiary role — violet-leaning teal complementary to indigo. Tuned
+    // to harmonize rather than fight the brand accent; reads "premium
+    // analytical" alongside indigo CTAs.
+    tertiary: { $value: '#7c3aed', $type: 'color' }, // violet-600 — premium accent
+    onTertiary: { $value: '#fafaf7', $type: 'color' },
+    tertiaryContainer: { $value: '#ede9fe', $type: 'color' }, // violet-100
+    onTertiaryContainer: { $value: '#4c1d95', $type: 'color' }, // violet-900
   },
 
   font: shared.font,
@@ -387,6 +402,19 @@ const indigoDark: DtcgTheme = {
     onContainer: { $value: '#eef2ff', $type: 'color' },
     outline: { $value: '#3e3c50', $type: 'color' },
     outlineVariant: { $value: '#2a2839', $type: 'color' },
+    // Primary role pair — dark: onPrimary is midnight, container = deep indigo.
+    onPrimary: { $value: '#0c0b14', $type: 'color' }, // Midnight
+    primaryContainer: { $value: '#312e81', $type: 'color' }, // dark primary-100
+    onPrimaryContainer: { $value: '#e0e7ff', $type: 'color' }, // dark primary-800
+    // Error role pair — lifted brand rose against midnight.
+    onError: { $value: '#3b0a14', $type: 'color' },
+    errorContainer: { $value: '#701222', $type: 'color' }, // dark error-100
+    onErrorContainer: { $value: '#fecdd3', $type: 'color' }, // dark error-800
+    // Tertiary role — violet lifted for AA contrast on midnight.
+    tertiary: { $value: '#a78bfa', $type: 'color' }, // violet-400 lifted
+    onTertiary: { $value: '#2e1065', $type: 'color' }, // violet-950
+    tertiaryContainer: { $value: '#4c1d95', $type: 'color' }, // violet-900
+    onTertiaryContainer: { $value: '#ede9fe', $type: 'color' }, // violet-100
   },
 
   font: shared.font,

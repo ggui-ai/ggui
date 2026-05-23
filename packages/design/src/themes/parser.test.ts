@@ -85,6 +85,19 @@ describe('parseTheme', () => {
           expect(parsed.cssVariables).toContain('--ggui-color-surface');
           expect(parsed.cssVariables).toContain('--ggui-color-onSurface');
           expect(parsed.cssVariables).toContain('--ggui-color-outline');
+          // Material 3 role pairs — primary / error / tertiary families.
+          // Every theme MUST ship a foreground for each tinted surface so
+          // the LLM never has to invent contrast colors.
+          expect(parsed.cssVariables).toContain('--ggui-color-onPrimary');
+          expect(parsed.cssVariables).toContain('--ggui-color-primaryContainer');
+          expect(parsed.cssVariables).toContain('--ggui-color-onPrimaryContainer');
+          expect(parsed.cssVariables).toContain('--ggui-color-onError');
+          expect(parsed.cssVariables).toContain('--ggui-color-errorContainer');
+          expect(parsed.cssVariables).toContain('--ggui-color-onErrorContainer');
+          expect(parsed.cssVariables).toContain('--ggui-color-tertiary');
+          expect(parsed.cssVariables).toContain('--ggui-color-onTertiary');
+          expect(parsed.cssVariables).toContain('--ggui-color-tertiaryContainer');
+          expect(parsed.cssVariables).toContain('--ggui-color-onTertiaryContainer');
           expect(parsed.cssVariables).toContain('--ggui-font-family-sans');
           expect(parsed.cssVariables).toContain('--ggui-shape-radius-');
           expect(parsed.cssVariables).toContain('--ggui-shape-shadow-');

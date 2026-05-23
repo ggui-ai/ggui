@@ -316,6 +316,39 @@ export function generateThemeReferenceDocumentation(theme: DtcgTheme): string {
     }
   }
 
+  // Material 3 role pairs — render guidance so the LLM picks the right
+  // foreground for each tinted surface. The singletons above already emit
+  // CSS vars; this section spells out the on*/container pairing contract.
+  sections.push('', '## Material Role Pairs', '');
+  sections.push(
+    'Each tinted surface ships an `on*` foreground token. Always pair them:',
+  );
+  sections.push('');
+  sections.push('- Surfaces: `--ggui-color-surface` + `--ggui-color-onSurface`');
+  sections.push(
+    '- Surface variants: `--ggui-color-surfaceVariant` + `--ggui-color-onSurfaceVariant`',
+  );
+  sections.push('- Containers: `--ggui-color-container` + `--ggui-color-onContainer`');
+  sections.push(
+    '- Primary CTAs: `--ggui-color-primary-500` + `--ggui-color-onPrimary`',
+  );
+  sections.push(
+    '- Primary tinted surface: `--ggui-color-primaryContainer` + `--ggui-color-onPrimaryContainer`',
+  );
+  sections.push(
+    '- Error CTAs: `--ggui-color-error-500` + `--ggui-color-onError`',
+  );
+  sections.push(
+    '- Error tinted surface: `--ggui-color-errorContainer` + `--ggui-color-onErrorContainer`',
+  );
+  sections.push(
+    '- Tertiary accent: `--ggui-color-tertiary` + `--ggui-color-onTertiary`',
+  );
+  sections.push(
+    '- Tertiary tinted surface: `--ggui-color-tertiaryContainer` + `--ggui-color-onTertiaryContainer`',
+  );
+  sections.push('- Outlines: `--ggui-color-outline` / `--ggui-color-outlineVariant`');
+
   sections.push('', '## Spacing', '');
   for (const [key, token] of Object.entries(theme.spacing)) {
     sections.push(`- var(--ggui-spacing-${key}) - ${token.$value}`);

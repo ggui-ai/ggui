@@ -82,7 +82,8 @@
     "test": "vitest run",
     "generate:docs": "node --experimental-strip-types scripts/generate-primitives-docs.ts",
     "generate:docs-ts": "node --experimental-strip-types scripts/generate-primitives-docs-ts.ts",
-    "generate:icons": "node scripts/generate-icon-data.mjs"
+    "generate:icons": "node scripts/generate-icon-data.mjs",
+    "audit:wcag": "node --experimental-strip-types --no-warnings --experimental-loader=./scripts/audit-wcag-loader.mjs scripts/audit-wcag-contrast.ts"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

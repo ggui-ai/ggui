@@ -260,6 +260,22 @@ const gguiLight: DtcgTheme = {
     onContainer: { $value: '#292929', $type: 'color' }, // ink
     outline: { $value: '#d6d4cb', $type: 'color' }, // line-2
     outlineVariant: { $value: '#e4e4e2', $type: 'color' }, // chrome-2
+    // Primary role pair — text on ink CTAs is paper; container = paper-2.
+    onPrimary: { $value: '#f4f3ed', $type: 'color' }, // paper
+    primaryContainer: { $value: '#ebe9e1', $type: 'color' }, // paper-2
+    onPrimaryContainer: { $value: '#292929', $type: 'color' }, // ink
+    // Error role pair — onError is paper for high contrast on signal-red.
+    onError: { $value: '#f4f3ed', $type: 'color' },
+    errorContainer: { $value: '#fbe7e3', $type: 'color' }, // error-50
+    onErrorContainer: { $value: '#57160d', $type: 'color' }, // error-800
+    // Tertiary role — brand-kit "live" green (success) doubles as the
+    // tertiary accent. GGUI is monochrome by design, but the status triad
+    // (signal/live/draft) is the only sanctioned color vocabulary. Live
+    // (#1b7a37) reads as the natural complementary accent to ink.
+    tertiary: { $value: '#1b7a37', $type: 'color' }, // live
+    onTertiary: { $value: '#f4f3ed', $type: 'color' }, // paper
+    tertiaryContainer: { $value: '#e8f5ec', $type: 'color' }, // success-50
+    onTertiaryContainer: { $value: '#093116', $type: 'color' }, // success-800
   },
 
   font: shared.font,
@@ -381,6 +397,21 @@ const gguiDark: DtcgTheme = {
     onContainer: { $value: '#f4f3ed', $type: 'color' }, // paper
     outline: { $value: '#3d3d3d', $type: 'color' }, // ink-2
     outlineVariant: { $value: '#292929', $type: 'color' },
+    // Primary role pair — dark inverts: primary is now paper, so onPrimary
+    // is ink to keep the monochrome contrast architecture.
+    onPrimary: { $value: '#292929', $type: 'color' }, // ink
+    primaryContainer: { $value: '#3d3d3d', $type: 'color' }, // ink-2
+    onPrimaryContainer: { $value: '#f4f3ed', $type: 'color' }, // paper
+    // Error role pair — lifted signal-red against ink surface.
+    onError: { $value: '#3d130d', $type: 'color' },
+    errorContainer: { $value: '#702419', $type: 'color' }, // dark error-100
+    onErrorContainer: { $value: '#ffc2ba', $type: 'color' }, // dark error-800
+    // Tertiary role — brand-kit "live" green lifted for AA on ink, mirrors
+    // the dark success-500 anchor.
+    tertiary: { $value: '#3da85b', $type: 'color' }, // dark success 500
+    onTertiary: { $value: '#0d2918', $type: 'color' },
+    tertiaryContainer: { $value: '#174f2a', $type: 'color' }, // dark success-100
+    onTertiaryContainer: { $value: '#cdead3', $type: 'color' }, // dark success-800
   },
 
   font: shared.font,

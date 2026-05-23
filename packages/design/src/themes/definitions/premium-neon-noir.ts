@@ -213,6 +213,21 @@ const neonNoirLight: DtcgTheme = {
     onContainer: { $value: '#fce7f3', $type: 'color' },
     outline: { $value: '#3b3b44', $type: 'color' },
     outlineVariant: { $value: '#232329', $type: 'color' },
+    // Primary role pair — onPrimary is deep noir so hot pink CTAs pop.
+    onPrimary: { $value: '#09090b', $type: 'color' },
+    primaryContainer: { $value: '#9d174d', $type: 'color' }, // primary-800
+    onPrimaryContainer: { $value: '#fce7f3', $type: 'color' }, // primary-100
+    // Error role pair — onError on lifted rose.
+    onError: { $value: '#09090b', $type: 'color' },
+    errorContainer: { $value: '#7f1d1d', $type: 'color' },
+    onErrorContainer: { $value: '#fecaca', $type: 'color' },
+    // Tertiary role — electric violet, the natural neon-noir sister hue
+    // to hot pink (UV side of the spectrum, keeps the nocturnal-electric
+    // family identity).
+    tertiary: { $value: '#a855f7', $type: 'color' }, // violet-500 — electric UV
+    onTertiary: { $value: '#09090b', $type: 'color' },
+    tertiaryContainer: { $value: '#6b21a8', $type: 'color' }, // violet-800
+    onTertiaryContainer: { $value: '#f3e8ff', $type: 'color' }, // violet-100
   },
 
   font: shared.font,
@@ -310,6 +325,19 @@ const neonNoirDark: DtcgTheme = {
     onContainer: { $value: '#fce7f3', $type: 'color' },
     outline: { $value: '#19191e', $type: 'color' },
     outlineVariant: { $value: '#111114', $type: 'color' },
+    // Primary role pair — dark: onPrimary is pure black, container = richer magenta.
+    onPrimary: { $value: '#000000', $type: 'color' },
+    primaryContainer: { $value: '#be185d', $type: 'color' }, // richer magenta
+    onPrimaryContainer: { $value: '#fce7f3', $type: 'color' },
+    // Error role pair — lifted rose against pure black.
+    onError: { $value: '#000000', $type: 'color' },
+    errorContainer: { $value: '#7f1d1d', $type: 'color' },
+    onErrorContainer: { $value: '#fecdd3', $type: 'color' },
+    // Tertiary role — electric violet lifted for AA on pure black.
+    tertiary: { $value: '#c084fc', $type: 'color' }, // violet-400 lifted
+    onTertiary: { $value: '#000000', $type: 'color' },
+    tertiaryContainer: { $value: '#581c87', $type: 'color' }, // violet-900
+    onTertiaryContainer: { $value: '#f3e8ff', $type: 'color' }, // violet-100
   },
 
   font: shared.font,

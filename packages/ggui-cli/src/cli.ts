@@ -80,6 +80,7 @@ import { runWhoamiCommand } from './auth-whoami.js';
 import { runKeysCommand } from './auth-keys.js';
 import { runGadgetCommand } from './gadget-command.js';
 import { runBlueprintCommand } from './blueprint-command.js';
+import { runThemeCommand } from './theme-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -128,6 +129,11 @@ Commands:
 
                  blueprint create <scope/name>  Scaffold a new blueprint repo.
 
+  theme        Validate + inspect operator-authored DTCG themes.
+
+                 theme validate <path>  Validate a JSON theme file against
+                                        the ThemeDocumentV1 schema.
+
 Global options:
   --help, -h   Show this help.
   --version    Show installed version.
@@ -169,6 +175,8 @@ async function main(argv: string[]): Promise<number> {
       return runGadgetCommand(rest);
     case 'blueprint':
       return runBlueprintCommand(rest);
+    case 'theme':
+      return runThemeCommand(rest);
     default:
       process.stderr.write(`ggui: unknown command "${command}"\n\n`);
       process.stderr.write(HELP);

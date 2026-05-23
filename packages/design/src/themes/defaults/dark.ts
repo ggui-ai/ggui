@@ -81,6 +81,20 @@ export const darkTheme: DtcgTheme = {
     onContainer: { $type: 'color', $value: '#f1f5f9' },
     outline: { $type: 'color', $value: '#64748b' },
     outlineVariant: { $type: 'color', $value: '#475569' },
+    // Primary role pair — dark mode inverts: text on primary surface is the
+    // darkest primary stop; primaryContainer is the deepest primary tint.
+    onPrimary: { $type: 'color', $value: '#0c4a6e' }, // primary-50 in dark ladder = sky-900 hex
+    primaryContainer: { $type: 'color', $value: '#075985' }, // primary-100 dark = sky-800 hex
+    onPrimaryContainer: { $type: 'color', $value: '#e0f2fe' }, // primary-800 dark = sky-100 hex
+    // Error role pair — same inversion.
+    onError: { $type: 'color', $value: '#450a0a' },
+    errorContainer: { $type: 'color', $value: '#7f1d1d' }, // error-100 dark
+    onErrorContainer: { $type: 'color', $value: '#fecaca' }, // error-800 dark
+    // Tertiary role — teal complement, lifted for dark contrast on slate.
+    tertiary: { $type: 'color', $value: '#2dd4bf' }, // teal-400
+    onTertiary: { $type: 'color', $value: '#042f2e' }, // teal-950
+    tertiaryContainer: { $type: 'color', $value: '#115e59' }, // teal-800
+    onTertiaryContainer: { $type: 'color', $value: '#ccfbf1' }, // teal-100
   },
 
   font: {

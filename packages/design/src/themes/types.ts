@@ -63,6 +63,26 @@ export interface DtcgTheme {
     onContainer: DtcgToken;
     outline: DtcgToken;
     outlineVariant: DtcgToken;
+    /** Text / icon color rendered ON a primary surface (CTA buttons, etc.). */
+    onPrimary: DtcgToken;
+    /** Softer primary-tinted surface (e.g. selected chips, hover wash). */
+    primaryContainer: DtcgToken;
+    /** Text / icon color rendered ON a primaryContainer surface. */
+    onPrimaryContainer: DtcgToken;
+    /** Text / icon color rendered ON an error surface (destructive CTAs). */
+    onError: DtcgToken;
+    /** Softer error-tinted surface (e.g. inline error banner). */
+    errorContainer: DtcgToken;
+    /** Text / icon color rendered ON an errorContainer surface. */
+    onErrorContainer: DtcgToken;
+    /** Accent / complementary role, typically harmonizing with primary. */
+    tertiary: DtcgToken;
+    /** Text / icon color rendered ON a tertiary surface. */
+    onTertiary: DtcgToken;
+    /** Softer tertiary-tinted surface (e.g. accent callouts). */
+    tertiaryContainer: DtcgToken;
+    /** Text / icon color rendered ON a tertiaryContainer surface. */
+    onTertiaryContainer: DtcgToken;
   };
 
   font: {
