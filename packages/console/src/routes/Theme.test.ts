@@ -134,6 +134,14 @@ describe('flattenLeaves', () => {
     expect(groups.map((g) => g.prefix)).toEqual([
       'color.primary',
       'color.neutral',
+      // Semantic-color scales each get their own ladder group (post-B-iii;
+      // the four were previously merged into a single singleton block).
+      'color.success',
+      'color.warning',
+      'color.error',
+      'color.info',
+      // Material 3 role-pair singletons (surface/onSurface/outline/…) stay
+      // under the bare `color` prefix.
       'color',
       'shape.radius',
       'shape.shadow',
@@ -168,17 +176,34 @@ describe('flattenLeaves', () => {
     }
   });
 
-  it('emits 12 semantic-color leaves under prefix `color`', () => {
+  it('emits the Material 3 role-pair singletons under prefix `color`', () => {
     const groups = flattenLeaves(theme);
-    const semantic = groups.find((g) => g.prefix === 'color' && g.label.includes('Semantic'));
-    expect(semantic).toBeDefined();
-    expect(semantic!.leaves).toHaveLength(12);
-    const paths = semantic!.leaves.map((l) => l.path);
-    // Probe the high-signal ones.
+    // Bare `color` prefix now holds ONLY the role-pair singletons —
+    // success/warning/error/info moved to their own ladder groups.
+    const roles = groups.find((g) => g.prefix === 'color' && g.label === 'Color · Roles');
+    expect(roles).toBeDefined();
+    const paths = roles!.leaves.map((l) => l.path);
+    // Surface family — eight Material 3 role pairs.
     expect(paths).toContain('color.surface');
     expect(paths).toContain('color.onSurface');
-    expect(paths).toContain('color.error');
+    expect(paths).toContain('color.surfaceVariant');
+    expect(paths).toContain('color.onSurfaceVariant');
+    expect(paths).toContain('color.container');
+    expect(paths).toContain('color.onContainer');
     expect(paths).toContain('color.outline');
+    expect(paths).toContain('color.outlineVariant');
+  });
+
+  it('emits a dedicated ladder group per semantic-color scale', () => {
+    const groups = flattenLeaves(theme);
+    for (const family of ['success', 'warning', 'error', 'info'] as const) {
+      const ladder = groups.find((g) => g.prefix === `color.${family}`);
+      expect(ladder, `missing color.${family} ladder`).toBeDefined();
+      // Every shipped theme ships 7 stops (50,100,200,500,600,700,800).
+      expect(ladder!.leaves.length).toBeGreaterThanOrEqual(7);
+      const paths = ladder!.leaves.map((l) => l.path);
+      expect(paths).toContain(`color.${family}.500`);
+    }
   });
 
   it('includes mono font family when the preset ships one', () => {
