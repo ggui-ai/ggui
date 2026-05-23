@@ -94,6 +94,15 @@ export interface HostSimulatorOptions {
 export interface CallToolResult {
   readonly structuredContent?: unknown;
   readonly content: ReadonlyArray<unknown>;
+  /**
+   * MCP-spec tool-level error flag. Set to `true` when the tool's
+   * handler threw — the MCP SDK auto-wraps the throw into a
+   * `{content:[{type:'text',text:msg}], isError:true}` result. Surfacing
+   * the flag here is the canonical signal callers (G2 + future
+   * error-envelope specs) read to distinguish a tool error from a
+   * normal result without parsing `content[*].text` heuristically.
+   */
+  readonly isError?: boolean;
   /** Set when the tool result carries `_meta.ggui.bootstrap`. */
   readonly bootstrap?: PushResultMeta['ggui']['bootstrap'];
   /**
@@ -412,12 +421,20 @@ export class HostSimulator {
     const bootstrap = hasPushBootstrapMeta(meta)
       ? meta.ggui.bootstrap
       : undefined;
+    // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
+    // to `true` on tool-handler throws via `createToolError` (server/mcp.js
+    // §createToolError). Without surfacing it here, callers can't
+    // distinguish error envelopes from normal results without parsing
+    // `content[*].text` heuristically — the G2 spec workaround the
+    // 2026-05-23 cleanup retired.
+    const isError = (result as { isError?: unknown }).isError === true;
 
     return {
       content: (result.content ?? []) as ReadonlyArray<unknown>,
       ...(result.structuredContent !== undefined
         ? { structuredContent: result.structuredContent }
         : {}),
+      ...(isError ? { isError: true } : {}),
       ...(bootstrap !== undefined ? { bootstrap } : {}),
       ...(toolEntry?.resourceUri !== undefined
         ? { toolResourceUri: toolEntry.resourceUri }
