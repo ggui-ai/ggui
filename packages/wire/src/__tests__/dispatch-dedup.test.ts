@@ -111,4 +111,16 @@ describe('tryAcceptDispatch — task-scoped dedup', () => {
     // Re-firing any of them is suppressed.
     expect(tryAcceptDispatch('b', { n: 1 }).suppressed).toBe(true);
   });
+
+  it('surfaces the decision signature so callers (useAction) can hand it to onDispatchSuppressed', () => {
+    // `tryAcceptDispatch` returns `{ suppressed, signature }`. The
+    // signature is what `useAction` forwards into the optional
+    // `WireConfig.onDispatchSuppressed` observability hook so hosts
+    // can route structured events to telemetry sinks without
+    // re-computing the key.
+    const first = tryAcceptDispatch('toggle', { id: 'x' });
+    const second = tryAcceptDispatch('toggle', { id: 'x' });
+    expect(first.signature).toBe(second.signature);
+    expect(second.signature).toBe('toggle::{"id":"x"}');
+  });
 });

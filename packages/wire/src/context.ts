@@ -123,6 +123,36 @@ export interface WireConfig<T extends DataContract = DataContract> {
     channelName: N,
     handler: (delivery: StreamDelivery<WireStreamPayload<T, N>>) => void,
   ) => () => void;
+  /**
+   * Optional structured observability for `useAction`'s task-scoped
+   * duplicate-dispatch suppression. Fires alongside the always-on
+   * `console.warn` whenever the runtime coalesces a same-(name,
+   * payload) re-dispatch within one event-loop task — the nested-
+   * interactive double-fire backstop. Hosts can route this to
+   * telemetry sinks (Sentry, Datadog, server-side log) for ops
+   * dashboards; absent → only the dev-console signal fires.
+   */
+  readonly onDispatchSuppressed?: (info: DispatchSuppressedInfo) => void;
+}
+
+/**
+ * Payload for the {@link WireConfig.onDispatchSuppressed} callback.
+ */
+export interface DispatchSuppressedInfo {
+  /** The action name that was suppressed. */
+  readonly actionName: string;
+  /**
+   * The dedup signature (`${actionName}::${JSON.stringify(payload)}`)
+   * computed for this dispatch. `null` when the payload was
+   * un-serializable (no signature, dedup bypassed) — though in that
+   * branch suppression cannot fire anyway, so `null` is observable
+   * here only if a future code path changes that invariant.
+   */
+  readonly payloadSignature: string | null;
+  /** The raw payload as supplied to the dispatch call. */
+  readonly payload: unknown;
+  /** `Date.now()` at the moment suppression was decided. */
+  readonly suppressedAt: number;
 }
 
 /**
