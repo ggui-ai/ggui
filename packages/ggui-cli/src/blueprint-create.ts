@@ -24,7 +24,7 @@
  * the banner.
  */
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   GGUI_BLUEPRINT_JSON_FILENAME,
   parseBlueprintManifest,
@@ -381,7 +381,11 @@ export async function runBlueprintCreate(
     };
   }
 
-  const targetDir = join(options.cwd, flags.dir ?? name);
+  // `resolve` (not `join`): when `flags.dir` is an absolute path, it must
+  // win over `options.cwd`. `join('/repo', '/tmp/foo')` concatenates to
+  // `/repo/tmp/foo`; `resolve('/repo', '/tmp/foo')` correctly returns
+  // `/tmp/foo`. Relative paths still resolve against cwd.
+  const targetDir = resolve(options.cwd, flags.dir ?? name);
 
   let dirState: { exists: boolean; empty: boolean };
   try {

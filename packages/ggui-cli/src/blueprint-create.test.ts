@@ -151,6 +151,28 @@ describe('runBlueprintCreate', () => {
     if (!result.ok) expect(result.code).toBe('target-not-empty');
   });
 
+  it('--dir honors absolute paths (regression: was concatenated under cwd via path.join)', async () => {
+    // Absolute --dir outside cwd. Pre-fix: targetDir landed at
+    // `<cwd>/tmp/.../absolute-dir/...` (path.join concatenation),
+    // making `--dir <absolute>` silently broken. Post-fix uses
+    // path.resolve so the absolute path wins.
+    const absoluteDir = join(workDir, 'absolute-target');
+    const result = await runBlueprintCreate(
+      { scopeName: '@my-org/login-form', dir: absoluteDir },
+      { cwd: '/different/cwd/that/does/not/exist' },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.targetDir).toBe(absoluteDir);
+    // Scaffold landed at the requested absolute path, not concatenated
+    // beneath the bogus cwd.
+    const tsx = await readFile(
+      join(absoluteDir, 'src', 'blueprint.tsx'),
+      'utf-8',
+    );
+    expect(tsx).toContain('export default function');
+  });
+
   it('--description threads through to the manifest', async () => {
     const result = await runBlueprintCreate(
       {
