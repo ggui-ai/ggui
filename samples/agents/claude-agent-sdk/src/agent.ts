@@ -10,13 +10,15 @@
  * This is what "Zero Agent Code" looks like in practice — the only
  * ggui-specific thing here is the MCP server URL.
  */
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
 /**
- * Absolute path to the Claude Agent SDK's bundled `cli.js`.
+ * Locate the Claude Agent SDK's bundled `cli.js`.
  *
  * The SDK ships a portable `#!/usr/bin/env node` `cli.js` AND optional
  * platform-native `claude` binaries (`@anthropic-ai/claude-agent-sdk-<plat>`).
@@ -25,11 +27,55 @@ import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
  * environment where the libc-specific variant isn't resolved. Pinning
  * `pathToClaudeCodeExecutable` at the bundled `cli.js` runs the agent
  * loop on plain Node everywhere, with no native-binary dependency.
+ *
+ * Two SDK versions coexist in this workspace — `0.2.76` (with bundled
+ * `cli.js`) is pinned here; `0.2.123` (no bundled `cli.js`, uses
+ * platform-native bins) is pulled in by `@ggui-ai/ui-gen`. pnpm in
+ * hoisted mode places one at root, the other nested, and the choice
+ * can flip between pnpm patch versions. So instead of trusting a
+ * single resolved path, walk the `node_modules` chain upward and
+ * accept the first SDK copy that actually contains `cli.js`.
  */
-const CLAUDE_CLI_PATH = join(
-  dirname(createRequire(import.meta.url).resolve('@anthropic-ai/claude-agent-sdk')),
-  'cli.js',
-);
+function resolveClaudeCliPath(): string {
+  const tried: string[] = [];
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let dir = startDir;
+  // Bounded walk — at most a handful of node_modules ancestors in practice.
+  for (let depth = 0; depth < 20; depth++) {
+    const candidates = [
+      // Same dir as the SDK that `require.resolve` picks from this level.
+      tryResolveSdkDir(dir),
+      // Direct nested copy under this dir's node_modules (pnpm hoisted mode
+      // sometimes places version-conflicted copies here even when the
+      // resolver would walk up).
+      join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+    ];
+    for (const sdkDir of candidates) {
+      if (!sdkDir) continue;
+      const cli = join(sdkDir, 'cli.js');
+      if (!tried.includes(cli)) tried.push(cli);
+      if (existsSync(cli)) return cli;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `Could not locate @anthropic-ai/claude-agent-sdk/cli.js. ` +
+      `Checked ${tried.length} candidate path(s):\n  ${tried.join('\n  ')}`,
+  );
+}
+
+function tryResolveSdkDir(fromDir: string): string | null {
+  try {
+    const req = createRequire(join(fromDir, 'noop.js'));
+    return dirname(req.resolve('@anthropic-ai/claude-agent-sdk'));
+  } catch {
+    return null;
+  }
+}
+
+const CLAUDE_CLI_PATH = resolveClaudeCliPath();
 
 export interface RunAgentOptions {
   /** The user prompt to feed the agent. */

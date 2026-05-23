@@ -51,6 +51,35 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Diagnostic: surface what pnpm v9 in CI actually installed for
+      # @anthropic-ai/claude-agent-sdk. Two SDK versions coexist (0.2.76
+      # for the sample agent, 0.2.123 transitively from @ggui-ai/ui-gen)
+      # and pnpm's hoisted-mode placement of the 12 MB bundled `cli.js`
+      # has been the recurring source of scenarios 06/07 failing in CI
+      # while passing locally. Lists every cli.js under any
+      # claude-agent-sdk dir + the SDK install dirs themselves, so if
+      # the agent-side walk-up resolver still can't find cli.js, this
+      # log shows definitively where (or whether) pnpm put it.
+      - name: Diagnose claude-agent-sdk install layout
+        run: |
+          echo "=== pnpm version ==="
+          pnpm --version
+          echo
+          echo "=== cli.js anywhere under @anthropic-ai/claude-agent-sdk ==="
+          find . -name cli.js -path '*claude-agent-sdk*' 2>/dev/null || true
+          echo
+          echo "=== claude-agent-sdk dirs ==="
+          find . -type d -name claude-agent-sdk -path '*@anthropic-ai*' 2>/dev/null || true
+          echo
+          echo "=== root hoisted SDK contents ==="
+          ls -la node_modules/@anthropic-ai/claude-agent-sdk 2>/dev/null || echo "(absent)"
+          echo
+          echo "=== nested sample SDK contents ==="
+          ls -la samples/agents/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk 2>/dev/null || echo "(absent)"
+          echo
+          echo "=== sample's package.json SDK pin ==="
+          grep -A1 claude-agent-sdk samples/agents/claude-agent-sdk/package.json || true
+
       # Install Playwright Chromium up front: `ui-visual-tester`'s
       # behavioral-validation unit tests (in the Unit step below) AND
       # the journeys e2e suite both launch a headless browser. One
