@@ -1,0 +1,326 @@
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
+import type { UiMessageEvent } from '@ggui-ai/react';
+import { useChat } from './useChat';
+import { StackItem } from './StackItem';
+import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
+
+export function Chat() {
+  const { entries, stackItems, sending, send, abort } = useChat();
+  const [prompt, setPrompt] = useState('');
+  const [layout, setLayout] = useState<LayoutMode>('inline');
+  const historyRef = useRef<HTMLDivElement | null>(null);
+
+  // Forward iframe-runtime's `ui/message` envelope as a fresh user turn.
+  // Iframe-runtime emits this on every agent-routed actionSpec dispatch
+  // alongside the server-side `ggui_runtime_submit_action` audit. Since the
+  // sample agent runs one-shot `query()` per turn (no resume, no inter-
+  // turn consume long-poll), this postMessage is the path that surfaces
+  // the user's gesture to the next turn.
+  const onUiMessage = useCallback(
+    (event: UiMessageEvent) => {
+      if (sending) return;
+      // Post-2026-05-14 drain-guarantee discriminator. Two distinct
+      // cases on `ui/message`:
+      //
+      //   - `event.userAction` IS set (`kind: 'queued'` | `'inline'`)
+      //     → the iframe-runtime stamped a structured envelope. Per
+      //     MCP Apps spec, `ui/message` is a PREPARED user prompt
+      //     the user must send — auto-firing would imply the gesture
+      //     went through when it actually requires manual confirm.
+      //     Populate the input and let the user press Enter; the
+      //     iframe-side toast says "press send in chat to forward."
+      //
+      //   - `event.userAction` absent → some other ui/message (a
+      //     non-drain-guarantee chat-shortcut, an SDK opting into
+      //     auto-forward, etc.). Preserve the verbatim send so this
+      //     doesn't regress non-userAction emitters.
+      //
+      // TODO (cross-SDK convention, not protocol): an SDK with
+      // first-class ggui awareness could inject the inline
+      // userAction's `{actionData, uiContext}` directly into its
+      // tool-result loop here — skipping the natural-language
+      // describe step entirely. Not part of the spec; hosts without
+      // ggui-awareness still get a regular ui/message and don't break.
+      if (event.userAction) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ggui] ${event.userAction.kind} userAction — prompt prepared in input; press send to forward`,
+          event.userAction,
+        );
+        setPrompt(event.text);
+        return;
+      }
+      void send(event.text);
+    },
+    [sending, send],
+  );
+
+  // Auto-scroll the chat log on new entries.
+  useEffect(() => {
+    const el = historyRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [entries.length]);
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const text = prompt.trim();
+    if (!text || sending) return;
+    setPrompt('');
+    void send(text);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter to send, Shift+Enter to insert a newline. Mirrors claude.ai
+    // / ChatGPT / Slack conventions.
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      (e.currentTarget.form as HTMLFormElement).requestSubmit();
+    }
+  };
+
+  return (
+    <div className={`layout layout-${layout}`}>
+      <aside className="chat">
+        <header>
+          <div className="title">
+            <h1>Sample Agent</h1>
+            <p className="subtitle">Google ADK · ggui MCP</p>
+          </div>
+          <div
+            className="layout-toggle"
+            role="group"
+            aria-label="Layout"
+          >
+            <button
+              type="button"
+              className={layout === 'inline' ? 'active' : ''}
+              onClick={() => setLayout('inline')}
+              data-testid="layout-inline"
+            >
+              Inline
+            </button>
+            <button
+              type="button"
+              className={layout === 'panel' ? 'active' : ''}
+              onClick={() => setLayout('panel')}
+              data-testid="layout-panel"
+            >
+              Panel
+            </button>
+          </div>
+        </header>
+
+        <div className="history" ref={historyRef} role="log" aria-live="polite">
+          {entries.length === 0 ? <EmptyState /> : null}
+          {entries.map((entry) => (
+            <ChatEntryView
+              key={entry.id}
+              entry={entry}
+              renderStackInline={layout === 'inline'}
+              onUiMessage={onUiMessage}
+            />
+          ))}
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <textarea
+            name="prompt"
+            placeholder="Ask the agent to render a UI…    (Shift+Enter for newline)"
+            rows={1}
+            autoFocus
+            value={prompt}
+            disabled={sending}
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+              setPrompt(e.target.value)
+            }
+            onKeyDown={onKeyDown}
+          />
+          {/*
+           * Dual-role button: submits a new prompt when idle, aborts
+           * the in-flight stream when sending. Type flips between
+           * `submit` and `button` so a keyboard Enter while idle still
+           * triggers form submit, while a click during sending fires
+           * onClick={abort} without re-submitting an empty prompt.
+           * Disabled only when idle AND no prompt — never when sending
+           * (the user MUST be able to click stop).
+           */}
+          <button
+            type={sending ? 'button' : 'submit'}
+            disabled={!sending && !prompt.trim()}
+            onClick={sending ? abort : undefined}
+            aria-label={sending ? 'Stop' : 'Send'}
+            title={sending ? 'Stop' : 'Send'}
+          >
+            {sending ? (
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  background: 'currentColor',
+                  borderRadius: 2,
+                }}
+              />
+            ) : (
+              'Send'
+            )}
+          </button>
+        </form>
+      </aside>
+
+      {/* Panel mode renders the right pane; inline mode is full-width
+       * chat (no panel at all). */}
+      {layout === 'panel' ? (
+        <main className="ui-pane">
+          <PanelView stackItems={stackItems} onUiMessage={onUiMessage} />
+        </main>
+      ) : null}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-mark">⌘</div>
+      <h2>Generate a UI</h2>
+      <p>Type a prompt below — the agent renders interactive UI inline.</p>
+      <div className="empty-state-examples">
+        <code>weather card for Berlin</code>
+        <code>feedback form with a rating</code>
+        <code>counter that starts at 0</code>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render one chat entry. In inline mode, stack-item entries embed the
+ * iframe directly between conversation turns. In panel mode, stack-item
+ * entries collapse to a compact marker.
+ */
+function ChatEntryView({
+  entry,
+  renderStackInline,
+  onUiMessage,
+}: {
+  entry: ChatEntry;
+  renderStackInline: boolean;
+  onUiMessage: (event: UiMessageEvent) => void;
+}) {
+  if (entry.kind === 'stack-item') {
+    if (renderStackInline) {
+      return (
+        <div className="msg stack-item-wrap">
+          <StackItem item={entry.stackItem} onUiMessage={onUiMessage} />
+        </div>
+      );
+    }
+    return (
+      <div className="msg tool">
+        ← UI #{entry.stackItem.stackItemId.slice(0, 12)} ·{' '}
+        {entry.stackItem.action}
+      </div>
+    );
+  }
+  if (entry.kind === 'end') {
+    return (
+      <div className="msg turn-end" data-testid="turn-end">
+        turn ended · {entry.subtype}
+      </div>
+    );
+  }
+  if (entry.kind === 'tool-call') {
+    return <ToolCallView entry={entry} />;
+  }
+  return <div className={`msg ${entry.kind}`}>{entry.text}</div>;
+}
+
+/**
+ * Tool-call row: compact one-liner summary with an expand button that
+ * reveals the full call input + result JSON. Helpful for debugging
+ * what the agent is actually sending/receiving on each wire call.
+ *
+ * State is local — no chat-log mutation needed. Each tool-call gets
+ * its own expand state; the disclosure persists across re-renders by
+ * being inside the React component tree.
+ */
+function ToolCallView({ entry }: { entry: ToolCallEntry }) {
+  const [open, setOpen] = useState(false);
+  const shortName = entry.name.replace(/^mcp__[^_]+__/, '');
+  const pending = entry.result === undefined && entry.isError !== true;
+  const status = entry.isError ? 'error' : pending ? 'pending' : 'ok';
+  return (
+    <div className={`msg tool-call tool-call-${status}`}>
+      <button
+        type="button"
+        className="tool-call-header"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="tool-call-chevron">{open ? '▾' : '▸'}</span>
+        <span className="tool-call-name">{shortName}</span>
+        <span className={`tool-call-status tool-call-status-${status}`}>
+          {pending ? '…' : entry.isError ? 'error' : 'ok'}
+        </span>
+      </button>
+      {open ? (
+        <div className="tool-call-body">
+          <div className="tool-call-section">
+            <div className="tool-call-section-label">input</div>
+            <pre className="tool-call-json">{prettyJson(entry.input)}</pre>
+          </div>
+          <div className="tool-call-section">
+            <div className="tool-call-section-label">
+              {entry.isError ? 'error result' : 'result'}
+            </div>
+            <pre className="tool-call-json">
+              {entry.result === undefined
+                ? '(awaiting)'
+                : prettyJson(entry.result)}
+            </pre>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function prettyJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Panel mode: render the top-of-stack item large in the right pane.
+ * Older stack items remain accessible via the chat-history compact
+ * markers, but only one iframe is mounted at a time.
+ */
+function PanelView({
+  stackItems,
+  onUiMessage,
+}: {
+  stackItems: ReadonlyArray<StackItemRef>;
+  onUiMessage: (event: UiMessageEvent) => void;
+}) {
+  const top = stackItems[stackItems.length - 1];
+  if (!top) {
+    return (
+      <div className="ui-placeholder">
+        <p>
+          The rendered UI will appear here once the agent calls{' '}
+          <code>ggui_push</code>.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="panel-frame">
+      <StackItem item={top} fillContainer onUiMessage={onUiMessage} />
+    </div>
+  );
+}
