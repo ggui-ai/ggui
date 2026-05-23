@@ -496,6 +496,11 @@ export async function runTier0Checks(
       sourceCode.match(new RegExp(`\\b${binding}\\s*\\(`, 'g')) ?? []
     ).length;
     if (callSites >= 2) {
+      // Kept at WARN — too many legit patterns (confirm/cancel, branched
+      // dispatch, sibling buttons in a list) match this generic shape. The
+      // structural correctness backstop lives at runtime in `useAction`'s
+      // task-scoped dedup; this check is a quality nudge for the LLM, not a
+      // load-bearing safety gate.
       issues.push({
         tier: 0,
         result: 'warn',

@@ -223,6 +223,17 @@ async function handleRequest(
       })) {
         msgCount += 1;
         console.log(`[sample-agent] sdk message #${msgCount}: ${msg.type}`);
+        // Surface every tool call so failure logs show what the agent
+        // actually did (the test's tool-name harvest only runs on
+        // success — without this, a stalled round-trip is invisible).
+        if (msg.type === 'assistant') {
+          const m = msg as { message?: { content?: ReadonlyArray<{ type?: string; name?: string }> } };
+          for (const c of m.message?.content ?? []) {
+            if (c.type === 'tool_use' && typeof c.name === 'string') {
+              console.log(`[sample-agent]   → tool_use: ${c.name}`);
+            }
+          }
+        }
         // Check abort BEFORE writing — otherwise the first
         // post-abort iteration writes one message to an
         // already-closed SSE socket and Node logs an EPIPE.

@@ -43,6 +43,8 @@
     "build": "tsc && node ../scripts/fix-esm-imports.mjs dist && npm run generate:docs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "generate:docs": "node --experimental-strip-types scripts/generate-wire-docs.ts"
   },
   "dependencies": {
@@ -53,7 +55,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
   },
   "repository": {
     "type": "git",

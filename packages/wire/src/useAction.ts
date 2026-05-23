@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useWireContext } from './context';
+import { tryAcceptDispatch } from './dispatch-dedup';
 
 /**
  * Fire an action to the agent. Fire-and-forget — no response, no pending state.
@@ -9,13 +10,45 @@ import { useWireContext } from './context';
  * identical — call `useAction(name)(payload)` either way. Treat the tool name
  * as informational (use it to inform button labels, icons, copy).
  *
+ * RUNTIME DEDUP. Same-`(name, payload)` calls within one event-loop task are
+ * coalesced — the first wins, subsequent duplicates are suppressed. This is the
+ * structural defense against LLM-generated nested-interactive components where
+ * a Checkbox `onChange` and an outer `Card as={Clickable}` `onClick` both wire
+ * to the same `useAction` binding; the inner gesture bubbles to the outer
+ * handler, so without dedup one user click would fire the action twice (a
+ * toggle would run back-to-back and the user's change would disappear). See
+ * `dispatch-dedup.ts` for the full failure-mode rationale.
+ *
+ * NEVER SILENT. When the dedup fires, a `console.warn` is emitted in BOTH dev
+ * and prod with the full diagnostic. The suppression is always visible in
+ * browser DevTools; operators investigating a "the second click does nothing"
+ * report see the warning immediately.
+ *
  * @param actionName - Action name from the action contract
  * @returns Stable callback that dispatches the action
  */
 export function useAction<T = unknown>(actionName: string): (data: T) => void {
   const { dispatch } = useWireContext();
   return useCallback(
-    (data: T) => dispatch(actionName, data),
+    (data: T) => {
+      const decision = tryAcceptDispatch(actionName, data);
+      if (decision.suppressed) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ggui] useAction('${actionName}') suppressed a duplicate dispatch ` +
+            `(same name + payload, same event-loop task). This usually means ` +
+            `two interactive elements nest and both wire to the same action ` +
+            `(e.g. a Checkbox onChange inside a Card as={Clickable} onClick); ` +
+            `the inner gesture bubbles to the outer handler so one user click ` +
+            `would fire the action twice. Wire each useAction callback to ` +
+            `exactly ONE interactive surface. Tier-0 'double-wired-action' ` +
+            `warns on this at gen time; this runtime defense ensures the ` +
+            `user-visible behavior stays correct regardless of code shape.`,
+        );
+        return;
+      }
+      dispatch(actionName, data);
+    },
     [actionName, dispatch],
   );
 }

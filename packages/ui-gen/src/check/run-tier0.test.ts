@@ -187,7 +187,14 @@ export default function C(props: Props) {
     expect(pxIssues[0].result).toBe('warn');
   });
 
-  it('warns when one useAction callback is wired to 2+ surfaces (double-wired)', async () => {
+  it('warns (not fails) when one useAction callback is wired to 2+ surfaces (double-wired)', async () => {
+    // The structural bug from scenario 7 (Card as={Clickable} > Checkbox
+    // onChange, both dispatching the same action — one gesture, two fires)
+    // is caught at RUNTIME by `useAction`'s task-scoped dedup. This
+    // tier-0 check stays at WARN: the regex is too generic to be a safe
+    // hard-fail (confirm/cancel, branched dispatch, sibling buttons all
+    // match the same shape). Keeping it as warn surfaces the smell to the
+    // LLM without blocking gen on false positives.
     const code = `
 import { useAction } from '@ggui-ai/wire';
 interface Props { todos: Array<{ id: string }> }
