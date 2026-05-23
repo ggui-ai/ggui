@@ -8,7 +8,7 @@
  * returned from disk.
  *
  * This module re-exports:
- *   - The plain `DTCGTheme` / `DTCGToken` / `ShadowValue` types.
+ *   - The plain `BaseDtcgTheme` / `DTCGToken` / `ShadowValue` types.
  *   - The pure emitter functions (`generateCssVariables`,
  *     `themeToCssVarReferences`, `generateCssVariableDocumentation`).
  *   - The built-in `lightTheme` + `darkTheme` defaults.
@@ -18,7 +18,7 @@
  */
 
 export type {
-  DTCGTheme,
+  BaseDtcgTheme,
   DTCGToken,
   DTCGTokenType,
   DTCGTokenGroup,

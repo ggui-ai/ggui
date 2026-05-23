@@ -7,7 +7,7 @@
  */
 
 // Legacy DTCG Types and Parser (base token system)
-export type { DTCGTheme, DTCGToken, DTCGTokenType, ShadowValue } from './dtcg/types';
+export type { BaseDtcgTheme, DTCGToken, DTCGTokenType, ShadowValue } from './dtcg/types';
 export {
   generateCssVariables,
   generateScopedCssVariables,

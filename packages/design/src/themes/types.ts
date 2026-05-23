@@ -6,7 +6,7 @@
  * canvas configuration, and metadata for the theme picker UI.
  *
  * Naming: `DtcgTheme` (camelCase) for the new extended system vs
- * `DTCGTheme` (all-caps) for the legacy base token system in dtcg/types.ts.
+ * `BaseDtcgTheme` (all-caps) for the legacy base token system in dtcg/types.ts.
  */
 
 /**

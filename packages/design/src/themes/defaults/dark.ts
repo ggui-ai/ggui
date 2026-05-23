@@ -5,9 +5,9 @@
  * modern dark mode aesthetics.
  */
 
-import type { DTCGTheme } from '../dtcg/types';
+import type { BaseDtcgTheme } from '../dtcg/types';
 
-export const darkTheme: DTCGTheme = {
+export const darkTheme: BaseDtcgTheme = {
   $schema: 'https://design-tokens.github.io/community-group/format/',
   $version: '1.0.0',
 

@@ -8,9 +8,9 @@
  * - Versatility (Works for SaaS, dashboards, consumer apps)
  */
 
-import type { DTCGTheme } from '../dtcg/types';
+import type { BaseDtcgTheme } from '../dtcg/types';
 
-export const lightTheme: DTCGTheme = {
+export const lightTheme: BaseDtcgTheme = {
   $schema: 'https://design-tokens.github.io/community-group/format/',
   $version: '1.0.0',
 

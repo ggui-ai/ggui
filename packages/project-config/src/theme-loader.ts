@@ -39,7 +39,7 @@ import {
 } from '@ggui-ai/design/themes/dtcg';
 import { getRawTheme, getTheme, parseTheme } from '@ggui-ai/design/themes';
 import type {
-  DTCGTheme,
+  BaseDtcgTheme,
   DtcgTheme,
   ThemeMode,
 } from '@ggui-ai/design/themes';
@@ -54,7 +54,7 @@ import { parseThemeDocument, type ThemeDocument } from './theme.js';
  * **`document` is shape-discriminated by `source`** (no casts, three
  * genuinely-distinct underlying types):
  *
- *   - `default` → `DTCGTheme` (base DTCG layout used by the shipped
+ *   - `default` → `BaseDtcgTheme` (base DTCG layout used by the shipped
  *     `lightTheme` / `darkTheme` literals in `@ggui-ai/design`).
  *   - `preset`  → `DtcgTheme` (the extended-DTCG registry layout — adds
  *     `$name`/`$description`/`$metadata` + `motion` + `canvas` over the
@@ -71,7 +71,7 @@ export type LoadedTheme =
   | {
       readonly source: 'default';
       readonly mode: ThemeMode;
-      readonly document: DTCGTheme;
+      readonly document: BaseDtcgTheme;
       readonly cssVariables: string;
     }
   | {

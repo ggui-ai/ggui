@@ -5,12 +5,12 @@
  */
 
 import React, { createContext, useContext, useMemo } from 'react';
-import type { DTCGTheme } from './dtcg/types';
+import type { BaseDtcgTheme } from './dtcg/types';
 import { generateCssVariables, themeToCssVarReferences } from './dtcg/parser';
 import { lightTheme } from './defaults/light';
 
 interface ThemeContextValue {
-  theme: DTCGTheme;
+  theme: BaseDtcgTheme;
   cssVars: Record<string, string>;
   mode: 'light' | 'dark';
 }
@@ -30,7 +30,7 @@ export function useTheme() {
 }
 
 interface ThemeProviderProps {
-  theme?: DTCGTheme;
+  theme?: BaseDtcgTheme;
   mode?: 'light' | 'dark';
   /**
    * When true, the body background is rendered as `transparent`

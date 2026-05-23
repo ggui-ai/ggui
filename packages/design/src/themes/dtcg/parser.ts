@@ -5,7 +5,7 @@
  * for token reference resolution.
  */
 
-import type { DTCGTheme, DTCGToken, DTCGTokenGroup, ShadowValue, TransitionValue } from './types';
+import type { BaseDtcgTheme, DTCGToken, DTCGTokenGroup, ShadowValue, TransitionValue } from './types';
 
 /**
  * Convert DTCG token path to CSS variable name
@@ -56,7 +56,7 @@ function formatTokenValue(token: DTCGToken): string {
  * `--ggui-color-primary-600`).
  *
  * The parameter is typed as {@link DTCGTokenGroup} rather than the
- * narrower {@link DTCGTheme} — the walker is duck-typed at runtime
+ * narrower {@link BaseDtcgTheme} — the walker is duck-typed at runtime
  * (checks `$value` presence to distinguish token-leaf from group),
  * so the accepting type matches actual behavior. This lets open
  * file-format consumers (`@ggui-ai/project-config`'s
@@ -64,7 +64,7 @@ function formatTokenValue(token: DTCGToken): string {
  * without a type-laundering cast.
  *
  * @param theme - The DTCG-shaped token tree to parse. Accepts any
- *   {@link DTCGTokenGroup} — `DTCGTheme` is a compatible subtype.
+ *   {@link DTCGTokenGroup} — `BaseDtcgTheme` is a compatible subtype.
  * @returns CSS string with `:root { --ggui-*: value; }` declarations
  */
 export function generateCssVariables(theme: DTCGTokenGroup): string {
@@ -165,7 +165,7 @@ export function themeToCssVarReferences(theme: DTCGTokenGroup): Record<string, s
  * @param theme - The DTCG theme definition to document
  * @returns Markdown string listing all CSS variables with their values
  */
-export function generateCssVariableDocumentation(theme: DTCGTheme): string {
+export function generateCssVariableDocumentation(theme: BaseDtcgTheme): string {
   const sections: string[] = [
     '# Design System CSS Variables',
     '',
