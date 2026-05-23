@@ -38,20 +38,40 @@ import {
   lightTheme,
 } from '@ggui-ai/design/themes/dtcg';
 import { getRawTheme, getTheme, parseTheme } from '@ggui-ai/design/themes';
-import type { DtcgTheme, ThemeMode } from '@ggui-ai/design/themes';
+import type {
+  DTCGTheme,
+  DtcgTheme,
+  ThemeMode,
+} from '@ggui-ai/design/themes';
 import type { GguiJsonV1, ThemeConfig } from './schema.js';
 import { parseThemeDocument, type ThemeDocument } from './theme.js';
 
 /**
- * One loaded theme — discriminated on `source`. Every variant
- * carries the resolved `mode`, the parsed token document, and the
- * pre-rendered `--ggui-*` CSS variable block.
+ * One loaded theme — discriminated on `source`. Every variant carries
+ * the resolved `mode`, the parsed token document, and the pre-rendered
+ * `--ggui-*` CSS variable block.
+ *
+ * **`document` is shape-discriminated by `source`** (no casts, three
+ * genuinely-distinct underlying types):
+ *
+ *   - `default` → `DTCGTheme` (base DTCG layout used by the shipped
+ *     `lightTheme` / `darkTheme` literals in `@ggui-ai/design`).
+ *   - `preset`  → `DtcgTheme` (the extended-DTCG registry layout — adds
+ *     `$name`/`$description`/`$metadata` + `motion` + `canvas` over the
+ *     base; what `getRawTheme()`/`parseTheme()` produce).
+ *   - `file`    → `ThemeDocument` (the flat strict-Zod schema validated
+ *     by `parseThemeDocument()` — top-level `typography`/`radius`/`shadow`,
+ *     no DTCG metadata keys).
+ *
+ * Consumers narrow on `source` if they ever need the shape. CSS-variable
+ * emission happens upstream into `cssVariables`, so most downstream code
+ * only reads that string.
  */
 export type LoadedTheme =
   | {
       readonly source: 'default';
       readonly mode: ThemeMode;
-      readonly document: ThemeDocument;
+      readonly document: DTCGTheme;
       readonly cssVariables: string;
     }
   | {
@@ -61,7 +81,7 @@ export type LoadedTheme =
       readonly mode: ThemeMode;
       /** Flat dot-path token overrides applied on top of the preset. */
       readonly overrides?: Record<string, string>;
-      readonly document: ThemeDocument;
+      readonly document: DtcgTheme;
       readonly cssVariables: string;
     }
   | {
@@ -139,10 +159,7 @@ export function loadTheme(options: LoadThemeOptions): LoadThemeResult {
       theme: {
         source: 'default',
         mode: 'light',
-        // `lightTheme` is typed as the internal `DTCGTheme` in
-        // `@ggui-ai/design`. Cast at this one layer boundary —
-        // see "ownership boundary" docstring in theme.ts.
-        document: lightTheme as ThemeDocument,
+        document: lightTheme,
         cssVariables: generateCssVariables(lightTheme),
       },
     };
@@ -212,21 +229,13 @@ function loadPreset(
         },
       };
     }
-    // `raw` is a `DtcgTheme` from design's registry — structurally a
-    // DTCG token tree with metadata roots ($name / $description / etc.)
-    // that `ThemeDocument` (the config-side projection) doesn't model.
-    // The two are JSON-compatible at the cssVariables-emission boundary
-    // but Zod-incompatible at the strict-schema boundary, so a parse
-    // would reject every preset. This cast bridges the two shapes at
-    // the assignment site; downstream consumers read only the subset
-    // both shapes share (cssVariables + token leaves).
     return {
       ok: true,
       theme: {
         source: 'preset',
         preset,
         mode,
-        document: raw as unknown as ThemeDocument,
+        document: raw,
         cssVariables: parsed.cssVariables,
       },
     };
@@ -244,7 +253,7 @@ function loadPreset(
       preset,
       mode,
       overrides,
-      document: mutated as unknown as ThemeDocument,
+      document: mutated,
       cssVariables: parsed.cssVariables,
     },
   };
