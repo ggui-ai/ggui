@@ -10,11 +10,17 @@
  * This is what "Zero Agent Code" looks like in practice — the only
  * ggui-specific thing here is the MCP server URL.
  */
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query,
+  type SDKMessage,
+  type SpawnOptions,
+  type SpawnedProcess,
+} from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
 /**
@@ -76,6 +82,68 @@ function tryResolveSdkDir(fromDir: string): string | null {
 }
 
 const CLAUDE_CLI_PATH = resolveClaudeCliPath();
+
+/**
+ * Spawn the SDK's CLI subprocess using `process.execPath` (the absolute
+ * path to the current Node binary) rather than letting the SDK do its
+ * default `spawn('node', ...)`.
+ *
+ * The SDK's `executable: 'node'` option resolves to `spawn('node', ...)`,
+ * which depends on `node` being on the child's `PATH`. In CI runs that
+ * spawn through pnpm → vite → tsx, the child's PATH has been observed
+ * to omit the setup-node toolcache dir, causing `ENOENT` at spawn time
+ * with a misleading "Claude Code executable not found at <cli.js>"
+ * error. Using `process.execPath` bypasses the PATH lookup — same
+ * Node binary, absolute path, no environment dependency.
+ *
+ * Returns Node's `ChildProcess`, which structurally satisfies the
+ * SDK's `SpawnedProcess` interface.
+ */
+function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
+  // Re-verify at spawn time so a missing cli.js surfaces with the
+  // actual path checked, rather than as a misleading SDK ENOENT
+  // (which can also fire on a missing `node` interpreter — different
+  // root cause, same wording in the SDK's own error message).
+  if (!existsSync(CLAUDE_CLI_PATH)) {
+    throw new Error(
+      `spawnClaudeCli: cli.js missing at spawn time — was present at module ` +
+        `load but is gone now: ${CLAUDE_CLI_PATH}`,
+    );
+  }
+  const child = spawn(process.execPath, [CLAUDE_CLI_PATH, ...opts.args], {
+    cwd: opts.cwd,
+    env: opts.env,
+    signal: opts.signal,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  // Mirror the SDK's own stderr handling — the bundled CLI's startup
+  // failures (missing dep, syntax error, MCP-connect crash) come out on
+  // its stderr, and the caller wires `options.stderr` on the SDK side.
+  child.stderr?.on('data', (chunk: Buffer) => {
+    process.stderr.write(`[agent-cli] ${chunk.toString()}`);
+  });
+  const { stdin, stdout } = child;
+  if (!stdin || !stdout) {
+    // `stdio: ['pipe', 'pipe', 'pipe']` guarantees both at runtime —
+    // narrow the nullable Node types into the SDK's non-null interface.
+    throw new Error('spawnClaudeCli: child stdin/stdout missing despite pipe stdio');
+  }
+  return {
+    stdin,
+    stdout,
+    get killed() {
+      return child.killed;
+    },
+    get exitCode() {
+      return child.exitCode;
+    },
+    kill: child.kill.bind(child),
+    on: child.on.bind(child),
+    once: child.once.bind(child),
+    off: child.off.bind(child),
+  };
+}
 
 export interface RunAgentOptions {
   /** The user prompt to feed the agent. */
@@ -228,15 +296,16 @@ export async function* runAgent(
       // Run the agent loop via the SDK's bundled portable `cli.js` — see
       // CLAUDE_CLI_PATH. Avoids the native-binary lookup that hard-errors
       // when the platform-specific optional package isn't installed.
+      // The actual subprocess spawn goes through `spawnClaudeCodeProcess`
+      // below — `pathToClaudeCodeExecutable` stays set so SDK internals
+      // that read the path (logging, telemetry) still see the right value.
       pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-      executable: 'node',
-      // Surface the bundled `claude` CLI subprocess's own stderr. The
-      // agent loop runs inside that child process; without this a CLI
-      // boot / MCP-connect / auth failure is an invisible hang on the
-      // caller side.
-      stderr: (data: string) => {
-        process.stderr.write(`[agent-cli] ${data}`);
-      },
+      // Custom-spawn the CLI through `process.execPath` so we don't
+      // depend on `node` being on the child's `PATH`. The default
+      // `spawn('node', ...)` has been observed to `ENOENT` in CI under
+      // pnpm-script → vite → tsx execution chains, surfacing as a
+      // misleading "Claude Code executable not found at <cli.js>" error.
+      spawnClaudeCodeProcess: spawnClaudeCli,
       ...(systemPrompt ? { systemPrompt } : {}),
       // Cancellation. When the caller aborts (e.g. the chat server's
       // SSE listener detects the browser tab closed), the SDK stops
