@@ -23,7 +23,7 @@ regressions. Provisional alerts are visible but non-blocking.
 ```
 
 - **Location**: `baseline-pipeline` job in `.github/workflows/ci.yml`
-- **Trigger model** (deliberate trust split — mirrors `sync-opensource`):
+- **Trigger model** (deliberate trust split — mirrors `sync-subtree-oss`):
   - **Automatic on push to `main`** — trusted baseline/cache prime
     path. Only path that writes cache. Gated by `core_changed == 'true'`
     so docs-only pushes skip it.
