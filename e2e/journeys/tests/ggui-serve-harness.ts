@@ -173,11 +173,21 @@ export const READY_TIMEOUT_MS = 15_000;
  * serves an instant cross-run hit on the next, and "real LLM call"
  * latency-floor assertions fail spuriously. Callers pass the name to
  * `assertNoBannedEnv`'s `skip` for the same reason `forwardEnv` does.
+ *
+ * **`embeddingCacheDir`.** Same shape as `codeCacheDir`, redirects the
+ * Xenova ONNX embedding model away from the user's `~/.ggui/models/`.
+ * Without it, every spawned server downloads (or competes for) the
+ * default 30 MB model file, and CI runs have hit
+ * `Protobuf parsing failed` when a download is interrupted (test
+ * timeout / SIGTERM) or two concurrent spawns race on the same file.
+ * Callers pass {@link EMBEDDING_CACHE_ENV} to `assertNoBannedEnv`'s
+ * `skip` for the same reason as `codeCacheDir`.
  */
 export function allowlistedEnv(
   opts: {
     readonly forwardEnv?: readonly string[];
     readonly codeCacheDir?: string;
+    readonly embeddingCacheDir?: string;
   } = {},
 ): NodeJS.ProcessEnv {
   const src = process.env;
@@ -196,6 +206,9 @@ export function allowlistedEnv(
   if (opts.codeCacheDir) {
     out['GGUI_CODE_CACHE_DIR'] = opts.codeCacheDir;
   }
+  if (opts.embeddingCacheDir) {
+    out['GGUI_EMBEDDING_CACHE_DIR'] = opts.embeddingCacheDir;
+  }
   return out;
 }
 
@@ -206,6 +219,30 @@ export function allowlistedEnv(
  * isolation, not an ambient `GGUI_*` leak.
  */
 const CODE_CACHE_ENV = 'GGUI_CODE_CACHE_DIR';
+
+/**
+ * Env var name for the per-worker embedding-cache isolation directory.
+ * Same role as {@link CODE_CACHE_ENV} — passed to
+ * {@link assertNoBannedEnv}'s `skip` so the harness-minted value
+ * isn't mistaken for an ambient `GGUI_*` leak.
+ */
+const EMBEDDING_CACHE_ENV = 'GGUI_EMBEDDING_CACHE_DIR';
+
+/**
+ * One embedding-cache dir shared across every spawn in this Playwright
+ * worker. CI runs with `workers: 1` + `fullyParallel: false`, so spec
+ * spawns are strictly serial — first spawn downloads the ~30 MB model
+ * into this dir, every subsequent spawn reads the warmed file from disk.
+ * No concurrent-download race, no per-spawn re-fetch.
+ *
+ * Lives under `os.tmpdir()` so the CI runner reclaims it on container
+ * teardown; the harness deliberately does NOT remove it between spawns
+ * (that would defeat the caching).
+ */
+const SHARED_EMBEDDING_CACHE_DIR = join(
+  tmpdir(),
+  `ggui-e2e-embeddings-${process.pid}`,
+);
 
 /** Keys that must NEVER appear in the spawned env. Used by diagnostics. */
 export const BANNED_ENV_PREFIXES: readonly string[] = [
@@ -550,8 +587,14 @@ export async function spawnGguiServe(
   // component cached by a prior run serves an instant cross-run hit,
   // breaking the "real LLM call" latency-floor assertions.
   const codeCacheDir = join(tempCwd, '.ggui-code-cache');
-  const env = allowlistedEnv({ forwardEnv, codeCacheDir });
-  assertNoBannedEnv(env, { skip: [...forwardEnv, CODE_CACHE_ENV] });
+  const env = allowlistedEnv({
+    forwardEnv,
+    codeCacheDir,
+    embeddingCacheDir: SHARED_EMBEDDING_CACHE_DIR,
+  });
+  assertNoBannedEnv(env, {
+    skip: [...forwardEnv, CODE_CACHE_ENV, EMBEDDING_CACHE_ENV],
+  });
 
   // `--mcp-only` because the temp cwd has no `ggui.json` / `agent.entry`.
   // `--port 0` yields an OS-assigned port; the CLI's `pickFreePort` path
@@ -675,8 +718,14 @@ export async function spawnGguiServeInCwd(
   // must not pollute), so the cache gets its own temp dir, reclaimed in
   // `close()`. See `spawnGguiServe` for why isolation matters.
   const codeCacheDir = mkdtempSync(join(tmpdir(), 'ggui-code-cache-e2e-'));
-  const env = allowlistedEnv({ forwardEnv, codeCacheDir });
-  assertNoBannedEnv(env, { skip: [...forwardEnv, CODE_CACHE_ENV] });
+  const env = allowlistedEnv({
+    forwardEnv,
+    codeCacheDir,
+    embeddingCacheDir: SHARED_EMBEDDING_CACHE_DIR,
+  });
+  assertNoBannedEnv(env, {
+    skip: [...forwardEnv, CODE_CACHE_ENV, EMBEDDING_CACHE_ENV],
+  });
 
   // See `spawnGguiServe` for rationale on capturing the cold-boot
   // wall-clock anchor before the `spawn()` call.
@@ -800,8 +849,14 @@ export async function spawnTasksBackedServe(
   // OSS e2e package root (not a scratch dir), so the cache gets its own
   // temp dir, reclaimed in `close()`. See `spawnGguiServe` for why.
   const codeCacheDir = mkdtempSync(join(tmpdir(), 'ggui-code-cache-e2e-'));
-  const env = allowlistedEnv({ forwardEnv, codeCacheDir });
-  assertNoBannedEnv(env, { skip: [...forwardEnv, CODE_CACHE_ENV] });
+  const env = allowlistedEnv({
+    forwardEnv,
+    codeCacheDir,
+    embeddingCacheDir: SHARED_EMBEDDING_CACHE_DIR,
+  });
+  assertNoBannedEnv(env, {
+    skip: [...forwardEnv, CODE_CACHE_ENV, EMBEDDING_CACHE_ENV],
+  });
   // CWD = `e2e/ggui-oss/` package root. Two reasons:
   //   1. tsx's ESM loader seeds some package resolutions from CWD;
   //      a random `/tmp/…` breaks `@ggui-ai/*` sub-path resolution
