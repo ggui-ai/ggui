@@ -49,6 +49,54 @@ interface ServiceSpec {
   readonly pkg: string;
   readonly port: number;
   readonly healthPath: string;
+  /**
+   * Env overrides for the spawned child. Keys with `undefined` values
+   * are DELETED from the inherited env. Used by the per-provider
+   * ggui-default instances to clear other providers' API keys so the
+   * ggui CLI's boot-time provider scan (anthropic → openai → google
+   * → openrouter, first key wins) locks to the intended provider.
+   */
+  readonly envOverride?: Record<string, string | undefined>;
+  /**
+   * Skip this service entirely when the predicate returns true —
+   * typically because its required env is missing. Used so the
+   * openai/google ggui-default instances drop out cleanly when their
+   * API key isn't set, without failing the suite.
+   */
+  readonly skipIf?: () => boolean;
+}
+
+/**
+ * Build an env-override map that PINS the ggui CLI's boot-time provider
+ * scan to exactly one provider — by passing that provider's key through
+ * and explicitly clearing every other recognized provider key. The CLI's
+ * `PROVIDER_PROBE_ORDER` is `anthropic → openai → google → openrouter`
+ * and "first key wins", so clearing the higher-priority ones is the
+ * only way to force a lower-priority pick.
+ */
+function providerOnlyEnv(
+  keep:
+    | 'ANTHROPIC_API_KEY'
+    | 'OPENAI_API_KEY'
+    | 'GEMINI_API_KEY'
+    | 'OPENROUTER_API_KEY',
+): Record<string, string | undefined> {
+  const ALL = [
+    'ANTHROPIC_API_KEY',
+    'OPENAI_API_KEY',
+    'GEMINI_API_KEY',
+    'GOOGLE_API_KEY', // ADK fallback alias for GEMINI_API_KEY
+    'OPENROUTER_API_KEY',
+  ] as const;
+  const out: Record<string, string | undefined> = {};
+  for (const key of ALL) out[key] = undefined;
+  out[keep] = process.env[keep];
+  // GEMINI_API_KEY pinning also passes GOOGLE_API_KEY through so the
+  // ADK's env-discovery (which accepts either) sees the same value.
+  if (keep === 'GEMINI_API_KEY') {
+    out.GOOGLE_API_KEY = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  }
+  return out;
 }
 
 const SERVICES: readonly ServiceSpec[] = [
@@ -110,6 +158,29 @@ const SERVICES: readonly ServiceSpec[] = [
     pkg: '@ggui-samples/ggui-canvas-demo',
     port: Number.parseInt(process.env.GGUI_CANVAS_PORT ?? '6786', 10),
     healthPath: '/healthz',
+  },
+  // Provider-matrix ggui instances. Same `ggui-default` package as the
+  // anthropic-keyed :6781 service above; each instance booted with a
+  // single-provider env so the CLI's boot scan locks it to a specific
+  // upstream LLM. Scenarios 03/09/11/12/15 fan out across these via the
+  // provider matrix; scenario 6 natural-pairs each agent SDK with the
+  // matching ggui port. Both instances skip cleanly when their key is
+  // missing — no need to set every provider's key to run the suite.
+  {
+    name: 'ggui-default-openai',
+    pkg: '@ggui-samples/ggui-default',
+    port: Number.parseInt(process.env.GGUI_OPENAI_PORT ?? '6787', 10),
+    healthPath: '/healthz',
+    envOverride: providerOnlyEnv('OPENAI_API_KEY'),
+    skipIf: () => !process.env.OPENAI_API_KEY,
+  },
+  {
+    name: 'ggui-default-google',
+    pkg: '@ggui-samples/ggui-default',
+    port: Number.parseInt(process.env.GGUI_GOOGLE_PORT ?? '6788', 10),
+    healthPath: '/healthz',
+    envOverride: providerOnlyEnv('GEMINI_API_KEY'),
+    skipIf: () => !process.env.GEMINI_API_KEY,
   },
 ];
 
@@ -229,6 +300,14 @@ export async function setup(): Promise<void> {
   console.log(`[e2e/scenarios] persistent dir (clean): ${PERSISTENT_DIR}`);
 
   for (const svc of SERVICES) {
+    // Per-service skip gate — used by the per-provider ggui-default
+    // instances so missing OPENAI_API_KEY / GEMINI_API_KEY simply
+    // drops the corresponding instance out of the run.
+    if (svc.skipIf?.()) {
+      // eslint-disable-next-line no-console
+      console.log(`[e2e/scenarios] skipping ${svc.name} (skipIf gate)`);
+      continue;
+    }
     const healthy = await isReusable(svc.port, svc.healthPath);
     if (healthy && !process.env.CI) {
       // Reuse the developer's running instance.
@@ -252,13 +331,26 @@ export async function setup(): Promise<void> {
 
     // eslint-disable-next-line no-console
     console.log(`[e2e/scenarios] starting ${svc.name} on :${svc.port}`);
+    // Build the child env: start from process.env, layer the per-port
+    // additions, then apply envOverride if present (keys with `undefined`
+    // are DELETED — the provider-pinning primitive). The override layer
+    // is what makes the openai/google ggui-default instances actually
+    // boot under their target provider regardless of which other keys
+    // the operator has exported.
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PORT: String(svc.port),
+      // Own embedding-model cache dir per service — see MODELS_DIR.
+      GGUI_EMBEDDING_CACHE_DIR: join(MODELS_DIR, svc.name),
+    };
+    if (svc.envOverride) {
+      for (const [k, v] of Object.entries(svc.envOverride)) {
+        if (v === undefined) delete childEnv[k];
+        else childEnv[k] = v;
+      }
+    }
     const child = spawn('pnpm', ['--filter', svc.pkg, 'start'], {
-      env: {
-        ...process.env,
-        PORT: String(svc.port),
-        // Own embedding-model cache dir per service — see MODELS_DIR.
-        GGUI_EMBEDDING_CACHE_DIR: join(MODELS_DIR, svc.name),
-      },
+      env: childEnv,
       stdio: 'pipe',
       // Own process group so teardown can SIGKILL the whole tree
       // (pnpm wrapper + ggui CLI + node).

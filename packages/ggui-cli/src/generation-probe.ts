@@ -70,8 +70,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<
   Record<Exclude<LlmProvider, 'bedrock'>, string>
 > = {
   anthropic: 'claude-haiku-4-5',
-  openai: 'gpt-4o',
-  google: 'gemini-2.0-flash',
+  openai: 'gpt-5.5-2026-04-23',
+  google: 'gemini-3.5-flash',
   openrouter: 'anthropic/claude-haiku-4.5',
 };
 
