@@ -47,11 +47,20 @@
  *   the `installedBlueprints` callback.
  * - **Compile TSX.** That's `compileUiOnDemand` in `@ggui-ai/dev-stack`.
  *   The caller hands a wrapping function to the `compile` callback.
- * - **Watch the filesystem.** Re-install while running requires a
- *   refresh — see `LocalUiRegistry.subscribe()` semantics. A
- *   follow-up could invalidate the per-scope idempotency tracker on
- *   detected change.
+ * - **Watch the filesystem.** Re-install while running was handled
+ *   in 2026-05-23 by switching the per-scope idempotency from
+ *   "ensured: true forever" to "ensured under signature S until
+ *   the discovered entry set hashes to a different signature".
+ *   ensureCached now ALWAYS invokes the installedBlueprints
+ *   callback (cheap — one DDB Query in the cloud bridge, one
+ *   directory walk in OSS dev-stack); the compile sweep is the
+ *   expensive part and IS still skipped on signature match. Orphan
+ *   eviction at the end of the walk drops install-provenance rows
+ *   whose contractKey isn't in the current entry set — closes the
+ *   G4 stale-cache leak (uninstall → next handshake → cache hit).
  */
+import { createHash } from 'node:crypto';
+import type { EnumerableVectorStore } from '@ggui-ai/mcp-server-core';
 import {
   installToCache,
   type InstallToCacheInput,
@@ -60,6 +69,7 @@ import {
   composeBlueprintId,
   deleteBlueprint,
   findBlueprintExact,
+  listBlueprints,
   type BlueprintRegistryDeps,
 } from './blueprint-registry.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
@@ -198,11 +208,34 @@ export interface CreateInstalledBlueprintsProviderOptions {
 export interface InstalledBlueprintsProvider {
   /**
    * Ensure all installed blueprints for `scope` are present in the
-   * cache. Idempotent: a per-scope flag prevents re-walks. Concurrent
-   * calls for the same scope share one ensure-walk via a per-scope
-   * promise.
+   * cache. Idempotent within a signature: every call re-reads the
+   * installed list (cheap — typically one DDB Query) and skips the
+   * compile/install walk when the signature matches the previous
+   * walk. Signature change (install OR uninstall) triggers:
+   *   - re-walk: compile + register every CURRENT entry (no-op for
+   *     unchanged entries thanks to the underlying installToCache
+   *     idempotency)
+   *   - **orphan eviction**: any install-provenance cache row at
+   *     this scope whose contractKey isn't in the current entry set
+   *     is deleted. Without this, uninstalled blueprints continue
+   *     serving cache hits on handshake — the G4 stale-cache leak.
+   *
+   * Concurrent calls for the same scope share one ensure-walk via a
+   * per-scope promise.
    */
   ensureCached(scope: string, options?: { contractKey?: string }): Promise<void>;
+  /**
+   * Explicit invalidation hook. Drops the signature-cache entry for
+   * `scope` so the next `ensureCached` re-walks unconditionally
+   * (even if the discovered entry list happens to hash identically
+   * to the previous walk — e.g. when the caller has out-of-band
+   * knowledge that the cache rows themselves drifted).
+   *
+   * Idempotent — invalidating a scope that's never been ensured is
+   * a no-op. Does NOT itself evict cache rows; the next
+   * `ensureCached` does that.
+   */
+  invalidate(scope: string): void;
   /**
    * Reference-equality handle on the provider's
    * `BlueprintRegistryDeps`. Exposed so consumers like
@@ -218,38 +251,63 @@ export interface InstalledBlueprintsProvider {
 }
 
 /**
+ * Stable hash of the installed-entry list. Folds in id + contractKey
+ * for each entry, sorted so callback ordering jitter doesn't cause a
+ * false-positive signature change. Intent is omitted — descriptive
+ * prose churn shouldn't trigger a re-walk.
+ *
+ * Failure to compute a contractKey (malformed contract) skips that
+ * entry in the signature so a transient discovery hiccup doesn't
+ * mask a real change in the rest of the set.
+ */
+function computeSignature(
+  entries: readonly InstalledBlueprintEntry[],
+): string {
+  const parts: string[] = [];
+  for (const e of entries) {
+    let key: string;
+    try {
+      key = blueprintKey(e.contract);
+    } catch {
+      continue;
+    }
+    parts.push(`${e.id} ${key}`);
+  }
+  parts.sort();
+  return createHash('sha256').update(parts.join('')).digest('hex');
+}
+
+/**
  * Construct an {@link InstalledBlueprintsProvider}. Stateful in the
- * sense that it tracks "already ensured" scopes — caller keeps a
- * single instance per server lifetime.
+ * sense that it tracks "last ensured signature" per scope — caller
+ * keeps a single instance per server lifetime.
  */
 export function createInstalledBlueprintsProvider(
   options: CreateInstalledBlueprintsProviderOptions,
 ): InstalledBlueprintsProvider {
-  // Per-scope state: undefined = never seen; Promise = walk in
-  // flight; true = walk complete (success or quenched). Sharing the
-  // promise across concurrent callers makes ensureCached a single
-  // bounded compile sweep per scope, even under burst load.
-  const ensured = new Map<string, Promise<void> | true>();
+  // Per-scope state. `signature` is the hash of the last
+  // successfully-walked entry set; `state` is either an in-flight
+  // walk promise (concurrent callers share it) or `true` when the
+  // walk has settled. A signature mismatch on the next ensureCached
+  // call drops the entry + triggers a fresh walk with eviction.
+  //
+  // `discoveryPoisoned: true` is the sentinel for "the installed-
+  // blueprints callback threw last time; don't retry it" (mirrors
+  // the original `ensured=true` posture for discovery failures —
+  // the operator restarts after fixing). Discovery-poisoned scopes
+  // also short-circuit the signature-recompute path so the throwing
+  // callback isn't invoked on every handshake.
+  interface ScopeState {
+    readonly signature: string;
+    readonly state: Promise<void> | true;
+    readonly discoveryPoisoned?: boolean;
+  }
+  const ensured = new Map<string, ScopeState>();
 
-  async function walkScope(scope: string): Promise<void> {
-    let entries: readonly InstalledBlueprintEntry[];
-    try {
-      entries = await options.installedBlueprints(scope);
-    } catch (err) {
-      // Discovery failure: surface as a scope-level issue and mark
-      // ensured (don't retry — the operator either fixes the issue
-      // and restarts, or accepts no installed-blueprint cache).
-      options.onIssue?.({
-        id: '<discovery>',
-        manifestPath: scope,
-        kind: 'compile-threw',
-        message: `installed-blueprint discovery threw: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      });
-      return;
-    }
-
+  async function walkScope(
+    scope: string,
+    entries: readonly InstalledBlueprintEntry[],
+  ): Promise<void> {
     const compileTimeoutMs = options.compileTimeoutMs ?? DEFAULT_COMPILE_TIMEOUT_MS;
     for (const entry of entries) {
       let compileResult: CompileResult;
@@ -307,29 +365,150 @@ export function createInstalledBlueprintsProvider(
         await evictStaleInstallRow(options.deps, scope, entry, options.onIssue);
       }
     }
+
+    // Orphan eviction: drop install-provenance rows whose contractKey
+    // is NOT in the current entry set. Covers the G4 uninstall path —
+    // when an entry disappears between walks, its install-provenance
+    // cache row would otherwise serve hits forever. Synth-provenance
+    // and register-provenance rows survive untouched.
+    //
+    // listByScope is a single enumeration call (S3VectorsStorage,
+    // sqlite, in-memory all support it). Skip eviction when the
+    // backend isn't enumerable rather than fail — non-enumerable
+    // backends are rare (legacy hosted before Opt-B) and the symptom
+    // gracefully degrades to the pre-fix state for them.
+    const store = options.deps.vectorStore;
+    if (!('listByScope' in store) || typeof store.listByScope !== 'function') {
+      return;
+    }
+    const liveKeys = new Set<string>();
+    for (const entry of entries) {
+      try {
+        liveKeys.add(blueprintKey(entry.contract));
+      } catch {
+        // Malformed contract — already surfaced as an issue during
+        // walk; skip from the live-set so it doesn't accidentally
+        // mask an orphan elsewhere.
+      }
+    }
+    let cached: ReadonlyArray<{
+      readonly id: string;
+      readonly provenance: string;
+      readonly contractKey?: string;
+    }>;
+    try {
+      cached = await listBlueprints(
+        { vectorStore: store as EnumerableVectorStore },
+        scope,
+      );
+    } catch (err) {
+      options.onIssue?.({
+        id: '<orphan-scan>',
+        manifestPath: scope,
+        kind: 'compile-threw',
+        message: `orphan eviction listByScope failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+      return;
+    }
+    for (const row of cached) {
+      if (row.provenance !== 'install') continue;
+      const key = row.contractKey;
+      if (key !== undefined && liveKeys.has(key)) continue;
+      // Orphan. Either we couldn't read the row's contractKey or it's
+      // not in the live set — either way it shouldn't be served.
+      try {
+        await deleteBlueprint(
+          { vectorStore: store },
+          scope,
+          row.id,
+        );
+        options.onIssue?.({
+          id: row.id,
+          manifestPath: scope,
+          kind: 'stale-row-evicted',
+          message: `evicted orphan install-provenance row (contractKey=${
+            key ?? '<unknown>'
+          }) — entry no longer in the discovered set; caller likely uninstalled it`,
+        });
+      } catch {
+        // Best-effort — orphan survives if the store rejects the
+        // delete. Operator still sees the issue list above.
+      }
+    }
   }
 
   return {
     async ensureCached(scope) {
-      const existing = ensured.get(scope);
-      if (existing === true) return;
-      if (existing) {
-        await existing;
+      const prior = ensured.get(scope);
+
+      // Discovery-poisoned scopes short-circuit before re-invoking
+      // the throwing callback. Operator restarts the pod after
+      // fixing whatever made discovery throw.
+      if (prior?.discoveryPoisoned) return;
+
+      // If a walk is currently in flight for this scope, share it.
+      // Concurrent callers await the same discovery + compile sweep
+      // rather than each spawning their own.
+      if (prior && prior.state !== true) {
+        await prior.state;
         return;
       }
-      const work = walkScope(scope).then(
-        () => {
-          ensured.set(scope, true);
-        },
-        // walkScope never rejects — it catches per-entry. Defensive:
-        // if the contract drifts and walkScope somehow throws, mark
-        // ensured anyway so we don't retry forever.
-        () => {
-          ensured.set(scope, true);
-        },
-      );
-      ensured.set(scope, work);
+
+      // Start a new ensure cycle. Invoke discovery + signature
+      // computation + (conditional) walk inside a single shared
+      // promise so subsequent concurrent callers latch onto it.
+      const work = (async () => {
+        let entries: readonly InstalledBlueprintEntry[];
+        try {
+          entries = await options.installedBlueprints(scope);
+        } catch (err) {
+          options.onIssue?.({
+            id: '<discovery>',
+            manifestPath: scope,
+            kind: 'compile-threw',
+            message: `installed-blueprint discovery threw: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+          ensured.set(scope, {
+            signature: '<discovery-error>',
+            state: true,
+            discoveryPoisoned: true,
+          });
+          return;
+        }
+        const signature = computeSignature(entries);
+        if (prior && prior.signature === signature) {
+          // Nothing changed since last walk — just mark ensured
+          // under the same sig + skip the compile sweep.
+          ensured.set(scope, { signature, state: true });
+          return;
+        }
+        try {
+          await walkScope(scope, entries);
+        } catch {
+          // walkScope's per-entry catches mean reaching here means
+          // the orphan-scan or listByScope step itself threw; mark
+          // ensured under the new signature anyway so we don't
+          // re-throw on every handshake.
+        }
+        ensured.set(scope, { signature, state: true });
+      })();
+
+      // Register the in-flight promise under whatever signature we
+      // currently know (the prior one if any, else a placeholder).
+      // Concurrent callers see `state !== true` and latch on. The
+      // promise body overwrites with the real signature when settled.
+      ensured.set(scope, {
+        signature: prior?.signature ?? '<pending>',
+        state: work,
+      });
       await work;
+    },
+    invalidate(scope) {
+      ensured.delete(scope);
     },
     deps: options.deps,
   };

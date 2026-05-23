@@ -370,6 +370,118 @@ describe('createInstalledBlueprintsProvider', () => {
     expect(installedBlueprints).toHaveBeenCalledTimes(1);
     expect(issues).toEqual([{ kind: 'compile-threw' }]);
   });
+
+  describe('orphan eviction on entry-set change (G4 stale-cache fix)', () => {
+    it('evicts install-provenance rows when an entry disappears between walks', async () => {
+      const deps = makeDeps();
+      // Two entries on first walk; one disappears on second.
+      const callCount = { current: 0 };
+      const provider = createInstalledBlueprintsProvider({
+        installedBlueprints: () => {
+          callCount.current += 1;
+          if (callCount.current === 1) {
+            return [
+              entry({
+                id: 'vendor:counter:1.0.0',
+                contract: COUNTER_CONTRACT,
+                intent: 'counter',
+              }),
+              entry({
+                id: 'vendor:timer:1.0.0',
+                contract: TIMER_CONTRACT,
+                intent: 'timer',
+              }),
+            ];
+          }
+          // Simulate uninstall — timer is gone.
+          return [
+            entry({
+              id: 'vendor:counter:1.0.0',
+              contract: COUNTER_CONTRACT,
+              intent: 'counter',
+            }),
+          ];
+        },
+        compile: async () => ({ kind: 'ok', code: 'x' }),
+        deps,
+      });
+
+      await provider.ensureCached(SCOPE);
+      let cached = await listBlueprints(deps, SCOPE);
+      expect(cached).toHaveLength(2);
+
+      await provider.ensureCached(SCOPE);
+      cached = await listBlueprints(deps, SCOPE);
+      // The orphan (timer) must be gone; counter must remain.
+      expect(cached).toHaveLength(1);
+      expect(cached[0]!.contractKey).toBe(
+        (await import('@ggui-ai/protocol/blueprint-key')).blueprintKey(
+          COUNTER_CONTRACT,
+        ),
+      );
+    });
+
+    it('preserves synth-provenance rows even when no installs remain', async () => {
+      const deps = makeDeps();
+      // Manually seed a synth-provenance row (cold-gen product the
+      // matcher wrote).
+      const { registerBlueprint } = await import('./blueprint-registry.js');
+      await registerBlueprint(deps, SCOPE, {
+        kind: 'template',
+        contract: COUNTER_CONTRACT,
+        componentCode: 'synth code',
+        intent: 'synth-cached counter',
+        provenance: 'synth',
+      });
+
+      const provider = createInstalledBlueprintsProvider({
+        installedBlueprints: () => [],
+        compile: async () => ({ kind: 'ok', code: 'x' }),
+        deps,
+      });
+      await provider.ensureCached(SCOPE);
+
+      // Synth row survives — orphan eviction only targets install-
+      // provenance rows.
+      const cached = await listBlueprints(deps, SCOPE);
+      expect(cached).toHaveLength(1);
+      expect(cached[0]!.provenance).toBe('synth');
+    });
+
+    it('invalidate(scope) forces re-walk on next ensureCached', async () => {
+      const deps = makeDeps();
+      const installedBlueprints = vi.fn(() => [
+        entry({
+          id: 'vendor:counter:1.0.0',
+          contract: COUNTER_CONTRACT,
+          intent: 'counter',
+        }),
+      ]);
+      const provider = createInstalledBlueprintsProvider({
+        installedBlueprints,
+        compile: async () => ({ kind: 'ok', code: 'x' }),
+        deps,
+      });
+
+      await provider.ensureCached(SCOPE);
+      expect(installedBlueprints).toHaveBeenCalledTimes(1);
+
+      // Identical-signature follow-up still invokes discovery, but
+      // skips the compile walk.
+      await provider.ensureCached(SCOPE);
+      expect(installedBlueprints).toHaveBeenCalledTimes(2);
+
+      // Invalidate forces the next call to walk from scratch
+      // (signature comparison is reset).
+      provider.invalidate(SCOPE);
+      await provider.ensureCached(SCOPE);
+      // Discovery called again, AND the walk re-runs (proven by no
+      // exception + cache row still present).
+      expect(installedBlueprints).toHaveBeenCalledTimes(3);
+      const cached = await listBlueprints(deps, SCOPE);
+      expect(cached).toHaveLength(1);
+    });
+  });
 });
 
 describe('matchBlueprint + installedBlueprints integration', () => {
@@ -414,6 +526,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
       ensureCached: vi.fn(async () => {
         throw new Error('provider went off the rails');
       }),
+      invalidate: vi.fn(),
       deps,
     };
 
@@ -431,6 +544,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     const deps = makeDeps();
     const provider = {
       ensureCached: vi.fn(async () => undefined),
+      invalidate: vi.fn(),
       deps,
     };
 
@@ -449,6 +563,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     const deps = makeDeps();
     const provider = {
       ensureCached: vi.fn(async () => undefined),
+      invalidate: vi.fn(),
       deps,
     };
 
