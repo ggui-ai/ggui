@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@ggui-ai/protocol": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "@ggui-ai/protocol-conformance": "workspace:*",
