@@ -21,27 +21,11 @@
  * override is silently reading the stored effectiveContract (push.ts
  * bug).
  *
- * Why NOT compare accept-vs-override with the SAME draft (the prior
- * formulation): when the negotiator legitimately no-ops on a fully-
- * specified draft (no `clientCapabilities.libraries` to merge, no
- * synth-added boilerplate for a trivial intent), effectiveContract_A
- * IS the literal draft. Both pushes produce identical code, the
- * assertion fails, and the test conflates "negotiator no-op (correct)"
- * with "plumbing bug". Negotiator-augmentation-flow-through belongs in
- * unit tests where we can mock the negotiator deterministically.
- *
- * Different drafts (A vs B) make the plumbing observable WITHOUT
- * depending on stochastic LLM augmentation.
- *
- * Gated on `ANTHROPIC_API_KEY` because both pushes drive cold-gen
- * (different shapes → different cache keys → no warm hits).
+ * Parametric over the model-provider axis. See provider-matrix.ts.
  */
 import { describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
-
-const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
-const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
-const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
+import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
 interface PushOut {
   stackItemId: string;
@@ -122,15 +106,15 @@ async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJso
   return (await resp.json()) as BootstrapJson;
 }
 
-async function handshakeAndPush(opts: {
-  seed: string;
-  decision: 'accept' | 'override';
-}): Promise<BootstrapJson> {
+async function handshakeAndPush(
+  mcpUrl: string,
+  opts: { seed: string; decision: 'accept' | 'override' },
+): Promise<BootstrapJson> {
   const session = unwrapStructured<{ sessionId: string }>(
-    await callTool(MCP_URL, 'ggui_new_session', { seed: opts.seed }),
+    await callTool(mcpUrl, 'ggui_new_session', { seed: opts.seed }),
   );
   const handshake = unwrapStructured<{ handshakeId: string }>(
-    await callTool(MCP_URL, 'ggui_handshake', {
+    await callTool(mcpUrl, 'ggui_handshake', {
       sessionId: session.sessionId,
       intent:
         'a single text caption showing the user-supplied caption prop',
@@ -149,7 +133,7 @@ async function handshakeAndPush(opts: {
       ? { caption: 'Hello' }
       : { caption: 'Hello', subtitle: 'Caption subtitle' };
   const out = unwrapStructured<PushOut>(
-    await callTool(MCP_URL, 'ggui_push', {
+    await callTool(mcpUrl, 'ggui_push', {
       handshakeId: handshake.handshakeId,
       decision:
         opts.decision === 'accept'
@@ -164,40 +148,53 @@ async function handshakeAndPush(opts: {
   return fetchBootstrap(out.url);
 }
 
-describe.skipIf(!HAS_KEY)(
-  'Scenario 11 — handshake → push reads effectiveContract',
-  () => {
-    test(
-      'override uses its literal blueprintDraft.contract, not the stored effectiveContract',
-      async () => {
-        const accepted = await handshakeAndPush({
-          seed: 'scenario-11-accept',
-          decision: 'accept',
+for (const provider of PROVIDERS) {
+  const hasKey = !!process.env[provider.apiKey];
+  describe.skipIf(providerSkip(provider))(
+    `Scenario 11 [${provider.name}] — handshake → push reads effectiveContract`,
+    () => {
+      if (!hasKey) {
+        test(`${provider.apiKey} missing (REQUIRE_ALL_PROVIDERS=${REQUIRE_ALL ? '1' : '0'})`, () => {
+          throw new Error(
+            `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1 but ${provider.apiKey} is not set — ` +
+              `the ${provider.name} row cannot run.`,
+          );
         });
-        const overridden = await handshakeAndPush({
-          seed: 'scenario-11-override',
-          decision: 'override',
-        });
+        return;
+      }
+      const MCP_URL = provider.mcpUrl;
 
-        // Both must produce valid bootstraps.
-        expect(typeof accepted.codeHash).toBe('string');
-        expect(accepted.codeHash?.length).toBeGreaterThan(0);
-        expect(typeof overridden.codeHash).toBe('string');
-        expect(overridden.codeHash?.length).toBeGreaterThan(0);
+      test(
+        'override uses its literal blueprintDraft.contract, not the stored effectiveContract',
+        async () => {
+          const accepted = await handshakeAndPush(MCP_URL, {
+            seed: `scenario-11-accept-${provider.name}`,
+            decision: 'accept',
+          });
+          const overridden = await handshakeAndPush(MCP_URL, {
+            seed: `scenario-11-override-${provider.name}`,
+            decision: 'override',
+          });
 
-        // Plumbing check: override generates against its OWN literal
-        // draft (which adds a `subtitle` prop), NOT against the stored
-        // effectiveContract (which only has `caption`). If push.ts had
-        // a bug where override silently read the stored contract, the
-        // generated code would miss `subtitle` and the two codeHashes
-        // would collide. The structural difference between the two
-        // drafts forces observably different generated code.
-        expect(accepted.codeHash).not.toBe(overridden.codeHash);
-      },
-      // 90s × 2 cold-gens (one per push) + handshake LLM calls +
-      // headroom. Both pushes cold-gen because their canonical
-      // contracts differ structurally.
-      240_000,
-    );
-  },
-);
+          // Both must produce valid bootstraps.
+          expect(typeof accepted.codeHash).toBe('string');
+          expect(accepted.codeHash?.length).toBeGreaterThan(0);
+          expect(typeof overridden.codeHash).toBe('string');
+          expect(overridden.codeHash?.length).toBeGreaterThan(0);
+
+          // Plumbing check: override generates against its OWN literal
+          // draft (which adds a `subtitle` prop), NOT against the stored
+          // effectiveContract (which only has `caption`). If push.ts had
+          // a bug where override silently read the stored contract, the
+          // generated code would miss `subtitle` and the two codeHashes
+          // would collide.
+          expect(accepted.codeHash).not.toBe(overridden.codeHash);
+        },
+        // 90s × 2 cold-gens (one per push) + handshake LLM calls +
+        // headroom. Both pushes cold-gen because their canonical
+        // contracts differ structurally.
+        240_000,
+      );
+    },
+  );
+}
