@@ -51,11 +51,13 @@ if (path) {
 ```json
 {
   "schema": "1",
-  "protocol": "draft-2026-05-23",
+  "protocol": "<current PROTOCOL_VERSION>",
   "app": { "slug": "my-app", "name": "My App" },
   "agent": { "entry": "./agent.ts" }
 }
 ```
+
+`protocol` MUST match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version installed.
 
 Optional blocks: `storage` (sessions / vectors / threads via `memory` or `sqlite`), `theme`, `primitives`, `blueprints`, `mcpMounts`, and `operator`. See the exported Zod schema for the full, authoritative shape.
 

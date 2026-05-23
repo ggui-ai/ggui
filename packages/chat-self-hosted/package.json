@@ -44,9 +44,6 @@
   "dependencies": {
     "@ggui-ai/protocol": "workspace:*"
   },
-  "peerDependencies": {
-    "vitest": ">=1.0.0"
-  },
   "peerDependenciesMeta": {
     "vitest": {
       "optional": true
@@ -55,5 +52,9 @@
   "devDependencies": {
     "typescript": "^5.0.0",
     "vitest": "^3.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

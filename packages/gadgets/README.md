@@ -118,4 +118,4 @@ Emit `descriptor.json` for registry consumption via `@ggui-ai/gadgets/codegen`.
 
 ## See also
 
-- [`@ggui-ai/protocol`](https://github.com/ggui-ai/ggui/tree/main/protocol) — `GadgetDescriptor`, `GadgetExport`, `ClientCapabilitiesSpec`, `STDLIB_GADGETS`, and the contract linter that validates contracts using these hooks.
+- [`@ggui-ai/protocol`](https://github.com/ggui-ai/ggui/tree/main/packages/protocol) — `GadgetDescriptor`, `GadgetExport`, `ClientCapabilitiesSpec`, `STDLIB_GADGETS`, and the contract linter that validates contracts using these hooks.

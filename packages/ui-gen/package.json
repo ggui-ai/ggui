@@ -22,10 +22,23 @@
     "access": "public"
   },
   "files": [
+    "LICENSE",
+    "README.md",
     "dist",
     "src",
-    "LICENSE",
-    "README.md"
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.test-d.ts",
+    "!**/*.test-d.tsx",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.test.js.map",
+    "!**/*.test-d.js",
+    "!**/*.test-d.d.ts",
+    "!**/__tests__/**",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx"
   ],
   "type": "module",
   "main": "dist/index.js",
@@ -282,7 +295,7 @@
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/sandbox": "workspace:*",
     "@ggui-ai/ui-visual-tester": "workspace:*",
-    "@ggui-ai/wire": "workspace:^",
+    "@ggui-ai/wire": "workspace:*",
     "@google/genai": "^1.45.0",
     "@huggingface/transformers": "^3.0.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -315,5 +328,9 @@
     "react-dom": "^19.0.0",
     "tsup": "^8.5.0",
     "vitest": "^3.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

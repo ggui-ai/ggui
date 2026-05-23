@@ -2237,16 +2237,21 @@ export function createGguiPushHandler(
         return undefined;
       }
 
-      const meta: PushResultMeta & {
-        ui: { resourceUri: string };
-        'ui/resourceUri': string;
-      } = {
+      // `_meta` on the MCP wire IS structurally `Record<string, unknown>`
+      // (open key set by spec). Build the object at that wider type and
+      // use `satisfies` to typecheck the closed shape we're providing
+      // inside it — gives compile-time validation of `ggui`, `ui`, and
+      // `ui/resourceUri` without an erasure cast at return time.
+      const meta: Record<string, unknown> = {
         ggui: { bootstrap },
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,
+      } satisfies PushResultMeta & {
+        ui: { resourceUri: string };
+        'ui/resourceUri': string;
       };
-      return meta as unknown as Record<string, unknown>;
+      return meta;
     },
   };
 }

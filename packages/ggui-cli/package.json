@@ -73,5 +73,9 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

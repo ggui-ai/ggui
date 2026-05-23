@@ -371,7 +371,7 @@ const nativeStyles = StyleSheet.create({
     color: rnColors.gray[700],
   },
   image: {
-    width: '100%' as unknown as number,
+    width: '100%',
     height: 200,
     borderRadius: rnRadius.md,
   },

@@ -22,8 +22,21 @@
     "access": "public"
   },
   "files": [
+    "README.md",
     "src",
-    "README.md"
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.test-d.ts",
+    "!**/*.test-d.tsx",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.test.js.map",
+    "!**/*.test-d.js",
+    "!**/*.test-d.d.ts",
+    "!**/__tests__/**",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx"
   ],
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -102,5 +115,9 @@
   },
   "bugs": {
     "url": "https://github.com/ggui-ai/ggui/issues"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

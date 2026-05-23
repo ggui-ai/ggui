@@ -11,5 +11,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["**/*.test-d.ts", "**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
 }

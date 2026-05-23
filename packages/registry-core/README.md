@@ -1,6 +1,6 @@
 # @ggui-ai/registry-core
 
-Pure-TypeScript registry operations + storage interfaces for the **ggui marketplace** — the shared business-logic layer behind the hosted ggui registry and the OSS-publishable [`@ggui-ai/registry-server`](https://github.com/ggui-ai/ggui/tree/main/registry-server). No I/O, no HTTP, no cloud SDK — operations take typed inputs + a `{ storage, bundleStorage, authn, clock }` deps bag and return discriminated-union results.
+Pure-TypeScript registry operations + storage interfaces for the **ggui marketplace** — the shared business-logic layer behind the hosted ggui registry and the OSS-publishable [`@ggui-ai/registry-server`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-server). No I/O, no HTTP, no cloud SDK — operations take typed inputs + a `{ storage, bundleStorage, authn, clock }` deps bag and return discriminated-union results.
 
 ## Why this package exists
 

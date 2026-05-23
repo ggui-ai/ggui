@@ -1,0 +1,16 @@
+# Default owner — anything not matched below
+* @wanseob
+
+# Generation triad — tightly coupled per CLAUDE.md.
+# Changes here MUST be benchmarked together.
+/packages/ui-gen/                 @wanseob
+/packages/protocol/src/version.ts @wanseob
+
+# Release + publish path
+/.github/workflows/release.yml      @wanseob
+/.github/workflows/publish-gate.yml @wanseob
+
+# Security + repo policy
+/SECURITY.md         @wanseob
+/CODE_OF_CONDUCT.md  @wanseob
+/.github/CODEOWNERS  @wanseob

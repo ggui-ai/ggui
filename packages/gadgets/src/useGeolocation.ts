@@ -57,17 +57,24 @@ export interface GeolocationOptions {
 
 function toCoords(position: GeolocationPosition): GeolocationCoords {
   const c = position.coords;
-  const result: Record<string, number> = {
+  // `GeolocationCoords` has 4 required + 4 optional fields. Build the
+  // required base, then conditionally widen with the optionals — the
+  // result is structurally-typed `GeolocationCoords` directly.
+  const base = {
     latitude: c.latitude,
     longitude: c.longitude,
     accuracy: c.accuracy,
     timestamp: position.timestamp,
   };
-  if (c.altitude !== null) result.altitude = c.altitude;
-  if (c.altitudeAccuracy !== null) result.altitudeAccuracy = c.altitudeAccuracy;
-  if (c.heading !== null) result.heading = c.heading;
-  if (c.speed !== null) result.speed = c.speed;
-  return result as unknown as GeolocationCoords;
+  return {
+    ...base,
+    ...(c.altitude !== null && { altitude: c.altitude }),
+    ...(c.altitudeAccuracy !== null && {
+      altitudeAccuracy: c.altitudeAccuracy,
+    }),
+    ...(c.heading !== null && { heading: c.heading }),
+    ...(c.speed !== null && { speed: c.speed }),
+  };
 }
 
 function mapGeolocationError(err: GeolocationPositionError): GadgetError {

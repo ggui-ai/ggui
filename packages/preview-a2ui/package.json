@@ -54,5 +54,9 @@
   "devDependencies": {
     "typescript": "^5.0.0",
     "vitest": "^3.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

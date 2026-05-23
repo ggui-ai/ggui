@@ -51,9 +51,6 @@
     "oxc-parser": "^0.131.0",
     "zod": "^4.3.6"
   },
-  "peerDependencies": {
-    "vitest": ">=2.0.0"
-  },
   "peerDependenciesMeta": {
     "vitest": {
       "optional": true
@@ -75,5 +72,9 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

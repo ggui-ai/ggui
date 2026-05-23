@@ -399,23 +399,27 @@ export async function executeTool(
         return { result: 'FAILED: No file exists.', error: true };
       }
 
-      let rawChanges = input.changes as Array<{
+      type RawChange = {
         startLine: number | string;
         endLine: number | string;
         code: string[] | string;
         description?: string;
-      }>;
+      };
+      // `input.changes` can legitimately arrive as either a single
+      // RawChange (LLM forgot the array wrapper) or RawChange[]. Normalize
+      // up front so downstream code only sees the array shape.
+      const inputChanges = input.changes as RawChange | RawChange[] | undefined;
+      const rawChanges: RawChange[] = inputChanges
+        ? Array.isArray(inputChanges)
+          ? inputChanges
+          : [inputChanges]
+        : [];
       // Option C: opt-in "allowBroken" — LLM deliberately commits a patch
       // that may fail syntax preflight, planning to finish the repair
       // across follow-up turns. The workspace is updated + a warning is
       // returned so the LLM sees the error location without the patch
       // being reverted.
       const allowBroken = input.allowBroken === true;
-
-      // Normalize: if LLM passed a single object instead of array, wrap it
-      if (rawChanges && !Array.isArray(rawChanges)) {
-        rawChanges = [rawChanges as unknown as typeof rawChanges[0]];
-      }
 
       // Shape-normalize each change. `startLine` / `endLine` may arrive as:
       //   - number (numeric-line schema)

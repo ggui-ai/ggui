@@ -12,7 +12,7 @@
   <a href="https://docs.ggui.ai/oss-quickstart/">OSS Quickstart</a>
 </p>
 
-> 🚧 **Active development — `v0.1.0-alpha` shipping imminently.** APIs are converging; pin exact versions and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the first alpha tag.
+> 🚧 **Active development — `v0.1.0-rc.1` is the first published release candidate.** APIs are converging; pin exact versions and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the next RC and the v0.1.0 final.
 
 ---
 
@@ -34,6 +34,15 @@ ggui serve
 `ggui serve` stands up `@ggui-ai/mcp-server` with the first-run bundle: MCP at `/mcp`, the same-origin session viewer at `/r/<shortCode>`, pairing endpoints, and a live-channel WebSocket. Open `http://127.0.0.1:6781/` to land on the operator console.
 
 Point any MCP-compatible agent runtime at `http://127.0.0.1:6781/mcp` with `Authorization: Bearer dev`. The [OSS Quickstart](https://docs.ggui.ai/oss-quickstart/) walks through the full self-hosted path including pairing.
+
+### Runnable examples
+
+[`samples/`](https://github.com/ggui-ai/ggui/tree/main/samples) holds end-to-end examples you can clone:
+
+- [`samples/gguis/`](https://github.com/ggui-ai/ggui/tree/main/samples/gguis) — ready-to-run project configs (`default`, `leaflet-demo`, `mapbox-demo`, `canvas-demo`) showing how a `ggui.json` is shaped.
+- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — reference agent that hosts ggui as an MCP server (Claude Agent SDK).
+- [`samples/gadgets/`](https://github.com/ggui-ai/ggui/tree/main/samples/gadgets) — example component / hook gadgets for the marketplace.
+- [`samples/mcp-servers/`](https://github.com/ggui-ai/ggui/tree/main/samples/mcp-servers) — minimal domain MCP servers (e.g. a todo server) you can pair against.
 
 ### Honest scope today
 

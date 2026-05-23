@@ -13,10 +13,10 @@ logic lives here — to change tool behavior, edit the handler package.
 
 ## Run it with the CLI
 
-The simplest way to start a server is the `ggui` CLI:
+The simplest way to start a server is the `ggui` CLI shipped by `@ggui-ai/cli`:
 
 ```bash
-npx ggui serve
+npx @ggui-ai/cli serve
 ```
 
 `ggui serve` boots this package with the OSS defaults — in-memory session store

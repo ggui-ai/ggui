@@ -68,5 +68,9 @@
   },
   "dependencies": {
     "@ggui-ai/protocol": "workspace:*"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

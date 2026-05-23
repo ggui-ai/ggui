@@ -86,7 +86,6 @@
     "@ggui-ai/ui-registry": "workspace:*"
   },
   "peerDependencies": {
-    "vitest": ">=1.0.0",
     "zod": ">=3.0.0"
   },
   "peerDependenciesMeta": {
@@ -114,5 +113,9 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

@@ -58,9 +58,21 @@
   },
   "files": [
     "dist",
+    "ggui.primitives.json",
     "src",
-    "!src/**/*.stories.tsx",
-    "ggui.primitives.json"
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.test-d.ts",
+    "!**/*.test-d.tsx",
+    "!**/*.test.js",
+    "!**/*.test.d.ts",
+    "!**/*.test.d.ts.map",
+    "!**/*.test.js.map",
+    "!**/*.test-d.js",
+    "!**/*.test-d.d.ts",
+    "!**/__tests__/**",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx"
   ],
   "scripts": {
     "build": "tsc && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && npm run generate:docs && npm run generate:docs-ts",
@@ -125,5 +137,9 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

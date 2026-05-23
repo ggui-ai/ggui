@@ -47,5 +47,9 @@
     "typescript": "^5.4.0",
     "vitest": "^3.0.0",
     "jsdom": "^25.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
 }

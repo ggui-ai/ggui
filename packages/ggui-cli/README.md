@@ -17,14 +17,16 @@ npm install -g @ggui-ai/cli
 npx @ggui-ai/cli --help
 ```
 
-For a new project, prefer the scaffolder — it installs this package as a project dependency and drops a minimal `ggui.json` + agent entry:
+For a new project, install this package and start `ggui serve` with `--mcp-only` (no `ggui.json` required) to get a server you can pair against:
 
 ```bash
-npm create ggui-server@latest my-app
-cd my-app
-pnpm install
-pnpm exec ggui serve
+mkdir my-app && cd my-app
+npm init -y
+npm install @ggui-ai/cli
+npx ggui serve --mcp-only       # boots http://127.0.0.1:6781
 ```
+
+To declare a project (blueprints, primitives, theme, agent entry), drop a `ggui.json` at the project root — see the [samples](https://github.com/ggui-ai/ggui/tree/main/samples/gguis) for runnable shapes.
 
 ## Commands
 
@@ -57,11 +59,13 @@ Start the local UI registry + compile-on-demand dev hub, optionally supervising 
 ```json
 {
   "schema": "1",
-  "protocol": "draft-2026-05-23",
+  "protocol": "<current PROTOCOL_VERSION>",
   "app": { "slug": "my-app", "name": "My App" },
   "agent": { "entry": "./agent.ts" }
 }
 ```
+
+Set `protocol` to the value of `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version you install (or omit the field — the CLI will fall back to the installed protocol version).
 
 Optional blocks include `storage` (sessions / vectors / threads via `memory` or `sqlite`), `primitives`, `theme`, `adapters`, and `blueprints`. See [`@ggui-ai/project-config`](../project-config) for the full schema.
 

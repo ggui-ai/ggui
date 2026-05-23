@@ -2,11 +2,18 @@
 
 Thanks for your interest in contributing!
 
+## Prerequisites
+
+- **Node.js** `>= 20.0.0` (LTS recommended; CI uses 22)
+- **pnpm** `9.x` — the repo pins via the `packageManager` field. Run `corepack enable` once and pnpm will use the right version automatically.
+- A **C/C++ toolchain** for `better-sqlite3`'s native build. On Debian/Ubuntu: `sudo apt install build-essential python3`; on macOS: `xcode-select --install`.
+
 ## Setup
 
 ```bash
 git clone https://github.com/ggui-ai/ggui.git
 cd ggui
+corepack enable                 # selects the pinned pnpm version
 pnpm install
 pnpm build
 ```

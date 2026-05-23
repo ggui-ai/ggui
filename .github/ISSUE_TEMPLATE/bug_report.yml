@@ -7,15 +7,24 @@ body:
     attributes:
       label: Package
       options:
+        - "@ggui-ai/cli"
         - "@ggui-ai/protocol"
         - "@ggui-ai/mcp-server"
-        - "@ggui-ai/server"
+        - "@ggui-ai/mcp-server-core"
+        - "@ggui-ai/mcp-server-handlers"
         - "@ggui-ai/react"
         - "@ggui-ai/react-native"
-        - "@ggui-ai/cli"
         - "@ggui-ai/wire"
         - "@ggui-ai/shared"
-        - Other
+        - "@ggui-ai/design"
+        - "@ggui-ai/console"
+        - "@ggui-ai/iframe-runtime"
+        - "@ggui-ai/registry-server"
+        - "@ggui-ai/registry-core"
+        - "@ggui-ai/ui-gen"
+        - "@ggui-ai/protocol-conformance"
+        - "@ggui-ai/protocol-reference-server"
+        - Other / multiple
     validations:
       required: true
   - type: textarea
@@ -34,4 +43,4 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: "0.0.1"
+      placeholder: "0.1.0-rc.1"

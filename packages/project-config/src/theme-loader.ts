@@ -212,13 +212,19 @@ function loadPreset(
         },
       };
     }
+    // `raw` is a `DtcgTheme` (design's registry shape); `ThemeDocument`
+    // is the validated config-side projection. `parseThemeDocument` runs
+    // the Zod schema and returns a typed `ThemeDocument`. A preset is a
+    // stable internal token tree, so a parse failure here means the
+    // registry shipped a malformed preset — surface that loudly rather
+    // than papering over it with a cast.
     return {
       ok: true,
       theme: {
         source: 'preset',
         preset,
         mode,
-        document: raw as unknown as ThemeDocument,
+        document: parseThemeDocument(raw),
         cssVariables: parsed.cssVariables,
       },
     };
@@ -236,7 +242,7 @@ function loadPreset(
       preset,
       mode,
       overrides,
-      document: mutated as unknown as ThemeDocument,
+      document: parseThemeDocument(mutated),
       cssVariables: parsed.cssVariables,
     },
   };

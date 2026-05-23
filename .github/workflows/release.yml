@@ -364,12 +364,19 @@ jobs:
             exit 1
           fi
 
-  # ── Publish — gated by the `npm-publish` environment (configure in the
-  # public repo's Settings → Environments with required reviewers).
+  # ── Publish — gated by the `npm-publish` environment (configured with
+  # required-reviewer = wanseob + restricted to the `main` branch).
+  # `id-token: write` is required for npm provenance: npm requests an
+  # OIDC token from GitHub at publish time and stores the resulting
+  # attestation alongside the tarball, so each package on npm carries a
+  # cryptographic "built from this repo at this commit" badge.
   publish:
     needs: preflight
     runs-on: ubuntu-latest
     environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -393,9 +400,18 @@ jobs:
         run: |
           set -euo pipefail
           DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
+          # `--provenance` requires (a) `id-token: write` permission on
+          # this job (set above), (b) the OIDC issuer (GitHub Actions
+          # always supplies one when permission is granted), and (c) each
+          # package.json's `repository.url` matching this repo. All three
+          # hold; the result is a public attestation on npm linking each
+          # tarball to this commit. Dry-run runs cannot mint provenance,
+          # so omit the flag on dispatch dry-run.
           PUBLISH_ARGS=(--access public --no-git-checks)
           if [ "$DRY_RUN" = "true" ]; then
             PUBLISH_ARGS+=(--dry-run)
+          else
+            PUBLISH_ARGS+=(--provenance)
           fi
 
           for pkg in ${{ needs.preflight.outputs.filter }}; do

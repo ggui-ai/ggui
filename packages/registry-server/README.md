@@ -1,6 +1,6 @@
 # @ggui-ai/registry-server
 
-OSS-runnable HTTP server for the **ggui marketplace registry**. Wraps [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/registry-core) with [hono](https://hono.dev) + filesystem storage + bearer-token auth. Self-hostable via `npx @ggui-ai/registry-server` for local dev, CI, and enterprise on-prem deployments.
+OSS-runnable HTTP server for the **ggui marketplace registry**. Wraps [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-core) with [hono](https://hono.dev) + filesystem storage + bearer-token auth. Self-hostable via `npx @ggui-ai/registry-server` for local dev, CI, and enterprise on-prem deployments.
 
 ## Quick start
 
@@ -63,7 +63,7 @@ This server is **MVP-scoped** for self-hosters who want the marketplace surface 
 - Per-org private artifact scoping (treat `visibility: 'private'` as a label, not enforcement)
 - Sigstore transparency log integration
 
-If you need any of the above, build your own transport on top of [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/registry-core).
+If you need any of the above, build your own transport on top of [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-core).
 
 ## Programmatic embedding
 
