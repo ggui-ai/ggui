@@ -11,6 +11,12 @@
  */
 
 import type { DtcgTheme } from '../types';
+import {
+  standardAccessibility,
+  standardSemanticScales,
+  standardTransitions,
+  standardZIndex,
+} from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 const shared = {
@@ -123,6 +129,7 @@ const shared = {
         $type: 'keyframes',
       },
     },
+    transition: standardTransitions,
   },
 } as const;
 
@@ -163,10 +170,10 @@ const botanicalLight: DtcgTheme = {
       '800': { $value: '#504530', $type: 'color' },
       '900': { $value: '#352e20', $type: 'color' },
     },
-    success: { $value: '#059669', $type: 'color' },
-    warning: { $value: '#d97706', $type: 'color' },
-    error: { $value: '#dc2626', $type: 'color' },
-    info: { $value: '#0284c7', $type: 'color' },
+    success: standardSemanticScales.light.success,
+    warning: standardSemanticScales.light.warning,
+    error: standardSemanticScales.light.error,
+    info: standardSemanticScales.light.info,
     // Semantic roles
     surface: { $value: '#fefcf8', $type: 'color' },
     onSurface: { $value: '#352e20', $type: 'color' },
@@ -182,6 +189,16 @@ const botanicalLight: DtcgTheme = {
   spacing: shared.spacing,
   shape: shared.shape,
   motion: shared.motion,
+
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#16a34a' },
+    },
+  },
+
+  zIndex: standardZIndex,
 
   canvas: {
     mode: { $value: 'mesh', $type: 'string' },
@@ -241,10 +258,10 @@ const botanicalDark: DtcgTheme = {
       '800': { $value: '#f0e4c9', $type: 'color' },
       '900': { $value: '#fefcf8', $type: 'color' }, // warm cream text
     },
-    success: { $value: '#34d399', $type: 'color' },
-    warning: { $value: '#f59e0b', $type: 'color' },
-    error: { $value: '#f87171', $type: 'color' },
-    info: { $value: '#38bdf8', $type: 'color' },
+    success: standardSemanticScales.dark.success,
+    warning: standardSemanticScales.dark.warning,
+    error: standardSemanticScales.dark.error,
+    info: standardSemanticScales.dark.info,
     surface: { $value: '#1f1c18', $type: 'color' },
     onSurface: { $value: '#fefcf8', $type: 'color' },
     surfaceVariant: { $value: '#352e20', $type: 'color' },
@@ -259,6 +276,16 @@ const botanicalDark: DtcgTheme = {
   spacing: shared.spacing,
   shape: shared.shape,
   motion: shared.motion,
+
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#4ade80' },
+    },
+  },
+
+  zIndex: standardZIndex,
 
   canvas: {
     mode: { $value: 'mesh', $type: 'string' },

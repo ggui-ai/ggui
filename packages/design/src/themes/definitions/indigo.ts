@@ -31,6 +31,11 @@
  */
 
 import type { DtcgTheme } from '../types';
+import {
+  standardAccessibility,
+  standardTransitions,
+  standardZIndex,
+} from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 const shared = {
@@ -155,6 +160,7 @@ const shared = {
         $type: 'keyframes',
       },
     },
+    transition: standardTransitions,
   },
 } as const;
 
@@ -207,11 +213,46 @@ const indigoLight: DtcgTheme = {
       '800': { $value: '#211f2c', $type: 'color' },
       '900': { $value: '#15131f', $type: 'color' }, // Ink (text)
     },
-    // Vivid semantic ladder. Tuned to harmonize with the indigo accent.
-    success: { $value: '#0e9d6e', $type: 'color' }, // emerald
-    warning: { $value: '#e08515', $type: 'color' }, // amber
-    error: { $value: '#dc2845', $type: 'color' }, // rose
-    info: { $value: '#0891b2', $type: 'color' }, // cyan
+    // Vivid semantic ladder. Tuned to harmonize with the indigo accent —
+    // brand-tuned 500 stops (emerald/amber/rose/cyan) wrapped in
+    // Tailwind-shaped 7-stop scales so consumers can reach for
+    // success-100, error-700 etc. consistently with other themes.
+    success: {
+      '50': { $value: '#ecfdf5', $type: 'color' },
+      '100': { $value: '#d1fae5', $type: 'color' },
+      '200': { $value: '#a7f3d0', $type: 'color' },
+      '500': { $value: '#0e9d6e', $type: 'color' }, // brand emerald
+      '600': { $value: '#0b8259', $type: 'color' },
+      '700': { $value: '#086847', $type: 'color' },
+      '800': { $value: '#064e36', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#fff8eb', $type: 'color' },
+      '100': { $value: '#fdecc8', $type: 'color' },
+      '200': { $value: '#fbd897', $type: 'color' },
+      '500': { $value: '#e08515', $type: 'color' }, // brand amber
+      '600': { $value: '#b86b0e', $type: 'color' },
+      '700': { $value: '#90530a', $type: 'color' },
+      '800': { $value: '#6b3d07', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#fef2f4', $type: 'color' },
+      '100': { $value: '#fde2e7', $type: 'color' },
+      '200': { $value: '#fbc5cf', $type: 'color' },
+      '500': { $value: '#dc2845', $type: 'color' }, // brand rose
+      '600': { $value: '#b81f38', $type: 'color' },
+      '700': { $value: '#94182d', $type: 'color' },
+      '800': { $value: '#701222', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#ecfeff', $type: 'color' },
+      '100': { $value: '#cffafe', $type: 'color' },
+      '200': { $value: '#a5f3fc', $type: 'color' },
+      '500': { $value: '#0891b2', $type: 'color' }, // brand cyan
+      '600': { $value: '#0e7490', $type: 'color' },
+      '700': { $value: '#155e75', $type: 'color' },
+      '800': { $value: '#164e63', $type: 'color' },
+    },
 
     surface: { $value: '#fafaf7', $type: 'color' }, // Paper
     onSurface: { $value: '#15131f', $type: 'color' }, // Ink
@@ -239,6 +280,17 @@ const indigoLight: DtcgTheme = {
     },
     background: { $value: '#fafaf7', $type: 'color' }, // Paper
   },
+
+  // Override the default focus-ring with the indigo accent so it
+  // reads as "this product's accent" not a generic sky-blue.
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#4f46e5' }, // primary-500
+    },
+  },
+  zIndex: standardZIndex,
 };
 
 // ── Indigo — Dark ──────────────────────────────────────────────────
@@ -281,10 +333,45 @@ const indigoDark: DtcgTheme = {
       '800': { $value: '#dcdbe2', $type: 'color' },
       '900': { $value: '#f5f4f9', $type: 'color' }, // Paper-on-dark (text)
     },
-    success: { $value: '#34d399', $type: 'color' },
-    warning: { $value: '#f59e0b', $type: 'color' },
-    error: { $value: '#fb7185', $type: 'color' },
-    info: { $value: '#22d3ee', $type: 'color' },
+    // Dark-mode semantic scales — brand-tuned 500 stops (lifted variants
+    // of the light brand hues for AA contrast on midnight) wrapped in
+    // an inverted 7-stop ramp (50 = darkest, 800 = lightest).
+    success: {
+      '50': { $value: '#022c1d', $type: 'color' },
+      '100': { $value: '#064e36', $type: 'color' },
+      '200': { $value: '#086847', $type: 'color' },
+      '500': { $value: '#34d399', $type: 'color' }, // brand emerald (lifted)
+      '600': { $value: '#6ee7b7', $type: 'color' },
+      '700': { $value: '#a7f3d0', $type: 'color' },
+      '800': { $value: '#d1fae5', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#3a2104', $type: 'color' },
+      '100': { $value: '#6b3d07', $type: 'color' },
+      '200': { $value: '#90530a', $type: 'color' },
+      '500': { $value: '#f59e0b', $type: 'color' }, // brand amber (lifted)
+      '600': { $value: '#fbbf24', $type: 'color' },
+      '700': { $value: '#fcd34d', $type: 'color' },
+      '800': { $value: '#fde68a', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#3b0a14', $type: 'color' },
+      '100': { $value: '#701222', $type: 'color' },
+      '200': { $value: '#94182d', $type: 'color' },
+      '500': { $value: '#fb7185', $type: 'color' }, // brand rose (lifted)
+      '600': { $value: '#fda4af', $type: 'color' },
+      '700': { $value: '#fecdd3', $type: 'color' },
+      '800': { $value: '#ffe4e6', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#083344', $type: 'color' },
+      '100': { $value: '#164e63', $type: 'color' },
+      '200': { $value: '#155e75', $type: 'color' },
+      '500': { $value: '#22d3ee', $type: 'color' }, // brand cyan (lifted)
+      '600': { $value: '#67e8f9', $type: 'color' },
+      '700': { $value: '#a5f3fc', $type: 'color' },
+      '800': { $value: '#cffafe', $type: 'color' },
+    },
 
     // Surface tiers tuned for clearer visual hierarchy in dark mode.
     // Earlier values had surface (#15131f) and surfaceVariant
@@ -316,6 +403,18 @@ const indigoDark: DtcgTheme = {
     },
     background: { $value: '#0c0b14', $type: 'color' },
   },
+
+  // Override the default focus-ring with the indigo accent. Use the
+  // dark-mode lifted variant (primary-500 here = #818cf8) so it pops
+  // on midnight.
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#818cf8' }, // primary-500 (dark)
+    },
+  },
+  zIndex: standardZIndex,
 };
 
 /**

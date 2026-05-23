@@ -57,8 +57,8 @@ function GguiWordmark(): React.JSX.Element {
   // off-white in dark). `gray-300` flips too — the gray scale in
   // `darkTheme` is intentionally inverted, so the wordmark's
   // contrasting "chrome" tone reads correctly under either theme.
-  const ink = 'var(--ggui-color-text-primary, #292929)';
-  const chrome = 'var(--ggui-color-gray-300, #d1d5db)';
+  const ink = 'var(--ggui-color-onSurface, #292929)';
+  const chrome = 'var(--ggui-color-neutral-300, #d1d5db)';
   return (
     <svg
       viewBox="0 0 224 50"
@@ -180,13 +180,13 @@ export function NoCredentialsCard({
   //
   //   - `--ggui-color-surface` — opaque card surface (white in light,
   //     slate-800 in dark). Used for the URL block + QR backdrop.
-  //   - `--ggui-color-text-primary` — high-contrast body text.
-  //   - `--ggui-color-text-secondary` — muted captions/headings.
-  //   - `--ggui-color-gray-100` — subtle tinted background that
+  //   - `--ggui-color-onSurface` — high-contrast body text.
+  //   - `--ggui-color-onSurfaceVariant` — muted captions/headings.
+  //   - `--ggui-color-neutral-100` — subtle tinted background that
   //     auto-flips. Used for the inner "details" panel — slightly
   //     differentiated from outer transparent canvas without being
   //     a hard surface.
-  //   - `--ggui-color-gray-200` — subtle outline that auto-flips.
+  //   - `--ggui-color-neutral-200` — subtle outline that auto-flips.
   return (
     // Outer Card is forced transparent — when this card renders inside
     // an MCP App iframe (claude.ai web, Claude Desktop), the host
@@ -194,7 +194,7 @@ export function NoCredentialsCard({
     // background creates a card-on-card look. Padding stays so content
     // doesn't crowd the iframe edges. Outside Claude (preview iframe,
     // console inspector), the ThemeProvider's body background is the
-    // theme's `--ggui-color-background`, so a transparent card just
+    // theme's `--ggui-color-surface`, so a transparent card just
     // shows the theme's canvas behind it — also fine.
     <Card
       padding="lg"
@@ -229,7 +229,7 @@ export function NoCredentialsCard({
                 fontFamily:
                   'var(--ggui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
                 fontSize: 'var(--ggui-font-size-xs, 11px)',
-                color: 'var(--ggui-color-text-secondary, #71717a)',
+                color: 'var(--ggui-color-onSurfaceVariant, #71717a)',
                 opacity: 0.7,
                 userSelect: 'all',
               }}
@@ -240,7 +240,7 @@ export function NoCredentialsCard({
           </div>
           <Text
             style={{
-              color: 'var(--ggui-color-text-secondary, #52525b)',
+              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
               lineHeight: '1.55',
             }}
           >
@@ -256,9 +256,9 @@ export function NoCredentialsCard({
             flexDirection: 'column',
             gap: 'var(--ggui-spacing-3, 12px)',
             padding: 'var(--ggui-spacing-4, 16px)',
-            background: 'var(--ggui-color-gray-100, #f4f4f5)',
-            border: '1px solid var(--ggui-color-gray-200, #e4e4e7)',
-            borderRadius: 'var(--ggui-radius-md, 10px)',
+            background: 'var(--ggui-color-neutral-100, #f4f4f5)',
+            border: '1px solid var(--ggui-color-neutral-200, #e4e4e7)',
+            borderRadius: 'var(--ggui-shape-radius-md, 10px)',
           }}
         >
           <div
@@ -293,7 +293,7 @@ export function NoCredentialsCard({
                 style={{
                   padding: 'var(--ggui-spacing-2, 8px)',
                   background: '#ffffff',
-                  borderRadius: 'var(--ggui-radius-sm, 6px)',
+                  borderRadius: 'var(--ggui-shape-radius-sm, 6px)',
                   lineHeight: 0,
                 }}
               >
@@ -307,7 +307,7 @@ export function NoCredentialsCard({
               <Text
                 variant="caption"
                 style={{
-                  color: 'var(--ggui-color-text-secondary, #52525b)',
+                  color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                   fontSize: 'var(--ggui-font-size-xs, 11px)',
                   textAlign: 'center',
                 }}
@@ -327,7 +327,7 @@ export function NoCredentialsCard({
               <Text
                 variant="caption"
                 style={{
-                  color: 'var(--ggui-color-text-secondary, #52525b)',
+                  color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                   fontWeight: 'var(--ggui-font-weight-semibold, 600)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
@@ -341,13 +341,13 @@ export function NoCredentialsCard({
                   fontFamily:
                     'var(--ggui-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
                   fontSize: 'var(--ggui-font-size-sm, 13px)',
-                  color: 'var(--ggui-color-text-primary, #111)',
+                  color: 'var(--ggui-color-onSurface, #111)',
                   wordBreak: 'break-all',
                   userSelect: 'all',
                   padding: 'var(--ggui-spacing-3, 12px)',
                   background: 'var(--ggui-color-surface, #fff)',
-                  border: '1px solid var(--ggui-color-gray-200, #e4e4e7)',
-                  borderRadius: 'var(--ggui-radius-sm, 6px)',
+                  border: '1px solid var(--ggui-color-neutral-200, #e4e4e7)',
+                  borderRadius: 'var(--ggui-shape-radius-sm, 6px)',
                   lineHeight: '1.45',
                 }}
               >
@@ -373,7 +373,7 @@ export function NoCredentialsCard({
                   <Text
                     variant="caption"
                     style={{
-                      color: 'var(--ggui-color-text-secondary, #52525b)',
+                      color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                       opacity: 0.85,
                     }}
                   >
@@ -389,7 +389,7 @@ export function NoCredentialsCard({
           <Text
             variant="caption"
             style={{
-              color: 'var(--ggui-color-text-secondary, #52525b)',
+              color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
               opacity: 0.7,
             }}
           >

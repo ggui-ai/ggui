@@ -1,20 +1,20 @@
 /**
  * DTCG Theme Type System
  *
- * Extended DTCG types for the theme selector system.
- * These types represent the full theme definition including motion tokens,
- * canvas configuration, and metadata for the theme picker UI.
+ * Single canonical theme shape consumed by every `@ggui-ai/design` theme
+ * (default light/dark + premium-*). Follows the DTCG (Design Tokens
+ * Community Group) format with Material 3 semantic color roles plus
+ * Tailwind-style 50-900 scales for primary/neutral/success/warning/
+ * error/info, motion tokens (duration/easing/transition/keyframes),
+ * accessibility tokens, z-index ladder, and canvas configuration for
+ * the GenerativeCanvas background.
  *
- * Naming: `DtcgTheme` (camelCase) for the new extended system vs
- * `BaseDtcgTheme` (all-caps) for the legacy base token system in dtcg/types.ts.
+ * @see https://design-tokens.github.io/community-group/format/
  */
 
 /**
- * Extended DTCG design token.
- *
- * Simplified variant of {@link DTCGToken} used by the theme selector system.
- * Uses camelCase naming (`DtcgToken`) to distinguish from the legacy
- * all-caps `DTCGToken` in `dtcg/types.ts`.
+ * DTCG design token leaf. `$value` carries the value, `$type` is the
+ * DTCG type identifier (`color`, `dimension`, `fontFamily`, etc.).
  *
  * @typeParam T - The TypeScript type of the token value (defaults to `string`)
  */
@@ -25,11 +25,12 @@ export interface DtcgToken<T = string> {
 }
 
 /**
- * Complete extended DTCG theme definition for the theme selector system.
+ * Complete DTCG theme definition.
  *
- * Extends the base DTCG format with motion tokens (`duration`, `easing`,
- * `keyframes`), canvas configuration for the GenerativeCanvas background,
- * and metadata for the theme picker UI (name, description).
+ * Single shape used by every theme in `@ggui-ai/design`. Replaces the
+ * pre-rc.1 split between `BaseDtcgTheme` (default light/dark) and the
+ * earlier minimal `DtcgTheme` (premium presets only). All fields are
+ * REQUIRED — no optional shape fields, no per-theme schema drift.
  */
 export interface DtcgTheme {
   $name: string;
@@ -41,13 +42,19 @@ export interface DtcgTheme {
   };
 
   color: {
+    /** 50-900 scale, primary brand color. */
     primary: Record<string, DtcgToken>;
+    /** 50-900 scale, neutral/gray foundation. */
     neutral: Record<string, DtcgToken>;
-    success: DtcgToken;
-    warning: DtcgToken;
-    error: DtcgToken;
-    info: DtcgToken;
-    // Semantic roles (DTCG standard two-tier pattern)
+    /** 50-900 scale, success semantic color (greens). */
+    success: Record<string, DtcgToken>;
+    /** 50-900 scale, warning semantic color (ambers). */
+    warning: Record<string, DtcgToken>;
+    /** 50-900 scale, error semantic color (reds). */
+    error: Record<string, DtcgToken>;
+    /** 50-900 scale, info semantic color (cyans/blues). */
+    info: Record<string, DtcgToken>;
+    // Material 3 semantic role pairs.
     surface: DtcgToken;
     onSurface: DtcgToken;
     surfaceVariant: DtcgToken;
@@ -78,6 +85,13 @@ export interface DtcgTheme {
   motion: {
     duration: Record<string, DtcgToken>;
     easing: Record<string, DtcgToken>;
+    /**
+     * Composed transition shorthands ready for the CSS `transition`
+     * property. Each value is a full transition string (e.g.
+     * `"200ms cubic-bezier(0.4, 0, 0.2, 1)"` or
+     * `"color, background-color 200ms ease-out"`).
+     */
+    transition: Record<string, DtcgToken>;
     keyframes: Record<string, DtcgToken>;
   };
 
@@ -87,6 +101,35 @@ export interface DtcgTheme {
     colors: DtcgToken<string[]>;
     background: DtcgToken;
   };
+
+  /**
+   * WCAG-driven accessibility tokens. Operators can override per-theme
+   * to tune focus ring contrast, reduced-motion duration, and
+   * high-contrast fallback palette.
+   */
+  accessibility: {
+    focusRing: {
+      color: DtcgToken;
+      width: DtcgToken;
+      offset: DtcgToken;
+    };
+    reducedMotion: {
+      duration: DtcgToken;
+    };
+    highContrast: {
+      borderWidth: DtcgToken;
+      textColor: DtcgToken;
+      backgroundColor: DtcgToken;
+      linkColor: DtcgToken;
+    };
+  };
+
+  /**
+   * Z-index ladder. All overlay UI (dropdowns, modals, toasts, etc.)
+   * should resolve their stacking context from these tokens to keep
+   * the cross-component layering coherent.
+   */
+  zIndex: Record<string, DtcgToken<number>>;
 }
 
 /** Parsed theme output ready for injection */

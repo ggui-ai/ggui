@@ -14,6 +14,7 @@
  */
 
 import type { DtcgTheme } from '../types';
+import { standardAccessibility, standardZIndex } from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 const shared = {
@@ -117,6 +118,36 @@ const shared = {
         $type: 'keyframes',
       },
     },
+    // Cyberpunk-tuned composed transitions: fast/normal match the
+    // standard ladder, but `slow` lifts to 600ms to mirror this
+    // theme's `motion.duration.slow` (drawn-out neon glow fades).
+    transition: {
+      fast: {
+        $type: 'transition',
+        $value: '100ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      normal: {
+        $type: 'transition',
+        $value: '200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      slow: {
+        $type: 'transition',
+        $value: '600ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      colors: {
+        $type: 'transition',
+        $value:
+          'color 200ms cubic-bezier(0.4, 0, 0.2, 1), background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      opacity: {
+        $type: 'transition',
+        $value: 'opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      transform: {
+        $type: 'transition',
+        $value: 'transform 200ms cubic-bezier(0, 0, 0.2, 1)',
+      },
+    },
   },
 } as const;
 
@@ -161,10 +192,46 @@ const cyberpunkLight: DtcgTheme = {
       '800': { $value: '#d0d0e0', $type: 'color' },
       '900': { $value: '#e8e8f0', $type: 'color' },
     },
-    success: { $value: '#00ff88', $type: 'color' },
-    warning: { $value: '#ffaa00', $type: 'color' },
-    error: { $value: '#ff2255', $type: 'color' },
-    info: { $value: '#00ccff', $type: 'color' },
+    // Neon semantic scales — each hue's existing singleton anchors `500`,
+    // with lighter 50/100/200 tints (HSL lightness lifted toward 95/85/75)
+    // and darker 600/700/800 shades (lightness pulled down ~10/20/30%)
+    // while holding hue + saturation constant to keep the neon identity.
+    success: {
+      '50': { $value: '#e0fff1', $type: 'color' },
+      '100': { $value: '#b3ffd9', $type: 'color' },
+      '200': { $value: '#66ffb3', $type: 'color' },
+      '500': { $value: '#00ff88', $type: 'color' },
+      '600': { $value: '#00cc6e', $type: 'color' },
+      '700': { $value: '#009955', $type: 'color' },
+      '800': { $value: '#006638', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#fff5e0', $type: 'color' },
+      '100': { $value: '#ffe5b3', $type: 'color' },
+      '200': { $value: '#ffcc66', $type: 'color' },
+      '500': { $value: '#ffaa00', $type: 'color' },
+      '600': { $value: '#cc8800', $type: 'color' },
+      '700': { $value: '#996600', $type: 'color' },
+      '800': { $value: '#664400', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#ffe0e8', $type: 'color' },
+      '100': { $value: '#ffb3c4', $type: 'color' },
+      '200': { $value: '#ff6688', $type: 'color' },
+      '500': { $value: '#ff2255', $type: 'color' },
+      '600': { $value: '#cc1a44', $type: 'color' },
+      '700': { $value: '#991333', $type: 'color' },
+      '800': { $value: '#660d22', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#e0f9ff', $type: 'color' },
+      '100': { $value: '#b3edff', $type: 'color' },
+      '200': { $value: '#66dbff', $type: 'color' },
+      '500': { $value: '#00ccff', $type: 'color' },
+      '600': { $value: '#00a3cc', $type: 'color' },
+      '700': { $value: '#007a99', $type: 'color' },
+      '800': { $value: '#005266', $type: 'color' },
+    },
     // Semantic roles (dark theme — inverted neutral scale)
     surface: { $value: '#0a0a0f', $type: 'color' },
     onSurface: { $value: '#e8e8f0', $type: 'color' },
@@ -180,6 +247,17 @@ const cyberpunkLight: DtcgTheme = {
   spacing: shared.spacing,
   shape: shared.shape,
   motion: shared.motion,
+
+  // Focus ring shifts to cyberpunk's primary cyan so neon-on-dark
+  // surfaces get a high-contrast cyan glow instead of the default sky.
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#06b6d4' },
+    },
+  },
+  zIndex: standardZIndex,
 
   canvas: {
     mode: { $value: 'constellation', $type: 'string' },
@@ -241,10 +319,46 @@ const cyberpunkDark: DtcgTheme = {
       '800': { $value: '#d0d0e0', $type: 'color' },
       '900': { $value: '#e8e8f0', $type: 'color' },
     },
-    success: { $value: '#33ffaa', $type: 'color' }, // brighter mint for dark
-    warning: { $value: '#ffbe33', $type: 'color' },
-    error: { $value: '#ff4477', $type: 'color' },
-    info: { $value: '#33d6ff', $type: 'color' },
+    // Neon semantic scales (dark) — inverted ramp: 50 is the deepest
+    // saturated shade, 500 anchors the existing brighter neon singleton
+    // for dark contrast, 800 is the palest tint. Derived by holding hue
+    // + saturation and walking HSL lightness down/up from 500.
+    success: {
+      '50': { $value: '#003319', $type: 'color' },
+      '100': { $value: '#006633', $type: 'color' },
+      '200': { $value: '#00994d', $type: 'color' },
+      '500': { $value: '#33ffaa', $type: 'color' }, // brighter mint for dark
+      '600': { $value: '#66ffbf', $type: 'color' },
+      '700': { $value: '#99ffd4', $type: 'color' },
+      '800': { $value: '#ccffea', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#332200', $type: 'color' },
+      '100': { $value: '#664400', $type: 'color' },
+      '200': { $value: '#996600', $type: 'color' },
+      '500': { $value: '#ffbe33', $type: 'color' },
+      '600': { $value: '#ffcb5c', $type: 'color' },
+      '700': { $value: '#ffd985', $type: 'color' },
+      '800': { $value: '#ffe7ad', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#330a17', $type: 'color' },
+      '100': { $value: '#66142e', $type: 'color' },
+      '200': { $value: '#991e45', $type: 'color' },
+      '500': { $value: '#ff4477', $type: 'color' },
+      '600': { $value: '#ff6e94', $type: 'color' },
+      '700': { $value: '#ff97b1', $type: 'color' },
+      '800': { $value: '#ffc1cf', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#002b33', $type: 'color' },
+      '100': { $value: '#005566', $type: 'color' },
+      '200': { $value: '#008099', $type: 'color' },
+      '500': { $value: '#33d6ff', $type: 'color' },
+      '600': { $value: '#5cdeff', $type: 'color' },
+      '700': { $value: '#85e6ff', $type: 'color' },
+      '800': { $value: '#adeeff', $type: 'color' },
+    },
     surface: { $value: '#000005', $type: 'color' },
     onSurface: { $value: '#e8e8f0', $type: 'color' },
     surfaceVariant: { $value: '#0a0a0f', $type: 'color' },
@@ -259,6 +373,17 @@ const cyberpunkDark: DtcgTheme = {
   spacing: shared.spacing,
   shape: shared.shape,
   motion: shared.motion,
+
+  // Focus ring uses the dark variant's lifted neon cyan (#22d3ee) so
+  // focus on pure-black surfaces glows brighter than the standard sky.
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#22d3ee' },
+    },
+  },
+  zIndex: standardZIndex,
 
   canvas: {
     mode: { $value: 'constellation', $type: 'string' },

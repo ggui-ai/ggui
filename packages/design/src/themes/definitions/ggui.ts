@@ -32,6 +32,11 @@
  */
 
 import type { DtcgTheme } from '../types';
+import {
+  standardAccessibility,
+  standardTransitions,
+  standardZIndex,
+} from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 //
@@ -140,6 +145,7 @@ const shared = {
         $type: 'cubicBezier',
       },
     },
+    transition: standardTransitions,
     keyframes: {
       'accent-pulse': {
         $value: '0%{opacity:1}50%{opacity:0.7}100%{opacity:1}',
@@ -206,11 +212,45 @@ const gguiLight: DtcgTheme = {
       '900': { $value: '#0e0e0e', $type: 'color' },
     },
     // Brand-kit status triad: signal / live / draft. Info inherits ink
-    // rather than introducing a fourth hue.
-    success: { $value: '#1b7a37', $type: 'color' }, // live
-    warning: { $value: '#a87b0e', $type: 'color' }, // draft
-    error: { $value: '#d93822', $type: 'color' }, // signal
-    info: { $value: '#3d3d3d', $type: 'color' }, // ink-2 (no info hue)
+    // rather than introducing a fourth hue. Each ships a 7-stop scale
+    // (50/100/200/500/600/700/800) with the brand hex pinned at 500;
+    // lower stops lighten, higher stops darken.
+    success: {
+      '50': { $value: '#e8f5ec', $type: 'color' },
+      '100': { $value: '#c5e6cd', $type: 'color' },
+      '200': { $value: '#8fcca0', $type: 'color' },
+      '500': { $value: '#1b7a37', $type: 'color' }, // live
+      '600': { $value: '#15622c', $type: 'color' },
+      '700': { $value: '#0f4a21', $type: 'color' },
+      '800': { $value: '#093116', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#fbf3e0', $type: 'color' },
+      '100': { $value: '#f3e1b0', $type: 'color' },
+      '200': { $value: '#e6c46e', $type: 'color' },
+      '500': { $value: '#a87b0e', $type: 'color' }, // draft
+      '600': { $value: '#86620b', $type: 'color' },
+      '700': { $value: '#654a08', $type: 'color' },
+      '800': { $value: '#433105', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#fbe7e3', $type: 'color' },
+      '100': { $value: '#f4bbb1', $type: 'color' },
+      '200': { $value: '#ea8a7a', $type: 'color' },
+      '500': { $value: '#d93822', $type: 'color' }, // signal
+      '600': { $value: '#ae2d1b', $type: 'color' },
+      '700': { $value: '#822214', $type: 'color' },
+      '800': { $value: '#57160d', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#e1e1e1', $type: 'color' },
+      '100': { $value: '#bababa', $type: 'color' },
+      '200': { $value: '#8e8e8e', $type: 'color' },
+      '500': { $value: '#3d3d3d', $type: 'color' }, // ink-2 (no info hue)
+      '600': { $value: '#313131', $type: 'color' },
+      '700': { $value: '#252525', $type: 'color' },
+      '800': { $value: '#181818', $type: 'color' },
+    },
     // Semantic surface roles
     surface: { $value: '#f4f3ed', $type: 'color' }, // paper
     onSurface: { $value: '#292929', $type: 'color' }, // ink
@@ -233,6 +273,19 @@ const gguiLight: DtcgTheme = {
     colors: { $value: [], $type: 'array' },
     background: { $value: '#f4f3ed', $type: 'color' }, // paper
   },
+
+  // Brand-aligned focus ring: ink (#292929) instead of the standard
+  // sky-blue accent — ggui has no accent hue, so the focus ring stays
+  // monochrome.
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#292929' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 // ── GGUI — Dark ───────────────────────────────────────────────────
@@ -279,11 +332,47 @@ const gguiDark: DtcgTheme = {
       '800': { $value: '#ebe9e1', $type: 'color' }, // paper-2
       '900': { $value: '#f4f3ed', $type: 'color' }, // paper (text)
     },
-    // Status hues lifted slightly for AA on the ink surface.
-    success: { $value: '#3da85b', $type: 'color' }, // brighter live
-    warning: { $value: '#d4a02e', $type: 'color' }, // brighter draft
-    error: { $value: '#ff5b46', $type: 'color' }, // brighter signal
-    info: { $value: '#d9d9d9', $type: 'color' }, // chrome (inverted ink-2)
+    // Status hues lifted slightly for AA on the ink surface. Each ships
+    // a 7-stop scale (50/100/200/500/600/700/800) with the brand hex
+    // pinned at 500; dark-mode convention inverts the ramp so 50 is the
+    // darkest and 800 the lightest, matching the standardSemanticScales
+    // dark variant.
+    success: {
+      '50': { $value: '#0d2918', $type: 'color' },
+      '100': { $value: '#174f2a', $type: 'color' },
+      '200': { $value: '#286b3d', $type: 'color' },
+      '500': { $value: '#3da85b', $type: 'color' }, // brighter live
+      '600': { $value: '#6dbf83', $type: 'color' },
+      '700': { $value: '#9dd5ab', $type: 'color' },
+      '800': { $value: '#cdead3', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#332608', $type: 'color' },
+      '100': { $value: '#5e4612', $type: 'color' },
+      '200': { $value: '#896720', $type: 'color' },
+      '500': { $value: '#d4a02e', $type: 'color' }, // brighter draft
+      '600': { $value: '#dfb55c', $type: 'color' },
+      '700': { $value: '#eaca8a', $type: 'color' },
+      '800': { $value: '#f5deb8', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#3d130d', $type: 'color' },
+      '100': { $value: '#702419', $type: 'color' },
+      '200': { $value: '#a33828', $type: 'color' },
+      '500': { $value: '#ff5b46', $type: 'color' }, // brighter signal
+      '600': { $value: '#ff7d6c', $type: 'color' },
+      '700': { $value: '#ff9f93', $type: 'color' },
+      '800': { $value: '#ffc2ba', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#363636', $type: 'color' },
+      '100': { $value: '#5a5a5a', $type: 'color' },
+      '200': { $value: '#8c8c8c', $type: 'color' },
+      '500': { $value: '#d9d9d9', $type: 'color' }, // chrome (inverted ink-2)
+      '600': { $value: '#e0e0e0', $type: 'color' },
+      '700': { $value: '#e8e8e8', $type: 'color' },
+      '800': { $value: '#f0f0f0', $type: 'color' },
+    },
     surface: { $value: '#1f1f1f', $type: 'color' }, // surface above ink base
     onSurface: { $value: '#f4f3ed', $type: 'color' }, // paper
     surfaceVariant: { $value: '#292929', $type: 'color' }, // ink
@@ -305,6 +394,19 @@ const gguiDark: DtcgTheme = {
     colors: { $value: [], $type: 'array' },
     background: { $value: '#1a1a1a', $type: 'color' }, // ink-base canvas
   },
+
+  // Brand-aligned focus ring: paper (#f4f3ed) instead of the standard
+  // sky-blue accent — ggui dark inverts the ink/paper relationship and
+  // stays monochrome.
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#f4f3ed' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 /**

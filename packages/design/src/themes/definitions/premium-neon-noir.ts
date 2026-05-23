@@ -12,6 +12,11 @@
  */
 
 import type { DtcgTheme } from '../types';
+import {
+  standardAccessibility,
+  standardSemanticScales,
+  standardZIndex,
+} from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 const shared = {
@@ -99,6 +104,33 @@ const shared = {
         $type: 'cubicBezier',
       },
     },
+    transition: {
+      fast: {
+        $value: '120ms cubic-bezier(0.4, 0, 0.2, 1)',
+        $type: 'transition',
+      },
+      normal: {
+        $value: '250ms cubic-bezier(0.4, 0, 0.2, 1)',
+        $type: 'transition',
+      },
+      slow: {
+        $value: '800ms cubic-bezier(0.4, 0, 0.2, 1)',
+        $type: 'transition',
+      },
+      colors: {
+        $value:
+          'color 250ms cubic-bezier(0.4, 0, 0.2, 1), background-color 250ms cubic-bezier(0.4, 0, 0.2, 1), border-color 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+        $type: 'transition',
+      },
+      opacity: {
+        $value: 'opacity 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+        $type: 'transition',
+      },
+      transform: {
+        $value: 'transform 250ms cubic-bezier(0.22, 1, 0.36, 1)',
+        $type: 'transition',
+      },
+    },
     keyframes: {
       'neon-flicker': {
         $value:
@@ -156,10 +188,22 @@ const neonNoirLight: DtcgTheme = {
       '800': { $value: '#d4d4de', $type: 'color' },
       '900': { $value: '#ececf0', $type: 'color' },
     },
-    success: { $value: '#34d399', $type: 'color' },
-    warning: { $value: '#fbbf24', $type: 'color' },
-    error: { $value: '#f87171', $type: 'color' },
-    info: { $value: '#38bdf8', $type: 'color' },
+    success: {
+      ...standardSemanticScales.dark.success,
+      '500': { $value: '#34d399', $type: 'color' },
+    },
+    warning: {
+      ...standardSemanticScales.dark.warning,
+      '500': { $value: '#fbbf24', $type: 'color' },
+    },
+    error: {
+      ...standardSemanticScales.dark.error,
+      '500': { $value: '#f87171', $type: 'color' },
+    },
+    info: {
+      ...standardSemanticScales.dark.info,
+      '500': { $value: '#38bdf8', $type: 'color' },
+    },
     // Semantic roles (dark theme — inverted neutral scale)
     surface: { $value: '#09090b', $type: 'color' },
     onSurface: { $value: '#ececf0', $type: 'color' },
@@ -189,6 +233,16 @@ const neonNoirLight: DtcgTheme = {
     },
     background: { $value: '#06060a', $type: 'color' },
   },
+
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $value: '#ec4899', $type: 'color' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 // ── Neon Noir — Dark ───────────────────────────────────────────────
@@ -232,10 +286,22 @@ const neonNoirDark: DtcgTheme = {
       '800': { $value: '#d4d4de', $type: 'color' },
       '900': { $value: '#ececf0', $type: 'color' },
     },
-    success: { $value: '#5ee0ad', $type: 'color' },
-    warning: { $value: '#ffd24a', $type: 'color' },
-    error: { $value: '#ff8a8a', $type: 'color' },
-    info: { $value: '#5acdff', $type: 'color' },
+    success: {
+      ...standardSemanticScales.dark.success,
+      '500': { $value: '#5ee0ad', $type: 'color' },
+    },
+    warning: {
+      ...standardSemanticScales.dark.warning,
+      '500': { $value: '#ffd24a', $type: 'color' },
+    },
+    error: {
+      ...standardSemanticScales.dark.error,
+      '500': { $value: '#ff8a8a', $type: 'color' },
+    },
+    info: {
+      ...standardSemanticScales.dark.info,
+      '500': { $value: '#5acdff', $type: 'color' },
+    },
     surface: { $value: '#000000', $type: 'color' },
     onSurface: { $value: '#ececf0', $type: 'color' },
     surfaceVariant: { $value: '#09090b', $type: 'color' },
@@ -264,6 +330,16 @@ const neonNoirDark: DtcgTheme = {
     },
     background: { $value: '#000000', $type: 'color' },
   },
+
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $value: '#f472b6', $type: 'color' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 /** Neon Noir registration — both modes ship from day one. */

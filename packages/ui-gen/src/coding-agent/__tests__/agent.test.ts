@@ -159,7 +159,7 @@ export default function ItemList(props: Props) {
   return (
     <div style={{
       padding: 'var(--ggui-spacing-lg, 24px)',
-      borderRadius: 'var(--ggui-radius-md, 8px)',
+      borderRadius: 'var(--ggui-shape-radius-md, 8px)',
       backgroundColor: 'var(--ggui-color-surface, #ffffff)',
     }}>
       <h2 style={{
@@ -180,7 +180,7 @@ export default function ItemList(props: Props) {
               backgroundColor: selected === item.id
                 ? 'var(--ggui-color-primaryContainer, #e0f2fe)'
                 : 'transparent',
-              borderRadius: 'var(--ggui-radius-sm, 4px)',
+              borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
             }}
           >
             {item.label}

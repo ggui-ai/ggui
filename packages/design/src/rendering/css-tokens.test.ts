@@ -17,7 +17,7 @@ describe('getCssTokens', () => {
     expect(css).toContain('--ggui-color-primary-600');
   });
 
-  it('uses --ggui-color-neutral-* (NOT --ggui-color-gray-*)', () => {
+  it('uses --ggui-color-neutral-* (legacy --ggui-color-gray-* retired)', () => {
     const css = getCssTokens();
     expect(css).toContain('--ggui-color-neutral-');
     expect(css).not.toContain('--ggui-color-gray-');

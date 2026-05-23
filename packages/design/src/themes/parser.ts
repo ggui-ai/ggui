@@ -56,7 +56,17 @@ function buildCssVariables(theme: DtcgTheme): string {
   walkTokens(theme.font, 'font', lines);
   walkTokens(theme.spacing, 'spacing', lines);
   walkTokens(theme.shape, 'shape', lines);
-  walkTokens({ duration: theme.motion.duration, easing: theme.motion.easing }, 'motion', lines);
+  walkTokens(
+    {
+      duration: theme.motion.duration,
+      easing: theme.motion.easing,
+      transition: theme.motion.transition,
+    },
+    'motion',
+    lines
+  );
+  walkTokens(theme.accessibility, 'accessibility', lines);
+  walkTokens(theme.zIndex, 'zIndex', lines);
 
   // Canvas tokens
   lines.push(`  --ggui-canvas-mode: ${theme.canvas.mode.$value};`);
@@ -148,4 +158,192 @@ export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
       background: String(theme.canvas.background.$value),
     },
   };
+}
+
+// ───── Duck-typed walker helpers (used by file-format consumers) ─────
+//
+// These helpers walk any DTCG-shaped token tree (including the open
+// `ThemeDocument` plain-DTCG file format from `@ggui-ai/project-config`)
+// without requiring the strict `DtcgTheme` shape. They power the
+// `loadTheme({ file })` path where operators ship Figma-Tokens /
+// Style-Dictionary output that may not include `motion`/`canvas`.
+
+/**
+ * Convert DTCG token path to CSS variable name.
+ * Example: `['color','primary','600']` → `--ggui-color-primary-600`.
+ */
+function tokenPathToCssVar(path: string[]): string {
+  return `--ggui-${path.join('-')}`;
+}
+
+/**
+ * Recursively walk a DTCG-shaped tree and emit `:root { --ggui-*: value; }`
+ * declarations. Accepts any tree of `{ $value, $type }` leaves and nested
+ * groups (duck-typed) — used for plain DTCG documents that may not
+ * conform to the full {@link DtcgTheme} shape.
+ *
+ * @param theme - Any DTCG-shaped token tree
+ * @returns CSS string `:root { --ggui-*: value; }`
+ */
+export function generateCssVariables(theme: unknown): string {
+  return wrapInSelector(':root', emitDuckTyped(theme));
+}
+
+/**
+ * Same as {@link generateCssVariables} but wraps the declarations in
+ * a caller-supplied selector. Useful for scoped previews.
+ *
+ * @param theme - Any DTCG-shaped token tree
+ * @param selector - CSS selector to scope the variables to (e.g. `.preview`)
+ */
+export function generateScopedCssVariables(
+  theme: unknown,
+  selector: string,
+): string {
+  return wrapInSelector(selector, emitDuckTyped(theme));
+}
+
+/**
+ * Convert a DTCG-shaped tree to a flat map of `var()` references keyed
+ * by dot-notation token paths. Useful for TypeScript code that needs
+ * to reference theme tokens programmatically.
+ *
+ * @returns `{ 'color.primary.600': 'var(--ggui-color-primary-600)' }`
+ */
+export function themeToCssVarReferences(
+  theme: unknown,
+): Record<string, string> {
+  const refs: Record<string, string> = {};
+
+  function traverse(obj: Record<string, unknown>, path: string[] = []) {
+    for (const [key, value] of Object.entries(obj)) {
+      if (key.startsWith('$')) continue;
+
+      if (value !== null && typeof value === 'object' && '$value' in value) {
+        const fullPath = [...path, key].join('.');
+        refs[fullPath] = `var(${tokenPathToCssVar([...path, key])})`;
+      } else if (value !== null && typeof value === 'object') {
+        traverse(value as Record<string, unknown>, [...path, key]);
+      }
+    }
+  }
+
+  if (theme !== null && typeof theme === 'object') {
+    traverse(theme as Record<string, unknown>);
+  }
+  return refs;
+}
+
+function emitDuckTyped(theme: unknown): string[] {
+  const declarations: string[] = [];
+
+  function traverse(obj: Record<string, unknown>, path: string[] = []) {
+    for (const [key, value] of Object.entries(obj)) {
+      if (key.startsWith('$')) continue;
+
+      if (value !== null && typeof value === 'object' && '$value' in value) {
+        const cssVar = tokenPathToCssVar([...path, key]);
+        const formatted = formatValue(value as DtcgToken<unknown>);
+        declarations.push(`  ${cssVar}: ${formatted};`);
+      } else if (value !== null && typeof value === 'object') {
+        traverse(value as Record<string, unknown>, [...path, key]);
+      }
+    }
+  }
+
+  if (theme !== null && typeof theme === 'object') {
+    traverse(theme as Record<string, unknown>);
+  }
+  return declarations;
+}
+
+function wrapInSelector(selector: string, lines: string[]): string {
+  return `${selector} {\n${lines.join('\n')}\n}`;
+}
+
+/**
+ * Generate human-readable Markdown reference of the theme's CSS variables.
+ * Consumed by the LLM generation pipeline to teach the model which
+ * `--ggui-*` tokens are available.
+ *
+ * @param theme - Full {@link DtcgTheme} definition
+ * @returns Markdown reference listing all emitted CSS variables
+ */
+export function generateThemeReferenceDocumentation(theme: DtcgTheme): string {
+  const sections: string[] = [
+    '# Design System CSS Variables',
+    '',
+    'Use these CSS variables in your component styles:',
+    '',
+  ];
+
+  // Colors — handles both scales (Record<string,DtcgToken>) and singletons.
+  sections.push('## Colors', '');
+  for (const [key, value] of Object.entries(theme.color)) {
+    if (value !== null && typeof value === 'object' && '$value' in value) {
+      sections.push(`- var(--ggui-color-${key}) - ${formatValue(value as DtcgToken<unknown>)}`);
+    } else if (value !== null && typeof value === 'object') {
+      for (const [shade, token] of Object.entries(value as Record<string, DtcgToken>)) {
+        sections.push(`- var(--ggui-color-${key}-${shade}) - ${token.$value}`);
+      }
+    }
+  }
+
+  sections.push('', '## Spacing', '');
+  for (const [key, token] of Object.entries(theme.spacing)) {
+    sections.push(`- var(--ggui-spacing-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Typography', '');
+  sections.push('### Font Families');
+  for (const [key, token] of Object.entries(theme.font.family)) {
+    if (token) sections.push(`- var(--ggui-font-family-${key}) - ${token.$value}`);
+  }
+  sections.push('', '### Font Sizes');
+  for (const [key, token] of Object.entries(theme.font.size)) {
+    sections.push(`- var(--ggui-font-size-${key}) - ${token.$value}`);
+  }
+  sections.push('', '### Font Weights');
+  for (const [key, token] of Object.entries(theme.font.weight)) {
+    sections.push(`- var(--ggui-font-weight-${key}) - ${token.$value}`);
+  }
+  sections.push('', '### Line Heights');
+  for (const [key, token] of Object.entries(theme.font.lineHeight)) {
+    sections.push(`- var(--ggui-font-lineHeight-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Border Radius', '');
+  for (const [key, token] of Object.entries(theme.shape.radius)) {
+    sections.push(`- var(--ggui-shape-radius-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Shadows', '');
+  for (const [key, token] of Object.entries(theme.shape.shadow)) {
+    sections.push(`- var(--ggui-shape-shadow-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Durations', '');
+  for (const [key, token] of Object.entries(theme.motion.duration)) {
+    sections.push(`- var(--ggui-motion-duration-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Transitions', '');
+  for (const [key, token] of Object.entries(theme.motion.transition)) {
+    sections.push(`- var(--ggui-motion-transition-${key}) - ${token.$value}`);
+  }
+
+  sections.push('', '## Accessibility', '');
+  sections.push('### Focus Ring');
+  sections.push(`- var(--ggui-accessibility-focusRing-color) - ${theme.accessibility.focusRing.color.$value}`);
+  sections.push(`- var(--ggui-accessibility-focusRing-width) - ${theme.accessibility.focusRing.width.$value}`);
+  sections.push(`- var(--ggui-accessibility-focusRing-offset) - ${theme.accessibility.focusRing.offset.$value}`);
+  sections.push('', '### Reduced Motion');
+  sections.push(`- var(--ggui-accessibility-reducedMotion-duration) - ${theme.accessibility.reducedMotion.duration.$value}`);
+  sections.push('', '### High Contrast');
+  sections.push(`- var(--ggui-accessibility-highContrast-borderWidth) - ${theme.accessibility.highContrast.borderWidth.$value}`);
+  sections.push(`- var(--ggui-accessibility-highContrast-textColor) - ${theme.accessibility.highContrast.textColor.$value}`);
+  sections.push(`- var(--ggui-accessibility-highContrast-backgroundColor) - ${theme.accessibility.highContrast.backgroundColor.$value}`);
+  sections.push(`- var(--ggui-accessibility-highContrast-linkColor) - ${theme.accessibility.highContrast.linkColor.$value}`);
+
+  return sections.join('\n');
 }

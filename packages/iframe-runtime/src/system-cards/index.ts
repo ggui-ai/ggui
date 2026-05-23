@@ -76,7 +76,7 @@ function UnknownSystemCard({
       style: {
         padding: '16px',
         border: '1px solid var(--ggui-color-outlineVariant, #e4e4e7)',
-        borderRadius: 'var(--ggui-radius-md, 10px)',
+        borderRadius: 'var(--ggui-shape-radius-md, 10px)',
         fontFamily:
           'var(--ggui-font-family-sans, -apple-system, BlinkMacSystemFont, sans-serif)',
         background: 'var(--ggui-color-surfaceVariant, #f4f4f5)',

@@ -6,13 +6,13 @@
  * surfaces in the ggui manifest model, alongside
  * `ggui.primitives.json` and `ggui.ui.json`.
  *
- * **Why plain DTCG** (not the extended `DtcgTheme` shape that the ggui
- * Studio's curated picker uses): plain DTCG is what external tooling
- * already emits (Figma Tokens, Style Dictionary, Tokens Studio). The
- * extended shape carries hosting-vendor-specific vocabulary (`$category:
- * 'signature' | 'premium'`, `canvas.*`) — keeping it out of the open
- * `ggui.json#theme` contract is what makes the theme file
- * hosting-neutral.
+ * **Why plain DTCG** (not the canonical {@link DtcgTheme} shape that
+ * the ggui Studio's curated registry uses): plain DTCG is what
+ * external tooling already emits (Figma Tokens, Style Dictionary,
+ * Tokens Studio). The canonical shape carries hosting-vendor-specific
+ * vocabulary (`$name`/`$description`/`$metadata`, `canvas.*`) —
+ * keeping it out of the open `ggui.json#theme` contract is what makes
+ * the theme file hosting-neutral.
  *
  * **Ownership boundary:**
  *

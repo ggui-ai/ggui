@@ -33,6 +33,32 @@
  */
 
 import type { DtcgTheme } from '../types';
+import {
+  standardAccessibility,
+  standardTransitions,
+  standardZIndex,
+} from './_shared';
+
+// Claudic uses bespoke durations (120/240/480ms) that diverge from the
+// standard (100/200/300ms). Spread + override `fast`/`normal`/`slow`
+// so transition shorthands match the theme's actual motion tempo.
+// `colors`/`opacity`/`transform` keep the 200ms canonical default
+// (they were intentionally pinned in standardTransitions).
+const claudicTransitions = {
+  ...standardTransitions,
+  fast: {
+    $type: 'transition',
+    $value: '120ms cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  normal: {
+    $type: 'transition',
+    $value: '240ms cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+  slow: {
+    $type: 'transition',
+    $value: '480ms cubic-bezier(0.4, 0, 0.2, 1)',
+  },
+} as const;
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 //
@@ -156,6 +182,7 @@ const shared = {
         $type: 'keyframes',
       },
     },
+    transition: claudicTransitions,
   },
 } as const;
 
@@ -205,10 +232,45 @@ const claudicLight: DtcgTheme = {
     },
     // Semantic colors — kept in the warm family. Success skews olive
     // rather than emerald; warning is amber-orange; error is brick.
-    success: { $value: '#6b8e3d', $type: 'color' },
-    warning: { $value: '#c98e2e', $type: 'color' },
-    error: { $value: '#bc4a3a', $type: 'color' },
-    info: { $value: '#7c7a76', $type: 'color' }, // info reads as neutral muted in Claudic
+    // Each scale anchors the Claudic brand hex at `500` and ladders
+    // lighter/darker around it so consumers can reference 50/100/200/
+    // 600/700/800 stops with the same idiom as Tailwind-canonical scales.
+    success: {
+      '50': { $value: '#f4f7ec', $type: 'color' },
+      '100': { $value: '#e3ecd0', $type: 'color' },
+      '200': { $value: '#c8d8a5', $type: 'color' },
+      '500': { $value: '#6b8e3d', $type: 'color' }, // brand: olive
+      '600': { $value: '#587634', $type: 'color' },
+      '700': { $value: '#465c29', $type: 'color' },
+      '800': { $value: '#33431e', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#fbf3e3', $type: 'color' },
+      '100': { $value: '#f6e2bb', $type: 'color' },
+      '200': { $value: '#eac786', $type: 'color' },
+      '500': { $value: '#c98e2e', $type: 'color' }, // brand: amber-orange
+      '600': { $value: '#a87725', $type: 'color' },
+      '700': { $value: '#825c1d', $type: 'color' },
+      '800': { $value: '#5d4214', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#f9ebe7', $type: 'color' },
+      '100': { $value: '#f1cec5', $type: 'color' },
+      '200': { $value: '#e3a294', $type: 'color' },
+      '500': { $value: '#bc4a3a', $type: 'color' }, // brand: brick
+      '600': { $value: '#9d3d30', $type: 'color' },
+      '700': { $value: '#7a2f25', $type: 'color' },
+      '800': { $value: '#57211a', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#f1f0ee', $type: 'color' },
+      '100': { $value: '#dedcd8', $type: 'color' },
+      '200': { $value: '#bdbab4', $type: 'color' },
+      '500': { $value: '#7c7a76', $type: 'color' }, // brand: neutral muted
+      '600': { $value: '#65635f', $type: 'color' },
+      '700': { $value: '#4d4b48', $type: 'color' },
+      '800': { $value: '#363432', $type: 'color' },
+    },
     // Two-tier semantic roles
     surface: { $value: '#faf9f5', $type: 'color' }, // Ivory
     onSurface: { $value: '#141413', $type: 'color' }, // Slate
@@ -232,6 +294,19 @@ const claudicLight: DtcgTheme = {
     colors: { $value: [], $type: 'array' },
     background: { $value: '#faf9f5', $type: 'color' }, // Ivory
   },
+
+  // Focus ring uses Crail (primary-500) so keyboard focus reads as
+  // brand-aligned rather than the sky-blue WCAG default. Reduced-motion
+  // + high-contrast stay on standard defaults.
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#cc785c' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 // ── Claudic — Dark ─────────────────────────────────────────────────
@@ -279,10 +354,47 @@ const claudicDark: DtcgTheme = {
       '800': { $value: '#ebe9df', $type: 'color' },
       '900': { $value: '#faf9f5', $type: 'color' }, // Ivory (text)
     },
-    success: { $value: '#9bb56b', $type: 'color' },
-    warning: { $value: '#dba14a', $type: 'color' },
-    error: { $value: '#d56b59', $type: 'color' },
-    info: { $value: '#a8a59f', $type: 'color' },
+    // Dark-mode semantic scales — ladder INVERTS like the neutral
+    // ladder (50 = darkest, 800 = lightest). Brand hex stays anchored
+    // at `500`; 600+ pull progressively lighter so they sit readable
+    // against Charcoal surfaces, while 50-200 darken into deep warm
+    // backgrounds usable for tinted callout/banner surfaces.
+    success: {
+      '50': { $value: '#1c2412', $type: 'color' },
+      '100': { $value: '#34461e', $type: 'color' },
+      '200': { $value: '#4a6029', $type: 'color' },
+      '500': { $value: '#9bb56b', $type: 'color' }, // brand: olive (lifted for dark)
+      '600': { $value: '#b1c688', $type: 'color' },
+      '700': { $value: '#c8d8a5', $type: 'color' },
+      '800': { $value: '#e3ecd0', $type: 'color' },
+    },
+    warning: {
+      '50': { $value: '#2a1e0c', $type: 'color' },
+      '100': { $value: '#523915', $type: 'color' },
+      '200': { $value: '#7a541f', $type: 'color' },
+      '500': { $value: '#dba14a', $type: 'color' }, // brand: amber-orange (lifted for dark)
+      '600': { $value: '#e4b46e', $type: 'color' },
+      '700': { $value: '#eac786', $type: 'color' },
+      '800': { $value: '#f6e2bb', $type: 'color' },
+    },
+    error: {
+      '50': { $value: '#2a1410', $type: 'color' },
+      '100': { $value: '#52271f', $type: 'color' },
+      '200': { $value: '#7a3a2e', $type: 'color' },
+      '500': { $value: '#d56b59', $type: 'color' }, // brand: brick (lifted for dark)
+      '600': { $value: '#df8576', $type: 'color' },
+      '700': { $value: '#e3a294', $type: 'color' },
+      '800': { $value: '#f1cec5', $type: 'color' },
+    },
+    info: {
+      '50': { $value: '#222220', $type: 'color' },
+      '100': { $value: '#3a3936', $type: 'color' },
+      '200': { $value: '#56544f', $type: 'color' },
+      '500': { $value: '#a8a59f', $type: 'color' }, // brand: neutral muted (lifted for dark)
+      '600': { $value: '#bcbab5', $type: 'color' },
+      '700': { $value: '#d1cfca', $type: 'color' },
+      '800': { $value: '#e6e4e0', $type: 'color' },
+    },
     surface: { $value: '#262624', $type: 'color' }, // Charcoal
     onSurface: { $value: '#faf9f5', $type: 'color' }, // Ivory
     surfaceVariant: { $value: '#2d2c2a', $type: 'color' },
@@ -304,6 +416,20 @@ const claudicDark: DtcgTheme = {
     colors: { $value: [], $type: 'array' },
     background: { $value: '#1a1917', $type: 'color' },
   },
+
+  // Dark-mode focus ring uses the lifted Crail (primary-500 in the
+  // dark ladder) so the keyboard-focus halo still reads as Claudic
+  // brand against the warm-charcoal surface, rather than the sky-blue
+  // WCAG default.
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#d6896c' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 /**

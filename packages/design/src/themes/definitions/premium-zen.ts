@@ -13,6 +13,7 @@
  */
 
 import type { DtcgTheme } from '../types';
+import { standardAccessibility, standardZIndex } from './_shared';
 
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 const shared = {
@@ -125,6 +126,14 @@ const shared = {
         $type: 'keyframes',
       },
     },
+    transition: {
+      fast: { $type: 'transition', $value: '200ms cubic-bezier(0.33, 0, 0.67, 1)' },
+      normal: { $type: 'transition', $value: '500ms cubic-bezier(0.33, 0, 0.67, 1)' },
+      slow: { $type: 'transition', $value: '1500ms cubic-bezier(0.33, 0, 0.67, 1)' },
+      colors: { $type: 'transition', $value: 'color 500ms cubic-bezier(0.33, 0, 0.67, 1), background-color 500ms cubic-bezier(0.33, 0, 0.67, 1), border-color 500ms cubic-bezier(0.33, 0, 0.67, 1)' },
+      opacity: { $type: 'transition', $value: 'opacity 500ms cubic-bezier(0.33, 0, 0.67, 1)' },
+      transform: { $type: 'transition', $value: 'transform 500ms cubic-bezier(0.22, 1, 0.36, 1)' },
+    },
   },
 } as const;
 
@@ -165,10 +174,45 @@ const zenLight: DtcgTheme = {
       '800': { $value: '#3e3a36', $type: 'color' },
       '900': { $value: '#2a2724', $type: 'color' },
     },
-    success: { $value: '#6b8f5e', $type: 'color' },
-    warning: { $value: '#c9a84c', $type: 'color' },
-    error: { $value: '#b85450', $type: 'color' },
-    info: { $value: '#6a8fa0', $type: 'color' },
+    // Zen-custom semantic scales — restrained, low-saturation; existing
+    // brand singletons preserved at 500; lighter/darker stops derived by
+    // HSL ramp around each anchor.
+    success: {
+      '50': { $type: 'color', $value: '#f0f4ee' },
+      '100': { $type: 'color', $value: '#dde6d8' },
+      '200': { $type: 'color', $value: '#c6d4be' },
+      '500': { $type: 'color', $value: '#6b8f5e' },
+      '600': { $type: 'color', $value: '#58754d' },
+      '700': { $type: 'color', $value: '#43583a' },
+      '800': { $type: 'color', $value: '#2f3e29' },
+    },
+    warning: {
+      '50': { $type: 'color', $value: '#faf6ea' },
+      '100': { $type: 'color', $value: '#f4ebcb' },
+      '200': { $type: 'color', $value: '#ecdda4' },
+      '500': { $type: 'color', $value: '#c9a84c' },
+      '600': { $type: 'color', $value: '#a88a3a' },
+      '700': { $type: 'color', $value: '#7e672c' },
+      '800': { $type: 'color', $value: '#59481f' },
+    },
+    error: {
+      '50': { $type: 'color', $value: '#f8edec' },
+      '100': { $type: 'color', $value: '#efd0ce' },
+      '200': { $type: 'color', $value: '#e3aba8' },
+      '500': { $type: 'color', $value: '#b85450' },
+      '600': { $type: 'color', $value: '#9a4340' },
+      '700': { $type: 'color', $value: '#743330' },
+      '800': { $type: 'color', $value: '#522423' },
+    },
+    info: {
+      '50': { $type: 'color', $value: '#eef3f5' },
+      '100': { $type: 'color', $value: '#d7e2e7' },
+      '200': { $type: 'color', $value: '#b9cdd5' },
+      '500': { $type: 'color', $value: '#6a8fa0' },
+      '600': { $type: 'color', $value: '#557585' },
+      '700': { $type: 'color', $value: '#405864' },
+      '800': { $type: 'color', $value: '#2c3d46' },
+    },
     // Semantic roles
     surface: { $value: '#faf9f7', $type: 'color' },
     onSurface: { $value: '#2a2724', $type: 'color' },
@@ -198,6 +242,16 @@ const zenLight: DtcgTheme = {
     },
     background: { $value: '#1a1816', $type: 'color' },
   },
+
+  accessibility: {
+    ...standardAccessibility.light,
+    focusRing: {
+      ...standardAccessibility.light.focusRing,
+      color: { $type: 'color', $value: '#748660' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 // ── Zen — Dark ─────────────────────────────────────────────────────
@@ -243,10 +297,43 @@ const zenDark: DtcgTheme = {
       '900': { $value: '#faf9f7', $type: 'color' }, // off-cream
     },
     // Semantic colors — held to similar low saturation as light variant.
-    success: { $value: '#8aab7a', $type: 'color' },
-    warning: { $value: '#d8b96a', $type: 'color' },
-    error: { $value: '#cf6f6a', $type: 'color' },
-    info: { $value: '#8eaab8', $type: 'color' },
+    // Zen-custom 7-stop scales; existing brand singletons preserved at 500.
+    success: {
+      '50': { $type: 'color', $value: '#f1f6ee' },
+      '100': { $type: 'color', $value: '#dceacc' },
+      '200': { $type: 'color', $value: '#c4dab1' },
+      '500': { $type: 'color', $value: '#8aab7a' },
+      '600': { $type: 'color', $value: '#6f8d62' },
+      '700': { $type: 'color', $value: '#546b4a' },
+      '800': { $type: 'color', $value: '#3a4b34' },
+    },
+    warning: {
+      '50': { $type: 'color', $value: '#fbf6e9' },
+      '100': { $type: 'color', $value: '#f4e9c1' },
+      '200': { $type: 'color', $value: '#ecdda4' },
+      '500': { $type: 'color', $value: '#d8b96a' },
+      '600': { $type: 'color', $value: '#b09553' },
+      '700': { $type: 'color', $value: '#84703d' },
+      '800': { $type: 'color', $value: '#5a4c2a' },
+    },
+    error: {
+      '50': { $type: 'color', $value: '#faeae9' },
+      '100': { $type: 'color', $value: '#f1cac8' },
+      '200': { $type: 'color', $value: '#e4a5a1' },
+      '500': { $type: 'color', $value: '#cf6f6a' },
+      '600': { $type: 'color', $value: '#a85753' },
+      '700': { $type: 'color', $value: '#7d403c' },
+      '800': { $type: 'color', $value: '#552a27' },
+    },
+    info: {
+      '50': { $type: 'color', $value: '#f0f4f6' },
+      '100': { $type: 'color', $value: '#d7e0e5' },
+      '200': { $type: 'color', $value: '#bccbd2' },
+      '500': { $type: 'color', $value: '#8eaab8' },
+      '600': { $type: 'color', $value: '#708995' },
+      '700': { $type: 'color', $value: '#546771' },
+      '800': { $type: 'color', $value: '#38454d' },
+    },
     surface: { $value: '#2a2724', $type: 'color' },
     onSurface: { $value: '#f3f1ed', $type: 'color' }, // muted off-cream, not pure white
     surfaceVariant: { $value: '#3e3a36', $type: 'color' },
@@ -275,6 +362,16 @@ const zenDark: DtcgTheme = {
     },
     background: { $value: '#1a1816', $type: 'color' },
   },
+
+  accessibility: {
+    ...standardAccessibility.dark,
+    focusRing: {
+      ...standardAccessibility.dark.focusRing,
+      color: { $type: 'color', $value: '#93a17c' },
+    },
+  },
+
+  zIndex: standardZIndex,
 };
 
 /** Zen registration — both modes ship from day one. */

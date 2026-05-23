@@ -2,14 +2,15 @@
  * Default Dark Theme
  *
  * Professional dark theme with excellent contrast ratios and
- * modern dark mode aesthetics.
+ * modern dark mode aesthetics. Companion to {@link lightTheme}.
  */
 
-import type { BaseDtcgTheme } from '../dtcg/types';
+import type { DtcgTheme } from '../types';
 
-export const darkTheme: BaseDtcgTheme = {
-  $schema: 'https://design-tokens.github.io/community-group/format/',
-  $version: '1.0.0',
+export const darkTheme: DtcgTheme = {
+  $name: 'Default Dark',
+  $description:
+    'ggui default dark theme — sky-blue primary lifted for dark, slate neutrals, WCAG-AA contrast.',
 
   color: {
     primary: {
@@ -24,7 +25,7 @@ export const darkTheme: BaseDtcgTheme = {
       '800': { $type: 'color', $value: '#e0f2fe' },
       '900': { $type: 'color', $value: '#f0f9ff' },
     },
-    gray: {
+    neutral: {
       '50': { $type: 'color', $value: '#111827' },
       '100': { $type: 'color', $value: '#1f2937' },
       '200': { $type: 'color', $value: '#374151' },
@@ -72,12 +73,49 @@ export const darkTheme: BaseDtcgTheme = {
       '700': { $type: 'color', $value: '#fca5a5' },
       '800': { $type: 'color', $value: '#fecaca' },
     },
-    background: { $type: 'color', $value: '#0f172a' },
     surface: { $type: 'color', $value: '#1e293b' },
-    text: {
-      primary: { $type: 'color', $value: '#f1f5f9' },
-      secondary: { $type: 'color', $value: '#94a3b8' },
-      disabled: { $type: 'color', $value: '#475569' },
+    onSurface: { $type: 'color', $value: '#f1f5f9' },
+    surfaceVariant: { $type: 'color', $value: '#334155' },
+    onSurfaceVariant: { $type: 'color', $value: '#94a3b8' },
+    container: { $type: 'color', $value: '#0f172a' },
+    onContainer: { $type: 'color', $value: '#f1f5f9' },
+    outline: { $type: 'color', $value: '#64748b' },
+    outlineVariant: { $type: 'color', $value: '#475569' },
+  },
+
+  font: {
+    family: {
+      sans: {
+        $type: 'fontFamily',
+        $value:
+          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      },
+      mono: {
+        $type: 'fontFamily',
+        $value:
+          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      },
+    },
+    size: {
+      xs: { $type: 'dimension', $value: '12px' },
+      sm: { $type: 'dimension', $value: '14px' },
+      base: { $type: 'dimension', $value: '16px' },
+      lg: { $type: 'dimension', $value: '18px' },
+      xl: { $type: 'dimension', $value: '20px' },
+      '2xl': { $type: 'dimension', $value: '24px' },
+      '3xl': { $type: 'dimension', $value: '30px' },
+      '4xl': { $type: 'dimension', $value: '36px' },
+    },
+    weight: {
+      normal: { $type: 'fontWeight', $value: '400' },
+      medium: { $type: 'fontWeight', $value: '500' },
+      semibold: { $type: 'fontWeight', $value: '600' },
+      bold: { $type: 'fontWeight', $value: '700' },
+    },
+    lineHeight: {
+      tight: { $type: 'number', $value: '1.25' },
+      normal: { $type: 'number', $value: '1.5' },
+      relaxed: { $type: 'number', $value: '1.75' },
     },
   },
 
@@ -91,136 +129,59 @@ export const darkTheme: BaseDtcgTheme = {
     '3xl': { $type: 'dimension', $value: '64px' },
   },
 
-  typography: {
-    fontFamily: {
-      sans: {
-        $type: 'fontFamily',
-        // Mirrors the lightTheme system stack — see defaults/light.ts.
-        $value: [
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'sans-serif',
-        ],
-      },
-      mono: {
-        $type: 'fontFamily',
-        $value: [
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Monaco',
-          'Consolas',
-          'monospace',
-        ],
-      },
-    },
-    fontSize: {
-      xs: { $type: 'dimension', $value: '12px' },
-      sm: { $type: 'dimension', $value: '14px' },
-      base: { $type: 'dimension', $value: '16px' },
-      lg: { $type: 'dimension', $value: '18px' },
-      xl: { $type: 'dimension', $value: '20px' },
+  shape: {
+    radius: {
+      none: { $type: 'dimension', $value: '0' },
+      sm: { $type: 'dimension', $value: '4px' },
+      md: { $type: 'dimension', $value: '8px' },
+      lg: { $type: 'dimension', $value: '12px' },
+      xl: { $type: 'dimension', $value: '16px' },
       '2xl': { $type: 'dimension', $value: '24px' },
-      '3xl': { $type: 'dimension', $value: '30px' },
-      '4xl': { $type: 'dimension', $value: '36px' },
+      full: { $type: 'dimension', $value: '9999px' },
     },
-    fontWeight: {
-      normal: { $type: 'fontWeight', $value: 400 },
-      medium: { $type: 'fontWeight', $value: 500 },
-      semibold: { $type: 'fontWeight', $value: 600 },
-      bold: { $type: 'fontWeight', $value: 700 },
-    },
-    lineHeight: {
-      tight: { $type: 'dimension', $value: '1.25' },
-      normal: { $type: 'dimension', $value: '1.5' },
-      relaxed: { $type: 'dimension', $value: '1.75' },
+    shadow: {
+      none: { $type: 'shadow', $value: '0 0 0 0 transparent' },
+      xs: { $type: 'shadow', $value: '0 1px 2px 0 rgba(0, 0, 0, 0.20)' },
+      sm: { $type: 'shadow', $value: '0 1px 3px 0 rgba(0, 0, 0, 0.30)' },
+      md: { $type: 'shadow', $value: '0 8px 16px -4px rgba(0, 0, 0, 0.40)' },
+      lg: { $type: 'shadow', $value: '0 16px 32px -8px rgba(0, 0, 0, 0.50)' },
+      xl: { $type: 'shadow', $value: '0 24px 48px -12px rgba(0, 0, 0, 0.60)' },
+      '2xl': { $type: 'shadow', $value: '0 25px 50px -12px rgba(0, 0, 0, 0.60)' },
     },
   },
 
-  radius: {
-    none: { $type: 'dimension', $value: '0' },
-    sm: { $type: 'dimension', $value: '4px' },
-    md: { $type: 'dimension', $value: '8px' },
-    lg: { $type: 'dimension', $value: '12px' },
-    xl: { $type: 'dimension', $value: '16px' },
-    '2xl': { $type: 'dimension', $value: '24px' },
-    full: { $type: 'dimension', $value: '9999px' },
+  motion: {
+    duration: {
+      instant: { $type: 'duration', $value: '0ms' },
+      fast: { $type: 'duration', $value: '100ms' },
+      normal: { $type: 'duration', $value: '200ms' },
+      slow: { $type: 'duration', $value: '300ms' },
+      slower: { $type: 'duration', $value: '500ms' },
+    },
+    easing: {
+      default: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+      easeOut: { $type: 'cubicBezier', $value: 'cubic-bezier(0, 0, 0.2, 1)' },
+      easeIn: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 1, 1)' },
+    },
+    transition: {
+      fast: { $type: 'transition', $value: '100ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      normal: { $type: 'transition', $value: '200ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      slow: { $type: 'transition', $value: '300ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      colors: {
+        $type: 'transition',
+        $value: 'color 200ms cubic-bezier(0.4, 0, 0.2, 1), background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      opacity: { $type: 'transition', $value: 'opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      transform: { $type: 'transition', $value: 'transform 200ms cubic-bezier(0, 0, 0.2, 1)' },
+    },
+    keyframes: {},
   },
 
-  shadow: {
-    none: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '0',
-        blur: '0',
-        spread: '0',
-        color: 'transparent',
-      },
-    },
-    xs: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '1px',
-        blur: '2px',
-        spread: '0',
-        color: 'rgba(0, 0, 0, 0.20)',
-      },
-    },
-    sm: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '1px',
-        blur: '3px',
-        spread: '0',
-        color: 'rgba(0, 0, 0, 0.30)',
-      },
-    },
-    md: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '8px',
-        blur: '16px',
-        spread: '-4px',
-        color: 'rgba(0, 0, 0, 0.40)',
-      },
-    },
-    lg: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '16px',
-        blur: '32px',
-        spread: '-8px',
-        color: 'rgba(0, 0, 0, 0.50)',
-      },
-    },
-    xl: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '24px',
-        blur: '48px',
-        spread: '-12px',
-        color: 'rgba(0, 0, 0, 0.60)',
-      },
-    },
-    '2xl': {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '25px',
-        blur: '50px',
-        spread: '-12px',
-        color: 'rgba(0, 0, 0, 0.6)',
-      },
-    },
+  canvas: {
+    mode: { $type: 'string', $value: 'none' },
+    speed: { $type: 'number', $value: 0 },
+    colors: { $type: 'array', $value: [] },
+    background: { $type: 'color', $value: '#0f172a' },
   },
 
   accessibility: {
@@ -253,52 +214,5 @@ export const darkTheme: BaseDtcgTheme = {
     skipLink: { $type: 'number', $value: 1600 },
     toast: { $type: 'number', $value: 1700 },
     tooltip: { $type: 'number', $value: 1800 },
-  },
-
-  duration: {
-    instant: { $type: 'duration', $value: '0ms' },
-    fast: { $type: 'duration', $value: '100ms' },
-    normal: { $type: 'duration', $value: '200ms' },
-    slow: { $type: 'duration', $value: '300ms' },
-    slower: { $type: 'duration', $value: '500ms' },
-  },
-
-  transition: {
-    fast: {
-      $type: 'transition',
-      $value: { duration: '100ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    normal: {
-      $type: 'transition',
-      $value: { duration: '200ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    slow: {
-      $type: 'transition',
-      $value: { duration: '300ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    colors: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        property: 'color, background-color, border-color',
-      },
-    },
-    opacity: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        property: 'opacity',
-      },
-    },
-    transform: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0, 0, 0.2, 1)',
-        property: 'transform',
-      },
-    },
   },
 };

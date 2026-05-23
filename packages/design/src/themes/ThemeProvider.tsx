@@ -5,12 +5,12 @@
  */
 
 import React, { createContext, useContext, useMemo } from 'react';
-import type { BaseDtcgTheme } from './dtcg/types';
-import { generateCssVariables, themeToCssVarReferences } from './dtcg/parser';
+import type { DtcgTheme } from './types';
+import { generateCssVariables, themeToCssVarReferences } from './parser';
 import { lightTheme } from './defaults/light';
 
 interface ThemeContextValue {
-  theme: BaseDtcgTheme;
+  theme: DtcgTheme;
   cssVars: Record<string, string>;
   mode: 'light' | 'dark';
 }
@@ -30,11 +30,11 @@ export function useTheme() {
 }
 
 interface ThemeProviderProps {
-  theme?: BaseDtcgTheme;
+  theme?: DtcgTheme;
   mode?: 'light' | 'dark';
   /**
    * When true, the body background is rendered as `transparent`
-   * instead of the theme's `--ggui-color-background`. Used when the
+   * instead of the theme's `--ggui-color-surface`. Used when the
    * runtime is embedded in a host that draws its own chrome around
    * our content (claude.ai chat bubbles, Claude Desktop iframe) — a
    * solid background would create a visible card-on-card frame.
@@ -114,13 +114,13 @@ export function ThemeProvider({
     // the visual layering we want: transparent canvas, opaque cards.
     const bodyBackground = transparent
       ? 'transparent'
-      : 'var(--ggui-color-background, #ffffff)';
+      : 'var(--ggui-color-surface, #ffffff)';
     const baseRules = `
 html, body {
   margin: 0;
   font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);
   background: ${bodyBackground};
-  color: var(--ggui-color-text-primary, #18181b);
+  color: var(--ggui-color-onSurface, #18181b);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color-scheme: ${mode};

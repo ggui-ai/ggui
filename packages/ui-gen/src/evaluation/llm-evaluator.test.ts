@@ -281,7 +281,7 @@ describe('parseEvalResponse', () => {
           category: 'visual',
           severity: 'major',
           description: 'Inconsistent border radius',
-          fix: 'Use --ggui-radius-md',
+          fix: 'Use --ggui-shape-radius-md',
         },
         {
           tier: 2,

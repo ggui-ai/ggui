@@ -737,15 +737,32 @@ export function flattenLeaves(theme: DtcgTheme): readonly LeafGroup[] {
     prefix: 'color.neutral',
     leaves: ladderLeaves('color.neutral', theme.color.neutral),
   });
-  // Semantic color roles (DTCG two-tier: 8 leaves)
+  // Semantic color scales (success/warning/error/info — 50..800 ladders).
   groups.push({
-    label: 'Color · Semantic',
+    label: 'Color · Success',
+    prefix: 'color.success',
+    leaves: ladderLeaves('color.success', theme.color.success),
+  });
+  groups.push({
+    label: 'Color · Warning',
+    prefix: 'color.warning',
+    leaves: ladderLeaves('color.warning', theme.color.warning),
+  });
+  groups.push({
+    label: 'Color · Error',
+    prefix: 'color.error',
+    leaves: ladderLeaves('color.error', theme.color.error),
+  });
+  groups.push({
+    label: 'Color · Info',
+    prefix: 'color.info',
+    leaves: ladderLeaves('color.info', theme.color.info),
+  });
+  // Material 3 semantic role pairs (8 leaves).
+  groups.push({
+    label: 'Color · Roles',
     prefix: 'color',
     leaves: [
-      { path: 'color.success', value: stringify(theme.color.success) },
-      { path: 'color.warning', value: stringify(theme.color.warning) },
-      { path: 'color.error', value: stringify(theme.color.error) },
-      { path: 'color.info', value: stringify(theme.color.info) },
       { path: 'color.surface', value: stringify(theme.color.surface) },
       { path: 'color.onSurface', value: stringify(theme.color.onSurface) },
       { path: 'color.surfaceVariant', value: stringify(theme.color.surfaceVariant) },

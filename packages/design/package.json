@@ -35,10 +35,6 @@
       "types": "./dist/themes/index.d.ts",
       "import": "./dist/themes/index.js"
     },
-    "./themes/dtcg": {
-      "types": "./dist/themes/dtcg/index.d.ts",
-      "import": "./dist/themes/dtcg/index.js"
-    },
     "./interact": {
       "types": "./dist/interact/index.d.ts",
       "import": "./dist/interact/index.js"

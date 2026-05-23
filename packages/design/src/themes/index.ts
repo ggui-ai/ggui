@@ -1,21 +1,15 @@
 /**
  * Theme Module Exports
  *
- * Provides the DTCG-based theming system including token parsers, a theme
- * registry with built-in themes, default light/dark themes, and React
- * context providers for runtime theme switching.
+ * Single canonical theme surface for `@ggui-ai/design`. One shape
+ * ({@link DtcgTheme}), one walker ({@link parseTheme}), one registry.
+ *
+ * The previous split between a "base DTCG" and an "extended DTCG"
+ * encoding was retired pre-rc.1 — see
+ * `docs/plans/2026-05-23-dtcg-theme-consolidation.md`.
  */
 
-// Legacy DTCG Types and Parser (base token system)
-export type { BaseDtcgTheme, DTCGToken, DTCGTokenType, ShadowValue } from './dtcg/types';
-export {
-  generateCssVariables,
-  generateScopedCssVariables,
-  themeToCssVarReferences,
-  generateCssVariableDocumentation,
-} from './dtcg/parser';
-
-// Extended DTCG Theme Types (theme selector system)
+// Theme types
 export type {
   DtcgTheme,
   DtcgToken,
@@ -25,14 +19,22 @@ export type {
   ThemeRegistration,
 } from './types';
 
-// Theme Parser (extended)
-export { parseTheme } from './parser';
+// Theme parser — `parseTheme` for the strict DtcgTheme path,
+// `generateCssVariables` / `generateScopedCssVariables` / `themeToCssVarReferences`
+// for the duck-typed file-format path (consumed by `loadTheme({ file })`).
+export {
+  parseTheme,
+  generateCssVariables,
+  generateScopedCssVariables,
+  themeToCssVarReferences,
+  generateThemeReferenceDocumentation,
+} from './parser';
 
-// Theme Validator
+// Theme validator
 export { validateTheme } from './validate';
 export type { ValidationResult, ValidationIssue } from './validate';
 
-// Theme Registry
+// Theme registry
 export {
   getTheme,
   getRawTheme,
@@ -41,9 +43,9 @@ export {
   getThemeIds,
 } from './registry';
 
-// Default Themes
+// Default themes
 export { lightTheme } from './defaults/light';
 export { darkTheme } from './defaults/dark';
 
-// Theme Provider
+// Theme provider
 export { ThemeProvider, useTheme } from './ThemeProvider';

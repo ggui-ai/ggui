@@ -17,11 +17,13 @@
  * ## cssVariables pre-rendering
  *
  * The loader pre-renders the `:root { --ggui-*: value; }` CSS block
- * via either `@ggui-ai/design/themes` (preset path, full DTCG with
- * canvas + motion tokens) or `@ggui-ai/design/themes/dtcg#generateCssVariables`
- * (file path, plain DTCG). Downstream consumers (console, render
- * endpoint, MCP apps iframe) inject the pre-rendered string without
- * re-walking the token tree.
+ * via `@ggui-ai/design/themes`: `parseTheme(id, DtcgTheme)` for the
+ * preset / default paths (full DTCG with canvas + motion tokens) and
+ * `generateCssVariables(ThemeDocument)` for the file path (the
+ * duck-typed walker accepts the plain DTCG document without requiring
+ * the strict {@link DtcgTheme} shape). Downstream consumers (console,
+ * render endpoint, MCP apps iframe) inject the pre-rendered string
+ * without re-walking the token tree.
  *
  * ## Mode handling
  *
@@ -35,14 +37,12 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import {
   generateCssVariables,
+  getRawTheme,
+  getTheme,
   lightTheme,
-} from '@ggui-ai/design/themes/dtcg';
-import { getRawTheme, getTheme, parseTheme } from '@ggui-ai/design/themes';
-import type {
-  BaseDtcgTheme,
-  DtcgTheme,
-  ThemeMode,
+  parseTheme,
 } from '@ggui-ai/design/themes';
+import type { DtcgTheme, ThemeMode } from '@ggui-ai/design/themes';
 import type { GguiJsonV1, ThemeConfig } from './schema.js';
 import { parseThemeDocument, type ThemeDocument } from './theme.js';
 
@@ -51,17 +51,15 @@ import { parseThemeDocument, type ThemeDocument } from './theme.js';
  * the resolved `mode`, the parsed token document, and the pre-rendered
  * `--ggui-*` CSS variable block.
  *
- * **`document` is shape-discriminated by `source`** (no casts, three
+ * **`document` is shape-discriminated by `source`** (no casts, two
  * genuinely-distinct underlying types):
  *
- *   - `default` → `BaseDtcgTheme` (base DTCG layout used by the shipped
- *     `lightTheme` / `darkTheme` literals in `@ggui-ai/design`).
- *   - `preset`  → `DtcgTheme` (the extended-DTCG registry layout — adds
- *     `$name`/`$description`/`$metadata` + `motion` + `canvas` over the
- *     base; what `getRawTheme()`/`parseTheme()` produce).
- *   - `file`    → `ThemeDocument` (the flat strict-Zod schema validated
- *     by `parseThemeDocument()` — top-level `typography`/`radius`/`shadow`,
- *     no DTCG metadata keys).
+ *   - `default` / `preset` → `DtcgTheme` (the single canonical theme
+ *     shape consumed by every registry-side theme — produces full
+ *     `--ggui-*` CSS through `parseTheme`).
+ *   - `file` → `ThemeDocument` (the flat strict-Zod schema for the
+ *     open `ggui.json#theme` file format — `typography`/`radius`/
+ *     `shadow` at the top level, optional motion/accessibility/zIndex).
  *
  * Consumers narrow on `source` if they ever need the shape. CSS-variable
  * emission happens upstream into `cssVariables`, so most downstream code
@@ -71,7 +69,7 @@ export type LoadedTheme =
   | {
       readonly source: 'default';
       readonly mode: ThemeMode;
-      readonly document: BaseDtcgTheme;
+      readonly document: DtcgTheme;
       readonly cssVariables: string;
     }
   | {
@@ -160,7 +158,7 @@ export function loadTheme(options: LoadThemeOptions): LoadThemeResult {
         source: 'default',
         mode: 'light',
         document: lightTheme,
-        cssVariables: generateCssVariables(lightTheme),
+        cssVariables: parseTheme('default', lightTheme).cssVariables,
       },
     };
   }

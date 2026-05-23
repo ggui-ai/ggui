@@ -8,11 +8,12 @@
  * - Versatility (Works for SaaS, dashboards, consumer apps)
  */
 
-import type { BaseDtcgTheme } from '../dtcg/types';
+import type { DtcgTheme } from '../types';
 
-export const lightTheme: BaseDtcgTheme = {
-  $schema: 'https://design-tokens.github.io/community-group/format/',
-  $version: '1.0.0',
+export const lightTheme: DtcgTheme = {
+  $name: 'Default Light',
+  $description:
+    'ggui default light theme — sky-blue primary, neutral foundation, WCAG-AA contrast, system font stack.',
 
   color: {
     primary: {
@@ -27,7 +28,7 @@ export const lightTheme: BaseDtcgTheme = {
       '800': { $type: 'color', $value: '#075985' },
       '900': { $type: 'color', $value: '#0c4a6e' },
     },
-    gray: {
+    neutral: {
       '50': { $type: 'color', $value: '#f9fafb' },
       '100': { $type: 'color', $value: '#f3f4f6' },
       '200': { $type: 'color', $value: '#e5e7eb' },
@@ -75,12 +76,58 @@ export const lightTheme: BaseDtcgTheme = {
       '700': { $type: 'color', $value: '#b91c1c' },
       '800': { $type: 'color', $value: '#991b1b' },
     },
-    background: { $type: 'color', $value: '#ffffff' },
+    // Material 3 semantic role pairs.
+    // Mapping decision (B-iii):
+    //   background    → surface
+    //   text.primary   → onSurface
+    //   text.secondary → onSurfaceVariant
+    //   text.disabled  → outlineVariant
     surface: { $type: 'color', $value: '#ffffff' },
-    text: {
-      primary: { $type: 'color', $value: '#111827' },
-      secondary: { $type: 'color', $value: '#6b7280' },
-      disabled: { $type: 'color', $value: '#d1d5db' },
+    onSurface: { $type: 'color', $value: '#111827' },
+    surfaceVariant: { $type: 'color', $value: '#f3f4f6' },
+    onSurfaceVariant: { $type: 'color', $value: '#6b7280' },
+    container: { $type: 'color', $value: '#f9fafb' },
+    onContainer: { $type: 'color', $value: '#111827' },
+    outline: { $type: 'color', $value: '#9ca3af' },
+    outlineVariant: { $type: 'color', $value: '#d1d5db' },
+  },
+
+  font: {
+    family: {
+      // OSS default = system stack. No Google Fonts dependency, no FOUT,
+      // works inside CSP-locked iframe sandboxes (claude.ai etc.).
+      // Branded fonts (Inter, etc.) live on opt-in premium themes.
+      sans: {
+        $type: 'fontFamily',
+        $value:
+          'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      },
+      mono: {
+        $type: 'fontFamily',
+        $value:
+          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      },
+    },
+    size: {
+      xs: { $type: 'dimension', $value: '12px' },
+      sm: { $type: 'dimension', $value: '14px' },
+      base: { $type: 'dimension', $value: '16px' },
+      lg: { $type: 'dimension', $value: '18px' },
+      xl: { $type: 'dimension', $value: '20px' },
+      '2xl': { $type: 'dimension', $value: '24px' },
+      '3xl': { $type: 'dimension', $value: '30px' },
+      '4xl': { $type: 'dimension', $value: '36px' },
+    },
+    weight: {
+      normal: { $type: 'fontWeight', $value: '400' },
+      medium: { $type: 'fontWeight', $value: '500' },
+      semibold: { $type: 'fontWeight', $value: '600' },
+      bold: { $type: 'fontWeight', $value: '700' },
+    },
+    lineHeight: {
+      tight: { $type: 'number', $value: '1.25' },
+      normal: { $type: 'number', $value: '1.5' },
+      relaxed: { $type: 'number', $value: '1.75' },
     },
   },
 
@@ -94,138 +141,59 @@ export const lightTheme: BaseDtcgTheme = {
     '3xl': { $type: 'dimension', $value: '64px' },
   },
 
-  typography: {
-    fontFamily: {
-      sans: {
-        $type: 'fontFamily',
-        // OSS default = system stack. No Google Fonts dependency, no FOUT,
-        // works inside CSP-locked iframe sandboxes (claude.ai etc.).
-        // Branded fonts (Inter, etc.) live on opt-in premium themes.
-        $value: [
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'sans-serif',
-        ],
-      },
-      mono: {
-        $type: 'fontFamily',
-        $value: [
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Monaco',
-          'Consolas',
-          'monospace',
-        ],
-      },
-    },
-    fontSize: {
-      xs: { $type: 'dimension', $value: '12px' },
-      sm: { $type: 'dimension', $value: '14px' },
-      base: { $type: 'dimension', $value: '16px' },
-      lg: { $type: 'dimension', $value: '18px' },
-      xl: { $type: 'dimension', $value: '20px' },
+  shape: {
+    radius: {
+      none: { $type: 'dimension', $value: '0' },
+      sm: { $type: 'dimension', $value: '4px' },
+      md: { $type: 'dimension', $value: '8px' },
+      lg: { $type: 'dimension', $value: '12px' },
+      xl: { $type: 'dimension', $value: '16px' },
       '2xl': { $type: 'dimension', $value: '24px' },
-      '3xl': { $type: 'dimension', $value: '30px' },
-      '4xl': { $type: 'dimension', $value: '36px' },
+      full: { $type: 'dimension', $value: '9999px' },
     },
-    fontWeight: {
-      normal: { $type: 'fontWeight', $value: 400 },
-      medium: { $type: 'fontWeight', $value: 500 },
-      semibold: { $type: 'fontWeight', $value: 600 },
-      bold: { $type: 'fontWeight', $value: 700 },
-    },
-    lineHeight: {
-      tight: { $type: 'dimension', $value: '1.25' },
-      normal: { $type: 'dimension', $value: '1.5' },
-      relaxed: { $type: 'dimension', $value: '1.75' },
+    shadow: {
+      none: { $type: 'shadow', $value: '0 0 0 0 transparent' },
+      xs: { $type: 'shadow', $value: '0 1px 2px 0 rgba(15, 23, 42, 0.04)' },
+      sm: { $type: 'shadow', $value: '0 1px 3px 0 rgba(15, 23, 42, 0.06)' },
+      md: { $type: 'shadow', $value: '0 8px 16px -4px rgba(15, 23, 42, 0.10)' },
+      lg: { $type: 'shadow', $value: '0 16px 32px -8px rgba(15, 23, 42, 0.14)' },
+      xl: { $type: 'shadow', $value: '0 24px 48px -12px rgba(15, 23, 42, 0.18)' },
+      '2xl': { $type: 'shadow', $value: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' },
     },
   },
 
-  radius: {
-    none: { $type: 'dimension', $value: '0' },
-    sm: { $type: 'dimension', $value: '4px' },
-    md: { $type: 'dimension', $value: '8px' },
-    lg: { $type: 'dimension', $value: '12px' },
-    xl: { $type: 'dimension', $value: '16px' },
-    '2xl': { $type: 'dimension', $value: '24px' },
-    full: { $type: 'dimension', $value: '9999px' },
+  motion: {
+    duration: {
+      instant: { $type: 'duration', $value: '0ms' },
+      fast: { $type: 'duration', $value: '100ms' },
+      normal: { $type: 'duration', $value: '200ms' },
+      slow: { $type: 'duration', $value: '300ms' },
+      slower: { $type: 'duration', $value: '500ms' },
+    },
+    easing: {
+      default: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+      easeOut: { $type: 'cubicBezier', $value: 'cubic-bezier(0, 0, 0.2, 1)' },
+      easeIn: { $type: 'cubicBezier', $value: 'cubic-bezier(0.4, 0, 1, 1)' },
+    },
+    transition: {
+      fast: { $type: 'transition', $value: '100ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      normal: { $type: 'transition', $value: '200ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      slow: { $type: 'transition', $value: '300ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      colors: {
+        $type: 'transition',
+        $value: 'color 200ms cubic-bezier(0.4, 0, 0.2, 1), background-color 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      opacity: { $type: 'transition', $value: 'opacity 200ms cubic-bezier(0.4, 0, 0.2, 1)' },
+      transform: { $type: 'transition', $value: 'transform 200ms cubic-bezier(0, 0, 0.2, 1)' },
+    },
+    keyframes: {},
   },
 
-  shadow: {
-    none: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '0',
-        blur: '0',
-        spread: '0',
-        color: 'transparent',
-      },
-    },
-    xs: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '1px',
-        blur: '2px',
-        spread: '0',
-        color: 'rgba(15, 23, 42, 0.04)',
-      },
-    },
-    sm: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '1px',
-        blur: '3px',
-        spread: '0',
-        color: 'rgba(15, 23, 42, 0.06)',
-      },
-    },
-    md: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '8px',
-        blur: '16px',
-        spread: '-4px',
-        color: 'rgba(15, 23, 42, 0.10)',
-      },
-    },
-    lg: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '16px',
-        blur: '32px',
-        spread: '-8px',
-        color: 'rgba(15, 23, 42, 0.14)',
-      },
-    },
-    xl: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '24px',
-        blur: '48px',
-        spread: '-12px',
-        color: 'rgba(15, 23, 42, 0.18)',
-      },
-    },
-    '2xl': {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '25px',
-        blur: '50px',
-        spread: '-12px',
-        color: 'rgba(0, 0, 0, 0.25)',
-      },
-    },
+  canvas: {
+    mode: { $type: 'string', $value: 'none' },
+    speed: { $type: 'number', $value: 0 },
+    colors: { $type: 'array', $value: [] },
+    background: { $type: 'color', $value: '#ffffff' },
   },
 
   accessibility: {
@@ -258,52 +226,5 @@ export const lightTheme: BaseDtcgTheme = {
     skipLink: { $type: 'number', $value: 1600 },
     toast: { $type: 'number', $value: 1700 },
     tooltip: { $type: 'number', $value: 1800 },
-  },
-
-  duration: {
-    instant: { $type: 'duration', $value: '0ms' },
-    fast: { $type: 'duration', $value: '100ms' },
-    normal: { $type: 'duration', $value: '200ms' },
-    slow: { $type: 'duration', $value: '300ms' },
-    slower: { $type: 'duration', $value: '500ms' },
-  },
-
-  transition: {
-    fast: {
-      $type: 'transition',
-      $value: { duration: '100ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    normal: {
-      $type: 'transition',
-      $value: { duration: '200ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    slow: {
-      $type: 'transition',
-      $value: { duration: '300ms', timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' },
-    },
-    colors: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        property: 'color, background-color, border-color',
-      },
-    },
-    opacity: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        property: 'opacity',
-      },
-    },
-    transform: {
-      $type: 'transition',
-      $value: {
-        duration: '200ms',
-        timingFunction: 'cubic-bezier(0, 0, 0.2, 1)',
-        property: 'transform',
-      },
-    },
   },
 };
