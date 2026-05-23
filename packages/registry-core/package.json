@@ -33,6 +33,11 @@
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js",
       "default": "./dist/types.js"
+    },
+    "./interfaces/registry-storage": {
+      "types": "./dist/interfaces/registry-storage.d.ts",
+      "import": "./dist/interfaces/registry-storage.js",
+      "default": "./dist/interfaces/registry-storage.js"
     }
   },
   "scripts": {
