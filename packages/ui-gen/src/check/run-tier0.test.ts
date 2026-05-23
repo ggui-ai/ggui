@@ -187,14 +187,14 @@ export default function C(props: Props) {
     expect(pxIssues[0].result).toBe('warn');
   });
 
-  it('warns (not fails) when one useAction callback is wired to 2+ surfaces (double-wired)', async () => {
-    // The structural bug from scenario 7 (Card as={Clickable} > Checkbox
-    // onChange, both dispatching the same action — one gesture, two fires)
-    // is caught at RUNTIME by `useAction`'s task-scoped dedup. This
-    // tier-0 check stays at WARN: the regex is too generic to be a safe
-    // hard-fail (confirm/cancel, branched dispatch, sibling buttons all
-    // match the same shape). Keeping it as warn surfaces the smell to the
-    // LLM without blocking gen on false positives.
+  it('warns (broad regex) AND fails (narrow AST) on Card as={Clickable} + Checkbox onChange same binding', async () => {
+    // The scenario-7 bug shape. Both rules fire:
+    //   - broad regex `double-wired-action` → WARN (FP-prone detector,
+    //     teaches the LLM toward cleaner patterns)
+    //   - narrow AST `double-wired-action:certain` → FAIL + critical
+    //     (near-zero FP, blocks gen) — the runtime dedup in @ggui-ai/wire
+    //     catches the SYMPTOM; this catches the CAUSE one turn earlier
+    //     so the broken a11y nest never ships.
     const code = `
 import { useAction } from '@ggui-ai/wire';
 interface Props { todos: Array<{ id: string }> }
@@ -211,10 +211,182 @@ export default function C(props: Props) {
   );
 }`;
     const issues = await runTier0Checks(code, COMPILED_OUTPUT);
-    const dw = issues.filter((i) => i.subcategory === 'double-wired-action');
-    expect(dw).toHaveLength(1);
-    expect(dw[0].result).toBe('warn');
-    expect(dw[0].category).toBe('interactivity');
+    const dwWarn = issues.filter((i) => i.subcategory === 'double-wired-action');
+    expect(dwWarn).toHaveLength(1);
+    expect(dwWarn[0].result).toBe('warn');
+
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(1);
+    expect(dwFail[0].result).toBe('fail');
+    expect(dwFail[0].severity).toBe('critical');
+    expect(dwFail[0].category).toBe('interactivity');
+    // Diagnostic names the outer + inner tags so the LLM has a precise
+    // remediation target.
+    expect(dwFail[0].description).toContain('Card');
+    expect(dwFail[0].description).toContain('Checkbox');
+    expect(dwFail[0].description).toContain('toggle');
+  });
+
+  it('narrow AST: catches Box as={Pressable} + Button onClick same binding', async () => {
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const submit = useAction('submit');
+  return (
+    <Box as={Pressable} onPress={() => submit({ id: props.id })}>
+      <Button onClick={() => submit({ id: props.id })}>Confirm</Button>
+    </Box>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(1);
+    expect(dwFail[0].result).toBe('fail');
+  });
+
+  it('narrow AST: deeply nested inner interactive (Card > Stack > Row > Checkbox) still caught', async () => {
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const toggle = useAction('toggle');
+  return (
+    <Card as={Clickable} onClick={() => toggle({ id: props.id })}>
+      <Stack>
+        <Row>
+          <Checkbox checked={false} onChange={() => toggle({ id: props.id })} />
+        </Row>
+      </Stack>
+    </Card>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(1);
+    expect(dwFail[0].result).toBe('fail');
+  });
+
+  it('narrow AST: does NOT fire when outer Card has NO as={Trait}', async () => {
+    // Plain Card is not a trait host — no click semantics on the
+    // outer. Inner Checkbox owns the gesture cleanly.
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const toggle = useAction('toggle');
+  return (
+    <Card onClick={() => toggle({ id: props.id })}>
+      <Checkbox checked={false} onChange={() => toggle({ id: props.id })} />
+    </Card>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(0);
+  });
+
+  it('narrow AST: does NOT fire when outer + inner call DIFFERENT useAction bindings', async () => {
+    // Two distinct gestures, different actions. No double-fire.
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const select = useAction('select');
+  const toggle = useAction('toggle');
+  return (
+    <Card as={Clickable} onClick={() => select({ id: props.id })}>
+      <Checkbox checked={false} onChange={() => toggle({ id: props.id })} />
+    </Card>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(0);
+  });
+
+  it('narrow AST: does NOT fire when inner is non-interactive (Text / Heading)', async () => {
+    // Card as={Clickable} wrapping a Text label — no bubble path,
+    // gesture lives on the Card alone.
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const select = useAction('select');
+  return (
+    <Card as={Clickable} onClick={() => select({ id: props.id })}>
+      <Text>Select me</Text>
+    </Card>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(0);
+  });
+
+  it('narrow AST: does NOT fire on sibling buttons that share a binding (no nesting)', async () => {
+    // Two distinct interactive surfaces, neither nests in the other —
+    // the bubble bug cannot manifest here even with the same binding.
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const submit = useAction('submit');
+  return (
+    <Stack>
+      <Button onClick={() => submit({ id: props.id })}>Yes</Button>
+      <Button onClick={() => submit({ id: props.id })}>No</Button>
+    </Stack>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(0);
+    // Broad regex still warns about 2+ call sites — that's its job.
+    const dwWarn = issues.filter(
+      (i) => i.subcategory === 'double-wired-action',
+    );
+    expect(dwWarn).toHaveLength(1);
+    expect(dwWarn[0].result).toBe('warn');
+  });
+
+  it('narrow AST: does NOT fire when handler indirects through a helper (runtime dedup catches at runtime)', async () => {
+    // Same source-level callee identifier ('fire') in both handlers,
+    // but it's a helper, not a useAction binding. The detector should
+    // skip — only outerCallee that matches a registered useAction
+    // binding qualifies. The runtime dedup remains the structural
+    // backstop for this and similar indirection patterns.
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const toggle = useAction('toggle');
+  const fire = (id) => toggle({ id });
+  return (
+    <Card as={Clickable} onClick={() => fire(props.id)}>
+      <Checkbox checked={false} onChange={() => fire(props.id)} />
+    </Card>
+  );
+}`;
+    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const dwFail = issues.filter(
+      (i) => i.subcategory === 'double-wired-action:certain',
+    );
+    expect(dwFail).toHaveLength(0);
   });
 
   it('does NOT flag a useAction callback wired to exactly one surface', async () => {

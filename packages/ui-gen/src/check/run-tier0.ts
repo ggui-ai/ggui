@@ -64,6 +64,202 @@ function stripComments(code: string): string {
   return out;
 }
 
+/**
+ * AST-precise detector for the unambiguous nested-interactive
+ * double-wire pattern. See the call-site comment in `runTier0Checks` +
+ * the `double-wired-action:certain` block for the rationale.
+ *
+ * The detector accepts a JSX element as the outer host when:
+ *   - tagName ∈ {Card, Box, Stack, Row}
+ *   - has `as={Clickable | Pressable}` (`Hoverable` doesn't fire click)
+ *   - has `onClick` (or `onPress`) whose handler calls one of the
+ *     known `useAction` bindings.
+ *
+ * Then it walks descendants of that outer element and matches an inner
+ * interactive primitive when:
+ *   - tagName ∈ {Button, Checkbox, Input, Toggle, Slider, RadioGroup,
+ *     Select, TextArea, Link}
+ *   - has any of {onClick, onChange, onPress, onSelect} whose handler
+ *     calls the SAME useAction binding as the outer.
+ *
+ * Patterns it INTENTIONALLY does not catch:
+ *   - helper-function indirection (`const fire = () => toggle({id})`
+ *     in both handlers) — the AST sees two distinct callees, not the
+ *     same binding. The runtime dedup in `useAction` still catches the
+ *     symptom; the static-time catch is a teaching aid, not a safety
+ *     net.
+ *   - cross-component prop drilling — same reason.
+ *   - imperative DOM addEventListener — out of scope for JSX walking.
+ */
+function detectCertainDoubleWiredActions(
+  sourceCode: string,
+  actionBindings: readonly string[],
+): EvalIssue[] {
+  const issues: EvalIssue[] = [];
+  if (actionBindings.length === 0) return issues;
+  const bindings = new Set(actionBindings);
+  const TRAIT_HOST_TAGS = new Set(['Card', 'Box', 'Stack', 'Row']);
+  const TRAITS_THAT_FIRE = new Set(['Clickable', 'Pressable']);
+  const INTERACTIVE_DESCENDANTS = new Set([
+    'Button',
+    'Checkbox',
+    'Input',
+    'Toggle',
+    'Slider',
+    'RadioGroup',
+    'Select',
+    'TextArea',
+    'Link',
+  ]);
+  const HANDLER_ATTRS = ['onClick', 'onChange', 'onPress', 'onSelect'] as const;
+
+  const sf = ts.createSourceFile(
+    'source.tsx',
+    sourceCode,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TSX,
+  );
+
+  function tagNameText(
+    node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  ): string | undefined {
+    return ts.isIdentifier(node.tagName) ? node.tagName.text : undefined;
+  }
+
+  function attrExpression(
+    node: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+    attrName: string,
+  ): ts.Expression | undefined {
+    for (const attr of node.attributes.properties) {
+      if (
+        ts.isJsxAttribute(attr) &&
+        ts.isIdentifier(attr.name) &&
+        attr.name.text === attrName &&
+        attr.initializer !== undefined &&
+        ts.isJsxExpression(attr.initializer)
+      ) {
+        return attr.initializer.expression;
+      }
+    }
+    return undefined;
+  }
+
+  function isTraitHostWithFiringAs(node: ts.JsxOpeningElement): boolean {
+    const tag = tagNameText(node);
+    if (tag === undefined || !TRAIT_HOST_TAGS.has(tag)) return false;
+    const asExpr = attrExpression(node, 'as');
+    return (
+      asExpr !== undefined &&
+      ts.isIdentifier(asExpr) &&
+      TRAITS_THAT_FIRE.has(asExpr.text)
+    );
+  }
+
+  // Best-effort callee extraction from event-handler expression shapes
+  // the LLM actually emits. Forms covered:
+  //   {handler}                          → 'handler'
+  //   {() => callee(arg)}                → 'callee'
+  //   {(e) => callee(e)}                 → 'callee'
+  //   {() => { callee(arg); }}           → 'callee'
+  //   {function () { callee(arg); }}     → 'callee'
+  // Forms intentionally not covered: chained calls, conditional
+  // expressions, calls inside if-branches. Those are rare in
+  // LLM-generated JSX and would expand the FP surface.
+  function extractCalleeName(
+    expr: ts.Expression | undefined,
+  ): string | undefined {
+    if (expr === undefined) return undefined;
+    if (ts.isIdentifier(expr)) return expr.text;
+    if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
+      const body = expr.body;
+      if (ts.isCallExpression(body) && ts.isIdentifier(body.expression)) {
+        return body.expression.text;
+      }
+      if (ts.isBlock(body)) {
+        for (const stmt of body.statements) {
+          if (
+            ts.isExpressionStatement(stmt) &&
+            ts.isCallExpression(stmt.expression) &&
+            ts.isIdentifier(stmt.expression.expression)
+          ) {
+            return stmt.expression.expression.text;
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  function findMatchingInteractiveDescendant(
+    outer: ts.JsxElement,
+    expectedBinding: string,
+  ): { tag: string; line: number } | undefined {
+    let found: { tag: string; line: number } | undefined;
+    function walk(node: ts.Node): void {
+      if (found !== undefined) return;
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : undefined;
+      if (opening !== undefined) {
+        const tag = tagNameText(opening);
+        if (tag !== undefined && INTERACTIVE_DESCENDANTS.has(tag)) {
+          for (const attrName of HANDLER_ATTRS) {
+            const callee = extractCalleeName(attrExpression(opening, attrName));
+            if (callee === expectedBinding) {
+              found = {
+                tag,
+                line:
+                  sf.getLineAndCharacterOfPosition(opening.getStart()).line + 1,
+              };
+              return;
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, walk);
+    }
+    // Walk only the outer element's children, not the outer itself.
+    ts.forEachChild(outer, walk);
+    return found;
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isJsxElement(node) && isTraitHostWithFiringAs(node.openingElement)) {
+      const outerCallee =
+        extractCalleeName(attrExpression(node.openingElement, 'onClick')) ??
+        extractCalleeName(attrExpression(node.openingElement, 'onPress'));
+      if (outerCallee !== undefined && bindings.has(outerCallee)) {
+        const match = findMatchingInteractiveDescendant(node, outerCallee);
+        if (match !== undefined) {
+          const outerTag = tagNameText(node.openingElement);
+          const outerLine =
+            sf.getLineAndCharacterOfPosition(node.openingElement.getStart())
+              .line + 1;
+          issues.push({
+            tier: 0,
+            result: 'fail',
+            category: 'interactivity',
+            subcategory: 'double-wired-action:certain',
+            severity: 'critical',
+            description:
+              `Nested-interactive double-wire: outer <${outerTag} as={...}> at line ${outerLine} and inner <${match.tag}> at line ${match.line} both dispatch the same useAction binding '${outerCallee}'. ` +
+              `One user click on the inner control fires its handler AND bubbles to the outer handler — '${outerCallee}' dispatches TWICE, the action runs back-to-back, and a toggle-style action silently reverts the user's change.`,
+            fix: `Pick ONE surface for the gesture: either drop \`as={...}\` + onClick on the outer <${outerTag}> and let the inner <${match.tag}> own the gesture, OR remove the inner <${match.tag}> and let the outer <${outerTag} as={...}> own it. Don't wire both to the same useAction binding.`,
+            line: outerLine,
+          });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sf);
+  return issues;
+}
+
 /** Map wire kind to the matching `@ggui-ai/wire` hook name. */
 const HOOK_NAME_FOR: Readonly<Record<WireKind, string>> = {
   action: 'useAction',
@@ -480,7 +676,7 @@ export async function runTier0Checks(
     }
   }
 
-  // ── Double-wired action check ───────────────────────────────
+  // ── Double-wired action check (warn — broad regex) ──────────
   // A useAction callback dispatched from 2+ call sites fires the action
   // more than once per gesture when an interactive element nests inside
   // another (the inner gesture bubbles to the outer handler). Captured
@@ -500,7 +696,8 @@ export async function runTier0Checks(
       // dispatch, sibling buttons in a list) match this generic shape. The
       // structural correctness backstop lives at runtime in `useAction`'s
       // task-scoped dedup; this check is a quality nudge for the LLM, not a
-      // load-bearing safety gate.
+      // load-bearing safety gate. See `docs/principles/no-silent-block.md`
+      // — three-pattern FP test fails for this detector → severity = warn.
       issues.push({
         tier: 0,
         result: 'warn',
@@ -510,6 +707,25 @@ export async function runTier0Checks(
         fix: `Wire each useAction callback to exactly ONE interactive surface; never nest interactive elements (e.g. a Checkbox inside a Card as={Clickable}).`,
       });
     }
+  }
+
+  // ── Double-wired action check (fail — narrow AST) ────────────
+  // Precise detector for the unambiguous shape: an outer trait-host JSX
+  // element (Card/Box/Stack/Row with `as={Clickable|Pressable}`) wired
+  // via onClick/onPress to useAction binding X, with a descendant
+  // interactive primitive (Checkbox/Button/Input/Toggle/Slider/
+  // RadioGroup/Select/TextArea/Link) wired via on* to the SAME X.
+  //
+  // Near-zero FP: the only patterns matching `<Card as={Clickable}
+  // onClick={X}> ... <Checkbox onChange={X}>` are bugs. Three-pattern
+  // FP test passes → severity earns 'fail' per no-silent-block
+  // principle Rule 1. The runtime dedup in @ggui-ai/wire's useAction
+  // catches the SYMPTOM regardless of shape; this check catches the
+  // CAUSE one turn earlier and prevents shipping the broken a11y nest.
+  if (actionBindings.length > 0) {
+    issues.push(
+      ...detectCertainDoubleWiredActions(sourceCode, actionBindings),
+    );
   }
 
   // ── Optional props accessed without guard ──────────────────
