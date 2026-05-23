@@ -32,9 +32,11 @@ const APP_NAME = 'ggui-agent-google-adk';
  * `type` without checking for undefined. JSON Schema legitimately omits
  * `type` when other keywords (`oneOf` / `enum` / `anyOf`) make it
  * redundant, so any nested sub-schema that does so crashes the agent
- * on first tool-call. Sanitize each MCP tool's `inputSchema` after
- * fetch by defaulting missing `type` fields. Remove this workaround
- * when upstream ADK ships a defensive `toGeminiType`.
+ * on first tool-call. Sanitize each MCP tool's `inputSchema` and
+ * `outputSchema` after fetch by defaulting missing `type` fields.
+ *
+ * Tracking: https://github.com/google/adk-js/issues/367
+ * Remove this workaround once that issue ships.
  */
 function sanitizeSchemaForGemini(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object') return schema;
@@ -72,7 +74,6 @@ class SanitizedMCPToolset extends MCPToolset {
     ...args: Parameters<MCPToolset['getTools']>
   ): Promise<Awaited<ReturnType<MCPToolset['getTools']>>> {
     const tools = await super.getTools(...args);
-    let sanitized = 0;
     for (const tool of tools) {
       // The MCPTool wrapper stores the raw `Tool` from
       // `@modelcontextprotocol/sdk` on a private `mcpTool` field.
@@ -93,12 +94,7 @@ class SanitizedMCPToolset extends MCPToolset {
       if (internal.outputSchema !== undefined) {
         internal.outputSchema = sanitizeSchemaForGemini(internal.outputSchema);
       }
-      sanitized += 1;
     }
-    // eslint-disable-next-line no-console
-    console.log(
-      `[SanitizedMCPToolset] sanitized ${sanitized}/${tools.length} MCP tools`,
-    );
     return tools;
   }
 }
