@@ -9,7 +9,8 @@
 
 <p align="center">
   <a href="https://docs.ggui.ai">Docs</a> ·
-  <a href="https://docs.ggui.ai/oss-quickstart/">OSS Quickstart</a>
+  <a href="https://github.com/ggui-ai/agentic-app-template">Template repo</a> ·
+  <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
 > 🚧 **Active development — `v0.1.0-rc.1` is the first published release candidate.** APIs are converging; pin exact versions and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the next RC and the v0.1.0 final.
@@ -18,29 +19,73 @@
 
 Agents describe what they need in natural language; ggui generates ephemeral, interactive interfaces over MCP. No frontend code, no React templates, no custom components — agents talk, users see UI.
 
-This repo is the **open protocol + reference runtime**. Self-host with `ggui serve`; pair against any MCP-aware agent runtime (Claude Desktop, Claude Code, Cursor, ChatGPT desktop, Goose, your own). Zero account required, zero managed infrastructure required, zero cloud dependency.
+This repo is the **open protocol + reference runtime**. Self-host with `ggui serve`; pair against any MCP-aware agent runtime (Claude Desktop, Claude Code, claude.ai, Cursor, ChatGPT desktop, Goose, your own). Zero account required, zero managed infrastructure required, zero cloud dependency.
 
-## Quickstart
+---
+
+## Quick start — pick your path
+
+### 1. Build an agentic app from the template _(recommended for new apps)_
+
+The fastest path if you want to **ship an agent end-to-end**. The template scaffolds a chat UI + agent loop + sample MCP servers in one repo, and lets you pick your agent SDK at bootstrap time.
+
+1. Open **https://github.com/ggui-ai/agentic-app-template**
+2. Click **"Use this template"** → create your repo → clone it locally
+3. Run `/bootstrap` in Claude Code (or `pnpm bootstrap`) — picks your agent SDK (`claude-agent-sdk` / `openai-agents-sdk` / `google-adk`), fetches it into `servers/agent`, seeds `.env.local`
+4. Add your LLM API key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`) to `.env.local`
+5. `pnpm dev:ggui` / `pnpm dev:todo` / `pnpm dev:agent` — three terminals, then open `http://localhost:6790` to chat
+
+The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. The template's [README](https://github.com/ggui-ai/agentic-app-template) walks through customisation (system prompt, domain MCP, blueprints, gadgets).
+
+### 2. Self-host the OSS MCP server + test from claude.ai
+
+For **testing the ggui protocol against a real chat host**. Localhost won't work from claude.ai — you need a public HTTPS URL, which [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides for free.
 
 ```bash
-# Run the OSS server directly via the `@ggui-ai/cli` binary
-npx @ggui-ai/cli serve     # binds 127.0.0.1:6781 by default
-
-# Or install globally
+# terminal 1 — boot the OSS MCP server
 npm install -g @ggui-ai/cli
-ggui serve
+ANTHROPIC_API_KEY=sk-… ggui serve --mcp-only       # http://127.0.0.1:6781/mcp
+
+# terminal 2 — expose it to the public internet (no Cloudflare account needed)
+cloudflared tunnel --url http://127.0.0.1:6781     # prints https://<random>.trycloudflare.com
 ```
 
-`ggui serve` stands up `@ggui-ai/mcp-server` with the first-run bundle: MCP at `/mcp`, the same-origin session viewer at `/r/<shortCode>`, pairing endpoints, and a live-channel WebSocket. Open `http://127.0.0.1:6781/` to land on the operator console.
+Then in **claude.ai → Settings → Connectors → Add custom connector**, paste `https://<random>.trycloudflare.com/mcp`. Ask Claude to render any UI; the server generates the component and serves it back as a rich rendered card inside the chat.
 
-Point any MCP-compatible agent runtime at `http://127.0.0.1:6781/mcp` with `Authorization: Bearer dev`. The [OSS Quickstart](https://docs.ggui.ai/oss-quickstart/) walks through the full self-hosted path including pairing.
+Install cloudflared via your package manager: `brew install cloudflared` (macOS), `apt install cloudflared` (Debian), or grab a binary from [cloudflare.com/products/tunnel](https://www.cloudflare.com/products/tunnel/).
 
-### Runnable examples
+### 3. Use the hosted ggui.ai cloud — `mcp.ggui.ai` _(deploying soon)_
+
+For **production**, sign up at [ggui.ai](https://ggui.ai) → create an app → get a managed MCP URL (form: `https://mcp.ggui.ai/<app-id>/mcp`). Paste into your chat host's connector settings — no self-hosting, no tunnel, no key management.
+
+🚧 _The hosted endpoint is deploying — coming in a follow-up rc. Use path 1 or 2 in the meantime._
+
+---
+
+## The `ggui` CLI
+
+`@ggui-ai/cli` ships the `ggui` binary — the single entrypoint for every OSS workflow. Five verbs cover the full lifecycle:
+
+| Verb             | What it does                                                                                                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ggui serve`     | Boot the OSS MCP server (`/mcp`), session viewer (`/r/<shortCode>`), pairing endpoints, and live-channel WebSocket. `--mcp-only` skips agent supervision — fastest first-run. `--port`, `--host` adjust binding. |
+| `ggui dev`       | Local UI registry + compile-on-demand dev hub for iterating on a `ggui.json` project. Optional tunnel, agent supervision, browser auto-open. Run `ggui dev --help` for the full flag list.                       |
+| `ggui blueprint` | Author + publish + install cached UI templates — `create`, `publish`, `install`. Blueprints make a known screen cheap, fast, and visually consistent by matching before falling back to full LLM generation.     |
+| `ggui gadget`    | Author + publish + install client-side libraries (maps, charts, camera, clipboard, anything) wrapped as ggui hooks/components so the generator can use them — `create`, `publish`, `install`.                    |
+| `ggui theme`     | Validate and inspect `ggui.json#theme` DTCG documents — `ggui theme validate <path>`. Catches schema errors before they reach the runtime.                                                                       |
+
+Plus auth verbs for the hosted path: `ggui login` / `ggui logout` / `ggui whoami` / `ggui keys`. Run `ggui --help` for the top-level overview, or `ggui <verb> --help` for per-command flags.
+
+Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
+
+---
+
+## Runnable examples
 
 [`samples/`](https://github.com/ggui-ai/ggui/tree/main/samples) holds end-to-end examples you can clone:
 
 - [`samples/gguis/`](https://github.com/ggui-ai/ggui/tree/main/samples/gguis) — ready-to-run project configs (`default`, `leaflet-demo`, `mapbox-demo`, `canvas-demo`) showing how a `ggui.json` is shaped.
-- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — reference agent that hosts ggui as an MCP server (Claude Agent SDK).
+- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — reference agents per SDK (Claude Agent SDK, OpenAI Agents SDK, Google ADK) talking to ggui as an MCP server. These same samples are what the template repo's `/bootstrap` fetches.
 - [`samples/gadgets/`](https://github.com/ggui-ai/ggui/tree/main/samples/gadgets) — example component / hook gadgets for the marketplace.
 - [`samples/mcp-servers/`](https://github.com/ggui-ai/ggui/tree/main/samples/mcp-servers) — minimal domain MCP servers (e.g. a todo server) you can pair against.
 
@@ -72,6 +117,7 @@ Your agent uses MCP tools to push UIs and receive user events. The protocol is d
 | `ggui_push`      | Push a UI to the user (natural-language prompt + data)   |
 | `ggui_update`    | Update props on an existing UI (no regeneration, ~200ms) |
 | `ggui_handshake` | Initial session bootstrap                                |
+| `ggui_consume`   | Long-poll for user gestures (clicks, form submits)       |
 
 Plus a blueprint family (`ggui_search_blueprints`, `ggui_render_blueprint`, `ggui_list_featured_blueprints`, …) for catalogue lookups. Full reference: [MCP Protocol Reference](https://docs.ggui.ai/api/mcp-protocol/).
 
@@ -90,7 +136,7 @@ If your agent runtime supports MCP natively, skip the SDK entirely. Add `ggui se
 }
 ```
 
-The runtime's native tool-calling loop discovers `ggui_push`, `ggui_update`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
+The runtime's native tool-calling loop discovers `ggui_push`, `ggui_update`, `ggui_consume`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
 
 ## Embedding UIs
 
@@ -130,20 +176,20 @@ For non-React frameworks, embed the viewer directly:
 
 Consumer-facing surface — what you `npm install`:
 
-| Package                                                 | Purpose                                                        | npm                                                                                                           |
-| ------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [`@ggui-ai/cli`](./packages/ggui-cli)                   | The `ggui` binary — `ggui serve`, `ggui dev`, `ggui blueprint` | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                   |
-| [`@ggui-ai/mcp-server`](./packages/mcp-server)          | Reference OSS server (programmatic embedding)                  | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)     |
-| [`@ggui-ai/react`](./packages/ggui-react)               | React embedding — `<McpAppIframe>` + shells                    | [![npm](https://img.shields.io/npm/v/@ggui-ai/react)](https://npmjs.com/package/@ggui-ai/react)               |
-| [`@ggui-ai/react-native`](./packages/ggui-react-native) | React Native embedding — WebView-backed renderer               | [![npm](https://img.shields.io/npm/v/@ggui-ai/react-native)](https://npmjs.com/package/@ggui-ai/react-native) |
-| [`@ggui-ai/protocol`](./packages/protocol)              | Wire types (events, sessions, WebSocket, MCP envelopes)        | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
-| [`@ggui-ai/gadgets`](./packages/gadgets)                | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)        | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
+| Package                                                 | Purpose                                                            | npm                                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| [`@ggui-ai/cli`](./packages/ggui-cli)                   | The `ggui` binary — `serve`, `dev`, `blueprint`, `gadget`, `theme` | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                   |
+| [`@ggui-ai/mcp-server`](./packages/mcp-server)          | Reference OSS server (programmatic embedding)                      | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)     |
+| [`@ggui-ai/react`](./packages/ggui-react)               | React embedding — `<McpAppIframe>` + shells                        | [![npm](https://img.shields.io/npm/v/@ggui-ai/react)](https://npmjs.com/package/@ggui-ai/react)               |
+| [`@ggui-ai/react-native`](./packages/ggui-react-native) | React Native embedding — WebView-backed renderer                   | [![npm](https://img.shields.io/npm/v/@ggui-ai/react-native)](https://npmjs.com/package/@ggui-ai/react-native) |
+| [`@ggui-ai/protocol`](./packages/protocol)              | Wire types (events, sessions, WebSocket, MCP envelopes)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
+| [`@ggui-ai/gadgets`](./packages/gadgets)                | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
 
 Plus ~30 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`, `@ggui-ai/predefined`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
 
 ## Hosted providers
 
-Self-hosting is the primary path. If you'd prefer managed infrastructure (no server to run, no LLM key to wire, hosted dashboards), [Guuey](https://guuey.com) is the first-party hosted provider built on this protocol. The OSS protocol is identical on both paths — you can move between self-hosted and hosted without rewriting anything against this SDK.
+Self-hosting is the primary path. For managed infrastructure (no server to run, no LLM key to wire, hosted dashboards), the first-party hosted endpoint at **`mcp.ggui.ai`** is deploying — see [path 3](#3-use-the-hosted-gguiai-cloud--mcpgguiai-deploying-soon) above. [Guuey](https://guuey.com) hosts an upgraded experience built on top of the protocol. The protocol is identical on all paths — you can move between self-hosted and hosted without rewriting anything against this SDK.
 
 ## Contributing
 
