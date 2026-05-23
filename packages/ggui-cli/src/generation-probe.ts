@@ -69,9 +69,13 @@ import type {
 export const DEFAULT_MODEL_BY_PROVIDER: Readonly<
   Record<Exclude<LlmProvider, 'bedrock'>, string>
 > = {
-  anthropic: 'claude-haiku-4-5',
-  openai: 'gpt-5.5-2026-04-23',
-  google: 'gemini-3.5-flash',
+  // Slash-prefixed `<provider>/<model>` form — `getProviderForModel`
+  // expects it; bare names trip the "Unrecognized model format" warning
+  // and silently default to anthropic. Pre-matrix the openai/google
+  // defaults were also bare; this fixes them as part of the model bump.
+  anthropic: 'anthropic/claude-haiku-4-5',
+  openai: 'openai/gpt-5.5-2026-04-23',
+  google: 'google/gemini-3.5-flash',
   openrouter: 'anthropic/claude-haiku-4.5',
 };
 

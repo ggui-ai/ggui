@@ -26,6 +26,83 @@ import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
 const APP_NAME = 'ggui-agent-google-adk';
 
+/**
+ * Workaround for an upstream `@google/adk` bug — `toGeminiType` in
+ * `utils/gemini_schema_util.js` calls `.toLowerCase()` on the schema's
+ * `type` without checking for undefined. JSON Schema legitimately omits
+ * `type` when other keywords (`oneOf` / `enum` / `anyOf`) make it
+ * redundant, so any nested sub-schema that does so crashes the agent
+ * on first tool-call. Sanitize each MCP tool's `inputSchema` after
+ * fetch by defaulting missing `type` fields. Remove this workaround
+ * when upstream ADK ships a defensive `toGeminiType`.
+ */
+function sanitizeSchemaForGemini(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object') return schema;
+  const node = schema as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...node };
+  if (typeof out.type !== 'string') {
+    // Object-shaped sub-schema (has `properties`) → 'object'; otherwise
+    // 'string' is the safest passthrough for Gemini's converter.
+    out.type =
+      typeof out.properties === 'object' && out.properties !== null
+        ? 'object'
+        : 'string';
+  }
+  if (out.properties && typeof out.properties === 'object') {
+    const props = out.properties as Record<string, unknown>;
+    const sanitizedProps: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      sanitizedProps[k] = sanitizeSchemaForGemini(v);
+    }
+    out.properties = sanitizedProps;
+  }
+  if (out.items !== undefined) {
+    out.items = sanitizeSchemaForGemini(out.items);
+  }
+  return out;
+}
+
+/**
+ * `MCPToolset` subclass that sanitizes each fetched MCP tool's
+ * `inputSchema` in place before ADK's Gemini converter sees it.
+ * See {@link sanitizeSchemaForGemini}.
+ */
+class SanitizedMCPToolset extends MCPToolset {
+  override async getTools(
+    ...args: Parameters<MCPToolset['getTools']>
+  ): Promise<Awaited<ReturnType<MCPToolset['getTools']>>> {
+    const tools = await super.getTools(...args);
+    let sanitized = 0;
+    for (const tool of tools) {
+      // The MCPTool wrapper stores the raw `Tool` from
+      // `@modelcontextprotocol/sdk` on a private `mcpTool` field.
+      // ADK's `_getDeclaration()` reads BOTH `inputSchema` and
+      // `outputSchema` and converts via `toGeminiSchema()` — sanitize
+      // both before the first call. Mutating the raw fields propagates
+      // the fix everywhere downstream because every read goes through
+      // the same `this.mcpTool` reference.
+      const internal = (
+        tool as unknown as {
+          mcpTool?: { inputSchema?: unknown; outputSchema?: unknown };
+        }
+      ).mcpTool;
+      if (!internal) continue;
+      if (internal.inputSchema !== undefined) {
+        internal.inputSchema = sanitizeSchemaForGemini(internal.inputSchema);
+      }
+      if (internal.outputSchema !== undefined) {
+        internal.outputSchema = sanitizeSchemaForGemini(internal.outputSchema);
+      }
+      sanitized += 1;
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[SanitizedMCPToolset] sanitized ${sanitized}/${tools.length} MCP tools`,
+    );
+    return tools;
+  }
+}
+
 export interface RunAgentOptions {
   readonly prompt: string;
   readonly mcpUrl: string;
@@ -111,7 +188,7 @@ export async function* runAgent(
   // `@google/adk` 0.1.x — the streamable-HTTP transport subsumed the
   // SSE-only path.)
   const tools: MCPToolset[] = [
-    new MCPToolset({
+    new SanitizedMCPToolset({
       type: 'StreamableHTTPConnectionParams',
       url: opts.mcpUrl,
       header: {
@@ -123,7 +200,7 @@ export async function* runAgent(
   ];
   if (opts.todoMcpUrl) {
     tools.push(
-      new MCPToolset({
+      new SanitizedMCPToolset({
         type: 'StreamableHTTPConnectionParams',
         url: opts.todoMcpUrl,
         header: {
