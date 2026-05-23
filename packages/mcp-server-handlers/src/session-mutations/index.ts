@@ -170,6 +170,11 @@ export {
 } from './stream.js';
 export { createGguiSubmitActionHandler } from './submit-action.js';
 export {
+  createGguiRefreshBootstrapHandler,
+  type BootstrapRefreshSeam,
+  type GguiRefreshBootstrapHandlerDeps,
+} from './refresh-bootstrap.js';
+export {
   createGguiSyncContextHandler,
   type CreateGguiSyncContextHandlerDeps,
 } from './sync-context.js';

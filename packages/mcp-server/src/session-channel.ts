@@ -255,22 +255,72 @@ export interface SessionChannelLocalToolsOptions {
  * the bootstrap-derived identity. This is intentional: MCP Apps
  * iframes don't have a long-lived bearer; the bootstrap IS the auth.
  */
+/**
+ * Verify failure shape — distinguished so the channel server can map
+ * `'expired'` to `BOOTSTRAP_EXPIRED` (client SHOULD refresh) vs
+ * `'invalid'` to `BOOTSTRAP_INVALID` (client MUST re-handshake).
+ *
+ * G14 (2026-05-23): bootstrap envelopes are no longer single-use. A
+ * signature-valid + unexpired token authenticates EVERY subscribe
+ * within the TTL window; transient WS drops reconnect without a fresh
+ * handshake. Past expiry, the iframe MAY refresh via the
+ * {@link refresh} surface; past the refresh window, fresh handshake.
+ */
+export type SessionChannelBootstrapVerifyResult =
+  | {
+      readonly ok: true;
+      readonly sessionId: string;
+      readonly appId: string;
+    }
+  | { readonly ok: false; readonly reason: 'expired' | 'invalid' };
+
+/**
+ * Result of {@link SessionChannelBootstrap.refresh}.
+ *
+ *   - `ok: true`: caller swaps the old envelope for `token` and resumes.
+ *   - `ok: false`: caller MUST re-handshake (refresh window closed,
+ *     tampered envelope, etc.).
+ */
+export type SessionChannelBootstrapRefreshResult =
+  | {
+      readonly ok: true;
+      readonly token: string;
+      readonly expiresAt: string;
+    }
+  | { readonly ok: false; readonly reason: 'window_closed' | 'invalid' };
+
 export interface SessionChannelBootstrap {
   /**
    * Verify a `SubscribePayload.bootstrap` token.
    *
-   * Returns the bound identity on success, `null` on ANY failure.
-   * Implementations SHOULD enforce single-use semantics (replay
-   * cache on `jti`) — that's their responsibility, not the
-   * channel server's.
+   * Returns the bound identity on success, or a discriminated failure.
+   * The channel server maps `'expired'` to `BOOTSTRAP_EXPIRED` so the
+   * iframe can branch on refresh-vs-rehandshake, and `'invalid'` to
+   * `BOOTSTRAP_INVALID` for tamper / format / kind failures (no
+   * refresh on those).
    */
-  verify(token: string): { sessionId: string; appId: string } | null;
+  verify(token: string): SessionChannelBootstrapVerifyResult;
   /**
    * Mint a longer-lived reconnect credential to return in
    * `AckPayload.sessionToken`. Called only after a successful
-   * `verify()` on a fresh bootstrap subscribe.
+   * `verify()` on a bootstrap subscribe.
    */
   issueSessionToken(sessionId: string, appId: string): string;
+  /**
+   * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
+   * into a new envelope with a fresh TTL. Used by the
+   * `ggui_runtime_refresh_bootstrap` MCP tool — iframes that see their
+   * bootstrap drift out of the TTL window swap in the refreshed
+   * envelope without going back through `ggui_push`.
+   *
+   * Stateless: verifies HMAC against the same secret used at mint,
+   * checks the refresh window against the ORIGINAL `iat`, and mints
+   * a fresh bootstrap envelope bound to the SAME `(sessionId, appId)`.
+   * Past the refresh window the result is `{ok:false, reason:
+   * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
+   * 'invalid'}`.
+   */
+  refresh(token: string): SessionChannelBootstrapRefreshResult;
 }
 
 /**
@@ -2083,20 +2133,37 @@ export function createSessionChannelServer(
         );
         return;
       }
-      const bound = opts.bootstrap.verify(payload.bootstrap);
-      if (!bound) {
+      const verifyResult = opts.bootstrap.verify(payload.bootstrap);
+      if (!verifyResult.ok) {
         opts.logger.warn('session_channel_bootstrap_rejected', {
           sessionId: payload.sessionId,
           appId: payload.appId,
+          reason: verifyResult.reason,
         });
-        sendError(
-          ws,
-          'BOOTSTRAP_INVALID',
-          'Bootstrap token invalid, expired, or replayed',
-          message.requestId,
-        );
+        // G14 (2026-05-23): distinguish `expired` from `invalid` so the
+        // iframe-side handler can branch on refresh-vs-rehandshake.
+        // Tamper / format / kind failures collapse into BOOTSTRAP_INVALID
+        // (no refresh path); expired-but-signed envelopes emit the
+        // dedicated BOOTSTRAP_EXPIRED so the client knows to call
+        // `ggui_runtime_refresh_bootstrap`.
+        if (verifyResult.reason === 'expired') {
+          sendError(
+            ws,
+            'BOOTSTRAP_EXPIRED',
+            'Bootstrap token expired — call ggui_runtime_refresh_bootstrap or re-handshake',
+            message.requestId,
+          );
+        } else {
+          sendError(
+            ws,
+            'BOOTSTRAP_INVALID',
+            'Bootstrap token invalid (bad signature, malformed, or wrong kind)',
+            message.requestId,
+          );
+        }
         return;
       }
+      const bound = { sessionId: verifyResult.sessionId, appId: verifyResult.appId };
       if (bound.sessionId !== payload.sessionId) {
         sendError(
           ws,

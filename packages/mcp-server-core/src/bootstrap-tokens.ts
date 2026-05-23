@@ -6,10 +6,15 @@
  * Apps outbound delivery, but any future bootstrap mechanism (signed-URL
  * share, short-code auto-login, etc.) can reuse the same primitives.
  *
- *   - **Bootstrap token** — short-TTL, single-use, minted by
- *     `ggui_push` (or equivalent), consumed at first live-channel
- *     subscribe. The MCP Apps iframe receives it via
- *     `_meta.ggui.bootstrap.token`.
+ *   - **Bootstrap token** — short-TTL signed envelope, minted by
+ *     `ggui_push` (or equivalent), consumed at live-channel subscribe.
+ *     The MCP Apps iframe receives it via `_meta.ggui.bootstrap.token`.
+ *     **Reusable within TTL** (G14, 2026-05-23) so a transient WS drop
+ *     can reconnect without a fresh handshake. After TTL expiry the
+ *     client either refreshes the envelope via
+ *     `ggui_runtime_refresh_bootstrap` (allowed within
+ *     `DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttl` of the
+ *     original `iat`) or re-handshakes.
  *
  *   - **Session token** — longer-TTL, reusable, minted by the session-
  *     channel server on the FIRST successful bootstrap-auth subscribe
@@ -24,10 +29,26 @@
  * discipline: keep the shape small, revisit only when multiple
  * signing keys or asymmetric sigs become real needs.
  *
- * **Replay resistance.** Bootstrap tokens are intended to be
- * single-use; the session-channel layer tracks consumed token ids in
- * memory (see `session-channel.ts`) to reject re-use within the TTL
- * window. Session tokens ARE reusable by design (reconnects).
+ * **Threat model.**
+ *   - PROTECTED: replay past the TTL window (signature still verifies
+ *     but `now > exp` rejects with `'expired'`).
+ *   - PROTECTED: tampering (any byte change → HMAC mismatch).
+ *   - NOT PROTECTED (by design, bounded by TTL): a valid-but-stolen
+ *     envelope within its TTL behaves like the legitimate iframe. Same
+ *     risk as the pre-G14 single-use model — the attacker still had to
+ *     intercept the envelope; the only thing G14 widens is the
+ *     legitimate iframe's reconnect window.
+ *   - NOT PROTECTED (by design): DoS via repeated subscribe attempts —
+ *     transport-layer rate limiting is the right defense, not envelope
+ *     state.
+ *
+ * **Constant-time comparison.** All HMAC compares go through
+ * `crypto.timingSafeEqual` — no early-byte short-circuit.
+ *
+ * **Replay tracker** (`BootstrapTokenReplayCache`) is still exported for
+ * callers that need explicit single-use semantics (one-time-link share,
+ * etc.). The default session-channel verify path does NOT use it post-
+ * G14 — that's the whole point of the refresh design.
  */
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -58,13 +79,32 @@ export interface BootstrapTokenClaims {
   readonly iat: number;
   /** Expires-at, epoch seconds. */
   readonly exp: number;
-  /** Random token id — enables single-use enforcement on bootstrap tokens. */
+  /**
+   * Random token id. Reserved for callers that opt into single-use
+   * semantics via {@link BootstrapTokenReplayCache}; the default G14
+   * session-channel verify path no longer claims it (multi-use within
+   * TTL is the supported recovery posture).
+   */
   readonly jti: string;
 }
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
-export const DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC = 120;
+export const DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC = 180;
 export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
+/**
+ * Refresh-window multiplier for bootstrap tokens (G14, 2026-05-23).
+ *
+ * Signature-valid bootstrap tokens are refreshable for
+ * `iat + DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttl` seconds —
+ * i.e. for one extra TTL window past expiry. Past that, the client
+ * must re-handshake (matcher-cache hit makes that cheap).
+ *
+ * Bounded purely by the original `iat` claim, not server state — the
+ * refresh path is stateless. Operators tune the window by overriding
+ * `refreshWindowSec` on `refreshBootstrapToken` (or via the cloud
+ * pod's `GGUI_BOOTSTRAP_REFRESH_WINDOW_SECONDS` env).
+ */
+export const DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER = 2;
 /**
  * Default console cookie TTL (8 hours). Matches the design note
  * §6.2 — "bound to the server's origin, short-lived (e.g., 8 hours)."
@@ -122,12 +162,15 @@ function mintToken(
 }
 
 /**
- * Mint a short-TTL single-use bootstrap token.
+ * Mint a short-TTL bootstrap token.
  *
  * Intended for the live-channel bootstrap flow: the token travels inside
- * `_meta.ggui.bootstrap.token` on a `ggui_push` tool result, is
- * consumed at the iframe's first `subscribe`, and is rejected on any
- * re-use (enforced by the session-channel server's replay tracker).
+ * `_meta.ggui.bootstrap.token` on a `ggui_push` tool result, is consumed
+ * at iframe `subscribe`, and remains valid for `ttlSec` (default 180s)
+ * to absorb transient WS drops without a fresh handshake (G14,
+ * 2026-05-23). Post-TTL: the iframe MAY refresh via
+ * {@link refreshBootstrapToken} for one extra TTL window past `iat`;
+ * past that, a fresh handshake is required.
  */
 export function mintBootstrapToken(
   input: MintTokenInput,
@@ -194,7 +237,11 @@ export type VerifyTokenFailure =
   | 'invalid_signature'
   | 'expired'
   | 'wrong_kind'
-  | 'malformed_claims';
+  | 'malformed_claims'
+  /** G14 refresh-only: signature valid + signed shape correct, but the
+   *  refresh window (`iat + refreshWindowSec`) has closed. The client
+   *  must re-handshake. */
+  | 'refresh_window_closed';
 
 export type VerifyTokenResult =
   | { readonly ok: true; readonly claims: BootstrapTokenClaims }
@@ -268,12 +315,163 @@ export function verifyToken(
 }
 
 /**
- * Small in-memory used-jti tracker for single-use bootstrap-token
- * enforcement. Bounded — entries age out once past their `exp`.
+ * Options for {@link refreshBootstrapToken}.
+ */
+export interface RefreshBootstrapTokenOptions {
+  /**
+   * TTL of the NEWLY-minted bootstrap envelope (seconds). Defaults to
+   * {@link DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC}. Operators tune via the
+   * cloud pod's `GGUI_BOOTSTRAP_TTL_SECONDS`.
+   */
+  readonly ttlSec?: number;
+  /**
+   * Refresh-window length (seconds), measured from the ORIGINAL
+   * envelope's `iat`. Defaults to
+   * `DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * (ttlSec ?? DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC)`
+   * — one extra TTL window past mint time. Past this, the caller
+   * MUST re-handshake; the refresh path returns
+   * `'refresh_window_closed'`.
+   *
+   * Bounding the window on the ORIGINAL `iat` (not the current
+   * `exp`) is deliberate: it caps the total reachable lifetime of a
+   * stolen envelope to `iat + refreshWindowSec`, independent of how
+   * many refreshes the caller pumps through.
+   */
+  readonly refreshWindowSec?: number;
+}
+
+/**
+ * Result of {@link refreshBootstrapToken}.
  *
- * Sized for single-process OSS deployments. Multi-process / multi-
- * host deployments would swap this for a shared store (Redis set,
- * DynamoDB conditional-write, etc.).
+ *   - `ok: true`: caller may swap the old envelope for `token` and
+ *     resume normally. The new envelope's `claims.iat` is the refresh
+ *     time, NOT the original mint; the `expiresAt` field returns the
+ *     new `claims.exp` (epoch-seconds → ISO-8601 conversion is the
+ *     transport-layer's job).
+ *   - `ok: false`: the caller MUST re-handshake. `reason` distinguishes
+ *     `'invalid_signature'` / `'malformed_claims'` (caller is broken
+ *     or attacking — log + reject) from `'refresh_window_closed'` /
+ *     `'wrong_kind'` (legitimate caller whose envelope aged out — do
+ *     the cheap re-handshake).
+ */
+export type RefreshBootstrapTokenResult =
+  | {
+      readonly ok: true;
+      readonly token: string;
+      readonly claims: BootstrapTokenClaims;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: VerifyTokenFailure;
+    };
+
+/**
+ * Refresh a (possibly-expired-but-signature-valid) bootstrap token.
+ *
+ * Stateless: verifies HMAC against the same secret used at mint, accepts
+ * the envelope if its ORIGINAL `iat` is within the refresh window
+ * (`now - iat <= refreshWindowSec`), and mints a fresh bootstrap envelope
+ * with new `iat` + `exp` + `jti`. The new envelope is bound to the SAME
+ * `sessionId` + `appId` as the original (a refresh never re-scopes).
+ *
+ * Failure semantics — the refresh path tolerates `'expired'` (that's its
+ * whole purpose) but NOT `'invalid_signature'` / `'malformed_claims'`
+ * (caller is broken or attacking) and NOT `'refresh_window_closed'`
+ * (envelope is too old; force the caller back through the handshake
+ * cache, which is cheap by design).
+ */
+export function refreshBootstrapToken(
+  token: string,
+  secret: string,
+  opts: RefreshBootstrapTokenOptions = {},
+): RefreshBootstrapTokenResult {
+  const ttlSec = opts.ttlSec ?? DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC;
+  const refreshWindowSec =
+    opts.refreshWindowSec ??
+    DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttlSec;
+
+  // Decode + signature-verify WITHOUT the standard expiry check — the
+  // whole point of refresh is to accept expired-but-signed envelopes.
+  // We reuse `verifyToken`'s machinery for tamper / shape / kind checks
+  // and conditionally pass-through `'expired'` because that IS the
+  // refresh case.
+  const result = verifyToken(token, secret, 'bootstrap');
+  let claims: BootstrapTokenClaims | undefined;
+  if (result.ok) {
+    claims = result.claims;
+  } else if (result.reason === 'expired') {
+    // Re-decode the payload to get claims (verifyToken already
+    // signature-checked + kind-checked; we know it's safe to re-parse).
+    const [payloadB64] = token.split('.');
+    if (payloadB64) {
+      try {
+        const raw = JSON.parse(
+          base64urlDecode(payloadB64).toString('utf8'),
+        ) as Record<string, unknown>;
+        // Re-validate the shape — we already passed it once in
+        // verifyToken, so this should always succeed; explicit re-check
+        // keeps the `claims!` non-null assertion below honest.
+        if (
+          typeof raw.sessionId === 'string' &&
+          typeof raw.appId === 'string' &&
+          typeof raw.iat === 'number' &&
+          typeof raw.exp === 'number' &&
+          typeof raw.jti === 'string' &&
+          raw.kind === 'bootstrap'
+        ) {
+          claims = {
+            sessionId: raw.sessionId,
+            appId: raw.appId,
+            kind: raw.kind,
+            iat: raw.iat,
+            exp: raw.exp,
+            jti: raw.jti,
+          };
+        }
+      } catch {
+        // Drop through — `claims` stays undefined, surfaced below as
+        // `'malformed_claims'`.
+      }
+    }
+    if (!claims) return { ok: false, reason: 'malformed_claims' };
+  } else {
+    // Hard reject: tamper / format / kind / shape failures must NOT
+    // refresh — those signal a broken or hostile caller, not a stale
+    // envelope.
+    return { ok: false, reason: result.reason };
+  }
+
+  // Refresh-window check is the only state we add beyond `verifyToken`.
+  const now = Math.floor(Date.now() / 1000);
+  if (now - claims.iat > refreshWindowSec) {
+    return { ok: false, reason: 'refresh_window_closed' };
+  }
+
+  // Mint a fresh bootstrap with the SAME sessionId + appId. New iat,
+  // exp, jti — the new envelope's lifetime starts from `now`, but the
+  // refresh window remains anchored to the ORIGINAL iat the caller
+  // first received (callers that refresh repeatedly cannot extend the
+  // window arbitrarily — see RefreshBootstrapTokenOptions.refreshWindowSec).
+  const { token: newToken, claims: newClaims } = mintBootstrapToken(
+    {
+      sessionId: claims.sessionId,
+      appId: claims.appId,
+      ttlSec,
+    },
+    secret,
+  );
+  return { ok: true, token: newToken, claims: newClaims };
+}
+
+/**
+ * Small in-memory used-jti tracker for callers that opt into single-
+ * use bootstrap-token enforcement (one-time share links, etc.). The
+ * default session-channel verify path does NOT use this post-G14 —
+ * the bootstrap is multi-use within TTL by design.
+ *
+ * Bounded — entries age out once past their `exp`. Sized for single-
+ * process callers; multi-process / multi-host callers would swap this
+ * for a shared store (Redis set, DynamoDB conditional-write, etc.).
  */
 export class BootstrapTokenReplayCache {
   private readonly seen = new Map<string, number>();

@@ -122,12 +122,12 @@ import type {
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import {
-  BootstrapTokenReplayCache,
   CODE_HASH_REGEX,
   isEnumerableVectorStore,
   isTokenRegisteringAuthAdapter,
   mintBootstrapToken,
   mintSessionToken,
+  refreshBootstrapToken,
   verifyToken,
   createDeterministicBlueprintSelector,
 } from '@ggui-ai/mcp-server-core';
@@ -255,6 +255,7 @@ import {
   createGguiUpdateHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
+  createGguiRefreshBootstrapHandler,
   createInMemoryProvisionalPreviewRegistry,
   invalidateGenerationCache,
   listBlueprints,
@@ -796,6 +797,27 @@ export function defaultHandlers(deps: {
      * lets the iframe know the server is transport-aware).
      */
     readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
+    /**
+     * Optional bootstrap-refresh seam for the
+     * `ggui_runtime_refresh_bootstrap` tool (G14, 2026-05-23). When
+     * supplied, the tool registers and validates each refresh request
+     * via this seam's HMAC check + refresh-window arithmetic. Typically
+     * wired against the SAME `channelBootstrap.refresh` the
+     * session-channel server uses for WS upgrade validation, so both
+     * paths share one HMAC secret and one refresh-window policy.
+     *
+     * Absent: the tool is NOT registered on this deployment. iframes
+     * fall back to the historical "fresh handshake on every reconnect"
+     * posture — fast via the matcher cache, but more wire traffic than
+     * a stateless refresh.
+     *
+     * `createGguiServer` wires this from the `mcpAppsEnabled` branch's
+     * `channelBootstrap.refresh` so the OSS factory's behavior matches
+     * the cloud pod's tool-side composition.
+     */
+    readonly bootstrapRefresh?: import(
+      '@ggui-ai/mcp-server-handlers/session-mutations'
+    ).BootstrapRefreshSeam;
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
@@ -1108,6 +1130,19 @@ export function defaultHandlers(deps: {
         sessionStore: deps.push.sessionStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
+    // `ggui_runtime_refresh_bootstrap` — G14 (2026-05-23) signed-
+    // envelope refresh tool. Registered only when a refresh seam is
+    // wired (typically `channelBootstrap.refresh` from the
+    // mcpAppsEnabled branch). Without the seam, the tool would always
+    // return BOOTSTRAP_NOT_SUPPORTED, which is honest but useless on
+    // tools/list — skip registration entirely.
+    if (deps.push.bootstrapRefresh) {
+      handlers.push(
+        createGguiRefreshBootstrapHandler({
+          refreshSeam: deps.push.bootstrapRefresh,
+        }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      );
+    }
     // ggui_new_session — session lifetime entry point. Registered
     // whenever a sessionStore is wired (via deps.push) because that's
     // the canonical session-bearing dep. Server-mints, agent-threads
@@ -3466,7 +3501,12 @@ export function createGguiServer(
       });
     }
     const secret = sharedTokenSecret;
-    const replayCache = new BootstrapTokenReplayCache();
+    // G14 (2026-05-23): the `BootstrapTokenReplayCache` is no longer
+    // wired into the default verify path — bootstrap envelopes are
+    // multi-use within their TTL so transient WS drops reconnect
+    // without a fresh handshake. The replay cache class stays exported
+    // from `@ggui-ai/mcp-server-core` for callers that need explicit
+    // single-use semantics (one-time-link share, etc.).
     const syncMinter = (sessionId: string, appId: string) => {
       const { token, claims } = mintBootstrapToken({ sessionId, appId }, secret);
       return {
@@ -3491,19 +3531,42 @@ export function createGguiServer(
     channelBootstrap = {
       verify: (token) => {
         const result = verifyToken(token, secret, 'bootstrap');
-        if (!result.ok) return null;
-        // Single-use enforcement — reject re-use within the TTL window.
-        if (!replayCache.claim(result.claims.jti, result.claims.exp)) {
-          return null;
+        if (result.ok) {
+          return {
+            ok: true,
+            sessionId: result.claims.sessionId,
+            appId: result.claims.appId,
+          };
         }
-        return {
-          sessionId: result.claims.sessionId,
-          appId: result.claims.appId,
-        };
+        // Surface `expired` separately so the channel server can emit
+        // `BOOTSTRAP_EXPIRED` instead of `BOOTSTRAP_INVALID` — drives
+        // the iframe's refresh-vs-rehandshake branch.
+        if (result.reason === 'expired') {
+          return { ok: false, reason: 'expired' };
+        }
+        return { ok: false, reason: 'invalid' };
       },
       issueSessionToken: (sessionId, appId) => {
         const { token } = mintSessionToken({ sessionId, appId }, secret);
         return token;
+      },
+      refresh: (token) => {
+        const result = refreshBootstrapToken(token, secret);
+        if (result.ok) {
+          return {
+            ok: true,
+            token: result.token,
+            expiresAt: new Date(result.claims.exp * 1000).toISOString(),
+          };
+        }
+        if (result.reason === 'refresh_window_closed') {
+          return { ok: false, reason: 'window_closed' };
+        }
+        // Tamper / format / kind / shape failures collapse into a
+        // single `invalid` — the iframe MUST re-handshake; the exact
+        // breakage type is logged server-side, not surfaced on the
+        // wire (would be useful only to attackers probing the surface).
+        return { ok: false, reason: 'invalid' };
       },
     };
   }
@@ -3871,6 +3934,15 @@ export function createGguiServer(
                   }
                 : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
+              // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
+              // the WS upgrade path uses — sharing it means one HMAC
+              // secret + one refresh-window policy across the verify
+              // path and the `ggui_runtime_refresh_bootstrap` tool.
+              // Absent when MCP Apps isn't enabled or no bootstrap
+              // secret is wired; the tool isn't registered in that case.
+              ...(channelBootstrap
+                ? { bootstrapRefresh: { refresh: channelBootstrap.refresh } }
+                : {}),
               // Iframe-runtime bundle URL — padded onto
               // `_meta.ggui.bootstrap.runtimeUrl` by the push
               // handler's resultMeta. C8 made this required on

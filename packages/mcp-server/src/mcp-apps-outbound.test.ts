@@ -470,7 +470,15 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     ws.close();
   });
 
-  it('rejects a reused bootstrap token (single-use enforcement)', async () => {
+  it('accepts a reused bootstrap token within TTL (G14, 2026-05-23)', async () => {
+    // G14: bootstrap envelopes are no longer single-use. Pre-G14 this
+    // test asserted the OPPOSITE — second subscribe rejected with
+    // `BOOTSTRAP_INVALID`. Under the signed-envelope model, a transient
+    // WS drop reconnects with the SAME envelope (no fresh handshake)
+    // as long as the envelope is still inside its TTL. Replay defense
+    // is now anchored on the signed `exp` claim + the refresh-window
+    // cap on the original `iat` (see `refreshBootstrapToken`), not
+    // on a server-side jti-claim Map.
     const bootstrap = await mintPushBootstrap();
 
     async function subscribeWithBootstrap(): Promise<{ ok: true; sessionToken?: string } | { ok: false; code: string }> {
@@ -511,9 +519,11 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     expect(first.ok).toBe(true);
 
     const second = await subscribeWithBootstrap();
-    expect(second.ok).toBe(false);
-    if (!second.ok) {
-      expect(second.code).toBe('BOOTSTRAP_INVALID');
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      // Each subscribe still mints a fresh sessionToken — that's the
+      // longer-TTL reconnect credential and is per-subscribe by design.
+      expect(typeof second.sessionToken).toBe('string');
     }
   });
 
