@@ -37,13 +37,9 @@ interface InterfaceInfo {
 }
 
 const designRoot = path.resolve(import.meta.dirname, '..');
-// get-primitives-ts.ts lives in cloud/generation-runtime/src/tools/ (it's a
-// cluster-side variant doc string used by primitiveDocFormat='ts' experiments).
-// Renamed from coreRoot when core/ was deleted in the 2026-04-25 taxonomy refactor.
-const generationRuntimeRoot = path.resolve(designRoot, '../../cloud/generation-runtime');
-// The ui-gen copy is what ui-gen imports directly — it cannot import from
-// `cloud/` (open package vs. the cloud boundary). Both copies are written
-// from this one generator so they can never drift.
+// ui-gen is the sole consumer post-2026-05-23 (the second consumer
+// `cloud/generation-runtime/src/tools/get-primitives-ts.ts` was retired
+// alongside the orphan `@ggui-cloud/generation-runtime` package).
 const uiGenRoot = path.resolve(designRoot, '../ui-gen');
 
 const sourceFiles = [
@@ -385,17 +381,12 @@ function main() {
 export const PRIMITIVES_DOCUMENTATION_TS = ${JSON.stringify(markdown)};
 `;
 
-  const outputPaths = [
-    path.join(generationRuntimeRoot, 'src/tools/get-primitives-ts.ts'),
-    path.join(uiGenRoot, 'src/tools/get-primitives-ts.ts'),
-  ];
+  const outputPath = path.join(uiGenRoot, 'src/tools/get-primitives-ts.ts');
 
   /* eslint-disable no-console */
-  for (const outputPath of outputPaths) {
-    if (!fs.existsSync(path.dirname(outputPath))) {
-      console.log(`Skipping write: ${path.dirname(outputPath)} not found`);
-      continue;
-    }
+  if (!fs.existsSync(path.dirname(outputPath))) {
+    console.log(`Skipping write: ${path.dirname(outputPath)} not found`);
+  } else {
     fs.writeFileSync(outputPath, output, 'utf-8');
     console.log(`Generated ${outputPath}`);
   }
