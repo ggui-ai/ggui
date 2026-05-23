@@ -5,6 +5,8 @@ import {
   parseTheme,
 } from './parser';
 import { lightTheme } from './defaults/light';
+import { getRawTheme, getThemeIds } from './registry';
+import type { ThemeMode } from './types';
 
 describe('generateCssVariables', () => {
   it('generates CSS variables for color tokens', () => {
@@ -54,6 +56,53 @@ describe('parseTheme', () => {
     expect(parsed.cssVariables).toContain('--ggui-motion-transition-fast');
     expect(parsed.cssVariables).toContain('--ggui-shape-radius-md: 8px');
     expect(parsed.canvasConfig.mode).toBe('none');
+  });
+
+  // Shape-conformance gate across every registered theme × every mode.
+  // Catches a premium theme drifting from the canonical DtcgTheme shape
+  // before it ships — without this, a missing `accessibility` or
+  // `motion.transition` block only surfaces at render time, not test time.
+  describe('shape conformance across every registered theme', () => {
+    const themeIds = getThemeIds();
+    const modes: readonly ThemeMode[] = ['light', 'dark'];
+
+    for (const id of themeIds) {
+      for (const mode of modes) {
+        it(`${id} (${mode}) parses + emits every required token group`, () => {
+          const raw = getRawTheme(id, mode);
+          expect(raw, `getRawTheme(${id}, ${mode}) returned undefined`).toBeDefined();
+          const parsed = parseTheme(id, raw!);
+
+          // Required emission groups — every canonical DtcgTheme must
+          // ship all of these. Premium themes that override durations or
+          // semantic-color stops still emit under these prefixes.
+          expect(parsed.cssVariables).toContain('--ggui-color-primary-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-neutral-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-success-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-warning-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-error-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-info-500');
+          expect(parsed.cssVariables).toContain('--ggui-color-surface');
+          expect(parsed.cssVariables).toContain('--ggui-color-onSurface');
+          expect(parsed.cssVariables).toContain('--ggui-color-outline');
+          expect(parsed.cssVariables).toContain('--ggui-font-family-sans');
+          expect(parsed.cssVariables).toContain('--ggui-shape-radius-');
+          expect(parsed.cssVariables).toContain('--ggui-shape-shadow-');
+          expect(parsed.cssVariables).toContain('--ggui-motion-duration-');
+          expect(parsed.cssVariables).toContain('--ggui-motion-transition-');
+          expect(parsed.cssVariables).toContain('--ggui-accessibility-focusRing-color');
+          expect(parsed.cssVariables).toContain('--ggui-accessibility-reducedMotion-duration');
+          expect(parsed.cssVariables).toContain('--ggui-accessibility-highContrast-borderWidth');
+          expect(parsed.cssVariables).toContain('--ggui-zIndex-modal');
+          expect(parsed.cssVariables).toContain('--ggui-zIndex-tooltip');
+
+          // ParsedTheme metadata round-trips from the source theme.
+          expect(parsed.id).toBe(id);
+          expect(parsed.name).toBe(raw!.$name);
+          expect(parsed.canvasConfig.mode).toBe(raw!.canvas.mode.$value);
+        });
+      }
+    }
   });
 });
 

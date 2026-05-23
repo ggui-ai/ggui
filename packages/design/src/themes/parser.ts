@@ -11,13 +11,40 @@
 import type { DtcgTheme, DtcgToken, ParsedTheme } from './types';
 
 /**
- * Format a token value for CSS output.
- * Arrays are joined with commas; everything else is coerced to string.
+ * Format a DTCG token value for CSS output.
+ *
+ * Most token types (`color`, `dimension`, `fontFamily`, `fontWeight`,
+ * `duration`, `cubicBezier`, `number`, `string`, `transition`-as-string)
+ * ship their `$value` as a CSS-ready string and pass through unchanged.
+ *
+ * Two DTCG-spec composite types may ship as structured objects when the
+ * theme came from an operator-authored {@link ThemeDocument} file:
+ *
+ *   - `shadow` → `{ offsetX, offsetY, blur, spread, color }`
+ *     → composes to `${offsetX} ${offsetY} ${blur} ${spread} ${color}`
+ *   - `transition` → `{ duration, timingFunction, property? }`
+ *     → composes to `${property} ${duration} ${timingFunction}` (no
+ *       property when absent)
+ *
+ * Arrays (e.g. canvas `colors`) are comma-joined.
  */
 function formatValue(token: DtcgToken<unknown>): string {
   const v = token.$value;
   if (Array.isArray(v)) {
     return v.join(', ');
+  }
+  if (v !== null && typeof v === 'object') {
+    const obj = v as Record<string, unknown>;
+    if (token.$type === 'shadow' && 'offsetX' in obj) {
+      return `${obj.offsetX} ${obj.offsetY} ${obj.blur} ${obj.spread} ${obj.color}`;
+    }
+    if (token.$type === 'transition' && 'duration' in obj && 'timingFunction' in obj) {
+      const prop = typeof obj.property === 'string' && obj.property ? `${obj.property} ` : '';
+      return `${prop}${obj.duration} ${obj.timingFunction}`;
+    }
+    // Unknown composite — coerce to string (will surface as `[object Object]`
+    // for the operator to debug; this is intentional, since silently emitting
+    // a broken CSS value would hide the misconfiguration).
   }
   return String(v);
 }

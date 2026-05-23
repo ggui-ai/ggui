@@ -57,7 +57,7 @@ const VALUE_BAND = 22;
 const LABEL_BAND = 30;
 const DEFAULT_HEIGHT = 240;
 const DEFAULT_BAR_COLOR = 'var(--ggui-color-primary-500, #3b82f6)';
-const TEXT_COLOR = 'var(--ggui-color-text-primary, #18181b)';
+const TEXT_COLOR = 'var(--ggui-color-onSurface, #18181b)';
 const AXIS_COLOR = 'var(--ggui-color-outline, #d4d4d8)';
 const FONT_FAMILY = 'var(--ggui-font-family-sans, sans-serif)';
 
@@ -199,13 +199,13 @@ function readChartTheme(): ChartTheme {
   return {
     palette: [
       readCssVar(style, '--ggui-color-primary-500', '#3b82f6'),
-      readCssVar(style, '--ggui-color-info', '#0ea5e9'),
-      readCssVar(style, '--ggui-color-success', '#22c55e'),
-      readCssVar(style, '--ggui-color-warning', '#f59e0b'),
-      readCssVar(style, '--ggui-color-error', '#ef4444'),
+      readCssVar(style, '--ggui-color-info-500', '#0ea5e9'),
+      readCssVar(style, '--ggui-color-success-500', '#22c55e'),
+      readCssVar(style, '--ggui-color-warning-500', '#f59e0b'),
+      readCssVar(style, '--ggui-color-error-500', '#ef4444'),
     ],
     axisColor: readCssVar(style, '--ggui-color-outline', '#d4d4d8'),
-    labelColor: readCssVar(style, '--ggui-color-text-primary', '#18181b'),
+    labelColor: readCssVar(style, '--ggui-color-onSurface', '#18181b'),
     gridColor: readCssVar(style, '--ggui-color-outline', '#e4e4e7'),
   };
 }

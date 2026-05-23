@@ -20,30 +20,32 @@ function minimalTheme(): ThemeDocument {
     spacing: {
       '4': { $type: 'dimension', $value: '16px' },
     },
-    typography: {
-      fontFamily: {
+    font: {
+      family: {
         sans: { $type: 'fontFamily', $value: ['Inter', 'system-ui'] },
       },
-      fontSize: {
+      size: {
         md: { $type: 'dimension', $value: '16px' },
       },
-      fontWeight: {
+      weight: {
         regular: { $type: 'fontWeight', $value: 400 },
       },
       lineHeight: {
         normal: { $type: 'number', $value: 1.5 },
       },
     },
-    radius: { md: { $type: 'dimension', $value: '8px' } },
-    shadow: {
-      sm: {
-        $type: 'shadow',
-        $value: {
-          offsetX: '0',
-          offsetY: '1px',
-          blur: '2px',
-          spread: '0',
-          color: 'rgba(0,0,0,.05)',
+    shape: {
+      radius: { md: { $type: 'dimension', $value: '8px' } },
+      shadow: {
+        sm: {
+          $type: 'shadow',
+          $value: {
+            offsetX: '0',
+            offsetY: '1px',
+            blur: '2px',
+            spread: '0',
+            color: 'rgba(0,0,0,.05)',
+          },
         },
       },
     },
@@ -169,7 +171,7 @@ describe('loadTheme — file path', () => {
     const themePath = join(tmp, 'theme.json');
     writeFileSync(
       themePath,
-      JSON.stringify({ color: {}, spacing: {} }), // missing typography/radius/shadow
+      JSON.stringify({ color: {}, spacing: {} }), // missing font/shape
     );
 
     const result = loadTheme({

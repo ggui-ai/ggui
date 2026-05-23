@@ -1002,30 +1002,32 @@ describe('createGguiServer — theme (OSS split Phase 4 #4 wiring)', () => {
       spacing: {
         '4': { $type: 'dimension' as const, $value: '16px' },
       },
-      typography: {
-        fontFamily: {
+      font: {
+        family: {
           sans: { $type: 'fontFamily' as const, $value: 'Brand Sans' },
         },
-        fontSize: {
+        size: {
           md: { $type: 'dimension' as const, $value: '16px' },
         },
-        fontWeight: {
+        weight: {
           regular: { $type: 'fontWeight' as const, $value: 400 },
         },
         lineHeight: {
           normal: { $type: 'number' as const, $value: 1.5 },
         },
       },
-      radius: { md: { $type: 'dimension' as const, $value: '8px' } },
-      shadow: {
-        sm: {
-          $type: 'shadow' as const,
-          $value: {
-            offsetX: '0',
-            offsetY: '1px',
-            blur: '2px',
-            spread: '0',
-            color: 'rgba(0,0,0,.05)',
+      shape: {
+        radius: { md: { $type: 'dimension' as const, $value: '8px' } },
+        shadow: {
+          sm: {
+            $type: 'shadow' as const,
+            $value: {
+              offsetX: '0',
+              offsetY: '1px',
+              blur: '2px',
+              spread: '0',
+              color: 'rgba(0,0,0,.05)',
+            },
           },
         },
       },

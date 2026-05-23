@@ -9,6 +9,10 @@ import {
  * Minimum valid theme — covers every required group with one token
  * each. Every test case starts from this base and mutates a single
  * field to isolate what's under test.
+ *
+ * Mirrors the canonical `DtcgTheme` shape: `color`/`font`/`spacing`/
+ * `shape` are required; `motion`/`canvas`/`accessibility`/`zIndex`
+ * are optional.
  */
 const baseTheme: ThemeDocument = {
   color: {
@@ -20,32 +24,34 @@ const baseTheme: ThemeDocument = {
   spacing: {
     '4': { $type: 'dimension', $value: '16px' },
   },
-  typography: {
-    fontFamily: {
+  font: {
+    family: {
       sans: { $type: 'fontFamily', $value: ['Inter', 'system-ui'] },
     },
-    fontSize: {
+    size: {
       md: { $type: 'dimension', $value: '16px' },
     },
-    fontWeight: {
+    weight: {
       regular: { $type: 'fontWeight', $value: 400 },
     },
     lineHeight: {
       normal: { $type: 'number', $value: 1.5 },
     },
   },
-  radius: {
-    md: { $type: 'dimension', $value: '8px' },
-  },
-  shadow: {
-    sm: {
-      $type: 'shadow',
-      $value: {
-        offsetX: '0',
-        offsetY: '1px',
-        blur: '2px',
-        spread: '0',
-        color: 'rgba(0,0,0,.05)',
+  shape: {
+    radius: {
+      md: { $type: 'dimension', $value: '8px' },
+    },
+    shadow: {
+      sm: {
+        $type: 'shadow',
+        $value: {
+          offsetX: '0',
+          offsetY: '1px',
+          blur: '2px',
+          spread: '0',
+          color: 'rgba(0,0,0,.05)',
+        },
       },
     },
   },
@@ -56,19 +62,34 @@ describe('parseThemeDocument — required groups', () => {
     const parsed = parseThemeDocument(baseTheme);
     expect(parsed.color).toBeDefined();
     expect(parsed.spacing).toBeDefined();
-    expect(parsed.typography).toBeDefined();
-    expect(parsed.radius).toBeDefined();
-    expect(parsed.shadow).toBeDefined();
+    expect(parsed.font).toBeDefined();
+    expect(parsed.shape).toBeDefined();
   });
 
-  it('accepts optional DTCG metadata ($schema, $version)', () => {
+  it('accepts optional DTCG metadata ($schema, $version, $name, $description)', () => {
     const parsed = parseThemeDocument({
       ...baseTheme,
       $schema: 'https://design-tokens.github.io/community-group/format/',
       $version: '1.0.0',
+      $name: 'My Brand',
+      $description: 'A custom theme for the brand site.',
     });
     expect(parsed.$schema).toContain('design-tokens');
     expect(parsed.$version).toBe('1.0.0');
+    expect(parsed.$name).toBe('My Brand');
+    expect(parsed.$description).toBe('A custom theme for the brand site.');
+  });
+
+  it('accepts optional $metadata bag', () => {
+    const parsed = parseThemeDocument({
+      ...baseTheme,
+      $metadata: {
+        font: 'Inter',
+        fontUrl: 'https://fonts.googleapis.com/css2?family=Inter',
+        philosophy: 'Quiet utility.',
+      },
+    });
+    expect(parsed.$metadata?.font).toBe('Inter');
   });
 
   it('rejects unknown top-level keys', () => {
@@ -82,16 +103,45 @@ describe('parseThemeDocument — required groups', () => {
     expect(() => parseThemeDocument(rest)).toThrow();
   });
 
-  it('rejects missing typography group', () => {
-    const { typography: _t, ...rest } = baseTheme;
+  it('rejects missing font group', () => {
+    const { font: _f, ...rest } = baseTheme;
     expect(() => parseThemeDocument(rest)).toThrow();
   });
 
-  it('rejects missing required typography sub-groups', () => {
+  it('rejects missing shape group', () => {
+    const { shape: _s, ...rest } = baseTheme;
+    expect(() => parseThemeDocument(rest)).toThrow();
+  });
+
+  it('rejects font group missing required `family.sans` slot', () => {
     expect(() =>
       parseThemeDocument({
         ...baseTheme,
-        typography: { fontFamily: baseTheme.typography.fontFamily },
+        font: {
+          ...baseTheme.font,
+          family: {
+            // No `sans` — required by FontGroup.family.
+            mono: { $type: 'fontFamily', $value: 'JetBrains Mono' },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects font group missing required sub-records', () => {
+    expect(() =>
+      parseThemeDocument({
+        ...baseTheme,
+        font: { family: baseTheme.font.family },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects shape group missing required sub-records', () => {
+    expect(() =>
+      parseThemeDocument({
+        ...baseTheme,
+        shape: { radius: baseTheme.shape.radius },
       }),
     ).toThrow();
   });
@@ -99,21 +149,61 @@ describe('parseThemeDocument — required groups', () => {
   it('accepts optional groups when present', () => {
     const parsed = parseThemeDocument({
       ...baseTheme,
-      duration: {
-        fast: { $type: 'duration', $value: '150ms' },
-      },
-      transition: {
-        default: {
-          $type: 'transition',
-          $value: { duration: '150ms', timingFunction: 'ease-out' },
+      motion: {
+        duration: {
+          fast: { $type: 'duration', $value: '150ms' },
+        },
+        transition: {
+          default: {
+            $type: 'transition',
+            $value: { duration: '150ms', timingFunction: 'ease-out' },
+          },
         },
       },
       zIndex: {
         modal: { $type: 'number', $value: 1000 },
       },
     });
-    expect(parsed.duration?.fast?.$value).toBe('150ms');
+    expect(parsed.motion?.duration.fast?.$value).toBe('150ms');
     expect(parsed.zIndex?.modal?.$value).toBe(1000);
+  });
+
+  it('accepts optional motion sub-records (easing + keyframes)', () => {
+    const parsed = parseThemeDocument({
+      ...baseTheme,
+      motion: {
+        duration: {
+          fast: { $type: 'duration', $value: '150ms' },
+        },
+        easing: {
+          default: {
+            $type: 'cubicBezier',
+            $value: 'cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+        },
+        transition: {
+          default: { $type: 'transition', $value: 'all 200ms ease-out' },
+        },
+        keyframes: {
+          pulse: { $type: 'string', $value: 'pulse-keyframes' },
+        },
+      },
+    });
+    expect(parsed.motion?.easing?.default?.$value).toContain('cubic-bezier');
+    expect(parsed.motion?.keyframes?.pulse).toBeDefined();
+  });
+
+  it('accepts an optional canvas group', () => {
+    const parsed = parseThemeDocument({
+      ...baseTheme,
+      canvas: {
+        mode: { $type: 'string', $value: 'wave' },
+        speed: { $type: 'number', $value: 1 },
+        colors: { $type: 'array', $value: ['#fff', '#000'] },
+        background: { $type: 'color', $value: '#0a0a0a' },
+      },
+    });
+    expect(parsed.canvas?.mode.$value).toBe('wave');
   });
 
   it('round-trips JSON.stringify → parse', () => {
@@ -125,7 +215,7 @@ describe('parseThemeDocument — required groups', () => {
 });
 
 describe('parseThemeDocument — token discriminated union', () => {
-  it('rejects unknown $type values (typo guard)', () => {
+  it('rejects unknown $type values inside the color group (typo guard)', () => {
     expect(() =>
       parseThemeDocument({
         ...baseTheme,
@@ -155,36 +245,37 @@ describe('parseThemeDocument — token discriminated union', () => {
   it('accepts string-form fontFamily value', () => {
     const parsed = parseThemeDocument({
       ...baseTheme,
-      typography: {
-        ...baseTheme.typography,
-        fontFamily: {
+      font: {
+        ...baseTheme.font,
+        family: {
+          sans: { $type: 'fontFamily', $value: 'Inter' },
           mono: { $type: 'fontFamily', $value: 'JetBrains Mono' },
         },
       },
     });
-    expect(parsed.typography.fontFamily.mono?.$value).toBe('JetBrains Mono');
+    expect(parsed.font.family.mono?.$value).toBe('JetBrains Mono');
   });
 
   it('accepts numeric fontWeight between 1-1000', () => {
     const parsed = parseThemeDocument({
       ...baseTheme,
-      typography: {
-        ...baseTheme.typography,
-        fontWeight: {
+      font: {
+        ...baseTheme.font,
+        weight: {
           bold: { $type: 'fontWeight', $value: 700 },
         },
       },
     });
-    expect(parsed.typography.fontWeight.bold?.$value).toBe(700);
+    expect(parsed.font.weight.bold?.$value).toBe(700);
   });
 
   it('rejects fontWeight outside 1-1000', () => {
     expect(() =>
       parseThemeDocument({
         ...baseTheme,
-        typography: {
-          ...baseTheme.typography,
-          fontWeight: {
+        font: {
+          ...baseTheme.font,
+          weight: {
             bogus: { $type: 'fontWeight', $value: 0 },
           },
         },
@@ -193,9 +284,9 @@ describe('parseThemeDocument — token discriminated union', () => {
     expect(() =>
       parseThemeDocument({
         ...baseTheme,
-        typography: {
-          ...baseTheme.typography,
-          fontWeight: {
+        font: {
+          ...baseTheme.font,
+          weight: {
             bogus: { $type: 'fontWeight', $value: 1001 },
           },
         },
@@ -206,18 +297,43 @@ describe('parseThemeDocument — token discriminated union', () => {
   it('accepts string-form transition $value', () => {
     const parsed = parseThemeDocument({
       ...baseTheme,
-      transition: {
-        default: { $type: 'transition', $value: 'all 200ms ease-out' },
+      motion: {
+        duration: {
+          fast: { $type: 'duration', $value: '150ms' },
+        },
+        transition: {
+          default: { $type: 'transition', $value: 'all 200ms ease-out' },
+        },
       },
     });
-    expect(parsed.transition?.default?.$value).toBe('all 200ms ease-out');
+    expect(parsed.motion?.transition.default?.$value).toBe(
+      'all 200ms ease-out',
+    );
   });
 
   it('accepts structured shadow $value', () => {
     const parsed = parseThemeDocument(baseTheme);
-    const sm = parsed.shadow.sm;
+    const sm = parsed.shape.shadow.sm;
     expect(typeof sm?.$value).toBe('object');
     expect((sm?.$value as { offsetX: string }).offsetX).toBe('0');
+  });
+
+  it('accepts string-form shadow $value (registry-theme style)', () => {
+    const parsed = parseThemeDocument({
+      ...baseTheme,
+      shape: {
+        ...baseTheme.shape,
+        shadow: {
+          sm: {
+            $type: 'shadow',
+            $value: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+          },
+        },
+      },
+    });
+    expect(parsed.shape.shadow.sm?.$value).toBe(
+      '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+    );
   });
 });
 
@@ -239,6 +355,34 @@ describe('parseThemeDocument — color group extensibility', () => {
     expect(parsed.color.primary).toBeDefined();
     expect(parsed.color.accent).toBeDefined();
     expect(parsed.color.surface).toBeDefined();
+  });
+
+  it('accepts semantic roles as either singleton tokens OR palettes', () => {
+    // Tools that emit singleton success/warning/error tokens — parses.
+    const singletons = parseThemeDocument({
+      ...baseTheme,
+      color: {
+        primary: { '500': { $type: 'color', $value: '#0ea5e9' } },
+        success: { $type: 'color', $value: '#16a34a' },
+        warning: { $type: 'color', $value: '#f59e0b' },
+        error: { $type: 'color', $value: '#dc2626' },
+        info: { $type: 'color', $value: '#2563eb' },
+      },
+    });
+    expect(singletons.color.success).toBeDefined();
+
+    // Tools that emit full 50-900 palettes — also parses.
+    const scales = parseThemeDocument({
+      ...baseTheme,
+      color: {
+        primary: { '500': { $type: 'color', $value: '#0ea5e9' } },
+        success: {
+          '500': { $type: 'color', $value: '#16a34a' },
+          '700': { $type: 'color', $value: '#15803d' },
+        },
+      },
+    });
+    expect(scales.color.success).toBeDefined();
   });
 
   it('rejects color palette with a non-token leaf', () => {

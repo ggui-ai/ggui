@@ -52,14 +52,17 @@ import { parseThemeDocument, type ThemeDocument } from './theme.js';
  * `--ggui-*` CSS variable block.
  *
  * **`document` is shape-discriminated by `source`** (no casts, two
- * genuinely-distinct underlying types):
+ * structurally-similar but separately-validated underlying types):
  *
- *   - `default` / `preset` → `DtcgTheme` (the single canonical theme
- *     shape consumed by every registry-side theme — produces full
- *     `--ggui-*` CSS through `parseTheme`).
- *   - `file` → `ThemeDocument` (the flat strict-Zod schema for the
- *     open `ggui.json#theme` file format — `typography`/`radius`/
- *     `shadow` at the top level, optional motion/accessibility/zIndex).
+ *   - `default` / `preset` → `DtcgTheme` (the canonical theme shape
+ *     consumed by every registry-side theme — produces full
+ *     `--ggui-*` CSS through `parseTheme`; every group required).
+ *   - `file` → `ThemeDocument` (the strict-Zod schema for the open
+ *     `ggui.json#theme` file format — same `color`/`font`/`spacing`/
+ *     `shape`/`motion`/`canvas`/`accessibility`/`zIndex` vocabulary
+ *     as `DtcgTheme`, but `motion`/`canvas`/`accessibility`/`zIndex`
+ *     are optional so external tools that emit only a subset still
+ *     parse).
  *
  * Consumers narrow on `source` if they ever need the shape. CSS-variable
  * emission happens upstream into `cssVariables`, so most downstream code

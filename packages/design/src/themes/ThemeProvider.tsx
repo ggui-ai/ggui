@@ -120,7 +120,7 @@ html, body {
   margin: 0;
   font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);
   background: ${bodyBackground};
-  color: var(--ggui-color-onSurface, #18181b);
+  color: var(--ggui-color-onSurface, #111827);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color-scheme: ${mode};
