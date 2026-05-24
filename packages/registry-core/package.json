@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/registry-core",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Pure-TypeScript registry operations and storage interfaces for the ggui marketplace. No I/O, no HTTP — operations take typed inputs plus a storage deps bag and return discriminated-union results.",
   "keywords": [
     "ggui",

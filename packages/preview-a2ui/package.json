@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/preview-a2ui",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Narrow A2UI boundary for ggui's provisional UI assembly channel. Framework-neutral types and validators for the server-write subset (createSurface / updateComponents / deleteSurface) used to paint shimmering placeholder UI before the final generated interface arrives.",
   "keywords": [
     "ggui",

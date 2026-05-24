@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/protocol",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "ggui protocol types — events, sessions, WebSocket, MCP, LLM models",
   "license": "Apache-2.0",
   "keywords": [

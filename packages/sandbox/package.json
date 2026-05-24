@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/sandbox",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Bounded process-isolation runner for untrusted Node subprocesses. Spawns a child with explicit cwd, env allowlist, wall-clock timeout, output caps, and (for Node children) a V8 heap cap. Honest scope — does NOT attempt network egress blocking, filesystem read boundaries, CPU limits, or syscall filtering (those need OS primitives: namespaces / seccomp / cgroups).",
   "keywords": [
     "ggui",

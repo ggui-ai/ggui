@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/dev-stack",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Shared local dev engine for the ggui protocol: local UI registry discovery, compile-on-demand, filesystem watcher with SSE, and a read-only HTTP surface for dev tooling. Framework-neutral — agent runtime supervision plugs in via an adapter seam, so no agent SDK is hardcoded.",
   "keywords": [
     "ggui",

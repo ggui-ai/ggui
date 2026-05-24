@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/channel-client",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Transport-negotiated channel registry for ggui clients. A framework-agnostic library (no React, no iframe assumptions): channels register once with a ChannelRegistry, and each channel picks a WebSocket or polling transport based on what the session bootstrap declares.",
   "keywords": [
     "ggui",
