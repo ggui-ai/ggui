@@ -1,4 +1,4 @@
-# @ggui-ai/e2e-scenarios
+# @ggui-ai/e2e-wire-scenarios
 
 Canonical end-to-end scenario suite for the ggui protocol. Vitest-driven full-stack journeys against the OSS samples — pins the wire's behavioral contract so a regression in any layer (protocol, handlers, iframe-runtime, MCP server, samples) trips the suite.
 
@@ -47,21 +47,21 @@ Each row uses `describe.skipIf(...)` to drop out cleanly when its API key is mis
 
 ```bash
 # All scenarios — rows whose API key isn't set skip cleanly.
-pnpm --filter @ggui-ai/e2e-scenarios test
+pnpm --filter @ggui-ai/e2e-wire-scenarios test
 
 # Anthropic rows only (matches the pre-matrix behavior).
-ANTHROPIC_API_KEY=sk-... pnpm --filter @ggui-ai/e2e-scenarios test
+ANTHROPIC_API_KEY=sk-... pnpm --filter @ggui-ai/e2e-wire-scenarios test
 
 # Full matrix — every row runs against its provider's ggui instance + sample agent.
 ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
-  pnpm --filter @ggui-ai/e2e-scenarios test
+  pnpm --filter @ggui-ai/e2e-wire-scenarios test
 
 # Full matrix + hard-fail on missing keys (the label-gated / nightly CI mode).
 GGUI_E2E_REQUIRE_ALL_PROVIDERS=1 ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
-  pnpm --filter @ggui-ai/e2e-scenarios test
+  pnpm --filter @ggui-ai/e2e-wire-scenarios test
 
 # Single scenario
-pnpm --filter @ggui-ai/e2e-scenarios exec vitest run tests/04-context-too-large.spec.ts
+pnpm --filter @ggui-ai/e2e-wire-scenarios exec vitest run tests/04-context-too-large.spec.ts
 ```
 
 ## Services

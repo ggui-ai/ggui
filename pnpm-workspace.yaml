@@ -40,7 +40,7 @@ packages:
   # OSS e2e suites — journeys (Playwright), wire-scenario contract suite,
   # and the Tier-2 MCP Apps host simulator (vitest, no browser).
   - "e2e/journeys"
-  - "e2e/scenarios"
+  - "e2e/wire-scenarios"
   - "e2e/mcp-host-simulator"
   # Marketplace test fixtures — workspace-private published gadget /
   # blueprint repos consumed by e2e to exercise publish→search→install.

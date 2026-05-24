@@ -26,7 +26,7 @@
  * `openSession`→push flow no longer yield the `{codeReady, cache}`
  * structuredContent the assertions expect — the handshake negotiator
  * now makes a real authenticated `[decision]` call. The same
- * push→cold-gen→cache behavior is covered green by `e2e/scenarios`
+ * push→cold-gen→cache behavior is covered green by `e2e/wire-scenarios`
  * `08-cached-push` + `17-cold-path-then-cache`, so coverage is not
  * lost. Re-enable after rebuilding the fake-generator + push harness
  * against the current contract (real `ANTHROPIC_API_KEY` via a

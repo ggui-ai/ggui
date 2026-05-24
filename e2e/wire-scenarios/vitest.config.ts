@@ -8,10 +8,11 @@ import { defineConfig } from 'vitest/config';
 //
 // `.env.local` lives at the OSS-subtree root — `oss/` in the monorepo,
 // the repo root in the OSS-standalone checkout — gitignored, so every
-// dev keeps their own. `scenarios/` sits exactly two levels below that
-// root in BOTH layouts (`oss/e2e/scenarios` / `e2e/scenarios`), so the
-// path is a single context-independent `../../`. Kept in lockstep with
-// the twin load in `fixtures/global-setup.ts`.
+// dev keeps their own. `wire-scenarios/` sits exactly two levels below
+// that root in BOTH layouts (`oss/e2e/wire-scenarios` /
+// `e2e/wire-scenarios`), so the path is a single context-independent
+// `../../`. Kept in lockstep with the twin load in
+// `fixtures/global-setup.ts`.
 //
 // A missing file is fine: dotenv no-ops, honest specs skip when their
 // gating env var is absent, and CI injects keys via GitHub Actions
