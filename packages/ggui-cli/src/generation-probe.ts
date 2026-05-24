@@ -75,7 +75,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Readonly<
   // defaults were also bare; this fixes them as part of the model bump.
   anthropic: 'anthropic/claude-haiku-4-5',
   openai: 'openai/gpt-5.5-2026-04-23',
-  google: 'google/gemini-3.5-flash',
+  google: 'gemini/gemini-3.5-flash',
   openrouter: 'anthropic/claude-haiku-4.5',
 };
 

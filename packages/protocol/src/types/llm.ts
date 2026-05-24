@@ -34,10 +34,10 @@ export type ModelId =
   | "anthropic/claude-sonnet-4-6"
   | "anthropic/claude-opus-4-6"
   // Google Gemini models (preview suffix required by API for *-preview ids)
-  | "google/gemini-3.5-flash"
-  | "google/gemini-3.1-flash-lite-preview"
-  | "google/gemini-3-flash-preview"
-  | "google/gemini-3.1-pro-preview"
+  | "gemini/gemini-3.5-flash"
+  | "gemini/gemini-3.1-flash-lite-preview"
+  | "gemini/gemini-3-flash-preview"
+  | "gemini/gemini-3.1-pro-preview"
   // OpenAI models
   | "openai/gpt-5.3-codex"
   | "openai/gpt-5.4"
@@ -101,8 +101,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
   // (https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json);
   // host-side consumers may apply a more authoritative price table
   // if they ship one.
-  "google/gemini-3.5-flash": {
-    id: "google/gemini-3.5-flash",
+  "gemini/gemini-3.5-flash": {
+    id: "gemini/gemini-3.5-flash",
     provider: "google",
     displayName: "Gemini 3.5 Flash",
     tier: "fast",
@@ -111,8 +111,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     supportsTools: true,
     supportsCaching: true,
   },
-  "google/gemini-3.1-flash-lite-preview": {
-    id: "google/gemini-3.1-flash-lite-preview",
+  "gemini/gemini-3.1-flash-lite-preview": {
+    id: "gemini/gemini-3.1-flash-lite-preview",
     provider: "google",
     displayName: "Gemini 3.1 Flash Lite",
     tier: "fast",
@@ -120,8 +120,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     maxTokens: 1000000,
     supportsTools: true,
   },
-  "google/gemini-3-flash-preview": {
-    id: "google/gemini-3-flash-preview",
+  "gemini/gemini-3-flash-preview": {
+    id: "gemini/gemini-3-flash-preview",
     provider: "google",
     displayName: "Gemini 3 Flash",
     tier: "fast",
@@ -129,8 +129,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     maxTokens: 1000000,
     supportsTools: true,
   },
-  "google/gemini-3.1-pro-preview": {
-    id: "google/gemini-3.1-pro-preview",
+  "gemini/gemini-3.1-pro-preview": {
+    id: "gemini/gemini-3.1-pro-preview",
     provider: "google",
     displayName: "Gemini 3.1 Pro",
     tier: "balanced",
@@ -203,9 +203,17 @@ export function getProviderForModel(modelId: string): LLMProvider {
   }
 
   const prefix = modelId.substring(0, slash);
+  // LiteLLM convention: `gemini/` = Google AI Studio (GEMINI_API_KEY),
+  // `vertex_ai/` = Vertex AI (GCP IAM). Both map to the same internal
+  // `google` provider since they serve the same models — the prefix
+  // disambiguates the transport, not the company. `bedrock/` and
+  // `openrouter/` are indirection providers (their inner model is
+  // encoded after the prefix, AWS-native `.` for Bedrock, `/` for
+  // OpenRouter).
   const providerMap: Record<string, LLMProvider> = {
     anthropic: "anthropic",
-    google: "google",
+    gemini: "google",
+    vertex_ai: "google",
     openai: "openai",
     openrouter: "openrouter",
   };
@@ -226,7 +234,7 @@ export function isValidLiteLLMFormat(modelId: string): boolean {
   const slash = modelId.indexOf("/");
   if (slash <= 0) return false;
   const prefix = modelId.substring(0, slash);
-  return ["anthropic", "google", "openai", "openrouter"].includes(prefix)
+  return ["anthropic", "gemini", "vertex_ai", "openai", "openrouter", "bedrock"].includes(prefix)
     && modelId.length > slash + 1;
 }
 

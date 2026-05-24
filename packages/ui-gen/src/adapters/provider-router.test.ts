@@ -155,15 +155,15 @@ describe('resolveRoute — OpenAI', () => {
 });
 
 describe('resolveRoute — Gemini (Google)', () => {
-  it('strips the `google/` prefix and sets BOTH GEMINI_API_KEY and GOOGLE_API_KEY', () => {
+  it('strips the `gemini/` prefix and sets BOTH GEMINI_API_KEY and GOOGLE_API_KEY', () => {
     // Google's `@google/genai` SDK accepts the bare model id (e.g.
-    // `'gemini-3.5-flash'`); leaving the `google/` prefix on returns
+    // `'gemini-3.5-flash'`); leaving the `gemini/` prefix on returns
     // 404 from the upstream API. The harness reads either GEMINI_API_KEY
     // or GOOGLE_API_KEY depending on which adapter slot it selects, so
     // both must be set to the same value. Clearing one would leave a
     // stale value across calls.
     const route = resolveRoute({
-      model: 'google/gemini-3.5-flash',
+      model: 'gemini/gemini-3.5-flash',
       apiKey: 'AIza-test',
       env: EMPTY_ENV,
     });
@@ -174,7 +174,7 @@ describe('resolveRoute — Gemini (Google)', () => {
 
   it('clears every non-Google sibling key', () => {
     const route = resolveRoute({
-      model: 'google/gemini-3.5-flash',
+      model: 'gemini/gemini-3.5-flash',
       apiKey: 'AIza-test',
       env: EMPTY_ENV,
     });
@@ -186,11 +186,11 @@ describe('resolveRoute — Gemini (Google)', () => {
 
   it('throws an API-key-required error when no apiKey is supplied', () => {
     expect(() =>
-      resolveRoute({ model: 'google/gemini-3.5-flash', env: EMPTY_ENV }),
+      resolveRoute({ model: 'gemini/gemini-3.5-flash', env: EMPTY_ENV }),
     ).toThrow(/API key/);
     expect(() =>
-      resolveRoute({ model: 'google/gemini-3.5-flash', env: EMPTY_ENV }),
-    ).toThrow(/google\/gemini-3\.5-flash/);
+      resolveRoute({ model: 'gemini/gemini-3.5-flash', env: EMPTY_ENV }),
+    ).toThrow(/gemini\/gemini-3\.5-flash/);
   });
 });
 
@@ -272,7 +272,7 @@ describe('resolveRoute — sibling-clear matrix', () => {
     {
       label: 'gemini-direct',
       input: {
-        model: 'google/gemini-3.5-flash',
+        model: 'gemini/gemini-3.5-flash',
         apiKey: 'k',
         env: EMPTY_ENV,
       },

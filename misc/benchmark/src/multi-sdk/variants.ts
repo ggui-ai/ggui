@@ -87,19 +87,19 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'google-fast',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'google/gemini-3-flash-preview',
+      modelId: 'gemini/gemini-3-flash-preview',
     },
     {
       id: 'google-balanced',
       sdkName: 'google',
       tier: 'balanced',
-      modelId: 'google/gemini-3.1-pro-preview',
+      modelId: 'gemini/gemini-3.1-pro-preview',
     },
     {
       id: 'google-premium',
       sdkName: 'google',
       tier: 'premium',
-      modelId: 'google/gemini-3.1-pro-preview', // No ultra available yet — use pro
+      modelId: 'gemini/gemini-3.1-pro-preview', // No ultra available yet — use pro
     },
 
     // --- OpenRouter ---
@@ -145,13 +145,13 @@ export function getSpeedVariants(): BenchmarkVariant[] {
       id: 'gemini-3-flash-preview',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'google/gemini-3-flash-preview',
+      modelId: 'gemini/gemini-3-flash-preview',
     },
     {
       id: 'gemini-3.1-flash-lite-preview',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'google/gemini-3.1-flash-lite-preview',
+      modelId: 'gemini/gemini-3.1-flash-lite-preview',
     },
     {
       id: 'claude-haiku',
@@ -190,8 +190,8 @@ export function getHybridVariants(): BenchmarkVariant[] {
       sdkName: 'google',
       tier: 'balanced',
       hybrid: {
-        draftModel: 'google/gemini-3-flash-preview',
-        reviewModel: 'google/gemini-3.1-pro-preview',
+        draftModel: 'gemini/gemini-3-flash-preview',
+        reviewModel: 'gemini/gemini-3.1-pro-preview',
       },
     },
   ];
@@ -209,7 +209,7 @@ export function getRawVsSdkVariants(): BenchmarkVariant[] {
   }> = [
     { sdkName: 'claude', modelId: 'anthropic/claude-sonnet-4-6' },
     { sdkName: 'openai', modelId: 'openai/gpt-5.3-codex' },
-    { sdkName: 'google', modelId: 'google/gemini-3.1-pro-preview' },
+    { sdkName: 'google', modelId: 'gemini/gemini-3.1-pro-preview' },
     { sdkName: 'openrouter', modelId: 'openrouter/anthropic/claude-sonnet-4-6' },
   ];
 
