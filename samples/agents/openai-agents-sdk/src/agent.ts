@@ -178,7 +178,14 @@ export async function* runAgent(
 
       // Tool calls — emitted when the model invokes an MCP tool. The
       // SDK surfaces them as run-item events; the underlying item
-      // carries the tool name + arguments + an id we reuse as tool_use_id.
+      // carries the tool name + arguments + a callId we reuse as
+      // tool_use_id. Per `@openai/agents-core` `FunctionCallItem`
+      // docs, `callId` is "the ID of the tool call. Required to match
+      // up the respective tool call result." The peer `id` field is a
+      // separate per-item internal id (e.g. `fc_*`) that does NOT
+      // match the result's callId (e.g. `call_*`); using it here was
+      // the bug that left every tool result orphaned at "(awaiting)"
+      // in the chat UI.
       if (
         ev.type === 'run_item_stream_event' &&
         typeof ev.name === 'string' &&
@@ -190,6 +197,7 @@ export async function* runAgent(
           | {
               readonly type?: string;
               readonly rawItem?: {
+                readonly callId?: string;
                 readonly id?: string;
                 readonly name?: string;
                 readonly arguments?: unknown;
@@ -198,7 +206,9 @@ export async function* runAgent(
             }
           | undefined;
         const raw = item?.rawItem;
-        const id = String(raw?.id ?? `oa-tool-${Date.now()}-${Math.random()}`);
+        const id = String(
+          raw?.callId ?? raw?.id ?? `oa-tool-${Date.now()}-${Math.random()}`,
+        );
         const name = String(raw?.name ?? 'unknown');
         const input = raw?.arguments ?? raw?.input ?? {};
         yield {
@@ -269,16 +279,42 @@ export async function* runAgent(
  * can JSON-parse downstream (matching Claude sample's tool_result
  * handling, which expects each block to be a text string).
  *
- * `FunctionCallResultItem.output` (per @openai/agents-core protocol)
- * is a `{type:'text', text}` envelope, NOT a bare string — JSON-
- * stringifying it whole produced `{"type":"text","text":"<inner>"}`
- * downstream, which the chat UI's `JSON.parse(text).url` lookup never
- * recognized as a ggui_push envelope, so the iframe never mounted.
- * Unwrap the envelope at this boundary so the inner text reaches the UI.
+ * `FunctionCallResultItem.output` (per @openai/agents-core protocol) is
+ * a `{type:'text', text}` envelope, NOT a bare string — and OpenAI's
+ * MCP adapter then nests the underlying MCP `content[0]` inside that
+ * envelope's `text` as a JSON-encoded `{type:'text', text:'<payload>'}`,
+ * so the actual ggui payload sits TWO wraps deep. Without recursive
+ * unwrap the chat UI saw `{"type":"text","text":"…"}` and never
+ * recognized the inner ggui_push envelope (no iframe mounted). Peel
+ * every `{type:'text', text}` layer until the payload surfaces, with a
+ * depth bound that defends against pathological inputs.
  */
-function stringifyToolOutput(output: unknown): string {
+function stringifyToolOutput(output: unknown, depth: number = 0): string {
+  if (depth > 5) return typeof output === 'string' ? output : JSON.stringify(output);
   if (output === undefined || output === null) return '';
-  if (typeof output === 'string') return output;
+  if (typeof output === 'string') {
+    // Strings can themselves be JSON-encoded `{type:'text', text}`
+    // envelopes — that's exactly what OpenAI's MCP adapter ships as
+    // the inner `text` field. Peel one more layer when we recognize
+    // the shape; otherwise return the string verbatim so non-envelope
+    // payloads (the actual ggui_push JSON, for example) pass through.
+    try {
+      const parsed: unknown = JSON.parse(output);
+      if (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'type' in parsed &&
+        (parsed as { type: unknown }).type === 'text' &&
+        'text' in parsed &&
+        typeof (parsed as { text: unknown }).text === 'string'
+      ) {
+        return stringifyToolOutput((parsed as { text: string }).text, depth + 1);
+      }
+    } catch {
+      /* not JSON — return string as-is */
+    }
+    return output;
+  }
   if (
     typeof output === 'object' &&
     'type' in output &&
@@ -286,13 +322,13 @@ function stringifyToolOutput(output: unknown): string {
     'text' in output &&
     typeof (output as { text: unknown }).text === 'string'
   ) {
-    return (output as { text: string }).text;
+    return stringifyToolOutput((output as { text: string }).text, depth + 1);
   }
   if (Array.isArray(output)) {
     const parts: string[] = [];
     for (const item of output as Array<{ readonly type?: string; readonly text?: unknown }>) {
       if (item?.type === 'text' && typeof item.text === 'string') {
-        parts.push(item.text);
+        parts.push(stringifyToolOutput(item.text, depth + 1));
       } else {
         parts.push(JSON.stringify(item));
       }
