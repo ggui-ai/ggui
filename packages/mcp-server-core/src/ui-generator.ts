@@ -221,6 +221,18 @@ export interface GenerationMetadata {
   cacheHit: boolean;
   /** Retry / turn count. 0 means single-shot success. */
   attempts?: number;
+  /**
+   * Optional generator-specific routing tag for finer-grained
+   * telemetry. The bound generator decides the value space; consumers
+   * treat it as an opaque label they log + group by.
+   *
+   * Examples — a generator that supports multiple transports for the
+   * same provider (direct API vs proxied) may emit
+   * `'<provider>-direct'` vs `'<provider>-proxy'` so per-transport
+   * spend is queryable without re-deriving from `(provider, model)`.
+   * Generators that route through a single path may omit the field.
+   */
+  routeKind?: string;
 }
 
 /**
