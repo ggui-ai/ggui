@@ -133,7 +133,7 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
     // routes (agent + runtime + protocol + ops); the `tools/list`
     // assertion below pins the agent/runtime surface the `/mcp` route
     // actually exposes. When the native surface changes, update both.
-    expect(health.tools).toBe(27);
+    expect(health.tools).toBe(28);
     expect(health.channel?.path).toBe('/ws');
 
     // tools/list with the pair-minted bearer. If publish-shape
