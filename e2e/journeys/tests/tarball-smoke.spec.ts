@@ -162,6 +162,7 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
       'ggui_new_session',
       'ggui_pop',
       'ggui_push',
+      'ggui_runtime_refresh_bootstrap',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
       'ggui_search_blueprints',
