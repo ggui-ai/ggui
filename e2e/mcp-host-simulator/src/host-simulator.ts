@@ -407,16 +407,31 @@ export class HostSimulator {
    * `hasPushBootstrapMeta`), the bootstrap object is surfaced on
    * the return — the test can pass it straight to
    * {@link subscribeWith} to open the WS without parsing meta itself.
+   *
+   * `options.timeoutMs` overrides the MCP SDK's default per-request
+   * timeout (`DEFAULT_REQUEST_TIMEOUT_MSEC = 60_000`). Cold-gen pushes
+   * on cold pods can exceed 60s in cloud e2e scenarios; cold-call
+   * tests pass an explicit longer budget (e.g. 180s) to keep MCP-layer
+   * timeouts from masking the assertion they want to make. Without
+   * this option, an MCP `-32001 Request timed out` surfaces as a
+   * cryptic test failure instead of the real perf signal.
    */
   async callTool(
     name: string,
     args: Record<string, unknown>,
+    options?: { readonly timeoutMs?: number },
   ): Promise<CallToolResult> {
     if (!this.client) throw new Error('connect() first');
     const tools = await this.listTools();
     const toolEntry = tools.find((t) => t.name === name);
 
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool(
+      { name, arguments: args },
+      undefined,
+      options?.timeoutMs !== undefined
+        ? { timeout: options.timeoutMs }
+        : undefined,
+    );
     const meta = (result as { _meta?: unknown })._meta;
     const bootstrap = hasPushBootstrapMeta(meta)
       ? meta.ggui.bootstrap
@@ -481,16 +496,22 @@ export class HostSimulator {
       readonly generator?: string;
     };
     readonly forceCreate?: boolean;
+    /** Forwarded to {@link callTool} — see its `options.timeoutMs`. */
+    readonly timeoutMs?: number;
   }): Promise<HandshakeOutput> {
     const blueprintDraft = args.blueprintDraft ?? { contract: {} };
-    const result = await this.callTool('ggui_handshake', {
-      sessionId: args.sessionId,
-      intent: args.intent,
-      blueprintDraft,
-      ...(args.forceCreate !== undefined
-        ? { forceCreate: args.forceCreate }
-        : {}),
-    });
+    const result = await this.callTool(
+      'ggui_handshake',
+      {
+        sessionId: args.sessionId,
+        intent: args.intent,
+        blueprintDraft,
+        ...(args.forceCreate !== undefined
+          ? { forceCreate: args.forceCreate }
+          : {}),
+      },
+      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined,
+    );
     return result.structuredContent as HandshakeOutput;
   }
 
@@ -514,12 +535,18 @@ export class HostSimulator {
     readonly handshakeId: string;
     readonly decision: PushDecisionInput;
     readonly props?: unknown;
+    /** Forwarded to {@link callTool} — see its `options.timeoutMs`. */
+    readonly timeoutMs?: number;
   }): Promise<CallToolResult> {
-    return this.callTool('ggui_push', {
-      handshakeId: args.handshakeId,
-      decision: args.decision,
-      ...(args.props !== undefined ? { props: args.props } : {}),
-    });
+    return this.callTool(
+      'ggui_push',
+      {
+        handshakeId: args.handshakeId,
+        decision: args.decision,
+        ...(args.props !== undefined ? { props: args.props } : {}),
+      },
+      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined,
+    );
   }
 
   /**
