@@ -11,6 +11,30 @@ make test-clean-room-consumer
 Exit 0 → safe to publish. Non-zero → **do not publish**, something is
 broken in a way the monorepo can't see.
 
+## Axis — hermetic publish gate
+
+This dir's organizing axis is **the publish-time contract for `@ggui-ai/*`**
+— one gate, exercising every package, against a registry-installed
+consumer that cannot see the monorepo. Unlike the per-package `*.test.ts`
+files (workspace-symlinked source) and the wire / journey e2e suites
+(workspace-resolved tarballs), this gate is the only test that catches
+**packaging-shape regressions** invisible to `pnpm test` and
+`pnpm typecheck`. See
+[Test Placement](../../../docs/principles/test-placement.md).
+
+## CI wiring
+
+Phase 1 (2026-05-24) added
+`.github/workflows/clean-room-consumer.yml` — wires this gate into
+per-PR CI on the monorepo (not just the OSS subtree). Path-filtered to
+packaging-relevant changes (`oss/packages/**`, this dir,
+`oss/package.json`, `oss/pnpm-lock.yaml`, `oss/.npmrc`,
+`oss/pnpm-workspace.yaml`). Before Phase 1 the gate ran only locally +
+inside the subtree's own `publish-gate.yml`, so monorepo PRs could land
+packaging breakage that the next subtree sync would surface — a silent
+gate per
+[Test Placement § Tests not in any CI tier](../../../docs/principles/test-placement.md#tests-not-in-any-ci-tier).
+
 ---
 
 ## Why this exists

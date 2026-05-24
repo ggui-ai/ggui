@@ -1,85 +1,103 @@
 # `@ggui-ai/e2e-journeys`
 
-Dedicated E2E harness for the **`ggui` OSS** product boundary —
-Phase 5 per
-[`docs/plans/2026-04-21-oss-split-e2e-phases.md`](../../docs/plans/2026-04-21-oss-split-e2e-phases.md).
+End-to-end Playwright journeys for the **`ggui` OSS** product boundary
+— a developer runs `npx ggui serve` on their own machine, with their own
+LLM key, and nothing calls `api.ggui.ai` at any step. Every spec here
+tests that surface.
 
-Scope lock: **this package proves the OSS claim**. A developer runs
-`npx ggui serve` on their own machine, with their own LLM key, and
-nothing calls `api.ggui.ai` at any step. Every spec here tests
-that surface. No sandbox deploys, no Cognito auth fixtures, no
-`aws-amplify` — by design.
+> **Rename note (2026-05-24):** package renamed `@ggui-ai/e2e` →
+> `@ggui-ai/e2e-journeys` so its name mirrors the directory's stable
+> axis (journeys). The bare `@ggui-ai/e2e` name had become an axis-blind
+> catch-all. Tracked in commit `d57231a02`.
 
-## Why this is a separate package
+## Axis — OSS product journey
 
-The `@ggui-private` scope is monorepo-only dev-infra per
-CLAUDE.md Tier 4 — E2E packages don't publish to npm. The "OSS"
-claim lives in the **dep graph**: this package's `devDependencies`
-contain zero references to any other `@ggui-private/*` package,
-no hosted-cloud SDK (`aws-amplify`, `@aws-sdk/*`,
-`@ggui-cloud/*`), and no hosted-bridge client. That negative
-space is the contract.
+This dir's organizing axis is **the OSS product boundary as journeys**:
+one spec per end-to-end flow a self-hoster (or `npx`-driven trier) would
+take. The OSS claim is enforced by the dep graph — no `aws-amplify`,
+no `@aws-sdk/*`, no `@ggui-cloud/*`, no `@ggui-private/*` in the
+`dependencies` or `devDependencies` of `package.json`. That negative
+space is the contract; see
+[OSS Purity](../../../docs/principles/oss-purity.md).
 
-The hosted E2E harness still lives at
-[`@ggui-private/e2e`](../). It runs everything except the
-`journeys-ggui-oss` project.
+The hosted-product Playwright journeys live next door under
+`cloud/e2e/tests/journeys/ggui/` (owned by `@ggui-private/e2e`).
+
+## Hybrid runner — known axis violation
+
+This package currently runs **two runners under one `package.json`**:
+
+- **Playwright** (`*.spec.ts`) — the primary journey lane (24 specs).
+- **vitest** — a single residue test `tarball-transitive-packages.test.ts`
+  plus the `fixtures/mcps/**/*.test.ts` lane (Lane-3 stateful-MCP
+  contract tests).
+
+Per
+[Test Placement § Mixing runners under one `package.json`](../../../docs/principles/test-placement.md#mixing-runners-under-one-packagejson),
+this is an anti-pattern. The **full split is deferred** because the
+vitest residue co-imports `tarball-install-harness.ts` with the
+Playwright specs — splitting today would either duplicate the harness or
+introduce a circular workspace dep. Tracked in commit `d57231a02`. The
+rename above was the rename-only half of the work; the structural split
+follows when the harness is refactored.
+
+Until then: invoke each runner with its dedicated script (`test` for
+Playwright, `test:mcp-fixtures` for vitest) — `pnpm test` does NOT pick
+up the vitest residue.
+
+## Where does a new test go?
+
+1. **OSS journey (self-hoster running `ggui serve`)?** → append a new
+   `<slug>.spec.ts` under `tests/`.
+2. **Stateful MCP fixture (Lane 3 contract test)?** → under
+   `tests/fixtures/mcps/<name>/<name>.test.ts` (the vitest residue).
+3. **Hosted product journey (UI tied to api.ggui.ai)?** → not here. Use
+   `cloud/e2e/tests/journeys/ggui/` with `@ggui-private/e2e`.
+4. **Cross-host MCP wire scenario (numeric ordinal)?** → not here. Use
+   [`oss/e2e/wire-scenarios/`](../wire-scenarios/README.md).
+
+If unsure, walk the
+[where-does-it-go decision tree](../../../docs/principles/test-placement.md#the-where-does-it-go-decision-tree).
 
 ## Running
 
 ```sh
-# Full OSS journey suite (default Playwright project =
-# `journeys-ggui-oss`, so no `--project` flag needed)
+# Full OSS journey suite (Playwright, project: journeys-ggui-oss)
 pnpm --filter @ggui-ai/e2e-journeys test
 
-# MCP fixture contract tests (vitest, Lane 3 per stateful-MCP
-# strategy §4.3)
+# MCP fixture contract tests (vitest residue, Lane 3)
 pnpm --filter @ggui-ai/e2e-journeys test:mcp-fixtures
 
 # Typecheck
 pnpm --filter @ggui-ai/e2e-journeys typecheck
 ```
 
-The `make test-journeys-ggui-oss` target at the repo root calls
-through to this package — unchanged name, new filter underneath.
+`make test-journeys-ggui-oss` at the repo root calls through to this
+package (target name unchanged for muscle-memory).
 
 ## Layout
 
 ```
-e2e/oss/
+oss/e2e/journeys/
 ├── package.json          — @ggui-ai/e2e-journeys
 ├── playwright.config.ts  — single project `journeys-ggui-oss`
-├── vitest.config.ts      — Lane 3 fixture contract tests
-├── tsconfig.json         — extends ../../tsconfig.base.json
+├── vitest.config.ts      — Lane 3 MCP fixture contract tests
 └── tests/
-    ├── pair-flow.spec.ts
-    ├── manifest-capabilities.spec.ts
-    ├── npx-bootstrap.spec.ts
-    ├── tarball-smoke.spec.ts
-    ├── chat-page.spec.ts
-    ├── provisional-preview.spec.ts
-    ├── live-generation.spec.ts
-    ├── ggui-serve-harness.ts
-    ├── tarball-install-harness.ts
+    ├── *.spec.ts                       — Playwright journeys (24)
+    ├── tarball-transitive-packages.test.ts  — vitest residue (1)
+    ├── ggui-serve-harness.ts           — shared boot helper
+    ├── tarball-install-harness.ts      — shared install helper
     └── fixtures/
-        ├── manifest-capabilities/  — ggui.json + blueprint fixture
-        └── mcps/                   — stateful MCP fixtures (tasks/...)
+        ├── contract-kit/   — MCP Apps host fixtures
+        └── mcps/           — stateful MCP fixtures (tasks/contacts/notes)
 ```
 
 ## What's NOT here (and why)
 
-- `fixtures/amplify.ts`, `fixtures/auth.ts`, `fixtures/mcp.ts` —
-  hosted sandbox fixtures, not needed here.
-- `global-setup.ts` / `global-teardown.ts` — hosted's shared Docker
-  UI-generator container; OSS specs spawn `ggui serve` directly per
-  test.
-
-## Relationship to the hosted package
-
-| Concern                          | Home                                       |
-| -------------------------------- | ------------------------------------------ |
-| Phase 5 OSS journey              | **This package** (`@ggui-ai/e2e-journeys`) |
-| Phase 6 hosted journeys          | `@ggui-private/e2e` at `../`               |
-| Contract tests (mcp/render/auth) | `@ggui-private/e2e`                        |
-| Ops + quality projects           | `@ggui-private/e2e`                        |
-| Docker UI-generator suite        | `@ggui-private/e2e`                        |
-| MCP fixture contract tests       | **This package** (Lane 3 vitest)           |
+- Hosted sandbox fixtures (`amplify.ts`, `auth.ts`, `mcp.ts`) — those
+  pull in `aws-amplify`; they live in `@ggui-private/e2e` (closed).
+- The Tier-2 MCP host simulator — lives in
+  [`oss/e2e/mcp-host-simulator/`](../mcp-host-simulator/README.md)
+  as `@ggui-ai/e2e-mcp-host-simulator`.
+- The clean-room consumer publish gate — lives in
+  [`oss/e2e/clean-room-consumer/`](../clean-room-consumer/README.md).

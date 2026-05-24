@@ -2,6 +2,26 @@
 
 Canonical end-to-end scenario suite for the ggui protocol. Vitest-driven full-stack journeys against the OSS samples — pins the wire's behavioral contract so a regression in any layer (protocol, handlers, iframe-runtime, MCP server, samples) trips the suite.
 
+> **Rename note (2026-05-24):** this dir was `oss/e2e/scenarios/` until
+> the Phase 2 disambiguation. Renamed to `wire-scenarios/` so a reader
+> can tell the difference between this (OSS, wire-contract focus) and
+> `cloud/e2e/scenarios/` (cloud, persona-organized) at a glance. Package
+> name moved in lockstep: `@ggui-ai/e2e-scenarios` → `@ggui-ai/e2e-wire-scenarios`.
+
+## Axis — numeric ordinal + descriptive slug
+
+Every spec is named `<NN>-<slug>.spec.ts` where `NN` is a stable
+two-digit ordinal (01-25 today). New scenarios append to the next free
+ordinal. The ordinal is the load-bearing identifier — referenced from
+PR descriptions, CI logs, and the
+[provider matrix](#provider-matrix) below. Per
+[Test Placement](../../../docs/principles/test-placement.md), this is a
+single stable axis; no per-feature subdirs.
+
+**Where does a new test go?** Append the next free ordinal:
+`tests/26-<slug>.spec.ts`. Add a row to the table below. If the test
+needs an LLM, audit whether it should join the provider matrix.
+
 ## Why vitest + playwright-core (not @playwright/test)
 
 The workspace runs with `node-linker=hoisted` in `.npmrc` (required for AWS Amplify Hosting monorepo SSR builds). That breaks `@playwright/test`'s singleton-module invariant — the runner and the test files end up importing different physical copies of `@playwright/test`, even at the same version, and you get `Playwright Test did not expect test() to be called here` errors.
