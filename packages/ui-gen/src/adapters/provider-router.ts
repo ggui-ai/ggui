@@ -36,20 +36,21 @@ export function getBedrockModelId(model: string): string {
   return `us.anthropic.${stripped}`;
 }
 
-export type RoutingMode =
-  | 'bedrock'
-  | 'anthropic-direct'
-  | 'anthropic-byok'
-  | 'openai-direct'
-  | 'gemini-direct'
-  | 'openrouter-direct';
-
 export interface RoutingDecision {
-  readonly mode: RoutingMode;
+  /**
+   * Upstream model id the dispatch adapter will pass to the provider
+   * SDK — already transformed for the chosen route (e.g.
+   * `getBedrockModelId` upcasts an `anthropic/...` alias to a
+   * `us.anthropic.*` inference profile when routing through Bedrock).
+   */
   readonly model: string;
+  /**
+   * Env-var mutations the caller MUST apply to `process.env` before
+   * invoking the dispatch adapter. `undefined` values are deletions
+   * (the wrong provider's stale key must be cleared so the dispatch
+   * doesn't accidentally fire against it). See {@link applyRouteToEnv}.
+   */
   readonly env: Record<string, string | undefined>;
-  readonly isByok: boolean;
-  readonly keySource: 'byok' | 'platform';
 }
 
 export interface RoutingInput {
@@ -94,7 +95,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
       );
     }
     return {
-      mode: 'openai-direct',
       // OpenAI SDK accepts the bare model id (e.g. `'gpt-5.4'`); the
       // upstream id helper strips the `openai/` LiteLLM prefix.
       model: getUpstreamModelId(model),
@@ -107,8 +107,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         OPENROUTER_API_KEY: undefined,
         CLAUDE_CODE_USE_BEDROCK: undefined,
       },
-      isByok: false,
-      keySource: 'platform',
     };
   }
 
@@ -121,7 +119,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
       );
     }
     return {
-      mode: 'gemini-direct',
       model: getUpstreamModelId(model),
       env: {
         // `harness/llm-router.ts`'s GoogleAgent reads `GEMINI_API_KEY ||
@@ -135,8 +132,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         OPENROUTER_API_KEY: undefined,
         CLAUDE_CODE_USE_BEDROCK: undefined,
       },
-      isByok: false,
-      keySource: 'platform',
     };
   }
 
@@ -149,7 +144,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
       );
     }
     return {
-      mode: 'openrouter-direct',
       // OpenRouter accepts the full `openrouter/<provider>/<model>`
       // path verbatim — no prefix-strip.
       model,
@@ -161,8 +155,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         GOOGLE_API_KEY: undefined,
         CLAUDE_CODE_USE_BEDROCK: undefined,
       },
-      isByok: false,
-      keySource: 'platform',
     };
   }
 
@@ -170,7 +162,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
   if (apiKey) {
     const upstreamModel = getUpstreamModelId(model);
     return {
-      mode: 'anthropic-byok',
       model: upstreamModel,
       env: {
         ANTHROPIC_API_KEY: apiKey,
@@ -184,8 +175,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         GOOGLE_API_KEY: undefined,
         OPENROUTER_API_KEY: undefined,
       },
-      isByok: true,
-      keySource: 'byok',
     };
   }
 
@@ -193,7 +182,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
   const noApiKey = !env.ANTHROPIC_API_KEY;
   if (explicitBedrock || noApiKey) {
     return {
-      mode: 'bedrock',
       model: getBedrockModelId(model),
       env: {
         ANTHROPIC_API_KEY: undefined,
@@ -204,14 +192,11 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         GOOGLE_API_KEY: undefined,
         OPENROUTER_API_KEY: undefined,
       },
-      isByok: false,
-      keySource: 'platform',
     };
   }
 
   const upstreamModel = getUpstreamModelId(model);
   return {
-    mode: 'anthropic-direct',
     model: upstreamModel,
     env: {
       ANTHROPIC_BASE_URL: undefined,
@@ -221,8 +206,6 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
       GOOGLE_API_KEY: undefined,
       OPENROUTER_API_KEY: undefined,
     },
-    isByok: false,
-    keySource: 'platform',
   };
 }
 
