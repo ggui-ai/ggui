@@ -180,6 +180,30 @@ export interface UiGenerateInput {
    * Absent / empty → no third-party gadget types to overlay.
    */
   gadgetTypes?: Readonly<Record<string, string>>;
+  /**
+   * Optional infra-side hint for the resolved generator. MP.5
+   * (2026-05-24): introduced so agent callers can override the
+   * server's default model per-render — `infra.model` is the only
+   * field at v1; future expansion (temperature, max_tokens, etc.)
+   * lands here additively.
+   *
+   * `model` MUST be a LiteLLM-format id (`provider/model-name`) OR a
+   * cloud-specific Bedrock alias (`bedrock/<bedrock-model-id>`). The
+   * generator decides routing from the prefix; OSS callers without a
+   * cloud pod read `infra.model` only when their bound generator
+   * honors it.
+   *
+   * Cloud pod (`@ggui-cloud/ggui-protocol-pod`): the
+   * `generator` override threads `infra.model` into
+   * `RunGenerationArgs.model`, which dispatches through
+   * `resolvePoolRoute`.
+   *
+   * Self-hosted OSS callers: typically read `infra.model` inside
+   * their `resolveLlm` impl to override the workspace default.
+   */
+  infra?: {
+    readonly model?: string;
+  };
   /** Abort cancellation — server may cancel on session close or timeout. */
   signal?: AbortSignal;
 }

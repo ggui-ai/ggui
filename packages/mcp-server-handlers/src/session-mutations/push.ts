@@ -845,6 +845,35 @@ const inputSchema = {
       "Per-stack-item theme override. Wins over Session.themeId for THIS render. Omit to inherit the session theme.",
     ),
   /**
+   * MP.5 (2026-05-24) — typed `infra` envelope. Today carries one
+   * field (`model`); future expansion (temperature, max_tokens,
+   * provider hints) lands here additively. `model` MUST be in
+   * LiteLLM format (`provider/model-name`) OR the cloud pod's
+   * `bedrock/<bedrock-model-id>` alias.
+   *
+   * Pre-MP.5 this field was un-schema'd — the cloud's pre-validation
+   * gate read it raw via `extractInfraModel` because the schema
+   * stripped unknown keys. With `infra` typed, the parsed value
+   * survives into the generator override, where the cloud seam
+   * threads `infra.model` into `RunGenerationArgs.model`.
+   *
+   * Strict — extra keys at `infra.*` are not silently dropped, so
+   * a typo (`infra.modelId`) surfaces as a clear zod path instead of
+   * a silent default-model fallback.
+   */
+  infra: z
+    .object({
+      model: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "LiteLLM model id (`provider/model-name`) or cloud Bedrock alias (`bedrock/<id>`).",
+        ),
+    })
+    .strict()
+    .optional(),
+  /**
    * Push decision discriminator.
    *
    *   - `{kind: 'accept'}` — use the handshake's
@@ -1813,6 +1842,13 @@ export function createGguiPushHandler(
               ...(resolvedGadgetTypes !== undefined
                 ? { gadgetTypes: resolvedGadgetTypes }
                 : {}),
+              // MP.5 (2026-05-24): typed `infra.model` flows from
+              // the agent's wire input through the parsed schema
+              // into the generator. Cloud's seam reads
+              // `generateInput.infra?.model` to populate
+              // `RunGenerationArgs.model`; the OSS generator path
+              // ignores it (resolveLlm picks the model).
+              ...(parsed.infra !== undefined ? { infra: parsed.infra } : {}),
             },
           );
           generatedCodeReady = outcome.ok;
@@ -2358,6 +2394,14 @@ async function runGenerationIntoSession(
      * sandbox loads each wrapper's real declaration into its VFS.
      */
     readonly gadgetTypes?: Readonly<Record<string, string>>;
+    /**
+     * MP.5 (2026-05-24) — typed `infra.model` override from the
+     * agent's wire input. Threaded onto `generateInputBase.infra`
+     * so the generator override (cloud pod) can pick the model up
+     * without re-parsing raw input. OSS path ignores it
+     * (`resolveLlm` already chose the model).
+     */
+    readonly infra?: { readonly model?: string };
   },
 ): Promise<GenerationRunOutcome> {
   const { ctx, sessionId, stackItemId, story } = args;
@@ -2404,6 +2448,11 @@ async function runGenerationIntoSession(
     ...(args.gadgetTypes !== undefined
       ? { gadgetTypes: args.gadgetTypes }
       : {}),
+    // MP.5 (2026-05-24) — typed infra envelope. Today carries one
+    // field (`model`); cloud's generator override pulls
+    // `infra.model` into `RunGenerationArgs.model` for the pool
+    // route dispatcher. OSS path ignores it.
+    ...(args.infra !== undefined ? { infra: args.infra } : {}),
   };
 
   let result: Awaited<ReturnType<UiGenerator['generate']>>;
