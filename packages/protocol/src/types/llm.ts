@@ -33,7 +33,8 @@ export type ModelId =
   | "anthropic/claude-haiku-4-5"
   | "anthropic/claude-sonnet-4-6"
   | "anthropic/claude-opus-4-6"
-  // Google Gemini models (preview suffix required by API)
+  // Google Gemini models (preview suffix required by API for *-preview ids)
+  | "gemini/gemini-3.5-flash"
   | "gemini/gemini-3.1-flash-lite-preview"
   | "gemini/gemini-3-flash-preview"
   | "gemini/gemini-3.1-pro-preview"
@@ -94,7 +95,21 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     supportsTools: true,
   },
 
-  // ── Google Gemini (API requires "-preview" suffix) ──────────────
+  // ── Google Gemini (API requires "-preview" suffix for previews) ──
+  // Default generation model (multi-provider-pool slice, 2026-05-24).
+  // Authoritative pricing lives in
+  // cloud/ggui-protocol-pod/data/litellm_prices_*.json; the values
+  // below mirror it for display/registry use only.
+  "gemini/gemini-3.5-flash": {
+    id: "gemini/gemini-3.5-flash",
+    provider: "google",
+    displayName: "Gemini 3.5 Flash",
+    tier: "fast",
+    costs: { inputPer1M: 1.5, outputPer1M: 9.0 },
+    maxTokens: 1048576,
+    supportsTools: true,
+    supportsCaching: true,
+  },
   "gemini/gemini-3.1-flash-lite-preview": {
     id: "gemini/gemini-3.1-flash-lite-preview",
     provider: "google",
