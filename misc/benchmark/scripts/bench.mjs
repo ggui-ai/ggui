@@ -110,7 +110,7 @@ const PRESETS = {
   quick: {
     providers: ['google'],
     commits: ['weather-card'],
-    model: 'gemini/gemini-3.1-flash-lite-preview',
+    model: 'google/gemini-3.1-flash-lite-preview',
     maxAttempts: 5,
     maxEvalRounds: 0,
     timeout: 120000,
@@ -118,7 +118,7 @@ const PRESETS = {
   'coding-agent': {
     providers: ['google'],
     commits: ['weather-card'],
-    model: 'gemini/gemini-3-flash-preview',
+    model: 'google/gemini-3-flash-preview',
     maxAttempts: 10,
     maxEvalRounds: 0,
     timeout: 300000,
@@ -265,7 +265,7 @@ loadEnvFile(resolve(WORKSPACE_ROOT, '.env.local'));
 const DEFAULT_MODELS = {
   claude: 'anthropic/claude-haiku-4-5',
   openai: 'openai/gpt-5.4-mini',
-  google: 'gemini/gemini-3.1-flash-lite-preview',
+  google: 'google/gemini-3.1-flash-lite-preview',
   openrouter: 'openrouter/anthropic/claude-haiku-4-5',
 };
 

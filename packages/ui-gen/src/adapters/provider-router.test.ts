@@ -8,9 +8,10 @@
 // provider routed):
 //
 //   1. `route.model` — the upstream id the downstream adapter must
-//      receive (provider-prefix stripped for OpenAI; verbatim for
-//      Gemini + OpenRouter; remapped to a Bedrock inference profile
-//      for Bedrock).
+//      receive (provider-prefix stripped for direct providers
+//      OpenAI + Google; verbatim for indirection providers like
+//      OpenRouter; remapped to a Bedrock inference profile for
+//      Bedrock).
 //   2. `route.env` — the full env mutation block. Crucially this
 //      INCLUDES sibling-provider keys cleared to `undefined`, so a
 //      stale value from a prior render cannot leak into the next call.
@@ -154,23 +155,26 @@ describe('resolveRoute — OpenAI', () => {
 });
 
 describe('resolveRoute — Gemini (Google)', () => {
-  it('returns the model verbatim and sets BOTH GEMINI_API_KEY and GOOGLE_API_KEY', () => {
-    // The harness reads either env var depending on which adapter slot
-    // it selects, so both must be set to the same value. Clearing one
-    // would leave a stale value across calls.
+  it('strips the `google/` prefix and sets BOTH GEMINI_API_KEY and GOOGLE_API_KEY', () => {
+    // Google's `@google/genai` SDK accepts the bare model id (e.g.
+    // `'gemini-3.5-flash'`); leaving the `google/` prefix on returns
+    // 404 from the upstream API. The harness reads either GEMINI_API_KEY
+    // or GOOGLE_API_KEY depending on which adapter slot it selects, so
+    // both must be set to the same value. Clearing one would leave a
+    // stale value across calls.
     const route = resolveRoute({
-      model: 'gemini/gemini-3.5-flash',
+      model: 'google/gemini-3.5-flash',
       apiKey: 'AIza-test',
       env: EMPTY_ENV,
     });
-    expect(route.model).toBe('gemini/gemini-3.5-flash');
+    expect(route.model).toBe('gemini-3.5-flash');
     expect(route.env.GEMINI_API_KEY).toBe('AIza-test');
     expect(route.env.GOOGLE_API_KEY).toBe('AIza-test');
   });
 
   it('clears every non-Google sibling key', () => {
     const route = resolveRoute({
-      model: 'gemini/gemini-3.5-flash',
+      model: 'google/gemini-3.5-flash',
       apiKey: 'AIza-test',
       env: EMPTY_ENV,
     });
@@ -182,11 +186,11 @@ describe('resolveRoute — Gemini (Google)', () => {
 
   it('throws an API-key-required error when no apiKey is supplied', () => {
     expect(() =>
-      resolveRoute({ model: 'gemini/gemini-3.5-flash', env: EMPTY_ENV }),
+      resolveRoute({ model: 'google/gemini-3.5-flash', env: EMPTY_ENV }),
     ).toThrow(/API key/);
     expect(() =>
-      resolveRoute({ model: 'gemini/gemini-3.5-flash', env: EMPTY_ENV }),
-    ).toThrow(/gemini\/gemini-3\.5-flash/);
+      resolveRoute({ model: 'google/gemini-3.5-flash', env: EMPTY_ENV }),
+    ).toThrow(/google\/gemini-3\.5-flash/);
   });
 });
 
@@ -268,7 +272,7 @@ describe('resolveRoute — sibling-clear matrix', () => {
     {
       label: 'gemini-direct',
       input: {
-        model: 'gemini/gemini-3.5-flash',
+        model: 'google/gemini-3.5-flash',
         apiKey: 'k',
         env: EMPTY_ENV,
       },

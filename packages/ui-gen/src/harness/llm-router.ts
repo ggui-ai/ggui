@@ -866,8 +866,8 @@ export class GoogleAgent extends LLMAgent {
   readonly provider = 'google' as const;
 
   protected resolveModel(model: string): string {
-    return model.startsWith('gemini/')
-      ? model.slice('gemini/'.length)
+    return model.startsWith('google/')
+      ? model.slice('google/'.length)
       : model;
   }
 

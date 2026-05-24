@@ -103,7 +103,7 @@ export abstract class GeneratorAdapter {
  * Strip provider prefix from LiteLLM-format model IDs.
  * 'anthropic/claude-sonnet-4-6' -> 'claude-sonnet-4-6'
  * 'openai/gpt-5.3-codex' -> 'gpt-5.3-codex'
- * 'gemini/gemini-3-flash-preview' -> 'gemini-3-flash-preview'
+ * 'google/gemini-3-flash-preview' -> 'gemini-3-flash-preview'
  */
 function stripModelPrefix(modelId: string): string {
   const slashIndex = modelId.indexOf('/');

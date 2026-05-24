@@ -16,7 +16,7 @@ export function getUpstreamModelId(model: string): string {
     'anthropic/claude-opus-4-6': 'claude-opus-4-6-20260201',
   };
   if (UPSTREAM_MAP[model]) return UPSTREAM_MAP[model];
-  if (model.startsWith('gemini/')) return model;
+  if (model.startsWith('google/')) return model.replace(/^google\//, '');
   if (model.startsWith('openai/')) return model.replace(/^openai\//, '');
   return model;
 }

@@ -205,7 +205,7 @@ describe('Cost Calculator', () => {
   });
 
   it('calculates cost for Gemini 3 Flash Preview', () => {
-    const cost = calculateCost('gemini/gemini-3-flash-preview', {
+    const cost = calculateCost('google/gemini-3-flash-preview', {
       input: 10000,
       output: 5000,
     });
@@ -215,7 +215,7 @@ describe('Cost Calculator', () => {
   });
 
   it('calculates cost for Gemini 3.1 Flash Lite Preview (cheapest)', () => {
-    const cost = calculateCost('gemini/gemini-3.1-flash-lite-preview', {
+    const cost = calculateCost('google/gemini-3.1-flash-lite-preview', {
       input: 10000,
       output: 5000,
     });
@@ -235,9 +235,9 @@ describe('Cost Calculator', () => {
 
 describe('MODEL_REGISTRY', () => {
   it('includes Google and OpenAI models', () => {
-    expect(MODEL_REGISTRY['gemini/gemini-3-flash-preview']).toBeDefined();
-    expect(MODEL_REGISTRY['gemini/gemini-3.1-flash-lite-preview']).toBeDefined();
-    expect(MODEL_REGISTRY['gemini/gemini-3.1-pro-preview']).toBeDefined();
+    expect(MODEL_REGISTRY['google/gemini-3-flash-preview']).toBeDefined();
+    expect(MODEL_REGISTRY['google/gemini-3.1-flash-lite-preview']).toBeDefined();
+    expect(MODEL_REGISTRY['google/gemini-3.1-pro-preview']).toBeDefined();
     expect(MODEL_REGISTRY['openai/gpt-5.3-codex']).toBeDefined();
     expect(MODEL_REGISTRY['openai/gpt-5.4']).toBeDefined();
     expect(MODEL_REGISTRY['openai/gpt-5.4-mini']).toBeDefined();
@@ -245,9 +245,9 @@ describe('MODEL_REGISTRY', () => {
   });
 
   it('models have correct tiers', () => {
-    expect(MODEL_REGISTRY['gemini/gemini-3-flash-preview'].tier).toBe('fast');
-    expect(MODEL_REGISTRY['gemini/gemini-3.1-flash-lite-preview'].tier).toBe('fast');
-    expect(MODEL_REGISTRY['gemini/gemini-3.1-pro-preview'].tier).toBe('balanced');
+    expect(MODEL_REGISTRY['google/gemini-3-flash-preview'].tier).toBe('fast');
+    expect(MODEL_REGISTRY['google/gemini-3.1-flash-lite-preview'].tier).toBe('fast');
+    expect(MODEL_REGISTRY['google/gemini-3.1-pro-preview'].tier).toBe('balanced');
     expect(MODEL_REGISTRY['openai/gpt-5.3-codex'].tier).toBe('balanced');
     expect(MODEL_REGISTRY['openai/gpt-5.4'].tier).toBe('premium');
     expect(MODEL_REGISTRY['openai/gpt-5.4-mini'].tier).toBe('fast');
@@ -255,7 +255,7 @@ describe('MODEL_REGISTRY', () => {
   });
 
   it('models have correct provider', () => {
-    expect(MODEL_REGISTRY['gemini/gemini-3-flash-preview'].provider).toBe('google');
+    expect(MODEL_REGISTRY['google/gemini-3-flash-preview'].provider).toBe('google');
     expect(MODEL_REGISTRY['openai/gpt-5.3-codex'].provider).toBe('openai');
   });
 
@@ -352,7 +352,7 @@ describe('SDK Adapters', () => {
   describe('GoogleRawAdapter', () => {
     it('resolves model IDs by stripping gemini/ prefix', () => {
       const adapter = new GoogleRawAdapter({});
-      expect(adapter.resolveModelId('gemini/gemini-3-flash-preview')).toBe('gemini-3-flash-preview');
+      expect(adapter.resolveModelId('google/gemini-3-flash-preview')).toBe('gemini-3-flash-preview');
       expect(adapter.resolveModelId('gemini-3.1-pro-preview')).toBe('gemini-3.1-pro-preview');
     });
 
@@ -423,7 +423,7 @@ describe('Report Generator', () => {
       generator: 'ui-gen-default-haiku-4-5',
     },
     {
-      variant: { id: 'google-fast', sdkName: 'google', tier: 'fast', modelId: 'gemini/gemini-3-flash-preview' },
+      variant: { id: 'google-fast', sdkName: 'google', tier: 'fast', modelId: 'google/gemini-3-flash-preview' },
       commit: { id: 'weather-card', name: 'Weather Card', description: '', prompt: '', complexity: 'simple', contract: {} },
       generation: null,
       evaluation: null,

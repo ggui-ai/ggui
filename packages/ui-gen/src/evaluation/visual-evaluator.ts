@@ -296,7 +296,7 @@ async function callMultimodalLLM(
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
   });
   const response = await client.models.generateContent({
-    model: model.startsWith('gemini/') ? model.slice(7) : model,
+    model: model.startsWith('google/') ? model.slice(7) : model,
     contents: [{
       role: 'user',
       parts: [
