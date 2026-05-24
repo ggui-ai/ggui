@@ -36,7 +36,13 @@ export function getBedrockModelId(model: string): string {
   return `us.anthropic.${stripped}`;
 }
 
-export type RoutingMode = 'bedrock' | 'anthropic-direct' | 'anthropic-byok';
+export type RoutingMode =
+  | 'bedrock'
+  | 'anthropic-direct'
+  | 'anthropic-byok'
+  | 'openai-direct'
+  | 'gemini-direct'
+  | 'openrouter-direct';
 
 export interface RoutingDecision {
   readonly mode: RoutingMode;
@@ -55,24 +61,112 @@ export interface RoutingInput {
 /**
  * Determine the routing strategy for a generation request.
  *
- * Priority chain:
- * 1. BYOK with customer API key → direct Anthropic API (anthropic-byok)
- * 2. Explicit Bedrock flag → Bedrock IAM (bedrock)
- * 3. Platform API key available → direct Anthropic API (anthropic-direct)
- * 4. No API key → Bedrock IAM (bedrock)
+ * Anthropic priority chain (unchanged):
+ *   1. BYOK with customer API key → direct Anthropic API (anthropic-byok)
+ *   2. Explicit Bedrock flag → Bedrock IAM (bedrock)
+ *   3. Platform API key available → direct Anthropic API (anthropic-direct)
+ *   4. No API key → Bedrock IAM (bedrock)
+ *
+ * Multi-provider extension (2026-05-24):
+ *   - `openai/*` → `openai-direct` (sets `OPENAI_API_KEY`)
+ *   - `gemini/*` → `gemini-direct` (sets `GEMINI_API_KEY`)
+ *   - `openrouter/*` → `openrouter-direct` (sets `OPENROUTER_API_KEY`)
+ *
+ * For non-Anthropic providers, an `apiKey` is REQUIRED — there's no
+ * IAM-style fallback (Bedrock-IAM is Anthropic-only). Callers that
+ * lack a key MUST surface a `NO_PLATFORM_KEY` envelope upstream
+ * before reaching the dispatch path.
  */
 export function resolveRoute(input: RoutingInput): RoutingDecision {
   const { model, apiKey, env } = input;
   const provider = getProviderForModel(model);
 
-  if (provider !== 'anthropic') {
-    throw new Error(
-      `Provider "${provider}" (model "${model}") is not yet supported for direct BYOK generation. `
-      + `Currently only Anthropic models are supported. `
-      + `Supported models: anthropic/claude-haiku-4-5, anthropic/claude-sonnet-4-6, anthropic/claude-opus-4-6.`,
-    );
+  // ── Non-Anthropic providers: API key required ───────────────────
+  // Each provider gets its own env var (read by the matching adapter
+  // in `harness/llm-router.ts`). The other providers' env vars are
+  // cleared so a previous call's keys can't leak into this one.
+  if (provider === 'openai') {
+    if (!apiKey) {
+      throw new Error(
+        `Model "${model}" requires an OpenAI API key. ` +
+          `Platform-pool callers MUST resolve the key from the pool ` +
+          `cache before dispatch; BYOK callers MUST supply their own.`,
+      );
+    }
+    return {
+      mode: 'openai-direct',
+      // OpenAI SDK accepts the bare model id (e.g. `'gpt-5.4'`); the
+      // upstream id helper strips the `openai/` LiteLLM prefix.
+      model: getUpstreamModelId(model),
+      env: {
+        OPENAI_API_KEY: apiKey,
+        // Clear sibling-provider env so the wrong adapter can't fire.
+        ANTHROPIC_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_API_KEY: undefined,
+        OPENROUTER_API_KEY: undefined,
+        CLAUDE_CODE_USE_BEDROCK: undefined,
+      },
+      isByok: false,
+      keySource: 'platform',
+    };
   }
 
+  if (provider === 'google') {
+    if (!apiKey) {
+      throw new Error(
+        `Model "${model}" requires a Google (Gemini) API key. ` +
+          `Platform-pool callers MUST resolve the key from the pool ` +
+          `cache before dispatch; BYOK callers MUST supply their own.`,
+      );
+    }
+    return {
+      mode: 'gemini-direct',
+      model: getUpstreamModelId(model),
+      env: {
+        // `harness/llm-router.ts`'s GoogleAgent reads `GEMINI_API_KEY ||
+        // GOOGLE_API_KEY`. We set both to the same value so either
+        // adapter slot picks the platform key up; clearing one would
+        // leave a stale value behind on the next call.
+        GEMINI_API_KEY: apiKey,
+        GOOGLE_API_KEY: apiKey,
+        ANTHROPIC_API_KEY: undefined,
+        OPENAI_API_KEY: undefined,
+        OPENROUTER_API_KEY: undefined,
+        CLAUDE_CODE_USE_BEDROCK: undefined,
+      },
+      isByok: false,
+      keySource: 'platform',
+    };
+  }
+
+  if (provider === 'openrouter') {
+    if (!apiKey) {
+      throw new Error(
+        `Model "${model}" requires an OpenRouter API key. ` +
+          `Platform-pool callers MUST resolve the key from the pool ` +
+          `cache before dispatch; BYOK callers MUST supply their own.`,
+      );
+    }
+    return {
+      mode: 'openrouter-direct',
+      // OpenRouter accepts the full `openrouter/<provider>/<model>`
+      // path verbatim — no prefix-strip.
+      model,
+      env: {
+        OPENROUTER_API_KEY: apiKey,
+        ANTHROPIC_API_KEY: undefined,
+        OPENAI_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_API_KEY: undefined,
+        CLAUDE_CODE_USE_BEDROCK: undefined,
+      },
+      isByok: false,
+      keySource: 'platform',
+    };
+  }
+
+  // ── Anthropic priority chain (existing path) ────────────────────
   if (apiKey) {
     const upstreamModel = getUpstreamModelId(model);
     return {
@@ -82,6 +176,13 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         ANTHROPIC_API_KEY: apiKey,
         ANTHROPIC_BASE_URL: undefined,
         CLAUDE_CODE_USE_BEDROCK: undefined,
+        // Clear sibling-provider keys for symmetry with the new
+        // routes; an Anthropic-direct call must not inherit a stale
+        // OPENAI_API_KEY from the previous render.
+        OPENAI_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_API_KEY: undefined,
+        OPENROUTER_API_KEY: undefined,
       },
       isByok: true,
       keySource: 'byok',
@@ -98,6 +199,10 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
         ANTHROPIC_API_KEY: undefined,
         ANTHROPIC_BASE_URL: undefined,
         CLAUDE_CODE_USE_BEDROCK: '1',
+        OPENAI_API_KEY: undefined,
+        GEMINI_API_KEY: undefined,
+        GOOGLE_API_KEY: undefined,
+        OPENROUTER_API_KEY: undefined,
       },
       isByok: false,
       keySource: 'platform',
@@ -111,6 +216,10 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
     env: {
       ANTHROPIC_BASE_URL: undefined,
       CLAUDE_CODE_USE_BEDROCK: undefined,
+      OPENAI_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      OPENROUTER_API_KEY: undefined,
     },
     isByok: false,
     keySource: 'platform',
