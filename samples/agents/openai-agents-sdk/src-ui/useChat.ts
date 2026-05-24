@@ -102,17 +102,23 @@ export function useChat(): UseChatResult {
 
   /**
    * Async fetch of `/api/bootstrap/<shortCode>`. The shortCode is parsed
-   * from a stack-item url like `<base>/r/<shortCode>`; the JSON endpoint
-   * returns the full bootstrap envelope (live trio + componentCode +
-   * propsJson + theme + capabilities). Recovers the field set the
-   * Anthropic SDK strips from `tool_result._meta`.
+   * from a stack-item url like `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`;
+   * the JSON endpoint returns the full bootstrap envelope (live trio +
+   * componentCode + propsJson + theme + capabilities). Recovers the
+   * field set the Anthropic SDK strips from `tool_result._meta`.
+   *
+   * The `sig`+`exp` query pair is forwarded verbatim — the MCP server's
+   * `/api/bootstrap/:shortCode` route enforces the same render-signing
+   * gate as `/r/:shortCode`, so dropping the query at this layer would
+   * 403 every refetch when render-signing is on (the default).
    */
   const refetchBootstrap = useCallback(
     async (stackItemId: string, url: string) => {
-      const shortCode = parseShortCodeFromUrl(url);
-      if (!shortCode) return;
+      const parsed = parseRenderUrl(url);
+      if (!parsed) return;
+      const { shortCode, search } = parsed;
       try {
-        const res = await fetch(`/api/bootstrap/${shortCode}`, {
+        const res = await fetch(`/api/bootstrap/${shortCode}${search}`, {
           headers: { Accept: 'application/json' },
         });
         if (!res.ok) return;
@@ -390,15 +396,21 @@ function handleEvent(
 }
 
 /**
- * Pull the shortCode out of a stack-item URL. The render path is
- * `<base>/r/<shortCode>` so we match the last path segment after `/r/`.
- * Returns null on shape mismatch (e.g. someone passes a non-render URL).
+ * Pull the shortCode + render-signing query out of a stack-item URL.
+ * The render path is `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`; we
+ * match the path segment after `/r/` and preserve the search string
+ * verbatim. `search` is `''` when the URL has no query (render-signing
+ * disabled on the source server). Returns null on shape mismatch.
  */
-function parseShortCodeFromUrl(url: string): string | null {
+function parseRenderUrl(
+  url: string,
+): { readonly shortCode: string; readonly search: string } | null {
   try {
     const parsed = new URL(url, 'http://localhost');
     const match = parsed.pathname.match(/\/r\/([^/?#]+)/);
-    return match?.[1] ?? null;
+    const shortCode = match?.[1];
+    if (!shortCode) return null;
+    return { shortCode, search: parsed.search };
   } catch {
     return null;
   }

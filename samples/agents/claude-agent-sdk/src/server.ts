@@ -90,7 +90,13 @@ async function handleRequest(
     try {
       const mcpOrigin = new URL(opts.mcpUrl);
       mcpOrigin.pathname = `/api/bootstrap/${encodeURIComponent(shortCode)}`;
-      mcpOrigin.search = '';
+      // Forward the browser's `?sig=...&exp=...` to the MCP server's
+      // render-signing gate. Stripping the query was a real bug: when
+      // the MCP server boots with render-signing on (the default),
+      // every `/r/<code>` URL the agent receives carries a sig+exp,
+      // and the matching `/api/bootstrap/<code>` route enforces the
+      // same signature. Dropping the query forced a 403.
+      mcpOrigin.search = url.search;
       const upstream = await fetch(mcpOrigin.toString(), {
         headers: { Accept: 'application/json' },
       });

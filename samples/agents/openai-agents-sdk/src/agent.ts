@@ -268,10 +268,26 @@ export async function* runAgent(
  * structured object. Reduce all of them to a single string the chat UI
  * can JSON-parse downstream (matching Claude sample's tool_result
  * handling, which expects each block to be a text string).
+ *
+ * `FunctionCallResultItem.output` (per @openai/agents-core protocol)
+ * is a `{type:'text', text}` envelope, NOT a bare string — JSON-
+ * stringifying it whole produced `{"type":"text","text":"<inner>"}`
+ * downstream, which the chat UI's `JSON.parse(text).url` lookup never
+ * recognized as a ggui_push envelope, so the iframe never mounted.
+ * Unwrap the envelope at this boundary so the inner text reaches the UI.
  */
 function stringifyToolOutput(output: unknown): string {
   if (output === undefined || output === null) return '';
   if (typeof output === 'string') return output;
+  if (
+    typeof output === 'object' &&
+    'type' in output &&
+    (output as { type: unknown }).type === 'text' &&
+    'text' in output &&
+    typeof (output as { text: unknown }).text === 'string'
+  ) {
+    return (output as { text: string }).text;
+  }
   if (Array.isArray(output)) {
     const parts: string[] = [];
     for (const item of output as Array<{ readonly type?: string; readonly text?: unknown }>) {
