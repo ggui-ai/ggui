@@ -845,17 +845,12 @@ const inputSchema = {
       "Per-stack-item theme override. Wins over Session.themeId for THIS render. Omit to inherit the session theme.",
     ),
   /**
-   * MP.5 (2026-05-24) — typed `infra` envelope. Today carries one
+   * Typed `infra` envelope (added 2026-05-24). Today carries one
    * field (`model`); future expansion (temperature, max_tokens,
-   * provider hints) lands here additively. `model` MUST be in
-   * LiteLLM format (`provider/model-name`) OR the cloud pod's
-   * `bedrock/<bedrock-model-id>` alias.
-   *
-   * Pre-MP.5 this field was un-schema'd — the cloud's pre-validation
-   * gate read it raw via `extractInfraModel` because the schema
-   * stripped unknown keys. With `infra` typed, the parsed value
-   * survives into the generator override, where the cloud seam
-   * threads `infra.model` into `RunGenerationArgs.model`.
+   * provider hints) lands here additively. `model` MUST be a
+   * provider-prefixed id (`provider/model-name`); a bound generator
+   * may also accept generator-specific prefixes for alternate
+   * transports (consult the generator's docs).
    *
    * Strict — extra keys at `infra.*` are not silently dropped, so
    * a typo (`infra.modelId`) surfaces as a clear zod path instead of
@@ -868,7 +863,7 @@ const inputSchema = {
         .min(1)
         .optional()
         .describe(
-          "LiteLLM model id (`provider/model-name`) or cloud Bedrock alias (`bedrock/<id>`).",
+          "Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.",
         ),
     })
     .strict()

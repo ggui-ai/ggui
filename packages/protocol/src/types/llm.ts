@@ -96,10 +96,11 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
   },
 
   // ── Google Gemini (API requires "-preview" suffix for previews) ──
-  // Default generation model (multi-provider-pool slice, 2026-05-24).
-  // Authoritative pricing lives in
-  // cloud/ggui-protocol-pod/data/litellm_prices_*.json; the values
-  // below mirror it for display/registry use only.
+  // Default generation model.
+  // Pricing values mirror LiteLLM upstream
+  // (https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json);
+  // host-side consumers may apply a more authoritative price table
+  // if they ship one.
   "gemini/gemini-3.5-flash": {
     id: "gemini/gemini-3.5-flash",
     provider: "google",

@@ -60,23 +60,32 @@ export interface RoutingInput {
 }
 
 /**
- * Determine the routing strategy for a generation request.
+ * Determine the routing strategy for a generation request — pure
+ * function over `(model, apiKey, env)` that returns the upstream
+ * model id and the env-var mutations the caller must apply before
+ * dispatch.
  *
- * Anthropic priority chain (unchanged):
- *   1. BYOK with customer API key → direct Anthropic API (anthropic-byok)
- *   2. Explicit Bedrock flag → Bedrock IAM (bedrock)
- *   3. Platform API key available → direct Anthropic API (anthropic-direct)
- *   4. No API key → Bedrock IAM (bedrock)
+ * Branching is keyed on `getProviderForModel(model)`:
  *
- * Multi-provider extension (2026-05-24):
- *   - `openai/*` → `openai-direct` (sets `OPENAI_API_KEY`)
- *   - `gemini/*` → `gemini-direct` (sets `GEMINI_API_KEY`)
- *   - `openrouter/*` → `openrouter-direct` (sets `OPENROUTER_API_KEY`)
+ *   - `openai/*` — direct OpenAI API (sets `OPENAI_API_KEY`).
+ *   - `gemini/*` — direct Gemini API (sets `GEMINI_API_KEY` +
+ *     `GOOGLE_API_KEY`).
+ *   - `openrouter/*` — direct OpenRouter API (sets `OPENROUTER_API_KEY`).
+ *   - `anthropic/*` — three-way branch:
+ *       1. With `apiKey` present → direct Anthropic API
+ *          (sets `ANTHROPIC_API_KEY`).
+ *       2. Without `apiKey` AND with explicit
+ *          `env.CLAUDE_CODE_USE_BEDROCK === '1'` (or no
+ *          `env.ANTHROPIC_API_KEY` at all) → AWS Bedrock route
+ *          (sets `CLAUDE_CODE_USE_BEDROCK=1`; dispatch uses the
+ *          host's IAM grant).
+ *       3. Otherwise → direct Anthropic API with whatever
+ *          `ANTHROPIC_API_KEY` is already in `env`.
  *
  * For non-Anthropic providers, an `apiKey` is REQUIRED — there's no
- * IAM-style fallback (Bedrock-IAM is Anthropic-only). Callers that
- * lack a key MUST surface a `NO_PLATFORM_KEY` envelope upstream
- * before reaching the dispatch path.
+ * IAM-style fallback. Callers that don't have a key MUST surface a
+ * "no API key" envelope to their agent before reaching the dispatch
+ * path; throwing here is defense in depth.
  */
 export function resolveRoute(input: RoutingInput): RoutingDecision {
   const { model, apiKey, env } = input;
@@ -89,9 +98,9 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
   if (provider === 'openai') {
     if (!apiKey) {
       throw new Error(
-        `Model "${model}" requires an OpenAI API key. ` +
-          `Platform-pool callers MUST resolve the key from the pool ` +
-          `cache before dispatch; BYOK callers MUST supply their own.`,
+        `Model "${model}" requires an API key. ` +
+          `Set 'apiKey' on the RoutingInput (BYOK) or supply your key ` +
+          `via your dispatch layer.`,
       );
     }
     return {
@@ -113,9 +122,9 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
   if (provider === 'google') {
     if (!apiKey) {
       throw new Error(
-        `Model "${model}" requires a Google (Gemini) API key. ` +
-          `Platform-pool callers MUST resolve the key from the pool ` +
-          `cache before dispatch; BYOK callers MUST supply their own.`,
+        `Model "${model}" requires an API key. ` +
+          `Set 'apiKey' on the RoutingInput (BYOK) or supply your key ` +
+          `via your dispatch layer.`,
       );
     }
     return {
@@ -138,9 +147,9 @@ export function resolveRoute(input: RoutingInput): RoutingDecision {
   if (provider === 'openrouter') {
     if (!apiKey) {
       throw new Error(
-        `Model "${model}" requires an OpenRouter API key. ` +
-          `Platform-pool callers MUST resolve the key from the pool ` +
-          `cache before dispatch; BYOK callers MUST supply their own.`,
+        `Model "${model}" requires an API key. ` +
+          `Set 'apiKey' on the RoutingInput (BYOK) or supply your key ` +
+          `via your dispatch layer.`,
       );
     }
     return {

@@ -181,25 +181,19 @@ export interface UiGenerateInput {
    */
   gadgetTypes?: Readonly<Record<string, string>>;
   /**
-   * Optional infra-side hint for the resolved generator. MP.5
-   * (2026-05-24): introduced so agent callers can override the
-   * server's default model per-render — `infra.model` is the only
-   * field at v1; future expansion (temperature, max_tokens, etc.)
-   * lands here additively.
+   * Optional infra-side hint for the resolved generator. Introduced
+   * 2026-05-24 so agent callers can override the server's default
+   * model per-render — `infra.model` is the only field at v1; future
+   * expansion (temperature, max_tokens, etc.) lands here additively.
    *
-   * `model` MUST be a LiteLLM-format id (`provider/model-name`) OR a
-   * cloud-specific Bedrock alias (`bedrock/<bedrock-model-id>`). The
-   * generator decides routing from the prefix; OSS callers without a
-   * cloud pod read `infra.model` only when their bound generator
-   * honors it.
+   * `model` MUST be a provider-prefixed id (`provider/model-name`);
+   * the active generator decides routing from the prefix. A bound
+   * generator may also accept generator-specific prefixes (e.g. a
+   * Bedrock-routing generator may accept `bedrock/...` ids); consult
+   * the generator's docs.
    *
-   * Cloud pod (`@ggui-cloud/ggui-protocol-pod`): the
-   * `generator` override threads `infra.model` into
-   * `RunGenerationArgs.model`, which dispatches through
-   * `resolvePoolRoute`.
-   *
-   * Self-hosted OSS callers: typically read `infra.model` inside
-   * their `resolveLlm` impl to override the workspace default.
+   * Self-hosted callers typically read `infra.model` inside their
+   * generator implementation to override a workspace default.
    */
   infra?: {
     readonly model?: string;
