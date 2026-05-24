@@ -180,9 +180,9 @@ export async function* runAgent(
   // header is the same content-negotiation the Streamable HTTP
   // transport uses, so the same class connects whether the server
   // speaks SSE or unary JSON responses. Bearer header carries ggui's
-  // dev-mode auth. (Renamed from `SseConnectionParams` in
-  // `@google/adk` 0.1.x — the streamable-HTTP transport subsumed the
-  // SSE-only path.)
+  // dev-mode auth. (Renamed from `SseConnectionParams` in earlier
+  // `@google/adk` releases — the streamable-HTTP transport subsumed
+  // the SSE-only path.)
   const tools: MCPToolset[] = [
     new SanitizedMCPToolset({
       type: 'StreamableHTTPConnectionParams',

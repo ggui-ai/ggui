@@ -12,7 +12,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@google/adk": "^0.1.0",
+    "@google/adk": "^1.1.0",
     "@ggui-ai/react": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "dotenv": "^16.4.5",
