@@ -54,3 +54,65 @@ packages:
   # Workspace-private OSS tooling — benchmark + benchmark-viewer. Never
   # published.
   - "misc/*"
+
+# ─── Settings migrated from package.json#pnpm + .npmrc (pnpm 11 move) ───
+#
+# pnpm 11 no longer reads `pnpm.*` from package.json or pnpm-specific
+# settings from .npmrc. Everything pnpm-flavored must live here.
+
+# Dep pin overrides. Migrated from package.json#pnpm.overrides. CVE pins
+# + ecosystem-wide bumps so the OSS publish wave's transitive graph is
+# unified and audit-clean.
+overrides:
+  "@types/react": ^19.0.0
+  "lodash@<4.18.0": ^4.18.1
+  "picomatch@<2.3.2": ^2.3.2
+  "picomatch@>=4.0.0 <4.0.4": ^4.0.4
+  "postcss@<8.5.10": ^8.5.13
+  "brace-expansion@<1.1.13": ^1.1.14
+  "brace-expansion@>=2.0.0 <2.0.3": ^2.1.0
+  "@tootallnate/once@<3.0.1": ^3.0.1
+  "tar@<7.5.11": ^7.5.13
+  "@anthropic-ai/sdk@<0.91.1": ^0.91.1
+  "vite@<6.4.2": ^6.4.2
+  "esbuild@<0.25.0": ^0.25.0
+  "uuid@<14.0.0": ^14.0.0
+  "@modelcontextprotocol/sdk": 1.27.1
+  "brace-expansion@>=5.0.0 <5.0.6": ^5.0.6
+  "fast-uri@<3.1.2": ^3.1.2
+  "fast-xml-builder@<1.1.7": ^1.1.7
+  "hono@<4.12.18": ^4.12.18
+  "ip-address@<10.1.1": ^10.1.1
+  "@mikro-orm/knex@<6.6.14": ^6.6.14
+  "qs@>=6.11.1 <6.15.2": ^6.15.2
+  "protobufjs@<7.5.8": ^7.5.8
+
+# Resolution behavior. Migrated from .npmrc. e2e/journeys assumes a
+# hoisted node_modules layout (see workspace-paths.ts `hoistedBin`).
+autoInstallPeers: true
+strictPeerDependencies: false
+nodeLinker: hoisted
+
+# Safety overrides for pnpm 11's new defaults — keep behavior stable
+# across the upgrade. publish-gate's clean-room-consumer needs
+# minimumReleaseAge=0 to install just-published tarballs; many deps
+# rely on build scripts that aren't yet in allowBuilds.
+minimumReleaseAge: 0
+strictDepBuilds: false
+
+# pnpm 11 default = 'install' → child install on every `pnpm run` →
+# modules-purge prompt → fails in non-TTY. Mirror the root workspace
+# config (this YAML is used when scripts run from oss/packages/*/
+# subdirectories under pnpm 11's "nearest workspace.yaml" lookup).
+verifyDepsBeforeRun: false
+confirmModulesPurge: false
+
+# Allowlist for native + post-install build scripts (matches pnpm 9
+# default-run behavior).
+allowBuilds:
+  better-sqlite3: true # native SQLite bindings
+  esbuild: true # native bundler binary
+  onnxruntime-node: true # native ML runtime bindings
+  protobufjs: true # codegen post-install
+  sharp: true # native imaging bindings
+  sqlite3: true # native SQLite bindings (alt)

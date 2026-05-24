@@ -73,7 +73,7 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 11.2.2
 
       - uses: actions/setup-node@v6
         with:
@@ -421,7 +421,7 @@ jobs:
 
       - uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 11.2.2
 
       - uses: actions/setup-node@v6
         with:
@@ -469,6 +469,10 @@ jobs:
           # hold; the result is a public attestation on npm linking each
           # tarball to this commit. Dry-run runs cannot mint provenance,
           # so omit the flag on dispatch dry-run.
+          # Tag prereleases (versions with a `-` suffix) under the
+          # `next` dist-tag so plain `npm install @ggui-ai/cli`
+          # keeps resolving to the latest STABLE rather than an rc.
+          # Users who want prereleases install via `@next`.
           PUBLISH_ARGS=(--access public --no-git-checks)
           if [ "$DRY_RUN" = "true" ]; then
             PUBLISH_ARGS+=(--dry-run)
@@ -479,8 +483,13 @@ jobs:
           for pkg in ${{ needs.preflight.outputs.filter }}; do
             name=$(node -pe "require('./packages/$pkg/package.json').name")
             ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            if [[ "$ver" == *-* ]]; then
+              TAG_ARGS=(--tag next)
+            else
+              TAG_ARGS=(--tag latest)
+            fi
             echo "::group::Publishing $name@$ver from packages/$pkg/"
-            (cd "packages/$pkg" && pnpm publish "${PUBLISH_ARGS[@]}")
+            (cd "packages/$pkg" && pnpm publish "${PUBLISH_ARGS[@]}" "${TAG_ARGS[@]}")
             echo "::endgroup::"
           done
 
