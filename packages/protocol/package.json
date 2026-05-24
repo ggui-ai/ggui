@@ -33,46 +33,46 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js",
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     },
     "./content-hash": {
+      "types": "./dist/validation/content-hash.d.ts",
       "import": "./dist/validation/content-hash.js",
       "require": "./dist/validation/content-hash.js",
-      "default": "./dist/validation/content-hash.js",
-      "types": "./dist/validation/content-hash.d.ts"
+      "default": "./dist/validation/content-hash.js"
     },
     "./blueprint-key": {
+      "types": "./dist/registry/blueprint-key.d.ts",
       "import": "./dist/registry/blueprint-key.js",
       "require": "./dist/registry/blueprint-key.js",
-      "default": "./dist/registry/blueprint-key.js",
-      "types": "./dist/registry/blueprint-key.d.ts"
+      "default": "./dist/registry/blueprint-key.js"
     },
     "./transport/websocket": {
+      "types": "./dist/transport/websocket.d.ts",
       "import": "./dist/transport/websocket.js",
       "require": "./dist/transport/websocket.js",
-      "default": "./dist/transport/websocket.js",
-      "types": "./dist/transport/websocket.d.ts"
+      "default": "./dist/transport/websocket.js"
     },
     "./integrations/mcp-apps": {
+      "types": "./dist/integrations/mcp-apps.d.ts",
       "import": "./dist/integrations/mcp-apps.js",
       "require": "./dist/integrations/mcp-apps.js",
-      "default": "./dist/integrations/mcp-apps.js",
-      "types": "./dist/integrations/mcp-apps.d.ts"
+      "default": "./dist/integrations/mcp-apps.js"
     },
     "./version": {
+      "types": "./dist/version.d.ts",
       "import": "./dist/version.js",
       "require": "./dist/version.js",
-      "default": "./dist/version.js",
-      "types": "./dist/version.d.ts"
+      "default": "./dist/version.js"
     },
     "./errors/version-mismatch": {
+      "types": "./dist/errors/version-mismatch.d.ts",
       "import": "./dist/errors/version-mismatch.js",
       "require": "./dist/errors/version-mismatch.js",
-      "default": "./dist/errors/version-mismatch.js",
-      "types": "./dist/errors/version-mismatch.d.ts"
+      "default": "./dist/errors/version-mismatch.js"
     }
   },
   "scripts": {

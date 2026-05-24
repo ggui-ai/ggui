@@ -30,44 +30,44 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./query": {
+      "types": "./dist/query/index.d.ts",
       "import": "./dist/query/index.mjs",
-      "require": "./dist/query/index.js",
-      "types": "./dist/query/index.d.ts"
+      "require": "./dist/query/index.js"
     },
     "./testing": {
+      "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.mjs",
-      "require": "./dist/testing/index.js",
-      "types": "./dist/testing/index.d.ts"
+      "require": "./dist/testing/index.js"
     },
     "./shells": {
+      "types": "./dist/shells/index.d.ts",
       "import": "./dist/shells/index.mjs",
-      "require": "./dist/shells/index.js",
-      "types": "./dist/shells/index.d.ts"
+      "require": "./dist/shells/index.js"
     },
     "./chat-helpers": {
+      "types": "./dist/chat-helpers/index.d.ts",
       "import": "./dist/chat-helpers/index.mjs",
-      "require": "./dist/chat-helpers/index.js",
-      "types": "./dist/chat-helpers/index.d.ts"
+      "require": "./dist/chat-helpers/index.js"
     },
     "./chat-thread": {
+      "types": "./dist/chat-thread/index.d.ts",
       "import": "./dist/chat-thread/index.mjs",
-      "require": "./dist/chat-thread/index.js",
-      "types": "./dist/chat-thread/index.d.ts"
+      "require": "./dist/chat-thread/index.js"
     },
     "./chat-thread/shells/chat": {
+      "types": "./dist/chat-thread/shells/chat/index.d.ts",
       "import": "./dist/chat-thread/shells/chat/index.mjs",
-      "require": "./dist/chat-thread/shells/chat/index.js",
-      "types": "./dist/chat-thread/shells/chat/index.d.ts"
+      "require": "./dist/chat-thread/shells/chat/index.js"
     },
     "./chat-thread/shells/agent": {
+      "types": "./dist/chat-thread/shells/agent/index.d.ts",
       "import": "./dist/chat-thread/shells/agent/index.mjs",
-      "require": "./dist/chat-thread/shells/agent/index.js",
-      "types": "./dist/chat-thread/shells/agent/index.d.ts"
+      "require": "./dist/chat-thread/shells/agent/index.js"
     }
   },
   "scripts": {
