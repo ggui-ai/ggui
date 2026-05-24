@@ -2181,6 +2181,25 @@ export interface CreateGguiServerOptions {
    */
   readonly streamWebSocketLocalTools?: import('./session-channel.js').SessionChannelLocalToolsOptions;
   /**
+   * Hook fired when the local subscriber count for `sessionId`
+   * transitions 0 → 1 on the live channel. Forwarded verbatim to
+   * `createSessionChannelServer`. Used by cloud adapters for per-session
+   * cross-pod pubsub channel scoping; OSS callers leave this undefined.
+   *
+   * Only consulted when `sessionChannel` is enabled. See
+   * `SessionChannelOptions.onFirstSubscriber` for the full contract.
+   */
+  readonly onFirstSubscriber?: (sessionId: string) => void;
+  /**
+   * Hook fired when the local subscriber count for `sessionId`
+   * transitions 1 → 0 on the live channel. Forwarded verbatim to
+   * `createSessionChannelServer`.
+   *
+   * Only consulted when `sessionChannel` is enabled. See
+   * `SessionChannelOptions.onLastSubscriberGone` for the full contract.
+   */
+  readonly onLastSubscriberGone?: (sessionId: string) => void;
+  /**
    * Override the sanitizer applied to the stringified original error
    * written into `ContractErrorPayload.error.causedBy`. Defaults to
    * `@ggui-ai/protocol::sanitizeCausedBy` when omitted — redacts
@@ -9093,6 +9112,12 @@ export function createGguiServer(
           : {}),
         ...(opts.versionPolicy !== undefined
           ? { versionPolicy: opts.versionPolicy }
+          : {}),
+        ...(opts.onFirstSubscriber
+          ? { onFirstSubscriber: opts.onFirstSubscriber }
+          : {}),
+        ...(opts.onLastSubscriberGone
+          ? { onLastSubscriberGone: opts.onLastSubscriberGone }
           : {}),
         // Shared TelemetrySink — bound once at composition so wired-
         // tool dispatches on the live channel emit `wired-tool.invoked`

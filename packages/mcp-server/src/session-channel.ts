@@ -609,6 +609,38 @@ export interface SessionChannelOptions {
    * identically in both modes.
    */
   readonly versionPolicy?: 'advisory' | 'reject';
+  /**
+   * Optional hook fired synchronously when the local subscriber count
+   * for `sessionId` transitions 0 → 1 (the first subscriber for that
+   * session connects to this server instance).
+   *
+   * Hosted deployments use this to lazily SUBSCRIBE to the per-session
+   * cross-pod broadcast channel (e.g. Redis pub/sub); OSS has no use
+   * for it (in-process broadcasts already route via
+   * {@link SessionChannelServer.sendPropsUpdate}). Bounding pubsub
+   * fan-in to only sessions a pod actually holds connections for is a
+   * correctness requirement, not an optimization — without it every
+   * pod receives every other pod's broadcast for every active session.
+   *
+   * Best-effort: a thrown callback is logged and swallowed.
+   * `register()` MUST NOT fail because of a hook error or the
+   * `wsSubscribers` set would drift out of sync with the real socket
+   * lifecycle.
+   *
+   * Concurrent register/unregister for the same sessionId are serialized
+   * by the channel's single-threaded WS event loop; hook implementations
+   * do not need their own mutex for the 0↔1 transition.
+   */
+  readonly onFirstSubscriber?: (sessionId: string) => void;
+  /**
+   * Optional hook fired synchronously when the local subscriber count
+   * for `sessionId` transitions 1 → 0 (the last subscriber for that
+   * session disconnects).
+   *
+   * Symmetric with {@link onFirstSubscriber}; same best-effort posture
+   * and single-threaded serialization guarantee.
+   */
+  readonly onLastSubscriberGone?: (sessionId: string) => void;
 }
 
 /**
@@ -801,6 +833,25 @@ export interface SessionChannelServer {
     readonly eventId: string;
     readonly drainedAt: string;
   }): void;
+  /**
+   * Fan a server-frame to every local WS subscriber bound to
+   * `sessionId`. Skips replay-buffer stamping, SessionStore lookups,
+   * and contract validation — the caller is the one that originally
+   * validated + persisted the underlying mutation. This surface is the
+   * cloud adapter's path for delivering already-validated frames that
+   * arrived via an external pubsub layer (Redis from another pod).
+   *
+   * Internal adapter use only. NOT part of the published ggui
+   * protocol, NOT stable across versions, NOT exposed to MCP / wire
+   * callers. The publisher is responsible for ensuring `frame` is
+   * wire-valid; this method does not re-validate.
+   *
+   * No-op when no local subscriber is bound to `sessionId`. Closed
+   * sockets are skipped silently by the underlying `send()` helper —
+   * same posture as `sendPropsUpdate` / `notifyStackPush`. Per-
+   * subscriber send failures are logged but never propagated.
+   */
+  externalBroadcast(sessionId: string, frame: WebSocketMessage): void;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
   /** Number of distinct sessions with at least one subscriber. */
@@ -883,6 +934,15 @@ export function createSessionChannelServer(
   const wsSubscribers = new Set<Subscriber>();
   /** ws → subscriber reverse index so socket-close can look up cheaply. */
   const subscribersByWs = new WeakMap<WebSocket, Subscriber>();
+  /**
+   * Per-session local subscriber count. Drives the {@link
+   * SessionChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
+   * 0↔1 transition hooks used by cloud adapters for per-session
+   * cross-pod pub/sub channel scoping. Distinct from the
+   * `sessionCount` getter — that walks `wsSubscribers` on demand;
+   * this map is the registration-time counter the hooks key off.
+   */
+  const sessionCountById = new Map<string, number>();
 
   /**
    * Pump live frames from the StreamFanout iterator out to this
@@ -922,6 +982,23 @@ export function createSessionChannelServer(
   function register(sub: Subscriber): void {
     wsSubscribers.add(sub);
     subscribersByWs.set(sub.ws, sub);
+    // Per-session count bookkeeping + 0→1 hook for cloud pubsub
+    // adapter scoping. Increment FIRST so the hook sees the up-to-date
+    // state; hook fires only on the transition (prevCount === 0).
+    const prevCount = sessionCountById.get(sub.sessionId) ?? 0;
+    sessionCountById.set(sub.sessionId, prevCount + 1);
+    if (prevCount === 0 && opts.onFirstSubscriber) {
+      try {
+        opts.onFirstSubscriber(sub.sessionId);
+      } catch (err) {
+        // Best-effort: a thrown hook MUST NOT corrupt the
+        // wsSubscribers set vs the real socket lifecycle.
+        opts.logger.warn('session_channel_on_first_subscriber_threw', {
+          sessionId: sub.sessionId,
+          error: String(err),
+        });
+      }
+    }
     // Start the pump loop. Fire-and-forget — pump errors are logged
     // inside pumpSubscriber, never propagated.
     void pumpSubscriber(sub);
@@ -932,6 +1009,23 @@ export function createSessionChannelServer(
     if (!sub) return;
     subscribersByWs.delete(ws);
     wsSubscribers.delete(sub);
+    // Per-session count bookkeeping + 1→0 hook (symmetric with register).
+    const prevCount = sessionCountById.get(sub.sessionId) ?? 0;
+    if (prevCount <= 1) {
+      sessionCountById.delete(sub.sessionId);
+      if (prevCount === 1 && opts.onLastSubscriberGone) {
+        try {
+          opts.onLastSubscriberGone(sub.sessionId);
+        } catch (err) {
+          opts.logger.warn('session_channel_on_last_subscriber_gone_threw', {
+            sessionId: sub.sessionId,
+            error: String(err),
+          });
+        }
+      }
+    } else {
+      sessionCountById.set(sub.sessionId, prevCount - 1);
+    }
     // Ending the iter terminates pumpSubscriber AND unregisters this
     // subscriber from the StreamFanout. Idempotent on the seam side
     // (close-after-return is a no-op).
@@ -2822,6 +2916,19 @@ export function createSessionChannelServer(
           type: 'drain_ack',
           payload: { sessionId, appId, stackItemId, eventId, drainedAt },
         });
+      }
+    },
+    externalBroadcast(sessionId, frame) {
+      // Walk the flat subscriber set; filter to matching sessionId.
+      // `send()` already guards closed sockets and logs (but doesn't
+      // throw on) per-subscriber failures, so the caller (a cloud
+      // pubsub on-message handler) can't be made to fail by a dead
+      // WebSocket. No SessionStore lookup — the publisher already
+      // validated; this seam is the cross-pod delivery path, not the
+      // re-validation point.
+      for (const sub of wsSubscribers) {
+        if (sub.sessionId !== sessionId) continue;
+        send(sub.ws, frame);
       }
     },
     get subscriberCount() {
