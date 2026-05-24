@@ -433,15 +433,15 @@ jobs:
       - run: pnpm -r --filter "./packages/*" build
 
       - name: Publish (leaf-first)
-        # Trusted Publishing (npm OIDC). No NPM_TOKEN, no long-lived
-        # secret to rotate, no 2FA-bypass checkbox. npm validates the
-        # OIDC token GitHub Actions auto-injects (because we have
-        # `id-token: write` above) against the Trusted Publisher config
-        # on npmjs.com for each @ggui-ai/* package. Config must match
+        # Auth via npm Trusted Publishing (OIDC) — no NPM_TOKEN secret.
+        # npm validates the OIDC token GitHub Actions auto-injects
+        # (because we have `id-token: write` above) against each
+        # @ggui-ai/* package's configured trusted publisher on npmjs.com:
         # owner=ggui-ai, repo=ggui, workflow=release.yml, env=npm-publish.
-        # If npm's config doesn't match, the publish fails with auth
-        # error and nothing lands — same all-or-nothing safety as
-        # token-based publish.
+        # Required allowed actions on the trusted-publisher config:
+        # `npm publish` + `npm stage publish`. If the trusted-publisher
+        # config is missing/mismatched, this step fails with auth error
+        # and nothing lands — same all-or-nothing safety as tokens.
         run: |
           set -euo pipefail
           DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
