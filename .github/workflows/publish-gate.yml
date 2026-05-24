@@ -12,9 +12,10 @@ name: Publish Gate
 #     exercises the published artifacts; source build/test cannot
 #     catch packaging bugs.
 #
-# Manual `workflow_dispatch` for now. Once proven by dispatch runs,
-# this becomes a required prerequisite of release.yml (add a
-# `workflow_call` trigger + a `uses:` from release.yml's preflight).
+# Two trigger surfaces:
+#   - `workflow_dispatch` — operator can fire ad-hoc from the Actions tab.
+#   - `workflow_call` — release.yml's preflight invokes this as a
+#     prerequisite of the publish job. If the gate is red, no publish.
 #
 # Lives under `oss/.github/workflows/` in the monorepo; the subtree
 # split strips the `oss/` prefix, so it runs as
@@ -23,6 +24,7 @@ name: Publish Gate
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: publish-gate

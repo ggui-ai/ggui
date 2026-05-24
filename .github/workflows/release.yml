@@ -378,6 +378,21 @@ jobs:
             exit 1
           fi
 
+  # ── Publish gate — invokes the standalone publish-gate.yml workflow
+  # as a prerequisite. Runs the source half (install/build/typecheck/
+  # unit/e2e) AND the packaging half (clean-room consumer registry
+  # round-trip via Docker+Verdaccio). Catches packaging bugs (missing
+  # `files`, broken `exports`, transitive-dep gaps) BEFORE the
+  # irreversible npm publish. If either half fails, publish never runs.
+  #
+  # Doesn't run on dry-run dispatches — dry-run is for fast operator
+  # iteration; the heavyweight gate is reserved for real publishes.
+  publish-gate:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
+    uses: ./.github/workflows/publish-gate.yml
+    secrets: inherit
+
   # ── Publish — gated by the `npm-publish` environment (configured with
   # required-reviewer = wanseob + restricted to the `main` branch).
   # `id-token: write` is required for npm provenance: npm requests an
@@ -385,7 +400,17 @@ jobs:
   # attestation alongside the tarball, so each package on npm carries a
   # cryptographic "built from this repo at this commit" badge.
   publish:
-    needs: preflight
+    needs: [preflight, publish-gate]
+    # The publish-gate is skipped on dry-run dispatches (intentional —
+    # dry-run is for fast operator iteration). Without this `if:`,
+    # GitHub Actions would auto-skip publish when publish-gate is
+    # skipped, breaking dry-run. `always()` + explicit result checks
+    # let publish run when preflight succeeded AND the gate either
+    # passed or was intentionally skipped.
+    if: |
+      always() &&
+      needs.preflight.result == 'success' &&
+      (needs.publish-gate.result == 'success' || needs.publish-gate.result == 'skipped')
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
