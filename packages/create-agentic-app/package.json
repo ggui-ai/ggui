@@ -1,0 +1,40 @@
+{
+  "name": "@ggui-ai/create-agentic-app",
+  "version": "0.1.0-rc.1",
+  "description": "Scaffold a ggui agentic app from one of the official templates (claude-agent-sdk, openai-agents-sdk, google-adk). One-time-use; meant to be invoked via `npx @ggui-ai/create-agentic-app`.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "create-agentic-app": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/create-agentic-app"
+  },
+  "keywords": [
+    "ggui",
+    "agentic-app",
+    "scaffold",
+    "create"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
