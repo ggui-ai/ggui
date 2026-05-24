@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://docs.ggui.ai">Docs</a> ·
-  <a href="https://github.com/ggui-ai/agentic-app-template">Template repo</a> ·
+  <a href="https://github.com/ggui-ai/agentic-app-templates">Template repos</a> ·
   <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
@@ -25,17 +25,24 @@ This repo is the **open protocol + reference runtime**. Self-host with `ggui ser
 
 ## Quick start — pick your path
 
-### 1. Build an agentic app from the template _(recommended for new apps)_
+### 1. Build an agentic app from a template _(recommended for new apps)_
 
-The fastest path if you want to **ship an agent end-to-end**. The template scaffolds a chat UI + agent loop + sample MCP servers in one repo, and lets you pick your agent SDK at bootstrap time.
+The fastest path if you want to **ship an agent end-to-end**. Each template scaffolds a chat UI + agent loop + sample MCP servers in one repo, pinned to one agent SDK.
 
-1. Open **https://github.com/ggui-ai/agentic-app-template**
-2. Click **"Use this template"** → create your repo → clone it locally
-3. Run `/bootstrap` in Claude Code (or `pnpm bootstrap`) — picks your agent SDK (`claude-agent-sdk` / `openai-agents-sdk` / `google-adk`), fetches it into `servers/agent`, seeds `.env.local`
-4. Add your LLM API key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`) to `.env.local`
-5. `pnpm dev:ggui` / `pnpm dev:todo` / `pnpm dev:agent` — three terminals, then open `http://localhost:6790` to chat
+```bash
+npx @ggui-ai/create-agentic-app --agent claude-agent-sdk my-app
+# or:  --agent openai-agents-sdk
+# or:  --agent google-adk
+cd my-app
+cp .env.example .env.local   # add your LLM API key
+pnpm dev:ggui                # terminal 1 — ggui MCP server
+pnpm dev:todo                # terminal 2 — todo MCP server
+pnpm dev:agent               # terminal 3 — agent + chat UI
+```
 
-The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. The template's [README](https://github.com/ggui-ai/agentic-app-template) walks through customisation (system prompt, domain MCP, blueprints, gadgets).
+Open `http://localhost:6790` (claude) / `6791` (openai) / `6792` (google) to chat.
+
+The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. Browse the templates at [github.com/ggui-ai/agentic-app-templates](https://github.com/ggui-ai/agentic-app-templates) — each subdir is a complete project with its own README + CLAUDE.md walking through customisation (system prompt, domain MCP, blueprints, gadgets).
 
 ### 2. Self-host the OSS MCP server + test from claude.ai
 
