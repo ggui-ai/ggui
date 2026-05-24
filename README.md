@@ -13,7 +13,7 @@
   <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
-> 🚧 **Active development — `v0.1.0-rc.1` is the first published release candidate.** APIs are converging; pin exact versions and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the next RC and the v0.1.0 final.
+> 🚧 **Active development — iterating on `v0.1.0` release candidates.** APIs are converging; pin exact versions (see badges below) and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the next RC and the v0.1.0 final.
 
 ---
 
