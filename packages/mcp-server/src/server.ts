@@ -3144,6 +3144,31 @@ export interface CreateGguiServerOptions {
   readonly opsCoupon?: {
     readonly coupons: CouponRedeemSource;
   };
+
+  /**
+   * Extra readiness checks merged into `GET /ggui/health`. Each check
+   * is a `{name, check}` pair; `check()` returns a boolean (or a
+   * Promise<boolean>) — `true` means "this dependency is ready".
+   *
+   * When ANY check returns `false` (or throws), `/ggui/health` answers
+   * `503 Service Unavailable` with `status: 'degraded'` + a `checks`
+   * map naming each failing dependency. The default `200 ok` shape is
+   * preserved when every check passes (and when the option is unset).
+   *
+   * Use this when an embedder wires a stateful external dependency
+   * (e.g. a pubsub subscriber connection, a vector-store reachability
+   * probe, a worker-pool health view) and wants its liveness probe to
+   * roll the process when that dependency fails — without forking the
+   * health endpoint.
+   *
+   * Each check MUST complete within ~1s; the server enforces a 1s
+   * per-check timeout so a hung dependency cannot block the probe.
+   * A timeout is treated as a failed check.
+   */
+  readonly readinessChecks?: ReadonlyArray<{
+    readonly name: string;
+    readonly check: () => boolean | Promise<boolean>;
+  }>;
 }
 
 export interface GguiServer {
@@ -4482,32 +4507,73 @@ export function createGguiServer(
   // closure can late-bind to it. /ggui/health reads the same ref to
   // surface live subscriber / session counts.
 
+  // 1s per-check timeout — a hung dependency must not block the K8s
+  // liveness probe, which itself runs on a short period. A timeout is
+  // treated as a failed check; the dependency is degraded either way.
+  const READINESS_CHECK_TIMEOUT_MS = 1_000;
+  const readinessChecks = opts.readinessChecks ?? [];
+
+  async function runReadinessChecks(): Promise<{
+    readonly allReady: boolean;
+    readonly results: Record<string, boolean>;
+  }> {
+    if (readinessChecks.length === 0) {
+      return { allReady: true, results: {} };
+    }
+    const results: Record<string, boolean> = {};
+    let allReady = true;
+    await Promise.all(
+      readinessChecks.map(async ({ name, check }) => {
+        try {
+          const ready = await Promise.race<boolean>([
+            Promise.resolve().then(() => check()),
+            new Promise<boolean>((resolve) =>
+              setTimeout(() => resolve(false), READINESS_CHECK_TIMEOUT_MS),
+            ),
+          ]);
+          results[name] = ready;
+          if (!ready) allReady = false;
+        } catch {
+          results[name] = false;
+          allReady = false;
+        }
+      }),
+    );
+    return { allReady, results };
+  }
+
   app.get('/ggui/health', (_req, res) => {
-    const body: Record<string, unknown> = {
-      status: 'ok',
-      server: info.name,
-      version: info.version,
-      tools: handlers.length,
-    };
-    if (channelForHealth) {
-      body.channel = {
-        path: channelForHealth.path,
-        subscribers: channelForHealth.subscriberCount,
-        sessions: channelForHealth.sessionCount,
+    void (async () => {
+      const { allReady, results } = await runReadinessChecks();
+      const body: Record<string, unknown> = {
+        status: allReady ? 'ok' : 'degraded',
+        server: info.name,
+        version: info.version,
+        tools: handlers.length,
       };
-    }
-    // Thread-transport presence + durability claim. Absent when the
-    // server was booted without `threads:` (no persistent-chat routes
-    // mounted). When present, `durability` is exactly what the caller
-    // declared — 'ephemeral' by default so Portal does not silently
-    // hide its non-durable caveat.
-    if (opts.threads) {
-      body.threads = {
-        enabled: true,
-        durability: opts.threads.durability ?? 'ephemeral',
-      };
-    }
-    res.json(body);
+      if (channelForHealth) {
+        body.channel = {
+          path: channelForHealth.path,
+          subscribers: channelForHealth.subscriberCount,
+          sessions: channelForHealth.sessionCount,
+        };
+      }
+      // Thread-transport presence + durability claim. Absent when the
+      // server was booted without `threads:` (no persistent-chat routes
+      // mounted). When present, `durability` is exactly what the caller
+      // declared — 'ephemeral' by default so Portal does not silently
+      // hide its non-durable caveat.
+      if (opts.threads) {
+        body.threads = {
+          enabled: true,
+          durability: opts.threads.durability ?? 'ephemeral',
+        };
+      }
+      if (Object.keys(results).length > 0) {
+        body.checks = results;
+      }
+      res.status(allReady ? 200 : 503).json(body);
+    })();
   });
 
   /**

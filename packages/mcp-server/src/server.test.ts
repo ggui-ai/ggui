@@ -161,6 +161,107 @@ describe('createGguiServer — HTTP surface', () => {
     expect(body.threads?.durability).toBe('durable');
   });
 
+  describe('readinessChecks (operator-injected /ggui/health gates)', () => {
+    it('omits `checks` and stays 200/ok when no readinessChecks are wired', async () => {
+      fx = await boot();
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.status).toBe('ok');
+      expect(body.checks).toBeUndefined();
+    });
+
+    it('answers 200/ok with `checks: {name: true}` when every check passes', async () => {
+      fx = await boot({
+        readinessChecks: [{ name: 'broadcast_subscriber', check: () => true }],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('ok');
+      expect(body.checks).toEqual({ broadcast_subscriber: true });
+    });
+
+    it('answers 503/degraded with `checks: {name: false}` when a check returns false', async () => {
+      fx = await boot({
+        readinessChecks: [{ name: 'broadcast_subscriber', check: () => false }],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('degraded');
+      expect(body.checks).toEqual({ broadcast_subscriber: false });
+    });
+
+    it('treats a thrown check as failed (no propagation into the response)', async () => {
+      fx = await boot({
+        readinessChecks: [
+          {
+            name: 'broadcast_subscriber',
+            check: () => {
+              throw new Error('boom');
+            },
+          },
+        ],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('degraded');
+      expect(body.checks.broadcast_subscriber).toBe(false);
+    });
+
+    it('treats a check timing out beyond 1s as failed', async () => {
+      fx = await boot({
+        readinessChecks: [
+          {
+            name: 'broadcast_subscriber',
+            check: () => new Promise<boolean>(() => undefined), // never resolves
+          },
+        ],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('degraded');
+      expect(body.checks.broadcast_subscriber).toBe(false);
+    }, 5_000);
+
+    it('one failing check among many drops the overall status to degraded', async () => {
+      fx = await boot({
+        readinessChecks: [
+          { name: 'ready_one', check: () => true },
+          { name: 'broken_two', check: () => false },
+          { name: 'ready_three', check: async () => true },
+        ],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('degraded');
+      expect(body.checks).toEqual({
+        ready_one: true,
+        broken_two: false,
+        ready_three: true,
+      });
+    });
+  });
+
   it('returns 405 on GET /mcp (stateless server)', async () => {
     fx = await boot();
     const res = await fetch(`${fx.url}/mcp`);
