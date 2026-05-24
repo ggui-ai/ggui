@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/chat-self-hosted",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Chat storage adapter for self-hosted ggui servers. Implements the FullChatStorageAdapter contract against the @ggui-ai/mcp-server persistent-thread HTTP + SSE surface.",
   "keywords": [
     "ggui",

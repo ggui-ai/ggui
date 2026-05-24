@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/negotiator",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "UI decision engine for ggui. Given an agent's signal and the current session state, decides which UI to render (create / update / compose / replace) and synthesizes the data contract. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
   "license": "Apache-2.0",
   "keywords": [

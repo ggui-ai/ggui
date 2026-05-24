@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/ui-gen",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "UI generation harness for ggui — the LLM system prompt, coding-agent loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
   "license": "Apache-2.0",
   "keywords": [

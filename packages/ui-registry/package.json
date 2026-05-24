@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/ui-registry",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Source-contract interface for ggui UI artifacts — cloud, local, and any future registry implement the `UiRegistry` shape so tooling can read and write UIs through one contract. Deliberately search-free and sync-free; a types-only package.",
   "license": "Apache-2.0",
   "type": "module",

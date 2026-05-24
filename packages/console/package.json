@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/console",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Operator console for a self-hosted @ggui-ai/mcp-server instance — a single-origin admin and devtools surface served by the server itself.",
   "keywords": [
     "ggui",

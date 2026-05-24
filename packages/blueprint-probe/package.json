@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/blueprint-probe",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Dev/CI runtime probe for ggui blueprint manifests. Implements BlueprintProbeRunner from @ggui-ai/registry-core using Node's vm module + React's renderToString. Catches blueprints that throw on initial render (hook misuse, destructuring errors, missing props) in CI instead of at iframe-load time.",
   "license": "Apache-2.0",
   "keywords": [

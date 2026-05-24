@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/project-config",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0-rc.3",
   "description": "Schema and loader for `ggui.json` — the portable app/agent manifest for the ggui protocol. Vendor-neutral. Consumed by the `ggui` CLI and any host that reconstitutes an agent from the manifest.",
   "keywords": [
     "ggui",
