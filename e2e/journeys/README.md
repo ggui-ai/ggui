@@ -1,4 +1,4 @@
-# `@ggui-private/e2e-oss`
+# `@ggui-ai/e2e-journeys`
 
 Dedicated E2E harness for the **`ggui` OSS** product boundary —
 Phase 5 per
@@ -29,14 +29,14 @@ The hosted E2E harness still lives at
 ```sh
 # Full OSS journey suite (default Playwright project =
 # `journeys-ggui-oss`, so no `--project` flag needed)
-pnpm --filter @ggui-private/e2e-oss test
+pnpm --filter @ggui-ai/e2e-journeys test
 
 # MCP fixture contract tests (vitest, Lane 3 per stateful-MCP
 # strategy §4.3)
-pnpm --filter @ggui-private/e2e-oss test:mcp-fixtures
+pnpm --filter @ggui-ai/e2e-journeys test:mcp-fixtures
 
 # Typecheck
-pnpm --filter @ggui-private/e2e-oss typecheck
+pnpm --filter @ggui-ai/e2e-journeys typecheck
 ```
 
 The `make test-journeys-ggui-oss` target at the repo root calls
@@ -46,7 +46,7 @@ through to this package — unchanged name, new filter underneath.
 
 ```
 e2e/oss/
-├── package.json          — @ggui-private/e2e-oss
+├── package.json          — @ggui-ai/e2e-journeys
 ├── playwright.config.ts  — single project `journeys-ggui-oss`
 ├── vitest.config.ts      — Lane 3 fixture contract tests
 ├── tsconfig.json         — extends ../../tsconfig.base.json
@@ -77,7 +77,7 @@ e2e/oss/
 
 | Concern                          | Home                                       |
 | -------------------------------- | ------------------------------------------ |
-| Phase 5 OSS journey              | **This package** (`@ggui-private/e2e-oss`) |
+| Phase 5 OSS journey              | **This package** (`@ggui-ai/e2e-journeys`) |
 | Phase 6 hosted journeys          | `@ggui-private/e2e` at `../`               |
 | Contract tests (mcp/render/auth) | `@ggui-private/e2e`                        |
 | Ops + quality projects           | `@ggui-private/e2e`                        |

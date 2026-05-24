@@ -1,7 +1,7 @@
 {
-  "name": "@ggui-ai/e2e",
+  "name": "@ggui-ai/e2e-journeys",
   "version": "0.0.1",
-  "description": "Dedicated E2E harness for the ggui OSS product boundary. Zero dependency on any closed package, no hosted-platform SDKs, no sandbox auth fixtures — by design. OSS claim is expressed in the dep graph, not just the npm scope.",
+  "description": "Dedicated E2E harness for the ggui OSS product boundary. Zero dependency on any closed package, no hosted-platform SDKs, no sandbox auth fixtures — by design. OSS claim is expressed in the dep graph, not just the npm scope. Rename note (2026-05-24): renamed from `@ggui-ai/e2e` to mirror the directory's stable name (`oss/e2e/journeys/`); the bare `@ggui-ai/e2e` package name had become an axis-blind catch-all. Outstanding follow-up tracked: this package still runs two runners (Playwright `*.spec.ts` + a single vitest `tarball-transitive-packages.test.ts` plus the `fixtures/mcps/**/*.test.ts` lane); see docs/principles/test-placement.md `Mixing runners under one package.json`. The full split is deferred because the vitest residue depends on Playwright-side infra (`tarball-install-harness.ts`) that itself is co-imported by Playwright specs.",
   "private": true,
   "scripts": {
     "test": "playwright test",
