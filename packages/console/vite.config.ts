@@ -17,6 +17,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Vite's default 500 kB raw-size warning doesn't match this
+    // project's actual budget — `scripts/check-bundle-size.ts`
+    // enforces 400 kB stress / 500 kB hard on GZIPPED size, which
+    // is the dimension users feel. Raise to 1 MB raw so Vite stays
+    // quiet while the gzip-budget check provides the real safeguard.
+    chunkSizeWarningLimit: 1000,
     // Single-file target → report-style gzip budget in
     // scripts/check-bundle-size.ts stays readable. Operators don't
     // need code-splitting for a two-route SPA.
