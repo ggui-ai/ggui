@@ -427,7 +427,24 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: "https://registry.npmjs.org"
+          # IMPORTANT: do NOT set `registry-url:` here. setup-node's
+          # only side-effect of that param is writing
+          # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` to
+          # `.npmrc`. When NODE_AUTH_TOKEN is unset (which it is, since
+          # we use OIDC Trusted Publishing instead of a token), pnpm
+          # ≤9.x passes the literal `${NODE_AUTH_TOKEN}` placeholder
+          # through verbatim — the registry returns 404 (npm's masked
+          # auth-failure response) BEFORE OIDC fallback ever fires.
+          # npm CLI handles this case fine; pnpm does not until the
+          # fix from PR https://github.com/pnpm/pnpm/pull/11526 lands
+          # in the 9.x line. Dropping `registry-url:` means no broken
+          # `.npmrc` gets written, so pnpm has no placeholder to
+          # mis-handle, and OIDC kicks in cleanly.
+          #
+          # pnpm publish targets registry.npmjs.org by default
+          # (workspace pnpm-workspace.yaml + package scopes resolve
+          # there), so the only thing we lose is the auto-written
+          # `.npmrc` auth line — which we don't want anyway.
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "./packages/*" build
