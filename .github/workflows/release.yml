@@ -67,6 +67,7 @@ jobs:
     outputs:
       filter: ${{ steps.resolve.outputs.filter }}
       effective_dry_run: ${{ steps.route.outputs.effective_dry_run }}
+      target_version: ${{ steps.version.outputs.target_version }}
     steps:
       - uses: actions/checkout@v6
 
@@ -244,6 +245,19 @@ jobs:
           fi
           echo "Publish filter (leaf-first): $FILTER"
           echo "filter=$FILTER" >> "$GITHUB_OUTPUT"
+
+      - name: Detect target version
+        id: version
+        # Every package in the wave is coordinated to the same version
+        # (validated downstream by version-collision detection). Read it
+        # off the first filter entry so smoke can poll npm for exactly
+        # the version we shipped and assert install equality.
+        run: |
+          set -euo pipefail
+          FIRST=$(echo "${{ steps.resolve.outputs.filter }}" | awk '{print $1}')
+          VER=$(node -pe "require('./packages/$FIRST/package.json').version")
+          echo "target_version=$VER" >> "$GITHUB_OUTPUT"
+          echo "target version: $VER (from packages/$FIRST/package.json)"
 
       - name: Print intended publish plan
         run: |
@@ -436,28 +450,88 @@ jobs:
             echo "**Real publish. Tarballs are live on https://registry.npmjs.org/**." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # ── Post-publish consumer smoke. Narrow and high-signal: install
-  # @ggui-ai/cli in a clean directory, confirm the bin resolves + executes.
-  # Only runs on a real (non-dry) publish — triggered either by a release
-  # event or by a dispatch with dry-run=false + confirm_version_set=yes.
+  # ── Post-publish consumer smoke. Two-phase: (1) poll npm registry
+  # for every published package until all are retrievable at the target
+  # version (up to 60 min — npm's CDN replication is usually <5 min but
+  # documented as long as 60 min for new versions of a scope's first
+  # publishes); (2) install @ggui-ai/cli at the exact target version
+  # in a clean directory, confirm the bin resolves + reports the
+  # expected version. Only runs on a real (non-dry) publish.
+  #
+  # Why poll: rc.1's first smoke run flaked at sleep(30) because
+  # @ggui-ai/project-config (a transitive of cli) hadn't replicated
+  # to all CDN mirrors yet. The fixed-sleep model trades flake risk
+  # for time on every release; the poll model gives generous budget
+  # while finishing fast when replication is quick.
   smoke:
     needs: [preflight, publish]
     if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
     runs-on: ubuntu-latest
+    # 60 min poll budget + 15 min headroom for the install/verify phase.
+    timeout-minutes: 75
     steps:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
 
-      - name: Smoke — @ggui-ai/cli
+      - name: Wait for npm registry replication (up to 60 min)
+        env:
+          TARGET_VERSION: ${{ needs.preflight.outputs.target_version }}
+        run: |
+          set -uo pipefail
+          # Every published @ggui-ai/* name. Keep in sync with the
+          # preflight ORDER (modulo directory→name renames like
+          # ggui-react → @ggui-ai/react).
+          PACKAGES=(
+            protocol artifact-manifest gadget-signing wire channel-client
+            design gadgets ui-gen blueprint-probe predefined preview-a2ui
+            iframe-runtime react react-native chat-self-hosted agent-runtime
+            mcp-server mcp-server-handlers mcp-server-core negotiator
+            registry-core registry-server ui-registry cli project-config
+            dev-stack sandbox embedding-local console shared
+            protocol-conformance protocol-reference-server ui-visual-tester
+          )
+          DEADLINE=$(( $(date +%s) + 3600 ))   # +60 min
+          attempt=0
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            attempt=$((attempt + 1))
+            MISSING=()
+            for pkg in "${PACKAGES[@]}"; do
+              code=$(curl -sf -o /dev/null -w "%{http_code}" \
+                "https://registry.npmjs.org/@ggui-ai%2F$pkg/$TARGET_VERSION" \
+                || echo "000")
+              if [ "$code" != "200" ]; then
+                MISSING+=("$pkg($code)")
+              fi
+            done
+            if [ "${#MISSING[@]}" -eq 0 ]; then
+              echo "::notice::All ${#PACKAGES[@]} packages retrievable at @0.x — $TARGET_VERSION (attempt $attempt)"
+              exit 0
+            fi
+            echo "[attempt $attempt] ${#MISSING[@]} still replicating: ${MISSING[@]:0:5}$([ "${#MISSING[@]}" -gt 5 ] && echo ' …more')"
+            sleep 30
+          done
+          echo "::error::Timed out after 60 min waiting for npm replication. Still missing: ${MISSING[*]}"
+          exit 1
+
+      - name: Install + smoke-run @ggui-ai/cli at target version
+        env:
+          TARGET_VERSION: ${{ needs.preflight.outputs.target_version }}
         run: |
           set -euo pipefail
-          # Let npm's registry mirrors catch up before we fetch.
-          sleep 30
           tmp=$(mktemp -d)
           cd "$tmp"
           npm init -y >/dev/null
-          npm install @ggui-ai/cli
-          ./node_modules/.bin/ggui --version
-          ./node_modules/.bin/ggui --help
+          # Pin to the exact target version — defense against an
+          # unrelated `latest` dist-tag drift or stale-cache install.
+          npm install "@ggui-ai/cli@$TARGET_VERSION"
+          installed=$(./node_modules/.bin/ggui --version | tr -d '[:space:]')
+          echo "installed: '$installed'"
+          # The cli prints just the version string; equality with the
+          # target proves "real consumer gets the version we shipped".
+          if [ "$installed" != "$TARGET_VERSION" ]; then
+            echo "::error::version mismatch — installed '$installed' vs expected '$TARGET_VERSION'"
+            exit 1
+          fi
+          ./node_modules/.bin/ggui --help > /dev/null
