@@ -648,10 +648,15 @@ export class HostSimulator {
       ? `${bootstrap.wsUrl}${bootstrap.wsUrl.includes('?') ? '&' : '?'}bootstrap=${encodeURIComponent(bootstrap.token)}`
       : bootstrap.wsUrl;
     const ws = new WebSocket(upgradeUrl);
+    // 15s ack budget — covers the cloud WS handler under bursty
+    // 100-worker load (loadgen Phase 3b surfaced 5s as too tight).
+    // OSS local server acks within ms; the higher ceiling only adds
+    // failure detection latency, not happy-path delay.
+    const ACK_TIMEOUT_MS = 15_000;
     const ackPromise = new Promise<SubscribeAck>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error('WS ack timeout (5s)')),
-        5_000,
+        () => reject(new Error(`WS ack timeout (${ACK_TIMEOUT_MS}ms)`)),
+        ACK_TIMEOUT_MS,
       );
       ws.once('message', (data) => {
         clearTimeout(timer);
@@ -683,6 +688,14 @@ export class HostSimulator {
         reject(err);
       });
     });
+    // Mark ackPromise as having a rejection handler the moment it's
+    // created. If any of the awaits before `await ackPromise` throws
+    // (open failure, send error, etc) the consumer chain unwinds
+    // without consuming ackPromise's eventual rejection — leaving
+    // its pending timer to fire as an unhandled rejection ~5–15s
+    // later. This single-line .catch keeps Node's tracker happy
+    // without affecting the real consumer's await/throw behavior.
+    ackPromise.catch(() => undefined);
 
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());
