@@ -124,6 +124,47 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     });
   });
 
+  it('strips the LiteLLM transport prefix before sending to Anthropic API', async () => {
+    // Regression for the negotiator-404 bug: `selection.model` arrives
+    // in canonical `<provider>/<model>` form per the model-string-
+    // convention principle, but Anthropic's API rejects the prefix
+    // with HTTP 404 ("model: anthropic/claude-haiku-4-5"). The
+    // negotiator must apply `getUpstreamModelId` before the SDK call,
+    // mapping `anthropic/claude-haiku-4-5` → dated id
+    // `claude-haiku-4-5-20251001`. Without this strip the negotiator
+    // silently degrades to its `bare-create` fallback on every
+    // handshake, losing the LLM-backed decision.
+    const captured: { body?: string } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.body = init?.body as string;
+      return new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: 'tool_use',
+              name: 'submit',
+              input: { ok: true },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const caller = buildLlmCaller(
+      { provider: 'anthropic', model: 'anthropic/claude-haiku-4-5' },
+      { provider: 'anthropic', key: 'sk' },
+    );
+    await caller.callStructured!('s', 'u', {
+      name: 'submit',
+      description: '',
+      input_schema: { type: 'object' },
+    });
+    const body = JSON.parse(captured.body!) as { model: string };
+    expect(body.model).toBe('claude-haiku-4-5-20251001');
+    expect(body.model).not.toContain('anthropic/');
+  });
+
   it('defaults max_tokens to 1024 when caller omits the parameter', async () => {
     const captured: { body?: string } = {};
     globalThis.fetch = vi.fn(async (_url, init) => {

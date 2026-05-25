@@ -78,6 +78,7 @@ import type {
   HandshakeSuggestion,
 } from '@ggui-ai/protocol';
 import { selectAdapter } from '@ggui-ai/ui-gen/providers';
+import { getUpstreamModelId } from '@ggui-ai/ui-gen/adapters';
 
 /**
  * Operational error classifier — mirrors the cloud helper. Bugs
@@ -121,11 +122,23 @@ export function buildLlmCaller(
 ): LLMCaller {
   const adapter = selectAdapter(selection.provider as LlmProvider);
   const isAnthropic = selection.provider === 'anthropic';
+  // Strip the LiteLLM transport prefix at this SDK-call boundary so
+  // per-provider APIs receive the bare model id they expect.
+  // `selection.model` arrives in canonical `<provider>/<model>` form
+  // (per `docs/principles/model-string-convention.md`) — without this
+  // strip Anthropic 404s on `anthropic/claude-haiku-4-5` and the
+  // negotiator silently degrades to its `bare-create` fallback,
+  // losing the LLM-backed decision on every handshake.
+  //
+  // Mirrors what `resolveRoute` in `provider-router.ts` already does
+  // for the dispatch path. The negotiator doesn't go through
+  // `resolveRoute`, so it has to apply the strip itself.
+  const upstreamModel = getUpstreamModelId(selection.model);
   const caller: LLMCaller = {
     async call(systemPrompt, userMessage, maxTokens) {
       const result = await adapter.complete({
         apiKey: providerKey.key,
-        model: selection.model,
+        model: upstreamModel,
         systemPrompt,
         userPrompt: userMessage,
         ...(maxTokens !== undefined ? { maxTokens } : {}),
@@ -148,7 +161,7 @@ export function buildLlmCaller(
     ): Promise<T> => {
       const result = await anthropicCallStructured({
         apiKey: providerKey.key,
-        model: selection.model,
+        model: upstreamModel,
         systemPrompt,
         userMessage,
         tool,
