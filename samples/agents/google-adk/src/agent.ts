@@ -15,6 +15,7 @@
  * envelope the Claude sample emits, so the shared chat UI
  * (`src-ui/useChat.ts`) parses one shape across all sample agents.
  */
+import { randomUUID } from 'node:crypto';
 import {
   LlmAgent,
   MCPToolset,
@@ -162,9 +163,38 @@ export type NormalizedMessage =
     }
   | { readonly type: 'result'; readonly subtype: string };
 
-export async function* runAgent(
-  opts: RunAgentOptions,
-): AsyncIterable<NormalizedMessage> {
+/**
+ * Module-scope agent state — singletons constructed lazily on the
+ * first `runAgent` call and reused across every subsequent call in
+ * this process. The Runner + LlmAgent + MCPToolset[] each carry
+ * non-trivial setup cost (the toolset alone does an MCP `tools/list`
+ * + per-tool schema sanitize), and the `sessionService` is the
+ * load-bearing piece for multi-turn — `runner.runAsync({sessionId,
+ * ...})` looks history up by id, so reusing the same sessionService
+ * across turns is the entire mechanism behind preserved context.
+ *
+ * Per-process singleton (not per-instance) is safe because each
+ * sample-agent boot is its own node process: the workspace's
+ * wire-scenarios e2e spawns a fresh `pnpm --filter @ggui-samples/agent-google-adk start`
+ * subprocess per matrix row, and chat-server users boot one process
+ * per port. A process never legitimately needs to talk to two
+ * different ggui MCPs at two different URLs.
+ */
+interface SharedState {
+  readonly sessionService: InMemorySessionService;
+  readonly runner: Runner;
+  readonly tools: MCPToolset[];
+  readonly userId: string;
+  readonly mcpUrl: string;
+  readonly todoMcpUrl: string | undefined;
+  readonly bearer: string;
+  readonly model: string;
+  readonly instruction: string;
+}
+
+let sharedStateInit: Promise<SharedState> | null = null;
+
+function buildSharedState(opts: RunAgentOptions): SharedState {
   const apiKey =
     opts.apiKey ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (!apiKey) {
@@ -228,17 +258,118 @@ export async function* runAgent(
 
   const sessionService = new InMemorySessionService();
   const artifactService = new InMemoryArtifactService();
-  const session = await sessionService.createSession({
-    appName: APP_NAME,
-    userId,
-  });
-
   const runner = new Runner({
     appName: APP_NAME,
     agent,
     artifactService,
     sessionService,
   });
+
+  // Process-shutdown cleanup. ADK's MCPToolset owns HTTP keep-alive
+  // sockets; closing on SIGTERM/SIGINT releases them cleanly so the
+  // ggui MCP doesn't see lingering half-open connections after a
+  // sample agent reboot. Per-call close (the pre-singleton pattern)
+  // was wrong: it tore down keep-alive every turn AND re-ran
+  // `tools/list` + schema-sanitize on every reconnect.
+  const onShutdown = async (): Promise<void> => {
+    for (const tool of tools) {
+      const maybeClose = (tool as { close?: () => Promise<void> | void }).close;
+      if (typeof maybeClose === 'function') {
+        try {
+          await maybeClose.call(tool);
+        } catch {
+          /* best-effort cleanup */
+        }
+      }
+    }
+  };
+  process.once('SIGTERM', onShutdown);
+  process.once('SIGINT', onShutdown);
+
+  return {
+    sessionService,
+    runner,
+    tools,
+    userId,
+    mcpUrl: opts.mcpUrl,
+    todoMcpUrl: opts.todoMcpUrl,
+    bearer,
+    model,
+    instruction,
+  };
+}
+
+/**
+ * Verify subsequent `runAgent` calls aren't trying to reconfigure the
+ * latched singleton. Distinct URLs / models / bearers / system
+ * prompts would silently route prompts at the previously-initialised
+ * agent — surface loudly instead of pretending to honour the new
+ * config.
+ */
+function assertSharedStateMatches(
+  state: SharedState,
+  opts: RunAgentOptions,
+): void {
+  const expectModel = opts.model ?? 'gemini-3.5-flash';
+  const expectBearer =
+    opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
+  const expectInstruction =
+    opts.systemPrompt === null
+      ? ''
+      : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
+  const mismatches: string[] = [];
+  if (state.mcpUrl !== opts.mcpUrl)
+    mismatches.push(`mcpUrl ${state.mcpUrl} → ${opts.mcpUrl}`);
+  if (state.todoMcpUrl !== opts.todoMcpUrl)
+    mismatches.push(`todoMcpUrl ${state.todoMcpUrl} → ${opts.todoMcpUrl}`);
+  if (state.bearer !== expectBearer)
+    mismatches.push('bearer');
+  if (state.model !== expectModel)
+    mismatches.push(`model ${state.model} → ${expectModel}`);
+  if (state.instruction !== expectInstruction)
+    mismatches.push('systemPrompt');
+  if (mismatches.length > 0) {
+    throw new Error(
+      `runAgent: per-call config differs from singleton init — ${mismatches.join(', ')}. ` +
+        `Module-scoped agent state is one-shot per process; restart the process to reconfigure.`,
+    );
+  }
+}
+
+export async function* runAgent(
+  opts: RunAgentOptions,
+): AsyncIterable<NormalizedMessage> {
+  // Lazy singleton init. `sharedStateInit` guards against concurrent
+  // first-call races: two `/chat` POSTs that land before init
+  // finishes share the same promise and resolve to the same state.
+  if (!sharedStateInit) {
+    sharedStateInit = Promise.resolve().then(() => buildSharedState(opts));
+  }
+  const state = await sharedStateInit;
+  assertSharedStateMatches(state, opts);
+
+  // Per-tab chat session id from the browser; auto-mint if absent so
+  // direct (non-browser) callers still get a session — they just
+  // won't share history across calls.
+  const chatSessionId = opts.chatSessionId ?? randomUUID();
+
+  // Get-or-create the ADK session under our chatSessionId. The
+  // sessionService stores conversation history keyed by sessionId;
+  // `runner.runAsync({sessionId})` hydrates that history before
+  // invoking the model, which is the entire mechanism behind
+  // multi-turn context preservation.
+  let session = await state.sessionService.getSession({
+    appName: APP_NAME,
+    userId: state.userId,
+    sessionId: chatSessionId,
+  });
+  if (!session) {
+    session = await state.sessionService.createSession({
+      appName: APP_NAME,
+      userId: state.userId,
+      sessionId: chatSessionId,
+    });
+  }
 
   // Per-turn buffer for streamed text deltas — ADK emits incremental
   // text on partial events and the final consolidated text on the
@@ -264,9 +395,9 @@ export async function* runAgent(
   abortSignal?.addEventListener('abort', onAbort);
 
   try {
-    const stream = runner.runAsync({
+    const stream = state.runner.runAsync({
       sessionId: session.id,
-      userId,
+      userId: state.userId,
       newMessage: { role: 'user', parts: [{ text: opts.prompt }] },
     });
 
@@ -359,19 +490,12 @@ export async function* runAgent(
     yield { type: 'result', subtype: aborted ? 'aborted' : 'ok' };
   } finally {
     abortSignal?.removeEventListener('abort', onAbort);
-    // Best-effort close of MCP transports. ADK's MCPToolset owns the
-    // underlying MCP client lifecycle; calling `close` if present
-    // releases the HTTP keep-alive.
-    for (const tool of tools) {
-      const maybeClose = (tool as { close?: () => Promise<void> | void }).close;
-      if (typeof maybeClose === 'function') {
-        try {
-          await maybeClose.call(tool);
-        } catch {
-          /* best-effort cleanup */
-        }
-      }
-    }
+    // NOTE: do NOT close MCPToolset here. The toolset is a process-
+    // lifetime singleton shared across every `/chat` POST — closing
+    // per-call would tear down HTTP keep-alive + force an MCP
+    // `tools/list` round trip + a schema-sanitize pass on every
+    // turn. Shutdown is registered as a SIGTERM/SIGINT handler
+    // inside `buildSharedState`.
   }
 }
 
