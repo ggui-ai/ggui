@@ -63,6 +63,7 @@ export type {
   InvokeRequest,
 } from './types/invoke';
 export * from './types/llm';
+export * from './types/llm-route';
 export * from './types/openrouter-models';
 export * from './types/interface-context';
 export * from './types/host-context';
