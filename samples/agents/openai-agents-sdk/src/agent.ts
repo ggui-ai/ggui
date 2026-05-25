@@ -55,6 +55,18 @@ export interface RunAgentOptions {
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
 
 /**
+ * Per-process map of chat-session id → the last response id the
+ * OpenAI Responses API minted for that session. Passed as
+ * `previousResponseId` on subsequent calls so the model sees the
+ * full conversation history (server-side state lives on OpenAI's
+ * infrastructure, keyed by response id; the SDK doesn't persist
+ * anything itself — we just track the cursor). After a process
+ * restart the map is empty and the next call starts a fresh
+ * conversation, identical to a fresh tab.
+ */
+const knownResponseIds = new Map<string, string>();
+
+/**
  * Normalized message shape — mirrors the relevant subset of Anthropic's
  * SDKMessage so the shared chat UI doesn't have to know which SDK is
  * upstream. Each per-SDK sample produces these shapes from its own
@@ -138,8 +150,19 @@ export async function* runAgent(
 
   try {
     for (const server of mcpServers) await server.connect();
+    // Multi-turn session continuity. The OpenAI Responses API stores
+    // conversation state server-side, keyed by response id; passing
+    // `previousResponseId` on the next turn loads that history before
+    // the model is invoked. We track {chatSessionId → lastResponseId}
+    // in `knownResponseIds` and look up the cursor here. Absent →
+    // fresh conversation (first turn, or non-browser caller with no
+    // chatSessionId).
+    const previousResponseId = opts.chatSessionId
+      ? knownResponseIds.get(opts.chatSessionId)
+      : undefined;
     const stream = await run(agent, opts.prompt, {
       stream: true,
+      ...(previousResponseId ? { previousResponseId } : {}),
       ...(opts.abortController ? { signal: opts.abortController.signal } : {}),
     });
 
@@ -269,6 +292,15 @@ export async function* runAgent(
 
     const tail = flushText();
     if (tail) yield tail;
+    // Capture the response-id cursor so the next turn for this chat
+    // session resumes the conversation. `lastResponseId` populates
+    // only after the stream completes; reading it before the
+    // for-await drains yields undefined. Skip the write when there's
+    // no chatSessionId — the caller is single-shot, no history to
+    // chain forward.
+    if (opts.chatSessionId && stream.lastResponseId) {
+      knownResponseIds.set(opts.chatSessionId, stream.lastResponseId);
+    }
     yield { type: 'result', subtype: 'ok' };
   } finally {
     for (const server of mcpServers) {
