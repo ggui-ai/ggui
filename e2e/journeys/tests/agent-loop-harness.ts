@@ -135,15 +135,25 @@ export async function spawnAgentLoop(
   // collisions as a downstream "server.address() unexpected shape"
   // error that obscures the real cause. Catch it here with a clear
   // message instead.
+  //
+  // Wait up to 15s for ports to clear — a prior describe's `afterAll`
+  // kills its children, but the OS takes a moment to release the bind
+  // (especially with WebSocket upgrades holding connections half-open).
+  // Without this poll, back-to-back describes in the matrix would race
+  // their teardown vs the next describe's pre-flight.
   const portsToCheck: Array<{ port: number; label: string }> = [
     { port: ports.ggui, label: 'ggui' },
     { port: ports.todo, label: 'todo' },
     { port: agentPort, label: `agent (${opts.sdk})` },
   ];
-  const squatted = portsToCheck.filter(({ port }) => portInUse(port));
+  let squatted = portsToCheck.filter(({ port }) => portInUse(port));
+  for (let i = 0; i < 15 && squatted.length > 0; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    squatted = portsToCheck.filter(({ port }) => portInUse(port));
+  }
   if (squatted.length > 0) {
     throw new Error(
-      `agent-loop harness: port(s) already bound: ` +
+      `agent-loop harness: port(s) still bound after 15s wait: ` +
         squatted.map(({ port, label }) => `${port} (${label})`).join(', ') +
         '. Free them before re-running (often a previous spec\'s orphan).',
     );
@@ -158,6 +168,15 @@ export async function spawnAgentLoop(
     await Promise.all(
       Object.values(procs).map((p) => p && killProc(p.child)),
     );
+    // After SIGKILL the OS still takes a beat to release the bind; the
+    // next describe's pre-flight check in this matrix runs immediately.
+    // Wait up to 10s for our 3 ports to actually clear so the next
+    // describe doesn't trip on its own predecessor.
+    const myPorts = [ports.ggui, ports.todo, agentPort];
+    for (let i = 0; i < 10; i++) {
+      if (myPorts.every((p) => !portInUse(p))) return;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   };
 
   try {
@@ -260,6 +279,11 @@ function spawnChild(opts: {
       `agent-loop harness: workspace root missing at ${WORKSPACE_ROOT}`,
     );
   }
+  // `detached: true` puts the child in its own process group so
+  // `process.kill(-pid, signal)` in `killProc` signals every descendant
+  // — including the pnpm → sh → node CLI chain. Without this, SIGKILL
+  // only reaches the outer pnpm wrapper; the actual ggui-serve / tsx
+  // process is reparented to PID 1 and keeps holding port 6781.
   const child: SpawnedChild = spawn(
     'pnpm',
     ['--filter', opts.pkg, '--silent', 'start'],
@@ -267,6 +291,7 @@ function spawnChild(opts: {
       cwd: WORKSPACE_ROOT,
       env: opts.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     },
   );
 
@@ -334,16 +359,33 @@ async function waitForBeacon(
 
 async function killProc(child: SpawnedChild): Promise<void> {
   if (child.killed || child.exitCode !== null) return;
-  child.kill('SIGTERM');
+  // Signal the whole process group (negative pid). The child was
+  // spawned with `detached: true` so it's the process-group leader;
+  // `-child.pid` reaches every descendant — pnpm → sh → node CLI.
+  // Without this, only the top-level pnpm wrapper dies; the actual
+  // ggui-serve / tsx process is reparented to PID 1 and continues
+  // holding the bound port.
+  const pgid = child.pid ? -child.pid : null;
+  const sig = (s: NodeJS.Signals): void => {
+    if (pgid !== null) {
+      try {
+        process.kill(pgid, s);
+      } catch {
+        /* group may already be gone */
+      }
+    }
+    try {
+      child.kill(s);
+    } catch {
+      /* best-effort */
+    }
+  };
+  sig('SIGTERM');
   await new Promise<void>((res) => {
     const onExit = (): void => res();
     child.once('exit', onExit);
     setTimeout(() => {
-      try {
-        if (!child.killed) child.kill('SIGKILL');
-      } catch {
-        /* best-effort */
-      }
+      sig('SIGKILL');
       res();
     }, 5_000);
   });
@@ -360,3 +402,87 @@ async function killProc(child: SpawnedChild): Promise<void> {
 //     test.afterAll(async () => { if (handle) await handle.close(); });
 //     ...
 //   });
+
+import type { FrameLocator, Locator } from '@playwright/test';
+
+/**
+ * Find a clickable toggle widget for a todo item authored by an LLM.
+ *
+ * LLM-authored UIs vary: some agents produce a labeled
+ * `<input type="checkbox" aria-label="buy milk">` (claude, openai), some
+ * produce an UNLABELED `<checkbox>` next to a `<p>buy milk</p>` paragraph
+ * (gemini). The first case matches `getByRole('checkbox', { name })`;
+ * the second does NOT — the checkbox has empty accessible name.
+ *
+ * This helper handles both. It returns the first matching strategy:
+ *   1. Named role-based (checkbox/switch/menuitemcheckbox/button by name)
+ *   2. Row-proximity: ancestor of the text node that contains a
+ *      checkbox/switch — picks up the unlabeled-checkbox-next-to-text
+ *      pattern Gemini emits.
+ *
+ * Callers do `await target.click()` once and let the chain pick the
+ * first viable widget.
+ */
+export function findTodoToggleable(
+  frame: FrameLocator,
+  name: RegExp,
+): Locator {
+  const namedRoles = frame
+    .getByRole('checkbox', { name })
+    .or(frame.getByRole('switch', { name }))
+    .or(frame.getByRole('menuitemcheckbox', { name }))
+    .or(frame.getByRole('button', { name }));
+
+  // Row-proximity fallback for unlabeled checkboxes (Gemini pattern).
+  // xpath ancestor walk finds the smallest ancestor of the text node
+  // that contains an interactive checkbox/switch element.
+  const rowWithCheckbox = frame
+    .getByText(name)
+    .first()
+    .locator(
+      'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
+    );
+  const rowCheckbox = rowWithCheckbox
+    .getByRole('checkbox')
+    .or(rowWithCheckbox.getByRole('switch'))
+    .or(rowWithCheckbox.locator('input[type="checkbox"]'));
+
+  return namedRoles.or(rowCheckbox).first();
+}
+
+/**
+ * Assert a todo item appears in a "completed/checked" state. Same
+ * labeled-vs-unlabeled split as {@link findTodoToggleable}.
+ */
+export function findTodoCheckedIndicator(
+  frame: FrameLocator,
+  name: RegExp,
+): Locator {
+  const namedChecked = frame
+    .getByRole('checkbox', { name, checked: true })
+    .or(frame.getByRole('switch', { name, checked: true }));
+
+  // Row-proximity: the unlabeled checkbox in the buy-milk row is checked.
+  const rowWithCheckbox = frame
+    .getByText(name)
+    .first()
+    .locator(
+      'xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or .//*[@role="switch"]][1]',
+    );
+  const rowChecked = rowWithCheckbox
+    .getByRole('checkbox', { checked: true })
+    .or(rowWithCheckbox.getByRole('switch', { checked: true }))
+    .or(rowWithCheckbox.locator('input[type="checkbox"]:checked'));
+
+  // Some agents instead re-render with "done"/"completed"/"✓" text near
+  // the item — accept that as evidence too.
+  const completionTextNear = frame.getByText(
+    new RegExp(
+      `${name.source}[\\s\\S]{0,40}(done|completed|✓|☑|complete)|` +
+        `\\b(done|completed|✓|☑|complete)\\b[\\s\\S]{0,40}${name.source}`,
+      'i',
+    ),
+  );
+
+  return namedChecked.or(rowChecked).or(completionTextNear).first();
+}
