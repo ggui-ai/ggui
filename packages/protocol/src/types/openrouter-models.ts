@@ -4,12 +4,13 @@
 // Generated: 2026-03-23T08:45:50.449Z
 // Models: 322
 
-import type { LLMProvider, ModelTier } from "./llm.js";
+import type { ModelTier } from "./llm.js";
+import type { LlmProvider } from "./llm-route.js";
 
 export interface OpenRouterModelConfig {
   id: string;
   openRouterId: string;
-  provider: LLMProvider;
+  provider: LlmProvider;
   displayName: string;
   tier: ModelTier;
   costs: { inputPer1M: number; outputPer1M: number };

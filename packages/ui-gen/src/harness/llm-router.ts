@@ -866,8 +866,17 @@ export class GoogleAgent extends LLMAgent {
   readonly provider = 'google' as const;
 
   protected resolveModel(model: string): string {
-    return model.startsWith('google/')
-      ? model.slice('google/'.length)
+    // Strip the LiteLLM transport prefix `gemini/` (Google AI Studio
+    // route) so the GenAI SDK receives the bare model id it expects.
+    // Pre-slice-#43 close-out this stripped `google/` instead — which
+    // (a) doesn't match LiteLLM's `gemini/` convention and (b) silently
+    // no-op'd against canonical `gemini/...` strings, then passed
+    // them to the GenAI SDK which 4xx's on the prefixed form. Fixed
+    // as part of the slice #43 audit. Bare ids pass through verbatim
+    // (typed `LlmRoute` already guarantees wire-canonical at every
+    // OSS call site).
+    return model.startsWith('gemini/')
+      ? model.slice('gemini/'.length)
       : model;
   }
 

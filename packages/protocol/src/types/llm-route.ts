@@ -183,18 +183,33 @@ export type LlmProvider = keyof typeof MODELS;
 export type KnownModelOf<P extends LlmProvider> = (typeof MODELS)[P][number];
 
 /**
- * Model names accepted on a route for a given provider. OpenRouter's
- * `<author>/<model>` permutation space is too large to enumerate
- * exhaustively — accept arbitrary strings at runtime, validated by
- * shape via {@link isValidOpenrouterModel}. Every other provider is
- * strict-enum: only the names in `MODELS[provider]` typecheck.
+ * Model names accepted on a route for a given provider. Two providers
+ * use the `(string & {})` escape hatch:
+ *
+ *   - **OpenRouter** — `<author>/<model>` permutation space is too
+ *     large to enumerate. Curated subset gives IDE autocomplete;
+ *     arbitrary strings pass validation via shape (matches the
+ *     `<author>/<model>` rule).
+ *   - **Bedrock** — operators pick from AWS-supplied foundation model
+ *     ids (e.g. `'anthropic.claude-sonnet-4-6'`), cross-region
+ *     inference profile ids (e.g. `'us.anthropic.claude-haiku-4-5-
+ *     20251001-v1:0'`), or even custom inference profile ARNs
+ *     (`'arn:aws:bedrock:...'`). The MODELS.bedrock list curates the
+ *     common cross-region profiles for autocomplete; arbitrary
+ *     strings pass at runtime so operators with custom profiles +
+ *     non-curated foundation models stay supported.
+ *
+ * Every other provider is strict-enum: only names in
+ * `MODELS[provider]` typecheck.
  *
  * The `(string & {})` trick preserves IDE autocomplete on the known
  * subset while still accepting arbitrary strings — without it, the
  * union collapses to `string` and the known entries lose autocomplete.
  */
-export type ModelOf<P extends LlmProvider> = P extends 'openrouter'
-  ? KnownModelOf<'openrouter'> | (string & {})
+export type ModelOf<P extends LlmProvider> = P extends
+  | 'openrouter'
+  | 'bedrock'
+  ? KnownModelOf<P> | (string & {})
   : KnownModelOf<P>;
 
 /**
@@ -259,16 +274,45 @@ export function isValidOpenrouterModel(s: string): boolean {
 }
 
 /**
+ * Validate a Bedrock model string by shape. AWS accepts THREE forms:
+ *
+ *   - Cross-region inference profile ids — `<region>.<inner>` where
+ *     region is `us`/`eu`/`apac`/`global` and inner contains `.`,
+ *     `-`, `:`, alphanumerics (e.g.
+ *     `'us.anthropic.claude-haiku-4-5-20251001-v1:0'`).
+ *   - Bedrock foundation model ids — bare `<vendor>.<model>` form
+ *     (e.g. `'anthropic.claude-sonnet-4-6'`).
+ *   - Inference profile ARNs — `'arn:aws:bedrock:...'`.
+ *
+ * Used for the Bedrock escape hatch — strings passing this check are
+ * accepted into `LlmRoute` even if not in `MODELS.bedrock[]`.
+ */
+export function isValidBedrockModel(s: string): boolean {
+  if (s.startsWith('arn:aws:bedrock:')) return true;
+  // `<segment>.<segment>` with both non-empty + a `.` separator.
+  // Permissive char class to cover Bedrock's mix of `.`, `-`, `:`,
+  // and alphanumerics.
+  return /^[A-Za-z0-9._:-]+\.[A-Za-z0-9._:-]+$/.test(s);
+}
+
+/**
  * Validate that a (provider, model) pair would construct a valid
- * `LlmRoute`. Handles the OpenRouter arbitrary-string escape hatch
- * — for OpenRouter, accepts any string passing
- * {@link isValidOpenrouterModel}; for every other provider, requires
- * the model to be in `MODELS[provider]`.
+ * `LlmRoute`. Two providers have arbitrary-string escape hatches:
+ *
+ *   - `openrouter` — accepts any string passing
+ *     {@link isValidOpenrouterModel}
+ *   - `bedrock` — accepts any string passing {@link isValidBedrockModel}
+ *
+ * Every other provider requires the model to be in
+ * `MODELS[provider]`.
  */
 export function isValidLlmRoute(provider: string, model: string): boolean {
   if (!isLlmProvider(provider)) return false;
   if (provider === 'openrouter') {
     return isKnownModel('openrouter', model) || isValidOpenrouterModel(model);
+  }
+  if (provider === 'bedrock') {
+    return isKnownModel('bedrock', model) || isValidBedrockModel(model);
   }
   return isKnownModel(provider, model);
 }

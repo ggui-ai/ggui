@@ -1,8 +1,29 @@
 /**
- * LLM Provider and Model Types for BYOK (Bring Your Own Key)
+ * LLM PRICING + MODEL REGISTRY (LiteLLM-keyed).
  *
- * Model IDs use LiteLLM format: "provider/model-name"
- * This allows direct passthrough to LiteLLM proxy without transformation.
+ * Scope split (locked 2026-05-25, slice #43 close-out):
+ *
+ *   - `MODEL_REGISTRY` here = LiteLLM-keyed pricing + capability
+ *     metadata. Keys are LiteLLM strings (`"gemini/gemini-3.5-flash"`,
+ *     `"openai/gpt-5.4-mini"`, …). Read by:
+ *       - `cloud/ggui-protocol-pod` pricing-drift test (vendored
+ *         LiteLLM JSON pricing table)
+ *       - `oss/misc/benchmark` runner (bench harness; picks model
+ *         configs by LiteLLM key)
+ *       - `scripts/check-litellm-pricing-drift.ts` (CI guard)
+ *     This registry's keys MUST stay in LiteLLM format because the
+ *     vendored pricing JSON they cross-reference is LiteLLM-shaped.
+ *
+ *   - LLM routing lives in {@link ./llm-route} — typed `LlmRoute`
+ *     discriminated union (`provider:model` canonical or
+ *     `provider/model` LiteLLM-compat). Every LLM call site threads
+ *     `LlmRoute`; the registry KEY equals the wire-canonical id the
+ *     provider's API expects. See
+ *     `docs/principles/model-string-convention.md`.
+ *
+ * The old routing helpers (`getProviderForModel`, `isValidLiteLLMFormat`,
+ * `LLMProvider` (capital)) were deleted in the slice #43 close-out —
+ * routing went through `parseAnyLlmRoute` + typed dispatch.
  *
  * Pricing last verified: March 2026
  * Sources:
@@ -11,17 +32,27 @@
  *   https://ai.google.dev/gemini-api/docs/pricing
  */
 
+import type { LlmProvider } from "./llm-route.js";
+
 // =============================================================================
-// Provider Types
+// Provider display metadata
 // =============================================================================
 
-export type LLMProvider = "anthropic" | "google" | "openai" | "openrouter";
-
-export const PROVIDER_INFO: Record<LLMProvider, { displayName: string; keyPrefix: string }> = {
+/**
+ * Display metadata keyed by `LlmProvider`. The `bedrock` entry is
+ * synthesized for UI continuity — operators picking a bedrock route
+ * still see a label. Pricing/key-prefix conventions for bedrock are
+ * AWS-IAM driven and don't follow the API-key prefix shape.
+ */
+export const PROVIDER_INFO: Record<
+  LlmProvider,
+  { displayName: string; keyPrefix: string }
+> = {
   anthropic: { displayName: "Anthropic", keyPrefix: "sk-ant-" },
   google: { displayName: "Google AI", keyPrefix: "AIza" },
   openai: { displayName: "OpenAI", keyPrefix: "sk-" },
   openrouter: { displayName: "OpenRouter", keyPrefix: "sk-or-" },
+  bedrock: { displayName: "AWS Bedrock", keyPrefix: "" },
 };
 
 // =============================================================================
@@ -48,7 +79,7 @@ export type ModelTier = "fast" | "balanced" | "premium";
 
 export interface ModelConfig {
   id: ModelId;
-  provider: LLMProvider;
+  provider: LlmProvider;
   displayName: string;
   tier: ModelTier;
   costs: {
@@ -192,56 +223,9 @@ export function isValidModelId(id: string): id is ModelId {
 }
 
 /**
- * Get provider name from a LiteLLM-format model ID.
- * Returns 'anthropic' as default for unrecognized formats.
- */
-export function getProviderForModel(modelId: string): LLMProvider {
-  const slash = modelId.indexOf("/");
-  if (slash < 0) {
-    console.warn(`Unrecognized model format (no slash): "${modelId}" — defaulting to anthropic`);
-    return "anthropic";
-  }
-
-  const prefix = modelId.substring(0, slash);
-  // LiteLLM convention: `gemini/` = Google AI Studio (GEMINI_API_KEY),
-  // `vertex_ai/` = Vertex AI (GCP IAM). Both map to the same internal
-  // `google` provider since they serve the same models — the prefix
-  // disambiguates the transport, not the company. `bedrock/` and
-  // `openrouter/` are indirection providers (their inner model is
-  // encoded after the prefix, AWS-native `.` for Bedrock, `/` for
-  // OpenRouter).
-  const providerMap: Record<string, LLMProvider> = {
-    anthropic: "anthropic",
-    gemini: "google",
-    vertex_ai: "google",
-    openai: "openai",
-    openrouter: "openrouter",
-  };
-
-  const provider = providerMap[prefix];
-  if (!provider) {
-    console.warn(`Unrecognized model format: "${modelId}" — defaulting to anthropic`);
-    return "anthropic";
-  }
-
-  return provider;
-}
-
-/**
- * Validate LiteLLM format: "provider/model-name"
- */
-export function isValidLiteLLMFormat(modelId: string): boolean {
-  const slash = modelId.indexOf("/");
-  if (slash <= 0) return false;
-  const prefix = modelId.substring(0, slash);
-  return ["anthropic", "gemini", "vertex_ai", "openai", "openrouter", "bedrock"].includes(prefix)
-    && modelId.length > slash + 1;
-}
-
-/**
  * Get all model IDs for a given provider.
  */
-export function getModelsForProvider(provider: LLMProvider): ModelId[] {
+export function getModelsForProvider(provider: LlmProvider): ModelId[] {
   return (Object.values(MODEL_REGISTRY) as ModelConfig[])
     .filter((m) => m.provider === provider)
     .map((m) => m.id);

@@ -1,6 +1,6 @@
 // core/src/benchmarks/multi-sdk/types.ts
 
-import type { GadgetDescriptor, ModelTier, LLMProvider, DataContract, JsonObject } from '@ggui-ai/protocol';
+import type { GadgetDescriptor, ModelTier, LlmProvider, DataContract, JsonObject } from '@ggui-ai/protocol';
 import type { DimensionScores, EvaluationResult } from '@ggui-ai/ui-gen/evaluation/types';
 import type { EvalResult } from '@ggui-ai/ui-gen/evaluation';
 import type { ProviderName, AdapterResult, AdapterMode } from '@ggui-ai/ui-gen/adapters/types';
@@ -522,7 +522,7 @@ export interface BenchmarkConfig {
   timeoutMs?: number;
   /** Quality mode: 'fast' (fix fails only), 'auto-improve' (fix warns too), 'high-quality' (max rounds) */
   qualityMode?: 'fast' | 'auto-improve' | 'high-quality';
-  apiKeys?: Partial<Record<LLMProvider, string>>;
+  apiKeys?: Partial<Record<LlmProvider, string>>;
   claudeUseBedrock?: boolean;
   /** Progress callback for streaming updates to the viewer */
   onProgress?: (event: { completed: number; total: number; message?: string }) => void;
