@@ -171,10 +171,13 @@ export function createUiGenerator(
       // inference profile when needed).
       const provider = mapLlmProviderToDispatchProvider(input.llm.provider);
 
-      // BYOK key injection. resolveRoute reads model + apiKey and
-      // returns env mutations (ANTHROPIC_API_KEY=<byok>). dispatch's
-      // adapters read keys from process.env, so we install the routed
-      // env for the duration of this call and restore on exit.
+      // BYOK key injection. resolveRoute reads the typed route +
+      // apiKey and returns env mutations (ANTHROPIC_API_KEY=<byok>).
+      // dispatch's adapters read keys from process.env, so we
+      // install the routed env for the duration of this call and
+      // restore on exit. `input.llm` IS structurally an `LlmRoute`
+      // (the typed `LlmSelection`), so we pass it as the route input
+      // directly — no string threading.
       let route: ReturnType<typeof resolveRoute>;
       try {
         const baseEnv: Record<string, string> = {};
@@ -182,7 +185,7 @@ export function createUiGenerator(
           if (v !== undefined) baseEnv[k] = v;
         }
         route = resolveRoute({
-          model: input.llm.model,
+          route: input.llm,
           apiKey: input.providerKey.key,
           env: baseEnv,
         });

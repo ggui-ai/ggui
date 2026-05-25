@@ -31,17 +31,6 @@ export { getAdapter, listAdapters } from './registry';
 export { createGeneratorTools } from './tools';
 export { zodToJsonSchema } from './tool-bridge';
 
-// ── Routing helpers ──────────────────────────────────────────────────
-// `getUpstreamModelId` strips the LiteLLM transport prefix
-// (`anthropic/`, `openai/`, `gemini/`, `vertex_ai/`) at the SDK call
-// boundary so per-provider SDKs receive the bare model name they
-// expect. Callers that bypass `resolveRoute` (e.g. the mcp-server's
-// llm-backed negotiator dispatching its own structured calls) must
-// pass model names through this helper — without the strip, Anthropic
-// 404s on `anthropic/claude-haiku-4-5` and Gemini 404s on
-// `gemini/gemini-3.5-flash`. See `docs/principles/model-string-convention.md`.
-export { getUpstreamModelId } from './provider-router';
-
 // ── Concrete adapters (for benchmarks, tests, instanceof checks) ─────
 // WARNING: These static imports pull in provider SDKs. Lambda entry
 // points should NOT import from this barrel — use getAdapter() instead.
