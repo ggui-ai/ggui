@@ -27,79 +27,6 @@ import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
 const APP_NAME = 'ggui-agent-google-adk';
 
-/**
- * Workaround for an upstream `@google/adk` bug — `toGeminiType` in
- * `utils/gemini_schema_util.js` calls `.toLowerCase()` on the schema's
- * `type` without checking for undefined. JSON Schema legitimately omits
- * `type` when other keywords (`oneOf` / `enum` / `anyOf`) make it
- * redundant, so any nested sub-schema that does so crashes the agent
- * on first tool-call. Sanitize each MCP tool's `inputSchema` and
- * `outputSchema` after fetch by defaulting missing `type` fields.
- *
- * Tracking: https://github.com/google/adk-js/issues/367
- * Remove this workaround once that issue ships.
- */
-function sanitizeSchemaForGemini(schema: unknown): unknown {
-  if (!schema || typeof schema !== 'object') return schema;
-  const node = schema as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...node };
-  if (typeof out.type !== 'string') {
-    // Object-shaped sub-schema (has `properties`) → 'object'; otherwise
-    // 'string' is the safest passthrough for Gemini's converter.
-    out.type =
-      typeof out.properties === 'object' && out.properties !== null
-        ? 'object'
-        : 'string';
-  }
-  if (out.properties && typeof out.properties === 'object') {
-    const props = out.properties as Record<string, unknown>;
-    const sanitizedProps: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      sanitizedProps[k] = sanitizeSchemaForGemini(v);
-    }
-    out.properties = sanitizedProps;
-  }
-  if (out.items !== undefined) {
-    out.items = sanitizeSchemaForGemini(out.items);
-  }
-  return out;
-}
-
-/**
- * `MCPToolset` subclass that sanitizes each fetched MCP tool's
- * `inputSchema` in place before ADK's Gemini converter sees it.
- * See {@link sanitizeSchemaForGemini}.
- */
-class SanitizedMCPToolset extends MCPToolset {
-  override async getTools(
-    ...args: Parameters<MCPToolset['getTools']>
-  ): Promise<Awaited<ReturnType<MCPToolset['getTools']>>> {
-    const tools = await super.getTools(...args);
-    for (const tool of tools) {
-      // The MCPTool wrapper stores the raw `Tool` from
-      // `@modelcontextprotocol/sdk` on a private `mcpTool` field.
-      // ADK's `_getDeclaration()` reads BOTH `inputSchema` and
-      // `outputSchema` and converts via `toGeminiSchema()` — sanitize
-      // both before the first call. Mutating the raw fields propagates
-      // the fix everywhere downstream because every read goes through
-      // the same `this.mcpTool` reference.
-      const internal = (
-        tool as unknown as {
-          mcpTool?: { inputSchema?: unknown; outputSchema?: unknown };
-        }
-      ).mcpTool;
-      if (!internal) continue;
-      if (internal.inputSchema !== undefined) {
-        internal.inputSchema = sanitizeSchemaForGemini(internal.inputSchema);
-      }
-      if (internal.outputSchema !== undefined) {
-        internal.outputSchema = sanitizeSchemaForGemini(internal.outputSchema);
-      }
-    }
-    return tools;
-  }
-}
-
 export interface RunAgentOptions {
   readonly prompt: string;
   readonly mcpUrl: string;
@@ -168,7 +95,7 @@ export type NormalizedMessage =
  * first `runAgent` call and reused across every subsequent call in
  * this process. The Runner + LlmAgent + MCPToolset[] each carry
  * non-trivial setup cost (the toolset alone does an MCP `tools/list`
- * + per-tool schema sanitize), and the `sessionService` is the
+ * round trip), and the `sessionService` is the
  * load-bearing piece for multi-turn — `runner.runAsync({sessionId,
  * ...})` looks history up by id, so reusing the same sessionService
  * across turns is the entire mechanism behind preserved context.
@@ -224,7 +151,7 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
   // `@google/adk` releases — the streamable-HTTP transport subsumed
   // the SSE-only path.)
   const tools: MCPToolset[] = [
-    new SanitizedMCPToolset({
+    new MCPToolset({
       type: 'StreamableHTTPConnectionParams',
       url: opts.mcpUrl,
       header: {
@@ -236,7 +163,7 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
   ];
   if (opts.todoMcpUrl) {
     tools.push(
-      new SanitizedMCPToolset({
+      new MCPToolset({
         type: 'StreamableHTTPConnectionParams',
         url: opts.todoMcpUrl,
         header: {
@@ -270,7 +197,7 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
   // ggui MCP doesn't see lingering half-open connections after a
   // sample agent reboot. Per-call close (the pre-singleton pattern)
   // was wrong: it tore down keep-alive every turn AND re-ran
-  // `tools/list` + schema-sanitize on every reconnect.
+  // `tools/list` on every reconnect.
   const onShutdown = async (): Promise<void> => {
     for (const tool of tools) {
       const maybeClose = (tool as { close?: () => Promise<void> | void }).close;
@@ -493,9 +420,8 @@ export async function* runAgent(
     // NOTE: do NOT close MCPToolset here. The toolset is a process-
     // lifetime singleton shared across every `/chat` POST — closing
     // per-call would tear down HTTP keep-alive + force an MCP
-    // `tools/list` round trip + a schema-sanitize pass on every
-    // turn. Shutdown is registered as a SIGTERM/SIGINT handler
-    // inside `buildSharedState`.
+    // `tools/list` round trip on every turn. Shutdown is registered
+    // as a SIGTERM/SIGINT handler inside `buildSharedState`.
   }
 }
 
