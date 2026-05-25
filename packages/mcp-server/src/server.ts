@@ -3157,9 +3157,15 @@ export interface CreateGguiServerOptions {
    *
    * Use this when an embedder wires a stateful external dependency
    * (e.g. a pubsub subscriber connection, a vector-store reachability
-   * probe, a worker-pool health view) and wants its liveness probe to
-   * roll the process when that dependency fails — without forking the
-   * health endpoint.
+   * probe, a worker-pool health view) and wants its K8s readinessProbe
+   * to take the pod OUT OF SERVICE when that dependency fails. The
+   * sibling `/ggui/live` endpoint is unaffected — that is the K8s
+   * livenessProbe target and stays 200 regardless of readiness, so a
+   * transient upstream blip removes the pod from rotation without
+   * restarting the process. Wire the two probes separately:
+   *
+   *     livenessProbe:  { httpGet: { path: '/ggui/live',   port } }
+   *     readinessProbe: { httpGet: { path: '/ggui/health', port } }
    *
    * Each check MUST complete within ~1s; the server enforces a 1s
    * per-check timeout so a hung dependency cannot block the probe.
@@ -4541,6 +4547,33 @@ export function createGguiServer(
     );
     return { allReady, results };
   }
+
+  /**
+   * Process-alive probe — answers 200 with a tiny JSON body whenever
+   * the Node event loop can run a handler, regardless of readiness.
+   *
+   * Why separate from `/ggui/health`: K8s livenessProbe + readinessProbe
+   * have distinct semantics. Liveness asks "is the process alive?" and
+   * a failure tells the kubelet to RESTART the pod. Readiness asks "is
+   * the pod ready to receive traffic?" and a failure tells the service
+   * to STOP ROUTING. Tying both probes to a single endpoint that gates
+   * on dependency health (Redis, DDB, RAG) means a transient
+   * upstream blip kills the pod entirely instead of just removing it
+   * from rotation.
+   *
+   * Self-hoster wiring (K8s):
+   *
+   *   livenessProbe:  { httpGet: { path: '/ggui/live',   port } }
+   *   readinessProbe: { httpGet: { path: '/ggui/health', port } }
+   *
+   * No body needed for the kubelet's HTTP check (status code is the
+   * signal), but a tiny JSON keeps the endpoint debuggable from a
+   * shell. No `readinessChecks` invoked — keeping this probe cheap
+   * is the point; any heavier work belongs in `/ggui/health`.
+   */
+  app.get('/ggui/live', (_req, res) => {
+    res.status(200).json({ status: 'alive', server: info.name });
+  });
 
   app.get('/ggui/health', (_req, res) => {
     void (async () => {

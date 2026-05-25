@@ -161,6 +161,31 @@ describe('createGguiServer — HTTP surface', () => {
     expect(body.threads?.durability).toBe('durable');
   });
 
+  describe('/ggui/live (K8s livenessProbe target)', () => {
+    it('answers 200 with {status: alive, server} regardless of readinessChecks', async () => {
+      // Even with a failing readiness check (which would 503 /ggui/health),
+      // /ggui/live must stay 200 — the kubelet's livenessProbe should
+      // never restart the pod for a degraded upstream dep. Pre-fix the
+      // pod kept rolling under WS load because BOTH probes hit
+      // /ggui/health; this contract guards against the regression.
+      fx = await boot({
+        readinessChecks: [{ name: 'broadcast_subscriber', check: () => false }],
+      });
+      const liveRes = await fetch(`${fx.url}/ggui/live`);
+      expect(liveRes.status).toBe(200);
+      const liveBody = (await liveRes.json()) as {
+        status: string;
+        server: string;
+      };
+      expect(liveBody.status).toBe('alive');
+      expect(liveBody.server).toBe('ggui-mcp-server');
+      // Sanity: /ggui/health on the same fixture IS degraded — proves
+      // we're not just hitting a 200 because the check is broken.
+      const healthRes = await fetch(`${fx.url}/ggui/health`);
+      expect(healthRes.status).toBe(503);
+    });
+  });
+
   describe('readinessChecks (operator-injected /ggui/health gates)', () => {
     it('omits `checks` and stays 200/ok when no readinessChecks are wired', async () => {
       fx = await boot();
