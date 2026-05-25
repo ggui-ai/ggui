@@ -72,7 +72,7 @@ export function createOpenAiAdapter(
   return {
     provider: PROVIDER,
     validateConfig(
-      request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+      request: Pick<ProviderRequest, 'apiKey' | 'route'>,
     ): ProviderValidation {
       return defaultValidateConfig(PROVIDER, request);
     },
@@ -153,14 +153,14 @@ export function createOpenAiAdapter(
  */
 export function buildOpenAiBody(request: ProviderRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    model: request.model,
+    model: request.route.model,
     messages: [
       { role: 'system', content: request.systemPrompt },
       { role: 'user', content: request.userPrompt },
     ],
   };
   if (request.maxTokens !== undefined) {
-    body[selectMaxTokensField(request.model)] = request.maxTokens;
+    body[selectMaxTokensField(request.route.model)] = request.maxTokens;
   }
   return body;
 }

@@ -168,7 +168,7 @@ export function createMockProviderAdapter(
   return {
     provider,
     validateConfig(
-      request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+      request: Pick<ProviderRequest, 'apiKey' | 'route'>,
     ): ProviderValidation {
       return defaultValidateConfig(provider, request);
     },

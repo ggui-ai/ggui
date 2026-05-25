@@ -81,7 +81,7 @@ export function createAnthropicAdapter(
   return {
     provider: PROVIDER,
     validateConfig(
-      request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+      request: Pick<ProviderRequest, 'apiKey' | 'route'>,
     ): ProviderValidation {
       return defaultValidateConfig(PROVIDER, request);
     },
@@ -103,7 +103,7 @@ export function createAnthropicAdapter(
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            model: request.model,
+            model: request.route.model,
             max_tokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
             system: request.systemPrompt,
             messages: [{ role: 'user', content: request.userPrompt }],

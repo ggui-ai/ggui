@@ -82,7 +82,7 @@ export function createGoogleAdapter(
   return {
     provider: PROVIDER,
     validateConfig(
-      request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+      request: Pick<ProviderRequest, 'apiKey' | 'route'>,
     ): ProviderValidation {
       return defaultValidateConfig(PROVIDER, request);
     },
@@ -94,7 +94,7 @@ export function createGoogleAdapter(
         return { ok: false, error: classifyFetchError(null, PROVIDER, request.signal) };
       }
 
-      const url = `${baseUrl}/models/${encodeURIComponent(request.model)}:generateContent?key=${encodeURIComponent(request.apiKey)}`;
+      const url = `${baseUrl}/models/${encodeURIComponent(request.route.model)}:generateContent?key=${encodeURIComponent(request.apiKey)}`;
 
       const body: Record<string, unknown> = {
         systemInstruction: {

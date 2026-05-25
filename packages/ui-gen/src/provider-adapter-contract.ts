@@ -22,6 +22,10 @@
  *     providerAdapterContract({
  *       name: 'anthropic',
  *       buildAdapter: () => createAnthropicAdapter(),
+ *       validRequest: {
+ *         apiKey: 'sk-test',
+ *         route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+ *       },
  *       errorFixtures: {
  *         unauthorized: { __status: 401 },
  *         forbidden: { __status: 403 },
@@ -40,7 +44,7 @@
  * is safe to ship in a non-test bundle.
  */
 import { describe, expect, it } from 'vitest';
-import type { LlmProvider } from '@ggui-ai/mcp-server-core';
+import type { LlmProvider, LlmRoute } from '@ggui-ai/protocol';
 import type {
   ProviderAdapter,
   ProviderError,
@@ -78,11 +82,15 @@ export interface ProviderAdapterContractInputs {
   >;
   /**
    * Request shape the runner uses for a happy-path
-   * `validateConfig` call. Defaults to `{apiKey: 'k', model: 'm'}`.
-   * Adapters with stricter shape rules (openrouter requires `/` in
-   * model id) override.
+   * `validateConfig` call. Each contract-test caller supplies the
+   * adapter-appropriate route — `LlmRoute` is a discriminated union
+   * keyed on `provider`, so the contract runner can't synthesize a
+   * generic valid route without knowing which adapter it's testing.
    */
-  readonly validRequest?: { readonly apiKey: string; readonly model: string };
+  readonly validRequest: {
+    readonly apiKey: string;
+    readonly route: LlmRoute;
+  };
   /** Provider name the adapter MUST report. */
   readonly expectedProvider?: LlmProvider;
 }
@@ -97,7 +105,7 @@ export function providerAdapterContract(
   inputs: ProviderAdapterContractInputs,
 ): void {
   describe(`ProviderAdapter contract — ${inputs.name}`, () => {
-  const valid = inputs.validRequest ?? { apiKey: 'k', model: 'm' };
+  const valid = inputs.validRequest;
 
   it(`${inputs.name}: reports a stable provider id`, () => {
     const adapter = inputs.buildAdapter();
@@ -109,23 +117,20 @@ export function providerAdapterContract(
 
   it(`${inputs.name}: validateConfig returns no-credentials for empty apiKey`, () => {
     const adapter = inputs.buildAdapter();
-    const result = adapter.validateConfig({ apiKey: '', model: valid.model });
+    const result = adapter.validateConfig({ apiKey: '', route: valid.route });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('no-credentials');
     expect(result.error.provider).toBe(adapter.provider);
   });
 
-  it(`${inputs.name}: validateConfig returns client-error for empty model`, () => {
-    const adapter = inputs.buildAdapter();
-    const result = adapter.validateConfig({
-      apiKey: valid.apiKey,
-      model: '',
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.kind).toBe('client-error');
-  });
+  // Empty-model branch is unreachable for typed `LlmRoute` callers
+  // (the `MODELS` registry never carries an empty string). The
+  // runtime defense-in-depth check still lives in
+  // `defaultValidateConfig` for untyped JSON crossings; the contract
+  // suite intentionally does NOT exercise it because constructing an
+  // empty-string `LlmRoute['model']` would require a banned `as`
+  // cast.
 
   it(`${inputs.name}: validateConfig returns ok for a valid request`, () => {
     const adapter = inputs.buildAdapter();
@@ -182,7 +187,7 @@ export function providerAdapterContract(
     const adapter = inputs.buildAdapter();
     const result = await adapter.complete({
       apiKey: '',
-      model: valid.model,
+      route: valid.route,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -197,7 +202,7 @@ export function providerAdapterContract(
     controller.abort();
     const result = await adapter.complete({
       apiKey: valid.apiKey,
-      model: valid.model,
+      route: valid.route,
       systemPrompt: 's',
       userPrompt: 'u',
       signal: controller.signal,

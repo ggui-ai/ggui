@@ -64,7 +64,7 @@ export function createOpenRouterAdapter(
   return {
     provider: PROVIDER,
     validateConfig(
-      request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+      request: Pick<ProviderRequest, 'apiKey' | 'route'>,
     ): ProviderValidation {
       return defaultValidateConfig(PROVIDER, request);
     },

@@ -40,17 +40,32 @@
  *     calling, function calling, and harness retry land in higher
  *     layers — adapters stay narrow.
  */
-import type { LlmProvider } from '@ggui-ai/mcp-server-core';
+import type { LlmProvider, LlmRoute } from '@ggui-ai/protocol';
 
 /**
  * One LLM completion request as the adapter sees it. Plain data so
  * tests can construct it without DI.
+ *
+ * `route` is a discriminated `LlmRoute` — `(provider, model)` typed
+ * together so the model id is structurally constrained to its
+ * provider's namespace (per the `MODELS` registry in
+ * `@ggui-ai/protocol/types/llm-route`). This makes the #22 / #42 bug
+ * class — passing a LiteLLM-prefixed `'anthropic/claude-haiku-4-5'`
+ * where Anthropic expected the wire id `'claude-haiku-4-5-20251001'` —
+ * a compile error at every adapter call site. The adapter reads the
+ * wire-canonical string off `request.route.model` and passes it
+ * verbatim to the provider SDK; no transformation step exists to
+ * forget.
  */
 export interface ProviderRequest {
   /** API key. Resolved upstream by `@ggui-ai/cli/byok-resolver`. */
   readonly apiKey: string;
-  /** Provider-native model id, e.g. `'claude-opus-4-7'`, `'gpt-4o'`. */
-  readonly model: string;
+  /**
+   * Discriminated `(provider, model)` route. `route.model` is the
+   * wire-canonical id the provider's API expects — adapters pass it
+   * verbatim with no stripping or remapping.
+   */
+  readonly route: LlmRoute;
   /** System prompt text. Adapter wires it into the provider's slot. */
   readonly systemPrompt: string;
   /** User prompt text. */
@@ -189,7 +204,7 @@ export interface ProviderAdapter {
    * the network. Returns `{ok: true}` when the request is at least
    * structurally valid; returns `{ok: false, error}` otherwise.
    */
-  validateConfig(request: Pick<ProviderRequest, 'apiKey' | 'model'>): ProviderValidation;
+  validateConfig(request: Pick<ProviderRequest, 'apiKey' | 'route'>): ProviderValidation;
   /**
    * Single-completion call. Resolves with `{ok: true, response}` on
    * success or `{ok: false, error}` on any failure (network,
@@ -267,10 +282,15 @@ export function statusToErrorKind(status: number): ProviderErrorKind {
  *
  * Catches the two universal failures: missing key + missing model.
  * Returns `{ok: true}` when both are present.
+ *
+ * The model-id check is defense-in-depth — typed `LlmRoute` callers
+ * cannot construct a route with an empty model string, but the
+ * adapter still validates at runtime in case the request crossed an
+ * untyped JSON boundary (e.g. deserialized from a wire format).
  */
 export function defaultValidateConfig(
   provider: LlmProvider,
-  request: Pick<ProviderRequest, 'apiKey' | 'model'>,
+  request: Pick<ProviderRequest, 'apiKey' | 'route'>,
 ): ProviderValidation {
   if (!request.apiKey || request.apiKey.length === 0) {
     return {
@@ -282,7 +302,7 @@ export function defaultValidateConfig(
       }),
     };
   }
-  if (!request.model || request.model.length === 0) {
+  if (!request.route?.model || request.route.model.length === 0) {
     return {
       ok: false,
       error: makeProviderError({

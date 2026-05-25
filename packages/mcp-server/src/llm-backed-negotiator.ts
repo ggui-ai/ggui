@@ -54,7 +54,7 @@
 import { negotiate, type LLMCaller } from '@ggui-ai/negotiator';
 import type {
   EmbeddingProvider,
-  LlmProvider,
+  LlmRoute,
   LlmSelection,
   ProviderKeyRef,
   VariantSelectionContext,
@@ -78,7 +78,6 @@ import type {
   HandshakeSuggestion,
 } from '@ggui-ai/protocol';
 import { selectAdapter } from '@ggui-ai/ui-gen/providers';
-import { getUpstreamModelId } from '@ggui-ai/ui-gen/adapters';
 
 /**
  * Operational error classifier — mirrors the cloud helper. Bugs
@@ -120,25 +119,24 @@ export function buildLlmCaller(
   selection: LlmSelection,
   providerKey: ProviderKeyRef,
 ): LLMCaller {
-  const adapter = selectAdapter(selection.provider as LlmProvider);
+  const adapter = selectAdapter(selection.provider);
   const isAnthropic = selection.provider === 'anthropic';
-  // Strip the LiteLLM transport prefix at this SDK-call boundary so
-  // per-provider APIs receive the bare model id they expect.
-  // `selection.model` arrives in canonical `<provider>/<model>` form
-  // (per `docs/principles/model-string-convention.md`) — without this
-  // strip Anthropic 404s on `anthropic/claude-haiku-4-5` and the
-  // negotiator silently degrades to its `bare-create` fallback,
-  // losing the LLM-backed decision on every handshake.
-  //
-  // Mirrors what `resolveRoute` in `provider-router.ts` already does
-  // for the dispatch path. The negotiator doesn't go through
-  // `resolveRoute`, so it has to apply the strip itself.
-  const upstreamModel = getUpstreamModelId(selection.model);
+  // `selection` IS an `LlmRoute & {inference params}` — the typed
+  // discriminated union means `selection.model` is already in the
+  // wire-canonical form the provider SDK expects. No LiteLLM-prefix
+  // strip happens here; if one were ever needed again, the validator
+  // belongs at the route construction boundary (`parseAnyLlmRoute`),
+  // not at the SDK-call site. This is what eliminates the #22 / #42
+  // bug class structurally. We pass `selection` itself as the `route`
+  // — re-constructing an object literal would widen the typed
+  // discriminator and lose the (provider, model) pairing TS needs to
+  // narrow against `LlmRoute`'s union.
+  const route: LlmRoute = selection;
   const caller: LLMCaller = {
     async call(systemPrompt, userMessage, maxTokens) {
       const result = await adapter.complete({
         apiKey: providerKey.key,
-        model: upstreamModel,
+        route,
         systemPrompt,
         userPrompt: userMessage,
         ...(maxTokens !== undefined ? { maxTokens } : {}),
@@ -161,7 +159,7 @@ export function buildLlmCaller(
     ): Promise<T> => {
       const result = await anthropicCallStructured({
         apiKey: providerKey.key,
-        model: upstreamModel,
+        model: selection.model,
         systemPrompt,
         userMessage,
         tool,

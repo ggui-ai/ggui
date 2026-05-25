@@ -16,6 +16,7 @@
  * through every adapter — no separate unit suite needed.
  */
 import { describe, expect, it } from 'vitest';
+import type { LlmRoute } from '@ggui-ai/protocol';
 import { providerAdapterContract } from '../provider-adapter-contract.js';
 import {
   parseRetryAfter,
@@ -27,6 +28,26 @@ import { createGoogleAdapter } from './google.js';
 import { createOpenAiAdapter, selectMaxTokensField } from './openai.js';
 import { createOpenRouterAdapter } from './openrouter.js';
 import { selectAdapter } from './index.js';
+
+// Per-adapter typed routes used by every `adapter.complete(...)` fixture
+// below. Each entry's model is the wire-canonical id from the `MODELS`
+// registry — the typed `LlmRoute` discriminator means each adapter
+// only accepts its own provider's model namespace, structurally
+// preventing the #22 / #42 bug class at every test site.
+const ANT_ROUTE: LlmRoute = {
+  provider: 'anthropic',
+  model: 'claude-haiku-4-5-20251001',
+};
+const OAI_ROUTE: LlmRoute = { provider: 'openai', model: 'gpt-5.5' };
+const G_ROUTE: LlmRoute = { provider: 'google', model: 'gemini-3.5-flash' };
+const OR_ROUTE: LlmRoute = {
+  provider: 'openrouter',
+  model: 'anthropic/claude-haiku-4.5',
+};
+const BR_ROUTE: LlmRoute = {
+  provider: 'bedrock',
+  model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+};
 
 // ─── http.ts helpers ──────────────────────────────────────────
 
@@ -122,6 +143,7 @@ describe('AnthropicAdapter — contract', () => {
           body: { error: { message: 'x' } },
         }),
       }),
+    validRequest: { apiKey: 'sk-test', route: ANT_ROUTE },
     errorFixtures: {
       network: new TypeError('ECONNRESET'),
       // `invalid-response` is produced inside `complete()` on an
@@ -153,7 +175,7 @@ describe('AnthropicAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'claude-opus-4-7',
+      route: { provider: 'anthropic', model: 'claude-opus-4-7' },
       systemPrompt: 'sys',
       userPrompt: 'u',
       maxTokens: 256,
@@ -190,7 +212,7 @@ describe('AnthropicAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: ANT_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -210,7 +232,7 @@ describe('AnthropicAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: ANT_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -227,7 +249,7 @@ describe('AnthropicAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: ANT_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -268,6 +290,7 @@ describe('OpenAiAdapter — contract', () => {
       createOpenAiAdapter({
         fetch: fakeFetch({ status: 403, body: { error: { message: 'x' } } }),
       }),
+    validRequest: { apiKey: 'sk-test', route: OAI_ROUTE },
     errorFixtures: {
       network: new TypeError('DNS failure'),
       unknown: 'opaque',
@@ -301,7 +324,7 @@ describe('OpenAiAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'sk-test',
-      model: 'gpt-4o',
+      route: OAI_ROUTE,
       systemPrompt: 'sys',
       userPrompt: 'u',
       maxTokens: 128,
@@ -318,8 +341,9 @@ describe('OpenAiAdapter — happy path', () => {
     const headers = capturedInit?.headers as Record<string, string> | undefined;
     expect(headers?.['authorization']).toBe('Bearer sk-test');
     const body = JSON.parse(capturedInit?.body as string) as Record<string, unknown>;
-    expect(body['model']).toBe('gpt-4o');
-    expect(body['max_tokens']).toBe(128);
+    expect(body['model']).toBe(OAI_ROUTE.model);
+    // gpt-5.x routes through `max_completion_tokens`, not `max_tokens`.
+    expect(body['max_completion_tokens']).toBe(128);
     const messages = body['messages'] as Array<{ role: string; content: string }>;
     expect(messages[0]?.role).toBe('system');
     expect(messages[1]?.role).toBe('user');
@@ -339,7 +363,7 @@ describe('OpenAiAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: OAI_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -354,7 +378,7 @@ describe('OpenAiAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: OAI_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -375,6 +399,7 @@ describe('OpenRouterAdapter — contract', () => {
       createOpenRouterAdapter({
         fetch: fakeFetch({ status: 500, body: { error: { message: 'x' } } }),
       }),
+    validRequest: { apiKey: 'or-test', route: OR_ROUTE },
     errorFixtures: {
       network: new TypeError('reset'),
       unknown: 42,
@@ -401,7 +426,10 @@ describe('OpenRouterAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'or-key',
-      model: 'anthropic/claude-opus-4',
+      // OpenRouter's typed `model` accepts arbitrary strings via the
+      // `(string & {})` escape hatch — model ids are the gateway's
+      // own convention, not a closed enum we control.
+      route: { provider: 'openrouter', model: 'anthropic/claude-opus-4' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -426,6 +454,7 @@ describe('GoogleAdapter — contract', () => {
       createGoogleAdapter({
         fetch: fakeFetch({ status: 429, headers: { 'retry-after': '10' }, body: { error: { message: 'x' } } }),
       }),
+    validRequest: { apiKey: 'g-test', route: G_ROUTE },
     errorFixtures: {
       network: new TypeError('reset'),
       unknown: null,
@@ -463,7 +492,7 @@ describe('GoogleAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'gkey&',
-      model: 'gemini-2.0-flash',
+      route: G_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
       maxTokens: 512,
@@ -478,7 +507,7 @@ describe('GoogleAdapter — happy path', () => {
     });
 
     // Ensure URL-encoding for API key + model.
-    expect(capturedUrl).toContain('/models/gemini-2.0-flash:generateContent');
+    expect(capturedUrl).toContain(`/models/${G_ROUTE.model}:generateContent`);
     expect(capturedUrl).toContain('key=gkey%26');
   });
 
@@ -496,7 +525,7 @@ describe('GoogleAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: G_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -515,7 +544,7 @@ describe('GoogleAdapter — happy path', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: G_ROUTE,
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -566,18 +595,19 @@ describe('BedrockAdapter — validateConfig', () => {
     // would return `no-credentials` here. The pod-generator passes a
     // sentinel like `'bedrock-iam'` so the wire envelope stays
     // non-empty, but the adapter itself MUST tolerate either.
-    expect(adapter.validateConfig({ apiKey: '', model: 'anthropic.claude-haiku-4-5' }).ok).toBe(true);
-    expect(adapter.validateConfig({ apiKey: 'bedrock-iam', model: 'anthropic.claude-haiku-4-5' }).ok).toBe(true);
+    expect(adapter.validateConfig({ apiKey: '', route: BR_ROUTE }).ok).toBe(true);
+    expect(
+      adapter.validateConfig({ apiKey: 'bedrock-iam', route: BR_ROUTE }).ok,
+    ).toBe(true);
   });
 
-  it('rejects requests with an empty model id', () => {
-    const adapter = createBedrockAdapter();
-    const result = adapter.validateConfig({ apiKey: 'bedrock-iam', model: '' });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.kind).toBe('client-error');
-    expect(result.error.provider).toBe('bedrock');
-  });
+  // Empty-model branch is unreachable for typed `LlmRoute` callers —
+  // `MODELS.bedrock` never carries an empty string. The runtime
+  // defense-in-depth check stays in `createBedrockAdapter`'s
+  // `validateConfig` for untyped JSON crossings; the test suite
+  // intentionally doesn't exercise it because constructing an
+  // empty-string `LlmRoute['model']` for bedrock would require a
+  // banned `as` cast.
 
   it('accepts cross-region inference profile model ids', () => {
     const adapter = createBedrockAdapter();
@@ -586,7 +616,10 @@ describe('BedrockAdapter — validateConfig', () => {
     expect(
       adapter.validateConfig({
         apiKey: 'bedrock-iam',
-        model: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        route: {
+          provider: 'bedrock',
+          model: 'eu.anthropic.claude-haiku-4-5-20251001-v1:0',
+        },
       }).ok,
     ).toBe(true);
   });

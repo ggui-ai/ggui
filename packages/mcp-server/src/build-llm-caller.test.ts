@@ -116,7 +116,12 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
       tools: Array<{ name: string; description: string; input_schema: unknown }>;
       tool_choice: { type: string; name: string };
     };
-    expect(sentBody.model).toBe('claude-haiku-4-5');
+    // Wire-canonical id reaches Anthropic verbatim — no strip. The
+    // typed `LlmRoute` system makes the negotiator's prior
+    // `getUpstreamModelId` strip a no-op (constructing the route with
+    // the dated wire id is now the only legal form), so the strip was
+    // deleted in slice #43 phase 3.
+    expect(sentBody.model).toBe('claude-haiku-4-5-20251001');
     expect(sentBody.max_tokens).toBe(512);
     // `temperature` is intentionally NOT sent — the param is deprecated
     // on Haiku 4.5+ (dropped in f300fde58). Pin its absence so a future

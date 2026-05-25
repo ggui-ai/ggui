@@ -35,7 +35,10 @@ describe('statusToErrorKind — locked HTTP-status → ProviderErrorKind mapping
 
 describe('defaultValidateConfig — universal pre-flight failures', () => {
   it('rejects empty apiKey with no-credentials', () => {
-    const result = defaultValidateConfig('anthropic', { apiKey: '', model: 'm' });
+    const result = defaultValidateConfig('anthropic', {
+      apiKey: '',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+    });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('no-credentials');
@@ -45,16 +48,12 @@ describe('defaultValidateConfig — universal pre-flight failures', () => {
     expect(result.error.message).not.toMatch(/sk-/);
   });
 
-  it('rejects empty model with client-error', () => {
-    const result = defaultValidateConfig('openai', { apiKey: 'k', model: '' });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.kind).toBe('client-error');
-  });
-
   it('passes when both fields are non-empty', () => {
     expect(
-      defaultValidateConfig('google', { apiKey: 'k', model: 'gemini-pro' }),
+      defaultValidateConfig('google', {
+        apiKey: 'k',
+        route: { provider: 'google', model: 'gemini-3.5-flash' },
+      }),
     ).toEqual({ ok: true });
   });
 });
@@ -103,7 +102,7 @@ describe('MockProviderAdapter — direct behavior', () => {
     });
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -123,7 +122,7 @@ describe('MockProviderAdapter — direct behavior', () => {
 
     const r1 = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -134,7 +133,7 @@ describe('MockProviderAdapter — direct behavior', () => {
 
     const r2 = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -146,7 +145,7 @@ describe('MockProviderAdapter — direct behavior', () => {
     // Queue drained — third call succeeds.
     const r3 = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -160,7 +159,7 @@ describe('MockProviderAdapter — direct behavior', () => {
     controller.abort();
     const result = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
       signal: controller.signal,
@@ -171,7 +170,7 @@ describe('MockProviderAdapter — direct behavior', () => {
     // The queued 401 fixture is still there for the next call.
     const next = await adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
     });
@@ -185,7 +184,7 @@ describe('MockProviderAdapter — direct behavior', () => {
     const controller = new AbortController();
     const promise = adapter.complete({
       apiKey: 'k',
-      model: 'm',
+      route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       systemPrompt: 's',
       userPrompt: 'u',
       signal: controller.signal,
@@ -231,6 +230,10 @@ providerAdapterContract({
   name: 'MockProviderAdapter',
   buildAdapter: () => createMockProviderAdapter(),
   expectedProvider: 'anthropic',
+  validRequest: {
+    apiKey: 'sk-test',
+    route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  },
   errorFixtures: {
     unauthorized: { __status: 401 },
     forbidden: { __status: 403 },
