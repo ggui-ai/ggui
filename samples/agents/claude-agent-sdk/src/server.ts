@@ -9,6 +9,7 @@
  * No framework dependency — node:http only. Keeps the sample's
  * `node_modules/` tiny so the test harness boots fast.
  */
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -186,8 +187,25 @@ async function handleRequest(
       return;
     }
 
+    // Per-tab chat-session id from the browser's `X-Chat-Session-Id`
+    // header — keys per-chat agent state (conversation history,
+    // resume tokens, ggui sessionId continuity) so multi-turn flows
+    // preserve context across `/chat` POSTs. Auto-mint when missing
+    // (non-browser callers like curl get single-turn isolation).
+    const chatSessionHeader = req.headers['x-chat-session-id'];
+    const chatSessionId =
+      typeof chatSessionHeader === 'string' && chatSessionHeader.length > 0
+        ? chatSessionHeader
+        : (() => {
+            const minted = randomUUID();
+            console.warn(
+              `[sample-agent] /chat missing X-Chat-Session-Id header — minted ${minted} (single-turn isolation; clients should set the header to preserve multi-turn context)`,
+            );
+            return minted;
+          })();
+
     console.log(
-      `[sample-agent] /chat received — prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
+      `[sample-agent] /chat received — chat=${chatSessionId} prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
     );
 
     res.writeHead(200, {
@@ -217,6 +235,7 @@ async function handleRequest(
     try {
       for await (const msg of runAgent({
         prompt,
+        chatSessionId,
         mcpUrl: opts.mcpUrl,
         abortController,
         ...(opts.todoMcpUrl !== undefined

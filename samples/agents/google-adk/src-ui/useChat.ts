@@ -162,7 +162,17 @@ export function useChat(): UseChatResult {
       try {
         const res = await fetch('/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Stable per-tab chat-session id. Persists across page
+            // refreshes via sessionStorage (cleared on tab close); a
+            // new tab gets a fresh id. The server keys its per-chat
+            // agent state on this header so multi-turn flows preserve
+            // conversation history, ggui sessionId, and stackItem
+            // continuity. Missing header = server auto-mints
+            // per-request → degrades to single-turn isolation.
+            'X-Chat-Session-Id': getOrCreateChatSessionId(),
+          },
           body: JSON.stringify({ prompt: trimmed }),
           signal: controller.signal,
         });
@@ -392,6 +402,31 @@ function handleEvent(
       subtype: String(msg.subtype ?? 'ok'),
     });
     return;
+  }
+}
+
+/**
+ * Stable per-tab chat-session id. Generated on first call, cached in
+ * sessionStorage so a page refresh within the tab keeps the same id;
+ * a fresh tab gets a fresh id. The server reads this off the
+ * `X-Chat-Session-Id` header and keys its per-chat agent state on it,
+ * so multi-turn flows preserve conversation history. SSR-safe: returns
+ * a throwaway id when sessionStorage isn't available (test envs).
+ */
+const CHAT_SESSION_STORAGE_KEY = 'ggui-chat-session-id';
+function getOrCreateChatSessionId(): string {
+  try {
+    const existing = window.sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    window.sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    // sessionStorage unavailable (SSR / privacy mode) — fall back to a
+    // per-call id so the header is always populated. Trade-off: each
+    // call looks like a fresh chat to the server, which degrades
+    // multi-turn but never breaks single-turn.
+    return crypto.randomUUID();
   }
 }
 

@@ -41,6 +41,15 @@ export interface RunAgentOptions {
   readonly systemPrompt?: string | null;
   /** Cancellation surface — closed-tab teardown propagates here. */
   readonly abortController?: AbortController;
+  /**
+   * Per-tab chat-session identifier from the browser's
+   * `X-Chat-Session-Id` header (auto-minted server-side when absent).
+   * Keys per-chat agent state — conversation history, resume tokens,
+   * ggui sessionId continuity — so multi-turn flows preserve context
+   * across `/chat` POSTs. Threaded through today; consumed by the
+   * multi-turn-resume slice that hoists agent state to module scope.
+   */
+  readonly chatSessionId?: string;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;

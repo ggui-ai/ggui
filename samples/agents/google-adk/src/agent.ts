@@ -115,6 +115,16 @@ export interface RunAgentOptions {
   readonly abortController?: AbortController;
   /** Userid for ADK's session bookkeeping. Default `'sample-user'`. */
   readonly userId?: string;
+  /**
+   * Per-tab chat-session identifier from the browser's
+   * `X-Chat-Session-Id` header (auto-minted server-side when absent).
+   * Keys per-chat agent state — conversation history, resume tokens,
+   * ggui sessionId continuity — so multi-turn flows preserve context
+   * across `/chat` POSTs. Threaded through today; consumed by the
+   * multi-turn-resume slice that hoists `sessionService` + `Runner`
+   * to module scope and keys ADK sessions by this id.
+   */
+  readonly chatSessionId?: string;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
