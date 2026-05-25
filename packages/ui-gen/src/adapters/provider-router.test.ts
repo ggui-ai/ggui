@@ -24,7 +24,7 @@
 import { describe, it, expect } from 'vitest';
 import type { LlmRoute } from '@ggui-ai/protocol';
 
-import { resolveRoute, type RoutingInput } from './provider-router';
+import { getBedrockModelId, resolveRoute, type RoutingInput } from './provider-router';
 
 /** Empty env — most tests don't care about the input env. */
 const EMPTY_ENV: RoutingInput['env'] = {};
@@ -258,6 +258,46 @@ describe('resolveRoute — OpenRouter', () => {
     expect(() =>
       resolveRoute({ route: OR_ROUTE, env: EMPTY_ENV }),
     ).toThrow(/openrouter:anthropic\/claude-haiku-4\.5/);
+  });
+});
+
+describe('getBedrockModelId — Bedrock opt-in dot form', () => {
+  it('upcasts the dot-form short id (anthropic.claude-haiku-4-5) to the cross-region profile', () => {
+    // Live-bug regression (cloud e2e 2026-05-25, bedrock-iam.spec): the
+    // cloud-pod's `resolvePoolRoute` accepts a `bedrock/<id>` opt-in
+    // prefix and strips it before dispatch. For the convenience input
+    // `bedrock/anthropic.claude-haiku-4-5`, the stripped form is the
+    // dot-shape `anthropic.claude-haiku-4-5`. Pre-fix, this fell through
+    // the `^anthropic\/` regex (which only matches the slash form), so
+    // the `us.anthropic.` prefix was re-prepended verbatim → the SDK
+    // received `us.anthropic.anthropic.claude-haiku-4-5` and Bedrock
+    // rejected it with 400 "model identifier is invalid". Test bedrock
+    // billing never landed → "balance did NOT drop within 20s" false
+    // pricing-miss diagnostic.
+    expect(getBedrockModelId('anthropic.claude-haiku-4-5')).toBe(
+      'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    );
+    expect(getBedrockModelId('anthropic.claude-sonnet-4-6')).toBe(
+      'us.anthropic.claude-sonnet-4-6',
+    );
+  });
+
+  it('passes wire-canonical inference-profile ids through verbatim', () => {
+    expect(
+      getBedrockModelId('us.anthropic.claude-haiku-4-5-20251001-v1:0'),
+    ).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0');
+  });
+
+  it('passes ARN forms through verbatim', () => {
+    const arn =
+      'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0';
+    expect(getBedrockModelId(arn)).toBe(arn);
+  });
+
+  it('upcasts the slash form via BEDROCK_MAP (existing behavior)', () => {
+    expect(getBedrockModelId('anthropic/claude-haiku-4-5')).toBe(
+      'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    );
   });
 });
 

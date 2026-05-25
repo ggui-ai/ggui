@@ -31,9 +31,20 @@ export function getBedrockModelId(model: string): string {
     'anthropic/claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
     'anthropic/claude-opus-4-6': 'us.anthropic.claude-opus-4-6-v1:0',
   };
-  if (BEDROCK_MAP[model]) return BEDROCK_MAP[model];
-  if (model.startsWith('us.anthropic.') || model.startsWith('arn:')) return model;
-  const stripped = model.replace(/^anthropic\//, '');
+  // Normalize the Bedrock dot-form opt-in (e.g. `anthropic.claude-haiku-4-5`,
+  // produced when cloud-pod's `resolvePoolRoute` strips a `bedrock/` opt-in
+  // prefix) to the Anthropic slash form. Both spellings should resolve to
+  // the same cross-region inference profile id — without this, the dot
+  // form would skip the BEDROCK_MAP hit, fall through the `^anthropic\/`
+  // strip (which is a no-op for the dot form), and re-prepend
+  // `us.anthropic.` to produce a double-`anthropic.` id that Bedrock
+  // rejects with 400 (cloud e2e regression 2026-05-25, bedrock-iam.spec).
+  const normalized = model.replace(/^anthropic\./, 'anthropic/');
+  if (BEDROCK_MAP[normalized]) return BEDROCK_MAP[normalized];
+  if (normalized.startsWith('us.anthropic.') || normalized.startsWith('arn:')) {
+    return normalized;
+  }
+  const stripped = normalized.replace(/^anthropic\//, '');
   return `us.anthropic.${stripped}`;
 }
 
