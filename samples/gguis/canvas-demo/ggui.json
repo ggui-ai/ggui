@@ -5,5 +5,8 @@
     "slug": "sample-ggui-canvas-demo",
     "name": "Sample ggui — canvas mode demo",
     "defaultMcpAppsMode": "canvas"
+  },
+  "generation": {
+    "model": "anthropic:claude-haiku-4-5-20251001"
   }
 }

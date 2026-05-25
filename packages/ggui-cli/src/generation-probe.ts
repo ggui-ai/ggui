@@ -98,6 +98,21 @@ export interface ProbeGenerationBindingOptions {
   /** Override the probe order. Tests use this to pin the winner. */
   readonly providerOrder?: readonly Exclude<LlmProvider, 'bedrock'>[];
   /**
+   * Explicit operator-declared route from `ggui.json#generation.model`.
+   * When set:
+   *   - `configuredRoute.provider` becomes the boot-scan provider
+   *     (overriding the priority chain).
+   *   - `configuredRoute.model` is what flows to the dispatch path
+   *     (overriding `DEFAULT_ROUTE_BY_PROVIDER[provider]`).
+   *
+   * Absent → fall back to today's behavior: walk the priority chain,
+   * use the per-provider default. The CLI hard-fails BEFORE reaching
+   * this function when a ggui.json exists, a key resolves, but
+   * `generation.model` is unset — so this seam only sees `undefined`
+   * for the `--mcp-only` / no-manifest paths.
+   */
+  readonly configuredRoute?: LlmRoute;
+  /**
    * Optional no-credentials fallback hook threaded straight onto
    * {@link GenerationDeps.onNoCredentials}. The CLI builds this
    * from the operator's resolved settings URL so the
@@ -158,30 +173,40 @@ export async function probeGenerationBinding(
 ): Promise<GenerationBinding> {
   const order = opts.providerOrder ?? PROVIDER_PROBE_ORDER;
 
-  // Boot scan — surfaces the banner-line provider/source. If
-  // multiple providers have boot-time keys, the first in priority
-  // order wins (matches pre-H2 behavior).
+  // When the operator declared an explicit route, the boot scan only
+  // needs to resolve THAT provider's credential — the priority walk
+  // is bypassed. Otherwise fall back to the original behavior: walk
+  // the chain, first hit wins.
+  const configured = opts.configuredRoute;
   let bootHit:
     | (ByokKeyResolution & { provider: Exclude<LlmProvider, 'bedrock'> })
     | null = null;
-  for (const provider of order) {
-    const resolution = await opts.resolver.resolve(provider);
+  if (configured && configured.provider !== 'bedrock') {
+    const resolution = await opts.resolver.resolve(configured.provider);
     if (resolution) {
-      bootHit = { ...resolution, provider };
-      break;
+      bootHit = { ...resolution, provider: configured.provider };
+    }
+  } else {
+    for (const provider of order) {
+      const resolution = await opts.resolver.resolve(provider);
+      if (resolution) {
+        bootHit = { ...resolution, provider };
+        break;
+      }
     }
   }
 
-  // Default provider locks to anthropic on boot-miss — matches the
-  // OSS "Claude first" posture. The Connect-Claude card flow steers
-  // misses toward an Anthropic key (env/file/OAuth); nothing in the
-  // contract prevents users from pasting an OpenAI/Google key
-  // instead, but the boot-time provider for THIS server stays
-  // anthropic until the operator restarts with a different boot
-  // hit.
+  // Resolve the route the dispatch path will use:
+  //   - explicit `configuredRoute` always wins, even on boot-miss
+  //   - else use the boot-hit provider's default route
+  //   - else default to anthropic / Haiku 4.5 (the OSS "Claude first"
+  //     posture; matches Connect-Claude card flow)
   const defaultProvider: Exclude<LlmProvider, 'bedrock'> =
-    bootHit?.provider ?? 'anthropic';
-  const defaultRoute = DEFAULT_ROUTE_BY_PROVIDER[defaultProvider];
+    configured && configured.provider !== 'bedrock'
+      ? configured.provider
+      : bootHit?.provider ?? 'anthropic';
+  const defaultRoute: LlmRoute =
+    configured ?? DEFAULT_ROUTE_BY_PROVIDER[defaultProvider];
   const defaultModel = defaultRoute.model;
 
   // Full-harness wire-up: `createUiGenerator` runs the same

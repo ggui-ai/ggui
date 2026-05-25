@@ -133,6 +133,58 @@ describe('probeGenerationBinding', () => {
     expect(binding.provider).toBe('google');
   });
 
+  // slice #43 phase 4: an explicit configuredRoute overrides BOTH the
+  // probe order (only THAT provider's key is resolved) AND the
+  // per-provider default model (the operator's model wins).
+  it('configuredRoute pins the provider + model when supplied (overrides probe order)', async () => {
+    const calls: Array<Exclude<LlmProvider, 'bedrock'>> = [];
+    const resolver: ByokResolver = {
+      resolve: async (provider) => {
+        calls.push(provider as Exclude<LlmProvider, 'bedrock'>);
+        if (provider === 'openai') {
+          return {
+            key: 'sk',
+            source: 'env',
+            provider: 'openai',
+            envName: 'OPENAI_API_KEY',
+          };
+        }
+        return null;
+      },
+    };
+    const binding = await probeGenerationBinding({
+      resolver,
+      blueprints: emptyBlueprints,
+      configuredRoute: {
+        provider: 'openai',
+        // Pinned model is intentionally NOT the per-provider default
+        // (`gpt-5.5-2026-04-23`) so a regression that ignored
+        // configuredRoute would surface immediately.
+        model: 'gpt-5.4-mini',
+      },
+    });
+    expect(binding.bootResolved).toBe(true);
+    expect(binding.provider).toBe('openai');
+    expect(binding.model).toBe('gpt-5.4-mini');
+    // Probe order was skipped — only openai was checked.
+    expect(calls).toEqual(['openai']);
+  });
+
+  it('configuredRoute still pins the model even when the boot scan misses', async () => {
+    const resolver = makeResolver({});
+    const binding = await probeGenerationBinding({
+      resolver,
+      blueprints: emptyBlueprints,
+      configuredRoute: {
+        provider: 'anthropic',
+        model: 'claude-opus-4-7',
+      },
+    });
+    expect(binding.bootResolved).toBe(false);
+    expect(binding.provider).toBe('anthropic');
+    expect(binding.model).toBe('claude-opus-4-7');
+  });
+
   it('threads the configured blueprints through to GenerationDeps', async () => {
     const blueprints: BlueprintProvider = {
       async list() {

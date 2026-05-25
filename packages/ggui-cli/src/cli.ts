@@ -47,6 +47,7 @@ import {
   resolveStorageFromConfig,
   buildNoCredentialsStackItem,
   type BlueprintProvider,
+  type LlmProvider,
   type McpServerMount,
   type ResolvedStorageStores,
   type SharedHandler,
@@ -57,6 +58,7 @@ import { InMemoryBlueprintProvider } from '@ggui-ai/mcp-server-core/in-memory';
 import { createByokResolver } from './byok-resolver.js';
 import { isInstalledBlueprintPath } from './internal/artifact-install.js';
 import {
+  DEFAULT_ROUTE_BY_PROVIDER,
   describeGenerationBinding,
   probeGenerationBinding,
   type GenerationBinding,
@@ -557,6 +559,24 @@ async function runServeCommand(args: string[]): Promise<number> {
   const baseUrlForCard =
     parsed.publicBaseUrl ?? `http://${parsed.host}:${effectivePort}`;
   const settingsUrl = `${baseUrlForCard}/settings`;
+
+  // Resolve the operator's explicit `generation.model` route, if any.
+  // The schema-side `parseAnyLlmRoute` transform yields a typed
+  // `LlmRoute` directly — no string parsing here. Bedrock is
+  // hosted-only on the OSS path (no IAM resolver chain wired); reject
+  // explicitly with a clear error rather than silently failing at
+  // dispatch time.
+  const configuredRoute = plan.manifest?.generation?.model;
+  if (configuredRoute?.provider === 'bedrock') {
+    process.stderr.write(
+      `ggui serve: ggui.json#generation.model declared a bedrock route ` +
+        `("${configuredRoute.model}"), but the OSS BYOK resolver chain ` +
+        `does not cover AWS IAM. Bedrock is supported via the hosted ` +
+        `runtime only. Pick an anthropic/openai/google/openrouter route.\n`,
+    );
+    return 1;
+  }
+
   let generationBinding: GenerationBinding;
   try {
     // Use whatever blueprint provider the manifest resolved, or
@@ -566,6 +586,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     generationBinding = await probeGenerationBinding({
       resolver: createByokResolver(),
       blueprints: blueprintsForGen,
+      ...(configuredRoute ? { configuredRoute } : {}),
       onNoCredentials: (_ctx, story) =>
         buildNoCredentialsStackItem({
           stackItemId: story.stackItemId,
@@ -587,7 +608,39 @@ async function runServeCommand(args: string[]): Promise<number> {
     generationBinding = await probeGenerationBinding({
       resolver: createByokResolver(),
       blueprints: blueprintsForGen,
+      ...(configuredRoute ? { configuredRoute } : {}),
     });
+  }
+
+  // Strict-fail: a key resolved at boot, but the operator never
+  // declared `generation.model` in their manifest. Silently picking
+  // the per-provider default was the surprise that produced #22 and
+  // #42 — the typed system removed the WIRE bug class, this check
+  // removes the OPERATOR bug class. (`--mcp-only` and no-manifest
+  // paths skip the check — they have no generation surface to pin.)
+  if (
+    plan.manifest !== null &&
+    generationBinding.bootResolved &&
+    configuredRoute === undefined
+  ) {
+    process.stderr.write(
+      `ggui serve: boot scan resolved a ${generationBinding.provider} key but ` +
+        `ggui.json#generation.model is unset. Pick the model explicitly:\n` +
+        `\n` +
+        `  {\n` +
+        `    "schema": "1",\n` +
+        `    "generation": {\n` +
+        `      "model": "${generationBinding.provider}:${DEFAULT_ROUTE_BY_PROVIDER[generationBinding.provider as Exclude<LlmProvider, 'bedrock'>].model}"\n` +
+        `    }\n` +
+        `  }\n` +
+        `\n` +
+        `Accepted forms:\n` +
+        `  - canonical: "anthropic:claude-haiku-4-5-20251001"\n` +
+        `  - LiteLLM:   "anthropic/claude-haiku-4-5"\n` +
+        `\n` +
+        `See docs/principles/model-string-convention.md.\n`,
+    );
+    return 1;
   }
   process.stdout.write(`${describeGenerationBinding(generationBinding)}\n`);
 

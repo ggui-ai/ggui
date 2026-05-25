@@ -43,7 +43,9 @@
 import { z } from 'zod';
 import {
   appPublicEnvSchema,
+  parseAnyLlmRoute,
   strictGadgetDescriptorSchema,
+  type LlmRoute,
 } from '@ggui-ai/protocol';
 
 /**
@@ -440,6 +442,54 @@ export type StorageSurfaceConfig = z.infer<typeof StorageSurfaceSchema>;
 export type StorageConfig = z.infer<typeof StorageSchema>;
 
 /**
+ * Explicit LLM-route selection for UI generation. The operator
+ * declares which `(provider, model)` the OSS `ggui serve` runs
+ * against — eliminates the surprise where exporting `OPENAI_API_KEY`
+ * silently picks the OpenAI default model.
+ *
+ * `model` accepts EITHER serialization:
+ *   - **Canonical** — `provider:model` (e.g. `anthropic:claude-haiku-4-5-20251001`)
+ *   - **LiteLLM compat** — `provider/model` (e.g. `anthropic/claude-haiku-4-5`)
+ *
+ * Parsed at schema-load time via `parseAnyLlmRoute` and surfaced
+ * as a typed `LlmRoute` for downstream consumers (zero string
+ * threading through the dispatch path).
+ */
+const GenerationSchema = z.strictObject({
+  /**
+   * Typed LLM route — `(provider, model)` parsed at the schema
+   * boundary into a discriminated `LlmRoute`. See
+   * `docs/principles/model-string-convention.md`.
+   */
+  model: z
+    .string()
+    .min(1, 'generation.model must not be empty')
+    .transform((raw, ctx): LlmRoute => {
+      const parsed = parseAnyLlmRoute(raw);
+      if (!parsed) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            `generation.model "${raw}" is not a recognized LlmRoute. ` +
+            `Use the canonical form "provider:model" (e.g. ` +
+            `"anthropic:claude-haiku-4-5-20251001") or the LiteLLM ` +
+            `form "provider/model" (e.g. "anthropic/claude-haiku-4-5"). ` +
+            `See docs/principles/model-string-convention.md.`,
+        });
+        return z.NEVER;
+      }
+      return parsed;
+    }),
+});
+
+/**
+ * Public type alias for the parsed generation block. `model` is the
+ * typed `LlmRoute`, NOT the raw string — schema-side transform fires
+ * at parse time so downstream consumers never see the string form.
+ */
+export type GenerationConfig = z.infer<typeof GenerationSchema>;
+
+/**
  * Public type alias for the resolved theme selection (post-parse).
  *
  * `theme` in `ggui.json` accepts a string shorthand, a preset
@@ -540,6 +590,21 @@ export const GguiJsonV1 = z.strictObject({
    * {@link StorageConfig}. */
   storage: StorageSchema.optional().describe(
     'Per-surface storage adapter declarations. Absent = every persistence surface (sessions, threads, vectors, kv) stays in-memory (zero-config OSS default). Present = opt-in per surface; no surface silently creates a file on disk.',
+  ),
+
+  /**
+   * Explicit UI-generation LLM route. Absent + a boot-time provider
+   * key resolves → `ggui serve` hard-fails with an actionable error
+   * pointing here. Absent + no key → graceful boot (the
+   * Connect-Claude card flow handles per-user keys at request time).
+   * Present → use this route verbatim; the schema-side
+   * `parseAnyLlmRoute` transform yields a typed `LlmRoute` so the
+   * dispatch path never sees a string.
+   *
+   * See {@link GenerationConfig}.
+   */
+  generation: GenerationSchema.optional().describe(
+    'Explicit UI-generation LLM route. `model` accepts canonical `provider:model` or LiteLLM `provider/model` form. Absent + a boot key resolves → server hard-fails (operator must pick a model). Absent + no key → graceful per-user fallback flow.',
   ),
 
   /**

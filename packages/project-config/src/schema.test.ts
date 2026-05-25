@@ -582,6 +582,127 @@ describe('ggui.json schema — agent block (ggui serve) (locked 2026-04-19)', ()
   });
 });
 
+describe('ggui.json schema — generation block (slice #43 — explicit LlmRoute)', () => {
+  it('parses canonical "provider:model" form into a typed LlmRoute', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001' },
+    });
+    expect(parsed.generation?.model).toEqual({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+    });
+  });
+
+  it('parses LiteLLM "provider/model" form into a typed LlmRoute', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic/claude-haiku-4-5' },
+    });
+    // LITELLM_TO_WIRE maps short-form to wire-canonical at parse time.
+    expect(parsed.generation?.model).toEqual({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+    });
+  });
+
+  it('parses google + openai + openrouter + bedrock entries', () => {
+    const cases: ReadonlyArray<{
+      input: string;
+      expected: { provider: string; model: string };
+    }> = [
+      {
+        input: 'google:gemini-3.5-flash',
+        expected: { provider: 'google', model: 'gemini-3.5-flash' },
+      },
+      {
+        input: 'openai:gpt-5.5-2026-04-23',
+        expected: { provider: 'openai', model: 'gpt-5.5-2026-04-23' },
+      },
+      {
+        input: 'openrouter:anthropic/claude-haiku-4.5',
+        expected: {
+          provider: 'openrouter',
+          model: 'anthropic/claude-haiku-4.5',
+        },
+      },
+      {
+        input: 'bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        expected: {
+          provider: 'bedrock',
+          model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        },
+      },
+    ];
+    for (const { input, expected } of cases) {
+      const parsed = parseGguiJson({
+        ...MINIMAL_V1,
+        generation: { model: input },
+      });
+      expect(parsed.generation?.model).toEqual(expected);
+    }
+  });
+
+  it('rejects an unrecognized provider with an actionable error', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'meta:llama-3.5' },
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const message = result.error.issues
+      .map((i) => i.message)
+      .join(' / ');
+    expect(message).toMatch(/not a recognized LlmRoute/);
+    expect(message).toMatch(/model-string-convention/);
+  });
+
+  it('rejects an unrecognized openai model (closed enum, no escape hatch)', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'openai:gpt-3' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts arbitrary openrouter model strings (escape hatch)', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: {
+        model: 'openrouter:some-future/model-not-in-curated-list',
+      },
+    });
+    expect(parsed.generation?.model).toEqual({
+      provider: 'openrouter',
+      model: 'some-future/model-not-in-curated-list',
+    });
+  });
+
+  it('rejects an empty model string', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: '' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects unknown keys inside generation (strict object)', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: {
+        model: 'anthropic:claude-haiku-4-5-20251001',
+        temperature: 0.5,
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('absent generation is fine (the CLI hard-fails downstream when a key resolves)', () => {
+    const parsed = parseGguiJson(MINIMAL_V1);
+    expect(parsed.generation).toBeUndefined();
+  });
+});
+
 describe('ggui.json schema — registry field (Slice 3.2 plugin marketplace)', () => {
   it('accepts a valid https registry URL', () => {
     const parsed = parseGguiJson({
