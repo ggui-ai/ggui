@@ -68,7 +68,7 @@ function makeGenerationDeps(): GenerationDeps {
     uiGenerator: makeFakeGenerator(),
     blueprints: new InMemoryBlueprintProvider(),
     resolveLlm: async () => ({
-      selection: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      selection: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       providerKey: { provider: 'anthropic', key: 'sk-stub' },
     }),
   };

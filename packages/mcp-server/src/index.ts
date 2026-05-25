@@ -360,6 +360,7 @@ export type {
 // implementation ships in `@ggui-ai/ui-gen#createUiGenerator`.
 export type {
   LlmProvider,
+  LlmRoute,
   LlmSelection,
   ProviderKeyRef,
   UiGenerateEvent,

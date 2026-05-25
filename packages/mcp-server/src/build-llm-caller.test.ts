@@ -17,20 +17,33 @@ import { buildLlmCaller } from './llm-backed-negotiator.js';
 describe('buildLlmCaller — callStructured wiring', () => {
   it('exposes callStructured on the anthropic provider', () => {
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk-test' },
     );
     expect(typeof caller.callStructured).toBe('function');
   });
 
   it('omits callStructured on every non-anthropic provider', () => {
-    const others = ['openai', 'google', 'openrouter', 'bedrock'] as const;
-    for (const provider of others) {
-      const caller = buildLlmCaller(
-        { provider, model: 'gpt-4o' },
-        { provider, key: 'sk-test' },
-      );
-      expect(caller.callStructured, `expected absent on ${provider}`).toBeUndefined();
+    // Each entry uses a model that's actually valid in its provider's
+    // typed namespace — the typed LlmRoute system (slice #43) means
+    // we can't construct a route with a mismatched model. The behavior
+    // under test (callStructured absence) is independent of which
+    // specific model is named.
+    const routes = [
+      { provider: 'openai', model: 'gpt-5.5' },
+      { provider: 'google', model: 'gemini-3.5-flash' },
+      { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' },
+      { provider: 'bedrock', model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' },
+    ] as const;
+    for (const route of routes) {
+      const caller = buildLlmCaller(route, {
+        provider: route.provider,
+        key: 'sk-test',
+      });
+      expect(
+        caller.callStructured,
+        `expected absent on ${route.provider}`,
+      ).toBeUndefined();
     }
   });
 });
@@ -68,7 +81,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     }) as unknown as typeof fetch;
 
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk-ant-test' },
     );
     const result = await caller.callStructured!<{
@@ -124,16 +137,15 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     });
   });
 
-  it('strips the LiteLLM transport prefix before sending to Anthropic API', async () => {
-    // Regression for the negotiator-404 bug: `selection.model` arrives
-    // in canonical `<provider>/<model>` form per the model-string-
-    // convention principle, but Anthropic's API rejects the prefix
-    // with HTTP 404 ("model: anthropic/claude-haiku-4-5"). The
-    // negotiator must apply `getUpstreamModelId` before the SDK call,
-    // mapping `anthropic/claude-haiku-4-5` → dated id
-    // `claude-haiku-4-5-20251001`. Without this strip the negotiator
-    // silently degrades to its `bare-create` fallback on every
-    // handshake, losing the LLM-backed decision.
+  it('sends the wire-canonical Anthropic model id (regression for #42)', async () => {
+    // Regression for the negotiator-404 bug: the negotiator's call site
+    // used to receive `selection.model` in LiteLLM canonical form
+    // (`anthropic/claude-haiku-4-5`) and pass it verbatim to Anthropic,
+    // which 404'd. The typed-LlmRoute system (slice #43) makes
+    // construction with the slash-prefixed form a compile error —
+    // `LlmSelection.model` is typed as `ModelOf<provider>`, which for
+    // anthropic is the dated wire ID enum. This test pins that the
+    // wire ID reaches Anthropic verbatim (no transformation).
     const captured: { body?: string } = {};
     globalThis.fetch = vi.fn(async (_url, init) => {
       captured.body = init?.body as string;
@@ -152,7 +164,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     }) as unknown as typeof fetch;
 
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'anthropic/claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk' },
     );
     await caller.callStructured!('s', 'u', {
@@ -184,7 +196,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     }) as unknown as typeof fetch;
 
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk' },
     );
     await caller.callStructured!('s', 'u', {
@@ -202,7 +214,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     }) as unknown as typeof fetch;
 
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk' },
     );
     await expect(
@@ -225,7 +237,7 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     }) as unknown as typeof fetch;
 
     const caller = buildLlmCaller(
-      { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
       { provider: 'anthropic', key: 'sk' },
     );
     await expect(

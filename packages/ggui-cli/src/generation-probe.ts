@@ -42,6 +42,7 @@ import type {
   GenerationDeps,
   HandlerContext,
   LlmProvider,
+  LlmRoute,
   LlmSelection,
   ProviderKeyRef,
   SessionStackEntry,
@@ -66,17 +67,20 @@ import type {
  * binds Bedrock through its own `GenerationDeps` at the hosted
  * surface.
  */
-export const DEFAULT_MODEL_BY_PROVIDER: Readonly<
-  Record<Exclude<LlmProvider, 'bedrock'>, string>
+/**
+ * Locked default route per provider, as a typed {@link LlmRoute}.
+ * Model strings are bare wire-canonical IDs (registry KEY ==
+ * what the provider's API expects on the wire) — there is no
+ * transformation step downstream. `dispatchGeneration` sends
+ * `route.model` verbatim.
+ */
+export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
+  Record<Exclude<LlmProvider, 'bedrock'>, LlmRoute>
 > = {
-  // Slash-prefixed `<provider>/<model>` form — `getProviderForModel`
-  // expects it; bare names trip the "Unrecognized model format" warning
-  // and silently default to anthropic. Pre-matrix the openai/google
-  // defaults were also bare; this fixes them as part of the model bump.
-  anthropic: 'anthropic/claude-haiku-4-5',
-  openai: 'openai/gpt-5.5-2026-04-23',
-  google: 'gemini/gemini-3.5-flash',
-  openrouter: 'anthropic/claude-haiku-4.5',
+  anthropic: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  openai: { provider: 'openai', model: 'gpt-5.5-2026-04-23' },
+  google: { provider: 'google', model: 'gemini-3.5-flash' },
+  openrouter: { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' },
 };
 
 /**
@@ -177,7 +181,8 @@ export async function probeGenerationBinding(
   // hit.
   const defaultProvider: Exclude<LlmProvider, 'bedrock'> =
     bootHit?.provider ?? 'anthropic';
-  const defaultModel = DEFAULT_MODEL_BY_PROVIDER[defaultProvider];
+  const defaultRoute = DEFAULT_ROUTE_BY_PROVIDER[defaultProvider];
+  const defaultModel = defaultRoute.model;
 
   // Full-harness wire-up: `createUiGenerator` runs the same
   // multi-turn coding agent + self-check loop the bench validates;
@@ -196,7 +201,10 @@ export async function probeGenerationBinding(
     });
     if (!resolution) return null;
     return {
-      selection: { provider: defaultProvider, model: defaultModel },
+      // Spread the typed route — TS knows `defaultRoute` is an
+      // `LlmRoute`, so the discriminator + model alignment is
+      // preserved when assigning to `LlmSelection`.
+      selection: { ...defaultRoute },
       providerKey: { provider: defaultProvider, key: resolution.key },
     };
   };

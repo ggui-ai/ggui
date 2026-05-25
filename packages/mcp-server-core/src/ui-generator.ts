@@ -15,18 +15,18 @@ import type {
   UIGenerationResponse,
   GenerationError,
   ProgressUpdate,
+  LlmProvider,
+  LlmRoute,
 } from '@ggui-ai/protocol';
 import type { BlueprintProvider } from './blueprint-provider.js';
 
 /**
- * LLM provider identifier. Matches the harness's provider router.
+ * Re-export `LlmProvider` + `LlmRoute` from `@ggui-ai/protocol` so
+ * existing `mcp-server-core` consumers keep working without an
+ * import-path change. The single source of truth is the `MODELS`
+ * registry in `@ggui-ai/protocol/types/llm-route`.
  */
-export type LlmProvider =
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'bedrock'
-  | 'openrouter';
+export type { LlmProvider, LlmRoute };
 
 /**
  * Generator tier — coarse quality / cost / latency band. Two values
@@ -47,14 +47,17 @@ export type GeneratorTier = 'default' | 'advanced' | (string & {});
 /**
  * LLM selection for a single generation. Resolved upstream by the server
  * (plan precedence: app config → workspace default → builder default).
+ *
+ * Composed as `LlmRoute & {inference params}` — the discriminated-union
+ * `LlmRoute` enforces that `model` belongs to `provider`'s namespace
+ * (per `MODELS` in `@ggui-ai/protocol/types/llm-route`), structurally
+ * preventing the #22/#42 bug class. Inference parameters
+ * (`temperature`, `maxTokens`) layer on top.
  */
-export interface LlmSelection {
-  provider: LlmProvider;
-  /** Provider-specific model ID, e.g. "claude-opus-4-7", "gpt-4o-2024-08". */
-  model: string;
+export type LlmSelection = LlmRoute & {
   temperature?: number;
   maxTokens?: number;
-}
+};
 
 /**
  * Provider credential passed to the harness at generation time. Plaintext at

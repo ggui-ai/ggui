@@ -61,7 +61,7 @@ function makeMockGenerator(opts: {
       };
       const metadata = {
         provider: 'anthropic' as const,
-        model: 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5-20251001',
         inputTokens: 100,
         outputTokens: 200,
         latencyMs: 50,
@@ -87,7 +87,7 @@ const fakeBlueprints: BlueprintProvider = {
 const fakeCredentials: GenerationCredentials = {
   selection: {
     provider: 'anthropic',
-    model: 'claude-haiku-4-5',
+    model: 'claude-haiku-4-5-20251001',
   },
   providerKey: {
     provider: 'anthropic',

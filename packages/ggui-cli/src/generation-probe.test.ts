@@ -4,7 +4,7 @@ import type {
   LlmProvider,
 } from '@ggui-ai/mcp-server';
 import {
-  DEFAULT_MODEL_BY_PROVIDER,
+  DEFAULT_ROUTE_BY_PROVIDER,
   PROVIDER_PROBE_ORDER,
   describeGenerationBinding,
   probeGenerationBinding,
@@ -65,7 +65,7 @@ describe('probeGenerationBinding', () => {
     });
     expect(binding.bootResolved).toBe(true);
     expect(binding.provider).toBe('openai');
-    expect(binding.model).toBe(DEFAULT_MODEL_BY_PROVIDER.openai);
+    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.openai.model);
     expect(binding.keySource).toBe('env');
     expect(binding.keyEnvName).toBe('OPENAI_API_KEY');
     // Boot scan halted on the first hit.
@@ -82,7 +82,7 @@ describe('probeGenerationBinding', () => {
     // Default to anthropic / claude-haiku-4-5 — the OSS fall-back
     // provider that the Connect-Claude card flow steers users toward.
     expect(binding.provider).toBe('anthropic');
-    expect(binding.model).toBe(DEFAULT_MODEL_BY_PROVIDER.anthropic);
+    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.anthropic.model);
     expect(binding.keySource).toBeUndefined();
     expect(binding.keyEnvName).toBeUndefined();
   });
@@ -107,7 +107,7 @@ describe('probeGenerationBinding', () => {
       blueprints: emptyBlueprints,
     });
     expect(binding.provider).toBe('anthropic');
-    expect(binding.model).toBe(DEFAULT_MODEL_BY_PROVIDER.anthropic);
+    expect(binding.model).toBe(DEFAULT_ROUTE_BY_PROVIDER.anthropic.model);
   });
 
   it('honors a custom providerOrder', async () => {
@@ -181,7 +181,7 @@ describe('probeGenerationBinding', () => {
       requestId: 'r',
     });
     expect(creds).toEqual({
-      selection: { provider: 'anthropic', model: DEFAULT_MODEL_BY_PROVIDER.anthropic },
+      selection: { provider: 'anthropic', model: DEFAULT_ROUTE_BY_PROVIDER.anthropic.model },
       providerKey: { provider: 'anthropic', key: 'ant-k' },
     });
     // Boot scan called with no userScope; per-call resolveLlm
@@ -286,10 +286,12 @@ describe('describeGenerationBinding', () => {
 // ─── Locked constants ────────────────────────────────────────
 
 describe('locked constants', () => {
-  it('DEFAULT_MODEL_BY_PROVIDER covers every non-bedrock LlmProvider in PROVIDER_PROBE_ORDER', () => {
+  it('DEFAULT_ROUTE_BY_PROVIDER covers every non-bedrock LlmProvider in PROVIDER_PROBE_ORDER', () => {
     for (const provider of PROVIDER_PROBE_ORDER) {
-      expect(DEFAULT_MODEL_BY_PROVIDER[provider]).toBeTypeOf('string');
-      expect(DEFAULT_MODEL_BY_PROVIDER[provider].length).toBeGreaterThan(0);
+      const route = DEFAULT_ROUTE_BY_PROVIDER[provider];
+      expect(route.provider).toBe(provider);
+      expect(route.model).toBeTypeOf('string');
+      expect(route.model.length).toBeGreaterThan(0);
     }
   });
 
