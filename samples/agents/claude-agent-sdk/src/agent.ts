@@ -198,6 +198,20 @@ export interface RunAgentOptions {
 }
 
 /**
+ * Per-process record of which chat-session ids have already produced
+ * at least one Claude Agent SDK turn. Used to choose between
+ * `options.sessionId` (first turn — create a new session under our
+ * id) and `options.resume` (subsequent turn — load the persisted
+ * conversation from `~/.claude/projects/`). Persistence note: the
+ * Claude SDK saves sessions to disk, so after a process restart the
+ * SET is empty but the on-disk session still exists. We accept that
+ * one edge case — a tab's first POST after a server restart starts
+ * a new session id collision with the on-disk one. The fall-back is
+ * a fresh, isolated turn, never an error.
+ */
+const knownChatSessions = new Set<string>();
+
+/**
  * Default system prompt — re-exported from `@ggui-ai/protocol`.
  *
  * The canonical posture-only prompt for ggui-aware agents on raw SDK
@@ -278,12 +292,38 @@ export async function* runAgent(
     ? [...GGUI_ALLOWED_TOOLS, ...TODO_ALLOWED_TOOLS]
     : GGUI_ALLOWED_TOOLS;
 
+  // Multi-turn session continuity. The Claude Agent SDK persists every
+  // session to `~/.claude/projects/` and exposes two complementary
+  // entry points on `options`:
+  //
+  //   - `sessionId: <UUID>` — start a new session with our id.
+  //   - `resume: <UUID>`    — load the persisted history for that id.
+  //
+  // We use our caller's chat-session id (the per-tab UUID minted by
+  // `useChat.ts` and forwarded as `X-Chat-Session-Id`) as the SDK
+  // session id, so the SDK's filesystem store is keyed by the same
+  // identifier the browser uses. First call → sessionId; remembered in
+  // a module-scope Set so subsequent calls → resume. Without a chat-
+  // session id (raw curl callers) we let the SDK mint its own id; that
+  // call won't be resumable from this server, but it still works.
+  const chatSessionId = opts.chatSessionId;
+  const sessionOptions: { resume?: string; sessionId?: string } = {};
+  if (chatSessionId) {
+    if (knownChatSessions.has(chatSessionId)) {
+      sessionOptions.resume = chatSessionId;
+    } else {
+      sessionOptions.sessionId = chatSessionId;
+      knownChatSessions.add(chatSessionId);
+    }
+  }
+
   const response = query({
     prompt: opts.prompt,
     options: {
       model: opts.model ?? 'claude-haiku-4-5',
       mcpServers,
       allowedTools,
+      ...sessionOptions,
       tools: [], // disable built-in tools — purely MCP
       // Isolation mode. The SDK's default is already "no filesystem
       // settings loaded" when `settingSources` is omitted, but we set
