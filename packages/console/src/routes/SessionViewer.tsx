@@ -54,12 +54,32 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import {
-  McpAppIframe,
-  type McpAppIframeProps,
-  type McpAppIframeRef,
-  type ProtocolError,
-} from '@ggui-ai/react';
+import { type ProtocolError } from '@ggui-ai/react';
+
+// Legacy `<McpAppIframe>` (+ its `McpAppIframeProps` / `McpAppIframeRef`
+// types) was deleted in the spec-migration slice (2026-05-26 — adopted
+// `<AppRenderer>` from `@mcp-ui/client`). This route hasn't been
+// migrated yet (cleanup tracked in #98); fail-loud stub keeps the
+// console buildable while the SessionViewer rewrite is pending.
+function McpAppIframe(_props: McpAppIframeProps): React.JSX.Element {
+  throw new Error(
+    'console SessionViewer uses deleted <McpAppIframe>. Migrate route to <AppRenderer> + sandbox-proxy URL.',
+  );
+}
+interface McpAppIframeProps {
+  readonly resource?: unknown;
+  readonly bootstrap?: unknown;
+  readonly theme?: Record<string, string>;
+  readonly containerDimensions?: { width?: number; height?: number };
+  readonly onToolCall?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  readonly onError?: (err: ProtocolError) => void;
+  readonly onObserve?: (event: { readonly kind: string }) => void;
+  readonly allowSameOrigin?: boolean;
+  readonly ref?: React.RefObject<McpAppIframeRef | null>;
+}
+interface McpAppIframeRef {
+  readonly dispatchAction: (name: string, data: unknown) => void;
+}
 import type { SessionStackEntry, StackItem } from '@ggui-ai/protocol';
 import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { SectionHead } from '../brand/SectionHead.js';

@@ -39,7 +39,15 @@ import { Clock, X } from 'lucide-react';
 import { useGguiContext } from '../context/GguiContext';
 import { useInvoke } from '../invoke/useInvoke';
 import { extractUiMoments, type UiMoment } from '../invoke/ui-moments';
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe';
+
+// Legacy `<McpAppIframe>` was deleted in the spec-migration slice
+// (2026-05-26). See ChatShell.tsx for the same fail-loud stub rationale
+// (cleanup tracked in #98).
+function McpAppIframe(_props: { resource: unknown }): React.JSX.Element {
+  throw new Error(
+    '<AgentShell> uses the deleted <McpAppIframe>. Migrate to <AppRenderer> + sandbox-proxy URL, or use useMcpAppsChat + <AppRenderer> directly.',
+  );
+}
 import type {
   AgentShellProps,
   AgentShellComponents,

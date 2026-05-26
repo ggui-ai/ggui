@@ -35,7 +35,15 @@ import { WelcomePage } from './WelcomePage';
 import { useGguiContext } from '../context/GguiContext';
 import { useInvoke, type ConversationMessage } from '../invoke/useInvoke';
 import { extractUiMoments, type UiMoment } from '../invoke/ui-moments';
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe';
+
+// Legacy `<McpAppIframe>` was deleted in the spec-migration slice
+// (2026-05-26). See ChatShell.tsx for the same fail-loud stub rationale
+// (cleanup tracked in #98).
+function McpAppIframe(_props: { resource: unknown }): React.JSX.Element {
+  throw new Error(
+    '<FullscreenShell> uses the deleted <McpAppIframe>. Migrate to <AppRenderer> + sandbox-proxy URL, or use useMcpAppsChat + <AppRenderer> directly.',
+  );
+}
 import { findLatestAssistantText } from './agent-shell/state-machine';
 
 /* ── Props ── */

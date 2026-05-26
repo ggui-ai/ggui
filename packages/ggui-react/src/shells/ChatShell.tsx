@@ -50,7 +50,20 @@ import {
 import { useGguiContext } from '../context/GguiContext';
 import { useInvoke, type ConversationMessage } from '../invoke/useInvoke';
 import { extractUiMoments, type UiMoment } from '../invoke/ui-moments';
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe';
+
+// Legacy `<McpAppIframe>` was deleted in the spec-migration slice
+// (2026-05-26 — adopted `@mcp-ui/client`'s `<AppRenderer>` as the
+// canonical iframe host). The three legacy shells (ChatShell,
+// AgentShell, FullscreenShell) still reference it but they're tagged
+// for cleanup (#98). For now: render-time fail-loud stub so the
+// typecheck passes without re-introducing a non-spec-compliant
+// component. Migrate to `<AppRenderer>` + sandbox-proxy URL when
+// reviving the shell.
+function McpAppIframe(_props: { resource: unknown }): React.JSX.Element {
+  throw new Error(
+    '<ChatShell> uses the deleted <McpAppIframe>. Migrate to <AppRenderer> + sandbox-proxy URL, or use useMcpAppsChat + <AppRenderer> directly.',
+  );
+}
 
 /* ── Props ── */
 

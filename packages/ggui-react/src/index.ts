@@ -155,25 +155,58 @@ export type {
 } from './components/DynamicComponent';
 
 // MCP Apps stack-item renderer (inbound third-party iframe hosting).
-// `@deprecated` — a session-bound legacy host. Prefer `<McpAppIframe>`
-// (exported below) for any new code; this export is retired once every
-// consumer has migrated.
+// `@deprecated` — a session-bound legacy host superseded by `<AppRenderer>`
+// (exported below). Retire once every consumer migrates.
 export { McpAppsStackItemRenderer } from './components/McpAppsStackItemRenderer';
 export type { McpAppsStackItemRendererProps } from './components/McpAppsStackItemRenderer';
 
-// `<McpAppIframe>` — generic MCP Apps iframe host.
-// Zero ggui-specific coupling; any MCP Apps host (Claude Desktop,
-// ChatGPT, VS Code, console, third-party playgrounds) uses this to
-// embed a ggui (or any MCP Apps-conformant) session. Pairs with
-// `@ggui-ai/iframe-runtime` which runs INSIDE the iframe.
-export { McpAppIframe } from './McpAppIframe/index';
+// Spec-canonical MCP Apps iframe host — re-exported from `@mcp-ui/client`.
+//
+// **Why a re-export, not our own component.** The MCP Apps spec mandates a
+// two-iframe sandbox-proxy pattern on different origins (sandbox.html on a
+// different origin from the host) + spec-canonical `AppBridge` over
+// postMessage. `@mcp-ui/client` is the de-facto reference React host
+// (Apache-2.0, used by Claude / VSCode / Postman / Goose / LibreChat) and
+// implements the pattern correctly. Per ggui's first principle — protocol
+// MUST work with standard spec MCP, no extensions out of spec — we adopt
+// the canonical implementation directly rather than wrap it.
+//
+// **Where ggui's bootstrap envelope flows.** `_meta["ai.ggui/bootstrap"]`
+// on `ggui_push` / `ggui_handshake` tool results uses the spec-canonical
+// `_meta` extension grammar (SEP-2133: `{reverse-dns-prefix}/{name}`); a
+// spec-compliant host (including `<AppRenderer>`) MUST forward
+// `_meta` from tool results to the view via `ui/notifications/tool-result`.
+// The view's iframe-runtime reads the key directly. See
+// `docs/protocol/extensions/ai.ggui-bootstrap.md`.
+//
+// Sandbox-proxy hosting: consumers MUST mount a `sandbox.html` on a
+// different origin and pass that URL via `<AppRenderer sandbox={{url, ...}}>`.
+// `@ggui-ai/dev-stack`'s `startSandboxProxyServer` provides a dev-ready
+// implementation on a different port.
+export {
+  AppRenderer,
+  AppFrame,
+  AppBridge,
+  PostMessageTransport,
+  getUIResourceMetadata,
+  getResourceMetadata,
+  isUIResource,
+  UI_EXTENSION_NAME,
+  UI_EXTENSION_CONFIG,
+  UI_EXTENSION_CAPABILITIES,
+} from '@mcp-ui/client';
 export type {
-  McpAppIframeProps,
-  McpAppIframeRef,
-  McpAppIframeDimensions,
-  McpAppIframePermissions,
-  UiMessageEvent,
-} from './McpAppIframe/index';
+  AppRendererProps,
+  AppRendererHandle,
+  AppFrameProps,
+  SandboxConfig,
+  AppInfo,
+  RequestHandlerExtra,
+  UIResourceMetadata,
+  ClientCapabilitiesWithExtensions,
+  McpUiHostContext,
+  McpUiHostCapabilities,
+} from '@mcp-ui/client';
 
 // Provisional A2UI preview renderer (consumes `_ggui:preview` channel)
 export { ProvisionalRenderer } from './components/ProvisionalRenderer';
