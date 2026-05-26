@@ -159,6 +159,9 @@ function projectPublicEnv(
     if (typeof value !== 'string') return undefined;
     collected[key] = value;
   }
+  // Empty map = wire-equivalent to absent (per #109 splitter posture).
+  // Consumers default at their read site.
+  if (Object.keys(collected).length === 0) return undefined;
   return collected;
 }
 
@@ -222,9 +225,25 @@ function projectSession(
   const streamRaw = session.streamWebSocketLocalTools;
   const streamWebSocketLocalTools: readonly string[] | undefined =
     Array.isArray(streamRaw) &&
+    streamRaw.length > 0 &&
     streamRaw.every((s): s is string => typeof s === 'string' && s.length > 0)
       ? streamRaw
       : undefined;
+
+  // themeMode is a closed `'light' | 'dark'` enum at the type level;
+  // unknown values collapse to undefined (consumers fall back to the
+  // host-context default).
+  const themeModeRaw = session.themeMode;
+  const themeMode: 'light' | 'dark' | undefined =
+    themeModeRaw === 'light' || themeModeRaw === 'dark'
+      ? themeModeRaw
+      : undefined;
+
+  // canvasMode is a strict boolean; non-boolean values (incl. truthy
+  // strings, numbers, `null`) collapse to undefined.
+  const canvasModeRaw = session.canvasMode;
+  const canvasMode: boolean | undefined =
+    typeof canvasModeRaw === 'boolean' ? canvasModeRaw : undefined;
 
   const projected: McpAppAiGguiSessionMeta = {
     sessionId: session.sessionId,
@@ -243,12 +262,8 @@ function projectSession(
       ? { pollingUrl: session.pollingUrl }
       : {}),
     ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-    ...(session.themeMode !== undefined
-      ? { themeMode: session.themeMode }
-      : {}),
-    ...(session.canvasMode !== undefined
-      ? { canvasMode: session.canvasMode }
-      : {}),
+    ...(themeMode !== undefined ? { themeMode } : {}),
+    ...(canvasMode !== undefined ? { canvasMode } : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(streamWebSocketLocalTools !== undefined
@@ -323,6 +338,17 @@ export function validateMeta(
 
   if (!session) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+  }
+
+  // `runtimeUrl` is a hard wire-required field on every session slice
+  // (no mode discriminator escapes this — the iframe needs to know
+  // where to fetch the runtime bundle to mount anything at all). The
+  // protocol-level `parseMcpAppAiGguiMeta` already enforces this for
+  // the envelope-driven extractors, but `validateMeta` is also called
+  // directly with pre-built slices (tests, `parseMetaFromGlobal`),
+  // so we re-assert here.
+  if (!isNonEmptyString(session.runtimeUrl)) {
+    return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
 
   const hasLive =

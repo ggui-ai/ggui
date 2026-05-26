@@ -31,9 +31,12 @@
  * validation of the payload shape — the gadget passes it through
  * verbatim.
  *
- * `polling` is OPTIONAL. When present, the handler is reachable via
- * `PollingTransport` as well as `WSTransport`. When absent, the
- * handler is WS-only — under a polling transport it never fires.
+ * Polling is REGISTRY-LEVEL (see {@link RegistryPollingOptions}) —
+ * a single HTTP fetch per tick parses a slice envelope into a map of
+ * `type → frame` and the transport dispatches each frame to the
+ * matching handler. R6 (2026-05-26) collapsed the per-handler
+ * `polling?: ChannelPollingDescriptor` shape into this single
+ * registry-level descriptor.
  */
 export interface ChannelHandler<TPayload = unknown> {
   /**
@@ -51,36 +54,42 @@ export interface ChannelHandler<TPayload = unknown> {
    * (when bound) for observability.
    */
   onMessage(payload: TPayload): void | Promise<void>;
-
-  /**
-   * OPTIONAL polling-fallback descriptor.
-   *
-   *   - `url` is the resource the `PollingTransport` fetches on each
-   *     poll tick. Resolved verbatim — the consumer composes any
-   *     query params it needs.
-   *   - `intervalMs` is the cadence. The library may clamp below a
-   *     floor (default 500ms) to avoid request storms.
-   *   - `parse` extracts the payload from the response body. Return
-   *     `null` to indicate "no new payload this tick" — the gadget
-   *     skips dispatch. Diff detection (e.g. only fire on propsJson
-   *     change) lives here, closed over by the consumer.
-   *
-   * Absent → handler is silently inert under polling.
-   */
-  readonly polling?: ChannelPollingDescriptor<TPayload>;
 }
 
-export interface ChannelPollingDescriptor<TPayload> {
+/**
+ * Registry-level polling descriptor (R6, 2026-05-26). One URL, one
+ * tick interval, one snapshot-parsing function for the WHOLE
+ * registry — replaces the per-handler `polling?: ChannelPollingDescriptor`
+ * shape that existed pre-R6.
+ *
+ * On each tick:
+ *
+ *   1. `PollingTransport` fetches `url` with `Accept: application/json`.
+ *   2. `parseSnapshot(body)` returns either `null` (nothing changed
+ *      since the last poll — short-circuit, no dispatch) OR a
+ *      `Record<type, frame>` mapping handler-type strings to
+ *      synthesized frames.
+ *   3. For each entry in the map, the transport looks up the handler
+ *      by `type` in the registry's handler map and calls
+ *      `handler.onMessage(frame.payload)`. Missing handlers are
+ *      skipped silently (the snapshot may describe types this
+ *      registry doesn't care about).
+ *
+ * Diff detection lives inside `parseSnapshot` — the consumer composes
+ * the snapshot hash / last-seen-value tracking in its closure. The
+ * transport itself is stateless beyond the timer.
+ */
+export interface RegistryPollingOptions {
   readonly url: string;
   readonly intervalMs: number;
   /**
-   * Parse the response body into a payload. Return `null` when the
-   * fetch was successful but nothing new arrived (e.g. 204 No Content,
-   * or a poll-against-current that didn't diff from the last seen
-   * state). Implementations are expected to manage their own "previous
-   * value" via closure if diff detection is needed.
+   * Parse the response body into a map of `type → frame` to dispatch.
+   * Return `null` when nothing changed since the last poll — the
+   * transport skips dispatch entirely. Empty `{}` is distinct from
+   * `null`: it means "snapshot parsed but no handlers matched today's
+   * keys" (e.g. session-only, no stack-item slice).
    */
-  parse(body: unknown): TPayload | null;
+  parseSnapshot(body: unknown): Record<string, ChannelFrame> | null;
 }
 
 /**
@@ -212,4 +221,13 @@ export interface BindOptions {
    * the renderer's status DOM + observability emitter.
    */
   readonly onStatusChange?: (status: TransportStatus) => void;
+  /**
+   * Registry-level polling descriptor (R6). When present, the
+   * `PollingTransport` (used directly when WS is not viable, or after
+   * `FailoverHandle` swap from a failed `WSTransport`) fires this URL
+   * on each tick and dispatches each frame in the returned map by
+   * handler `type`. Absent → no polling fallback (handlers stay inert
+   * when WS is unavailable).
+   */
+  readonly polling?: RegistryPollingOptions;
 }

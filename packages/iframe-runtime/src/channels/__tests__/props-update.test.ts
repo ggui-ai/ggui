@@ -12,6 +12,10 @@
  *   - mcpApps / system targets skipped (no propsSpec)
  *   - invalid props (failed validation) skipped
  *   - valid props patched + renderer re-applied
+ *
+ * R6 (2026-05-26) moved the polling descriptor out of the handler
+ * (registry-level now — see `snapshot-polling.test.ts`). This file
+ * only exercises the on-message branches.
  */
 import { describe, expect, it } from 'vitest';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
@@ -105,144 +109,5 @@ describe('createPropsUpdateHandler', () => {
     });
     await handler.onMessage({ stackItemId: 'm', props: { x: 1 } });
     expect(renderer.applied).toHaveLength(0);
-  });
-});
-
-describe('createPropsUpdateHandler — B5 polling descriptor', () => {
-  it('omits polling when pollingUrl is missing', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-    });
-    expect(handler.polling).toBeUndefined();
-  });
-
-  it('installs polling descriptor with the supplied URL', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc123',
-    });
-    expect(handler.polling).toBeDefined();
-    expect(handler.polling?.url).toBe(
-      'http://ggui.test/r/abc123',
-    );
-    expect(handler.polling?.intervalMs).toBe(2000);
-  });
-
-  it('honors custom pollingIntervalMs override', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-      pollingIntervalMs: 500,
-    });
-    expect(handler.polling?.intervalMs).toBe(500);
-  });
-
-  // Helper for the slice-envelope shape the polling endpoint
-  // (`GET /r/<shortCode>` with `Accept: application/json`) returns.
-  // The polling parser reads `body['ai.ggui/stack-item']?.propsJson` +
-  // `stackItemId`.
-  function envelope(stackItem: {
-    stackItemId?: string;
-    propsJson?: string;
-  }): unknown {
-    return { 'ai.ggui/stack-item': stackItem };
-  }
-
-  it('parse emits the first poll (no last-seen baseline)', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    const out = handler.polling!.parse(envelope({
-      stackItemId: 'item_a',
-      propsJson: '{"count":0}',
-    }));
-    expect(out).toEqual({ stackItemId: 'item_a', props: { count: 0 } });
-  });
-
-  it('parse returns null on identical second poll (diff detection)', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    const body = envelope({ stackItemId: 'item_a', propsJson: '{"count":0}' });
-    handler.polling!.parse(body); // prime baseline
-    expect(handler.polling!.parse(body)).toBeNull();
-  });
-
-  it('parse emits when propsJson changes', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    handler.polling!.parse(envelope({
-      stackItemId: 'item_a',
-      propsJson: '{"count":0}',
-    }));
-    const out = handler.polling!.parse(envelope({
-      stackItemId: 'item_a',
-      propsJson: '{"count":5}',
-    }));
-    expect(out).toEqual({ stackItemId: 'item_a', props: { count: 5 } });
-  });
-
-  it('parse skips when body lacks propsJson / stackItemId', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    expect(handler.polling!.parse({})).toBeNull();
-    expect(handler.polling!.parse(envelope({ propsJson: '{}' }))).toBeNull();
-    expect(handler.polling!.parse(envelope({ stackItemId: 'x' }))).toBeNull();
-  });
-
-  it('parse skips when propsJson is malformed', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    expect(
-      handler.polling!.parse(envelope({
-        stackItemId: 'item_a',
-        propsJson: '{not valid json',
-      })),
-    ).toBeNull();
-  });
-
-  it('parse skips when propsJson parses to an array or null', () => {
-    const stackModel = new StackModel();
-    const handler = createPropsUpdateHandler({
-      stackModel,
-      getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/r/abc',
-    });
-    expect(
-      handler.polling!.parse(envelope({
-        stackItemId: 'item_a',
-        propsJson: '[1,2,3]',
-      })),
-    ).toBeNull();
-    expect(
-      handler.polling!.parse(envelope({
-        stackItemId: 'item_a',
-        propsJson: 'null',
-      })),
-    ).toBeNull();
   });
 });

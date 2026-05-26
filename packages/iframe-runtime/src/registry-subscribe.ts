@@ -51,6 +51,7 @@ import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChannelRegistry,
+  RegistryPollingOptions,
   TransportStatus,
   WsTransportHandle,
 } from '@ggui-ai/live-channel';
@@ -137,6 +138,17 @@ export interface ConnectViaRegistryOptions {
    * coherent by the time the resubscribe-ack arrives.
    */
   readonly onResubscribeAck?: (ack: AckPayload) => void;
+  /**
+   * Registry-level polling descriptor (R6). When supplied, the live-
+   * channel's `FailoverHandle` uses this as its polling fallback when
+   * `WSTransport` reaches `'failed'`. Absent → no polling fallback
+   * (WS-only mode; once WS is exhausted, handlers stay inert).
+   *
+   * Composed at the runtime layer from `session.pollingUrl` +
+   * `session.lastSequence` (cursor seed) — the live-channel itself is
+   * URL- and shape-agnostic.
+   */
+  readonly polling?: RegistryPollingOptions;
 }
 
 /**
@@ -421,6 +433,7 @@ export function connectViaRegistry(
           appId: opts.session.appId,
         },
         onStatusChange: mappedStatusCallback,
+        ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
       })
       .then((bound) => {
         // bound is `AnyTransportHandle`. Composed URL + wsToken means

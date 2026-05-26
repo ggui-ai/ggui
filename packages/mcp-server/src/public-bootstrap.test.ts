@@ -161,11 +161,14 @@ describe('GET /r/:shortCode (Accept: application/json)', () => {
     expect(session?.['wsUrl']).toMatch(/^wss?:\/\/127\.0\.0\.1:\d+\/ws$/);
     // pollingUrl — iframe-runtime's `PollingTransport` fetches this
     // URL on a cadence when the WebSocket is unavailable (host CSP
-    // blocks `wss://`) or fails irrecoverably. Post-R4 the URL points
-    // back at the same `/r/<shortCode>` endpoint — the polling client
-    // requests `Accept: application/json` and routes here.
-    expect(session?.['pollingUrl']).toMatch(/^https?:\/\/.+\/r\/.+$/);
-    expect(session?.['pollingUrl'] as string).toContain(fx.shortCode);
+    // blocks `wss://`) or fails irrecoverably. R6 moved the URL from
+    // `/r/<shortCode>` to the wsToken-gated
+    // `/api/sessions/<sessionId>/state?wsToken=<token>` endpoint so
+    // the surface survives R5's deletion of `/r/`.
+    expect(session?.['pollingUrl']).toMatch(
+      /^https?:\/\/.+\/api\/sessions\/.+\/state\?wsToken=.+$/,
+    );
+    expect(session?.['pollingUrl'] as string).toContain(fx.sessionId);
   });
 
   it('projects the active stack item through the canonical view (codeUrl + propsJson)', async () => {

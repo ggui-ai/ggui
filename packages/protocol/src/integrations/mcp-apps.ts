@@ -290,6 +290,20 @@ export interface McpAppAiGguiSessionMeta {
   readonly streamWebSocketLocalTools?: readonly string[];
   readonly appCallableTools?: readonly string[];
   readonly permissionsPolicy?: readonly string[];
+
+  /**
+   * Monotonic sequence number of the most-recent SessionEvent applied
+   * to this session. Stamped on every emission (push, update,
+   * `GET /api/sessions/:id/state` read, MCP `resources/read` of
+   * `ui://ggui/session/<id>`). Consumers use it to initialize polling
+   * cursors aligned with the SessionEvent ledger — see the R7
+   * `/api/sessions/:id/events?sinceSequence=N` endpoint that reads
+   * from a cursor.
+   *
+   * Absent on legacy sessions or in pre-ledger code paths (back-compat
+   * during R6 rollout). Post-R7 it MUST be present.
+   */
+  readonly lastSequence?: number;
 }
 
 /**
@@ -412,6 +426,16 @@ export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaRes
     if (ae !== undefined && typeof ae !== 'string') {
       return { ok: false, reason: 'MALFORMED_SESSION' };
     }
+    // `lastSequence` MUST be a non-negative finite integer when present
+    // — it's a monotonic ledger cursor. NaN / negative / float / string
+    // are protocol violations.
+    const ls = s.lastSequence;
+    if (
+      ls !== undefined &&
+      (typeof ls !== 'number' || !Number.isInteger(ls) || ls < 0)
+    ) {
+      return { ok: false, reason: 'MALFORMED_SESSION' };
+    }
     session = {
       sessionId: s.sessionId,
       appId: s.appId,
@@ -444,6 +468,7 @@ export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaRes
       ...(s.permissionsPolicy !== undefined
         ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
         : {}),
+      ...(ls !== undefined ? { lastSequence: ls as number } : {}),
     };
   }
 

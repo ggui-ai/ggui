@@ -5406,7 +5406,15 @@ export function createGguiServer(
             const pollingBaseOriginEmpty = opts.publicBaseUrl
               ? opts.publicBaseUrl.replace(/\/$/, '')
               : `${req.protocol}://${requestHostForEmpty}`;
-            const pollingUrlEmpty = `${pollingBaseOriginEmpty}/r/${encodeURIComponent(shortCode)}`;
+            // R6 — polling URL points at the new wsToken-gated /state
+            // endpoint, which survives R5's deletion of /r/. The
+            // wsToken is baked into the URL so the iframe-runtime can
+            // poll without re-signing per tick; on refresh, the runtime
+            // rebuilds the URL with the new wsToken.
+            const pollingUrlEmpty =
+              emptyLiveCreds !== undefined
+                ? `${pollingBaseOriginEmpty}/api/sessions/${encodeURIComponent(session.id)}/state?wsToken=${encodeURIComponent(emptyLiveCreds.token)}`
+                : `${pollingBaseOriginEmpty}/api/sessions/${encodeURIComponent(session.id)}/state`;
             const emptySession: McpAppAiGguiSessionMeta = {
               sessionId: session.id,
               appId: session.appId,
@@ -5421,6 +5429,9 @@ export function createGguiServer(
                     expiresAt: emptyLiveCreds.expiresAt,
                   }
                 : {}),
+              // R6 — stamp ledger cursor so polling clients align with
+              // the R7 /events stream from the first read.
+              lastSequence: session.eventSequence,
             };
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -5572,7 +5583,15 @@ export function createGguiServer(
         const pollingBaseOrigin = opts.publicBaseUrl
           ? opts.publicBaseUrl.replace(/\/$/, '')
           : `${req.protocol}://${requestHost}`;
-        const pollingUrl = `${pollingBaseOrigin}/r/${encodeURIComponent(shortCode)}`;
+        // R6 — polling URL points at the new wsToken-gated /state
+        // endpoint. When live creds were minted, bake the wsToken into
+        // the URL so the iframe-runtime can poll without re-signing
+        // per tick; absent live creds → no auth available, polling
+        // disabled.
+        const pollingUrl =
+          liveCreds !== undefined
+            ? `${pollingBaseOrigin}/api/sessions/${encodeURIComponent(session.id)}/state?wsToken=${encodeURIComponent(liveCreds.token)}`
+            : undefined;
         // Content-negotiation: JSON branch returns the slice envelope
         // (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`),
         // same shape as the wire `_meta` and the inline
@@ -5592,7 +5611,7 @@ export function createGguiServer(
             sessionId: session.id,
             appId: session.appId,
             runtimeUrl: resolveRuntimeUrlForResultMeta(),
-            pollingUrl,
+            ...(pollingUrl !== undefined ? { pollingUrl } : {}),
             ...(renderThemeId !== undefined ? { themeId: renderThemeId } : {}),
             ...(renderThemeMode !== undefined ? { themeMode: renderThemeMode } : {}),
             ...(renderPublicEnv !== undefined &&
@@ -5613,6 +5632,9 @@ export function createGguiServer(
                   expiresAt: liveCreds.expiresAt,
                 }
               : {}),
+            // R6 — stamp ledger cursor so polling clients align with
+            // the R7 /events stream from the first read.
+            lastSequence: session.eventSequence,
           };
           const jsonStackItem: McpAppAiGguiStackItemMeta | undefined = (() => {
             const si: McpAppAiGguiStackItemMeta = {
@@ -5693,6 +5715,8 @@ export function createGguiServer(
             ? { publicEnv: renderPublicEnv }
             : {}),
           ...(liveCreds !== undefined ? liveCreds : {}),
+          // R6 — ledger cursor stamp on inline-shell envelopes.
+          lastSequence: session.eventSequence,
         });
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -5742,6 +5766,269 @@ export function createGguiServer(
   // {...} }`), matching the shape consumers already see on the wire
   // `_meta` and the inline `__GGUI_META__` global. One URL,
   // one projection, two representations.
+
+  // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
+  //
+  // Auth'd snapshot read of the current session state, returning the
+  // same slice envelope as the wire `_meta` (`{"ai.ggui/session":
+  // {...}, "ai.ggui/stack-item": {...}}`). Polling clients call this
+  // on a fixed interval (registry-level polling — see R6 library
+  // refactor) to pick up changes when WS is blocked at the host's CSP
+  // layer.
+  //
+  // wsToken-gated: same credential as the live-channel WS upgrade
+  // (`?wsToken=<token>` on `/ws`). Drift-free with the WS surface —
+  // the iframe-runtime already has the token from the bootstrap
+  // envelope; no separate refresh path needed.
+  //
+  // Distinct from `/r/:shortCode` (JSON branch):
+  //   - `/r/...` is shortCode-gated (bearer-by-obscurity; anyone with
+  //     the URL can read). R5 deletes that surface entirely.
+  //   - `/api/sessions/.../state` is wsToken-gated (HMAC-signed,
+  //     short-TTL, scoped to sessionId+appId). Survives R5.
+  //
+  // Distinct from R7's `/api/sessions/:id/events?sinceSequence=N`
+  // (planned): /state is a snapshot; /events is a cursor-replay. Both
+  // are gated identically (wsToken), unified under the SessionEvent
+  // ledger cursor (`session.lastSequence`).
+  if (
+    mcpAppsEnabled &&
+    sessionStore &&
+    sharedTokenSecret !== undefined
+  ) {
+    const sessionStoreForState = sessionStore;
+    const stateSecret = sharedTokenSecret;
+    const appMetadataStoreForState = opts.appMetadataStore;
+    const stateThemeId =
+      opts.theme === undefined || opts.theme.source === 'default'
+        ? undefined
+        : opts.theme.source === 'preset'
+          ? opts.theme.preset
+          : undefined;
+    const stateThemeMode =
+      opts.theme === undefined || opts.theme.source === 'default'
+        ? undefined
+        : opts.theme.mode;
+    app.get('/api/sessions/:sessionId/state', async (req, res) => {
+      const sessionId = req.params['sessionId'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        res.status(400).type('text/plain').send('sessionId required');
+        return;
+      }
+      const wsTokenRaw = req.query['wsToken'];
+      const wsToken = typeof wsTokenRaw === 'string' ? wsTokenRaw : '';
+      if (wsToken.length === 0) {
+        res
+          .status(401)
+          .type('text/plain')
+          .send('wsToken query required');
+        return;
+      }
+      const verify = verifyToken(wsToken, stateSecret, 'ws');
+      if (!verify.ok) {
+        // 410 Gone for expired (matches the `BOOTSTRAP_EXPIRED`
+        // semantics on the WS upgrade): the envelope was once valid
+        // but has aged out; the iframe-runtime branches on this to
+        // surface a refresh-vs-rehandshake prompt instead of treating
+        // it as a hostile request.
+        if (verify.reason === 'expired') {
+          res.status(410).type('text/plain').send('wsToken expired');
+          return;
+        }
+        // 401 for tamper / wrong-kind / malformed / invalid-format —
+        // the caller is broken or hostile; no info leak.
+        res.status(401).type('text/plain').send('wsToken invalid');
+        return;
+      }
+      // Tenancy gate: the wsToken's claimed sessionId MUST match the
+      // URL's sessionId. A wsToken minted for session A MUST NOT read
+      // session B's state.
+      if (verify.claims.sessionId !== sessionId) {
+        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        return;
+      }
+      let session;
+      try {
+        session = await sessionStoreForState.get(sessionId);
+      } catch (err) {
+        logger.warn('state_read_failed', {
+          sessionId,
+          error: String(err),
+        });
+        res.status(500).type('text/plain').send('internal error');
+        return;
+      }
+      if (!session) {
+        // 404: session evicted / never existed. Polling clients fold
+        // this into "stop polling" — distinct from 410 which signals
+        // "credential aged out, refresh".
+        res.status(404).type('text/plain').send('session not found');
+        return;
+      }
+      // Tenancy gate (round 2): the wsToken's appId MUST match the
+      // session's appId. Closes the case where a session is created
+      // under a different appId than the token was minted for.
+      if (verify.claims.appId !== session.appId) {
+        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        return;
+      }
+      // Project the top renderable stack-item using the same selection
+      // logic the /r/ route uses — module-private over there, replicated
+      // here to keep the seam narrow.
+      let top:
+        | {
+            id: string;
+            kind?: string;
+            source: SessionStackEntry;
+          }
+        | null = null;
+      for (let i = session.stack.length - 1; i >= 0; i -= 1) {
+        const entry = session.stack[i];
+        if (!entry || entry.type === 'mcpApps') continue;
+        if (entry.type === 'system') {
+          if (typeof entry.kind === 'string' && entry.kind.length > 0) {
+            top = { id: entry.id, kind: entry.kind, source: entry };
+            break;
+          }
+          continue;
+        }
+        const code = entry.componentCode;
+        if (typeof code === 'string' && code.length > 0) {
+          top = { id: entry.id, source: entry };
+          break;
+        }
+      }
+      // Build session-slice meta. Mirror push.resultMeta's shape so
+      // the iframe-runtime parser admits identical envelopes regardless
+      // of which surface served them. `lastSequence` is the load-bearing
+      // R6 addition: polling clients use it to initialize the R7 /events
+      // cursor (`?sinceSequence=N`) aligned with the WS stream.
+      const view = top ? deriveStackItemMeta(top.source) : undefined;
+      let statePublicEnv:
+        | Readonly<Record<string, string>>
+        | undefined;
+      if (appMetadataStoreForState && top) {
+        try {
+          const appRecord = await appMetadataStoreForState.get(
+            session.appId,
+          );
+          statePublicEnv = derivePublicEnvProjection(
+            top.source,
+            appRecord?.publicEnv,
+          );
+        } catch {
+          // Silent — wrappers calling getPublicEnv throw clearly.
+        }
+      }
+      const sessionMeta: McpAppAiGguiSessionMeta = {
+        sessionId: session.id,
+        appId: session.appId,
+        runtimeUrl: resolveRuntimeUrlForResultMeta(),
+        ...(stateThemeId !== undefined ? { themeId: stateThemeId } : {}),
+        ...(stateThemeMode !== undefined
+          ? { themeMode: stateThemeMode }
+          : {}),
+        ...(view?.gadgets !== undefined && view.gadgets.length > 0
+          ? { gadgets: view.gadgets }
+          : {}),
+        ...(statePublicEnv !== undefined &&
+        Object.keys(statePublicEnv).length > 0
+          ? { publicEnv: statePublicEnv }
+          : {}),
+        ...(view?.permissionsPolicy !== undefined &&
+        view.permissionsPolicy.length > 0
+          ? { permissionsPolicy: view.permissionsPolicy }
+          : {}),
+        // R6 — load-bearing ledger cursor. Always stamped on /state
+        // reads so polling clients can position the R7 /events cursor.
+        lastSequence: session.eventSequence,
+      };
+      // Static-component delivery via codeUrl (the same content-addressable
+      // channel /r/ uses). Polling clients are render-capable and need
+      // the URL to mount/refresh the static-component variant.
+      let renderCodeUrl: string | undefined;
+      let renderCodeHash: string | undefined;
+      let renderContractHash: string | undefined;
+      let renderValidatorsUrl: string | undefined;
+      if (top && view?.kind === undefined && opts.codeStore) {
+        const codeEntry = top.source as unknown as {
+          readonly componentCode?: string;
+        };
+        const code = codeEntry.componentCode;
+        if (typeof code === 'string' && code.length > 0) {
+          try {
+            const hash = opts.codeStore.hashOf(code);
+            await opts.codeStore.put(hash, code);
+            renderCodeHash = hash;
+            const requestHost = req.get('host') ?? '';
+            const base = opts.publicBaseUrl
+              ? opts.publicBaseUrl.replace(/\/$/, '')
+              : `${req.protocol}://${requestHost}`;
+            renderCodeUrl = `${base}/code/${hash}.js`;
+          } catch {
+            // Silent — caller falls back to live-mode delivery.
+          }
+          try {
+            const bundle = await deriveContractBundle(top.source);
+            if (bundle) {
+              await opts.codeStore.put(
+                bundle.contractHash,
+                bundle.bundleSource,
+              );
+              renderContractHash = bundle.contractHash;
+              const requestHost = req.get('host') ?? '';
+              const base = opts.publicBaseUrl
+                ? opts.publicBaseUrl.replace(/\/$/, '')
+                : `${req.protocol}://${requestHost}`;
+              renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          } catch {
+            // Silent — server-side gate remains authoritative.
+          }
+        }
+      }
+      const stackItem: McpAppAiGguiStackItemMeta | undefined =
+        top !== null
+          ? {
+              stackItemId: top.id,
+              ...(view?.kind !== undefined ? { kind: view.kind } : {}),
+              ...(renderCodeUrl !== undefined
+                ? {
+                    codeUrl: renderCodeUrl,
+                    ...(renderCodeHash !== undefined
+                      ? { codeHash: renderCodeHash }
+                      : {}),
+                  }
+                : {}),
+              ...(view?.propsJson !== undefined
+                ? { propsJson: view.propsJson }
+                : {}),
+              ...(view?.actionNextSteps !== undefined
+                ? { actionNextSteps: view.actionNextSteps }
+                : {}),
+              ...(view?.contextSlots !== undefined
+                ? { contextSlots: view.contextSlots }
+                : {}),
+              ...(renderContractHash !== undefined &&
+              renderValidatorsUrl !== undefined
+                ? {
+                    contractHash: renderContractHash,
+                    validatorsUrl: renderValidatorsUrl,
+                  }
+                : {}),
+            }
+          : undefined;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).json({
+        [MCP_APP_AI_GGUI_SESSION_META_KEY]: sessionMeta,
+        ...(stackItem !== undefined
+          ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: stackItem }
+          : {}),
+      });
+    });
+  }
 
   // GET /code/:hash.js — content-addressable componentCode delivery.
   // GET /contract/:hash.js — content-addressable contract-validator-bundle

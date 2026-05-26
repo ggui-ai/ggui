@@ -795,6 +795,14 @@ export interface SelfContainedShellInputs {
    * live updates silently no-op until a fresh push refreshes creds.
    */
   readonly expiresAt?: string;
+  /**
+   * Monotonic SessionEvent ledger cursor at emit time, mirrored from
+   * {@link McpAppAiGguiSessionMeta.lastSequence}. Polling clients
+   * initialize the R7 `/events?sinceSequence=N` cursor from this.
+   * Absent in pre-R7 envelopes (back-compat); post-R7 it MUST be
+   * present.
+   */
+  readonly lastSequence?: McpAppAiGguiSessionMeta['lastSequence'];
 }
 
 /**
@@ -895,6 +903,9 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     ...(opts.wsUrl !== undefined ? { wsUrl: opts.wsUrl } : {}),
     ...(opts.token !== undefined ? { wsToken: opts.token } : {}),
     ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+    ...(opts.lastSequence !== undefined
+      ? { lastSequence: opts.lastSequence }
+      : {}),
   };
 
   // Stack-item slice — what's being rendered NOW. Built only when any
@@ -1374,6 +1385,8 @@ export function registerGguiSessionResourceTemplate(
           expiresAt: creds.expiresAt,
           ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+          // R6 — ledger cursor stamp for polling-cursor alignment.
+          lastSequence: session.eventSequence,
         });
         return shellContents(uri, html);
       }
@@ -1492,6 +1505,8 @@ export function registerGguiSessionResourceTemplate(
           Object.keys(resourcePublicEnv).length > 0
             ? { publicEnv: resourcePublicEnv }
             : {}),
+          // R6 — ledger cursor stamp for polling-cursor alignment.
+          lastSequence: session.eventSequence,
         });
         // Augment per-call CSP with gadget-declared bundle / style /
         // API origins. Without this, claude.ai's iframe CSP only allows

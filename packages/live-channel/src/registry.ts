@@ -139,6 +139,7 @@ export class ChannelRegistry {
       ...(this.opts.fetchImpl !== undefined
         ? { fetchImpl: this.opts.fetchImpl }
         : {}),
+      ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
     };
     return new PollingTransport(pollOpts);
   }

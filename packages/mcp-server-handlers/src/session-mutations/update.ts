@@ -539,10 +539,15 @@ export function createGguiUpdateHandler(
       // push: liveTheme > stackItem > session > deps.themeId.
       let stackItemThemeId: string | undefined;
       let sessionThemeId: string | undefined;
+      // `lastSequence` — monotonic SessionEvent ledger cursor stamped on
+      // every emit (R6). Polling clients use it to initialize the /events
+      // cursor (R7) aligned with the WS stream.
+      let lastSequence: number | undefined;
       try {
         const session = await deps.sessionStore.get(output.sessionId);
         if (session) {
           sessionThemeId = session.themeId;
+          lastSequence = session.eventSequence;
         }
         const top = session?.stack.find((s) => s.id === output.stackItemId);
         if (top) {
@@ -614,6 +619,7 @@ export function createGguiUpdateHandler(
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
+        ...(lastSequence !== undefined ? { lastSequence } : {}),
       };
       const stackItem: McpAppAiGguiStackItemMeta | undefined =
         output.stackItemId !== undefined || view.propsJson

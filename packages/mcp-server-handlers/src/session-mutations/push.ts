@@ -2081,11 +2081,16 @@ export function createGguiPushHandler(
       // model). Captured here from the same sessionStore.get() that
       // powers the view/theme lookup to avoid a second read.
       let canvasOwnsRender = false;
+      // `lastSequence` — monotonic SessionEvent ledger cursor stamped on
+      // every emit (R6). Polling clients use it to initialize the /events
+      // cursor (R7) aligned with the WS stream.
+      let lastSequence: number | undefined;
       try {
         const session = await deps.sessionStore?.get(output.sessionId);
         const top = session?.stack[session.currentStackIndex];
         if (session) {
           sessionThemeId = session.themeId;
+          lastSequence = session.eventSequence;
           if (session.mcpAppsMode === 'canvas' && session.canvasLoaded === true) {
             canvasOwnsRender = true;
           }
@@ -2265,6 +2270,7 @@ export function createGguiPushHandler(
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
+        ...(lastSequence !== undefined ? { lastSequence } : {}),
       };
       // stackItemId is load-bearing: the iframe-runtime threads it
       // into `dispatchWiredAction.stackItemId` on every useAction

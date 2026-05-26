@@ -1,27 +1,39 @@
 /**
- * `PollingTransport` — per-channel HTTP polling for clients without
- * WebSocket access (locked-down enterprise hosts, future
- * server-side / native SDK consumers, or as a failover when
- * WSTransport's reconnect budget runs out).
+ * `PollingTransport` — registry-level HTTP polling for clients without
+ * WebSocket access (locked-down enterprise hosts, future server-side /
+ * native SDK consumers, or as a failover when `WSTransport`'s reconnect
+ * budget runs out).
  *
- * Each channel handler declares its own `polling` descriptor with
- * URL + interval + parse fn. Channels that omit `polling` are inert
- * under this transport (they simply never receive payloads).
+ * R6 (2026-05-26) collapsed the pre-R6 per-handler polling descriptor
+ * shape into a single registry-level descriptor
+ * ({@link RegistryPollingOptions}). One URL, one tick interval, one
+ * snapshot parser. The consumer composes the snapshot URL (e.g.
+ * `/api/sessions/:id/state?wsToken=<token>`) and supplies a
+ * `parseSnapshot` closure that returns a `Record<type, frame>` map
+ * (or `null` to short-circuit when nothing changed since the last
+ * poll).
  *
- * Polling is per-channel and independent — channels with sub-second
- * cadence don't block channels at higher intervals. Each poll fires
- * a `fetch()` against the channel's URL; the handler's `parse()` is
- * responsible for diff detection (return `null` when no new payload).
+ * Each tick fires ONE `fetch()`; for every entry in the returned map
+ * the transport looks up the handler by `type` in the registry's
+ * handler map and calls `handler.onMessage(frame.payload)`.
  *
  * Failures are absorbed and logged; the loop keeps trying on the
  * next tick. Errors don't escalate to `'failed'` status because the
  * NEXT poll might succeed (transient network blip).
+ *
+ * No polling descriptor on `BindOptions` → the transport has nothing
+ * to poll. It still satisfies the `PollingTransportHandle` contract;
+ * status transitions to `'open'` and stays there (no fetches fire,
+ * handlers stay inert). Used by tests + the `WSTransport`-only path
+ * when callers don't opt into the polling fallback.
  */
 
 import type {
+  ChannelFrame,
   ChannelHandler,
   ChannelLogger,
   PollingTransportHandle,
+  RegistryPollingOptions,
   TransportStatus,
 } from './types.js';
 
@@ -31,27 +43,24 @@ export interface PollingTransportOptions {
   readonly handlers: ReadonlyMap<string, ChannelHandler>;
   readonly logger?: ChannelLogger;
   /**
-   * Floor for the polling interval. Defaults to 500ms — any handler
-   * declaring a smaller interval is clamped here.
+   * Floor for the polling interval. Defaults to 500ms — `polling.intervalMs`
+   * smaller than this is clamped.
    */
   readonly minPollIntervalMs?: number;
   /**
    * Test hook — inject a fetch impl. Defaults to `globalThis.fetch`.
    */
   readonly fetchImpl?: typeof fetch;
-}
-
-interface PollerHandle {
-  readonly type: string;
-  readonly url: string;
-  readonly intervalMs: number;
-  timer: ReturnType<typeof setInterval> | null;
-  cancelled: boolean;
+  /**
+   * Registry-level polling descriptor (R6). When absent, the transport
+   * runs but never fetches — handlers stay inert.
+   */
+  readonly polling?: RegistryPollingOptions;
 }
 
 export class PollingTransport implements PollingTransportHandle {
   readonly kind = 'polling' as const;
-  private readonly pollers: PollerHandle[] = [];
+  private timer: ReturnType<typeof setInterval> | null = null;
   private disposed = false;
   private currentStatus: TransportStatus = 'connecting';
 
@@ -63,70 +72,54 @@ export class PollingTransport implements PollingTransportHandle {
 
   start(): void {
     if (this.disposed) return;
+    const { polling } = this.opts;
+    if (polling === undefined) {
+      // No descriptor — transport is logically alive but does nothing.
+      // Consumers that bind without a polling option see an `'open'`
+      // PollingTransportHandle whose handlers never fire. Matches the
+      // pre-R6 "no handler had polling" behavior at a different layer.
+      this.currentStatus = 'open';
+      return;
+    }
     const minInterval =
       this.opts.minPollIntervalMs ?? DEFAULT_MIN_POLL_INTERVAL_MS;
-    for (const handler of this.opts.handlers.values()) {
-      if (!handler.polling) continue;
-      const clampedInterval = Math.max(handler.polling.intervalMs, minInterval);
-      const poller: PollerHandle = {
-        type: handler.type,
-        url: handler.polling.url,
-        intervalMs: clampedInterval,
-        timer: null,
-        cancelled: false,
-      };
-      this.pollers.push(poller);
-      // Fire immediately so consumers get a payload as fast as
-      // possible, then schedule recurring ticks.
-      void this.tick(poller, handler);
-      poller.timer = setInterval(() => {
-        void this.tick(poller, handler);
-      }, clampedInterval);
-    }
-    // No pollers = nothing to do, but the transport is still
-    // "running" in the sense that handlers without polling
-    // descriptors are simply inert.
+    const intervalMs = Math.max(polling.intervalMs, minInterval);
+    // Fire immediately so consumers get a payload as fast as possible,
+    // then schedule recurring ticks.
+    void this.tick(polling);
+    this.timer = setInterval(() => {
+      void this.tick(polling);
+    }, intervalMs);
     this.currentStatus = 'open';
   }
 
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    for (const poller of this.pollers) {
-      poller.cancelled = true;
-      if (poller.timer !== null) {
-        clearInterval(poller.timer);
-        poller.timer = null;
-      }
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
     }
-    this.pollers.length = 0;
     this.currentStatus = 'closed';
   }
 
-  private async tick(
-    poller: PollerHandle,
-    handler: ChannelHandler,
-  ): Promise<void> {
-    if (this.disposed || poller.cancelled) return;
+  private async tick(polling: RegistryPollingOptions): Promise<void> {
+    if (this.disposed) return;
     const fetchImpl = this.opts.fetchImpl ?? globalThis.fetch;
     if (typeof fetchImpl !== 'function') {
       this.opts.logger?.warn?.('channel_polling_no_fetch', {
-        type: poller.type,
+        url: polling.url,
       });
       return;
     }
     let body: unknown;
     try {
-      // Request the JSON branch on content-negotiated URLs (e.g.
-      // `/r/<shortCode>` returns HTML by default, slice-envelope JSON
-      // when `Accept: application/json` is sent). Servers that ignore
-      // Accept simply continue serving whatever they always served.
-      const resp = await fetchImpl(poller.url, {
+      const resp = await fetchImpl(polling.url, {
         headers: { accept: 'application/json' },
       });
       if (!resp.ok) {
         this.opts.logger?.debug?.('channel_polling_non_ok', {
-          type: poller.type,
+          url: polling.url,
           status: resp.status,
         });
         return;
@@ -142,29 +135,50 @@ export class PollingTransport implements PollingTransportHandle {
       }
     } catch (err) {
       this.opts.logger?.debug?.('channel_polling_fetch_failed', {
-        type: poller.type,
+        url: polling.url,
         error: err instanceof Error ? err.message : String(err),
       });
       return;
     }
-    if (this.disposed || poller.cancelled) return;
-    const payload = handler.polling?.parse(body);
-    if (payload === null || payload === undefined) return;
+    if (this.disposed) return;
+    let frames: Record<string, ChannelFrame> | null;
     try {
-      const result = handler.onMessage(payload);
-      if (result instanceof Promise) {
-        result.catch((err: unknown) => {
-          this.opts.logger?.warn?.('channel_handler_throw', {
-            type: poller.type,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-      }
+      frames = polling.parseSnapshot(body);
     } catch (err) {
-      this.opts.logger?.warn?.('channel_handler_throw', {
-        type: poller.type,
+      this.opts.logger?.warn?.('channel_polling_parse_failed', {
+        url: polling.url,
         error: err instanceof Error ? err.message : String(err),
       });
+      return;
+    }
+    if (frames === null) return;
+    // Dispatch each frame to its matching handler. Handlers absent from
+    // the registry are skipped silently — the snapshot may describe
+    // event types this consumer doesn't observe.
+    for (const [type, frame] of Object.entries(frames)) {
+      const handler = this.opts.handlers.get(type);
+      if (handler === undefined) {
+        this.opts.logger?.debug?.('channel_polling_no_handler', {
+          type,
+        });
+        continue;
+      }
+      try {
+        const result = handler.onMessage(frame.payload);
+        if (result instanceof Promise) {
+          result.catch((err: unknown) => {
+            this.opts.logger?.warn?.('channel_handler_throw', {
+              type,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
+      } catch (err) {
+        this.opts.logger?.warn?.('channel_handler_throw', {
+          type,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 }

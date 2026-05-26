@@ -143,18 +143,12 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
       },
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    // Register a handler with a polling descriptor — only such
-    // handlers exercise the polling fallback. The parse() returns null
-    // so the dispatch loop is silent (we just need start() to set up
-    // the poller).
+    // R6: polling is registry-level, supplied on BindOptions. Register
+    // any handler so the registry has at least one entry (the swap
+    // proves the transition; the snapshot parse is a separate concern).
     registry.register({
       type: 'props_update',
       onMessage: () => {},
-      polling: {
-        url: 'http://test/r/abc',
-        intervalMs: 60_000,
-        parse: () => null,
-      },
     });
     const statuses: string[] = [];
     const handle = await registry.bind({
@@ -165,6 +159,13 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
         appId: 'a',
       },
       onStatusChange: (s) => statuses.push(s),
+      // R6: registry-level polling. PollingTransport (post-swap) fires
+      // this URL once on start() per its own currentStatus transition.
+      polling: {
+        url: 'http://test/r/abc',
+        intervalMs: 60_000,
+        parseSnapshot: () => null,
+      },
     });
     // Pre-swap: WSTransport is active.
     expect(handle.kind).toBe('ws');
