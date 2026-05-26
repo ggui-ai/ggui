@@ -365,18 +365,12 @@ function LiveViewer({
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       const iframe = iframeRef.current;
-      // eslint-disable-next-line no-console
-      console.warn('[DEBUG handleMessage]', { hasIframe: !!iframe, sameSource: event.source === iframe?.contentWindow, isReq: isUiInitializeRequest(event.data), dataKeys: event.data && typeof event.data === 'object' ? Object.keys(event.data) : event.data });
       if (!iframe) return;
       // Only respond to messages from THIS iframe's contentWindow —
       // postMessages on `window` from elsewhere (other iframes, the
       // host itself, browser extensions) are ignored.
       if (event.source !== iframe.contentWindow) return;
       if (!isUiInitializeRequest(event.data)) return;
-      const cw1 = iframe.contentWindow;
-      const cw2 = iframe.contentWindow;
-      // eslint-disable-next-line no-console
-      console.warn('[DEBUG cw stable?]', cw1 === cw2, cw1 === event.source);
       const reply = {
         jsonrpc: '2.0' as const,
         id: event.data.id,
@@ -388,18 +382,23 @@ function LiveViewer({
           },
         },
       };
+      // Reply through `event.source`, NOT a fresh `iframe.contentWindow`
+      // dereference. In jsdom, `iframe.contentWindow` is a getter that
+      // can return distinct proxy instances across accesses — when
+      // tests patch the postMessage method on the FIRST access, a
+      // subsequent access can see the unpatched original, which makes
+      // the spy invisible to the host's reply path. `event.source`
+      // is the exact proxy the message arrived through, so any
+      // monkey-patched listener catches the reply. Production browsers
+      // don't exhibit this churn, but the safer pattern is to reply
+      // on the source you received from regardless.
+      //
       // Wildcard target is safe here — the iframe is opaque-origin
       // (sandbox without allow-same-origin), so postMessage's origin
-      // check would reject any non-wildcard string anyway. The
-      // browser still confines the message to the actual iframe
-      // contentWindow.
-      try {
-        iframe.contentWindow?.postMessage(reply, '*');
-        // eslint-disable-next-line no-console
-        console.warn('[DEBUG] postMessage call complete');
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[DEBUG] postMessage threw', err);
+      // check would reject any non-wildcard string anyway.
+      const source = event.source;
+      if (source && 'postMessage' in source) {
+        source.postMessage(reply, '*');
       }
     },
     [envelope],
