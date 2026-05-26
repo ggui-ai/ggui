@@ -391,14 +391,17 @@ function handleEvent(
       // tool_use_result), NOT from text blocks (Anthropic SDK strips
       // structuredContent + _meta from the model-visible content array).
       if (!sc) continue;
+      // ggui_push's structuredContent intentionally OMITS sessionId
+      // (see pushOutputSchema docstring: "the iframe receives bootstrap
+      // credentials via the ai.ggui/session slice meta, not via this
+      // response"). We read sessionId from initialMeta.session.sessionId
+      // (extracted from tool_use_result._meta) and stackItemId from sc.
+      const sessionId = initialMeta?.session?.sessionId;
+      const stackItemId =
+        typeof sc.stackItemId === 'string' ? sc.stackItemId : undefined;
+      if (!sessionId || !stackItemId) continue;
       // ggui_push branch — new stack item entering the chat log.
-      if (
-        typeof sc.sessionId === 'string' &&
-        typeof sc.stackItemId === 'string' &&
-        sc.updated !== true
-      ) {
-        const sessionId = sc.sessionId;
-        const stackItemId = sc.stackItemId;
+      if (sc.updated !== true) {
         const item: StackItemRef = {
           stackItemId,
           sessionId,
@@ -424,13 +427,7 @@ function handleEvent(
         continue;
       }
       // ggui_update branch — existing stack item gets new props.
-      if (
-        sc.updated === true &&
-        typeof sc.stackItemId === 'string' &&
-        typeof sc.sessionId === 'string'
-      ) {
-        const stackItemId = sc.stackItemId;
-        const sessionId = sc.sessionId;
+      if (sc.updated === true) {
         if (initialMeta) {
           updateStackItemMeta(stackItemId, initialMeta);
         } else {
