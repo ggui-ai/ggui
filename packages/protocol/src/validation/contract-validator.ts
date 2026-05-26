@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { PropsSpec, StreamSpec, ActionSpec, ContextSpec, JsonSchema, JsonObject, DataContract } from '../types/data-contract';
 import { deriveContextDefault } from '../types/data-contract';
 import type { ActionEnvelope } from '../types/events';
@@ -445,6 +446,109 @@ export function compileContractValidators(specs: {
   if (context) out.context = context;
 
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Wrap a {@link CompiledContractValidators} object as the source text of
+ * an ES module whose `default` export is the same object. This is the
+ * wire format served from the content-addressable contract route
+ * (`GET /contract/<hash>.js`) in #109's decomposition slice — one URL,
+ * one fetch, one dynamic-import per unique contract.
+ *
+ * Why a wrapping module rather than emitting the validator-modules
+ * raw: each inner validator-module is independently `export default ...`,
+ * so they can't share a single file without name collisions. The
+ * iframe-runtime's existing `loadCompiledValidators` already knows how
+ * to take a `CompiledContractValidators` and load each inner module via
+ * `blob:` import; this wrapper just hands it the same shape it expects,
+ * sourced from one HTTP round-trip instead of inline.
+ *
+ * `JSON.stringify` is deterministic on objects with string keys in V8
+ * + Node — the producer's iteration order is preserved, so a given
+ * contract always serializes to identical bytes. {@link computeContractBundle}
+ * leans on that determinism so the resulting hash is stable across
+ * pushes of the same contract.
+ *
+ * @public
+ */
+export function bundleCompiledValidatorsAsModule(
+  compiled: CompiledContractValidators,
+): string {
+  return `export default ${JSON.stringify(compiled)};\n`;
+}
+
+/**
+ * Recursive canonical-JSON serializer with object keys sorted
+ * lexicographically at every depth. Output is byte-stable across any
+ * two callers building the same logical contract via different key
+ * orders (e.g. `{a:1, b:2}` vs `{b:2, a:1}`) — so {@link computeContractBundle}'s
+ * hash is robust to spec-author hand-ordering.
+ *
+ * Arrays preserve element order (semantically meaningful in JSON
+ * Schema, e.g. `required: [a, b]` differs from `[b, a]` for some
+ * validators / error message ordering). Functions are not part of
+ * `DataContract` specs, so the type-`function` branch is unreachable
+ * in normal use and excluded.
+ */
+function canonicalJsonStringify(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJsonStringify).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const parts = keys.map(
+      (k) => `${JSON.stringify(k)}:${canonicalJsonStringify((value as Record<string, unknown>)[k])}`,
+    );
+    return `{${parts.join(',')}}`;
+  }
+  // undefined / function — not valid inside DataContract specs.
+  return 'null';
+}
+
+/**
+ * Convenience over {@link compileContractValidators} +
+ * {@link bundleCompiledValidatorsAsModule} + sha256 — produces the
+ * `{contractHash, bundleSource, validators}` triple the emitter (push.ts
+ * / update.ts in #109 C4) writes to the content-addressable store and
+ * emits as `_meta["ai.ggui/contract"] = {contractHash, validatorsUrl}`.
+ *
+ * `contractHash` is `sha256(canonicalJsonStringify(specs))` (hex). Hashing
+ * the INPUT specs — not the compiled output — guarantees a stable hash
+ * across server processes and Ajv version bumps: the same contract
+ * definition always lands at the same URL. Compiled output bytes may
+ * differ across calls (Ajv's standalone emitter uses incrementing
+ * counter names like `validate10`/`validate11`), but the CodeStore is
+ * idempotent (first write wins) and the URL response carries
+ * `Cache-Control: immutable`, so browsers + CDNs lock in the
+ * first-served bytes and never observe a counter-name reshuffle.
+ *
+ * Returns `undefined` when the contract declares no runtime-validated
+ * schema at all (matches {@link compileContractValidators}'s posture).
+ *
+ * @public
+ */
+export function computeContractBundle(specs: {
+  readonly propsSpec?: PropsSpec;
+  readonly actionSpec?: ActionSpec;
+  readonly streamSpec?: StreamSpec;
+  readonly contextSpec?: ContextSpec;
+}):
+  | {
+      readonly contractHash: string;
+      readonly bundleSource: string;
+      readonly validators: CompiledContractValidators;
+    }
+  | undefined {
+  const validators = compileContractValidators(specs);
+  if (validators === undefined) return undefined;
+  const bundleSource = bundleCompiledValidatorsAsModule(validators);
+  const contractHash = createHash('sha256')
+    .update(canonicalJsonStringify(specs), 'utf-8')
+    .digest('hex');
+  return { contractHash, bundleSource, validators };
 }
 
 /**

@@ -4,6 +4,8 @@ import {
   validatePropsData,
   buildPropsWrapperSchema,
   compileContractValidators,
+  bundleCompiledValidatorsAsModule,
+  computeContractBundle,
   ContractViolationError,
 } from './contract-validator.js';
 import { compileForValidation } from './ajv-runtime.js';
@@ -579,5 +581,91 @@ describe('compileContractValidators', () => {
     expect(out?.props).toBeUndefined();
     expect(out?.actions?.createTask).toBeDefined();
     expect(out?.streams?.tasks).toBeDefined();
+  });
+});
+
+describe('bundleCompiledValidatorsAsModule', () => {
+  it('wraps a CompiledContractValidators as an ES module whose default is the same object', () => {
+    const compiled = {
+      props: 'export default function v(d){return true};',
+      actions: { increment: 'export default function v(d){return true};' },
+    };
+    const module = bundleCompiledValidatorsAsModule(compiled);
+    expect(module).toBe(
+      `export default ${JSON.stringify(compiled)};\n`,
+    );
+  });
+});
+
+describe('computeContractBundle', () => {
+  it('returns undefined when the contract declares no runtime-validated schema', () => {
+    expect(computeContractBundle({})).toBeUndefined();
+  });
+
+  it('returns {contractHash, bundleSource, validators} for a contract with an action', () => {
+    const result = computeContractBundle({
+      actionSpec: {
+        increment: {
+          label: 'inc',
+          schema: { type: 'object', properties: { by: { type: 'integer' } } },
+        },
+      },
+    });
+    expect(result).toBeDefined();
+    if (!result) return;
+    expect(result.contractHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.bundleSource).toContain('export default');
+    expect(result.validators.actions?.increment).toBeDefined();
+  });
+
+  it('produces a stable contractHash for the same contract on repeated calls', () => {
+    // Hash is over the INPUT specs, not the compiled output, so it's
+    // stable across calls even though Ajv's standalone emitter uses
+    // incrementing counter names (`validate10`, `validate11`) that change
+    // per call from the shared singleton.
+    const specs = {
+      actionSpec: {
+        increment: {
+          label: 'inc',
+          schema: { type: 'object', properties: { by: { type: 'integer' } } },
+        },
+      },
+    };
+    const a = computeContractBundle(specs);
+    const b = computeContractBundle(specs);
+    expect(a?.contractHash).toBe(b?.contractHash);
+  });
+
+  it('produces a stable contractHash regardless of input-key insertion order', () => {
+    // Canonical-JSON serialization sorts keys at every depth, so two
+    // logically-identical specs built with different key orders hash to
+    // the same value.
+    const a = computeContractBundle({
+      actionSpec: {
+        b: { label: 'b', schema: { type: 'object', properties: { y: { type: 'string' }, x: { type: 'integer' } } } },
+        a: { label: 'a', schema: { type: 'object' } },
+      },
+    });
+    const b = computeContractBundle({
+      actionSpec: {
+        a: { label: 'a', schema: { type: 'object' } },
+        b: { label: 'b', schema: { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'string' } } } },
+      },
+    });
+    expect(a?.contractHash).toBe(b?.contractHash);
+  });
+
+  it('produces different hashes for different contracts', () => {
+    const a = computeContractBundle({
+      actionSpec: {
+        a: { label: 'a', schema: { type: 'object' } },
+      },
+    });
+    const b = computeContractBundle({
+      actionSpec: {
+        b: { label: 'b', schema: { type: 'object' } },
+      },
+    });
+    expect(a?.contractHash).not.toBe(b?.contractHash);
   });
 });

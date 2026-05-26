@@ -5911,18 +5911,24 @@ export function createGguiServer(
   }
 
   // GET /code/:hash.js — content-addressable componentCode delivery.
+  // GET /contract/:hash.js — content-addressable contract-validator-bundle
+  //   delivery (#109).
   //
-  // The push handler computes `sha256(code)`, writes (hash, code) to the
-  // CodeStore, and embeds the URL on `_meta.ggui.bootstrap.codeUrl`. The
-  // iframe runtime fetches via this route and dynamic-imports the result.
+  // Both routes serve from the same {@link CodeStore} keyed by
+  // `sha256(bytes)`. The same store is safe to share — content-addressable
+  // hashes can't collide across kinds unless the bytes are identical
+  // (in which case the cached value is equally valid for either path).
+  // Two separate URLs exist for debuggability + protocol clarity: a
+  // request to `/code/<hash>.js` is unambiguously a component fetch;
+  // `/contract/<hash>.js` is unambiguously a validator-bundle fetch.
   //
   // Cache posture: `Cache-Control: public, max-age=31536000, immutable` —
   // hash is content-derived, the bytes can NEVER change for a given URL,
   // so browsers + CDNs cache forever (immutable means "don't even
-  // revalidate"). A second push of identical-intent componentCode hits
-  // browser cache for free.
+  // revalidate"). A second push with the same componentCode / contract
+  // hits browser cache for free.
   //
-  // CORS: same `*` posture as `/api/bootstrap/:shortCode` — code is
+  // CORS: same `*` posture as `/api/bootstrap/:shortCode` — bytes are
   // public-by-shortCode anyway (the agent already shared the URL with
   // the host), and the bytes carry no credentials.
   //
@@ -5931,51 +5937,58 @@ export function createGguiServer(
   // store sees the parameter.
   if (opts.codeStore) {
     const codeStoreForRoute = opts.codeStore;
-    app.get('/code/:hash.js', async (req: Request, res: Response) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      const hash = req.params['hash'];
-      if (typeof hash !== 'string' || !CODE_HASH_REGEX.test(hash)) {
-        res.setHeader('Cache-Control', 'no-store');
-        res.status(400).json({
-          error: {
-            code: 'invalid_request',
-            message: 'hash path parameter must be 64-char lowercase hex',
-          },
-        });
-        return;
-      }
-      try {
-        const code = await codeStoreForRoute.get(hash);
-        if (code === null) {
+    const mountContentAddressableRoute = (
+      mountPath: string,
+      label: 'code' | 'contract',
+    ): void => {
+      app.get(mountPath, async (req: Request, res: Response) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        const hash = req.params['hash'];
+        if (typeof hash !== 'string' || !CODE_HASH_REGEX.test(hash)) {
           res.setHeader('Cache-Control', 'no-store');
-          res.status(404).json({
+          res.status(400).json({
             error: {
-              code: 'not_found',
-              message: 'unknown code hash',
+              code: 'invalid_request',
+              message: 'hash path parameter must be 64-char lowercase hex',
             },
           });
           return;
         }
-        res.setHeader(
-          'Content-Type',
-          'application/javascript; charset=utf-8',
-        );
-        res.setHeader(
-          'Cache-Control',
-          'public, max-age=31536000, immutable',
-        );
-        res.status(200).send(code);
-      } catch (err) {
-        logger.warn('code_route_failed', { hash, error: String(err) });
-        res.setHeader('Cache-Control', 'no-store');
-        res.status(500).json({
-          error: {
-            code: 'internal',
-            message: 'code fetch failed',
-          },
-        });
-      }
-    });
+        try {
+          const code = await codeStoreForRoute.get(hash);
+          if (code === null) {
+            res.setHeader('Cache-Control', 'no-store');
+            res.status(404).json({
+              error: {
+                code: 'not_found',
+                message: `unknown ${label} hash`,
+              },
+            });
+            return;
+          }
+          res.setHeader(
+            'Content-Type',
+            'application/javascript; charset=utf-8',
+          );
+          res.setHeader(
+            'Cache-Control',
+            'public, max-age=31536000, immutable',
+          );
+          res.status(200).send(code);
+        } catch (err) {
+          logger.warn(`${label}_route_failed`, { hash, error: String(err) });
+          res.setHeader('Cache-Control', 'no-store');
+          res.status(500).json({
+            error: {
+              code: 'internal',
+              message: `${label} fetch failed`,
+            },
+          });
+        }
+      });
+    };
+    mountContentAddressableRoute('/code/:hash.js', 'code');
+    mountContentAddressableRoute('/contract/:hash.js', 'contract');
   }
 
   // Pairing transport + auth bridge. Opt-in via `opts.pairing`. When
