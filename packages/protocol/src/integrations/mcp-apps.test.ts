@@ -12,21 +12,20 @@ import {
   GGUI_SESSION_RESOURCE_MIME,
   GGUI_PUSH_UI_META,
     MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_AUTH_META_KEY,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  MCP_APP_AI_GGUI_CONTRACT_META_KEY,
-  MCP_APP_AI_GGUI_COMPONENT_META_KEY,
+  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
   combineMcpAppAiGguiMeta,
-    splitBootstrapMeta,
+  mergeSlicesIntoMountView,
+  slicesToMcpAppMeta,
+  splitMountViewIntoSlices,
   deriveContextName,
     isGguiUserActionMeta,
   isMcpAppsStackItem,
   isMcpAppLifecycleMessage,
   isGguiSubmitActionInput,
   validateMcpAppsStackItem,
-  type GguiBootstrapMeta,
+  type McpAppAiGguiMountView,
   type McpAppLifecycleEvent,
   type McpAppLifecycleMessage,
   type McpAppLifecycleState,
@@ -80,10 +79,10 @@ describe('deriveContextName helper', () => {
   });
 });
 
-describe('GguiBootstrapMeta structural lock', () => {
+describe('McpAppAiGguiMountView structural lock', () => {
   // Intentional key-set enumeration — any addition or rename must
   // revisit the design-lock rule about structuredContent-vs-_meta
-  // separation. GguiBootstrapMeta is the CANONICAL shape view code
+  // separation. McpAppAiGguiMountView is the CANONICAL shape view code
   // reads from `_meta.ggui.bootstrap`; its keys are the API surface.
   it('carries exactly the six required keys when no optionals are set', () => {
     // Minimal producer shape — no adapters. Six required keys are
@@ -97,7 +96,7 @@ describe('GguiBootstrapMeta structural lock', () => {
     // into the separately-served renderer bundle. The shell reads
     // this URL to know where to dynamic-script-load the runtime; a
     // bootstrap without it is un-bootable under the post-C8 shell.
-    const meta: GguiBootstrapMeta = {
+    const meta: McpAppAiGguiMountView = {
       wsUrl: 'w',
       token: 't',
       expiresAt: 'e',
@@ -607,7 +606,8 @@ describe('isGguiUserActionMeta type guard', () => {
 });
 
 // =============================================================================
-// #109 — decomposed per-window meta keys (split / combine helpers).
+// #109 — two-slice decomposition: session (mount-time + auth + capabilities)
+// and stack-item (per-push render + contract + component).
 // =============================================================================
 
 describe('combineMcpAppAiGguiMeta', () => {
@@ -617,11 +617,15 @@ describe('combineMcpAppAiGguiMeta', () => {
     runtimeUrl: '/_ggui/iframe-runtime.js',
   };
 
-  it('returns MISSING_SESSION when no session slice is present', () => {
-    expect(combineMcpAppAiGguiMeta({}).ok).toBe(false);
-    expect(combineMcpAppAiGguiMeta(null).ok).toBe(false);
-    const result = combineMcpAppAiGguiMeta({});
-    expect(result.ok ? null : result.reason).toBe('MISSING_SESSION');
+  it('returns ok with empty slices when no recognized keys are present', () => {
+    // No required-slice gate at the combiner — missing slices come
+    // through as undefined. The merge step enforces session presence.
+    const a = combineMcpAppAiGguiMeta({});
+    expect(a.ok).toBe(true);
+    if (a.ok) expect(a.slices).toEqual({});
+    const b = combineMcpAppAiGguiMeta(null);
+    expect(b.ok).toBe(true);
+    if (b.ok) expect(b.slices).toEqual({});
   });
 
   it('returns MALFORMED_SESSION when session is present but identity is missing', () => {
@@ -631,99 +635,142 @@ describe('combineMcpAppAiGguiMeta', () => {
     expect(result.ok ? null : result.reason).toBe('MALFORMED_SESSION');
   });
 
-  it('combines a session-only slice into a minimal bootstrap', () => {
+  it('combines a session-only slice', () => {
     const result = combineMcpAppAiGguiMeta({
       [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.bootstrap).toEqual(minimalSession);
-  });
-
-  it('combines all five slices into the aggregated shape', () => {
-    const result = combineMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: {
-        ...minimalSession,
-        themeId: 'indigo',
-        themeMode: 'dark',
-        canvasMode: true,
-      },
-      [MCP_APP_AI_GGUI_AUTH_META_KEY]: {
-        wsUrl: 'ws://x',
-        token: 't',
-        expiresAt: '9999-12-31T23:59:59.999Z',
-      },
-      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
-        stackItemId: 'st-1',
-        propsJson: '{}',
-        appCallableTools: ['ggui_runtime_submit_action'],
-      },
-      [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: {
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
-      },
-      [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: { kind: 'loading' },
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.sessionId).toBe('sess-1');
-      expect(result.bootstrap.wsUrl).toBe('ws://x');
-      expect(result.bootstrap.token).toBe('t');
-      expect(result.bootstrap.stackItemId).toBe('st-1');
-      expect(result.bootstrap.kind).toBe('loading');
-      expect(result.bootstrap.canvasMode).toBe(true);
+      expect(result.slices.session).toEqual(minimalSession);
+      expect(result.slices.stackItem).toBeUndefined();
     }
   });
 
-  it('rejects half-live auth (wsUrl without token)', () => {
+  it('combines both slices into the slice struct', () => {
     const result = combineMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_AUTH_META_KEY]: { wsUrl: 'ws://x' },
+      [MCP_APP_AI_GGUI_SESSION_META_KEY]: {
+        ...minimalSession,
+        wsUrl: 'ws://x',
+        token: 't',
+        expiresAt: '9999-12-31T23:59:59.999Z',
+        themeId: 'indigo',
+        themeMode: 'dark',
+        canvasMode: true,
+        appCallableTools: ['ggui_runtime_submit_action'],
+      },
+      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
+        stackItemId: 'st-1',
+        propsJson: '{}',
+        contractHash: 'sha256:abc',
+        validatorsUrl: '/contract/sha256:abc.js',
+        kind: 'loading',
+      },
     });
-    expect(result.ok ? null : result.reason).toBe('MALFORMED_AUTH');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.slices.session?.sessionId).toBe('sess-1');
+      expect(result.slices.session?.wsUrl).toBe('ws://x');
+      expect(result.slices.session?.token).toBe('t');
+      expect(result.slices.session?.canvasMode).toBe(true);
+      expect(result.slices.stackItem?.stackItemId).toBe('st-1');
+      expect(result.slices.stackItem?.contractHash).toBe('sha256:abc');
+      expect(result.slices.stackItem?.kind).toBe('loading');
+    }
   });
 
-  it('rejects component slice with both kind and codeUrl', () => {
+  it('rejects half-live auth (wsUrl without token) on the session slice', () => {
+    const result = combineMcpAppAiGguiMeta({
+      [MCP_APP_AI_GGUI_SESSION_META_KEY]: { ...minimalSession, wsUrl: 'ws://x' },
+    });
+    expect(result.ok ? null : result.reason).toBe('MALFORMED_SESSION');
+  });
+
+  it('rejects stack-item slice with both kind and codeUrl', () => {
     const result = combineMcpAppAiGguiMeta({
       [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: {
+      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
         kind: 'loading',
         codeUrl: '/code/sha256:abc.js',
       },
     });
-    expect(result.ok ? null : result.reason).toBe('MALFORMED_COMPONENT');
+    expect(result.ok ? null : result.reason).toBe('MALFORMED_STACK_ITEM');
   });
 
-  it('hoists the contract slice onto bootstrap.contractHash + validatorsUrl', () => {
+  it('drops a malformed contract pair silently (degrades to no validators)', () => {
     const result = combineMcpAppAiGguiMeta({
       [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: {
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
+      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: { contractHash: 'h' /* no validatorsUrl */ },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.slices.stackItem?.contractHash).toBeUndefined();
+      expect(result.slices.stackItem?.validatorsUrl).toBeUndefined();
+    }
+  });
+
+  it('renders-only deltas: combiner accepts stack-item without session', () => {
+    // Future render-only update path — session lives in host cache,
+    // wire carries just the stack-item slice with the new props.
+    const result = combineMcpAppAiGguiMeta({
+      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
+        stackItemId: 'st-2',
+        propsJson: '{"count":5}',
       },
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.contractHash).toBe('sha256:abc');
-      expect(result.bootstrap.validatorsUrl).toBe('/contract/sha256:abc.js');
-    }
-  });
-
-  it('drops a malformed contract slice silently (no client-side validators)', () => {
-    const result = combineMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: { contractHash: 'h' },
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.bootstrap.contractHash).toBeUndefined();
-      expect(result.bootstrap.validatorsUrl).toBeUndefined();
+      expect(result.slices.session).toBeUndefined();
+      expect(result.slices.stackItem?.propsJson).toBe('{"count":5}');
     }
   });
 });
 
-describe('splitBootstrapMeta', () => {
+describe('mergeSlicesIntoMountView', () => {
+  const minimalSession = {
+    sessionId: 'sess-1',
+    appId: 'app-1',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+  };
+
+  it('returns MISSING_SESSION when slices lack a session', () => {
+    const r = mergeSlicesIntoMountView({});
+    expect(r.ok ? null : r.reason).toBe('MISSING_SESSION');
+  });
+
+  it('flattens session-only slices into a minimal view', () => {
+    const r = mergeSlicesIntoMountView({ session: minimalSession });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.view.sessionId).toBe('sess-1');
+      expect(r.view.appId).toBe('app-1');
+      expect(r.view.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      expect(r.view.stackItemId).toBeUndefined();
+    }
+  });
+
+  it('flattens session + stack-item slices', () => {
+    const r = mergeSlicesIntoMountView({
+      session: { ...minimalSession, wsUrl: 'ws://x', token: 't' },
+      stackItem: {
+        stackItemId: 'st-1',
+        propsJson: '{"x":1}',
+        kind: 'loading',
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.view.wsUrl).toBe('ws://x');
+      expect(r.view.token).toBe('t');
+      expect(r.view.stackItemId).toBe('st-1');
+      expect(r.view.propsJson).toBe('{"x":1}');
+      expect(r.view.kind).toBe('loading');
+    }
+  });
+});
+
+describe('splitMountViewIntoSlices', () => {
   it('emits the session slice with only present optional fields', () => {
-    const out = splitBootstrapMeta({
+    const out = splitMountViewIntoSlices({
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/r',
@@ -735,77 +782,57 @@ describe('splitBootstrapMeta', () => {
       runtimeUrl: '/r',
       themeId: 'indigo',
     });
-    expect(out.auth).toBeUndefined();
-    expect(out.render).toBeUndefined();
-    expect(out.contract).toBeUndefined();
-    expect(out.component).toBeUndefined();
+    expect(out.stackItem).toBeUndefined();
   });
 
-  it('emits auth slice when wsUrl+token are present together', () => {
-    const out = splitBootstrapMeta({
+  it('emits auth fields on the session slice when wsUrl+token are present', () => {
+    const out = splitMountViewIntoSlices({
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/r',
       wsUrl: 'ws://x',
       token: 't',
     });
-    expect(out.auth).toEqual({ wsUrl: 'ws://x', token: 't' });
+    expect(out.session.wsUrl).toBe('ws://x');
+    expect(out.session.token).toBe('t');
   });
 
-  it('emits render slice with present optional fields only', () => {
-    const out = splitBootstrapMeta({
+  it('emits stack-item slice with render + contract + component fields', () => {
+    const out = splitMountViewIntoSlices({
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/r',
       stackItemId: 'st-1',
       propsJson: '{}',
-    });
-    expect(out.render).toEqual({ stackItemId: 'st-1', propsJson: '{}' });
-  });
-
-  it('emits contract slice only when bootstrap carries contractHash + validatorsUrl', () => {
-    const base = {
-      sessionId: 'sess-1',
-      appId: 'app-1',
-      runtimeUrl: '/r',
-    };
-    expect(splitBootstrapMeta(base).contract).toBeUndefined();
-    const withContract = splitBootstrapMeta({
-      ...base,
       contractHash: 'sha256:abc',
       validatorsUrl: '/contract/sha256:abc.js',
+      codeUrl: '/code/sha256:def.js',
+      codeHash: 'sha256:def',
     });
-    expect(withContract.contract).toEqual({
+    expect(out.stackItem).toEqual({
+      stackItemId: 'st-1',
+      propsJson: '{}',
       contractHash: 'sha256:abc',
       validatorsUrl: '/contract/sha256:abc.js',
+      codeUrl: '/code/sha256:def.js',
+      codeHash: 'sha256:def',
     });
   });
 
-  it('emits component slice for static-component (codeUrl) and system-card (kind) modes', () => {
-    const staticMode = splitBootstrapMeta({
-      sessionId: 'sess-1',
-      appId: 'app-1',
-      runtimeUrl: '/r',
-      codeUrl: '/code/sha256:abc.js',
-      codeHash: 'sha256:abc',
-    });
-    expect(staticMode.component).toEqual({
-      codeUrl: '/code/sha256:abc.js',
-      codeHash: 'sha256:abc',
-    });
-    const systemCard = splitBootstrapMeta({
+  it('emits stack-item slice for system-card kind alone', () => {
+    const out = splitMountViewIntoSlices({
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/r',
       kind: 'loading',
     });
-    expect(systemCard.component).toEqual({ kind: 'loading' });
+    expect(out.stackItem).toEqual({ kind: 'loading' });
   });
 });
 
 describe('combine ⇔ split round-trip', () => {
-  it('preserves a full bootstrap across split → emit → combine', () => {
-    const bootstrap: GguiBootstrapMeta = {
+  it('preserves a full mount view across split → emit → combine → merge', () => {
+    const view: McpAppAiGguiMountView = {
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/_ggui/iframe-runtime.js',
@@ -824,22 +851,16 @@ describe('combine ⇔ split round-trip', () => {
       contractHash: 'sha256:abc',
       validatorsUrl: '/contract/sha256:abc.js',
     };
-    const split = splitBootstrapMeta(bootstrap);
-    // Component slice has both kind and (absent) codeUrl — but bootstrap above
-    // sets kind only; component must NOT also carry codeUrl.
-    expect(split.component?.codeUrl).toBeUndefined();
-    // Reconstruct a synthetic `_meta` from the slices and combine.
-    const meta = {
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
-      ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
-      ...(split.render ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render } : {}),
-      ...(split.contract ? { [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: split.contract } : {}),
-      ...(split.component
-        ? { [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: split.component }
-        : {}),
-    };
+    const slices = splitMountViewIntoSlices(view);
+    expect(slices.stackItem?.codeUrl).toBeUndefined(); // view set kind only
+    const meta = slicesToMcpAppMeta(slices);
+    expect(meta[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
+    expect(meta[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeDefined();
     const combined = combineMcpAppAiGguiMeta(meta);
     expect(combined.ok).toBe(true);
-    if (combined.ok) expect(combined.bootstrap).toEqual(bootstrap);
+    if (!combined.ok) return;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (merged.ok) expect(merged.view).toEqual(view);
   });
 });

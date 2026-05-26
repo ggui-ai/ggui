@@ -10,7 +10,7 @@
  * import {
  *   MCP_APPS_UI_CAPABILITY,
  *   GGUI_SESSION_RESOURCE_URI,
- *   type GguiBootstrapMeta,
+ *   type McpAppAiGguiMountView,
  * } from '@ggui-ai/protocol/integrations/mcp-apps';
  * ```
  *
@@ -145,7 +145,7 @@ export type McpAppsToolVisibility = 'model' | 'app';
  * }
  * ```
  */
-export interface GguiBootstrapMeta {
+export interface McpAppAiGguiMountView {
   /**
    * WebSocket URL the view opens for live mode (e.g.
    * `wss://server.example/ws`). REQUIRED in live mode; absent in
@@ -654,534 +654,516 @@ export function deriveContextName(slotKey: string): string {
 }
 
 // =============================================================================
-// #109 — per-stability-window `_meta` keys (decomposition of the single
-// `_meta["ai.ggui/bootstrap"]` envelope into five top-level keys, each
-// keyed by what changes together).
+// #109 — per-stability-window `_meta` keys. Two slices that map 1:1 to
+// the actual update cadence:
 //
-// Decomposition rationale: hosts that forward `_meta` to views may
-// receive many pushes per session. Splitting by stability window lets
-// hosts cache the `session` slice (sent once, stable for the session),
-// rotate the `auth` slice on token refresh, and stream just `render`
-// per push. `contract` is content-addressable — same contract on
-// repeat pushes ⇒ same URL ⇒ browser HTTP cache reuse, no re-fetch.
-// `component` only appears in static-component and system-card modes.
+//   - `ai.ggui/session`    — mount-time + session-scoped: identity,
+//                            boot wiring, live-channel auth, capability
+//                            advertisements. Host caches per session.
+//   - `ai.ggui/stack-item` — what's being rendered NOW: the active
+//                            stack item's id, props, action hints,
+//                            contract pointer, component discriminator.
+//                            Replaced per push that activates a new
+//                            stack item.
 //
-// Wire shape (all keys optional on the wire; presence is signal):
+// Wire shape (both keys optional; presence is signal):
 //
 // ```jsonc
 // "_meta": {
-//   "ai.ggui/session":   { sessionId, appId, runtimeUrl, ... },
-//   "ai.ggui/auth":      { wsUrl, token, expiresAt? },
-//   "ai.ggui/render":    { stackItemId?, propsJson?, ... },
-//   "ai.ggui/contract":  { contractHash, validatorsUrl },
-//   "ai.ggui/component": { codeUrl?, codeHash?, kind? }
+//   "ai.ggui/session":    { sessionId, appId, runtimeUrl, wsUrl, token, ... },
+//   "ai.ggui/stack-item": { stackItemId, propsJson, contractHash, validatorsUrl, ... }
 // }
 // ```
 //
-// Hosts that don't recognize any of these MUST treat them as opaque
-// and forward verbatim — same posture as the spec-defined `_meta` extension
-// surface. Combiner ({@link combineMcpAppAiGguiMeta}) reconstructs a
-// {@link GguiBootstrapMeta} from the five slices for consumers that
-// prefer the aggregated shape (every iframe-runtime parser, today).
+// Hosts that don't recognize either key MUST treat them as opaque
+// and forward verbatim — same posture as the spec-defined `_meta`
+// extension surface.
+//
+// Consumers:
+//   - {@link combineMcpAppAiGguiMeta}(_meta) → {session?, stackItem?}
+//     parses the wire into a slice struct. No required-fields gate;
+//     missing slices come through as undefined.
+//   - {@link mergeSlicesIntoMountView}(slices) → {ok, view}|MISSING_SESSION
+//     flattens slices into a unified {@link McpAppAiGguiMountView} the
+//     iframe-runtime mounts from. Future work: layer over a per-session
+//     cache so render-only updates can omit the session slice.
+//   - {@link slicesToMcpAppMeta}(slices) → `_meta` envelope: emitter
+//     helper that builds the wire shape from server-built slices.
 // =============================================================================
 
 /**
- * `_meta` key carrying session-lifetime identity + boot wiring.
- * REQUIRED on every push (the iframe-runtime needs these to mount at
- * all). Bytes typically stable across the session — a host MAY cache
- * by session id and forward without re-validating.
+ * `_meta` key carrying mount-time identity + boot wiring + live-channel
+ * auth. Stable across the session lifetime (token, wsUrl, runtimeUrl,
+ * gadgets, theme, ...). Hosts MAY cache this slice keyed by sessionId
+ * and forward subsequent pushes without re-validating.
  *
  * @public
  */
 export const MCP_APP_AI_GGUI_SESSION_META_KEY = 'ai.ggui/session' as const;
 
 /**
- * `_meta` key carrying live-channel auth (WebSocket URL + short-TTL
- * bootstrap token + optional expiry). REQUIRED in live mode; absent in
- * static-component and system-card modes. Hosts SHOULD treat this slice
- * as ephemeral — a token refresh emits a fresh value; the prior value
- * MUST NOT be reused after expiry.
+ * `_meta` key carrying the active stack item — what's being rendered
+ * NOW. Replaced per push that activates a different stack item; absent
+ * on pushes that only refresh session-level state (auth rotation, theme
+ * change). Includes the rendered item's id, props, action hints,
+ * content-addressable contract pointer, and component-mode
+ * discriminator (codeUrl / codeHash / kind).
  *
  * @public
  */
-export const MCP_APP_AI_GGUI_AUTH_META_KEY = 'ai.ggui/auth' as const;
+export const MCP_APP_AI_GGUI_STACK_ITEM_META_KEY = 'ai.ggui/stack-item' as const;
 
 /**
- * `_meta` key carrying per-push render state — which stack item is
- * active, its props, action hints, context slots, app-callable tools.
- * Emitted on EVERY push that changes the rendered output. Absent on a
- * push that ONLY updates auth or refreshes a contract URL.
+ * Session slice — mount-time identity, boot wiring, live-channel auth,
+ * and host-cacheable capability advertisements.
  *
- * @public
- */
-export const MCP_APP_AI_GGUI_RENDER_META_KEY = 'ai.ggui/render' as const;
-
-/**
- * `_meta` key carrying a content-addressable pointer to the active
- * stack item's compiled contract validators. The validators themselves
- * live at {@link McpAppAiGguiContractMeta.validatorsUrl} (served by the
- * server's content-addressable store, `Cache-Control: immutable`).
- * Subsequent pushes with the same contract emit the SAME `contractHash`
- * — the browser HTTP cache returns the validator module without a
- * round-trip.
- *
- * Absent on pushes whose stack item declares no runtime-validated
- * schema, or when the server has no validator store wired (the
- * iframe-runtime then degrades to no client-side validation; the
- * server-side `assertActionContract` gate remains authoritative).
- *
- * @public
- */
-export const MCP_APP_AI_GGUI_CONTRACT_META_KEY = 'ai.ggui/contract' as const;
-
-/**
- * `_meta` key carrying static-component / system-card discriminator
- * fields. Present only when the active stack item is in one of those
- * modes; live-mode renders (the common path) omit this key.
- *
- * @public
- */
-export const MCP_APP_AI_GGUI_COMPONENT_META_KEY = 'ai.ggui/component' as const;
-
-/**
- * Session-lifetime identity + boot wiring slice of the decomposed
- * bootstrap meta. See {@link MCP_APP_AI_GGUI_SESSION_META_KEY}.
- *
- * Required across every mode: `sessionId`, `appId`, `runtimeUrl`.
- * Optional fields mirror the same-named fields on
- * {@link GguiBootstrapMeta} — combiner {@link combineMcpAppAiGguiMeta}
- * passes them through unchanged.
+ * Required when present (first emission per session): `sessionId`,
+ * `appId`, `runtimeUrl`. Live-channel auth (`wsUrl` + `token`) is
+ * paired — both present or both absent; `expiresAt` informational.
+ * Other fields are optional capabilities + config.
  *
  * @public
  */
 export interface McpAppAiGguiSessionMeta {
-  readonly sessionId: GguiBootstrapMeta['sessionId'];
-  readonly appId: GguiBootstrapMeta['appId'];
-  readonly runtimeUrl: GguiBootstrapMeta['runtimeUrl'];
-  readonly pollingUrl?: GguiBootstrapMeta['pollingUrl'];
-  readonly themeId?: GguiBootstrapMeta['themeId'];
-  readonly themeMode?: GguiBootstrapMeta['themeMode'];
-  readonly canvasMode?: GguiBootstrapMeta['canvasMode'];
-  readonly gadgets?: GguiBootstrapMeta['gadgets'];
-  readonly publicEnv?: GguiBootstrapMeta['publicEnv'];
-  readonly streamWebSocketLocalTools?: GguiBootstrapMeta['streamWebSocketLocalTools'];
-  readonly permissionsPolicy?: GguiBootstrapMeta['permissionsPolicy'];
+  // Identity
+  readonly sessionId: string;
+  readonly appId: string;
+  readonly runtimeUrl: string;
+
+  // Live-channel auth (paired)
+  readonly wsUrl?: string;
+  readonly token?: string;
+  readonly expiresAt?: string;
+
+  // Polling-fallback URL when WS blocked at the host CSP layer
+  readonly pollingUrl?: string;
+
+  // Theme (resolved at mount; rarely changes mid-session)
+  readonly themeId?: string;
+  readonly themeMode?: 'light' | 'dark';
+
+  // Architectural discriminator: canvas-scoped vs per-stack-item iframe
+  readonly canvasMode?: boolean;
+
+  // Capability accumulators (union across all stack items in the session)
+  readonly gadgets?: McpAppAiGguiMountView['gadgets'];
+  readonly publicEnv?: Readonly<Record<string, string>>;
+  readonly streamWebSocketLocalTools?: readonly string[];
+  readonly appCallableTools?: readonly string[];
+  readonly permissionsPolicy?: readonly string[];
 }
 
 /**
- * Live-channel auth slice of the decomposed bootstrap meta. See
- * {@link MCP_APP_AI_GGUI_AUTH_META_KEY}.
+ * Stack-item slice — what's being rendered RIGHT NOW. Activated per
+ * push; combines what were formerly three separate slices (render +
+ * contract + component) because they all describe a single stack item
+ * and always activate together.
  *
- * Both `wsUrl` and `token` are present together or absent together —
- * half-live (one without the other) is MALFORMED at the combiner.
+ * Mode discriminator (cross-cutting validation in
+ * {@link mergeSlicesIntoMountView}): at least one of
+ * `{ codeUrl, kind, session.wsUrl-with-token }` MUST be present for
+ * the iframe to mount. `kind` and `codeUrl` are mutually exclusive.
  *
  * @public
  */
-export interface McpAppAiGguiAuthMeta {
-  readonly wsUrl: NonNullable<GguiBootstrapMeta['wsUrl']>;
-  readonly token: NonNullable<GguiBootstrapMeta['token']>;
-  readonly expiresAt?: GguiBootstrapMeta['expiresAt'];
+export interface McpAppAiGguiStackItemMeta {
+  // Identity of the active stack item
+  readonly stackItemId?: string;
+
+  // Render state — what the iframe re-renders on update
+  readonly propsJson?: string;
+  readonly actionNextSteps?: Readonly<Record<string, string>>;
+  readonly contextSlots?: McpAppAiGguiMountView['contextSlots'];
+
+  // Contract pointer (content-addressable). When present, the iframe
+  // fetches the validators bundle from `validatorsUrl`; same contract
+  // on repeat activations ⇒ browser HTTP cache hit (no round-trip).
+  // Both fields paired — hash without URL has nowhere to fetch from.
+  readonly contractHash?: string;
+  readonly validatorsUrl?: string;
+
+  // Component mode discriminator
+  // - codeUrl + codeHash → static-component mode
+  // - kind → system-card mode (mutually exclusive with codeUrl)
+  // - absent (in live mode) → mount via live-channel
+  readonly codeUrl?: string;
+  readonly codeHash?: string;
+  readonly kind?: string;
 }
 
 /**
- * Per-push render state slice of the decomposed bootstrap meta. See
- * {@link MCP_APP_AI_GGUI_RENDER_META_KEY}.
+ * Parsed wire slices — the structured pair {@link combineMcpAppAiGguiMeta}
+ * returns. Both keys are optional; an absent slice means "the host
+ * cache (or earlier mount) already has it." First-mount pushes
+ * typically carry both; render-only deltas carry just `stackItem`.
  *
  * @public
  */
-export interface McpAppAiGguiRenderMeta {
-  readonly stackItemId?: GguiBootstrapMeta['stackItemId'];
-  readonly propsJson?: GguiBootstrapMeta['propsJson'];
-  readonly actionNextSteps?: GguiBootstrapMeta['actionNextSteps'];
-  readonly contextSlots?: GguiBootstrapMeta['contextSlots'];
-  readonly appCallableTools?: GguiBootstrapMeta['appCallableTools'];
+export interface McpAppAiGguiSlices {
+  readonly session?: McpAppAiGguiSessionMeta;
+  readonly stackItem?: McpAppAiGguiStackItemMeta;
 }
 
 /**
- * Content-addressable contract slice. The validators themselves are
- * served at `validatorsUrl` (the server's content-addressable store);
- * `contractHash` is the cache key. Same hash on repeat pushes ⇒
- * browser HTTP cache returns the module without a round-trip.
- *
- * URL response shape: an ES module whose `default` export is a
- * {@link CompiledContractValidators} object. The iframe-runtime
- * dynamic-imports the URL, then loads each inner validator-module via
- * `blob:` import per the existing `loadCompiledValidators` flow.
- *
- * Both fields are REQUIRED when this key is present — a hash without a
- * URL has no way to materialize, and a URL without a hash defeats the
- * cache.
- *
- * @public
- */
-export interface McpAppAiGguiContractMeta {
-  /** Hex sha256 of the compiled validators object (the bytes the URL
-   * serves). Stable across pushes — same contract ⇒ same hash. */
-  readonly contractHash: string;
-  /** URL serving the validators bundle. `Cache-Control: immutable`.
-   * Producer convention: `<publicBaseUrl>/contract/<hash>.js`. */
-  readonly validatorsUrl: string;
-}
-
-/**
- * Static-component / system-card discriminator slice. Present only
- * when the active stack item mounts via inlined `codeUrl`+`codeHash`
- * (static-component) or `kind` (system-card); absent on live-mode
- * pushes (the common path).
- *
- * Mutually exclusive at the discriminator level: `kind` and `codeUrl`
- * MUST NOT both be present on the same key (combiner rejects).
- *
- * @public
- */
-export interface McpAppAiGguiComponentMeta {
-  readonly codeUrl?: GguiBootstrapMeta['codeUrl'];
-  readonly codeHash?: GguiBootstrapMeta['codeHash'];
-  readonly kind?: GguiBootstrapMeta['kind'];
-}
-
-/**
- * Discriminated result of {@link combineMcpAppAiGguiMeta}. `ok: false` cases
- * carry a structural reason so consumers (parsers, tests) can
- * differentiate "no session slice on this meta" (likely a
- * non-bootstrap result) from "session slice present but malformed"
- * (a wire-shape violation worth surfacing).
+ * Discriminated result of {@link combineMcpAppAiGguiMeta}. The combiner
+ * does structural slice-shape validation only — `MALFORMED_*` reasons
+ * surface structurally-invalid slice contents (wrong type, paired
+ * fields half-present). Missing slices are NOT failures here; the
+ * "is session present" gate lives in {@link mergeSlicesIntoMountView}.
  *
  * @public
  */
 export type CombineMcpAppAiGguiMetaResult =
-  | { readonly ok: true; readonly bootstrap: GguiBootstrapMeta }
-  | { readonly ok: false; readonly reason: 'MISSING_SESSION' | 'MALFORMED_SESSION' | 'MALFORMED_AUTH' | 'MALFORMED_COMPONENT' };
+  | { readonly ok: true; readonly slices: McpAppAiGguiSlices }
+  | { readonly ok: false; readonly reason: 'MALFORMED_SESSION' | 'MALFORMED_STACK_ITEM' };
 
 /**
- * Read the five per-window `_meta` keys off a parsed JSON-RPC `_meta`
- * object and combine them into a single {@link GguiBootstrapMeta}.
+ * Discriminated result of {@link mergeSlicesIntoMountView}. The merger
+ * flattens slices into a {@link McpAppAiGguiMountView} and enforces
+ * that the session slice is present (required for any mount). Once
+ * the per-session cache lands (future slice), this gate accepts a
+ * cached session in lieu of an incoming slice.
  *
- * Required input: the `ai.ggui/session` slice (sessionId + appId +
- * runtimeUrl). When absent, returns `{ ok: false, reason: 'MISSING_SESSION' }`
- * — the caller treats this as "this `_meta` carries no ggui bootstrap"
- * (a non-ggui tool result, or a strip path).
+ * @public
+ */
+export type MergeSlicesResult =
+  | { readonly ok: true; readonly view: McpAppAiGguiMountView }
+  | { readonly ok: false; readonly reason: 'MISSING_SESSION' };
+
+/**
+ * Read the two per-window `_meta` keys off a parsed JSON-RPC `_meta`
+ * object and partition them into a {@link McpAppAiGguiSlices} struct.
  *
- * Validation is structural only — shape-preserving optional fields
- * pass through unchanged. Field-level validation (e.g. JSON Schema
- * conformance of contextSlots) lives in the iframe-runtime parser,
- * which has access to the runtime's defensive-parse posture.
+ * The combiner does STRUCTURAL slice-shape validation only. Missing
+ * slices come through as `undefined` (not failures) — first-mount
+ * pushes typically carry both `session` + `stackItem`; render-only
+ * delta pushes carry just `stackItem`; auth-only refresh pushes carry
+ * just `session`. The "is the session required for THIS consumer"
+ * gate lives in {@link mergeSlicesIntoMountView}.
  *
- * Auth half-live (wsUrl without token or vice versa) returns
- * `MALFORMED_AUTH`. Component discriminator conflict (kind AND codeUrl)
- * returns `MALFORMED_COMPONENT`.
+ * Field-level optional-field defensive parsing (e.g. context-slot
+ * schema narrowing, expiresAt date parse) lives in
+ * {@link validateMountView} after the merge.
  *
  * @public
  */
 export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaResult {
   if (meta === null || typeof meta !== 'object') {
-    return { ok: false, reason: 'MISSING_SESSION' };
+    return { ok: true, slices: {} };
   }
   const m = meta as Record<string, unknown>;
 
-  const session = m[MCP_APP_AI_GGUI_SESSION_META_KEY];
+  // Session slice — identity, boot wiring, live-channel auth.
+  let session: McpAppAiGguiSessionMeta | undefined;
+  const sessionRaw = m[MCP_APP_AI_GGUI_SESSION_META_KEY];
+  if (sessionRaw !== undefined) {
+    if (sessionRaw === null || typeof sessionRaw !== 'object' || Array.isArray(sessionRaw)) {
+      return { ok: false, reason: 'MALFORMED_SESSION' };
+    }
+    const s = sessionRaw as Record<string, unknown>;
+    if (
+      typeof s.sessionId !== 'string' ||
+      s.sessionId.length === 0 ||
+      typeof s.appId !== 'string' ||
+      s.appId.length === 0 ||
+      typeof s.runtimeUrl !== 'string' ||
+      s.runtimeUrl.length === 0
+    ) {
+      return { ok: false, reason: 'MALFORMED_SESSION' };
+    }
+    // Auth pairing — both wsUrl + token present or both absent.
+    const aw = s.wsUrl;
+    const at = s.token;
+    const ae = s.expiresAt;
+    const hasW = typeof aw === 'string' && aw.length > 0;
+    const hasT = typeof at === 'string' && at.length > 0;
+    if (hasW !== hasT) return { ok: false, reason: 'MALFORMED_SESSION' };
+    if (ae !== undefined && typeof ae !== 'string') {
+      return { ok: false, reason: 'MALFORMED_SESSION' };
+    }
+    session = {
+      sessionId: s.sessionId,
+      appId: s.appId,
+      runtimeUrl: s.runtimeUrl,
+      ...(hasW && hasT ? { wsUrl: aw as string, token: at as string } : {}),
+      ...(ae !== undefined ? { expiresAt: ae as string } : {}),
+      ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
+      ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
+      ...(s.themeMode !== undefined
+        ? { themeMode: s.themeMode as 'light' | 'dark' }
+        : {}),
+      ...(s.canvasMode !== undefined
+        ? { canvasMode: s.canvasMode as boolean }
+        : {}),
+      ...(s.gadgets !== undefined
+        ? { gadgets: s.gadgets as McpAppAiGguiMountView['gadgets'] }
+        : {}),
+      ...(s.publicEnv !== undefined
+        ? { publicEnv: s.publicEnv as Readonly<Record<string, string>> }
+        : {}),
+      ...(s.streamWebSocketLocalTools !== undefined
+        ? {
+            streamWebSocketLocalTools:
+              s.streamWebSocketLocalTools as readonly string[],
+          }
+        : {}),
+      ...(s.appCallableTools !== undefined
+        ? { appCallableTools: s.appCallableTools as readonly string[] }
+        : {}),
+      ...(s.permissionsPolicy !== undefined
+        ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
+        : {}),
+    };
+  }
+
+  // Stack-item slice — render state + contract pointer + component mode.
+  let stackItem: McpAppAiGguiStackItemMeta | undefined;
+  const stackItemRaw = m[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY];
+  if (stackItemRaw !== undefined) {
+    if (stackItemRaw === null || typeof stackItemRaw !== 'object' || Array.isArray(stackItemRaw)) {
+      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
+    }
+    const si = stackItemRaw as Record<string, unknown>;
+
+    // Component-mode discriminator: codeUrl + kind mutually exclusive.
+    const cu = si.codeUrl;
+    const ck = si.kind;
+    const ch = si.codeHash;
+    if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
+      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
+    }
+    if (ck !== undefined && (typeof ck !== 'string' || ck.length === 0)) {
+      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
+    }
+    if (ch !== undefined && (typeof ch !== 'string' || ch.length === 0)) {
+      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
+    }
+    if (typeof cu === 'string' && cu.length > 0 && typeof ck === 'string' && ck.length > 0) {
+      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
+    }
+
+    // Contract pair — both present or both absent (or both effectively
+    // absent via empty/wrong type → drop both, degrade to no validators).
+    const cHash = si.contractHash;
+    const vUrl = si.validatorsUrl;
+    const validContractPair =
+      typeof cHash === 'string' &&
+      cHash.length > 0 &&
+      typeof vUrl === 'string' &&
+      vUrl.length > 0;
+
+    stackItem = {
+      ...(si.stackItemId !== undefined
+        ? { stackItemId: si.stackItemId as string }
+        : {}),
+      ...(si.propsJson !== undefined
+        ? { propsJson: si.propsJson as string }
+        : {}),
+      ...(si.actionNextSteps !== undefined
+        ? {
+            actionNextSteps: si.actionNextSteps as Readonly<
+              Record<string, string>
+            >,
+          }
+        : {}),
+      ...(si.contextSlots !== undefined
+        ? {
+            contextSlots:
+              si.contextSlots as McpAppAiGguiMountView['contextSlots'],
+          }
+        : {}),
+      ...(validContractPair
+        ? {
+            contractHash: cHash as string,
+            validatorsUrl: vUrl as string,
+          }
+        : {}),
+      ...(typeof cu === 'string' && cu.length > 0 ? { codeUrl: cu } : {}),
+      ...(typeof ch === 'string' && ch.length > 0 ? { codeHash: ch } : {}),
+      ...(typeof ck === 'string' && ck.length > 0 ? { kind: ck } : {}),
+    };
+  }
+
+  return {
+    ok: true,
+    slices: {
+      ...(session !== undefined ? { session } : {}),
+      ...(stackItem !== undefined ? { stackItem } : {}),
+    },
+  };
+}
+
+/**
+ * Flatten {@link McpAppAiGguiSlices} into a single
+ * {@link McpAppAiGguiMountView} the iframe-runtime mounts from. Enforces
+ * that the `session` slice is present (required for any mount).
+ *
+ * Future work (separate slice): layer a per-session cache so the
+ * caller can pass `cachedSession` and accept incoming slices that
+ * omit `session`. Until then, every meta destined for an unmounted
+ * iframe MUST carry the session slice.
+ *
+ * @public
+ */
+export function mergeSlicesIntoMountView(
+  slices: McpAppAiGguiSlices,
+): MergeSlicesResult {
+  const { session, stackItem } = slices;
   if (session === undefined) {
     return { ok: false, reason: 'MISSING_SESSION' };
   }
-  if (session === null || typeof session !== 'object') {
-    return { ok: false, reason: 'MALFORMED_SESSION' };
-  }
-  const s = session as Record<string, unknown>;
-  if (
-    typeof s.sessionId !== 'string' ||
-    s.sessionId.length === 0 ||
-    typeof s.appId !== 'string' ||
-    s.appId.length === 0 ||
-    typeof s.runtimeUrl !== 'string' ||
-    s.runtimeUrl.length === 0
-  ) {
-    return { ok: false, reason: 'MALFORMED_SESSION' };
-  }
-
-  const auth = m[MCP_APP_AI_GGUI_AUTH_META_KEY];
-  let wsUrl: string | undefined;
-  let token: string | undefined;
-  let expiresAt: string | undefined;
-  if (auth !== undefined) {
-    if (auth === null || typeof auth !== 'object') {
-      return { ok: false, reason: 'MALFORMED_AUTH' };
-    }
-    const a = auth as Record<string, unknown>;
-    const aw = a.wsUrl;
-    const at = a.token;
-    const ae = a.expiresAt;
-    const hasW = typeof aw === 'string' && aw.length > 0;
-    const hasT = typeof at === 'string' && at.length > 0;
-    if (hasW !== hasT) return { ok: false, reason: 'MALFORMED_AUTH' };
-    if (hasW && hasT) {
-      wsUrl = aw as string;
-      token = at as string;
-    }
-    if (ae !== undefined) {
-      if (typeof ae !== 'string') return { ok: false, reason: 'MALFORMED_AUTH' };
-      expiresAt = ae;
-    }
-  }
-
-  const render = m[MCP_APP_AI_GGUI_RENDER_META_KEY];
-  const r =
-    render !== undefined && render !== null && typeof render === 'object'
-      ? (render as Record<string, unknown>)
-      : {};
-
-  const component = m[MCP_APP_AI_GGUI_COMPONENT_META_KEY];
-  let codeUrl: string | undefined;
-  let codeHash: string | undefined;
-  let kind: string | undefined;
-  if (component !== undefined) {
-    if (component === null || typeof component !== 'object') {
-      return { ok: false, reason: 'MALFORMED_COMPONENT' };
-    }
-    const c = component as Record<string, unknown>;
-    const cu = c.codeUrl;
-    const ch = c.codeHash;
-    const ck = c.kind;
-    if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_COMPONENT' };
-    }
-    if (ch !== undefined && (typeof ch !== 'string' || ch.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_COMPONENT' };
-    }
-    if (ck !== undefined && (typeof ck !== 'string' || ck.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_COMPONENT' };
-    }
-    if (typeof cu === 'string' && cu.length > 0 && typeof ck === 'string' && ck.length > 0) {
-      return { ok: false, reason: 'MALFORMED_COMPONENT' };
-    }
-    codeUrl = typeof cu === 'string' && cu.length > 0 ? cu : undefined;
-    codeHash = typeof ch === 'string' && ch.length > 0 ? ch : undefined;
-    kind = typeof ck === 'string' && ck.length > 0 ? ck : undefined;
-  }
-
-  // contract slice is intentionally NOT combined into GguiBootstrapMeta —
-  // its `contractHash`/`validatorsUrl` are consumed by a separate runtime
-  // path (URL fetch + dynamic import). Read the slice via the constant
-  // {@link MCP_APP_AI_GGUI_CONTRACT_META_KEY} directly when needed.
-
-  // Assemble the aggregated shape. Optional fields stay optional: the
-  // bootstrap-meta producer omits them when empty/absent, and we
-  // forward verbatim.
-  const bootstrap: GguiBootstrapMeta = {
-    sessionId: s.sessionId,
-    appId: s.appId,
-    runtimeUrl: s.runtimeUrl,
-    ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
-    ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
-    ...(s.themeMode !== undefined
-      ? { themeMode: s.themeMode as 'light' | 'dark' }
+  const view: McpAppAiGguiMountView = {
+    sessionId: session.sessionId,
+    appId: session.appId,
+    runtimeUrl: session.runtimeUrl,
+    ...(session.wsUrl !== undefined && session.token !== undefined
+      ? { wsUrl: session.wsUrl, token: session.token }
       : {}),
-    ...(s.canvasMode !== undefined
-      ? { canvasMode: s.canvasMode as boolean }
+    ...(session.expiresAt !== undefined ? { expiresAt: session.expiresAt } : {}),
+    ...(session.pollingUrl !== undefined ? { pollingUrl: session.pollingUrl } : {}),
+    ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
+    ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
+    ...(session.canvasMode !== undefined ? { canvasMode: session.canvasMode } : {}),
+    ...(session.gadgets !== undefined ? { gadgets: session.gadgets } : {}),
+    ...(session.publicEnv !== undefined ? { publicEnv: session.publicEnv } : {}),
+    ...(session.streamWebSocketLocalTools !== undefined
+      ? { streamWebSocketLocalTools: session.streamWebSocketLocalTools }
       : {}),
-    ...(s.gadgets !== undefined
-      ? { gadgets: s.gadgets as GguiBootstrapMeta['gadgets'] }
+    ...(session.appCallableTools !== undefined
+      ? { appCallableTools: session.appCallableTools }
       : {}),
-    ...(s.publicEnv !== undefined
-      ? { publicEnv: s.publicEnv as Readonly<Record<string, string>> }
+    ...(session.permissionsPolicy !== undefined
+      ? { permissionsPolicy: session.permissionsPolicy }
       : {}),
-    ...(s.streamWebSocketLocalTools !== undefined
+    ...(stackItem?.stackItemId !== undefined
+      ? { stackItemId: stackItem.stackItemId }
+      : {}),
+    ...(stackItem?.propsJson !== undefined
+      ? { propsJson: stackItem.propsJson }
+      : {}),
+    ...(stackItem?.actionNextSteps !== undefined
+      ? { actionNextSteps: stackItem.actionNextSteps }
+      : {}),
+    ...(stackItem?.contextSlots !== undefined
+      ? { contextSlots: stackItem.contextSlots }
+      : {}),
+    ...(stackItem?.contractHash !== undefined && stackItem?.validatorsUrl !== undefined
       ? {
-          streamWebSocketLocalTools:
-            s.streamWebSocketLocalTools as readonly string[],
+          contractHash: stackItem.contractHash,
+          validatorsUrl: stackItem.validatorsUrl,
         }
       : {}),
-    ...(s.permissionsPolicy !== undefined
-      ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
-      : {}),
-    ...(wsUrl !== undefined && token !== undefined ? { wsUrl, token } : {}),
-    ...(expiresAt !== undefined ? { expiresAt } : {}),
-    ...(r.stackItemId !== undefined ? { stackItemId: r.stackItemId as string } : {}),
-    ...(r.propsJson !== undefined ? { propsJson: r.propsJson as string } : {}),
-    ...(r.actionNextSteps !== undefined
-      ? {
-          actionNextSteps: r.actionNextSteps as Readonly<
-            Record<string, string>
-          >,
-        }
-      : {}),
-    ...(r.contextSlots !== undefined
-      ? { contextSlots: r.contextSlots as GguiBootstrapMeta['contextSlots'] }
-      : {}),
-    ...(r.appCallableTools !== undefined
-      ? { appCallableTools: r.appCallableTools as readonly string[] }
-      : {}),
-    ...(codeUrl !== undefined ? { codeUrl } : {}),
-    ...(codeHash !== undefined ? { codeHash } : {}),
-    ...(kind !== undefined ? { kind } : {}),
+    ...(stackItem?.codeUrl !== undefined ? { codeUrl: stackItem.codeUrl } : {}),
+    ...(stackItem?.codeHash !== undefined ? { codeHash: stackItem.codeHash } : {}),
+    ...(stackItem?.kind !== undefined ? { kind: stackItem.kind } : {}),
   };
-
-  // Contract slice (content-addressable validators). Both fields are
-  // present together or absent together. When present, hoist onto the
-  // aggregated bootstrap as `contractHash` + `validatorsUrl` — the
-  // iframe-runtime fetches `validatorsUrl` + dynamic-imports to
-  // resolve validators. Malformed shapes degrade to "no validators
-  // shipped" rather than failing the whole parse; the server-side
-  // `assertActionContract` gate remains authoritative.
-  const contract = m[MCP_APP_AI_GGUI_CONTRACT_META_KEY];
-  if (contract !== undefined && contract !== null && typeof contract === 'object') {
-    const c = contract as Record<string, unknown>;
-    const ch = c.contractHash;
-    const vu = c.validatorsUrl;
-    if (
-      typeof ch === 'string' &&
-      ch.length > 0 &&
-      typeof vu === 'string' &&
-      vu.length > 0
-    ) {
-      (bootstrap as { contractHash?: string; validatorsUrl?: string }).contractHash = ch;
-      (bootstrap as { contractHash?: string; validatorsUrl?: string }).validatorsUrl = vu;
-    }
-  }
-
-  return { ok: true, bootstrap };
+  return { ok: true, view };
 }
 
 /**
- * Inverse of {@link combineMcpAppAiGguiMeta} — partition a
- * {@link GguiBootstrapMeta} into its five per-window slices, suitable
- * for emission as five top-level `_meta` keys.
+ * Inverse of {@link mergeSlicesIntoMountView} — partition a flat
+ * {@link McpAppAiGguiMountView} into its two per-window slices, for
+ * emission as two top-level `_meta` keys.
  *
- * Contract slice is derived from the bootstrap's `contractHash` +
- * `validatorsUrl` pair — present when the producer wrote a contract
- * bundle to the content-addressable store, absent otherwise.
- *
- * Empty optional fields are dropped per slice (an empty render slice
- * is returned as `undefined` so the emitter can skip the key entirely),
- * mirroring the wire-byte-stable spread pattern that lives in
- * push.ts today.
+ * Defensive against hand-built mount views with null/wrong-type
+ * optional fields: malformed shapes are dropped from the slice (the
+ * field appears absent) rather than crashing the splitter.
  *
  * @public
  */
-export function splitBootstrapMeta(
-  bootstrap: GguiBootstrapMeta,
-): {
-  readonly session: McpAppAiGguiSessionMeta;
-  readonly auth?: McpAppAiGguiAuthMeta;
-  readonly render?: McpAppAiGguiRenderMeta;
-  readonly contract?: McpAppAiGguiContractMeta;
-  readonly component?: McpAppAiGguiComponentMeta;
-} {
-  const session: McpAppAiGguiSessionMeta = {
-    sessionId: bootstrap.sessionId,
-    appId: bootstrap.appId,
-    runtimeUrl: bootstrap.runtimeUrl,
-    ...(bootstrap.pollingUrl !== undefined ? { pollingUrl: bootstrap.pollingUrl } : {}),
-    ...(bootstrap.themeId !== undefined ? { themeId: bootstrap.themeId } : {}),
-    ...(bootstrap.themeMode !== undefined ? { themeMode: bootstrap.themeMode } : {}),
-    ...(bootstrap.canvasMode !== undefined ? { canvasMode: bootstrap.canvasMode } : {}),
-    ...(Array.isArray(bootstrap.gadgets) && bootstrap.gadgets.length > 0
-      ? { gadgets: bootstrap.gadgets }
-      : {}),
-    ...(bootstrap.publicEnv !== null &&
-    typeof bootstrap.publicEnv === 'object' &&
-    !Array.isArray(bootstrap.publicEnv) &&
-    Object.keys(bootstrap.publicEnv).length > 0
-      ? { publicEnv: bootstrap.publicEnv }
-      : {}),
-    ...(bootstrap.streamWebSocketLocalTools !== undefined
-      ? { streamWebSocketLocalTools: bootstrap.streamWebSocketLocalTools }
-      : {}),
-    ...(bootstrap.permissionsPolicy !== undefined
-      ? { permissionsPolicy: bootstrap.permissionsPolicy }
-      : {}),
-  };
-
-  const auth: McpAppAiGguiAuthMeta | undefined =
-    bootstrap.wsUrl !== undefined && bootstrap.token !== undefined
-      ? {
-          wsUrl: bootstrap.wsUrl,
-          token: bootstrap.token,
-          ...(bootstrap.expiresAt !== undefined
-            ? { expiresAt: bootstrap.expiresAt }
-            : {}),
-        }
-      : undefined;
-
-  // Defensive guards: a malformed bootstrap (e.g. `actionNextSteps:
-  // null` from a hand-built fixture or a producer-side bug) MUST NOT
-  // crash splitBootstrapMeta — defer the malformation to the
-  // combiner+validator on the read side, which has the canonical
-  // defensive-parse posture.
+export function splitMountViewIntoSlices(
+  view: McpAppAiGguiMountView,
+): McpAppAiGguiSlices {
   const isObjectNonNull = (v: unknown): v is Record<string, unknown> =>
     v !== null && typeof v === 'object' && !Array.isArray(v);
-  const renderCandidate: McpAppAiGguiRenderMeta = {
-    ...(bootstrap.stackItemId !== undefined ? { stackItemId: bootstrap.stackItemId } : {}),
-    ...(bootstrap.propsJson !== undefined ? { propsJson: bootstrap.propsJson } : {}),
-    ...(isObjectNonNull(bootstrap.actionNextSteps) &&
-    Object.keys(bootstrap.actionNextSteps).length > 0
-      ? { actionNextSteps: bootstrap.actionNextSteps }
+
+  const session: McpAppAiGguiSessionMeta = {
+    sessionId: view.sessionId,
+    appId: view.appId,
+    runtimeUrl: view.runtimeUrl,
+    ...(view.wsUrl !== undefined && view.token !== undefined
+      ? { wsUrl: view.wsUrl, token: view.token }
       : {}),
-    ...(Array.isArray(bootstrap.contextSlots) && bootstrap.contextSlots.length > 0
-      ? { contextSlots: bootstrap.contextSlots }
+    ...(view.expiresAt !== undefined ? { expiresAt: view.expiresAt } : {}),
+    ...(view.pollingUrl !== undefined ? { pollingUrl: view.pollingUrl } : {}),
+    ...(view.themeId !== undefined ? { themeId: view.themeId } : {}),
+    ...(view.themeMode !== undefined ? { themeMode: view.themeMode } : {}),
+    ...(view.canvasMode !== undefined ? { canvasMode: view.canvasMode } : {}),
+    ...(Array.isArray(view.gadgets) && view.gadgets.length > 0
+      ? { gadgets: view.gadgets }
       : {}),
-    ...(Array.isArray(bootstrap.appCallableTools) &&
-    bootstrap.appCallableTools.length > 0
-      ? { appCallableTools: bootstrap.appCallableTools }
+    ...(isObjectNonNull(view.publicEnv) &&
+    Object.keys(view.publicEnv).length > 0
+      ? { publicEnv: view.publicEnv }
+      : {}),
+    ...(view.streamWebSocketLocalTools !== undefined
+      ? { streamWebSocketLocalTools: view.streamWebSocketLocalTools }
+      : {}),
+    ...(Array.isArray(view.appCallableTools) && view.appCallableTools.length > 0
+      ? { appCallableTools: view.appCallableTools }
+      : {}),
+    ...(view.permissionsPolicy !== undefined
+      ? { permissionsPolicy: view.permissionsPolicy }
       : {}),
   };
-  const render: McpAppAiGguiRenderMeta | undefined =
-    Object.keys(renderCandidate).length > 0 ? renderCandidate : undefined;
 
-  const componentCandidate: McpAppAiGguiComponentMeta = {
-    ...(bootstrap.codeUrl !== undefined ? { codeUrl: bootstrap.codeUrl } : {}),
-    ...(bootstrap.codeHash !== undefined ? { codeHash: bootstrap.codeHash } : {}),
-    ...(bootstrap.kind !== undefined ? { kind: bootstrap.kind } : {}),
+  const stackItemCandidate: McpAppAiGguiStackItemMeta = {
+    ...(view.stackItemId !== undefined ? { stackItemId: view.stackItemId } : {}),
+    ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+    ...(isObjectNonNull(view.actionNextSteps) &&
+    Object.keys(view.actionNextSteps).length > 0
+      ? { actionNextSteps: view.actionNextSteps }
+      : {}),
+    ...(Array.isArray(view.contextSlots) && view.contextSlots.length > 0
+      ? { contextSlots: view.contextSlots }
+      : {}),
+    ...(view.contractHash !== undefined && view.validatorsUrl !== undefined
+      ? { contractHash: view.contractHash, validatorsUrl: view.validatorsUrl }
+      : {}),
+    ...(view.codeUrl !== undefined ? { codeUrl: view.codeUrl } : {}),
+    ...(view.codeHash !== undefined ? { codeHash: view.codeHash } : {}),
+    ...(view.kind !== undefined ? { kind: view.kind } : {}),
   };
-  const component: McpAppAiGguiComponentMeta | undefined =
-    Object.keys(componentCandidate).length > 0 ? componentCandidate : undefined;
-
-  const contract: McpAppAiGguiContractMeta | undefined =
-    bootstrap.contractHash !== undefined && bootstrap.validatorsUrl !== undefined
-      ? {
-          contractHash: bootstrap.contractHash,
-          validatorsUrl: bootstrap.validatorsUrl,
-        }
-      : undefined;
+  const stackItem: McpAppAiGguiStackItemMeta | undefined =
+    Object.keys(stackItemCandidate).length > 0 ? stackItemCandidate : undefined;
 
   return {
     session,
-    ...(auth !== undefined ? { auth } : {}),
-    ...(render !== undefined ? { render } : {}),
-    ...(contract !== undefined ? { contract } : {}),
-    ...(component !== undefined ? { component } : {}),
+    ...(stackItem !== undefined ? { stackItem } : {}),
   };
 }
 
 /**
- * Convenience for emitters + tests: take a {@link GguiBootstrapMeta}
- * and produce the `_meta` envelope shape with the five per-window
- * keys (`ai.ggui/session` / `auth` / `render` / `contract` / `component`),
- * dropping empty slices.
- *
- * Equivalent to calling {@link splitBootstrapMeta} and spreading each
- * non-undefined slice under its canonical key constant; centralizes
- * the spread so every caller agrees on which keys are emitted and
- * under what names.
+ * Emitter convenience — wrap a server-built {@link McpAppAiGguiSlices}
+ * struct as the wire `_meta` envelope under the canonical key
+ * constants. Drops empty slices.
  *
  * @public
  */
-export function bootstrapToMcpAppMeta(
-  bootstrap: GguiBootstrapMeta,
+export function slicesToMcpAppMeta(
+  slices: McpAppAiGguiSlices,
 ): Record<string, unknown> {
-  const split = splitBootstrapMeta(bootstrap);
   return {
-    [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
-    ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
-    ...(split.render
-      ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render }
+    ...(slices.session
+      ? { [MCP_APP_AI_GGUI_SESSION_META_KEY]: slices.session }
       : {}),
-    ...(split.contract
-      ? { [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: split.contract }
-      : {}),
-    ...(split.component
-      ? { [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: split.component }
+    ...(slices.stackItem
+      ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: slices.stackItem }
       : {}),
   };
+}
+
+/**
+ * Test + legacy-emitter convenience — take a flat
+ * {@link McpAppAiGguiMountView} and produce the wire `_meta` envelope.
+ * Equivalent to `slicesToMcpAppMeta(splitMountViewIntoSlices(view))`.
+ *
+ * @public
+ */
+export function mountViewToMcpAppMeta(
+  view: McpAppAiGguiMountView,
+): Record<string, unknown> {
+  return slicesToMcpAppMeta(splitMountViewIntoSlices(view));
 }
 
 // =============================================================================
