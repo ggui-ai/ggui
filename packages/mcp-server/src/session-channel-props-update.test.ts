@@ -29,7 +29,7 @@
  *
  * Live mount-tool integration coverage (a wired-action mount that
  * calls `ctx.sendPropsUpdate` and the renderer's DOM reflects the new
- * props) lives in the Lane-1 `mcp-app-iframe.spec.ts::props-update-
+ * props) lives in the Lane-1 `session-viewer-iframe.spec.ts::props-update-
  * roundtrip` fixture under `e2e/ggui-oss`. This file is the
  * channel-server unit boundary — it proves the WS frame is fanned
  * out correctly; the e2e proves the renderer applies it.

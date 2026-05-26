@@ -158,26 +158,21 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 4. Wait for the renderer iframe to reach `code-ready` per the
-      //    `McpAppLifecycleMessage` protocol. Post-C9.5 the live
-      //    session viewer wraps rendered UI in `<McpAppIframe>`; the
-      //    inner connection-status text lives inside the iframe child
-      //    and is unreachable from the outer page. The lifecycle
-      //    mirror on the outer iframe is the protocol-defined ready
-      //    signal — see
-      //    `@ggui-ai/protocol/integrations/mcp-apps#McpAppLifecycleMessage`.
+      // 4. The console SessionViewer mounts the rendered session
+      //    inside a plain `<iframe srcDoc>` (read-only / visual-only
+      //    — post C1-fix it no longer carries the `<McpAppIframe>`
+      //    lifecycle-mirror attribute). Inner connection-status text
+      //    lives INSIDE the iframe and is reachable only via
+      //    `frameLocator`. Readiness is gated by the inner
+      //    `data-ggui-preview` assertion below.
       const liveIframe = page
-        .locator('iframe[data-ggui-mcp-app-iframe]')
+        .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      await expect(liveIframe).toHaveAttribute(
-        'data-ggui-mcp-app-iframe-lifecycle',
-        'code-ready',
-        { timeout: 15_000 },
-      );
+      await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
       // Renderer DOM is reachable via frameLocator below.
       const frame = page
-        .frameLocator('iframe[data-ggui-mcp-app-iframe]')
+        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
         .first();
 
       // 5. Wait for the deterministic emitter's frames to arrive

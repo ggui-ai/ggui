@@ -1,6 +1,6 @@
 # contract-kit
 
-Protocol-conformance fixture catalog for the `<McpAppIframe>` + renderer bundle surface.
+Protocol-conformance fixture catalog for the SessionViewer iframe + renderer bundle surface (originally the `<McpAppIframe>` host path; the console host was migrated to a plain read-only iframe in C1-fix).
 
 **This directory is the authoring surface of the Phase 3.1 conformance kit.** The JSON cases under `./cases/` and the TypeScript loader + types in this directory get **repackaged verbatim** into `@ggui-ai/protocol-conformance` when Phase 3.1 ships. Any change here is a breaking change to a published npm surface — treat the on-disk format the way you'd treat a `@ggui-ai/protocol` type declaration: additive, extensibly-closed, backwards-compatible.
 

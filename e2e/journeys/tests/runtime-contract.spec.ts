@@ -87,17 +87,19 @@ const TEST_TIMEOUT_MS = 60_000;
  * and wait for the SPA to land on `/s/<shortCode>` with the blueprint
  * mounted inside the session viewer.
  *
- * Post Phase-2-Wave-2 C9.5 the live session viewer wraps the rendered
- * UI in `<McpAppIframe>`; the inner stack-item attributes
+ * The console SessionViewer mounts the rendered session inside a
+ * plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
+ * it no longer carries the `<McpAppIframe>` lifecycle-mirror
+ * attribute). The inner stack-item attributes
  * (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE the
- * iframe child and are unreachable from the outer page locator. The
- * lifecycle protocol locked in `@ggui-ai/protocol/integrations/mcp-
- * apps` (`McpAppLifecycleMessage`) gives us an outer-DOM signal:
- * `<McpAppIframe>` mirrors the renderer's `code-ready` transition
- * onto `iframe[data-ggui-mcp-app-iframe-lifecycle="code-ready"]`. We
- * pin on that attribute here — it is the protocol-defined ready
- * signal observers (this spec, third-party hosts, accessibility
- * scanners) consume.
+ * iframe child and are reachable only via Playwright's
+ * `frameLocator`. Readiness is gated by waiting for the iframe
+ * itself to be visible + by inner-DOM assertions further down the
+ * test body (e.g. `[data-ggui-contract-error-count]`).
+ *
+ * Click interactivity inside the iframe still works — the renderer
+ * runs its own wsToken WS channel from inside the srcDoc'd document,
+ * independent of any host-side relay.
  *
  * Returns the resolved `shortCode` for any follow-up assertions the
  * caller wants to make on the URL.
@@ -129,18 +131,14 @@ async function openLiveSession(
   }
   const shortCode = match[1]!;
 
-  // Wait for the renderer iframe to reach `code-ready` per the
-  // McpAppLifecycle protocol. This replaces the pre-C9.5 inner-DOM
-  // wait — pinning on the outer-DOM mirror keeps the spec working
-  // when the renderer runs cross-origin in production.
+  // Wait for the SessionViewer iframe to be visible. Inner-DOM
+  // assertions further down the test body (probe buttons, error
+  // panels) carry their own timeouts and serve as the de-facto
+  // readiness gate now that the lifecycle mirror is gone.
   const liveIframe = page
-    .locator('iframe[data-ggui-mcp-app-iframe]')
+    .locator('iframe[data-testid="session-viewer-iframe"]')
     .first();
-  await expect(liveIframe).toHaveAttribute(
-    'data-ggui-mcp-app-iframe-lifecycle',
-    'code-ready',
-    { timeout: 15_000 },
-  );
+  await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
   return shortCode;
 }
@@ -148,12 +146,14 @@ async function openLiveSession(
 /**
  * Lazy accessor for the renderer-iframe Playwright locator, so
  * downstream interactions (click probes, assert on rendered DOM rows)
- * scope inside the iframe. Outer-DOM lifecycle is the protocol
- * surface; inner DOM is host-implementation detail and reachable
- * only via Playwright's `frameLocator` from the spec side.
+ * scope inside the iframe. Outer-DOM is host-implementation detail;
+ * inner DOM is reachable only via Playwright's `frameLocator` from
+ * the spec side.
  */
 function rendererFrame(page: Page) {
-  return page.frameLocator('iframe[data-ggui-mcp-app-iframe]').first();
+  return page
+    .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+    .first();
 }
 
 test.describe.serial(
@@ -211,9 +211,9 @@ test.describe.serial(
       gate = await installNetworkGate(page);
 
       await openLiveSession(page, handle.baseUrl, 'todo-list');
-      // Renderer DOM is inside the McpAppIframe child; outer-DOM
-      // lifecycle gating happened in `openLiveSession`. Interactions
-      // below scope through frameLocator.
+      // Renderer DOM is inside the SessionViewer iframe child;
+      // outer-iframe visibility gating happened in `openLiveSession`.
+      // Interactions below scope through frameLocator.
       const frame = rendererFrame(page);
 
       // Slice 11.5 v1 explicit non-goal: refresh tools are

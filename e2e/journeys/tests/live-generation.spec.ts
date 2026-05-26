@@ -260,9 +260,9 @@ test.describe.serial(
       // Code-readiness is no longer surfaced via a `codeReady` boolean.
       // The structural proof that real generation ran is the latency
       // floor below + the rendered stack-item assertions further down
-      // (data-ggui-mcp-app-iframe-lifecycle="code-ready" + ggui-rcr-*
-      // scope must mount, which only happens when generation completed
-      // successfully).
+      // (data-ggui-stack-item-root visibility inside the iframe +
+      // ggui-rcr-* scope must mount, which only happens when
+      // generation completed successfully).
       expect(pushResult._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
       // Sanity: a real generator call takes noticeable time. If this
       // returns instantly, something is stubbing the provider (wrong
@@ -283,38 +283,31 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 5. Post-C9.5 the live SessionViewer wraps its rendered stack
-      //    in `<McpAppIframe>`; the inner componentCard data-attrs
-      //    (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE
-      //    the iframe child and are unreachable from outer-page
-      //    locators. The lifecycle protocol locked in
-      //    `@ggui-ai/protocol/integrations/mcp-apps`
-      //    (`McpAppLifecycleMessage`) gives an outer-DOM signal:
-      //    `<McpAppIframe>` mirrors the renderer's `code-ready`
-      //    transition onto
-      //    `iframe[data-ggui-mcp-app-iframe-lifecycle="code-ready"]`.
-      //    We pin on that attribute here — it is the protocol-defined
-      //    ready signal observers consume. Mirrors
-      //    `runtime-contract.spec.ts::openLiveSession` /
-      //    `mcp-app-iframe.spec.ts::openLiveSession`.
+      // 5. The console SessionViewer mounts the rendered session
+      //    inside a plain `<iframe srcDoc>` (read-only / visual-only
+      //    — post C1-fix it no longer carries the `<McpAppIframe>`
+      //    lifecycle-mirror attribute). Inner componentCard
+      //    data-attrs (`data-ggui-stack-entry`, `data-ggui-code-
+      //    ready`) live INSIDE the iframe child and are reachable
+      //    only via `frameLocator`. Readiness is gated by the inner
+      //    `[data-ggui-stack-item-root]` visibility check below — the
+      //    renderer emits that anchor when the bundle has mounted and
+      //    the first stack item is rendered.
       const liveIframe = page
-        .locator('iframe[data-ggui-mcp-app-iframe]')
+        .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      await expect(liveIframe).toHaveAttribute(
-        'data-ggui-mcp-app-iframe-lifecycle',
-        'code-ready',
-        { timeout: 15_000 },
-      );
+      await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
       // 6. The renderer mounts each stack item into a
       //    `<div data-ggui-stack-item-root="<id>">` per
-      //    `iframe-runtime/src/runtime.ts::containerFor`. This is the
-      //    post-pivot equivalent of the pre-C9.5 `data-ggui-stack-entry`
-      //    console wrapper — same observable purpose (anchor for
-      //    "real componentCode is mounted on this stack item"), now
-      //    emitted by the renderer itself inside the iframe. Scoped
-      //    through `frameLocator`.
-      const frame = page.frameLocator('iframe[data-ggui-mcp-app-iframe]').first();
+      //    `iframe-runtime/src/runtime.ts::containerFor`. Same
+      //    observable purpose as the pre-C9.5 `data-ggui-stack-entry`
+      //    console wrapper (anchor for "real componentCode is mounted
+      //    on this stack item"), now emitted by the renderer itself
+      //    inside the iframe. Scoped through `frameLocator`.
+      const frame = page
+        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .first();
       const stackItemRoot = frame.locator('[data-ggui-stack-item-root]');
       await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
 

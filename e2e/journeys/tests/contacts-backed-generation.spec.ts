@@ -251,26 +251,25 @@ test.describe.serial(
 
       await page.goto(`${baseUrl}/s/${shortCode}`, { waitUntil: 'networkidle' });
 
-      // Post-C9.5 the live SessionViewer wraps the rendered stack in
-      // `<McpAppIframe>`; inner componentCard data-attrs live INSIDE
-      // the iframe. Pin on the protocol-defined outer-DOM ready signal
-      // (`McpAppLifecycleMessage` → `code-ready`) before reaching into
-      // inner DOM via `frameLocator`. Mirrors
-      // `runtime-contract.spec.ts::openLiveSession`.
+      // The console SessionViewer mounts the rendered session inside a
+      // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
+      // it no longer carries the `<McpAppIframe>` lifecycle-mirror
+      // attribute). Inner componentCard data-attrs live INSIDE the
+      // iframe; reach them through `frameLocator`. Readiness is gated
+      // by the inner `[data-ggui-stack-item-root]` visibility check
+      // below.
       const liveIframe = page
-        .locator('iframe[data-ggui-mcp-app-iframe]')
+        .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      await expect(liveIframe).toHaveAttribute(
-        'data-ggui-mcp-app-iframe-lifecycle',
-        'code-ready',
-        { timeout: 15_000 },
-      );
+      await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
       // The renderer mounts each stack item into a
       // `<div data-ggui-stack-item-root="<id>">` (see
       // `iframe-runtime/src/runtime.ts::containerFor`). Inside that,
       // the React mount wraps the tree in a `ggui-rcr-*` scope div.
-      const frame = page.frameLocator('iframe[data-ggui-mcp-app-iframe]').first();
+      const frame = page
+        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .first();
       const stackItemRoot = frame.locator('[data-ggui-stack-item-root]');
       await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
 

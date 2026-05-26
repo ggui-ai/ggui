@@ -297,35 +297,34 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // Post-C9.5 the live SessionViewer wraps the rendered stack in
-      // `<McpAppIframe>`; inner componentCard data-attrs live INSIDE
-      // the iframe. Pin on the protocol-defined outer-DOM ready signal
-      // (`McpAppLifecycleMessage` → `code-ready`) before reaching into
-      // inner DOM via `frameLocator`. Mirrors
-      // `runtime-contract.spec.ts::openLiveSession`.
+      // The console SessionViewer mounts the rendered session inside a
+      // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
+      // it no longer carries the `<McpAppIframe>` lifecycle-mirror
+      // attribute). Inner componentCard data-attrs live INSIDE the
+      // iframe; reach them through `frameLocator`. Readiness is gated
+      // by the inner `[data-ggui-stack-item-root]` visibility check
+      // below — 60s on that inner check covers slow runner cases
+      // where the iframe runtime is still fetching the bundle +
+      // opening the WS when ggui_push returns. Other Lane-2 specs
+      // (cache-reuse, notes-backed) saw similar latency under live
+      // LLM and bumped past the original 15s budget; mirror that
+      // here.
       const liveIframe = page
-        .locator('iframe[data-ggui-mcp-app-iframe]')
+        .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      // 60s — covers slow runner cases where the iframe runtime is
-      // still fetching the bundle + opening the WS when ggui_push
-      // returns. Other Lane-2 specs (cache-reuse, notes-backed) saw
-      // similar latency under live LLM and bumped past the original
-      // 15s budget; mirror that here.
-      await expect(liveIframe).toHaveAttribute(
-        'data-ggui-mcp-app-iframe-lifecycle',
-        'code-ready',
-        { timeout: 60_000 },
-      );
+      await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
       // The renderer mounts each stack item into a
       // `<div data-ggui-stack-item-root="<id>">` (see
       // `iframe-runtime/src/runtime.ts::containerFor`). Inside that,
       // the React mount wraps the tree in a `ggui-rcr-*` scope div.
       const frame = page
-        .frameLocator('iframe[data-ggui-mcp-app-iframe]')
+        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
         .first();
       const stackItemRoot = frame.locator('[data-ggui-stack-item-root]');
-      await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
+      // 60s — see comment on the outer iframe visibility check above
+      // (live-LLM Lane-2 latency budget).
+      await expect(stackItemRoot).toBeVisible({ timeout: 60_000 });
 
       // The iframe-runtime React mount wraps in `ggui-rcr-*`.
       // Presence + ≥1 child proves the esbuild-compiled ESM loaded

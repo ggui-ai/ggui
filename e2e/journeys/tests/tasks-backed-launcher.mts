@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   // `renderer.url` BEFORE `createGguiServer` (Task #382 — srcdoc
   // iframes can't resolve relative paths; the renderer bundle URL on
   // `_meta.ggui.bootstrap.rendererUrl` must be absolute for the
-  // devtool `/s/<shortCode>` viewer's `<McpAppIframe>` to load the
+  // devtool `/s/<shortCode>` SessionViewer iframe (srcdoc'd) to load the
   // renderer inside its srcdoc-mounted iframe).
   const port = await pickFreePort('127.0.0.1');
   const baseUrl = `http://127.0.0.1:${port}`;

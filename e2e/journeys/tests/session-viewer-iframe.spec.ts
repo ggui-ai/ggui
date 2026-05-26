@@ -9,54 +9,42 @@
  *      (`loadFixture(name)` returns a shape-valid {@link TestCase}).
  *   2. Fixtures that can drive against today's Phase-2 harness
  *      (`ggui serve` + `playground/` + existing blueprints)
- *      produce a green assertion through the real MCP Apps iframe
- *      host path.
+ *      produce a green assertion through the read-only console
+ *      SessionViewer iframe (renderer-inside-srcdoc) host path.
  *   3. Fixtures authored for Phase 3.1's `ConformanceHost` dispatcher
  *      skip cleanly with their `skipReason` reported — proving the
  *      format is forward-loadable without the runner that will
  *      un-skip them.
  *
- * ## Why this spec is the "MCP Apps iframe" spec
+ * ## Why this spec is the "SessionViewer iframe" spec
  *
  * Every assertion in a RUN-tier fixture exercises the RENDERER
- * CONTRACT through the real postMessage host-bridge path. The
- * console's live session viewer at `/s/<shortCode>` IS an MCP Apps
- * iframe host — it mounts the thin shell, the shell fetches the
- * renderer bundle, the renderer opens WS + subscribes, and
- * contract-error / observability frames the renderer emits are
- * forwarded via postMessage into the host DOM where the
- * `contract-probe` blueprint's `useStream('_ggui:contract-error')`
- * subscription paints them as `data-ggui-contract-error-*`
- * attributes we assert on.
+ * CONTRACT through the iframe-runtime's own WS channel. The console's
+ * live session viewer at `/s/<shortCode>` mounts the production thin
+ * shell in `<iframe srcdoc sandbox="allow-scripts">`; the shell
+ * fetches the renderer bundle, the renderer opens its own
+ * wsToken-gated WS channel, and contract-error / observability
+ * frames the renderer emits paint `data-ggui-contract-error-*`
+ * attributes on inner-iframe DOM that we assert on via Playwright's
+ * `frameLocator`.
  *
- * The spec is NOT the `<McpAppIframe>` component's unit test — that
- * lives at `packages/ggui-react/src/McpAppIframe/McpAppIframe.test.tsx`.
- * This spec asserts the wire-observable RENDERER outputs a correct
- * MCP Apps host would receive, through a real live-rendering path.
- * Phase 3.1 ships the packaged runner that reuses this fixture
- * catalog against vendor-neutral host implementations.
- *
- * ## Why no custom `harness.html`
- *
- * An earlier iteration of the brief considered a vanilla-JS harness
- * page mounting its own `<iframe>` to mimic `<McpAppIframe>` without
- * React. On review, the console's live session viewer (already
- * served by `ggui serve` at `/s/<shortCode>`) IS that harness for the
- * Phase-2 harness surface — it runs through the same postMessage
- * protocol `<McpAppIframe>` uses. Standing up a second harness would
- * duplicate the host bridge without adding assertion value, and
- * the "no bundler" constraint in the brief explicitly bans the path
- * that would make a standalone React harness easy (importing the
- * built `@ggui-ai/react` bundle via a module script). The console
- * SPA already carries a bundled version — reusing it stays within
- * the brief's intent and keeps the spec path isolated to
- * `mcp-app-iframe.spec.ts` + `fixtures/contract-kit/**`.
+ * Pre-C1-fix this spec was the `<McpAppIframe>` host path. The
+ * console SessionViewer was migrated off `<McpAppIframe>` to a plain
+ * read-only iframe (no MCP client relay, no IframeErrorPane, no
+ * lifecycle-mirror attribute) — see
+ * `oss/packages/console/src/routes/SessionViewer.tsx`. The
+ * fixture-catalog dispatch paths that depended on `<McpAppIframe>`
+ * surfaces (bootstrap-failure → IframeErrorPane) are now PENDING
+ * a new driver and skip honestly. The wired-action + contract-error
+ * + props-update fixtures still execute because the inner renderer
+ * keeps its own WS channel and is unaffected by host-side relay.
  *
  * Phase 3.1's runner CAN stand up its own vanilla harness under the
  * packaged kit's test infrastructure — that's the right layer to
- * host a non-React implementation of the MCP Apps iframe host.
+ * host a non-React implementation that surfaces the deleted
+ * IframeErrorPane semantics.
  */
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
@@ -70,7 +58,6 @@ import {
 import {
   listFixtures,
   loadFixture,
-  type BootstrapFailureBehavior,
   type ContractErrorBehavior,
   type ObservabilityBehavior,
   type TestCase,
@@ -142,19 +129,17 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * and wait for the SPA to land on `/s/<shortCode>` with the blueprint
  * mounted inside the session viewer. Returns the resolved `shortCode`.
  *
- * Post Phase-2-Wave-2 C9.5 the live session viewer wraps the rendered
- * UI in `<McpAppIframe>`; the inner stack-item attributes
+ * The console SessionViewer mounts a plain `<iframe srcDoc>` with
+ * `data-testid="session-viewer-iframe"` (read-only / visual-only —
+ * post C1-fix it no longer carries the `<McpAppIframe>`
+ * lifecycle-mirror attribute). Inner stack-item attributes
  * (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE the
- * iframe child and are unreachable from the outer page locator. The
- * lifecycle protocol locked in `@ggui-ai/protocol/integrations/mcp-
- * apps` (`McpAppLifecycleMessage`) gives us an outer-DOM signal:
- * `<McpAppIframe>` mirrors the renderer's `code-ready` transition
- * onto `iframe[data-ggui-mcp-app-iframe-lifecycle="code-ready"]`. We
- * pin on that attribute here — it is the protocol-defined ready
- * signal observers (this spec, third-party hosts, accessibility
- * scanners) consume.
+ * iframe child and are reachable only via Playwright's
+ * `frameLocator`. Readiness is gated by waiting for the iframe to be
+ * visible + by inner-DOM assertions further down the fixture
+ * dispatcher (e.g. `[data-ggui-contract-error-count]`).
  *
- * Mirrors the pattern locked by `runtime-contract.spec.ts::openLiveSession`
+ * Mirrors the pattern in `runtime-contract.spec.ts::openLiveSession`
  * — intentionally duplicated here so this spec stays self-contained
  * against its path-scope (the helper is not exported from the
  * harness).
@@ -182,25 +167,23 @@ async function openLiveSession(
     throw new Error(`expected /s/<shortCode> URL, got ${page.url()}`);
   }
   const liveIframe = page
-    .locator('iframe[data-ggui-mcp-app-iframe]')
+    .locator('iframe[data-testid="session-viewer-iframe"]')
     .first();
-  await expect(liveIframe).toHaveAttribute(
-    'data-ggui-mcp-app-iframe-lifecycle',
-    'code-ready',
-    { timeout: 15_000 },
-  );
+  await expect(liveIframe).toBeVisible({ timeout: 15_000 });
   return match[1]!;
 }
 
 /**
  * Lazy accessor for the renderer-iframe Playwright locator, so
  * downstream interactions (click probes, assert on rendered DOM rows)
- * scope inside the iframe. Outer-DOM lifecycle is the protocol
- * surface; inner DOM is host-implementation detail and reachable
+ * scope inside the iframe. Outer-iframe visibility is the host
+ * surface; inner DOM is renderer-implementation detail and reachable
  * only via Playwright's `frameLocator` from the spec side.
  */
 function rendererFrame(page: Page) {
-  return page.frameLocator('iframe[data-ggui-mcp-app-iframe]').first();
+  return page
+    .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+    .first();
 }
 
 /**
@@ -452,6 +435,19 @@ const KIT_DRIVEN_KNOWN_GAPS: Readonly<Record<string, string>> = {};
  *   - `canvas-mode-wire-shapes` (4) — need `set-app-mode` +
  *     `assert-session-field` + `assert-channel-envelope` host
  *     directives (see that sub-module's `index.ts`).
+ *   - `bootstrap-bundle-fetch-failed` + `bootstrap-meta-missing` —
+ *     pre-C1-fix these ran through a Playwright `page.route()`-based
+ *     fault-injection path against the console's `<McpAppIframe>` +
+ *     `<IframeErrorPane>` surface. Post C1-fix the console
+ *     SessionViewer is a read-only plain-iframe inspector — it no
+ *     longer mounts `<IframeErrorPane>` and no longer surfaces the
+ *     `data-ggui-console-iframe-error` outer-DOM marker the fixtures
+ *     assert on. A new driver needs either (a) a vanilla harness host
+ *     that re-implements the bootstrap-failure error surface, or (b)
+ *     a kit-side `renderer-url-override` / `ui-initialize-response-
+ *     override` directive that the reference server can dispatch (and
+ *     a matcher that observes the resulting bootstrap-failed frame
+ *     out of band from any host iframe). Until then, skip honestly.
  *
  * (SPEC §7.7.2's gadget obligations are NOT here — they are
  * pure-function conformance, graded by the kit's `schema-conformance`
@@ -466,6 +462,8 @@ const PENDING_DRIVER_FIXTURES: ReadonlySet<string> = new Set([
   'canvas-lifecycle-channel-emits-handshake-started',
   'canvas-navigated-updates-active-stack-item',
   'host-context-observed-persists',
+  'bootstrap-bundle-fetch-failed',
+  'bootstrap-meta-missing',
 ]);
 
 /**
@@ -529,202 +527,21 @@ async function runFixtureViaKit(
 }
 
 // =============================================================================
-// Browser-driven bootstrap-failure fixtures (Slice M)
+// Browser-driven bootstrap-failure fixtures (Slice M) — RETIRED post C1-fix
 // =============================================================================
-
-/**
- * Fixtures driven directly through Playwright against the live `ggui
- * serve` + console surface, with `page.route()`-based fault injection
- * on the host's `/ggui/console/session-bootstrap` response. These are
- * the bootstrap-failure fixtures whose expected behavior is observable
- * ONLY on the iframe-host side — the conformance kit's reference
- * server speaks pure WS and has no concept of the host's bootstrap-
- * fetch / `ui/initialize` round-trip, so its `renderer-url-override`
- * + `ui-initialize-response-override` setup directives throw and the
- * kit returns SKIP. Driving the live OSS host with mutated bootstrap
- * payloads is the right shape for these two fixtures: the bootstrap
- * round-trip IS the surface they target.
- *
- * Why a separate set from `KIT_DRIVEN_FIXTURES`: the kit path runs
- * against the in-process reference server and never opens a Playwright
- * page. The browser-driven path uses the same `ggui serve` handle as
- * the iframe host fixtures (`runFixture()`), so it pays the SPA-load +
- * try-live cost — but only twice. Two disjoint sets, dispatched
- * BEFORE the kit set in the registration loop.
- *
- * Per-fixture pattern:
- *   - `bootstrap-bundle-fetch-failed` — intercept the host's bootstrap
- *     response and rewrite `bootstrap.runtimeUrl` to the unreachable
- *     URL the fixture's `renderer-url-override` directive specifies
- *     (`http://127.0.0.1:1/does-not-exist.js`). The `<McpAppIframe>`
- *     forwards the mutated bootstrap to the thin shell via
- *     `ui/initialize`'s `_meta.ggui.bootstrap`; the shell's
- *     `<script src=runtimeUrl>` errors and the shell posts
- *     `{type:'ggui:bootstrap-failed', reason:'BUNDLE_FETCH_FAILED', message}`
- *     to the parent. `<McpAppIframe>::onError` fires, the console's
- *     `<IframeErrorPane>` paints, and the assertion pins on the
- *     `data-ggui-console-iframe-error` container with the fixture's
- *     `messageContains` substring.
- *
- *   - `bootstrap-meta-missing` — same interception point, but rewrite
- *     the bootstrap to OMIT the `runtimeUrl` field (matching the
- *     fixture's `ui-initialize-response-override.toolOutput._meta.ggui`
- *     empty object — the host's bootstrap-fetch surface still requires
- *     a non-null `bootstrap` key, so we strip `runtimeUrl` rather than
- *     return `{}` outright; the shell's parse rejects on the empty
- *     `runtimeUrl` per the same code path the fixture asserts).
- *     Shell posts `{type:'ggui:bootstrap-failed',
- *     reason:'BOOTSTRAP_META_MISSING', message}`.
- *
- * The `data-ggui-console-iframe-error` outer-DOM attribute lives on the
- * SessionViewer's `<IframeErrorPane>`, NOT on the `<McpAppIframe>` itself
- * — `<McpAppIframe>` only mirrors `ggui:lifecycle` envelopes onto its
- * outer attribute, never bootstrap-failure. The error pane's badge
- * carries `err.kind === 'bootstrap'` and the body carries `err.message`,
- * which is the operator-visible `messageContains` surface.
- */
-const BROWSER_DRIVEN_FIXTURES: ReadonlySet<string> = new Set([
-  'bootstrap-bundle-fetch-failed',
-  'bootstrap-meta-missing',
-]);
-
-/**
- * Mutate the host's `/ggui/console/session-bootstrap` JSON response
- * via `page.route()` so the bootstrap forwarded onto `ui/initialize`
- * triggers the fixture's expected `bootstrap-failed` reason. Returns
- * an unroute function so each test cleans its own interception.
- *
- * The route is registered INSIDE the test (per fixture) so each spec
- * scopes its own mutation — no cross-test bleed. Playwright matches
- * later-registered routes first, so this handler runs ahead of the
- * `installNetworkGate` catch-all even though the gate is
- * registered earlier in the test body.
- */
-async function installBootstrapFailureRoute(
-  page: Page,
-  fixtureName: string,
-): Promise<() => Promise<void>> {
-  const pattern = '**/ggui/console/session-bootstrap*';
-  const handler = async (route: Route): Promise<void> => {
-    const response = await route.fetch();
-    const status = response.status();
-    if (status !== 200) {
-      // Pass non-200s through untouched — the SessionViewer's own
-      // `resource-failed` path renders the upstream status, and the
-      // fixture's expected message wouldn't land if we masked the
-      // failure.
-      await route.fulfill({ response });
-      return;
-    }
-    const body = (await response.json()) as {
-      readonly bootstrap: Record<string, unknown>;
-    };
-    const original = body.bootstrap;
-    let mutated: Record<string, unknown>;
-    if (fixtureName === 'bootstrap-bundle-fetch-failed') {
-      // Match the fixture's `renderer-url-override` setup directive:
-      // unreachable URL on a port the shell's `<script>` onerror is
-      // guaranteed to fire on. Same string the conformance fixture
-      // declares verbatim.
-      mutated = {
-        ...original,
-        runtimeUrl: 'http://127.0.0.1:1/does-not-exist.js',
-      };
-    } else if (fixtureName === 'bootstrap-meta-missing') {
-      // Strip `runtimeUrl` so the shell's
-      // `if(!b||typeof b.runtimeUrl!=='string'||b.runtimeUrl.length===0)`
-      // gate trips. Mirrors the fixture's
-      // `ui-initialize-response-override.toolOutput._meta.ggui = {}`
-      // intent — the host's bootstrap-fetch surface itself still
-      // requires the `bootstrap` key (SessionViewer transitions to
-      // `resource-failed` on missing key), so we remove the inner
-      // field that the shell's parse actually validates.
-      const { runtimeUrl: _ignored, ...withoutRuntimeUrl } = original;
-      void _ignored;
-      mutated = withoutRuntimeUrl;
-    } else {
-      // Unknown fixture in the browser-driven set — fail loud rather
-      // than passing the response through silently.
-      throw new Error(
-        `installBootstrapFailureRoute: no mutation rule for fixture '${fixtureName}'`,
-      );
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json; charset=utf-8',
-      body: JSON.stringify({ bootstrap: mutated }),
-    });
-  };
-  await page.route(pattern, handler);
-  return () => page.unroute(pattern, handler);
-}
-
-/**
- * Drive a browser-driven bootstrap-failure fixture against the live
- * `ggui serve` SPA. Navigates to `/preview/<blueprint>` → clicks
- * try-live → waits for the SessionViewer to land on `/s/<shortCode>`
- * → asserts the `<IframeErrorPane>` paints with the fixture's
- * expected message substring.
- *
- * Cannot reuse `openLiveSession()` — that helper waits for the
- * iframe's `data-ggui-mcp-app-iframe-lifecycle="code-ready"` mirror,
- * which by definition will NEVER be set on a bootstrap-failed run
- * (the renderer never reaches `code-ready` because the bundle never
- * finishes loading or the meta is unparseable).
- */
-async function runBrowserDrivenBootstrapFailureFixture(
-  page: Page,
-  handle: GguiServeHandle,
-  fixture: TestCase,
-): Promise<void> {
-  // Any blueprint will do — the fixture targets the host's
-  // bootstrap-fetch round-trip, which is upstream of blueprint-
-  // specific code. `todo-list` is the cheapest playground entry
-  // (no synthetic probe traffic) and is already required by the
-  // happy-path fixture, so its dist is in the harness's path.
-  const blueprintId = 'todo-list';
-  const unroute = await installBootstrapFailureRoute(page, fixture.name);
-  try {
-    await page.goto(`${handle.baseUrl}/preview/${blueprintId}`, {
-      waitUntil: 'networkidle',
-    });
-    const tryBtn = page.locator(
-      `button[data-ggui-try-live][data-ggui-blueprint-id="${blueprintId}"]`,
-    );
-    await expect(tryBtn).toBeVisible({ timeout: 15_000 });
-    await tryBtn.click();
-    // Short code is the URL-safe lowercase alphabet from
-    // `generateShortCode()` in `packages/mcp-server-handlers/src/
-    // session-mutations/push.ts`. Length is not pinned here — the
-    // generator's exact length has drifted across slices and the
-    // bootstrap-failure assertion is alphabet-shape-based, not
-    // length-pinned.
-    await page.waitForURL(/\/s\/[a-z0-9]+$/, { timeout: 15_000 });
-
-    // The iframe DOES mount (the bootstrap response carries the
-    // `bootstrap` key — only the inner shape is malformed); we wait
-    // for `<IframeErrorPane>` to render its outer-DOM marker.
-    const errorPane = page.locator('[data-ggui-console-iframe-error]');
-    await expect(errorPane).toBeVisible({ timeout: 15_000 });
-
-    // ProtocolError.kind is 'bootstrap'; pane renders the kind as a
-    // `<StatusBadge>` and the message via `formatProtocolErrorMessage`.
-    // Both render INTO the pane, so a substring assertion against the
-    // pane's text content covers both signals.
-    const paneText = await errorPane.innerText();
-    expect(paneText.toLowerCase()).toContain('bootstrap');
-    if (fixture.expectedBehavior.kind !== 'bootstrap-failure') {
-      throw new Error(
-        `runBrowserDrivenBootstrapFailureFixture: fixture '${fixture.name}' kind '${fixture.expectedBehavior.kind}' is not 'bootstrap-failure' — registered in BROWSER_DRIVEN_FIXTURES by mistake?`,
-      );
-    }
-    const behavior = fixture.expectedBehavior as BootstrapFailureBehavior;
-    expect(paneText).toContain(behavior.messageContains);
-  } finally {
-    await unroute();
-  }
-}
-
+//
+// The Playwright `page.route()`-based bootstrap-failure driver was deleted
+// when the console SessionViewer was migrated off `<McpAppIframe>` to a
+// plain read-only `<iframe srcDoc>` (see
+// `oss/packages/console/src/routes/SessionViewer.tsx`). The driver
+// targeted the `<IframeErrorPane>` outer-DOM marker
+// (`data-ggui-console-iframe-error`) which the new SessionViewer no
+// longer surfaces. The two fixtures it dispatched —
+// `bootstrap-bundle-fetch-failed` + `bootstrap-meta-missing` — now route
+// through `PENDING_DRIVER_FIXTURES` and skip honestly with a pointer to
+// the new-driver requirement (kit-side directive OR vanilla-harness host
+// that re-implements the error surface).
+//
 // =============================================================================
 // Browser-driven props-update fixtures (Slice O — option B)
 // =============================================================================
@@ -744,14 +561,14 @@ async function runBrowserDrivenBootstrapFailureFixture(
  * iframe-runtime re-renders with the new prop. The DOM stamp on
  * `data-ggui-prop-count` is the wire-observable assertion target.
  *
- * Why a separate set from `BROWSER_DRIVEN_FIXTURES`: that set targets
- * fault injection on the bootstrap response; this set drives the
- * happy path of a runtime emission seam. Two disjoint dispatchers,
- * dispatched BEFORE the kit set in the registration loop. The
- * `installNetworkGate` clean-room invariant still applies — the
- * mount handler runs in-process and the props_update fan-out stays
- * inside the live `ggui serve` server, so no hosted/AWS reach-out can
- * occur on a clean run.
+ * Single browser-driven dispatcher remaining: pre-C1-fix there was a
+ * sibling `BROWSER_DRIVEN_FIXTURES` set covering bootstrap-failure via
+ * Playwright `page.route()` fault injection, but that set was retired
+ * when the console SessionViewer dropped `<IframeErrorPane>`. The
+ * `installNetworkGate` clean-room invariant still applies — the mount
+ * handler runs in-process and the props_update fan-out stays inside
+ * the live `ggui serve` server, so no hosted/AWS reach-out can occur
+ * on a clean run.
  */
 const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
   'props-update-roundtrip',
@@ -760,8 +577,8 @@ const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
 /**
  * Drive the `props-update-roundtrip` fixture through the live `ggui
  * serve` SPA + `props-echo` blueprint:
- *   1. `openLiveSession` lands on `/s/<shortCode>` with the renderer
- *      iframe in `code-ready` lifecycle.
+ *   1. `openLiveSession` lands on `/s/<shortCode>` with the
+ *      SessionViewer iframe visible.
  *   2. Inside the iframe, assert the cold-start render stamps
  *      `data-ggui-prop-count="0"` (the component's `count ?? 0`
  *      fallback — no `props_update` has fired yet).
@@ -907,21 +724,6 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
       test.setTimeout(TEST_TIMEOUT_MS);
       if (fixture.skipReason !== null) {
         test.skip(true, fixture.skipReason);
-        return;
-      }
-
-      // Slice M browser-driven path: live `ggui serve` host with
-      // Playwright `page.route()` fault injection on the bootstrap
-      // round-trip. Used for fixtures whose expected behavior is
-      // observable on the host iframe surface but not via the kit's
-      // pure-WS reference-server path. Network gate still applies —
-      // these fixtures stay clean-room (the mutated bootstrap is
-      // synthesized in-page, no hosted / AWS reach-out).
-      if (BROWSER_DRIVEN_FIXTURES.has(fixture.name)) {
-        if (!handle) throw new Error('handle not ready — beforeAll failed');
-        const gate = await installNetworkGate(page);
-        await runBrowserDrivenBootstrapFailureFixture(page, handle, fixture);
-        expect(gate.attempts).toEqual([]);
         return;
       }
 

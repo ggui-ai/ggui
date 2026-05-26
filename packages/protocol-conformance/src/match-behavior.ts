@@ -153,7 +153,7 @@ export function matchBehavior(
     return {
       kind: 'unmatchable-on-ws',
       reason:
-        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + `ui/initialize` postMessage round-trip, not a WS frame the server emits. The `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. Drive these fixtures via a Path-B browser-host harness (today: Slice M Playwright dispatch in `e2e/ggui-oss/tests/mcp-app-iframe.spec.ts`; future: packaged Phase-3.2 adapter inside the kit).',
+        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + `ui/initialize` postMessage round-trip, not a WS frame the server emits. The `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. Drive these fixtures via a Path-B browser-host harness (today: PENDING a new driver — the original Slice M Playwright dispatch in `e2e/ggui-oss/tests/session-viewer-iframe.spec.ts` was retired post C1-fix when the console SessionViewer dropped `<IframeErrorPane>`; future: packaged Phase-3.2 adapter inside the kit).',
     };
   }
   if (behavior.kind === 'observability-event') {
@@ -163,7 +163,7 @@ export function matchBehavior(
     return {
       kind: 'unmatchable-on-ws',
       reason:
-        'props-update is a Path-B (browser-host) claim — the assertion is on rendered DOM (selector + attribute/text), not on the `_ggui:props` WS frame in isolation. Matchable on WS only as "frame was emitted"; the fixture vocabulary asserts "DOM reflects the update". Drive via a Path-B browser-host harness (today: Slice M Playwright dispatch in `e2e/ggui-oss/tests/mcp-app-iframe.spec.ts`; future: packaged Phase-3.2 adapter inside the kit).',
+        'props-update is a Path-B (browser-host) claim — the assertion is on rendered DOM (selector + attribute/text), not on the `_ggui:props` WS frame in isolation. Matchable on WS only as "frame was emitted"; the fixture vocabulary asserts "DOM reflects the update". Drive via a Path-B browser-host harness (today: Slice M Playwright dispatch in `e2e/ggui-oss/tests/session-viewer-iframe.spec.ts`; future: packaged Phase-3.2 adapter inside the kit).',
     };
   }
   // Extensibly-closed union catch — unknown `kind` = new fixture
