@@ -51,6 +51,7 @@ import {
   type StackItem,
 } from '@ggui-ai/protocol';
 import {
+  AI_GGUI_BOOTSTRAP_META_KEY,
   GGUI_PUSH_UI_META,
   type GguiBootstrapMeta,
   type PushResultMeta,
@@ -343,7 +344,7 @@ export interface GguiPushHandlerDeps {
   readonly pendingEventConsumer?: PendingEventConsumer;
   /**
    * Bootstrap-credential minter for the MCP Apps outbound path. When
-   * present, the handler's `resultMeta` returns `{ ggui: { bootstrap } }`.
+   * present, the handler's `resultMeta` returns `{ ["ai.ggui/bootstrap"]: bootstrap }`.
    * When ABSENT, no `_meta` is emitted — the path still works end-to-end
    * for non-MCP-Apps hosts that just need the `url` fallback.
    *
@@ -2274,7 +2275,7 @@ export function createGguiPushHandler(
       // inside it — gives compile-time validation of `ggui`, `ui`, and
       // `ui/resourceUri` without an erasure cast at return time.
       const meta: Record<string, unknown> = {
-        ggui: { bootstrap },
+        [AI_GGUI_BOOTSTRAP_META_KEY]: bootstrap,
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,

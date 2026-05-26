@@ -644,19 +644,49 @@ export function deriveContextName(slotKey: string): string {
 }
 
 /**
- * Shape of the `_meta` field on a `ggui_push` tool result when the server
- * is the MCP Apps outbound host. Wrapping the bootstrap under `_meta.ggui.*`
- * keeps ggui's namespace distinct from MCP Apps' own `_meta.ui.*` on the
- * tool declaration side.
+ * Canonical `_meta` key under which a `ggui_push` / `ggui_handshake`
+ * tool result carries its {@link GguiBootstrapMeta} envelope. Matches
+ * the MCP base spec's `_meta` extension-key grammar (SEP-2133):
+ * `{reverse-dns-prefix}/{name}` — `ai.ggui` is the reverse-DNS prefix
+ * (`ai.ggui` mirrors the domain `ggui.ai`), `bootstrap` is the name.
  *
- * Hosts forward `_meta` alongside `structuredContent` when they pass tool
- * output into `ui/initialize`; the view reads `_meta.ggui.bootstrap` from
- * the initialization context.
+ * Cross-package use: import and key against this constant instead of
+ * a string literal so a rename or grammar adjustment lands in one place.
+ *
+ * Spec context: SEP-1865 (MCP Apps) standardizes the host's obligation
+ * to forward tool-result `_meta` to views via
+ * `ui/notifications/tool-result`. The reference implementation
+ * (`@mcp-ui/client`'s `<AppRenderer>` + `@modelcontextprotocol/ext-apps`'s
+ * `AppBridge`) honors this contract; views consume the payload via
+ * `app.ontoolresult(params)` where `params._meta` is "widget-only
+ * metadata from server" (compare OpenAI's `window.openai.toolResponseMetadata`).
+ *
+ * Failure mode + observability: see
+ * `docs/protocol/extensions/ai.ggui-bootstrap.md`.
+ *
+ * @public
+ */
+export const AI_GGUI_BOOTSTRAP_META_KEY = 'ai.ggui/bootstrap' as const;
+
+/**
+ * Shape of the `_meta` field on a `ggui_push` / `ggui_handshake` tool
+ * result. Carries the {@link GguiBootstrapMeta} under
+ * {@link AI_GGUI_BOOTSTRAP_META_KEY} per SEP-2133's vendor-extension
+ * grammar.
+ *
+ * Hosts MUST forward `_meta` alongside `structuredContent` when they
+ * deliver tool output to views via `ui/notifications/tool-result` (per
+ * SEP-1865). Views consume the payload from
+ * `params._meta["ai.ggui/bootstrap"]`. Spec-compliant hosts including
+ * `@mcp-ui/client`'s `<AppRenderer>` honor this forwarding.
+ *
+ * If a host strips `_meta` before view delivery, the runtime's inline-
+ * bootstrap fallback (resource HTML's `window.__GGUI_BOOTSTRAP__`) is
+ * the documented secondary path — see
+ * `docs/protocol/extensions/ai.ggui-bootstrap.md`.
  */
 export interface PushResultMeta {
-  readonly ggui: {
-    readonly bootstrap: GguiBootstrapMeta;
-  };
+  readonly [AI_GGUI_BOOTSTRAP_META_KEY]: GguiBootstrapMeta;
 }
 
 // =============================================================================
@@ -1063,9 +1093,9 @@ export function hasPushBootstrapMeta(
   meta: unknown,
 ): meta is PushResultMeta {
   if (meta === null || typeof meta !== 'object') return false;
-  const ggui = (meta as { ggui?: unknown }).ggui;
-  if (ggui === null || typeof ggui !== 'object') return false;
-  const bootstrap = (ggui as { bootstrap?: unknown }).bootstrap;
+  const bootstrap = (meta as Record<string, unknown>)[
+    AI_GGUI_BOOTSTRAP_META_KEY
+  ];
   if (bootstrap === null || typeof bootstrap !== 'object') return false;
   const b = bootstrap as Record<string, unknown>;
   // Required-everywhere fields.

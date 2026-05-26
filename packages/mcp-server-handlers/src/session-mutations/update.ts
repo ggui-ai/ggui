@@ -53,7 +53,10 @@ import {
   type JsonObject,
   type SessionStackEntry,
 } from '@ggui-ai/protocol';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  AI_GGUI_BOOTSTRAP_META_KEY,
+  type GguiBootstrapMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import {
@@ -594,7 +597,7 @@ export function createGguiUpdateHandler(
         themeMode?: 'light' | 'dark';
         propsJson?: string;
       };
-      return { ggui: { bootstrap } };
+      return { [AI_GGUI_BOOTSTRAP_META_KEY]: bootstrap };
     },
   };
 }
