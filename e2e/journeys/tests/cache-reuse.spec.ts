@@ -226,7 +226,9 @@ async function pushWithTimeout(
   }
   const outer = env.result as {
     structuredContent?: PushStructuredContent;
-    _meta?: { ggui?: { bootstrap?: { sessionId?: string } } };
+    // R3/R4 slice envelope — `_meta["ai.ggui/session"]` replaced the
+    // legacy `_meta.ggui.bootstrap` nesting.
+    _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
     isError?: boolean;
   };
   if (outer.isError === true) {
@@ -244,7 +246,7 @@ async function pushWithTimeout(
     result: sc,
     elapsedMs,
     sessionId,
-    sessionIdFromBootstrap: outer._meta?.ggui?.bootstrap?.sessionId,
+    sessionIdFromBootstrap: outer._meta?.['ai.ggui/session']?.sessionId,
   };
 }
 

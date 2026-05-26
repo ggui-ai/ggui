@@ -237,15 +237,15 @@ test.describe.serial(
       // {stackItemId, url, action, nextStep?} — retired fields
       // (sessionId, shortCode, codeReady, handshakeId, contractHash,
       // decision) are gone. sessionId now lives on
-      // `_meta.ggui.bootstrap.sessionId`; shortCode is the tail of
-      // `url`'s `/r/<shortCode>` path.
+      // `_meta["ai.ggui/session"].sessionId` (R3/R4 slice envelope);
+      // shortCode is the tail of `url`'s `/r/<shortCode>` path.
       const pushResult = pushEnv.result as {
         structuredContent?: {
           stackItemId?: string;
           url?: string;
           action?: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
         };
-        _meta?: { ggui?: { bootstrap?: { sessionId?: string } } };
+        _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
         isError?: boolean;
       };
       expect(
@@ -263,7 +263,7 @@ test.describe.serial(
       // (data-ggui-mcp-app-iframe-lifecycle="code-ready" + ggui-rcr-*
       // scope must mount, which only happens when generation completed
       // successfully).
-      expect(pushResult._meta?.ggui?.bootstrap?.sessionId).toBe(sessionId);
+      expect(pushResult._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
       // Sanity: a real generator call takes noticeable time. If this
       // returns instantly, something is stubbing the provider (wrong
       // build pulled in, regression in probe wiring). 1s floor is

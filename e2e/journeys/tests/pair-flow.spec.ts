@@ -392,15 +392,15 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     expect(pushEnv.error).toBeUndefined();
     // Retired in Slice 5+: structuredContent no longer carries
     // `sessionId` / `shortCode`. The proof the push committed is now
-    // `stackItemId` + a `/r/<shortCode>` URL; sessionId lives on
-    // `_meta.ggui.bootstrap.sessionId`.
+    // `stackItemId` + a `/r/<shortCode>` URL; sessionId lives on the
+    // R3/R4 slice envelope at `_meta["ai.ggui/session"].sessionId`.
     const pushResult = pushEnv.result as {
       structuredContent?: { stackItemId?: string; url?: string };
-      _meta?: { ggui?: { bootstrap?: { sessionId?: string } } };
+      _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
     };
     expect(pushResult.structuredContent?.stackItemId).toBeTruthy();
     expect(pushResult.structuredContent?.url).toMatch(/\/r\/[a-z0-9]+/);
-    expect(pushResult._meta?.ggui?.bootstrap?.sessionId).toBe(sessionId);
+    expect(pushResult._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
 
     // 4. Network gate — no browser-side call attempted hosted / AWS
     //    / Cognito during this sub-test.

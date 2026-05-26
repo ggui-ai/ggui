@@ -141,10 +141,20 @@ export async function spawnAgentLoop(
   // (especially with WebSocket upgrades holding connections half-open).
   // Without this poll, back-to-back describes in the matrix would race
   // their teardown vs the next describe's pre-flight.
+  // Sample-agents auto-bind a sandbox-proxy server at `agent_port + 1000`
+  // (see `oss/samples/agents/<sdk>/src/index.ts` SANDBOX_PROXY_PORT
+  // default — 6790→7790, 6791→7791, 6792→7792). The proxy listener
+  // outlives a SIGTERM by the same OS-bind-release window as the agent
+  // itself, so we MUST include it in the pre-flight + drain loop or
+  // back-to-back describes in the matrix race their teardown.
   const portsToCheck: Array<{ port: number; label: string }> = [
     { port: ports.ggui, label: 'ggui' },
     { port: ports.todo, label: 'todo' },
     { port: agentPort, label: `agent (${opts.sdk})` },
+    {
+      port: agentPort + 1000,
+      label: `sandbox-proxy (${opts.sdk})`,
+    },
   ];
   let squatted = portsToCheck.filter(({ port }) => portInUse(port));
   for (let i = 0; i < 15 && squatted.length > 0; i++) {
@@ -172,7 +182,9 @@ export async function spawnAgentLoop(
     // next describe's pre-flight check in this matrix runs immediately.
     // Wait up to 10s for our 3 ports to actually clear so the next
     // describe doesn't trip on its own predecessor.
-    const myPorts = [ports.ggui, ports.todo, agentPort];
+    // Drain matches pre-flight — include sandbox-proxy (agent + 1000)
+    // so the next describe's pre-flight doesn't see a stale bind.
+    const myPorts = [ports.ggui, ports.todo, agentPort, agentPort + 1000];
     for (let i = 0; i < 10; i++) {
       if (myPorts.every((p) => !portInUse(p))) return;
       await new Promise((r) => setTimeout(r, 1000));

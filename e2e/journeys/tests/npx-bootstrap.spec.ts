@@ -27,8 +27,9 @@
  *      `_meta.ui.resourceUri` + `_meta.ui.visibility` entry-point stamp
  *      per `docs/plans/2026-04-17-ggui-oss-split.md` §2.4.1.
  *   4. `tools/call ggui_push` creates a session, returns a structured
- *      shortCode/url/sessionId tuple, and carries `_meta.ggui.bootstrap`.
- *      The `url` points back at the same-origin console viewer.
+ *      shortCode/url/sessionId tuple, and carries the R3/R4 slice envelope
+ *      at `_meta["ai.ggui/session"]`. The `url` points back at the
+ *      same-origin console viewer.
  *   5. `GET /` serves the console landing bundle with the CSP /
  *      security-header set per `packages/console/README.md` §Security.
  *   6. `GET /ggui/console/info` returns the server-identity block.
@@ -322,8 +323,9 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // mints a session, negotiates via handshake, then pushes with the
     // returned handshakeId. The retired fields that previously rode on
     // `structuredContent` (sessionId, shortCode, codeReady, handshakeId,
-    // contractHash, decision) are gone — `_meta.ggui.bootstrap.sessionId`
-    // carries the sessionId, and shortCode is derivable from the url tail.
+    // contractHash, decision) are gone — `_meta["ai.ggui/session"].sessionId`
+    // (R3/R4 slice envelope) carries the sessionId, and shortCode is
+    // derivable from the url tail.
     const sessEnv = await mcpCall(baseUrl, pairToken, 'tools/call', {
       name: 'ggui_new_session',
       arguments: {},
@@ -364,14 +366,15 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
         nextStep?: { tool: string; args: { stackItemId: string } };
       };
       _meta?: {
-        ggui?: {
-          bootstrap?: {
-            wsUrl: string;
-            token: string;
-            expiresAt: string;
-            sessionId: string;
-            appId: string;
-          };
+        // R3/R4 slice envelope — `_meta["ai.ggui/session"]` replaced the
+        // legacy `_meta.ggui.bootstrap` nesting. The bearer field is now
+        // `wsToken` (was `token`); the rest of the slice carries through.
+        'ai.ggui/session'?: {
+          wsUrl: string;
+          wsToken: string;
+          expiresAt: string;
+          sessionId: string;
+          appId: string;
         };
       };
     };
@@ -401,11 +404,11 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // not an exact string that would reject the signature params.
     expect(out.url.startsWith(`${baseUrl}/r/${derivedShortCode}`)).toBe(true);
 
-    const bootstrap = pushResult._meta?.ggui?.bootstrap;
-    expect(bootstrap).toBeTruthy();
-    expect(bootstrap?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
-    expect(typeof bootstrap?.token).toBe('string');
-    expect(bootstrap?.sessionId).toBe(mintedSessionId);
+    const sessionSlice = pushResult._meta?.['ai.ggui/session'];
+    expect(sessionSlice).toBeTruthy();
+    expect(sessionSlice?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
+    expect(typeof sessionSlice?.wsToken).toBe('string');
+    expect(sessionSlice?.sessionId).toBe(mintedSessionId);
 
     // ── 4. Console info endpoint ───────────────────────────────────
     // Admin-gated since the Slice 4 admin-zone refactor — pass the

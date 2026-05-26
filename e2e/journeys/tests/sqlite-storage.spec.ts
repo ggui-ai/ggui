@@ -201,14 +201,15 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     expect(pushEnv.error).toBeUndefined();
     // Retired in Slice 5+: `sessionId` / `shortCode` are no longer on
     // structuredContent. The presence of `stackItemId` is the new proof
-    // the push committed; sessionId now lives on `_meta.ggui.bootstrap`.
+    // the push committed; sessionId now lives on the R3/R4 slice envelope
+    // at `_meta["ai.ggui/session"].sessionId`.
     const pushOutput = pushEnv.result as {
       structuredContent?: { stackItemId?: string; url?: string };
-      _meta?: { ggui?: { bootstrap?: { sessionId?: string } } };
+      _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
       isError?: boolean;
     };
     expect(pushOutput.structuredContent?.stackItemId).toBeTruthy();
-    expect(pushOutput._meta?.ggui?.bootstrap?.sessionId).toBe(sessionId);
+    expect(pushOutput._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
 
     const postWriteBytes = sqliteFamilyBytes(
       handle.tempCwd,

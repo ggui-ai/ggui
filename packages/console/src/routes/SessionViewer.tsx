@@ -1,51 +1,59 @@
 /**
  * Session viewer route — `/s/<shortCode>`.
  *
- * The console boots the SAME thin-shell HTML Claude Desktop fetches
- * via MCP `resources/read ui://ggui/session` — no compensation layer
- * inside the iframe. `ai.ggui/*` meta forwarding happens host-side via
- * `<McpAppIframe meta={...}>`, which threads the value through
- * `ui/initialize` in a forwarding path scoped to the `ai.ggui/*`
- * namespace. The iframe child stays portable: it never assumes it is
- * running inside the console.
+ * **Posture: read-only / visual-only.** The console SessionViewer is
+ * an admin inspector view — it shows what the agent rendered into a
+ * given session. It does NOT forward end-user interactions back to
+ * any MCP host (the console has no MCP client to relay through), and
+ * it does NOT mount the operator-debug chrome (test-action form,
+ * activity ring buffer, error pane) the pre-spec-migration viewer
+ * carried.
  *
- * Boot sequence:
+ * **Why a same-origin srcdoc iframe instead of `<AppRenderer>`.** The
+ * spec-canonical `<AppRenderer>` host needs a separate-origin
+ * sandbox-proxy + an MCP `client` (or `onCallTool`) to forward
+ * inbound `tools/call`. Both are pure overhead for a read-only
+ * inspector. We mount the production thin-shell HTML directly into
+ * `<iframe srcdoc>` with `sandbox="allow-scripts"` (no
+ * `allow-same-origin` = the iframe runs in an opaque origin —
+ * effective origin isolation without a second port), then implement
+ * just enough of AppBridge to reply to the iframe's
+ * `ui/initialize` request with the slice-envelope `_meta` it needs
+ * to boot. The iframe-runtime's own wsToken-gated WS channel handles
+ * wired-action dispatch independently — the rendered UI stays
+ * interactive even though the console host doesn't relay tool calls.
+ *
+ * # Boot sequence
  *
  *   1. POST `/ggui/console/session-cookie` with the short-code →
  *      mint a same-origin HttpOnly cookie bound to (sessionId, appId).
  *   2. In parallel:
  *      - GET `/ggui/console/session-resource?session=<sessionId>` →
  *        `ResourceContents` blob whose `text` is the production thin-
- *        shell HTML (no inlined meta).
+ *        shell HTML.
  *      - GET `/ggui/console/sessions/<sessionId>/meta` →
  *        slice-envelope JSON (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`,
- *        the same shape as the wire `_meta`; the
- *        payload IS the parsed `_meta["ai.ggui/*"]` slice pair).
- *   3. Mount `<McpAppIframe resource={...} meta={...}>`. The host
- *      forwards the meta pair via `ui/initialize`'s `toolOutput._meta`
- *      (carrying the `ai.ggui/session` + `ai.ggui/stack-item` slices);
- *      the renderer's `parseBootstrap` reads exactly that path. All
- *      other postMessages (`ggui:renderer-ready`, `ggui:observe`,
- *      `ggui:bootstrap-failed`, `tools/call`) reach `<McpAppIframe>`
- *      natively — no fakeParent override, no `Object.defineProperty`
- *      substitution.
+ *        same shape as the wire `_meta`).
+ *      - GET `/ggui/console/session-stack?session=<sessionId>` →
+ *        observational stack snapshot (currently unused by the
+ *        read-only viewer; kept in the fetch fan-out so the server
+ *        round-trip count doesn't regress when an admin panel is
+ *        re-added).
+ *   3. Mount `<iframe srcdoc={shellHtml} sandbox="allow-scripts">`.
+ *   4. Listen for `ui/initialize` postMessage from the iframe's
+ *      contentWindow; reply with the spec-canonical JSON-RPC envelope
+ *      whose `result.toolOutput._meta` carries the slice pair
+ *      (Path-B inline-meta delivery per
+ *      `docs/protocol/extensions/ai.ggui-meta.md`).
  *
- * Earlier iterations of this viewer consumed a wrapped console shell
- * that inlined the meta + monkey-patched
- * `window.parent.postMessage` from inside the iframe. That layering
- * violation is gone — the iframe child is now portable across any
- * MCP Apps host that supports the prop forwarding path.
- *
- * Unhappy paths handled honestly:
+ * # Unhappy paths
  *
  *   - 404 (short-code miss): explicit not-found card.
  *   - 500/4xx on cookie-mint: error card with status.
- *   - Network fail on either fetch: raw error message.
- *   - Resource OR meta fetch fails (401/403/404/503/network):
- *     explicit `resource-failed` state with message — the viewer
- *     needs both blobs to mount.
- *   - `<McpAppIframe onError>`: routed to the error pane.
- *
+ *   - Network fail on any fetch: raw error message.
+ *   - Resource OR meta fetch fails (401/403/404/503/network) OR
+ *     `contents[]` empty OR missing `ai.ggui/session` slice: explicit
+ *     `resource-failed` state with message.
  */
 import {
   useCallback,
@@ -53,50 +61,17 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { type ProtocolError } from '@ggui-ai/react';
-
-// Legacy `<McpAppIframe>` (+ its `McpAppIframeProps` / `McpAppIframeRef`
-// types) was deleted in the spec-migration slice (2026-05-26 — adopted
-// `<AppRenderer>` from `@mcp-ui/client`). This route hasn't been
-// migrated yet (cleanup tracked in #98); fail-loud stub keeps the
-// console buildable while the SessionViewer rewrite is pending.
-function McpAppIframe(_props: McpAppIframeProps): React.JSX.Element {
-  throw new Error(
-    'console SessionViewer uses deleted <McpAppIframe>. Migrate route to <AppRenderer> + sandbox-proxy URL.',
-  );
-}
-interface McpAppIframeProps {
-  readonly resource?: unknown;
-  readonly meta?: McpAppAiGguiMeta;
-  readonly theme?: Record<string, string>;
-  readonly containerDimensions?: { width?: number; height?: number };
-  readonly onToolCall?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
-  readonly onError?: (err: ProtocolError) => void;
-  readonly onObserve?: (event: { readonly kind: string }) => void;
-  readonly allowSameOrigin?: boolean;
-  readonly ref?: React.RefObject<McpAppIframeRef | null>;
-}
-interface McpAppIframeRef {
-  readonly dispatchAction: (name: string, data: unknown) => void;
-}
-import type { SessionStackEntry, StackItem } from '@ggui-ai/protocol';
 import {
   parseMcpAppAiGguiMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
-import {
-  MAX_ACTIVITY_EVENTS,
-  SessionInspector,
-  toObservabilityEventShape,
-  type ActivityEvent,
-} from './SessionInspector.js';
 
 /**
  * Response shape of `POST /ggui/console/session-cookie`. Must
@@ -111,14 +86,7 @@ interface SessionCookieResponse {
 /**
  * Shape of a single content blob returned by the session-resource
  * endpoint. Structurally compatible with
- * `@modelcontextprotocol/sdk`'s `ResourceContents` — the superset
- * requires `uri: string` + allows optional `mimeType` / `text` /
- * `blob`. We declare every field we rely on as required + non-null,
- * which both satisfies the SDK's structural check on `<McpAppIframe
- * resource={…}>` and keeps the fetch layer decoupled from the SDK's
- * type (console avoids pulling `@modelcontextprotocol/sdk` into its
- * dependency tree — the dep boundary matches SessionInspector's
- * decision to stay free of `@ggui-ai/iframe-runtime`).
+ * `@modelcontextprotocol/sdk`'s `ResourceContents`.
  */
 interface SessionResourceContents {
   readonly uri: string;
@@ -128,31 +96,10 @@ interface SessionResourceContents {
 
 /**
  * Shape of `GET /ggui/console/session-resource?session=<id>`'s
- * success body (see `packages/mcp-server/src/server.ts`).
+ * success body.
  */
 interface SessionResourceResponse {
   readonly contents: readonly SessionResourceContents[];
-}
-
-// Slice-envelope response shape — `GET /ggui/console/sessions/:sessionId/meta`
-// returns the raw `{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`
-// envelope the wire `_meta` carries. We parse it via
-// `parseMcpAppAiGguiMeta` (same path the iframe-runtime uses) to lift
-// it into the typed `{session, stackItem}` shape `<McpAppIframe>` consumes.
-
-/**
- * Shape of `GET /ggui/console/session-stack?session=<id>`'s
- * success body — console-only observation surface for the
- * inspector pane. The iframe owns the live WS subscription, so
- * the OUTER console DOM has no live signal for stack data;
- * this endpoint is the read-once-on-mount source of truth that
- * lets `<SessionInspector>` render contract / test-action panels
- * per stack entry.
- */
-interface SessionStackResponse {
-  readonly stack: readonly SessionStackEntry[];
-  readonly currentStackIndex: number;
-  readonly eventSequence: number;
 }
 
 type BootstrapState =
@@ -166,7 +113,6 @@ type BootstrapState =
       readonly session: SessionCookieResponse;
       readonly resource: SessionResourceContents;
       readonly meta: McpAppAiGguiMeta;
-      readonly stack: readonly SessionStackEntry[];
     }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'resource-failed'; readonly message: string }
@@ -215,16 +161,12 @@ export function SessionViewer({
     return () => controller.abort();
   }, [shortCode]);
 
-  // Step 2 — fetch the session-resource blob, the meta JSON,
-  // and the inspector-side stack snapshot in parallel once the
-  // cookie's been minted. Cookie travels via `credentials:
-  // 'same-origin'`. Resource + meta failure transitions the
-  // viewer to `resource-failed` — both are required to mount the
-  // iframe. Stack-fetch failure does NOT block the iframe mount;
-  // the inspector pane simply renders an empty-stack hint while
-  // the iframe still paints. The iframe is the primary surface;
-  // the inspector is observational chrome that should degrade
-  // gracefully.
+  // Step 2 — fetch the session-resource HTML blob, the slice envelope,
+  // and the observational stack snapshot in parallel once the cookie's
+  // been minted. Cookie travels via `credentials: 'same-origin'`.
+  // Resource + meta failure transitions to `resource-failed`; stack
+  // failure does NOT block (kept in the fan-out as a no-op probe so
+  // when admin chrome is re-added the network shape doesn't regress).
   const loadingSession =
     state.kind === 'loading-resource' ? state.session : null;
   useEffect(() => {
@@ -233,7 +175,7 @@ export function SessionViewer({
     void (async () => {
       try {
         const sessionParam = encodeURIComponent(loadingSession.sessionId);
-        const [resourceRes, metaRes, stackRes] = await Promise.all([
+        const [resourceRes, metaRes, _stackRes] = await Promise.all([
           fetch(
             `/ggui/console/session-resource?session=${sessionParam}`,
             {
@@ -260,7 +202,7 @@ export function SessionViewer({
               headers: { accept: 'application/json' },
               credentials: 'same-origin',
             },
-          ),
+          ).catch(() => null),
         ]);
         if (!resourceRes.ok) {
           setState({
@@ -286,9 +228,6 @@ export function SessionViewer({
           });
           return;
         }
-        // Parse slice envelope (`{ "ai.ggui/session": {...},
-        // "ai.ggui/stack-item": {...} }`) the meta route returns into
-        // the typed `{session, stackItem}` pair `<McpAppIframe>` accepts.
         const metaBody = (await metaRes.json()) as unknown;
         const parsedMeta = parseMcpAppAiGguiMeta(metaBody);
         if (!parsedMeta.ok || !parsedMeta.meta.session) {
@@ -298,27 +237,11 @@ export function SessionViewer({
           });
           return;
         }
-        // Stack fetch is observational — degrade gracefully when
-        // the route 503's (no sessionStore wired) or 4xx's. The
-        // iframe still mounts; the inspector pane shows an empty
-        // stack with a hint.
-        let stack: readonly SessionStackEntry[] = [];
-        if (stackRes.ok) {
-          try {
-            const stackBody = (await stackRes.json()) as SessionStackResponse;
-            stack = stackBody.stack;
-          } catch {
-            // Malformed JSON on the stack route — keep the iframe
-            // mount honest; surface zero stack entries.
-            stack = [];
-          }
-        }
         setState({
           kind: 'ready',
           session: loadingSession,
           resource: first,
           meta: parsedMeta.meta,
-          stack,
         });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -338,7 +261,7 @@ export function SessionViewer({
             <code className="ggui-code">/s/{shortCode}</code>
           </>
         }
-        intro="The short-code above resolved against this server's index. The viewer holds a same-origin cookie on /ws and mirrors every stack mutation the agent emits."
+        intro="The short-code above resolved against this server's index. The iframe below renders exactly what the agent pushed — interactions inside the iframe dispatch through the same wsToken-gated WS channel the agent's own host uses."
       />
 
       {state.kind === 'minting' ? (
@@ -377,7 +300,6 @@ export function SessionViewer({
           session={state.session}
           resource={state.resource}
           meta={state.meta}
-          stack={state.stack}
           shortCode={shortCode}
         />
       )}
@@ -386,80 +308,107 @@ export function SessionViewer({
 }
 
 /**
- * `ready` state — mount `<McpAppIframe>` against the fetched
- * `ResourceContents` + {@link McpAppAiGguiMeta}. The meta pair is
- * forwarded via the `meta` prop (`<McpAppIframe meta={...}>`); the
- * host threads it onto `ui/initialize`'s `toolOutput._meta`
- * (carrying the `ai.ggui/session` + `ai.ggui/stack-item` slices).
- * Feeds `onObserve` into the activity ring buffer and `onError` into
- * the error pane. The test-action panel fires notifications through
- * `iframeRef.current?.dispatchAction`.
+ * Minimal JSON-RPC request shape we recognize on the message bus.
+ * Anything not matching this is ignored.
+ */
+interface UiInitializeRequest {
+  readonly jsonrpc: '2.0';
+  readonly id: number | string;
+  readonly method: 'ui/initialize';
+  readonly params?: unknown;
+}
+
+function isUiInitializeRequest(value: unknown): value is UiInitializeRequest {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    method?: unknown;
+  };
+  if (obj.jsonrpc !== '2.0') return false;
+  if (obj.method !== 'ui/initialize') return false;
+  if (typeof obj.id !== 'number' && typeof obj.id !== 'string') return false;
+  return true;
+}
+
+/**
+ * `ready` state — mount the srcdoc iframe and reply to its
+ * `ui/initialize` request with the slice-envelope `_meta`. The iframe
+ * runs in an opaque origin (`sandbox="allow-scripts"` without
+ * `allow-same-origin`) so it can't reach this window's DOM.
+ *
+ * The reply implements the minimum slice of AppBridge the iframe-
+ * runtime asks for at boot — `ui/initialize` → `{ toolOutput: { _meta: {…} } }`
+ * (Path-B inline-meta delivery per spec). No further bridge methods
+ * are implemented: outbound `tools/call`, `resources/*`, `prompts/*`
+ * are all no-ops, which is the read-only contract.
  */
 function LiveViewer({
   session,
   resource,
   meta,
-  stack,
   shortCode,
 }: {
   readonly session: SessionCookieResponse;
   readonly resource: SessionResourceContents;
   readonly meta: McpAppAiGguiMeta;
-  readonly stack: readonly SessionStackEntry[];
   readonly shortCode: string;
 }): ReactElement {
-  // Activity ring buffer — bounded FIFO so chatty MCPs don't drift
-  // the viewer's render cost. Fed by `<McpAppIframe onObserve>`,
-  // which surfaces the renderer's observability union via C7c + C12.
-  const [activity, setActivity] = useState<readonly ActivityEvent[]>([]);
-  const eventCounter = useRef(0);
-  const pushActivity = useCallback((event: ActivityEvent) => {
-    setActivity((prev) => {
-      const next = [...prev, event];
-      return next.length > MAX_ACTIVITY_EVENTS
-        ? next.slice(next.length - MAX_ACTIVITY_EVENTS)
-        : next;
-    });
-  }, []);
-  const nextEventId = useCallback(() => {
-    eventCounter.current += 1;
-    return `evt-${eventCounter.current}`;
-  }, []);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // `<McpAppIframe onObserve>` fires with `ObservabilityEvent` (owned
-  // by `@ggui-ai/iframe-runtime`). Console avoids a direct renderer import
-  // — SessionInspector.ts documents the boundary: renderer ships
-  // react + design + wire + protocol inline and console would
-  // balloon. We extract the parameter type from the exported prop
-  // shape (`@ggui-ai/react` re-exports `McpAppIframeProps` but NOT
-  // `ObservabilityEvent`) and route through `toObservabilityEventShape`
-  // to land the event in the ring buffer (`ActivityEvent['event']`
-  // is typed `ObservabilityEventShape` — see SessionInspector.tsx).
-  // Every observe emission lands as an `observe` activity row — the
-  // row reader (`activityRowLabel` / `activityRowTone` below)
-  // pattern-matches on `event.event.kind` for the four known kinds
-  // and falls through to an extensible branch for anything else
-  // (renderer may ship new kinds ahead of the console's typings —
-  // extensibly-closed union invariant).
-  type ObserveHandler = NonNullable<McpAppIframeProps['onObserve']>;
-  const handleObserve = useCallback<ObserveHandler>(
-    (event) => {
-      pushActivity({
-        kind: 'observe',
-        id: nextEventId(),
-        at: Date.now(),
-        event: toObservabilityEventShape(event),
-      });
+  // Build the slice envelope once per meta change. The iframe receives
+  // it as `result.toolOutput._meta` on the `ui/initialize` reply —
+  // iframe-runtime parses the `ai.ggui/*` keys exactly like it would
+  // off any wire `_meta` field.
+  const envelope = useMemo(() => toMcpAppEnvelope(meta), [meta]);
+
+  const handleMessage = useCallback(
+    (event: MessageEvent) => {
+      const iframe = iframeRef.current;
+      // eslint-disable-next-line no-console
+      console.warn('[DEBUG handleMessage]', { hasIframe: !!iframe, sameSource: event.source === iframe?.contentWindow, isReq: isUiInitializeRequest(event.data), dataKeys: event.data && typeof event.data === 'object' ? Object.keys(event.data) : event.data });
+      if (!iframe) return;
+      // Only respond to messages from THIS iframe's contentWindow —
+      // postMessages on `window` from elsewhere (other iframes, the
+      // host itself, browser extensions) are ignored.
+      if (event.source !== iframe.contentWindow) return;
+      if (!isUiInitializeRequest(event.data)) return;
+      const cw1 = iframe.contentWindow;
+      const cw2 = iframe.contentWindow;
+      // eslint-disable-next-line no-console
+      console.warn('[DEBUG cw stable?]', cw1 === cw2, cw1 === event.source);
+      const reply = {
+        jsonrpc: '2.0' as const,
+        id: event.data.id,
+        result: {
+          // Per `ui/initialize` spec response shape; iframe-runtime
+          // reads `toolOutput._meta` for the slice envelope.
+          toolOutput: {
+            _meta: envelope,
+          },
+        },
+      };
+      // Wildcard target is safe here — the iframe is opaque-origin
+      // (sandbox without allow-same-origin), so postMessage's origin
+      // check would reject any non-wildcard string anyway. The
+      // browser still confines the message to the actual iframe
+      // contentWindow.
+      try {
+        iframe.contentWindow?.postMessage(reply, '*');
+        // eslint-disable-next-line no-console
+        console.warn('[DEBUG] postMessage call complete');
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[DEBUG] postMessage threw', err);
+      }
     },
-    [pushActivity, nextEventId],
+    [envelope],
   );
 
-  const [iframeError, setIframeError] = useState<ProtocolError | null>(null);
-  const handleError = useCallback((err: ProtocolError) => {
-    setIframeError(err);
-  }, []);
-
-  const iframeRef = useRef<McpAppIframeRef>(null);
+  useEffect(() => {
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -471,10 +420,7 @@ function LiveViewer({
             <span />
           </div>
           <span className="ggui-pane__title">session · {shortCode}</span>
-          <span className="ggui-pane__meta">
-            {activity.length}{' '}
-            {activity.length === 1 ? 'event' : 'events'}
-          </span>
+          <span className="ggui-pane__meta">read-only inspector</span>
         </div>
         <div className="ggui-pane__body">
           <div
@@ -485,9 +431,7 @@ function LiveViewer({
               flexWrap: 'wrap',
             }}
           >
-            <StatusBadge tone={iframeError ? 'signal' : 'ink'}>
-              {iframeError ? 'iframe error' : 'mounted'}
-            </StatusBadge>
+            <StatusBadge tone="ink">mounted</StatusBadge>
             <span className="ggui-muted">
               session <code className="ggui-code">{session.sessionId}</code>
             </span>
@@ -498,8 +442,6 @@ function LiveViewer({
           </p>
         </div>
       </section>
-
-      {iframeError ? <IframeErrorPane err={iframeError} /> : null}
 
       <section className="ggui-pane" aria-label="rendered session">
         <div className="ggui-pane__head">
@@ -512,432 +454,31 @@ function LiveViewer({
           className="ggui-pane__body"
           style={{ padding: 0, minHeight: 420 }}
           data-ggui-console-iframe-host
+          data-ggui-console-session={session.sessionId}
         >
-          <McpAppIframe
+          <iframe
             ref={iframeRef}
-            resource={resource}
-            meta={meta}
-            onObserve={handleObserve}
-            onError={handleError}
-          />
-        </div>
-      </section>
-
-      <StackInspectorList
-        stack={stack}
-        activity={activity}
-        onFireAction={(name, data) => {
-          iframeRef.current?.dispatchAction(name, data);
-        }}
-      />
-
-      <TestActionForm
-        onDispatch={(name, data) => {
-          iframeRef.current?.dispatchAction(name, data);
-        }}
-      />
-
-      <ActivityList activity={activity} />
-    </div>
-  );
-}
-
-/**
- * Stack-inspector pane — renders one `<SessionInspector>` per
- * `StackItem` in the session's stack. The iframe is the primary
- * view; this pane is operator-facing debug chrome (contract /
- * activity / test-action panels per entry).
- *
- * `McpAppsStackItem` entries are filtered out — those are
- * embedded third-party MCP App iframes that don't carry the
- * `actionSpec` / `streamSpec` / `propsSpec` fields the inspector
- * surfaces. Only the `'component'` (generated UI) variant flows
- * through the inspector.
- *
- * `data-ggui-console-stack-inspectors` is the outer anchor for
- * tests; each inspector retains its own `data-ggui-inspect`
- * attribute (asserted by `e2e/ggui-oss/tests/session-inspector.spec.ts`).
- */
-function StackInspectorList({
-  stack,
-  activity,
-  onFireAction,
-}: {
-  readonly stack: readonly SessionStackEntry[];
-  readonly activity: readonly ActivityEvent[];
-  readonly onFireAction: (name: string, data: unknown) => void;
-}): ReactElement {
-  // Filter to component-variant StackItems. The inspector's
-  // contract panel reads actionSpec / streamSpec / propsSpec —
-  // fields McpAppsStackItem doesn't carry (typed as `?: never`
-  // on that variant per protocol/types/session.ts).
-  const componentEntries: readonly StackItem[] = stack.filter(
-    (entry): entry is StackItem => entry.type !== 'mcpApps',
-  );
-  if (componentEntries.length === 0) {
-    return (
-      <section
-        className="ggui-pane"
-        aria-label="stack inspector"
-        data-ggui-console-stack-inspectors
-        data-ggui-console-stack-inspectors-empty="true"
-      >
-        <div className="ggui-pane__head">
-          <span className="ggui-pane__title">stack inspector</span>
-          <span className="ggui-pane__meta">INS · 0 entries</span>
-        </div>
-        <div className="ggui-pane__body">
-          <p className="ggui-muted" style={{ margin: 0 }}>
-            No stack entries to inspect yet. When the agent commits a
-            generated UI to the session stack (via{' '}
-            <code className="ggui-code">ggui_push</code>), per-entry
-            contract / activity / test-action panels appear here.
-          </p>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section
-      className="ggui-pane"
-      aria-label="stack inspector"
-      data-ggui-console-stack-inspectors
-    >
-      <div className="ggui-pane__head">
-        <span className="ggui-pane__title">stack inspector</span>
-        <span className="ggui-pane__meta">
-          INS · {componentEntries.length}{' '}
-          {componentEntries.length === 1 ? 'entry' : 'entries'}
-        </span>
-      </div>
-      <div className="ggui-pane__body">
-        {componentEntries.map((entry, index) => (
-          <SessionInspector
-            key={entry.id}
-            entry={entry}
-            entryIndex={index}
-            activity={activity}
-            onFireAction={(data) => {
-              // Fire through the same dispatcher the rendered UI
-              // uses. The inspector's TestActionPanel tracks the
-              // selected action name internally; the parsed JSON is
-              // routed through `dispatchAction` using the stack-item
-              // id as the action key.
-              // Operators that need fine-grained per-action firing
-              // can use the flat `<TestActionForm>` below — that's
-              // the surface where the action name is the form's
-              // first field.
-              onFireAction(entry.id, data);
-            }}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Typed error pane — surfaces `ProtocolError.kind` so operators can
- * tell a transport blip from a bootstrap rejection. Observable-
- * violation leg of the viewer contract (plan §C9.5 Bar 4).
- */
-function IframeErrorPane({ err }: { readonly err: ProtocolError }): ReactElement {
-  return (
-    <div className="ggui-card" data-ggui-console-iframe-error>
-      <div className="ggui-card__head">
-        <span className="ggui-card__title">iframe error</span>
-        <span className="ggui-card__num">ERR / IFR</span>
-      </div>
-      <div className="ggui-card__body">
-        <p className="ggui-body">
-          <StatusBadge tone="signal">{err.kind}</StatusBadge>{' '}
-          {formatProtocolErrorMessage(err)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function formatProtocolErrorMessage(err: ProtocolError): string {
-  if (err.kind === 'transport') return err.message ?? err.code;
-  if (err.kind === 'auth') return err.message ?? err.code;
-  if (err.kind === 'protocol') return err.message ?? err.code;
-  if (err.kind === 'contract')
-    return `contract-error ${err.payload.error.code}: ${err.payload.error.message}`;
-  if (err.kind === 'bootstrap') return err.message;
-  if (err.kind === 'version') return err.message ?? 'version mismatch';
-  if (err.kind === 'unknown') return 'unknown error (see ring buffer)';
-  // Extensibly-closed union: render gracefully rather than assert.
-  return 'unrecognized error';
-}
-
-/**
- * Flat test-fire form — replaces the old per-entry TestActionPanel
- * that was stack-bound. Operator types `name` + `data` (JSON); on
- * submit we parse the JSON and fire through `dispatchAction` on the
- * iframe ref. The iframe's own wired-action handler receives it as
- * a JSON-RPC notification (see McpAppIframeRef.dispatchAction).
- */
-function TestActionForm({
-  onDispatch,
-}: {
-  readonly onDispatch: (name: string, data: unknown) => void;
-}): ReactElement {
-  const [name, setName] = useState('');
-  const [payloadText, setPayloadText] = useState('{}');
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [lastFired, setLastFired] = useState<string | null>(null);
-
-  const canSubmit = useMemo(() => name.trim().length > 0, [name]);
-
-  const handleSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!canSubmit) return;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(payloadText);
-      } catch (err) {
-        setParseError(err instanceof Error ? err.message : String(err));
-        return;
-      }
-      setParseError(null);
-      onDispatch(name, parsed);
-      setLastFired(name);
-    },
-    [canSubmit, name, payloadText, onDispatch],
-  );
-
-  return (
-    <section
-      className="ggui-pane"
-      aria-label="test action"
-      data-ggui-console-test-action
-    >
-      <div className="ggui-pane__head">
-        <span className="ggui-pane__title">test action</span>
-        <span className="ggui-pane__meta">TST · dispatch</span>
-      </div>
-      <form
-        className="ggui-pane__body ggui-form"
-        onSubmit={handleSubmit}
-        style={{ display: 'grid', gap: 8 }}
-      >
-        <label className="ggui-label" htmlFor="ggui-console-test-name">
-          action name
-        </label>
-        <div className="ggui-field">
-          <input
-            id="ggui-console-test-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="my.action"
-            data-ggui-console-test-name
-          />
-        </div>
-        <label
-          className="ggui-label"
-          htmlFor="ggui-console-test-payload"
-        >
-          payload (JSON)
-        </label>
-        <div className="ggui-field">
-          <textarea
-            id="ggui-console-test-payload"
-            data-ggui-console-test-payload
-            value={payloadText}
-            onChange={(e) => setPayloadText(e.target.value)}
-            rows={4}
-            spellCheck={false}
+            data-testid="session-viewer-iframe"
+            title={`session ${shortCode}`}
+            srcDoc={resource.text}
+            // `allow-scripts` is required for the shell's inline
+            // bootstrap. `allow-same-origin` is INTENTIONALLY omitted —
+            // an opaque-origin sandbox gives effective cross-origin
+            // isolation without a second port. Inner-iframe access to
+            // this window's DOM is blocked by the browser.
+            sandbox="allow-scripts"
             style={{
-              fontFamily:
-                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-              fontSize: '0.85em',
               width: '100%',
+              height: '100%',
+              minHeight: 420,
+              border: 'none',
+              display: 'block',
             }}
           />
         </div>
-        {parseError ? (
-          <p
-            className="ggui-body"
-            style={{ margin: 0 }}
-            data-ggui-console-test-parse-error
-          >
-            <StatusBadge tone="signal">parse error</StatusBadge> {parseError}
-          </p>
-        ) : null}
-        {lastFired && !parseError ? (
-          <p
-            className="ggui-muted"
-            style={{ margin: 0 }}
-            data-ggui-console-test-last-fired={lastFired}
-          >
-            fired <code className="ggui-code">{lastFired}</code> — responses
-            appear in the activity log below.
-          </p>
-        ) : null}
-        <div>
-          <button
-            type="submit"
-            className="ggui-btn"
-            data-ggui-console-test-submit
-            disabled={!canSubmit}
-          >
-            fire →
-          </button>
-        </div>
-      </form>
-    </section>
+      </section>
+    </div>
   );
-}
-
-/**
- * Flat ring-buffer readout — the inspector's full tab-filter UI was
- * stack-entry-bound; here we stream observe events in arrival order.
- * Every row renders its `event.kind` + a JSON dump so unknown kinds
- * stay observable (extensibly-closed union invariant).
- */
-function ActivityList({
-  activity,
-}: {
-  readonly activity: readonly ActivityEvent[];
-}): ReactElement {
-  return (
-    <section
-      className="ggui-pane"
-      aria-label="activity log"
-      data-ggui-console-activity
-    >
-      <div className="ggui-pane__head">
-        <span className="ggui-pane__title">activity</span>
-        <span className="ggui-pane__meta">
-          ACT · {activity.length}/{MAX_ACTIVITY_EVENTS}
-        </span>
-      </div>
-      <div className="ggui-pane__body">
-        {activity.length === 0 ? (
-          <p className="ggui-muted" style={{ margin: 0 }}>
-            No observability events yet. When the iframe fires a wired
-            tool, emits a contract-error envelope, rejects a schema-
-            version handshake, or surfaces a non-fatal subscribe
-            failure, a row lands here in arrival order.
-          </p>
-        ) : (
-          <ul
-            data-ggui-console-activity-list
-            style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'grid',
-              gap: 4,
-              maxHeight: 280,
-              overflowY: 'auto',
-            }}
-          >
-            {[...activity].reverse().map((event) => (
-              <ActivityRow key={event.id} event={event} />
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ActivityRow({
-  event,
-}: {
-  readonly event: ActivityEvent;
-}): ReactElement {
-  const label = activityRowLabel(event);
-  const tone = activityRowTone(event);
-  const preview = activityRowPreview(event);
-  return (
-    <li
-      data-ggui-console-activity-row
-      data-ggui-console-activity-kind={event.kind}
-      style={{
-        padding: '4px 8px',
-        borderRadius: 3,
-        background: 'var(--ggui-surface-subtle, #f8f8f8)',
-      }}
-    >
-      <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-        <span className="ggui-muted" style={{ fontSize: '0.8em', minWidth: 80 }}>
-          {formatTimeOnly(event.at)}
-        </span>
-        <StatusBadge tone={tone}>{label}</StatusBadge>
-        <code
-          className="ggui-code"
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {preview}
-        </code>
-      </div>
-    </li>
-  );
-}
-
-/**
- * Row label: observe rows surface the inner observability `kind` so
- * operators see `wired-tool-invoked` / `contract-error-emitted` /
- * etc. rather than the outer category. Dispatch / response / stream
- * rows retain the arrow shorthand from the old inspector.
- */
-function activityRowLabel(event: ActivityEvent): string {
-  if (event.kind === 'dispatch') return '⟶';
-  if (event.kind === 'response') return '⟵ack';
-  if (event.kind === 'stream') return '⟵str';
-  return event.event.kind;
-}
-
-function activityRowTone(
-  event: ActivityEvent,
-): 'ink' | 'draft' | 'signal' {
-  if (event.kind === 'stream') return 'draft';
-  if (event.kind === 'observe') {
-    if (event.event.kind === 'contract-error-emitted') return 'signal';
-    if (event.event.kind === 'schema-version-mismatch') return 'signal';
-    return 'draft';
-  }
-  return 'ink';
-}
-
-function activityRowPreview(event: ActivityEvent): string {
-  const source =
-    event.kind === 'observe'
-      ? event.event
-      : event.kind === 'response'
-        ? event.response
-        : event.kind === 'dispatch'
-          ? event.data
-          : event.payload;
-  const s = safeStringify(source);
-  return s.length > 80 ? s.slice(0, 77) + '…' : s;
-}
-
-function formatTimeOnly(at: number): string {
-  try {
-    const d = new Date(at);
-    return d.toISOString().slice(11, 23); // HH:MM:SS.mmm
-  } catch {
-    return String(at);
-  }
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
 }
 
 function BootstrapCard({

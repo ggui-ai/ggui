@@ -97,7 +97,18 @@ for (const entry of MATRIX) {
       const iframe = page.locator('iframe').first();
       await expect(iframe).toBeVisible({ timeout: 30_000 });
 
-      const frame = page.frameLocator('iframe').first();
+      // R5/spec-mig: `<AppRenderer>` mounts TWO iframes — an outer
+      // sandbox-proxy iframe (serves `sandbox.html`, only carries the
+      // postMessage relay) and an inner `srcdoc` iframe (carries the
+      // LLM-generated UI). `frameLocator('iframe').first()` resolves to
+      // the OUTER frame, which has no LLM output. Chain a second
+      // `.frameLocator('iframe').first()` to drill into the inner frame
+      // where the LLM-authored DOM actually lives.
+      const frame = page
+        .frameLocator('iframe')
+        .first()
+        .frameLocator('iframe')
+        .first();
       await expect(
         frame.getByRole('heading', { name: /setup needed/i }),
       ).toHaveCount(0, { timeout: 60_000 });
@@ -133,8 +144,17 @@ for (const entry of MATRIX) {
       await expect(turnEndedMarkers).toHaveCount(2, { timeout: 180_000 });
 
       // "5" visible in latest iframe. \b5\b avoids matching 15/50/0.5.
+      // Double `.frameLocator('iframe').first()` after `.last()` drills
+      // through `<AppRenderer>`'s outer sandbox-proxy iframe into the
+      // inner `srcdoc` iframe where the LLM-authored DOM lives.
       await expect(
-        page.frameLocator('iframe').last().getByText(/\b5\b/).first(),
+        page
+          .frameLocator('iframe')
+          .last()
+          .frameLocator('iframe')
+          .first()
+          .getByText(/\b5\b/)
+          .first(),
       ).toBeVisible({ timeout: 60_000 });
     });
 
@@ -161,7 +181,15 @@ for (const entry of MATRIX) {
       const iframeLocator = page.locator('iframe').first();
       await expect(iframeLocator).toBeVisible({ timeout: 120_000 });
 
-      const firstFrame = page.frameLocator('iframe').first();
+      // R5/spec-mig: `<AppRenderer>` is a two-iframe sandbox-proxy host —
+      // chain `.frameLocator('iframe').first()` twice to drill from the
+      // outer proxy frame into the inner `srcdoc` frame where the
+      // LLM-authored DOM lives.
+      const firstFrame = page
+        .frameLocator('iframe')
+        .first()
+        .frameLocator('iframe')
+        .first();
       await expect(firstFrame.getByText(/buy milk/i).first()).toBeVisible({
         timeout: 120_000,
       });
@@ -180,7 +208,13 @@ for (const entry of MATRIX) {
       // tool returns — give it 180s to converge. Poll latest iframe
       // so this works whether the agent updated in place or pushed a
       // new view.
-      const latestFrame = page.frameLocator('iframe').last();
+      // Double-drill again on the LATEST iframe pair to reach the
+      // inner srcdoc where the agent's update lands.
+      const latestFrame = page
+        .frameLocator('iframe')
+        .last()
+        .frameLocator('iframe')
+        .first();
       await expect(
         findTodoCheckedIndicator(latestFrame, /buy milk/i),
       ).toBeVisible({ timeout: 180_000 });
