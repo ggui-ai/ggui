@@ -39,7 +39,6 @@ import type {
   McpAppsPermissions,
   McpAppsContainerDimensions,
   McpAppsToolVisibility,
-  PushResultMeta,
 } from './mcp-apps';
 import {
   MCP_APPS_UI_CAPABILITY,
@@ -69,7 +68,6 @@ describe('MCP Apps root-barrel isolation (type-level)', () => {
     expect((root as Record<string, unknown>).MCP_APPS_UI_CAPABILITY).toBeUndefined();
     expect((root as Record<string, unknown>).GGUI_SESSION_RESOURCE_URI).toBeUndefined();
     expect((root as Record<string, unknown>).GGUI_PUSH_UI_META).toBeUndefined();
-    expect((root as Record<string, unknown>).hasPushBootstrapMeta).toBeUndefined();
     expect((root as Record<string, unknown>).isMcpAppsStackItem).toBeUndefined();
     expect((root as Record<string, unknown>).validateMcpAppsStackItem).toBeUndefined();
   });
@@ -317,14 +315,6 @@ describe('GguiBootstrapMeta / PushResultMeta visibility to external tools', () =
     );
   });
 
-  it('PushResultMeta is reachable only via the integrations subpath', () => {
-    const meta: PushResultMeta = { ggui: { bootstrap: {
-      wsUrl: 'w', token: 't', expiresAt: 'e', sessionId: 's', appId: 'a',
-      runtimeUrl: '/_ggui/iframe-runtime.js',
-    } } };
-    expect(meta.ggui?.bootstrap?.sessionId).toBe('s');
-  });
-
   it('McpAppsToolVisibility is the narrow model-or-app tag', () => {
     const model: McpAppsToolVisibility = 'model';
     const app: McpAppsToolVisibility = 'app';
@@ -355,8 +345,6 @@ const FORBIDDEN_TOKENS = [
   'GGUI_SESSION_RESOURCE_URI',
   'GGUI_SESSION_RESOURCE_MIME',
   'GGUI_PUSH_UI_META',
-  'PushResultMeta',
-  'hasPushBootstrapMeta',
   'isMcpAppsStackItem',
   'validateMcpAppsStackItem',
 ];
@@ -427,8 +415,6 @@ describe('SessionStackEntry discriminator is the ONE place mcpApps enters core',
       'GGUI_SESSION_RESOURCE_URI',
       'GGUI_SESSION_RESOURCE_MIME',
       'GGUI_PUSH_UI_META',
-      'PushResultMeta',
-      'hasPushBootstrapMeta',
       'McpAppsSource',
       'McpAppsCsp',
       'McpAppsPermissions',

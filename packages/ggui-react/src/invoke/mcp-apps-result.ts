@@ -21,7 +21,7 @@
  * recovered bit-for-bit.
  */
 import {
-  hasPushBootstrapMeta,
+  combineMcpAppAiGguiMeta,
   type GguiBootstrapMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
@@ -51,6 +51,6 @@ import {
 export function extractBootstrapMeta(content: unknown): GguiBootstrapMeta | null {
   if (content === null || typeof content !== 'object') return null;
   const meta = (content as { _meta?: unknown })._meta;
-  if (!hasPushBootstrapMeta(meta)) return null;
-  return meta.ggui.bootstrap;
+  const combined = combineMcpAppAiGguiMeta(meta);
+  return combined.ok ? combined.bootstrap : null;
 }

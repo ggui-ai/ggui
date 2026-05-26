@@ -43,11 +43,10 @@
  * back arrays, primitives, null — all rejected by the same code path.
  */
 import type {
-  CompiledContractValidators,
   GguiBootstrapMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { PUBLIC_ENV_APP_KEY_RE, projectHostContext } from '@ggui-ai/protocol';
-import { MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { BootstrapParseResult } from './types.js';
 
 /**
@@ -369,41 +368,26 @@ export function validateBootstrapMeta(
     return collected;
   })();
 
-  // `compiledValidators` — precompiled, eval-free contract validators
-  // (one ESM validator-module source per propsSpec / actionSpec /
-  // streamSpec / contextSpec). The renderer iframe's strict CSP blocks
-  // runtime `ajv.compile()`, so it loads these modules via `blob:`
-  // import instead. Defensive parse: malformed payload collapses the
-  // WHOLE field to undefined (the runtime then falls back to in-iframe
-  // compilation, which is no worse than pre-A4 behavior).
-  const compiledValidatorsRaw = raw['compiledValidators'];
-  const compiledValidators: CompiledContractValidators | undefined = (() => {
-    if (compiledValidatorsRaw === undefined) return undefined;
-    if (!isPlainObject(compiledValidatorsRaw)) return undefined;
-    const out: {
-      props?: string;
-      actions?: Record<string, string>;
-      streams?: Record<string, string>;
-      context?: Record<string, string>;
-    } = {};
-    const propsRaw = compiledValidatorsRaw['props'];
-    if (propsRaw !== undefined) {
-      if (!isNonEmptyString(propsRaw)) return undefined;
-      out.props = propsRaw;
-    }
-    for (const group of ['actions', 'streams', 'context'] as const) {
-      const groupRaw = compiledValidatorsRaw[group];
-      if (groupRaw === undefined) continue;
-      if (!isPlainObject(groupRaw)) return undefined;
-      const collected: Record<string, string> = {};
-      for (const [name, src] of Object.entries(groupRaw)) {
-        if (!isNonEmptyString(src)) return undefined;
-        collected[name] = src;
-      }
-      out[group] = collected;
-    }
-    return Object.keys(out).length > 0 ? out : undefined;
-  })();
+  // `contractHash` + `validatorsUrl` — content-addressable pointer to
+  // the compiled contract validators. The renderer iframe's strict
+  // CSP blocks runtime `ajv.compile()`, so the server compiles +
+  // bundles validators at push time and serves them under a
+  // sha256-keyed immutable URL. The iframe fetches the URL +
+  // dynamic-imports to resolve validators. Defensive parse: malformed
+  // payload (one field set without the other, empty strings, wrong
+  // type) collapses BOTH fields to undefined; degrades to no
+  // client-side validation (server-side `assertActionContract` stays
+  // authoritative).
+  const contractHashRaw = raw['contractHash'];
+  const validatorsUrlRaw = raw['validatorsUrl'];
+  const contractHash =
+    isNonEmptyString(contractHashRaw) && isNonEmptyString(validatorsUrlRaw)
+      ? contractHashRaw
+      : undefined;
+  const validatorsUrl =
+    isNonEmptyString(contractHashRaw) && isNonEmptyString(validatorsUrlRaw)
+      ? validatorsUrlRaw
+      : undefined;
 
   // `streamWebSocketLocalTools` — mirror of the handshake's
   // `serverCapabilities.streamWebSocketLocalTools` so the
@@ -452,7 +436,9 @@ export function validateBootstrapMeta(
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(canvasMode !== undefined ? { canvasMode } : {}),
-    ...(compiledValidators !== undefined ? { compiledValidators } : {}),
+    ...(contractHash !== undefined && validatorsUrl !== undefined
+      ? { contractHash, validatorsUrl }
+      : {}),
   };
 
   return { ok: true, bootstrap: result };
@@ -481,15 +467,19 @@ export function parseBootstrapFromUiInitialize(
   if (!isPlainObject(meta)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  // SEP-2133 vendor-extension grammar: `{reverse-dns-prefix}/{name}`.
-  // Renamed from nested `_meta.ggui.bootstrap` (malformed under spec
-  // grammar) to `_meta["ai.ggui/bootstrap"]` 2026-05-26. See
-  // docs/protocol/extensions/ai.ggui-bootstrap.md.
-  const bootstrap = meta[MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY];
-  if (!isPlainObject(bootstrap)) {
+  // #109 — combine the five per-window `_meta` keys
+  // (`ai.ggui/session` / `auth` / `render` / `contract` / `component`)
+  // into the aggregated bootstrap shape, then run the shared
+  // shape validator. `combineMcpAppAiGguiMeta` returns
+  // `{ok:false, reason:'MISSING_SESSION'}` when the session slice is
+  // absent — surfaced here as MISSING_META_GGUI_BOOTSTRAP (the
+  // iframe-runtime's error code doesn't distinguish "no _meta" from
+  // "_meta has no session slice"; both mean "no bootstrap to mount").
+  const combined = combineMcpAppAiGguiMeta(meta);
+  if (!combined.ok) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  const validated = validateBootstrapMeta(bootstrap);
+  const validated = validateBootstrapMeta(combined.bootstrap);
   if (!validated.ok) return validated;
 
   // opportunistically capture HostContext from
@@ -581,11 +571,12 @@ export function parseBootstrapFromToolResult(
   if (meta === undefined) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  // SEP-2133 vendor-extension grammar — see parseBootstrapFromUiInitialize
-  // for the rename rationale.
-  const bootstrap = meta[MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY];
-  if (!isPlainObject(bootstrap)) {
+  // #109 — combine the five per-window `_meta` keys then validate the
+  // aggregated shape. See parseBootstrapFromUiInitialize for the
+  // combiner rationale.
+  const combined = combineMcpAppAiGguiMeta(meta);
+  if (!combined.ok) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  return validateBootstrapMeta(bootstrap);
+  return validateBootstrapMeta(combined.bootstrap);
 }

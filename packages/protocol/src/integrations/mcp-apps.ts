@@ -569,34 +569,44 @@ export interface GguiBootstrapMeta {
    */
   readonly publicEnv?: Readonly<Record<string, string>>;
   /**
-   * Precompiled, eval-free runtime validators for the active stack
-   * item's contract specs. See {@link CompiledContractValidators}.
+   * Content-addressable hash for the active stack item's compiled
+   * contract validators. Stable across pushes — same contract definition
+   * always hashes to the same value via `computeContractBundle`'s
+   * canonical-JSON-of-specs serializer. Paired with {@link validatorsUrl}.
    *
-   * Why precompiled: the renderer iframe runs under a strict CSP with
-   * no `'unsafe-eval'`, so it cannot compile JSON Schemas at runtime
-   * (`ajv.compile` builds validators via `new Function`, which the CSP
-   * blocks with `EvalError`). Compilation happens server-side at push
-   * time — where the contract schema is fixed and `eval` is legal —
-   * and the iframe loads each module via a `blob:` dynamic import
-   * (governed by `script-src`, not `unsafe-eval`) and only ever RUNS
-   * the validator.
+   * Producer: server push handler, via
+   * `@ggui-ai/protocol`'s `computeContractBundle`. Consumer:
+   * iframe-runtime's `loadCompiledValidatorsFromUrl`, which fetches
+   * the URL + dynamic-imports the validator bundle.
    *
-   * Producer: server push handler, via `compileValidatorModule` from
-   * `@ggui-ai/protocol`. Consumer: iframe-runtime's wire + channel
-   * validation layer.
-   *
-   * Absent → no precompiled validators shipped; the iframe falls back
-   * to the server as the sole contract authority (the push-time
-   * `assertActionContract` gate still enforces outbound actions).
+   * Absent → no precompiled validators shipped (contract declares no
+   * runtime-validated specs, OR the server has no CodeStore wired for
+   * the bundle write). The server-side `assertActionContract` gate
+   * remains the authoritative validation surface; client-side fast-fail
+   * degrades to no-op.
    *
    * @public
    */
-  readonly compiledValidators?: CompiledContractValidators;
+  readonly contractHash?: string;
+  /**
+   * URL serving the content-addressable contract-validator bundle —
+   * `<publicBaseUrl>/contract/<contractHash>.js`. Response is an ES
+   * module whose `default` export is a {@link CompiledContractValidators}.
+   * `Cache-Control: immutable` so repeat pushes with the same contract
+   * hit browser cache without a round-trip.
+   *
+   * Always paired with {@link contractHash}: present together or absent
+   * together.
+   *
+   * @public
+   */
+  readonly validatorsUrl?: string;
 }
 
 /**
  * Precompiled, eval-free validators for a contract's runtime-validated
- * specs — see {@link GguiBootstrapMeta.compiledValidators}.
+ * specs — served at `_meta["ai.ggui/contract"].validatorsUrl` as the
+ * `default` export of a content-addressable ES module.
  *
  * Each value is the SOURCE TEXT of an ES module whose `default` export
  * is an Ajv validator function (`(data) => boolean`, carrying
@@ -641,52 +651,6 @@ export interface CompiledContractValidators {
 export function deriveContextName(slotKey: string): string {
   if (slotKey.length === 0) return 'Context';
   return slotKey.charAt(0).toUpperCase() + slotKey.slice(1) + 'Context';
-}
-
-/**
- * Canonical `_meta` key under which a `ggui_push` / `ggui_handshake`
- * tool result carries its {@link GguiBootstrapMeta} envelope. Matches
- * the MCP base spec's `_meta` extension-key grammar (SEP-2133):
- * `{reverse-dns-prefix}/{name}` — `ai.ggui` is the reverse-DNS prefix
- * (`ai.ggui` mirrors the domain `ggui.ai`), `bootstrap` is the name.
- *
- * Cross-package use: import and key against this constant instead of
- * a string literal so a rename or grammar adjustment lands in one place.
- *
- * Spec context: SEP-1865 (MCP Apps) standardizes the host's obligation
- * to forward tool-result `_meta` to views via
- * `ui/notifications/tool-result`. The reference implementation
- * (`@mcp-ui/client`'s `<AppRenderer>` + `@modelcontextprotocol/ext-apps`'s
- * `AppBridge`) honors this contract; views consume the payload via
- * `app.ontoolresult(params)` where `params._meta` is "widget-only
- * metadata from server" (compare OpenAI's `window.openai.toolResponseMetadata`).
- *
- * Failure mode + observability: see
- * `docs/protocol/extensions/ai.ggui-bootstrap.md`.
- *
- * @public
- */
-export const MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY = 'ai.ggui/bootstrap' as const;
-
-/**
- * Shape of the `_meta` field on a `ggui_push` / `ggui_handshake` tool
- * result. Carries the {@link GguiBootstrapMeta} under
- * {@link MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY} per SEP-2133's vendor-extension
- * grammar.
- *
- * Hosts MUST forward `_meta` alongside `structuredContent` when they
- * deliver tool output to views via `ui/notifications/tool-result` (per
- * SEP-1865). Views consume the payload from
- * `params._meta["ai.ggui/bootstrap"]`. Spec-compliant hosts including
- * `@mcp-ui/client`'s `<AppRenderer>` honor this forwarding.
- *
- * If a host strips `_meta` before view delivery, the runtime's inline-
- * bootstrap fallback (resource HTML's `window.__GGUI_BOOTSTRAP__`) is
- * the documented secondary path — see
- * `docs/protocol/extensions/ai.ggui-bootstrap.md`.
- */
-export interface PushResultMeta {
-  readonly [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: GguiBootstrapMeta;
 }
 
 // =============================================================================
@@ -1050,30 +1014,31 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
     ...(codeHash !== undefined ? { codeHash } : {}),
     ...(kind !== undefined ? { kind } : {}),
   };
-  return { ok: true, bootstrap };
-}
 
-/**
- * Read the `ai.ggui/contract` slice off a parsed `_meta` object.
- * Returns `null` when the slice is absent OR structurally malformed —
- * the iframe-runtime consumer treats both the same way (degrade to no
- * client-side validation; server-side `assertActionContract` remains
- * authoritative).
- *
- * Kept separate from {@link combineMcpAppAiGguiMeta} because the contract
- * slice is consumed via URL fetch + dynamic import, not assembled
- * into the aggregated bootstrap shape.
- *
- * @public
- */
-export function readMcpAppAiGguiContractMeta(meta: unknown): McpAppAiGguiContractMeta | null {
-  if (meta === null || typeof meta !== 'object') return null;
-  const contract = (meta as Record<string, unknown>)[MCP_APP_AI_GGUI_CONTRACT_META_KEY];
-  if (contract === null || typeof contract !== 'object') return null;
-  const c = contract as Record<string, unknown>;
-  if (typeof c.contractHash !== 'string' || c.contractHash.length === 0) return null;
-  if (typeof c.validatorsUrl !== 'string' || c.validatorsUrl.length === 0) return null;
-  return { contractHash: c.contractHash, validatorsUrl: c.validatorsUrl };
+  // Contract slice (content-addressable validators). Both fields are
+  // present together or absent together. When present, hoist onto the
+  // aggregated bootstrap as `contractHash` + `validatorsUrl` — the
+  // iframe-runtime fetches `validatorsUrl` + dynamic-imports to
+  // resolve validators. Malformed shapes degrade to "no validators
+  // shipped" rather than failing the whole parse; the server-side
+  // `assertActionContract` gate remains authoritative.
+  const contract = m[MCP_APP_AI_GGUI_CONTRACT_META_KEY];
+  if (contract !== undefined && contract !== null && typeof contract === 'object') {
+    const c = contract as Record<string, unknown>;
+    const ch = c.contractHash;
+    const vu = c.validatorsUrl;
+    if (
+      typeof ch === 'string' &&
+      ch.length > 0 &&
+      typeof vu === 'string' &&
+      vu.length > 0
+    ) {
+      (bootstrap as { contractHash?: string; validatorsUrl?: string }).contractHash = ch;
+      (bootstrap as { contractHash?: string; validatorsUrl?: string }).validatorsUrl = vu;
+    }
+  }
+
+  return { ok: true, bootstrap };
 }
 
 /**
@@ -1081,10 +1046,9 @@ export function readMcpAppAiGguiContractMeta(meta: unknown): McpAppAiGguiContrac
  * {@link GguiBootstrapMeta} into its five per-window slices, suitable
  * for emission as five top-level `_meta` keys.
  *
- * `contract` is NOT derived from the bootstrap — the producer passes it
- * via `opts.contract` after writing the compiled validators to the
- * content-addressable store. When omitted, the contract slice is
- * dropped from output.
+ * Contract slice is derived from the bootstrap's `contractHash` +
+ * `validatorsUrl` pair — present when the producer wrote a contract
+ * bundle to the content-addressable store, absent otherwise.
  *
  * Empty optional fields are dropped per slice (an empty render slice
  * is returned as `undefined` so the emitter can skip the key entirely),
@@ -1095,7 +1059,6 @@ export function readMcpAppAiGguiContractMeta(meta: unknown): McpAppAiGguiContrac
  */
 export function splitBootstrapMeta(
   bootstrap: GguiBootstrapMeta,
-  opts?: { readonly contract?: McpAppAiGguiContractMeta },
 ): {
   readonly session: McpAppAiGguiSessionMeta;
   readonly auth?: McpAppAiGguiAuthMeta;
@@ -1163,11 +1126,19 @@ export function splitBootstrapMeta(
   const component: McpAppAiGguiComponentMeta | undefined =
     Object.keys(componentCandidate).length > 0 ? componentCandidate : undefined;
 
+  const contract: McpAppAiGguiContractMeta | undefined =
+    bootstrap.contractHash !== undefined && bootstrap.validatorsUrl !== undefined
+      ? {
+          contractHash: bootstrap.contractHash,
+          validatorsUrl: bootstrap.validatorsUrl,
+        }
+      : undefined;
+
   return {
     session,
     ...(auth !== undefined ? { auth } : {}),
     ...(render !== undefined ? { render } : {}),
-    ...(opts?.contract !== undefined ? { contract: opts.contract } : {}),
+    ...(contract !== undefined ? { contract } : {}),
     ...(component !== undefined ? { component } : {}),
   };
 }
@@ -1562,123 +1533,10 @@ export function isMcpAppLifecycleMessage(
   return true;
 }
 
-/**
- * Type guard for recognizing a `ggui_push` result `_meta` that carries a
- * bootstrap block. Handy for views / tests that receive the raw result.
- *
- * Validates the three-mode discriminator: a well-formed bootstrap MUST
- * carry `runtimeUrl` + `sessionId` + `appId` AND at least one of
- * `{wsUrl, codeUrl, kind}` as a non-empty string. Live mode
- * additionally requires `token` to pair with `wsUrl` — half-live
- * (one without the other) is rejected as MALFORMED.
- */
-export function hasPushBootstrapMeta(
-  meta: unknown,
-): meta is PushResultMeta {
-  if (meta === null || typeof meta !== 'object') return false;
-  const bootstrap = (meta as Record<string, unknown>)[
-    MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY
-  ];
-  if (bootstrap === null || typeof bootstrap !== 'object') return false;
-  const b = bootstrap as Record<string, unknown>;
-  // Required-everywhere fields.
-  if (
-    !(
-      typeof b.sessionId === 'string' &&
-      b.sessionId.length > 0 &&
-      typeof b.appId === 'string' &&
-      b.appId.length > 0 &&
-      typeof b.runtimeUrl === 'string' &&
-      b.runtimeUrl.length > 0
-    )
-  ) {
-    return false;
-  }
-  // Mode discriminator — at least one of {wsUrl, codeUrl, kind} MUST
-  // be a non-empty string. Live mode requires `token` paired with
-  // `wsUrl`; half-live is MALFORMED. `codeUrl` is the static-component
-  // delivery channel (content-addressable URL the runtime fetches the
-  // compiled ES module from). System-card mode (`kind`) is mutually
-  // exclusive with `codeUrl`.
-  const hasWsUrl = typeof b.wsUrl === 'string' && b.wsUrl.length > 0;
-  const hasToken = typeof b.token === 'string' && b.token.length > 0;
-  const hasCodeUrl = typeof b.codeUrl === 'string' && b.codeUrl.length > 0;
-  const hasKind = typeof b.kind === 'string' && b.kind.length > 0;
-  if (hasWsUrl !== hasToken) return false;
-  if (!hasWsUrl && !hasCodeUrl && !hasKind) return false;
-  if (hasKind && hasCodeUrl) return false;
-  // expiresAt is now optional (live-mode-only). When present, must be
-  // a string; type-only check, semantic validation lives in the
-  // iframe-runtime parser which has clock access.
-  if (b.expiresAt !== undefined && typeof b.expiresAt !== 'string') {
-    return false;
-  }
-  // themeMode (when present) must be one of the closed set.
-  if (
-    b.themeMode !== undefined &&
-    b.themeMode !== 'light' &&
-    b.themeMode !== 'dark'
-  ) {
-    return false;
-  }
-  // themeId / propsJson (when present) must be strings.
-  if (b.themeId !== undefined && typeof b.themeId !== 'string') return false;
-  if (b.propsJson !== undefined && typeof b.propsJson !== 'string') return false;
-  if (b.appCallableTools !== undefined) {
-    if (!Array.isArray(b.appCallableTools)) return false;
-    if (!b.appCallableTools.every((s) => typeof s === 'string')) return false;
-  }
-  if (b.actionNextSteps !== undefined) {
-    if (
-      b.actionNextSteps === null ||
-      typeof b.actionNextSteps !== 'object' ||
-      Array.isArray(b.actionNextSteps)
-    ) {
-      return false;
-    }
-    for (const value of Object.values(
-      b.actionNextSteps as Record<string, unknown>,
-    )) {
-      if (typeof value !== 'string') return false;
-    }
-  }
-  // `contextSlots` is OPTIONAL on the wire. Each entry MUST carry
-  // non-empty `name`, non-empty `contextName`, a `schema` object, AND
-  // a `default` value (JsonValue, can be null — the runtime owns
-  // useState per slot and the Provider seed is load-bearing).
-  // Optional `debounceMs` MUST be a number when present.
-  if (b.contextSlots !== undefined) {
-    if (!Array.isArray(b.contextSlots)) return false;
-    for (const entry of b.contextSlots) {
-      if (entry === null || typeof entry !== 'object') return false;
-      const e = entry as Record<string, unknown>;
-      if (typeof e.name !== 'string' || e.name.length === 0) return false;
-      if (typeof e.contextName !== 'string' || e.contextName.length === 0) {
-        return false;
-      }
-      if (e.schema === null || typeof e.schema !== 'object' || Array.isArray(e.schema)) {
-        return false;
-      }
-      // `default` MUST be present (key exists). The value MAY be null
-      // — that's a legitimate JsonValue. Discriminate via `in` so a
-      // literal `null` passes while truly-missing fails.
-      if (!('default' in e)) return false;
-      if (e.debounceMs !== undefined && typeof e.debounceMs !== 'number') {
-        return false;
-      }
-    }
-  }
-  // `permissionsPolicy` is OPTIONAL on the wire. When present, MUST be
-  // an array of non-empty strings (the browser Permissions API names
-  // declared on `DataContract.clientCapabilities.gadgets[*].permission`).
-  if (b.permissionsPolicy !== undefined) {
-    if (!Array.isArray(b.permissionsPolicy)) return false;
-    for (const value of b.permissionsPolicy) {
-      if (typeof value !== 'string' || value.length === 0) return false;
-    }
-  }
-  return true;
-}
+// `hasPushBootstrapMeta` removed in #109 — its role (validate a
+// `_meta["ai.ggui/bootstrap"]` envelope) is gone with the aggregated
+// key. Use {@link combineMcpAppAiGguiMeta} for structural validation
+// of the new five-key `_meta` shape.
 
 // =============================================================================
 // Gesture envelope (ggui_runtime_submit_action input contract)

@@ -51,10 +51,14 @@ import {
   type StackItem,
 } from '@ggui-ai/protocol';
 import {
-  MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY,
+  MCP_APP_AI_GGUI_SESSION_META_KEY,
+  MCP_APP_AI_GGUI_AUTH_META_KEY,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  MCP_APP_AI_GGUI_CONTRACT_META_KEY,
+  MCP_APP_AI_GGUI_COMPONENT_META_KEY,
   GGUI_PUSH_UI_META,
+  splitBootstrapMeta,
   type GguiBootstrapMeta,
-  type PushResultMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AppMetadataStore,
@@ -120,6 +124,7 @@ import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 import {
   deriveStackItemBootstrapView,
   derivePublicEnvProjection,
+  deriveContractBundle,
   type StackItemBootstrapView,
 } from './bootstrap-meta-derivation.js';
 
@@ -2177,7 +2182,41 @@ export function createGguiPushHandler(
       // "transport-aware client knows server is configured" vs
       // "fall through to iframe poll for everything".
       const streamWebSocketLocalTools = deps.streamWebSocketLocalTools?.();
-      const bootstrap = {
+
+      // Content-addressable contract bundle. When the stack item
+      // declares a runtime-validated schema AND the server has a
+      // CodeStore wired, compile + write the bundle + emit the URL.
+      // The iframe-runtime fetches the URL and dynamic-imports to
+      // resolve validators (Cache-Control:immutable means repeat
+      // pushes with the same contract hit the browser cache without
+      // a round-trip). Absent → no client-side validators shipped;
+      // server-side `assertActionContract` remains authoritative.
+      //
+      // Symmetric pattern with the `/code/<hash>.js` componentCode
+      // route above — same store, same idempotent put, same charset
+      // gate, different URL prefix.
+      let contractHash: string | undefined;
+      let validatorsUrl: string | undefined;
+      if (deps.codeStore && deps.codeBaseUrl) {
+        try {
+          const session = await deps.sessionStore.get(output.sessionId);
+          const top = session?.stack[session.currentStackIndex];
+          if (top) {
+            const bundle = await deriveContractBundle(top);
+            if (bundle) {
+              await deps.codeStore.put(bundle.contractHash, bundle.bundleSource);
+              contractHash = bundle.contractHash;
+              const base = deps.codeBaseUrl.replace(/\/$/, '');
+              validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          }
+        } catch {
+          // Silent — contract-bundle write failure degrades to no
+          // client-side validators (server-side gate is authoritative).
+        }
+      }
+
+      const bootstrap: GguiBootstrapMeta = {
         ...partial,
         sessionId: output.sessionId,
         appId: ctx.appId,
@@ -2191,7 +2230,9 @@ export function createGguiPushHandler(
         // other bootstrap transport already projects this field via
         // `deriveStackItemBootstrapView`; push.resultMeta was the
         // last drift point.
-        stackItemId: output.stackItemId,
+        ...(output.stackItemId !== undefined
+          ? { stackItemId: output.stackItemId }
+          : {}),
         runtimeUrl,
         ...(appCallableTools.length > 0 ? { appCallableTools } : {}),
         ...(streamWebSocketLocalTools !== undefined
@@ -2201,7 +2242,7 @@ export function createGguiPushHandler(
           ? { actionNextSteps: view.actionNextSteps }
           : {}),
         ...(view.contextSlots !== undefined
-          ? { contextSlots: view.contextSlots }
+          ? { contextSlots: [...view.contextSlots] }
           : {}),
         // Operator-registered wrappers ride the bootstrap to the
         // iframe so the runtime can dynamic-import each before the
@@ -2213,14 +2254,11 @@ export function createGguiPushHandler(
         view.gadgets.length > 0
           ? { gadgets: view.gadgets }
           : {}),
-        // Precompiled, eval-free contract validators. The renderer
-        // iframe's strict CSP (no `'unsafe-eval'`) blocks runtime
-        // `ajv.compile()`, so validator codegen happens here at push
-        // time; the iframe loads each module via a `blob:` import.
-        // Projected by `deriveStackItemBootstrapView`; emitted only
-        // when the contract declares a runtime-validated schema.
-        ...(view.compiledValidators !== undefined
-          ? { compiledValidators: view.compiledValidators }
+        // Content-addressable contract validators (see content-bundle
+        // compute above). Both fields present together or absent
+        // together — iframe-runtime treats absence as "no validators".
+        ...(contractHash !== undefined && validatorsUrl !== undefined
+          ? { contractHash, validatorsUrl }
           : {}),
         // Minimum-disclosure subset of App.publicEnv (union of
         // declared wrappers' `requires`). Filtered above by
@@ -2240,14 +2278,6 @@ export function createGguiPushHandler(
         ...(outputWithCode.codeHash
           ? { codeHash: outputWithCode.codeHash }
           : {}),
-      } as GguiBootstrapMeta & {
-        stackItemId?: string;
-        themeId?: string;
-        themeMode?: 'light' | 'dark';
-        kind?: string;
-        propsJson?: string;
-        codeUrl?: string;
-        codeHash?: string;
       };
       // Canvas-mode + loaded path: the canvas
       // iframe already exists, is subscribed to the live channel, and owns
@@ -2256,7 +2286,7 @@ export function createGguiPushHandler(
       //
       //   - ui.resourceUri stamp would cause the host to mount a
       //     second iframe per push, defeating the canvas model.
-      //   - ggui.bootstrap carries this push's `stackItemId`, which
+      //   - the bootstrap slices carry this push's `stackItemId`, which
       //     if forwarded via postMessage to the canvas iframe would
       //     poison its bootstrap parser into single-item mode and
       //     break the session-wide subscription.
@@ -2269,19 +2299,29 @@ export function createGguiPushHandler(
         return undefined;
       }
 
-      // `_meta` on the MCP wire IS structurally `Record<string, unknown>`
-      // (open key set by spec). Build the object at that wider type and
-      // use `satisfies` to typecheck the closed shape we're providing
-      // inside it — gives compile-time validation of `ggui`, `ui`, and
-      // `ui/resourceUri` without an erasure cast at return time.
+      // Split the aggregated bootstrap into the five per-window
+      // `_meta` keys (#109). Hosts that forward `_meta` to views may
+      // cache the `session` slice for the session's lifetime, rotate
+      // `auth` on token refresh, and stream just `render` per push.
+      // `contract` is content-addressable — same hash on repeat
+      // pushes ⇒ browser HTTP cache returns the validators without a
+      // round-trip.
+      const split = splitBootstrapMeta(bootstrap);
       const meta: Record<string, unknown> = {
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: bootstrap,
+        [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
+        ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
+        ...(split.render
+          ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render }
+          : {}),
+        ...(split.contract
+          ? { [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: split.contract }
+          : {}),
+        ...(split.component
+          ? { [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: split.component }
+          : {}),
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,
-      } satisfies PushResultMeta & {
-        ui: { resourceUri: string };
-        'ui/resourceUri': string;
       };
       return meta;
     },

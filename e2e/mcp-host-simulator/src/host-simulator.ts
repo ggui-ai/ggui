@@ -36,9 +36,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
-  hasPushBootstrapMeta,
+  combineMcpAppAiGguiMeta,
   MCP_APPS_UI_CAPABILITY,
-  type PushResultMeta,
+  type GguiBootstrapMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import WebSocket from 'ws';
 import {
@@ -104,7 +104,7 @@ export interface CallToolResult {
    */
   readonly isError?: boolean;
   /** Set when the tool result carries `_meta.ggui.bootstrap`. */
-  readonly bootstrap?: PushResultMeta['ggui']['bootstrap'];
+  readonly bootstrap?: GguiBootstrapMeta;
   /**
    * The `_meta.ui.resourceUri` declared on the TOOL (from
    * tools/list), if any. Distinct from per-call `_meta.ui.resourceUri`
@@ -241,7 +241,7 @@ export interface SimulateWiredActionArgs {
    * Pass the bootstrap object directly; the simulator pulls the
    * fields it needs.
    */
-  readonly bootstrap: PushResultMeta['ggui']['bootstrap'];
+  readonly bootstrap: GguiBootstrapMeta;
   /** Override `firedAt` for deterministic actionId tests. */
   readonly firedAt?: string;
 }
@@ -433,9 +433,8 @@ export class HostSimulator {
         : undefined,
     );
     const meta = (result as { _meta?: unknown })._meta;
-    const bootstrap = hasPushBootstrapMeta(meta)
-      ? meta.ggui.bootstrap
-      : undefined;
+    const combined = combineMcpAppAiGguiMeta(meta);
+    const bootstrap = combined.ok ? combined.bootstrap : undefined;
     // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
     // to `true` on tool-handler throws via `createToolError` (server/mcp.js
     // §createToolError). Without surfacing it here, callers can't
@@ -629,7 +628,7 @@ export class HostSimulator {
    * `keepOpen: true` to retain the WS for streaming-event tests.
    */
   async subscribeWith(
-    bootstrap: PushResultMeta['ggui']['bootstrap'],
+    bootstrap: GguiBootstrapMeta,
     opts: { keepOpen?: boolean } = {},
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
     if (!bootstrap.wsUrl) {

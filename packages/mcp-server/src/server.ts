@@ -272,6 +272,7 @@ import {
   type ProvisionalPreviewOutcome,
   deriveStackItemBootstrapView,
   derivePublicEnvProjection,
+  deriveContractBundle,
 } from '@ggui-ai/mcp-server-handlers/session-mutations';
 import { buildMcpServer, type ServerInfo } from './build-mcp.js';
 import { installMcpAppsInbound } from './mcp-apps-inbound.js';
@@ -5434,6 +5435,8 @@ export function createGguiServer(
         // WS subscribe instead.
         let renderCodeUrl: string | undefined;
         let renderCodeHash: string | undefined;
+        let renderContractHash: string | undefined;
+        let renderValidatorsUrl: string | undefined;
         if (
           top.componentCode !== undefined
           && opts.codeStore
@@ -5448,6 +5451,21 @@ export function createGguiServer(
             renderCodeUrl = `${base}/code/${hash}.js`;
           } catch {
             // Silent — falls through to live-mode delivery.
+          }
+          // Content-addressable contract-validator bundle (#109).
+          try {
+            const bundle = await deriveContractBundle(top.source);
+            if (bundle) {
+              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+              renderContractHash = bundle.contractHash;
+              const base = opts.publicBaseUrl
+                ? opts.publicBaseUrl.replace(/\/$/, '')
+                : `${req.protocol}://${requestHost}`;
+              renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          } catch {
+            // Silent — bundle write failure degrades to no client-side
+            // validators (server-side gate remains authoritative).
           }
         }
         // Forward gadgets + publicEnv on the self-contained shell
@@ -5507,8 +5525,8 @@ export function createGguiServer(
           view.gadgets.length > 0
             ? { gadgets: view.gadgets }
             : {}),
-          ...(view.compiledValidators !== undefined
-            ? { compiledValidators: view.compiledValidators }
+          ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
+            ? { contractHash: renderContractHash, validatorsUrl: renderValidatorsUrl }
             : {}),
           ...(renderPublicEnv !== undefined &&
           Object.keys(renderPublicEnv).length > 0
@@ -5782,6 +5800,8 @@ export function createGguiServer(
         // mint via the minter above).
         let bootstrapCodeUrl: string | undefined;
         let bootstrapCodeHash: string | undefined;
+        let bootstrapContractHash: string | undefined;
+        let bootstrapValidatorsUrl: string | undefined;
         if (
           topSource
           && topSource.type !== 'system'
@@ -5799,6 +5819,23 @@ export function createGguiServer(
             bootstrapCodeUrl = `${base}/code/${hash}.js`;
           } catch {
             // Silent — falls through to live-only mode.
+          }
+        }
+        if (topSource && opts.codeStore) {
+          // Content-addressable contract-validator bundle (#109).
+          try {
+            const bundle = await deriveContractBundle(topSource);
+            if (bundle) {
+              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+              bootstrapContractHash = bundle.contractHash;
+              const base = opts.publicBaseUrl
+                ? opts.publicBaseUrl.replace(/\/$/, '')
+                : `${req.protocol}://${requestHost}`;
+              bootstrapValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          } catch {
+            // Silent — bundle write failure degrades to no client-side
+            // validators (server-side gate remains authoritative).
           }
         }
         // Same theme cascade push uses — preset theme (operator-picked
@@ -5857,15 +5894,15 @@ export function createGguiServer(
           && view.permissionsPolicy.length > 0
             ? { permissionsPolicy: view.permissionsPolicy }
             : {}),
-          // Precompiled, eval-free contract validators. This Path-A
-          // JSON route is the initial bootstrap for claude.ai
+          // Content-addressable contract-validator bundle (#109). This
+          // Path-A JSON route is the initial bootstrap for claude.ai
           // Connector / Claude Desktop (they strip `_meta`, so Path B
           // is unavailable) — the strict-CSP hosts where the renderer
-          // iframe cannot run `ajv.compile()`. Forwarding the
-          // precompiled modules here is what makes wired actions
-          // dispatch at all on those hosts.
-          ...(view.compiledValidators !== undefined
-            ? { compiledValidators: view.compiledValidators }
+          // iframe cannot run `ajv.compile()`. Forwarding the URL +
+          // hash here lets those hosts fetch the validators bundle
+          // and dispatch wired actions.
+          ...(bootstrapContractHash !== undefined && bootstrapValidatorsUrl !== undefined
+            ? { contractHash: bootstrapContractHash, validatorsUrl: bootstrapValidatorsUrl }
             : {}),
         } as GguiBootstrapMeta & {
           stackItemId?: string;
@@ -8006,21 +8043,18 @@ export function createGguiServer(
             // envelope rather than us silently rewriting a string
             // we don't understand.
           }
-          // Project the active stack item's precompiled, eval-free
-          // contract validators onto this live-mode bootstrap. The
-          // renderer iframe's strict CSP forbids the `new Function`
-          // codegen `ajv.compile()` needs; without these the console
-          // live viewer's wired actions never dispatch. The rest of
-          // the stack-item projection (props / actions / context)
-          // still arrives via the live WS channel — only the
-          // precompiled validators, which the iframe cannot derive
-          // itself under CSP, must ride the bootstrap. Best-effort:
-          // a lookup failure degrades to the iframe's (CSP-blocked)
-          // in-iframe-compile fallback — no worse than pre-fix.
-          let compiledValidators:
-            | ReturnType<typeof deriveStackItemBootstrapView>['compiledValidators']
-            | undefined;
-          if (sessionStore) {
+          // Content-addressable contract-validator bundle (#109) for
+          // the active stack item. The renderer iframe's strict CSP
+          // forbids the `new Function` codegen `ajv.compile()` needs,
+          // so the server compiles + writes the bundle to its
+          // CodeStore at push time and threads the URL here. The
+          // iframe fetches the URL + dynamic-imports to resolve
+          // validators. Best-effort: a missing bundle degrades to no
+          // client-side validation; server-side `assertActionContract`
+          // remains authoritative.
+          let sessionContractHash: string | undefined;
+          let sessionValidatorsUrl: string | undefined;
+          if (sessionStore && opts.codeStore) {
             try {
               const session = await sessionStore.get(verified.sessionId);
               const stack = session?.stack ?? [];
@@ -8037,8 +8071,18 @@ export function createGguiServer(
                   typeof entry.componentCode === 'string' &&
                   entry.componentCode.length > 0
                 ) {
-                  compiledValidators =
-                    deriveStackItemBootstrapView(entry).compiledValidators;
+                  const bundle = await deriveContractBundle(entry);
+                  if (bundle) {
+                    await opts.codeStore.put(
+                      bundle.contractHash,
+                      bundle.bundleSource,
+                    );
+                    sessionContractHash = bundle.contractHash;
+                    const baseForValidators = opts.publicBaseUrl
+                      ? opts.publicBaseUrl.replace(/\/$/, '')
+                      : `${req.protocol}://${requestHost}`;
+                    sessionValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
+                  }
                   break;
                 }
               }
@@ -8056,8 +8100,11 @@ export function createGguiServer(
             sessionId: verified.sessionId,
             appId: verified.appId,
             runtimeUrl: absoluteRendererUrl,
-            ...(compiledValidators !== undefined
-              ? { compiledValidators }
+            ...(sessionContractHash !== undefined && sessionValidatorsUrl !== undefined
+              ? {
+                  contractHash: sessionContractHash,
+                  validatorsUrl: sessionValidatorsUrl,
+                }
               : {}),
           };
           res.status(200).json({ bootstrap });

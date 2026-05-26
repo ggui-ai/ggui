@@ -81,7 +81,7 @@ import {
   setActiveValidatorSet,
   type RendererValidatorContext,
 } from './validation.js';
-import { loadCompiledValidators } from './compiled-validators.js';
+import { loadCompiledValidatorsFromUrl } from './compiled-validators.js';
 import {
   StackRenderer,
   type StackRenderContext,
@@ -576,7 +576,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // to fall back to in-iframe compilation (CSP-blocked, but no worse
   // than pre-A4).
   setActiveValidatorSet(
-    await loadCompiledValidators(parsed.bootstrap.compiledValidators),
+    await loadCompiledValidatorsFromUrl(parsed.bootstrap.validatorsUrl),
   );
 
   // Single-item mode. When a per-item resource route served this
@@ -2413,7 +2413,7 @@ async function bootSelfContained(
     // `__ggui__` dependency. System-card bootstraps carry none (the
     // loader returns the empty set); harmless to call unconditionally.
     setActiveValidatorSet(
-      await loadCompiledValidators(bootstrap.compiledValidators),
+      await loadCompiledValidatorsFromUrl(bootstrap.validatorsUrl),
     );
 
     // Parse propsJson up-front — both branches (system card + compiled

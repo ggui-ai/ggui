@@ -11,8 +11,7 @@ import {
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
   GGUI_PUSH_UI_META,
-  MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY,
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
+    MCP_APP_AI_GGUI_SESSION_META_KEY,
   MCP_APP_AI_GGUI_AUTH_META_KEY,
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   MCP_APP_AI_GGUI_CONTRACT_META_KEY,
@@ -20,11 +19,9 @@ import {
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
   combineMcpAppAiGguiMeta,
-  readMcpAppAiGguiContractMeta,
-  splitBootstrapMeta,
+    splitBootstrapMeta,
   deriveContextName,
-  hasPushBootstrapMeta,
-  isGguiUserActionMeta,
+    isGguiUserActionMeta,
   isMcpAppsStackItem,
   isMcpAppLifecycleMessage,
   isGguiSubmitActionInput,
@@ -34,7 +31,6 @@ import {
   type McpAppLifecycleMessage,
   type McpAppLifecycleState,
   type McpAppsStackItem,
-  type PushResultMeta,
   type McpAppsToolVisibility,
   type SubmitActionKind,
   type GguiSubmitActionInput,
@@ -65,302 +61,6 @@ describe('MCP Apps outbound constants', () => {
   });
 });
 
-describe('hasPushBootstrapMeta type guard', () => {
-  const validBootstrap: GguiBootstrapMeta = {
-    wsUrl: 'ws://localhost:8080/ws',
-    token: 'btk.signature',
-    expiresAt: '2026-05-01T00:00:00.000Z',
-    sessionId: 'sess-1',
-    appId: 'app-1',
-    runtimeUrl: '/_ggui/iframe-runtime.js',
-  };
-  const validMeta: PushResultMeta = {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: validBootstrap  };
-
-  it('accepts a well-shaped PushResultMeta', () => {
-    expect(hasPushBootstrapMeta(validMeta)).toBe(true);
-  });
-
-  it.each([
-    ['null', null],
-    ['undefined', undefined],
-    ['primitive', 'string'],
-    ['empty object', {}],
-    ['missing ggui.bootstrap', {}],
-    ['wsUrl not a string', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, wsUrl: 123 }  }],
-    ['token not a string', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, token: null }  }],
-    ['expiresAt not a string', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, expiresAt: 0 }  }],
-    ['sessionId missing', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { wsUrl: 'w', token: 't', expiresAt: 'e', appId: 'a', runtimeUrl: '/_ggui/iframe-runtime.js' }  }],
-    ['appId missing', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { wsUrl: 'w', token: 't', expiresAt: 'e', sessionId: 's', runtimeUrl: '/_ggui/iframe-runtime.js' }  }],
-    // C8 (2026-04-23) — runtimeUrl is load-bearing for thin-shell boot.
-    ['runtimeUrl missing', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { wsUrl: 'w', token: 't', expiresAt: 'e', sessionId: 's', appId: 'a' }  }],
-    ['runtimeUrl not a string', {  [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, runtimeUrl: 42 }  }],
-  ])('rejects %s', (_label, input) => {
-    expect(hasPushBootstrapMeta(input)).toBe(false);
-  });
-
-  // Slice 1 (2026-05-07) — `appCallableTools` is OPTIONAL on the wire.
-  // Legacy bootstraps without the field MUST still pass; well-typed
-  // arrays of strings MUST pass; arrays containing non-strings MUST
-  // fail (catches a producer that mistakenly serializes objects).
-  it('accepts a bootstrap with a string[] appCallableTools', () => {
-    const meta: PushResultMeta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          appCallableTools: ['ggui_runtime_submit_action', 'foo_tool'],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap with an empty appCallableTools array', () => {
-    const meta = {
-       [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, appCallableTools: [] } ,
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap WITHOUT appCallableTools (back-compat)', () => {
-    // Pre-Slice-1 bootstrap — no appCallableTools field at all. Must
-    // still pass; consumers default to `[]`.
-    expect(hasPushBootstrapMeta(validMeta)).toBe(true);
-  });
-
-  it('rejects appCallableTools containing non-strings', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          appCallableTools: ['ok', 42, 'also_ok'],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects appCallableTools that is not an array', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, appCallableTools: 'ggui_runtime_submit_action' },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  // Slice 2 (2026-05-07) — `actionNextSteps` is OPTIONAL on the wire.
-  // Same back-compat + shape posture as `appCallableTools`: legacy
-  // bootstraps without the field MUST still pass; well-typed
-  // `Record<string, string>` MUST pass; records with non-string
-  // values MUST fail.
-  it('accepts a bootstrap with a Record<string, string> actionNextSteps', () => {
-    const meta: PushResultMeta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          actionNextSteps: { archive: 'gmail_archive', send: 'gmail_send' },
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap with an empty actionNextSteps object', () => {
-    const meta = {
-       [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, actionNextSteps: {} } ,
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap WITHOUT actionNextSteps (back-compat)', () => {
-    // Pre-Slice-2 bootstrap — no actionNextSteps field at all. Must
-    // still pass; consumers default to `{}`.
-    expect(hasPushBootstrapMeta(validMeta)).toBe(true);
-  });
-
-  it('rejects actionNextSteps containing non-string values', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          actionNextSteps: { archive: 'gmail_archive', invalid: 42 },
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects actionNextSteps that is an array', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          actionNextSteps: ['archive', 'send'],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects actionNextSteps that is null', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, actionNextSteps: null },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  // Slice 8 (2026-05-08) — `contextSlots` is OPTIONAL on the wire.
-  // Each entry MUST carry non-empty `name`, non-empty `contextName`,
-  // and an object `schema`. Optional `default` (any JsonValue) and
-  // optional `debounceMs` (number) ride along.
-  it('accepts a bootstrap with a well-shaped contextSlots array', () => {
-    const meta: PushResultMeta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            {
-              name: 'currentStep',
-              contextName: 'CurrentStepContext',
-              schema: { type: 'number' },
-              default: 0,
-            },
-            {
-              name: 'draftText',
-              contextName: 'DraftTextContext',
-              schema: { type: 'string' },
-              default: '',
-              debounceMs: 500,
-            },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap with an empty contextSlots array', () => {
-    const meta = {
-       [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, contextSlots: [] } ,
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-
-  it('accepts a bootstrap WITHOUT contextSlots (back-compat)', () => {
-    expect(hasPushBootstrapMeta(validMeta)).toBe(true);
-  });
-
-  it('rejects contextSlots that is not an array', () => {
-    const meta = {
-       [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: { ...validBootstrap, contextSlots: {} } ,
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects contextSlots entry missing name', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            { contextName: 'XContext', schema: { type: 'number' } },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects contextSlots entry with empty name', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            { name: '', contextName: 'XContext', schema: { type: 'number' } },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects contextSlots entry missing contextName', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            { name: 'currentStep', schema: { type: 'number' } },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects contextSlots entry missing schema', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            { name: 'currentStep', contextName: 'CurrentStepContext' },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('rejects contextSlots entry with non-number debounceMs', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            {
-              name: 'currentStep',
-              contextName: 'CurrentStepContext',
-              schema: { type: 'number' },
-              default: 0,
-              debounceMs: 'fast',
-            },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  // Slice 12 (2026-05-08) — `default` is now REQUIRED on every
-  // contextSlots entry. The runtime owns useState per slot; a missing
-  // Provider seed would force the runtime to silently fabricate one.
-  it('rejects contextSlots entry missing default (Slice 12)', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            {
-              name: 'currentStep',
-              contextName: 'CurrentStepContext',
-              schema: { type: 'number' },
-              // No `default` — should reject.
-            },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(false);
-  });
-
-  it('accepts contextSlots entry with default: null (literal null is a JsonValue)', () => {
-    const meta = {
-      
-        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: {
-          ...validBootstrap,
-          contextSlots: [
-            {
-              name: 'maybeNullable',
-              contextName: 'MaybeNullableContext',
-              schema: { type: 'object' },
-              default: null,
-            },
-          ],
-        },
-    };
-    expect(hasPushBootstrapMeta(meta)).toBe(true);
-  });
-});
 
 describe('deriveContextName helper', () => {
   it('derives PascalCase + Context suffix for a typical camelCase slot key', () => {
@@ -419,8 +119,8 @@ describe('GguiBootstrapMeta structural lock', () => {
   // bootstrap-meta.
 });
 
-describe('non-leak lock: PushResultMeta is not structuredContent', () => {
-  it('is imported via the integrations/mcp-apps subpath, not the root', () => {
+describe('non-leak lock: outbound meta types live on the integrations subpath', () => {
+  it('integration capability identifier is reachable only via the subpath', () => {
     expect(typeof MCP_APPS_UI_CAPABILITY).toBe('string');
   });
 });
@@ -993,7 +693,7 @@ describe('combineMcpAppAiGguiMeta', () => {
     expect(result.ok ? null : result.reason).toBe('MALFORMED_COMPONENT');
   });
 
-  it('intentionally ignores the contract slice (not assembled into bootstrap)', () => {
+  it('hoists the contract slice onto bootstrap.contractHash + validatorsUrl', () => {
     const result = combineMcpAppAiGguiMeta({
       [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
       [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: {
@@ -1002,34 +702,22 @@ describe('combineMcpAppAiGguiMeta', () => {
       },
     });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.bootstrap).not.toHaveProperty('compiledValidators');
-  });
-});
-
-describe('readMcpAppAiGguiContractMeta', () => {
-  it('returns null when the contract slice is absent', () => {
-    expect(readMcpAppAiGguiContractMeta({})).toBeNull();
+    if (result.ok) {
+      expect(result.bootstrap.contractHash).toBe('sha256:abc');
+      expect(result.bootstrap.validatorsUrl).toBe('/contract/sha256:abc.js');
+    }
   });
 
-  it('returns null for malformed contract slice', () => {
-    expect(
-      readMcpAppAiGguiContractMeta({
-        [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: { contractHash: 'h' },
-      }),
-    ).toBeNull();
-  });
-
-  it('returns {contractHash, validatorsUrl} on a well-shaped slice', () => {
-    const out = readMcpAppAiGguiContractMeta({
-      [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: {
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
-      },
+  it('drops a malformed contract slice silently (no client-side validators)', () => {
+    const result = combineMcpAppAiGguiMeta({
+      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
+      [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: { contractHash: 'h' },
     });
-    expect(out).toEqual({
-      contractHash: 'sha256:abc',
-      validatorsUrl: '/contract/sha256:abc.js',
-    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.bootstrap.contractHash).toBeUndefined();
+      expect(result.bootstrap.validatorsUrl).toBeUndefined();
+    }
   });
 });
 
@@ -1075,18 +763,17 @@ describe('splitBootstrapMeta', () => {
     expect(out.render).toEqual({ stackItemId: 'st-1', propsJson: '{}' });
   });
 
-  it('emits contract slice only when opts.contract is provided', () => {
+  it('emits contract slice only when bootstrap carries contractHash + validatorsUrl', () => {
     const base = {
       sessionId: 'sess-1',
       appId: 'app-1',
       runtimeUrl: '/r',
     };
     expect(splitBootstrapMeta(base).contract).toBeUndefined();
-    const withContract = splitBootstrapMeta(base, {
-      contract: {
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
-      },
+    const withContract = splitBootstrapMeta({
+      ...base,
+      contractHash: 'sha256:abc',
+      validatorsUrl: '/contract/sha256:abc.js',
     });
     expect(withContract.contract).toEqual({
       contractHash: 'sha256:abc',
@@ -1134,13 +821,10 @@ describe('combine ⇔ split round-trip', () => {
       appCallableTools: ['ggui_runtime_submit_action'],
       actionNextSteps: { archive: 'gmail_archive' },
       kind: 'loading',
+      contractHash: 'sha256:abc',
+      validatorsUrl: '/contract/sha256:abc.js',
     };
-    const split = splitBootstrapMeta(bootstrap, {
-      contract: {
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
-      },
-    });
+    const split = splitBootstrapMeta(bootstrap);
     // Component slice has both kind and (absent) codeUrl — but bootstrap above
     // sets kind only; component must NOT also carry codeUrl.
     expect(split.component?.codeUrl).toBeUndefined();
@@ -1157,10 +841,5 @@ describe('combine ⇔ split round-trip', () => {
     const combined = combineMcpAppAiGguiMeta(meta);
     expect(combined.ok).toBe(true);
     if (combined.ok) expect(combined.bootstrap).toEqual(bootstrap);
-    // contract slice flows through readContract, not combine.
-    expect(readMcpAppAiGguiContractMeta(meta)).toEqual({
-      contractHash: 'sha256:abc',
-      validatorsUrl: '/contract/sha256:abc.js',
-    });
   });
 });

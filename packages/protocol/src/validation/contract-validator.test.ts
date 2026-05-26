@@ -598,12 +598,12 @@ describe('bundleCompiledValidatorsAsModule', () => {
 });
 
 describe('computeContractBundle', () => {
-  it('returns undefined when the contract declares no runtime-validated schema', () => {
-    expect(computeContractBundle({})).toBeUndefined();
+  it('returns undefined when the contract declares no runtime-validated schema', async () => {
+    expect(await computeContractBundle({})).toBeUndefined();
   });
 
-  it('returns {contractHash, bundleSource, validators} for a contract with an action', () => {
-    const result = computeContractBundle({
+  it('returns {contractHash, bundleSource, validators} for a contract with an action', async () => {
+    const result = await computeContractBundle({
       actionSpec: {
         increment: {
           label: 'inc',
@@ -618,7 +618,7 @@ describe('computeContractBundle', () => {
     expect(result.validators.actions?.increment).toBeDefined();
   });
 
-  it('produces a stable contractHash for the same contract on repeated calls', () => {
+  it('produces a stable contractHash for the same contract on repeated calls', async () => {
     // Hash is over the INPUT specs, not the compiled output, so it's
     // stable across calls even though Ajv's standalone emitter uses
     // incrementing counter names (`validate10`, `validate11`) that change
@@ -631,22 +631,22 @@ describe('computeContractBundle', () => {
         },
       },
     };
-    const a = computeContractBundle(specs);
-    const b = computeContractBundle(specs);
+    const a = await computeContractBundle(specs);
+    const b = await computeContractBundle(specs);
     expect(a?.contractHash).toBe(b?.contractHash);
   });
 
-  it('produces a stable contractHash regardless of input-key insertion order', () => {
+  it('produces a stable contractHash regardless of input-key insertion order', async () => {
     // Canonical-JSON serialization sorts keys at every depth, so two
     // logically-identical specs built with different key orders hash to
     // the same value.
-    const a = computeContractBundle({
+    const a = await computeContractBundle({
       actionSpec: {
         b: { label: 'b', schema: { type: 'object', properties: { y: { type: 'string' }, x: { type: 'integer' } } } },
         a: { label: 'a', schema: { type: 'object' } },
       },
     });
-    const b = computeContractBundle({
+    const b = await computeContractBundle({
       actionSpec: {
         a: { label: 'a', schema: { type: 'object' } },
         b: { label: 'b', schema: { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'string' } } } },
@@ -655,13 +655,13 @@ describe('computeContractBundle', () => {
     expect(a?.contractHash).toBe(b?.contractHash);
   });
 
-  it('produces different hashes for different contracts', () => {
-    const a = computeContractBundle({
+  it('produces different hashes for different contracts', async () => {
+    const a = await computeContractBundle({
       actionSpec: {
         a: { label: 'a', schema: { type: 'object' } },
       },
     });
-    const b = computeContractBundle({
+    const b = await computeContractBundle({
       actionSpec: {
         b: { label: 'b', schema: { type: 'object' } },
       },

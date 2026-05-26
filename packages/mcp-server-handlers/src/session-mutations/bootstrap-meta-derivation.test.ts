@@ -224,17 +224,17 @@ describe('deriveStackItemBootstrapView', () => {
           default: 0,
         },
       ],
-      // The contextSpec slot's schema compiles to a precompiled,
-      // eval-free validator module (`save` is a void action — no
-      // schema, no entry; no propsSpec declared — no `props` key).
-      compiledValidators: {
-        context: { count: expect.any(String) },
-      },
+      // Validators are no longer projected onto the view — push.ts
+      // calls deriveContractBundle directly + writes to the
+      // content-addressable store. The view carries no contract bytes.
     });
   });
+});
 
-  it('component variant: compiledValidators carries one module per validated spec', () => {
-    const view = deriveStackItemBootstrapView(
+describe('deriveContractBundle — content-addressable validator bundle', () => {
+  it('component variant: returns {contractHash, bundleSource, validators}', async () => {
+    const { deriveContractBundle } = await import('./bootstrap-meta-derivation.js');
+    const bundle = await deriveContractBundle(
       componentItem({
         propsSpec: {
           properties: { city: { schema: { type: 'string' }, required: true } },
@@ -246,19 +246,23 @@ describe('deriveStackItemBootstrapView', () => {
         contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
       }),
     );
-    expect(typeof view.compiledValidators?.props).toBe('string');
-    expect(typeof view.compiledValidators?.actions?.rename).toBe('string');
-    expect(typeof view.compiledValidators?.streams?.ticks).toBe('string');
-    expect(typeof view.compiledValidators?.context?.count).toBe('string');
+    expect(bundle).toBeDefined();
+    if (!bundle) return;
+    expect(bundle.contractHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(bundle.bundleSource).toContain('export default');
+    expect(typeof bundle.validators.props).toBe('string');
+    expect(typeof bundle.validators.actions?.rename).toBe('string');
+    expect(typeof bundle.validators.streams?.ticks).toBe('string');
+    expect(typeof bundle.validators.context?.count).toBe('string');
   });
 
-  it('mcpApps / system variants carry no compiledValidators', () => {
+  it('mcpApps / system variants return undefined', async () => {
+    const { deriveContractBundle } = await import('./bootstrap-meta-derivation.js');
     expect(
-      deriveStackItemBootstrapView(systemItem({ kind: 'no-credentials' }))
-        .compiledValidators,
+      await deriveContractBundle(systemItem({ kind: 'no-credentials' })),
     ).toBeUndefined();
     expect(
-      deriveStackItemBootstrapView({
+      await deriveContractBundle({
         id: 'page-1',
         type: 'mcpApps',
         source: {
@@ -267,7 +271,7 @@ describe('deriveStackItemBootstrapView', () => {
           resourceUri: 'ui://example/x',
         },
         createdAt: NOW,
-      }).compiledValidators,
+      }),
     ).toBeUndefined();
   });
 });

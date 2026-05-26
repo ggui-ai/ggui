@@ -35,7 +35,7 @@
  */
 import {
   bundleHostScheme,
-  compileContractValidators,
+  computeContractBundle,
   deriveContextDefault,
   DEFAULT_BUNDLE_HOST,
   type GadgetDescriptor,
@@ -614,23 +614,12 @@ export interface StackItemBootstrapView {
      * when present. */
     readonly bundleSri?: string;
   }>;
-  /**
-   * Precompiled, eval-free runtime validators for the contract's
-   * `propsSpec` / `actionSpec` / `streamSpec` / `contextSpec` — each an
-   * ESM validator-module source string from
-   * `compileValidatorModule` (`@ggui-ai/protocol`). Mirrored verbatim
-   * onto `GguiBootstrapMeta.compiledValidators`.
-   *
-   * Compilation runs server-side at push time because the renderer
-   * iframe's strict CSP forbids the `new Function` codegen
-   * `ajv.compile()` needs. See
-   * {@link import('@ggui-ai/protocol/integrations/mcp-apps').GguiBootstrapMeta.compiledValidators}.
-   *
-   * Absent ⇒ no precompiled validators (contract declares no
-   * runtime-validated specs, or the projection ran without the
-   * compiler dep).
-   */
-  readonly compiledValidators?: CompiledContractValidators;
+  // `compiledValidators` removed in #109 — validators are now served
+  // via a content-addressable URL (`_meta["ai.ggui/contract"].validatorsUrl`).
+  // Producers call {@link deriveContractBundle} to compute
+  // `{contractHash, bundleSource}`, write `bundleSource` to their
+  // `CodeStore` at `contractHash`, then emit `bootstrap.contractHash` +
+  // `bootstrap.validatorsUrl` for the iframe-runtime to fetch.
 }
 
 /**
@@ -758,26 +747,39 @@ export function deriveGadgetRegistrations(
 }
 
 /**
- * Precompiled, eval-free validator modules for a stack item's
- * runtime-validated contract specs — `propsSpec` / `actionSpec` /
- * `streamSpec` / `contextSpec`. Each is the ESM source of a standalone
- * Ajv validator, compiled server-side (where codegen is legal) so the
- * renderer iframe — under a strict CSP with no `'unsafe-eval'` — can
- * load and run validators without calling `ajv.compile()` itself.
+ * Content-addressable bundle of precompiled, eval-free validator
+ * modules for a stack item's runtime-validated contract specs —
+ * `propsSpec` / `actionSpec` / `streamSpec` / `contextSpec`. The bundle
+ * is an ES module text whose `default` export is a
+ * {@link CompiledContractValidators}; the hash is `sha256` over the
+ * canonical-JSON serialization of the input specs (stable across
+ * server processes and Ajv version bumps).
  *
- * Delegates to `@ggui-ai/protocol`'s {@link compileContractValidators}
- * — the producer half of the channel, colocated with the four runtime
+ * The push handler writes `bundleSource` to its `CodeStore` at
+ * `contractHash`, then emits `_meta["ai.ggui/contract"] = {contractHash,
+ * validatorsUrl}` — the iframe-runtime fetches the URL + dynamic-imports
+ * to resolve validators.
+ *
+ * Delegates to `@ggui-ai/protocol`'s {@link computeContractBundle} —
+ * the producer half of the channel, colocated with the four runtime
  * validators so the precompiled module enforces byte-identical
- * semantics. See {@link StackItemBootstrapView.compiledValidators}.
+ * semantics.
  *
  * Returns `undefined` for mcpApps / system variants (no contract) and
  * for component items that declare no runtime-validated schema.
  */
-export function deriveCompiledValidators(
+export async function deriveContractBundle(
   item: SessionStackEntry,
-): CompiledContractValidators | undefined {
+): Promise<
+  | {
+      readonly contractHash: string;
+      readonly bundleSource: string;
+      readonly validators: CompiledContractValidators;
+    }
+  | undefined
+> {
   if (item.type === 'mcpApps' || item.type === 'system') return undefined;
-  return compileContractValidators({
+  return computeContractBundle({
     propsSpec: item.propsSpec,
     actionSpec: item.actionSpec,
     streamSpec: item.streamSpec,
@@ -832,7 +834,6 @@ export function deriveStackItemBootstrapView(
     deriveBundleOrigins(item),
   );
   const gadgets = deriveGadgetRegistrations(item);
-  const compiledValidators = deriveCompiledValidators(item);
   return {
     ...(propsJson !== undefined ? { propsJson } : {}),
     ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
@@ -844,6 +845,5 @@ export function deriveStackItemBootstrapView(
       ? { contentSecurityPolicy }
       : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
-    ...(compiledValidators !== undefined ? { compiledValidators } : {}),
   };
 }

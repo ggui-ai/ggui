@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { PropsSpec, StreamSpec, ActionSpec, ContextSpec, JsonSchema, JsonObject, DataContract } from '../types/data-contract';
 import { deriveContextDefault } from '../types/data-contract';
 import type { ActionEnvelope } from '../types/events';
@@ -530,24 +529,32 @@ function canonicalJsonStringify(value: unknown): string {
  *
  * @public
  */
-export function computeContractBundle(specs: {
+export async function computeContractBundle(specs: {
   readonly propsSpec?: PropsSpec;
   readonly actionSpec?: ActionSpec;
   readonly streamSpec?: StreamSpec;
   readonly contextSpec?: ContextSpec;
-}):
+}): Promise<
   | {
       readonly contractHash: string;
       readonly bundleSource: string;
       readonly validators: CompiledContractValidators;
     }
-  | undefined {
+  | undefined
+> {
   const validators = compileContractValidators(specs);
   if (validators === undefined) return undefined;
   const bundleSource = bundleCompiledValidatorsAsModule(validators);
-  const contractHash = createHash('sha256')
-    .update(canonicalJsonStringify(specs), 'utf-8')
-    .digest('hex');
+  // Web Crypto's subtle.digest is universal (Node 19+, all modern
+  // browsers, Workers). The protocol package ships into iframe-runtime
+  // bundles too — `node:crypto` would force esbuild to mark a Node
+  // builtin unresolved at browser bundle time even though this
+  // function is server-only at call time.
+  const bytes = new TextEncoder().encode(canonicalJsonStringify(specs));
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const contractHash = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
   return { contractHash, bundleSource, validators };
 }
 

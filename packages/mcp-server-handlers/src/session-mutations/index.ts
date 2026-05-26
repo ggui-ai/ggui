@@ -301,6 +301,7 @@ export {
   deriveContextSlots,
   derivePropsJson,
   derivePublicEnvProjection,
+  deriveContractBundle,
   deriveStackItemBootstrapView,
   deriveWiredActionTools,
   resolveGadgetUrls,

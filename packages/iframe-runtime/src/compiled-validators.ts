@@ -121,3 +121,47 @@ export async function loadCompiledValidators(
     context,
   };
 }
+
+/**
+ * #109 content-addressable variant: fetch the validator-bundle URL,
+ * dynamic-import the response, then delegate to
+ * {@link loadCompiledValidators}. Returns {@link EMPTY_COMPILED_VALIDATOR_SET}
+ * when `url` is undefined OR the fetch/import fails — sidecar
+ * semantics, the server-side `assertActionContract` gate remains
+ * authoritative on validator absence.
+ *
+ * Response shape: an ES module whose `default` export is a
+ * {@link CompiledContractValidators} object (produced server-side by
+ * `bundleCompiledValidatorsAsModule`). `Cache-Control: immutable` so
+ * repeat pushes with the same contract hit browser cache with no
+ * round-trip.
+ */
+export async function loadCompiledValidatorsFromUrl(
+  url: string | undefined,
+  warn?: (message: string, detail: unknown) => void,
+): Promise<CompiledValidatorSet> {
+  if (url === undefined) return EMPTY_COMPILED_VALIDATOR_SET;
+  try {
+    const mod = (await import(/* @vite-ignore */ url)) as {
+      default?: unknown;
+    };
+    const compiled = mod.default;
+    if (compiled === null || typeof compiled !== 'object') {
+      warn?.(
+        '[ggui:validators] contract bundle: default export is not an object',
+        compiled,
+      );
+      return EMPTY_COMPILED_VALIDATOR_SET;
+    }
+    return loadCompiledValidators(
+      compiled as CompiledContractValidators,
+      warn,
+    );
+  } catch (err) {
+    warn?.(
+      `[ggui:validators] contract bundle: failed to load ${url}`,
+      err,
+    );
+    return EMPTY_COMPILED_VALIDATOR_SET;
+  }
+}

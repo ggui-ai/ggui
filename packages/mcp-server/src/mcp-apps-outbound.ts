@@ -46,6 +46,7 @@ import {
 import {
   deriveStackItemBootstrapView,
   derivePublicEnvProjection,
+  deriveContractBundle,
   deriveBundleOrigins,
   findBlueprintExact,
   type Blueprint,
@@ -751,17 +752,22 @@ export interface SelfContainedShellInputs {
    */
   readonly gadgets?: GguiBootstrapMeta['gadgets'];
   /**
-   * Precompiled, eval-free contract validators (one ESM validator-
-   * module source per `propsSpec` / `actionSpec` / `streamSpec` /
-   * `contextSpec`), mirrored from
-   * {@link GguiBootstrapMeta.compiledValidators}. The renderer iframe's
-   * strict CSP (no `'unsafe-eval'`) blocks runtime `ajv.compile()`, so
-   * the iframe loads these precompiled modules via `blob:` import
-   * instead. Symmetric forward for the self-contained shell so
-   * `/r/<shortCode>` and `resources/read` iframes validate wire
-   * traffic exactly as the MCP-Apps postMessage path does.
+   * Content-addressable hash for the active stack item's compiled
+   * contract validators, mirrored from
+   * {@link GguiBootstrapMeta.contractHash}. The iframe-runtime resolves
+   * validators via `fetch({@link validatorsUrl})` + dynamic import.
+   * Paired with {@link validatorsUrl} — present together or absent
+   * together.
    */
-  readonly compiledValidators?: GguiBootstrapMeta['compiledValidators'];
+  readonly contractHash?: GguiBootstrapMeta['contractHash'];
+  /**
+   * URL serving the content-addressable contract-validator bundle,
+   * mirrored from {@link GguiBootstrapMeta.validatorsUrl}. Symmetric
+   * forward for the self-contained shell so `/r/<shortCode>` and
+   * `resources/read` iframes resolve validators exactly as the
+   * MCP-Apps postMessage path does.
+   */
+  readonly validatorsUrl?: GguiBootstrapMeta['validatorsUrl'];
   /**
    * Server-filtered public env values that declared wrappers'
    * `requires` cover (minimum-disclosure subset of `App.publicEnv`).
@@ -900,13 +906,15 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     ...(opts.gadgets !== undefined && opts.gadgets.length > 0
       ? { gadgets: opts.gadgets }
       : {}),
-    // Precompiled, eval-free contract validators. Symmetric forward
-    // for the self-contained shell — the renderer iframe's strict CSP
-    // blocks runtime `ajv.compile()`, so it loads these modules via
-    // `blob:` import. Omitted when the contract declares no
-    // runtime-validated schema.
-    ...(opts.compiledValidators !== undefined
-      ? { compiledValidators: opts.compiledValidators }
+    // Content-addressable contract-validator bundle. Iframe-runtime
+    // fetches `validatorsUrl` + dynamic-imports to resolve validators.
+    // Omitted when the contract declares no runtime-validated schema
+    // OR when the server has no CodeStore wired for the bundle write.
+    ...(opts.contractHash !== undefined && opts.validatorsUrl !== undefined
+      ? {
+          contractHash: opts.contractHash,
+          validatorsUrl: opts.validatorsUrl,
+        }
       : {}),
     // Server-filtered public env values that declared wrappers'
     // `requires` cover. Symmetric forward; without it, wrappers
@@ -1382,6 +1390,8 @@ export function registerGguiSessionResourceTemplate(
         // when codeStore + codeBaseUrl aren't wired.
         let codeUrl: string | undefined;
         let codeHash: string | undefined;
+        let contractHash: string | undefined;
+        let validatorsUrl: string | undefined;
         if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
           try {
             const hash = opts.codeStore.hashOf(top.componentCode);
@@ -1391,6 +1401,19 @@ export function registerGguiSessionResourceTemplate(
             codeUrl = `${base}/code/${hash}.js`;
           } catch {
             // Silent — falls through to loading shell below.
+          }
+          // Content-addressable contract-validator bundle (#109).
+          try {
+            const bundle = await deriveContractBundle(top.source);
+            if (bundle) {
+              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+              contractHash = bundle.contractHash;
+              const base = opts.codeBaseUrl.replace(/\/$/, '');
+              validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          } catch {
+            // Silent — bundle write failure degrades to no client-side
+            // validators (server-side gate is authoritative).
           }
         }
         if (!isSystem && codeUrl === undefined) {
@@ -1448,8 +1471,8 @@ export function registerGguiSessionResourceTemplate(
           view.gadgets.length > 0
             ? { gadgets: view.gadgets }
             : {}),
-          ...(view.compiledValidators !== undefined
-            ? { compiledValidators: view.compiledValidators }
+          ...(contractHash !== undefined && validatorsUrl !== undefined
+            ? { contractHash, validatorsUrl }
             : {}),
           ...(resourcePublicEnv !== undefined &&
           Object.keys(resourcePublicEnv).length > 0

@@ -16,7 +16,7 @@ import {
   MCP_APPS_UI_CAPABILITY,
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
-  hasPushBootstrapMeta,
+  combineMcpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createHash } from 'node:crypto';
 import {
@@ -255,9 +255,15 @@ describe('end-to-end outbound flow', () => {
     expect(sc.stackItemId).toBeDefined();
     expect(sc.url).toMatch(/^http:\/\/localhost\/r\//);
 
-    // _meta.ggui.bootstrap is present and well-shaped.
+    // The five `ai.ggui/*` _meta keys decode to a well-shaped bootstrap.
     expect(result._meta).toBeDefined();
-    expect(hasPushBootstrapMeta(result._meta)).toBe(true);
+    const combined = combineMcpAppAiGguiMeta(result._meta);
+    expect(combined.ok).toBe(true);
+    if (combined.ok) {
+      expect(combined.bootstrap.sessionId).toBeDefined();
+      expect(combined.bootstrap.appId).toBeDefined();
+      expect(combined.bootstrap.runtimeUrl).toBeDefined();
+    }
   });
 
   it('ggui_push declaration exposes _meta.ui.resourceUri on tools/list', async () => {
