@@ -8,9 +8,10 @@
  *
  * The handler stamps declaration-level `_meta.ui.resourceUri` +
  * `_meta.ui.visibility` so MCP Apps hosts know to fetch
- * `ui://ggui/session` on a tool call, and (when `mintBootstrap` is
- * wired) emits per-result `_meta.ggui.bootstrap` carrying the
- * WebSocket bootstrap credentials the iframe shell needs.
+ * `ui://ggui/session` on a tool call, and (when `mintWsToken` is
+ * wired) emits per-result `_meta["ai.ggui/session"]` +
+ * `_meta["ai.ggui/stack-item"]` slice meta carrying the WebSocket
+ * bootstrap credentials the iframe shell needs.
  *
  * **What it does:**
  *
@@ -25,7 +26,7 @@
  *   7. Otherwise runs the bound `UiGenerator` and registers the
  *      produced blueprint into the cache.
  *   8. Returns a spec-conformant `pushOutputSchema`-shaped result and
- *      emits `_meta.ggui.bootstrap` via `resultMeta`.
+ *      emits the `ai.ggui/*` slice meta pair via `resultMeta`.
  *
  * **Placeholder stack-item invariant.** When the handler is built
  * with `provisionalPreview` deps, an empty-componentCode placeholder
@@ -52,9 +53,10 @@ import {
 } from '@ggui-ai/protocol';
 import {
   GGUI_PUSH_UI_META,
-  slicesToMcpAppMeta,
-  splitMountViewIntoSlices,
-  type McpAppAiGguiMountView,
+  metaToMcpAppMeta,
+  type McpAppAiGguiMeta,
+  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiStackItemMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AppMetadataStore,
@@ -118,11 +120,11 @@ import {
 } from './cache-trace-sink.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 import {
-  deriveStackItemBootstrapView,
+  deriveStackItemMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
-  type StackItemBootstrapView,
-} from './bootstrap-meta-derivation.js';
+  type StackItemMetaView,
+} from './slice-meta-derivation.js';
 
 /**
  * Generation-time deps for the `ggui_push` handler. Absent = the
@@ -345,24 +347,24 @@ export interface GguiPushHandlerDeps {
   readonly pendingEventConsumer?: PendingEventConsumer;
   /**
    * Bootstrap-credential minter for the MCP Apps outbound path. When
-   * present, the handler's `resultMeta` returns `{ ["ai.ggui/bootstrap"]: bootstrap }`.
-   * When ABSENT, no `_meta` is emitted — the path still works end-to-end
-   * for non-MCP-Apps hosts that just need the `url` fallback.
+   * present, the handler's `resultMeta` emits the live-auth trio on
+   * the `ai.ggui/session` slice. When ABSENT, no `_meta` is emitted —
+   * the path still works end-to-end for non-MCP-Apps hosts that just
+   * need the `url` fallback.
    *
-   * Returns the transport-level portion of `McpAppAiGguiMountView` —
+   * Returns the live-auth fields on the session slice —
    * `{wsUrl, token, expiresAt}`. The handler adds `sessionId` + `appId`
    * from the push context itself, plus `runtimeUrl` from the separate
    * `runtimeUrl` dep (server-level config, not minter-scoped).
    */
   // Live-mode credential minter. Returns the WS subscribe target +
-  // the single-use bootstrap token + its expiry. The protocol's
-  // `McpAppAiGguiMountView.wsUrl/token/expiresAt` are optional (only live
-  // mode populates them); a minter that's wired AT ALL is by
-  // construction the live-mode minter, so the return shape pins them
-  // required so consumers don't have to narrow. Set this to
-  // `undefined` (omit the key) for self-contained / system-card-only
-  // deployments.
-  readonly mintBootstrap?: (
+  // the short-TTL WS auth token + its expiry. These fields are
+  // session-slice optional (only live mode populates them); a minter
+  // that's wired AT ALL is by construction the live-mode minter, so
+  // the return shape pins them required so consumers don't have to
+  // narrow. Set this to `undefined` (omit the key) for self-contained
+  // / system-card-only deployments.
+  readonly mintWsToken?: (
     sessionId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
@@ -378,13 +380,13 @@ export interface GguiPushHandlerDeps {
   readonly defaultGenerator?: string;
   /**
    * URL of the renderer bundle the thin shell should fetch. Padded
-   * onto {@link McpAppAiGguiMountView.runtimeUrl} at `resultMeta` time
+   * onto {@link McpAppAiGguiSessionMeta.runtimeUrl} at `resultMeta` time
    * alongside `sessionId` / `appId`. Separate dep (not a field on
-   * `mintBootstrap`'s return) because the URL is a server-config
+   * `mintWsToken`'s return) because the URL is a server-config
    * value (same for every session), not a per-mint credential.
    *
-   * Required when `mintBootstrap` is set — the thin-shell HTML's
-   * boot path depends on it. Omitted + `mintBootstrap` set is a
+   * Required when `mintWsToken` is set — the thin-shell HTML's
+   * boot path depends on it. Omitted + `mintWsToken` set is a
    * configuration bug; we fall back to `/_ggui/iframe-runtime.js` (the
    * same-origin OSS default) with a warning on first use. Callers
    * composing the deps bundle inside `@ggui-ai/mcp-server` always
@@ -417,13 +419,13 @@ export interface GguiPushHandlerDeps {
   readonly signRenderUrl?: (shortCode: string) => string;
   /**
    * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
-   * `_meta.ggui.bootstrap.themeId` so MCP Apps hosts (claude.ai web,
-   * Claude Desktop) that mount via `ui/notifications/tool-result`
-   * postMessage propagate the operator's theme into the iframe's
-   * `extractBootstrapFromToolResult` path. Without this, hosts that
-   * don't fetch the per-session resource via `resources/read`
-   * silently fall back to the iframe-runtime's baked default theme
-   * (`ggui`), even when `ggui.json#theme: 'indigo'` is set.
+   * the `ai.ggui/session.themeId` slice field so MCP Apps hosts
+   * (claude.ai web, Claude Desktop) that mount via
+   * `ui/notifications/tool-result` postMessage propagate the operator's
+   * theme into the iframe's `extractBootstrapFromToolResult` path.
+   * Without this, hosts that don't fetch the per-session resource via
+   * `resources/read` silently fall back to the iframe-runtime's baked
+   * default theme (`ggui`), even when `ggui.json#theme: 'indigo'` is set.
    */
   readonly themeId?: string;
   /** Theme color mode resolved from `ggui.json#theme.mode`. */
@@ -667,7 +669,7 @@ export interface GguiPushHandlerDeps {
    * `componentCode` on the appended stack item, the handler
    * computes `sha256(code)`, writes (hash, code) to the store, and
    * surfaces `codeUrl` + `codeHash` on the push response
-   * (`structuredContent` + `_meta.ggui.bootstrap`). The iframe
+   * (`structuredContent` + the `ai.ggui/stack-item` slice). The iframe
    * runtime fetches the URL to load the compiled ES module.
    *
    * Pairs with {@link codeBaseUrl} below — both must be present for
@@ -1928,7 +1930,7 @@ export function createGguiPushHandler(
       // upsert-by-id so this collapses to a single row update; the
       // bootstrap-projection block in `resultMeta` then reads the
       // overlaid value via the same lookup path that drives
-      // `deriveStackItemBootstrapView`.
+      // `deriveStackItemMeta`.
       //
       // Failure here downgrades to "no per-push theme override" (the
       // session.themeId / app default / process default still apply
@@ -2039,20 +2041,20 @@ export function createGguiPushHandler(
       const perCallUiMeta = { resourceUri: perCallResourceUri };
 
       // Look up the just-appended stack item to embed renderable wire
-      // shape on `_meta.ggui.bootstrap`. Hosts whose iframe sandbox CSP
-      // blocks `connect-src` to our origin (claude.ai's
+      // shape on the `ai.ggui/stack-item` slice meta. Hosts whose iframe
+      // sandbox CSP blocks `connect-src` to our origin (claude.ai's
       // `claudemcpcontent.com` wrapper) cannot fetch the per-session
       // resource — but they DO forward the full `_meta` over postMessage,
       // so the inline-mount path needs the renderable in the meta itself.
       //
       // Stack-item-derived fields (componentCode | kind, propsJson,
       // actionNextSteps, contextSlots) come from the
-      // {@link deriveStackItemBootstrapView} projection — same single
+      // {@link deriveStackItemMeta} projection — same single
       // source of truth the public-render `/r/<shortCode>` route
       // composes its inline shell from. Encoding `componentCode` to
       // base64 happens here at the meta-emission boundary; the View
       // itself stays raw so transports own their wire encoding.
-      let view: StackItemBootstrapView = {};
+      let view: StackItemMetaView = {};
       // Public env projection requires App.publicEnv, which lives on
       // the App record (not the stack item). Re-read here in
       // resultMeta rather than threading via closure: the
@@ -2089,7 +2091,7 @@ export function createGguiPushHandler(
           }
         }
         if (top) {
-          view = deriveStackItemBootstrapView(top);
+          view = deriveStackItemMeta(top);
           // Project the App's publicEnv down to the union of declared
           // wrappers' `requires`. The push gate has already verified
           // every required key is satisfied, so this projection's
@@ -2119,16 +2121,28 @@ export function createGguiPushHandler(
           : deps.runtimeUrl;
       const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
 
-      // `mintBootstrap` owns wsUrl + token + expiresAt when wired. When
-      // absent we still emit a minimal `_meta.ggui.bootstrap` carrying
-      // sessionId + appId + runtimeUrl + the renderable variant so
-      // postMessage-mount paths work without a bootstrap minter.
-      const partial = deps.mintBootstrap
-        ? deps.mintBootstrap(output.sessionId, ctx.appId)
+      // `mintWsToken` owns wsUrl + wsToken + expiresAt when wired. The
+      // minter's own return shape names the credential `token` (legacy);
+      // we rename to `wsToken` here so the session slice matches the
+      // wire field name. When absent we still emit a minimal
+      // `ai.ggui/session` slice carrying sessionId + appId + runtimeUrl
+      // + the renderable variant on the `ai.ggui/stack-item` slice so
+      // postMessage-mount paths work without a WS-token minter.
+      const mintedTrio = deps.mintWsToken
+        ? deps.mintWsToken(output.sessionId, ctx.appId)
+        : undefined;
+      const partial: Partial<
+        Pick<McpAppAiGguiSessionMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+      > = mintedTrio
+        ? {
+            wsUrl: mintedTrio.wsUrl,
+            wsToken: mintedTrio.token,
+            expiresAt: mintedTrio.expiresAt,
+          }
         : {};
       // Surface the content-addressable code URL + hash on the
-      // bootstrap envelope. The output object already carries these
-      // (the handler body wrote to codeStore + composed the URL
+      // `ai.ggui/stack-item` slice. The output object already carries
+      // these (the handler body wrote to codeStore + composed the URL
       // before returning), so we just forward — no second lookup, no
       // second store write. `codeUrl` is the sole static-component
       // delivery channel post-2026-05-13; the inline base64
@@ -2137,7 +2151,7 @@ export function createGguiPushHandler(
         codeUrl?: string;
         codeHash?: string;
       };
-      // Layered theme resolution at bootstrap-projection time. Order
+      // Layered theme resolution at slice-meta-projection time. Order
       // is operator-debug-wins: `liveTheme` exists ONLY when an
       // operator just picked a theme via the dev console picker, so
       // it's their "show me what THIS looks like" intent — that has
@@ -2212,49 +2226,30 @@ export function createGguiPushHandler(
         }
       }
 
-      const bootstrap: McpAppAiGguiMountView = {
-        ...partial,
+      // Build the two slices directly (#109 / R3). Session-slice
+      // carries identity + live-auth + capability advertisements
+      // (cached per session by hosts); stack-item slice carries the
+      // active item's render state + contract pointer + component-mode
+      // discriminator (replaced per push). `partial` is the
+      // `mintWsToken` output (wsUrl + token + expiresAt) — all
+      // session-slice fields.
+      const session: McpAppAiGguiSessionMeta = {
         sessionId: output.sessionId,
         appId: ctx.appId,
-        // stackItemId is load-bearing: the iframe-runtime threads it
-        // into `dispatchWiredAction.stackItemId` on every useAction
-        // call. When absent, submit_action returns PIPE_NOT_FOUND
-        // (post 2026-05-13 fail-loud fix) and the iframe falls through
-        // to `ui/message` — the gesture reaches the chat surface but
-        // the agent's open ggui_consume long-poll never drains the
-        // event. Caught by 2026-05-13 live claude.ai smoke: every
-        // other bootstrap transport already projects this field via
-        // `deriveStackItemBootstrapView`; push.resultMeta was the
-        // last drift point.
-        ...(output.stackItemId !== undefined
-          ? { stackItemId: output.stackItemId }
-          : {}),
         runtimeUrl,
+        ...partial,
         ...(appCallableTools.length > 0 ? { appCallableTools } : {}),
         ...(streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools }
           : {}),
-        ...(view.actionNextSteps !== undefined
-          ? { actionNextSteps: view.actionNextSteps }
-          : {}),
-        ...(view.contextSlots !== undefined
-          ? { contextSlots: [...view.contextSlots] }
-          : {}),
-        // Operator-registered wrappers ride the bootstrap to the
+        // Operator-registered wrappers ride the session slice to the
         // iframe so the runtime can dynamic-import each before the
         // first stack item renders. Projected by
-        // `deriveStackItemBootstrapView` from the (enriched) stack-
+        // `deriveStackItemMeta` from the (enriched) stack-
         // item contract; only emitted when wrappers are actually
         // declared so pure-STDLIB apps stay byte-identical.
-        ...(view.gadgets !== undefined &&
-        view.gadgets.length > 0
+        ...(view.gadgets !== undefined && view.gadgets.length > 0
           ? { gadgets: view.gadgets }
-          : {}),
-        // Content-addressable contract validators (see content-bundle
-        // compute above). Both fields present together or absent
-        // together — iframe-runtime treats absence as "no validators".
-        ...(contractHash !== undefined && validatorsUrl !== undefined
-          ? { contractHash, validatorsUrl }
           : {}),
         // Minimum-disclosure subset of App.publicEnv (union of
         // declared wrappers' `requires`). Filtered above by
@@ -2264,8 +2259,38 @@ export function createGguiPushHandler(
         Object.keys(bootstrapPublicEnv).length > 0
           ? { publicEnv: bootstrapPublicEnv }
           : {}),
-        ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
-        ...(resolvedThemeMode !== undefined ? { themeMode: resolvedThemeMode } : {}),
+        ...(resolvedThemeId !== undefined
+          ? { themeId: resolvedThemeId }
+          : {}),
+        ...(resolvedThemeMode !== undefined
+          ? { themeMode: resolvedThemeMode }
+          : {}),
+      };
+      // stackItemId is load-bearing: the iframe-runtime threads it
+      // into `dispatchWiredAction.stackItemId` on every useAction
+      // call. When absent, submit_action returns PIPE_NOT_FOUND
+      // (post 2026-05-13 fail-loud fix) and the iframe falls through
+      // to `ui/message` — the gesture reaches the chat surface but
+      // the agent's open ggui_consume long-poll never drains the
+      // event. Every other slice-meta transport already projects this
+      // field via `deriveStackItemMeta`; push.resultMeta was
+      // the last drift point.
+      const stackItem: McpAppAiGguiStackItemMeta = {
+        ...(output.stackItemId !== undefined
+          ? { stackItemId: output.stackItemId }
+          : {}),
+        ...(view.actionNextSteps !== undefined
+          ? { actionNextSteps: view.actionNextSteps }
+          : {}),
+        ...(view.contextSlots !== undefined
+          ? { contextSlots: [...view.contextSlots] }
+          : {}),
+        // Content-addressable contract validators (see content-bundle
+        // compute above). Both fields present together or absent
+        // together — iframe-runtime treats absence as "no validators".
+        ...(contractHash !== undefined && validatorsUrl !== undefined
+          ? { contractHash, validatorsUrl }
+          : {}),
         ...(view.kind ? { kind: view.kind } : {}),
         ...(view.propsJson ? { propsJson: view.propsJson } : {}),
         ...(outputWithCode.codeUrl
@@ -2282,10 +2307,10 @@ export function createGguiPushHandler(
       //
       //   - ui.resourceUri stamp would cause the host to mount a
       //     second iframe per push, defeating the canvas model.
-      //   - the bootstrap slices carry this push's `stackItemId`, which
+      //   - the stack-item slice carries this push's `stackItemId`, which
       //     if forwarded via postMessage to the canvas iframe would
-      //     poison its bootstrap parser into single-item mode and
-      //     break the session-wide subscription.
+      //     poison its parser into single-item mode and break the
+      //     session-wide subscription.
       //
       // The stack item still flows over the live channel via the existing
       // `push` envelope (server-side appendStackItem path emits it
@@ -2295,14 +2320,18 @@ export function createGguiPushHandler(
         return undefined;
       }
 
-      // Split the aggregated mount view into the two per-window `_meta`
-      // keys (#109). Hosts that forward `_meta` to views may cache the
-      // `session` slice for the session's lifetime; render-only deltas
-      // can emit just `stack-item`. The contract pointer is
-      // content-addressable — same hash on repeat pushes ⇒ browser
-      // HTTP cache returns the validators without a round-trip.
+      // Emit the two per-window `_meta` keys (#109). Hosts that
+      // forward `_meta` to views may cache the `session` slice for the
+      // session's lifetime; render-only deltas can emit just
+      // `stack-item`. The contract pointer is content-addressable —
+      // same hash on repeat pushes ⇒ browser HTTP cache returns the
+      // validators without a round-trip.
+      const ggui: McpAppAiGguiMeta = {
+        session,
+        ...(Object.keys(stackItem).length > 0 ? { stackItem } : {}),
+      };
       const meta: Record<string, unknown> = {
-        ...slicesToMcpAppMeta(splitMountViewIntoSlices(bootstrap)),
+        ...metaToMcpAppMeta(ggui),
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,
@@ -2444,9 +2473,9 @@ async function runGenerationIntoSession(
     // intent for the generator's prompt. create-ui-generator echoes
     // the contract back on `result.response.contract`, which the
     // StackItem persistence block projects onto the committed item
-    // — so bootstrap-meta-derivation's deriveContextSlots /
-    // deriveWiredActionTools pick them up on /r/<id> + on
-    // _meta.ggui.bootstrap.
+    // — so slice-meta-derivation's deriveContextSlots /
+    // deriveWiredActionTools pick them up on /r/<id> + on the
+    // `ai.ggui/stack-item` slice meta.
     ...(story.contract !== undefined
       ? { contract: story.contract }
       : {}),
@@ -2734,9 +2763,10 @@ async function runGenerationIntoSession(
  * the stack-push notify, and tear down provisional preview with the
  * canonical `'no-credentials'` reason. Returns `ok: true` so the
  * push handler reports `codeReady: true` and emits the card's
- * `kind` on `_meta.ggui.bootstrap.kind` — the iframe renderer mounts
- * the registered system card. (T3-1 retired the inline
- * `componentCode` channel; system cards use the `kind` discriminator.)
+ * `kind` on the `ai.ggui/stack-item.kind` slice field — the iframe
+ * renderer mounts the registered system card. (T3-1 retired the
+ * inline `componentCode` channel; system cards use the `kind`
+ * discriminator.)
  *
  * Pageid contract: the caller's `stackItem.id` MUST equal `stackItemId`
  * (the in-flight stack-item id) so `appendStackItem` replaces the

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  mountViewToMcpAppMeta,
-  type McpAppAiGguiMountView,
+  metaToMcpAppMeta,
+  type McpAppAiGguiMeta,
+  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiStackItemMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { parseBootstrap } from '../bootstrap.js';
+import { parseMetaFromUiInitialize } from '../meta-parse.js';
 
 /**
  * Bootstrap-parse tests cover the four typed failure reasons + the
@@ -22,6 +24,55 @@ import { parseBootstrap } from '../bootstrap.js';
 const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 
 /**
+ * Field names that belong on the session slice. Used by {@link flatToMeta}
+ * to split a flat fixture input into the two-slice envelope shape that
+ * `metaToMcpAppMeta` consumes. Kept in sync with `McpAppAiGguiSessionMeta`.
+ */
+const SESSION_FIELDS = new Set<string>([
+  'sessionId',
+  'appId',
+  'runtimeUrl',
+  'wsUrl',
+  'wsToken',
+  'expiresAt',
+  'pollingUrl',
+  'themeId',
+  'themeMode',
+  'canvasMode',
+  'gadgets',
+  'publicEnv',
+  'streamWebSocketLocalTools',
+  'appCallableTools',
+  'permissionsPolicy',
+]);
+
+/**
+ * Split a flat fixture object into the two-slice {@link McpAppAiGguiMeta}
+ * shape. Unknown fields (test inputs that intentionally include garbage
+ * to drive malformed-parse paths) ride on the stack-item slice so the
+ * combiner's structural validation can still see them.
+ */
+function flatToMeta(flat: unknown): McpAppAiGguiMeta {
+  if (flat === null || typeof flat !== 'object' || Array.isArray(flat)) {
+    // Malformed fixture — surface it on session so the combiner trips.
+    return { session: flat as unknown as McpAppAiGguiSessionMeta };
+  }
+  const sessionRaw: Record<string, unknown> = {};
+  const stackItemRaw: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(flat as Record<string, unknown>)) {
+    if (SESSION_FIELDS.has(k)) sessionRaw[k] = v;
+    else stackItemRaw[k] = v;
+  }
+  const meta: McpAppAiGguiMeta = {
+    session: sessionRaw as unknown as McpAppAiGguiSessionMeta,
+    ...(Object.keys(stackItemRaw).length > 0
+      ? { stackItem: stackItemRaw as unknown as McpAppAiGguiStackItemMeta }
+      : {}),
+  };
+  return meta;
+}
+
+/**
  * Build a `ui/initialize` `result` payload from the four wire-required
  * bootstrap fields (+ optional expiresAt). Every test composes its
  * input through this so the call sites stay ergonomic without leaking
@@ -34,7 +85,7 @@ const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
   return {
     toolOutput: {
-      _meta: mountViewToMcpAppMeta(bootstrap as McpAppAiGguiMountView),
+      _meta: metaToMcpAppMeta(flatToMeta(bootstrap)),
       structuredContent: { sessionId: 'sess_001' },
     },
     ...(hostContext !== undefined ? { hostContext } : {}),
@@ -43,31 +94,31 @@ function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
 
 const happyBootstrap = {
   wsUrl: 'wss://server.example/ws',
-  token: 'tok_abc123',
+  wsToken: 'tok_abc123',
   sessionId: 'sess_001',
   appId: 'app_001',
   expiresAt: FUTURE_ISO,
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
-describe('parseBootstrap — happy path', () => {
+describe('parseMetaFromUiInitialize — happy path', () => {
   it('returns the typed bootstrap when all required fields are present and well-formed', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.wsUrl).toBe('wss://server.example/ws');
-      expect(result.bootstrap.token).toBe('tok_abc123');
-      expect(result.bootstrap.sessionId).toBe('sess_001');
-      expect(result.bootstrap.appId).toBe('app_001');
-      expect(result.bootstrap.expiresAt).toBe(FUTURE_ISO);
+      expect(result.meta.session.wsUrl).toBe('wss://server.example/ws');
+      expect(result.meta.session.wsToken).toBe('tok_abc123');
+      expect(result.meta.session.sessionId).toBe('sess_001');
+      expect(result.meta.session.appId).toBe('app_001');
+      expect(result.meta.session.expiresAt).toBe(FUTURE_ISO);
     }
   });
 
-  it('accepts a bootstrap without expiresAt and supplies the unbounded sentinel', () => {
-    const result = parseBootstrap(
+  it('accepts a bootstrap without expiresAt and propagates undefined', () => {
+    const result = parseMetaFromUiInitialize(
       buildResult({
         wsUrl: happyBootstrap.wsUrl,
-        token: happyBootstrap.token,
+        wsToken: happyBootstrap.wsToken,
         sessionId: happyBootstrap.sessionId,
         appId: happyBootstrap.appId,
         runtimeUrl: happyBootstrap.runtimeUrl,
@@ -75,20 +126,18 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // The renderer never echoes this back to the wire — sentinel is
-      // a downstream-consumer convenience, not a wire commitment.
-      expect(result.bootstrap.expiresAt).toBe('9999-12-31T23:59:59.999Z');
+      expect(result.meta.session.expiresAt).toBeUndefined();
     }
   });
 
-  it('carries the runtimeUrl field forward onto the typed bootstrap', () => {
-    // C8 (2026-04-23): runtimeUrl is required. parseBootstrap MUST
-    // propagate the field verbatim so the thin-shell's script-load
+  it('carries the runtimeUrl field forward onto the typed session slice', () => {
+    // C8 (2026-04-23): runtimeUrl is required. parseMetaFromUiInitialize
+    // MUST propagate the field verbatim so the thin-shell's script-load
     // path has a URL to point at. Missing is MALFORMED (tested below).
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      expect(result.meta.session.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     }
   });
 
@@ -97,7 +146,7 @@ describe('parseBootstrap — happy path', () => {
   // when absent OR malformed the parse defaults to `[]` so Slice 2
   // dispatch routing can read the array unconditionally.
   it('propagates a well-typed appCallableTools array', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         appCallableTools: ['ggui_runtime_submit_action', 'foo_tool'],
@@ -105,7 +154,7 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.appCallableTools).toEqual([
+      expect(result.meta.session.appCallableTools).toEqual([
         'ggui_runtime_submit_action',
         'foo_tool',
       ]);
@@ -115,27 +164,27 @@ describe('parseBootstrap — happy path', () => {
   it('defaults appCallableTools to [] when the field is absent (back-compat)', () => {
     // Pre-Slice-1 bootstraps don't carry the field. Parser fills `[]`
     // so consumers don't need a presence check.
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.appCallableTools).toEqual([]);
+      expect(result.meta.session.appCallableTools).toEqual([]);
     }
   });
 
   it('defaults appCallableTools to [] when the field is malformed (non-array)', () => {
     // Shape-preserving: a misshapen optional field MUST NOT fail the
     // whole parse. Falls through to `[]`, same as absent.
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, appCallableTools: 'ggui_runtime_submit_action' }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.appCallableTools).toEqual([]);
+      expect(result.meta.session.appCallableTools).toEqual([]);
     }
   });
 
   it('defaults appCallableTools to [] when the array contains non-strings', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         appCallableTools: ['ok', 42, 'also_ok'],
@@ -143,7 +192,7 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.appCallableTools).toEqual([]);
+      expect(result.meta.session.appCallableTools).toEqual([]);
     }
   });
 
@@ -151,7 +200,7 @@ describe('parseBootstrap — happy path', () => {
   // appCallableTools: optional on the wire, well-typed records
   // propagate, malformed shapes default to `{}`.
   it('propagates a well-typed actionNextSteps record', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         actionNextSteps: {
@@ -162,7 +211,7 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.actionNextSteps).toEqual({
+      expect(result.meta.stackItem?.actionNextSteps).toEqual({
         archive: 'gmail_archive',
         send: 'gmail_send',
       });
@@ -170,25 +219,28 @@ describe('parseBootstrap — happy path', () => {
   });
 
   it('defaults actionNextSteps to {} when the field is absent (back-compat)', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.actionNextSteps).toEqual({});
+      // Session-only bootstrap (no stackItem at all) — actionNextSteps
+      // lives on stackItem, so reading defaults to undefined for the
+      // whole slice. Consumers default at the read site.
+      expect(result.meta.stackItem).toBeUndefined();
     }
   });
 
   it('defaults actionNextSteps to {} when the field is malformed (non-object)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, actionNextSteps: 'not-an-object' }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.actionNextSteps).toEqual({});
+      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
     }
   });
 
   it('defaults actionNextSteps to {} when the record contains non-string values', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         actionNextSteps: { ok: 'gmail_archive', bad: 42 },
@@ -196,17 +248,17 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.actionNextSteps).toEqual({});
+      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
     }
   });
 
   it('defaults actionNextSteps to {} when the field is null', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, actionNextSteps: null }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.actionNextSteps).toEqual({});
+      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
     }
   });
 
@@ -214,7 +266,7 @@ describe('parseBootstrap — happy path', () => {
   // posture as the other Slice fields: legacy bootstraps without the
   // field default to `[]`; malformed shapes also default to `[]`.
   it('propagates a well-typed contextSlots array', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         contextSlots: [
@@ -236,7 +288,7 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const slots = result.bootstrap.contextSlots ?? [];
+      const slots = result.meta.stackItem?.contextSlots ?? [];
       expect(slots).toHaveLength(2);
       expect(slots[0]?.name).toBe('currentStep');
       expect(slots[0]?.contextName).toBe('CurrentStepContext');
@@ -245,25 +297,26 @@ describe('parseBootstrap — happy path', () => {
   });
 
   it('defaults contextSlots to [] when the field is absent (back-compat)', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.contextSlots).toEqual([]);
+      // Session-only bootstrap omits the whole stackItem slice.
+      expect(result.meta.stackItem).toBeUndefined();
     }
   });
 
   it('defaults contextSlots to [] when the field is malformed (not an array)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, contextSlots: 'not-an-array' }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.contextSlots).toEqual([]);
+      expect(result.meta.stackItem?.contextSlots).toEqual([]);
     }
   });
 
   it('defaults contextSlots to [] when an entry is missing required fields', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         contextSlots: [
@@ -274,7 +327,7 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.contextSlots).toEqual([]);
+      expect(result.meta.stackItem?.contextSlots).toEqual([]);
     }
   });
 
@@ -282,7 +335,7 @@ describe('parseBootstrap — happy path', () => {
   // useState per slot, so the seed is load-bearing). Missing `default`
   // → entire array drops to [] same as missing `schema`.
   it('defaults contextSlots to [] when an entry omits `default` (Slice 12)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         contextSlots: [
@@ -297,91 +350,91 @@ describe('parseBootstrap — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.contextSlots).toEqual([]);
+      expect(result.meta.stackItem?.contextSlots).toEqual([]);
     }
   });
 });
 
-describe('parseBootstrap — MISSING_TOOL_OUTPUT', () => {
+describe('parseMetaFromUiInitialize — MISSING_TOOL_OUTPUT', () => {
   it('rejects undefined input', () => {
-    expect(parseBootstrap(undefined)).toEqual({
+    expect(parseMetaFromUiInitialize(undefined)).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 
   it('rejects null input', () => {
-    expect(parseBootstrap(null)).toEqual({
+    expect(parseMetaFromUiInitialize(null)).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 
   it('rejects an array (which is typeof "object")', () => {
-    expect(parseBootstrap([])).toEqual({
+    expect(parseMetaFromUiInitialize([])).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 
   it('rejects a primitive string', () => {
-    expect(parseBootstrap('not-an-object')).toEqual({
+    expect(parseMetaFromUiInitialize('not-an-object')).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 
   it('rejects when toolOutput is missing entirely', () => {
-    expect(parseBootstrap({ structuredContent: {} })).toEqual({
+    expect(parseMetaFromUiInitialize({ structuredContent: {} })).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 
   it('rejects when toolOutput is not an object', () => {
-    expect(parseBootstrap({ toolOutput: 'string-output' })).toEqual({
+    expect(parseMetaFromUiInitialize({ toolOutput: 'string-output' })).toEqual({
       ok: false,
       reason: 'MISSING_TOOL_OUTPUT',
     });
   });
 });
 
-describe('parseBootstrap — MISSING_META_GGUI_BOOTSTRAP', () => {
+describe('parseMetaFromUiInitialize — MISSING_META_GGUI_BOOTSTRAP', () => {
   it('rejects when _meta is absent', () => {
-    expect(parseBootstrap({ toolOutput: { structuredContent: {} } })).toEqual({
+    expect(parseMetaFromUiInitialize({ toolOutput: { structuredContent: {} } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
     });
   });
 
   it('rejects when the session slice is absent from _meta', () => {
-    expect(parseBootstrap({ toolOutput: { _meta: { other: {} } } })).toEqual({
+    expect(parseMetaFromUiInitialize({ toolOutput: { _meta: { other: {} } } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
     });
   });
 
   it('rejects when _meta carries an empty object (no per-window keys)', () => {
-    expect(parseBootstrap({ toolOutput: { _meta: {} } })).toEqual({
+    expect(parseMetaFromUiInitialize({ toolOutput: { _meta: {} } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
     });
   });
 
   it('rejects when the bootstrap value is an array (combiner returns MALFORMED_SESSION)', () => {
-    expect(parseBootstrap(buildResult([]))).toEqual({
+    expect(parseMetaFromUiInitialize(buildResult([]))).toEqual({
       ok: false,
       reason: 'MALFORMED_BOOTSTRAP',
     });
   });
 });
 
-describe('parseBootstrap — MALFORMED_BOOTSTRAP', () => {
+describe('parseMetaFromUiInitialize — MALFORMED_BOOTSTRAP', () => {
   it('rejects when wsUrl is missing', () => {
     expect(
-      parseBootstrap(
+      parseMetaFromUiInitialize(
         buildResult({
-          token: happyBootstrap.token,
+          wsToken: happyBootstrap.wsToken,
           sessionId: happyBootstrap.sessionId,
           appId: happyBootstrap.appId,
         }),
@@ -391,43 +444,43 @@ describe('parseBootstrap — MALFORMED_BOOTSTRAP', () => {
 
   it('rejects when token is empty string', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, token: '' })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, wsToken: '' })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects when sessionId is a number (wrong type)', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, sessionId: 12345 })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, sessionId: 12345 })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects when appId is null', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, appId: null })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, appId: null })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects when expiresAt is unparseable', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, expiresAt: 'not-a-date' })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, expiresAt: 'not-a-date' })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects when expiresAt is the wrong type (number, not ISO string)', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, expiresAt: Date.now() })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, expiresAt: Date.now() })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects when runtimeUrl is missing (C8 load-bearing field)', () => {
     // runtimeUrl joined the required set in C8; absence is MALFORMED.
     // Exactly the same posture as the other four string fields —
-    // parseBootstrap refuses to surface an un-bootable bootstrap.
+    // parseMetaFromUiInitialize refuses to surface an un-bootable meta.
     expect(
-      parseBootstrap(
+      parseMetaFromUiInitialize(
         buildResult({
           wsUrl: happyBootstrap.wsUrl,
-          token: happyBootstrap.token,
+          wsToken: happyBootstrap.wsToken,
           sessionId: happyBootstrap.sessionId,
           appId: happyBootstrap.appId,
           expiresAt: happyBootstrap.expiresAt,
@@ -439,14 +492,14 @@ describe('parseBootstrap — MALFORMED_BOOTSTRAP', () => {
 
   it('rejects when runtimeUrl is empty string', () => {
     expect(
-      parseBootstrap(buildResult({ ...happyBootstrap, runtimeUrl: '' })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, runtimeUrl: '' })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 });
 
-describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
+describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () => {
   it('preserves a non-empty allowlist verbatim', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         streamWebSocketLocalTools: ['weather_now', 'tasks_list'],
@@ -454,7 +507,7 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.streamWebSocketLocalTools).toEqual([
+      expect(result.meta.session.streamWebSocketLocalTools).toEqual([
         'weather_now',
         'tasks_list',
       ]);
@@ -462,7 +515,7 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
   });
 
   it('preserves an empty allowlist verbatim (server transport-aware, no tool local)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         streamWebSocketLocalTools: [],
@@ -470,20 +523,23 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.streamWebSocketLocalTools).toEqual([]);
+      // Empty array projects to undefined per the parser's
+      // "shape-preserving collapse" rule (only non-empty entries
+      // survive). Consumers default at the read site.
+      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
   it('defaults to undefined when the field is absent (universal iframe-poll fallback)', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
   it('defaults to undefined on malformed payload (non-array)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         streamWebSocketLocalTools: 'not-an-array',
@@ -491,12 +547,12 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
   it('defaults to undefined when array contains non-string entries', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         streamWebSocketLocalTools: ['weather_now', 42],
@@ -504,7 +560,7 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 });
@@ -514,9 +570,9 @@ describe('parseBootstrap — EE+ 1c streamWebSocketLocalTools', () => {
 // PACKAGE (`package` required; no per-hook `hook` field). Parse:
 // defensive — malformed entries collapse the WHOLE field to
 // `undefined` rather than partially trusting it.
-describe('parseBootstrap — GG.8.2 gadgets', () => {
+describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
   it('parses a well-formed gadgets array', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: [
@@ -532,7 +588,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toEqual([
+      expect(result.meta.session.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-leaflet',
         },
@@ -545,15 +601,15 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
   });
 
   it('defaults gadgets to undefined when absent', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toBeUndefined();
+      expect(result.meta.session.gadgets).toBeUndefined();
     }
   });
 
   it('defaults to undefined when an entry lacks a package', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: [{ bundleUrl: 'https://cdn.example/orphan.js' }],
@@ -561,12 +617,12 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toBeUndefined();
+      expect(result.meta.session.gadgets).toBeUndefined();
     }
   });
 
   it('defaults to undefined when the field is not an array', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: { package: 'oops' },
@@ -574,12 +630,12 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toBeUndefined();
+      expect(result.meta.session.gadgets).toBeUndefined();
     }
   });
 
   it('defaults to undefined when an entry has an empty package string', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: [{ package: '' }],
@@ -587,7 +643,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toBeUndefined();
+      expect(result.meta.session.gadgets).toBeUndefined();
     }
   });
 
@@ -595,7 +651,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
   // Without a bundleUrl the field is stripped (SRI is only meaningful
   // on the `<link rel="modulepreload">` path).
   it('threads bundleSri end-to-end when paired with bundleUrl', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: [
@@ -609,7 +665,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toEqual([
+      expect(result.meta.session.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-mapbox',
           bundleUrl: 'https://registry.ggui.ai/bundles/mapbox.js',
@@ -620,7 +676,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
   });
 
   it('drops bundleSri on a package-only entry (SRI requires a bundleUrl)', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         gadgets: [
@@ -633,7 +689,7 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.gadgets).toEqual([
+      expect(result.meta.session.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-mapbox',
         },
@@ -647,9 +703,9 @@ describe('parseBootstrap — GG.8.2 gadgets', () => {
 // `globalThis.__ggui__.publicEnv` for wrapper hooks to read via
 // `getPublicEnv()`. Parser is defensive: every key must match
 // `PUBLIC_ENV_APP_KEY_RE`; one bad key drops the whole field.
-describe('parseBootstrap — Slice 2.0 publicEnv', () => {
+describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
   it('parses a well-formed publicEnv map', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         publicEnv: {
@@ -660,7 +716,7 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toEqual({
+      expect(result.meta.session.publicEnv).toEqual({
         GGUI_PUBLIC_APP_MAPBOX_TOKEN: 'pk.eyJ...',
         GGUI_PUBLIC_APP_API_BASE: 'https://api.example.com',
       });
@@ -668,10 +724,10 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
   });
 
   it('defaults publicEnv to undefined when absent', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 
@@ -681,17 +737,17 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     // it as absent (undefined). Empty-map and absent are now
     // wire-equivalent; consumers that need a defined map default at
     // their read site.
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, publicEnv: {} }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 
   it('collapses to undefined when a key violates the prefix rule', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         publicEnv: {
@@ -702,12 +758,12 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 
   it('collapses to undefined when a value is not a string', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         publicEnv: { GGUI_PUBLIC_APP_TOKEN: 123 },
@@ -715,22 +771,22 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 
   it('collapses to undefined when the field itself is not a plain object', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, publicEnv: 'not-an-object' }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 
   it('collapses to undefined when a key uses the reserved USER_ namespace', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         publicEnv: { GGUI_PUBLIC_USER_TOKEN: 'pk.eyJ...' },
@@ -738,15 +794,15 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toBeUndefined();
+      expect(result.meta.session.publicEnv).toBeUndefined();
     }
   });
 });
 
-describe('parseBootstrap — EXPIRED_BOOTSTRAP', () => {
+describe('parseMetaFromUiInitialize — EXPIRED_BOOTSTRAP', () => {
   it('rejects when expiresAt is in the past', () => {
     expect(
-      parseBootstrap(
+      parseMetaFromUiInitialize(
         buildResult({ ...happyBootstrap, expiresAt: '2000-01-01T00:00:00.000Z' }),
       ),
     ).toEqual({ ok: false, reason: 'EXPIRED_BOOTSTRAP' });
@@ -754,7 +810,7 @@ describe('parseBootstrap — EXPIRED_BOOTSTRAP', () => {
 
   it('rejects when expiresAt is one millisecond in the past', () => {
     expect(
-      parseBootstrap(
+      parseMetaFromUiInitialize(
         buildResult({
           ...happyBootstrap,
           // Set to one ms in the past to avoid clock-jitter flakes.
@@ -765,7 +821,7 @@ describe('parseBootstrap — EXPIRED_BOOTSTRAP', () => {
   });
 });
 
-describe('parseBootstrap — auth-degraded fallback (rehydrate)', () => {
+describe('parseMetaFromUiInitialize — auth-degraded fallback (rehydrate)', () => {
   // chat-history rehydrate scenario: claude.ai persisted the original
   // bootstrap (with its 2-min token TTL) and re-mounts the iframe
   // minutes/hours later. The token has expired but the static
@@ -775,13 +831,13 @@ describe('parseBootstrap — auth-degraded fallback (rehydrate)', () => {
   // degraded mode — auth fields dropped, static fields preserved.
 
   it('expired + codeUrl → returns ok in degraded mode', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         sessionId: 'sess_001',
         appId: 'app_001',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'wss://server.example/ws',
-        token: 'tok_abc123',
+        wsToken: 'tok_abc123',
         expiresAt: '2000-01-01T00:00:00.000Z',
         codeUrl: 'https://cdn.example/blueprint/abc.js',
         codeHash: 'sha256-deadbeef',
@@ -789,35 +845,35 @@ describe('parseBootstrap — auth-degraded fallback (rehydrate)', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
-      expect(result.bootstrap.wsUrl).toBeUndefined();
-      expect(result.bootstrap.token).toBeUndefined();
+      expect(result.meta.stackItem?.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
+      expect(result.meta.session.wsUrl).toBeUndefined();
+      expect(result.meta.session.wsToken).toBeUndefined();
     }
   });
 
   it('expired + system kind → returns ok in degraded mode', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         sessionId: 'sess_001',
         appId: 'app_001',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'wss://server.example/ws',
-        token: 'tok_abc123',
+        wsToken: 'tok_abc123',
         expiresAt: '2000-01-01T00:00:00.000Z',
         kind: 'no-credentials',
       }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.kind).toBe('no-credentials');
-      expect(result.bootstrap.wsUrl).toBeUndefined();
-      expect(result.bootstrap.token).toBeUndefined();
+      expect(result.meta.stackItem?.kind).toBe('no-credentials');
+      expect(result.meta.session.wsUrl).toBeUndefined();
+      expect(result.meta.session.wsToken).toBeUndefined();
     }
   });
 
   it('expired + NO static content → still rejects with EXPIRED_BOOTSTRAP', () => {
     expect(
-      parseBootstrap(
+      parseMetaFromUiInitialize(
         buildResult({
           ...happyBootstrap,
           expiresAt: '2000-01-01T00:00:00.000Z',
@@ -828,14 +884,14 @@ describe('parseBootstrap — auth-degraded fallback (rehydrate)', () => {
   });
 });
 
-describe('parseBootstrap — Slice A HostContext capture', () => {
-  // The widening: parseBootstrapFromUiInitialize
+describe('parseMetaFromUiInitialize — Slice A HostContext capture', () => {
+  // The widening: parseMetaFromUiInitialize
   // now opportunistically reads `result.hostContext` and projects it
-  // alongside the bootstrap. Best-effort — never blocks the bootstrap
-  // parse.
+  // alongside the slice meta. Best-effort — never blocks the
+  // slice-meta parse.
 
   it('captures hostContext when present alongside a valid bootstrap', () => {
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult(happyBootstrap, {
         displayMode: 'fullscreen',
         availableDisplayModes: ['inline', 'fullscreen', 'pip'],
@@ -853,7 +909,7 @@ describe('parseBootstrap — Slice A HostContext capture', () => {
   });
 
   it('omits hostContext when the host did not emit one', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.hostContext).toBeUndefined();
@@ -861,19 +917,19 @@ describe('parseBootstrap — Slice A HostContext capture', () => {
   });
 
   it('omits hostContext when malformed (best-effort, never blocks)', () => {
-    const result = parseBootstrap(buildResult(happyBootstrap, 'not an object'));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap, 'not an object'));
     expect(result.ok).toBe(true);
     if (result.ok) {
       // Bootstrap still parses; hostContext silently undefined.
       expect(result.hostContext).toBeUndefined();
-      expect(result.bootstrap.sessionId).toBe('sess_001');
+      expect(result.meta.session.sessionId).toBe('sess_001');
     }
   });
 
   it('captures hostContext as empty {} when host emits object-with-no-recognized-fields', () => {
     // Distinct from undefined — host DID emit context, just nothing
     // ggui projects. Useful for "host is on the spec but minimal".
-    const result = parseBootstrap(buildResult(happyBootstrap, { theme: 'dark' }));
+    const result = parseMetaFromUiInitialize(buildResult(happyBootstrap, { theme: 'dark' }));
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.hostContext).toEqual({});
@@ -882,7 +938,7 @@ describe('parseBootstrap — Slice A HostContext capture', () => {
 
   it('malformed bootstrap still rejects regardless of hostContext', () => {
     // hostContext capture must not mask a bootstrap-parse failure.
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult(
         { wsUrl: 'wss://x', sessionId: 'sess_001' /* missing appId+runtimeUrl */ },
         { displayMode: 'fullscreen' },
@@ -897,7 +953,7 @@ describe('parseBootstrap — Slice A HostContext capture', () => {
   it('fresh + codeUrl → returns ok with all live-mode fields preserved', () => {
     // Sanity: the degraded fallback only fires on expiry. Fresh
     // bootstraps with static content keep the live fields too.
-    const result = parseBootstrap(
+    const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
         codeUrl: 'https://cdn.example/blueprint/abc.js',
@@ -906,10 +962,10 @@ describe('parseBootstrap — Slice A HostContext capture', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.wsUrl).toBe('wss://server.example/ws');
-      expect(result.bootstrap.token).toBe('tok_abc123');
-      expect(result.bootstrap.expiresAt).toBe(FUTURE_ISO);
-      expect(result.bootstrap.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
+      expect(result.meta.session.wsUrl).toBe('wss://server.example/ws');
+      expect(result.meta.session.wsToken).toBe('tok_abc123');
+      expect(result.meta.session.expiresAt).toBe(FUTURE_ISO);
+      expect(result.meta.stackItem?.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
     }
   });
 });

@@ -18,7 +18,7 @@
  * registry-owned WS transport is the sole dispatch site.
  */
 
-import type { ChannelHandler } from '@ggui-ai/channel-client';
+import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type { PushPayload } from '@ggui-ai/protocol';
 
 import type { ChannelTransportRouter } from '../channel-transport.js';

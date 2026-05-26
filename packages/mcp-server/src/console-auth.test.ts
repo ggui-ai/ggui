@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  mintBootstrapToken,
+  mintWsToken,
   mintSessionToken,
   verifyToken,
 } from '@ggui-ai/mcp-server-core';
@@ -86,7 +86,7 @@ describe('mintDevtoolCookie', () => {
 
 describe('verifyDevtoolCookie — isolation', () => {
   it('rejects bootstrap tokens minted with the same secret', () => {
-    const { token } = mintBootstrapToken(
+    const { token } = mintWsToken(
       { sessionId: 's1', appId: 'a1' },
       SECRET,
     );
@@ -101,14 +101,14 @@ describe('verifyDevtoolCookie — isolation', () => {
     expect(verifyDevtoolCookie(token, SECRET)).toBeNull();
   });
 
-  it('bootstrap tokens do NOT verify when the cookie kind is requested', () => {
+  it('ws tokens do NOT verify when the cookie kind is requested', () => {
     const { cookieValue } = mintDevtoolCookie({
       sessionId: 's1',
       appId: 'a1',
       secret: SECRET,
     });
-    // Same value does NOT verify as bootstrap — kind claim guards it.
-    const bootstrapVerify = verifyToken(cookieValue, SECRET, 'bootstrap');
+    // Same value does NOT verify as a ws token — kind claim guards it.
+    const bootstrapVerify = verifyToken(cookieValue, SECRET, 'ws');
     expect(bootstrapVerify.ok).toBe(false);
     // Same value does NOT verify as session either.
     const sessionVerify = verifyToken(cookieValue, SECRET, 'session');

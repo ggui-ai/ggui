@@ -14,8 +14,8 @@
  *   - no generation deps: existing placeholder behavior preserved.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { combineMcpAppAiGguiMeta,
-  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { parseMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppContextSlot } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   BlueprintProvider,
   LlmProvider,
@@ -667,17 +667,16 @@ describe('ggui_push — contextSpec projection', () => {
       appId: 'app-1',
       requestId: 'req-1',
     });
-    const combined = combineMcpAppAiGguiMeta(meta);
-    expect(combined.ok).toBe(true);
-    if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-    const bootstrap = merged.view;
-    expect(bootstrap.contextSlots).toBeDefined();
-    expect(bootstrap.contextSlots).toHaveLength(2);
+    const parsed = parseMcpAppAiGguiMeta(meta);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const stackItem = parsed.meta.stackItem;
+    expect(stackItem).toBeDefined();
+    if (!stackItem) return;
+    expect(stackItem.contextSlots).toBeDefined();
+    expect(stackItem.contextSlots).toHaveLength(2);
     const byName = Object.fromEntries(
-      (bootstrap.contextSlots ?? []).map((s) => [s.name, s]),
+      (stackItem.contextSlots ?? []).map((s: McpAppContextSlot) => [s.name, s]),
     );
     expect(byName.currentStep?.default).toBe(1);
     expect(byName.draftText?.default).toBe('');
@@ -721,12 +720,9 @@ describe('ggui_push — contextSpec projection', () => {
       appId: 'app-1',
       requestId: 'req-1',
     });
-    const combined = combineMcpAppAiGguiMeta(meta);
-    expect(combined.ok).toBe(true);
-    if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-    expect(merged.view.contextSlots).toBeUndefined();
+    const parsed = parseMcpAppAiGguiMeta(meta);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.meta.stackItem?.contextSlots).toBeUndefined();
   });
 });

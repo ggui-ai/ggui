@@ -224,8 +224,9 @@ export const handshakeInputSchema = z.object({
  * its internal `HandshakeOutput` TS shape for telemetry / post-classify
  * tracing — zod strips them before structuredContent serialization.
  *
- * `serverCapabilities` reaches the iframe via `_meta.ggui.bootstrap`
- * (see `bootstrap-meta-derivation.ts`), not via this response.
+ * `serverCapabilities` reaches the iframe via the `ai.ggui/session` +
+ * `ai.ggui/stack-item` slice meta pair (see `slice-meta-derivation.ts`),
+ * not via this response.
  */
 export const handshakeOutputSchema = z.object({
   handshakeId: z.string().describe('Stable id — pass to ggui_push / ggui_update'),
@@ -318,7 +319,8 @@ export const pushInputSchema = z.object({
  * structuredContent serialization.
  *
  * The iframe receives bootstrap credentials (`wsUrl`, `token`,
- * `expiresAt`) via `_meta.ggui.bootstrap`, not via this response.
+ * `expiresAt`) via the `ai.ggui/session` slice meta, not via this
+ * response.
  */
 export const pushOutputSchema = z.object({
   stackItemId: z.string(),
@@ -403,8 +405,9 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
  *
  * Post-update the iframe receives the new props via the live-channel
  * `props_update` WS frame; the cross-host fallback path receives them
- * via `_meta.ggui.bootstrap.propsJson` (see `update.resultMeta`). The
- * wire response itself is just acknowledgement.
+ * via the `ai.ggui/stack-item.propsJson` slice field (see
+ * `update.resultMeta`). The wire response itself is just
+ * acknowledgement.
  */
 export const updateOutputSchema = z.object({
   stackItemId: z.string(),

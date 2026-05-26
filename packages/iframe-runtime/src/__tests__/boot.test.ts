@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type {
+  McpAppAiGguiMeta,
+  McpAppAiGguiSessionMeta,
+  McpAppAiGguiStackItemMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
 
@@ -30,20 +34,22 @@ import type { ConnectFn } from '../registry-subscribe.js';
  * the recorder.
  */
 
-const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
+const VALID_SESSION: McpAppAiGguiSessionMeta = {
   wsUrl: 'wss://server.example/ws',
-  token: 'tok_abc',
+  wsToken: 'tok_abc',
   sessionId: 'sess_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
+const VALID_META: McpAppAiGguiMeta = { session: VALID_SESSION };
+
 function buildHappyInitResponse(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: mountViewToMcpAppMeta(VALID_BOOTSTRAP),
+        _meta: metaToMcpAppMeta(VALID_META),
         structuredContent: {},
       },
     },
@@ -69,7 +75,7 @@ function buildMockConnect(stack: SessionStackEntry[] | undefined): {
   connectFn: ConnectFn;
   emitFrame: (type: string, payload: unknown) => void;
 } {
-  const registryRef: { current: import('@ggui-ai/channel-client').ChannelRegistry | null } = { current: null };
+  const registryRef: { current: import('@ggui-ai/live-channel').ChannelRegistry | null } = { current: null };
   const connectFn: ConnectFn = async (opts) => {
     registryRef.current = opts.registry;
     return {
@@ -163,15 +169,18 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const pinnedItem = makeStackItem('item_pinned', 'the pinned one');
     const otherItem = makeStackItem('item_other', 'sibling');
 
-    const pinnedBootstrap: McpAppAiGguiMountView = {
-      ...VALID_BOOTSTRAP,
+    const pinnedStackItem: McpAppAiGguiStackItemMeta = {
       stackItemId: 'item_pinned',
+    };
+    const pinnedMeta: McpAppAiGguiMeta = {
+      session: VALID_SESSION,
+      stackItem: pinnedStackItem,
     };
 
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: mountViewToMcpAppMeta(pinnedBootstrap),
+          _meta: metaToMcpAppMeta(pinnedMeta),
           structuredContent: {},
         },
       },
@@ -214,15 +223,15 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
 
     const ackOnlyItem = makeStackItem('item_only', 'unrelated');
 
-    const pinnedBootstrap: McpAppAiGguiMountView = {
-      ...VALID_BOOTSTRAP,
-      stackItemId: 'item_missing',
+    const pinnedMeta: McpAppAiGguiMeta = {
+      session: VALID_SESSION,
+      stackItem: { stackItemId: 'item_missing' },
     };
 
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: mountViewToMcpAppMeta(pinnedBootstrap),
+          _meta: metaToMcpAppMeta(pinnedMeta),
           structuredContent: {},
         },
       },

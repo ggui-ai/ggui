@@ -65,7 +65,7 @@ async function bootWithSession(opts: {
     sessionChannel: true,
     sessionStore,
     shortCodeIndex,
-    bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+    wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
     // C.2 sig verification adds `?sig=...&exp=...` to render URLs.
     // These tests probe `/r/:shortCode` with bare codes (they don't
     // mint URLs through the push path), so disable signing to keep
@@ -144,7 +144,7 @@ describe('GET /r/:shortCode', () => {
       sessionChannel: true,
       sessionStore,
       shortCodeIndex,
-      bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
       renderSigning: false,
     });
     const httpServer = await server.listen(0, '127.0.0.1');
@@ -175,7 +175,7 @@ describe('GET /r/:shortCode', () => {
     // `runtimeUrl` field; the test doesn't pin the exact URL because
     // the OSS server's default is `/_ggui/iframe-runtime.js` and a
     // future override would still satisfy the contract.
-    expect(body).toMatch(/window\.__GGUI_BOOTSTRAP__ = \{[^}]*"runtimeUrl"/);
+    expect(body).toMatch(/window\.__GGUI_META__ = \{[^}]*"runtimeUrl"/);
   });
 
   it('inlines the live-mode trio (wsUrl/token/expiresAt) when the bootstrap minter is wired', async () => {
@@ -189,9 +189,9 @@ describe('GET /r/:shortCode', () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     // All three are required for live-mode admission — parseBootstrap
-    // rejects half-live envelopes (wsUrl XOR token) as MALFORMED.
+    // rejects half-live envelopes (wsUrl XOR wsToken) as MALFORMED.
     expect(body).toContain('"wsUrl"');
-    expect(body).toContain('"token"');
+    expect(body).toContain('"wsToken"');
     expect(body).toContain('"expiresAt"');
     // wsUrl rewrite: the minter's default is `ws://localhost/ws`, but
     // serving through a non-localhost host should rewrite the hostname
@@ -228,7 +228,7 @@ describe('GET /r/:shortCode', () => {
       sessionChannel: true,
       sessionStore,
       shortCodeIndex,
-      bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
       renderSigning: false,
     });
     const httpServer = await server.listen(0, '127.0.0.1');
@@ -279,7 +279,7 @@ describe('GET /r/:shortCode', () => {
       sessionChannel: true,
       sessionStore,
       shortCodeIndex,
-      bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
       renderSigning: false,
     });
     const httpServer = await server.listen(0, '127.0.0.1');

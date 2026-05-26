@@ -1,6 +1,6 @@
 /**
  * In-iframe status DOM. Extracted from `runtime.ts` in B3b so the
- * channel-client handlers can import the `setStatus` + status-refs
+ * live-channel handlers can import the `setStatus` + status-refs
  * helpers without a circular dep on the runtime module (which imports
  * the handlers for registration at boot).
  *

@@ -1,5 +1,5 @@
 /**
- * Public types for `@ggui-ai/channel-client`.
+ * Public types for `@ggui-ai/live-channel`.
  *
  * The library separates THREE concerns that used to be tangled together
  * inside the iframe-runtime:
@@ -98,16 +98,18 @@ export type TransportKind = 'ws' | 'polling';
 
 /**
  * Bootstrap shape the registry reads to pick a transport. Mirrors the
- * subset of `McpAppAiGguiMountView` the transport layer needs — keeping
- * the type local lets the gadget stay protocol-version-agnostic at
- * the import boundary (consumers thread in the concrete bootstrap).
+ * subset of `McpAppAiGguiSessionMeta` the transport layer needs —
+ * keeping the type local lets the gadget stay protocol-version-agnostic
+ * at the import boundary (consumers thread in the concrete session
+ * slice). Field names line up 1:1 with the upstream slice so callers
+ * can spread without an adapter.
  *
- * `wsUrl + token` present (both non-empty) → WSTransport.
+ * `wsUrl + wsToken` present (both non-empty) → WSTransport.
  * Either missing → PollingTransport.
  */
 export interface ChannelClientBootstrap {
   readonly wsUrl?: string;
-  readonly token?: string;
+  readonly wsToken?: string;
   readonly sessionId: string;
   readonly appId: string;
 }

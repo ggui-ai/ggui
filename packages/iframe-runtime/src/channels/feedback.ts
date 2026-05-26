@@ -10,7 +10,7 @@
  * intentional, the handler documents that.
  */
 
-import type { ChannelHandler } from '@ggui-ai/channel-client';
+import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type { JsonObject } from '@ggui-ai/protocol';
 
 export function createFeedbackHandler(): ChannelHandler<JsonObject> {

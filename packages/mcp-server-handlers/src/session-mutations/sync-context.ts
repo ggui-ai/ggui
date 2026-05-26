@@ -68,19 +68,19 @@ const inputSchema = {
     .string()
     .min(1, 'sessionId is required')
     .describe(
-      'Active session id — sourced from `_meta.ggui.bootstrap.sessionId` on the iframe boot envelope.',
+      'Active session id — sourced from `_meta["ai.ggui/session"].sessionId` on the iframe boot envelope.',
     ),
   appId: z
     .string()
     .min(1, 'appId is required')
     .describe(
-      'Active app id — sourced from `_meta.ggui.bootstrap.appId` on the iframe boot envelope.',
+      'Active app id — sourced from `_meta["ai.ggui/session"].appId` on the iframe boot envelope.',
     ),
   stackItemId: z
     .string()
     .min(1, 'stackItemId is required')
     .describe(
-      'Active stack item id — the iframe-runtime knows it from `bootstrap.stackItemId`. Server upserts onto this stack entry.',
+      'Active stack item id — the iframe-runtime knows it from `_meta["ai.ggui/stack-item"].stackItemId`. Server upserts onto this stack entry.',
     ),
   snapshot: z
     .record(z.string(), z.unknown())

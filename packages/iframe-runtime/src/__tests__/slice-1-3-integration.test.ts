@@ -20,10 +20,11 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-  mountViewToMcpAppMeta,
-  type McpAppAiGguiMountView,
+  metaToMcpAppMeta,
+  type McpAppAiGguiMeta,
+  type McpAppAiGguiSessionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { parseBootstrap } from '../bootstrap.js';
+import { parseBootstrap } from '../meta-parse.js';
 import {
   loadGadgetRegistry,
   type DynamicImporter,
@@ -47,17 +48,18 @@ function buildBootstrapEnvelope(
     bundleSri?: string;
   }>,
 ) {
-  const bootstrap: McpAppAiGguiMountView = {
+  const session: McpAppAiGguiSessionMeta = {
     wsUrl: 'wss://server.example/ws',
-    token: 'tok_abc',
+    wsToken: 'tok_abc',
     sessionId: 'sess_001',
     appId: 'app_001',
     runtimeUrl: '/_ggui/iframe-runtime.js',
     ...(gadgets !== undefined ? { gadgets } : {}),
   };
+  const meta: McpAppAiGguiMeta = { session };
   return {
     toolOutput: {
-      _meta: mountViewToMcpAppMeta(bootstrap),
+      _meta: metaToMcpAppMeta(meta),
       structuredContent: { sessionId: 'sess_001' },
     },
   };
@@ -84,13 +86,13 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const parsed = parseBootstrap(buildBootstrapEnvelope());
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unexpected');
-    expect(parsed.bootstrap.gadgets).toBeUndefined();
+    expect(parsed.meta.session.gadgets).toBeUndefined();
 
     // (2) Compose registry with empty package list — STDLIB only.
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.bootstrap.gadgets ?? [],
+      parsed.meta.session.gadgets ?? [],
     );
 
     // (3) Install on globalThis.
@@ -129,7 +131,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     );
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unexpected');
-    expect(parsed.bootstrap.gadgets).toEqual([
+    expect(parsed.meta.session.gadgets).toEqual([
       {
         package: '@ggui-samples/gadget-leaflet',
       },
@@ -152,7 +154,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.bootstrap.gadgets ?? [],
+      parsed.meta.session.gadgets ?? [],
       { importer: fakeImporter, logger: { warn: vi.fn() } },
     );
 
@@ -208,7 +210,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.bootstrap.gadgets ?? [],
+      parsed.meta.session.gadgets ?? [],
       { importer: failingImporter, logger: { warn: vi.fn() } },
     );
 
@@ -252,7 +254,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.bootstrap.gadgets ?? [],
+      parsed.meta.session.gadgets ?? [],
       { importer: evilImporter, logger: { warn: vi.fn() } },
     );
 

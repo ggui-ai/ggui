@@ -60,22 +60,20 @@ export function StackItem({
 }: StackItemProps) {
   // ResourceContents shape — no `text` / `blob` → host mounts via
   // `src=uri`. The iframe's HTML at `/r/<shortCode>` embeds the
-  // bootstrap meta inline server-side, so the renderer self-
+  // meta slice pair inline server-side, so the renderer self-
   // subscribes to the live channel from there.
   const resource = useMemo(() => ({ uri: item.url }), [item.url]);
 
-  // Late-arrival bootstrap forwarding. The Anthropic SDK strips
-  // `_meta` from tool_result blocks (the API spec only carries text
-  // content); we recover the envelope via `/api/bootstrap/<shortCode>`
-  // in useChat.ts and pass it here. On the FIRST mount the iframe
-  // boots from the inline `__GGUI_BOOTSTRAP__` global. On every
-  // subsequent transition (typically a `ggui_update` refetch),
-  // McpAppIframe posts `_meta.ggui.bootstrap = <bootstrap>` over
-  // postMessage so iframe-runtime re-applies the new propsJson
-  // without a WS round-trip — the spec-compliant live-update path.
-  const bootstrap = item.bootstrap as
-    | import('@ggui-ai/protocol/integrations/mcp-apps').GguiBootstrapMeta
-    | undefined;
+  // Late-arrival meta forwarding. The Anthropic SDK strips `_meta`
+  // from tool_result blocks (the API spec only carries text content);
+  // we recover the envelope via `/api/bootstrap/<shortCode>` in
+  // useChat.ts and pass it here. On the FIRST mount the iframe boots
+  // from the inline `__GGUI_META__` global. On every subsequent
+  // transition (typically a `ggui_update` refetch), McpAppIframe
+  // re-posts the `ai.ggui/*` `_meta` slices over postMessage so
+  // iframe-runtime re-applies the new propsJson without a WS
+  // round-trip — the spec-compliant live-update path.
+  const meta = item.meta;
 
   const onToolCall = useCallback(
     async (name: string, args: Record<string, unknown>): Promise<unknown> => {
@@ -140,7 +138,7 @@ export function StackItem({
           onToolCall={onToolCall}
           allowSameOrigin
           onUiMessage={onUiMessage}
-          {...(bootstrap !== undefined ? { bootstrap } : {})}
+          {...(meta !== undefined ? { meta } : {})}
         />
       </div>
     </div>

@@ -54,9 +54,10 @@ import {
   type SessionStackEntry,
 } from '@ggui-ai/protocol';
 import {
-  slicesToMcpAppMeta,
-  splitMountViewIntoSlices,
-  type McpAppAiGguiMountView,
+  metaToMcpAppMeta,
+  type McpAppAiGguiMeta,
+  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiStackItemMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
@@ -65,9 +66,9 @@ import {
   type StackItemTarget,
 } from './apply-stack-item-patch.js';
 import {
-  deriveStackItemBootstrapView,
-  type StackItemBootstrapView,
-} from './bootstrap-meta-derivation.js';
+  deriveStackItemMeta,
+  type StackItemMetaView,
+} from './slice-meta-derivation.js';
 import { StackItemNotFoundError, SessionNotFoundError } from './errors.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 
@@ -172,33 +173,35 @@ export interface GguiUpdateHandlerDeps {
    */
   readonly description?: string;
   /**
-   * Bootstrap-credential minter mirroring `GguiPushHandlerDeps.mintBootstrap`.
-   * When set, the handler's `resultMeta` emits `_meta.ggui.bootstrap`
-   * carrying the live trio (`wsUrl` + `token` + `expiresAt`) for the
-   * post-patch stack item. MCP Apps hosts that forward the full
-   * `CallToolResult` (including `_meta`) via `ui/notifications/tool-result`
-   * postMessage can re-apply the patched props to a still-mounted iframe
-   * WITHOUT the iframe re-subscribing — same single-source-of-truth
-   * derivation `ggui_push` uses, just sourced from the patched item.
+   * Bootstrap-credential minter mirroring `GguiPushHandlerDeps.mintWsToken`.
+   * When set, the handler's `resultMeta` emits the `ai.ggui/session` +
+   * `ai.ggui/stack-item` slice pair carrying the live trio
+   * (`wsUrl` + `token` + `expiresAt`) for the post-patch stack item.
+   * MCP Apps hosts that forward the full `CallToolResult` (including
+   * `_meta`) via `ui/notifications/tool-result` postMessage can re-apply
+   * the patched props to a still-mounted iframe WITHOUT the iframe
+   * re-subscribing — same single-source-of-truth derivation `ggui_push`
+   * uses, just sourced from the patched item.
    *
    * Absent = no `_meta` on update results (matches the legacy posture).
    * Persistence + the live-channel `props_update` fan-out still fire; only
    * the spec-compliant postMessage fallback path is unwired.
    */
-  readonly mintBootstrap?: (
+  readonly mintWsToken?: (
     sessionId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
-   * Iframe-runtime bundle URL forwarded onto `_meta.ggui.bootstrap.runtimeUrl`.
-   * Required-when-set-with-mintBootstrap; absent + minter absent = no
-   * bootstrap envelope at all (no field to populate). Mirrors
+   * Iframe-runtime bundle URL forwarded onto the
+   * `ai.ggui/session.runtimeUrl` slice field.
+   * Required-when-set-with-mintWsToken; absent + minter absent = no
+   * slice meta at all (no field to populate). Mirrors
    * {@link GguiPushHandlerDeps.runtimeUrl}.
    */
   readonly runtimeUrl?: string | (() => string | undefined);
-  /** Theme preset id forwarded onto `_meta.ggui.bootstrap.themeId`. */
+  /** Theme preset id forwarded onto the `ai.ggui/session.themeId` slice field. */
   readonly themeId?: string;
-  /** Theme mode forwarded onto `_meta.ggui.bootstrap.themeMode`. */
+  /** Theme mode forwarded onto the `ai.ggui/session.themeMode` slice field. */
   readonly themeMode?: 'light' | 'dark';
   /**
    * Live theme getter (overrides static `themeId`/`themeMode` per-update).
@@ -211,15 +214,16 @@ export interface GguiUpdateHandlerDeps {
   } | undefined;
   /**
    * Returns the names of registered tools whose `_meta.ui.visibility`
-   * includes `"app"`. Forwarded onto `bootstrap.appCallableTools` so the
-   * iframe-runtime can resolve pattern α (direct tools/call) vs pattern β
-   * (3-message bridge) per wired action — same posture push uses.
+   * includes `"app"`. Forwarded onto the `ai.ggui/session.appCallableTools`
+   * slice field so the iframe-runtime can resolve pattern α (direct
+   * tools/call) vs pattern β (3-message bridge) per wired action — same
+   * posture push uses.
    */
   readonly appCallableTools?: () => readonly string[];
   /**
-   * Resolver for the bootstrap field `streamWebSocketLocalTools`.
-   * Mirrors push's resolver so the post-update bootstrap envelope agrees
-   * with what the iframe-runtime saw on initial mount.
+   * Resolver for the `ai.ggui/session.streamWebSocketLocalTools` slice
+   * field. Mirrors push's resolver so the post-update session slice
+   * agrees with what the iframe-runtime saw on initial mount.
    */
   readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
 }
@@ -279,7 +283,7 @@ const outputSchema = {
 type UpdateOutput = {
   /**
    * Internal-only — kept on the TS type because resultMeta needs the
-   * session for its bootstrap projection. Stripped by zod before
+   * session for its slice-meta projection. Stripped by zod before
    * structuredContent serializes (same pattern as push.ts).
    */
   sessionId: string;
@@ -493,24 +497,26 @@ export function createGguiUpdateHandler(
       };
     },
     /**
-     * Emit `_meta.ggui.bootstrap` mirroring `ggui_push`'s shape but
-     * **props-only** (post-2026-05-13 trim). Spec-compliant MCP Apps
-     * hosts forward the full `CallToolResult` (including `_meta`) via
+     * Emit the `ai.ggui/session` + `ai.ggui/stack-item` slice pair
+     * mirroring `ggui_push`'s shape but **props-only** (post-2026-05-13
+     * trim). Spec-compliant MCP Apps hosts forward the full
+     * `CallToolResult` (including `_meta`) via
      * `ui/notifications/tool-result` postMessage; iframe-runtime's
      * `installPostMountListener` reads the envelope and re-applies the
      * patched props to the live mount WITHOUT a WS round-trip. The WS
-     * `props_update` frame remains the first-party fast path; this
-     * envelope is the cross-host fallback.
+     * `props_update` frame remains the first-party fast path; the
+     * slice meta is the cross-host fallback.
      *
      * **Why props-only:** update mutates props, not the contract. The
      * iframe is already mounted with code + actionSpec + contextSpec +
-     * permissions from its initial push bootstrap; those are mount-time
+     * permissions from its initial push slice meta; those are mount-time
      * invariants. Re-emitting them on every update wasted 5-50KB per
-     * call. Today's update bootstrap carries only what actually
-     * changed (propsJson) plus the auth/session/runtime fields the
-     * cross-host fallback needs to re-bind: `{sessionId, appId,
-     * stackItemId, runtimeUrl, propsJson?, themeId?, themeMode?,
-     * wsUrl?, token?, expiresAt?}`.
+     * call. Today's update slice meta carries only what actually
+     * changed (propsJson on the stack-item slice) plus the
+     * auth/session/runtime fields on the session slice the cross-host
+     * fallback needs to re-bind: `{sessionId, appId, runtimeUrl,
+     * themeId?, themeMode?, wsUrl?, token?, expiresAt?}` on session,
+     * `{stackItemId, propsJson?}` on stack-item.
      *
      * Skipped entirely when no propsJson + no minter + no runtimeUrl —
      * keeps the response byte-identical for hosts that don't read
@@ -523,11 +529,11 @@ export function createGguiUpdateHandler(
       // compiledValidators) are mount-time invariants — the initial
       // push already shipped them, and `ggui_update` patches `props`
       // only, never the contract specs.
-      let view: StackItemBootstrapView = {};
+      let view: StackItemMetaView = {};
       // Capture session + stack-item themeId from the same lookup that
-      // drives `deriveStackItemBootstrapView`. Without this, a session
+      // drives `deriveStackItemMeta`. Without this, a session
       // minted with `ggui_new_session({themeId})` followed by a
-      // `ggui_update` (props refresh) would emit a bootstrap WITHOUT
+      // `ggui_update` (props refresh) would emit slice meta WITHOUT
       // themeId — the iframe re-mounts with the default theme even
       // though the session has a sticky theme. Same 4-layer chain as
       // push: liveTheme > stackItem > session > deps.themeId.
@@ -540,19 +546,19 @@ export function createGguiUpdateHandler(
         }
         const top = session?.stack.find((s) => s.id === output.stackItemId);
         if (top) {
-          view = deriveStackItemBootstrapView(top);
+          view = deriveStackItemMeta(top);
           if (top.type !== 'mcpApps' && top.type !== 'system') {
             stackItemThemeId = top.themeId;
           }
         }
       } catch {
-        // Silent — bootstrap stays minimal on lookup failure.
+        // Silent — slice meta stays minimal on lookup failure.
       }
 
       // Nothing to emit ⇒ no _meta at all.
       if (
         view.propsJson === undefined &&
-        !deps.mintBootstrap &&
+        !deps.mintWsToken &&
         deps.runtimeUrl === undefined
       ) {
         return undefined;
@@ -563,8 +569,19 @@ export function createGguiUpdateHandler(
           ? deps.runtimeUrl()
           : deps.runtimeUrl;
       const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
-      const partial = deps.mintBootstrap
-        ? deps.mintBootstrap(output.sessionId, ctx.appId)
+      // The minter's own return shape names the credential `token`
+      // (legacy); the session slice uses `wsToken`. Remap explicitly.
+      const mintedTrio = deps.mintWsToken
+        ? deps.mintWsToken(output.sessionId, ctx.appId)
+        : undefined;
+      const partial: Partial<
+        Pick<McpAppAiGguiSessionMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+      > = mintedTrio
+        ? {
+            wsUrl: mintedTrio.wsUrl,
+            wsToken: mintedTrio.token,
+            expiresAt: mintedTrio.expiresAt,
+          }
         : {};
       // 4-layer theme resolution. Mirror of the push.resultMeta chain
       // (liveTheme > stackItem > session > deps.themeId) so update +
@@ -581,26 +598,37 @@ export function createGguiUpdateHandler(
         ?? sessionThemeId
         ?? deps.themeId;
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
-      const bootstrap: McpAppAiGguiMountView = {
-        ...partial,
+      // Build the two slices directly (#109 / R3). update.ts only
+      // ever refreshes propsJson + theme; the stack-item slice carries
+      // the render delta (propsJson), the session slice carries
+      // identity + live-auth + theme. Contract + component pointers
+      // stay on the initial slices from push.ts and are not re-emitted
+      // here. `partial` carries the live-auth trio (wsUrl/token/expiresAt)
+      // from `mintWsToken` — all session-slice fields.
+      const session: McpAppAiGguiSessionMeta = {
         sessionId: output.sessionId,
         appId: ctx.appId,
-        ...(output.stackItemId !== undefined
-          ? { stackItemId: output.stackItemId }
-          : {}),
         runtimeUrl,
+        ...partial,
         ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
-        ...(view.propsJson ? { propsJson: view.propsJson } : {}),
       };
-      // Emit the two-slice `_meta` shape (#109). update.ts only ever
-      // refreshes propsJson + theme; the stack-item slice carries the
-      // render delta (propsJson), the session slice carries
-      // identity/theme. Contract+component pointers stay on the
-      // initial bootstrap from push.ts.
-      return slicesToMcpAppMeta(splitMountViewIntoSlices(bootstrap));
+      const stackItem: McpAppAiGguiStackItemMeta | undefined =
+        output.stackItemId !== undefined || view.propsJson
+          ? {
+              ...(output.stackItemId !== undefined
+                ? { stackItemId: output.stackItemId }
+                : {}),
+              ...(view.propsJson ? { propsJson: view.propsJson } : {}),
+            }
+          : undefined;
+      const meta: McpAppAiGguiMeta = {
+        session,
+        ...(stackItem !== undefined ? { stackItem } : {}),
+      };
+      return metaToMcpAppMeta(meta);
     },
   };
 }

@@ -6,7 +6,7 @@
  *     production thin-shell HTML wrapped as a ResourceContents blob.
  *     NO inlined bootstrap — console fetches that separately.
  *   - `GET /ggui/console/session-bootstrap?session=<id>` — returns
- *     `{bootstrap: McpAppAiGguiMountView}` JSON. Console feeds this to
+ *     `{bootstrap: McpAppAiGguiMeta}` JSON. Console feeds this to
  *     `<McpAppIframe bootstrap={...}>` which forwards via Reading B.
  *
  * Both routes share the cookie-auth + session-scope gate. The
@@ -66,7 +66,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     sessionStore,
     shortCodeIndex,
     console: { sessionCookie: true },
-    bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+    wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
   });
   const httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -182,7 +182,7 @@ describe('GET /ggui/console/session-resource', () => {
   });
 });
 
-describe('GET /ggui/console/session-bootstrap', () => {
+describe('GET /ggui/console/sessions/:sessionId/meta', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -192,20 +192,10 @@ describe('GET /ggui/console/session-bootstrap', () => {
     }
   });
 
-  it('returns 400 when `session` query is missing', async () => {
-    fx = await bootAndMintCookie();
-    const res = await fetch(`${fx.url}/ggui/console/session-bootstrap`, {
-      headers: { cookie: fx.cookiePair },
-    });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('invalid_request');
-  });
-
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-bootstrap?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
     );
     expect(res.status).toBe(401);
   });
@@ -213,7 +203,7 @@ describe('GET /ggui/console/session-bootstrap', () => {
   it('returns 403 when the cookie is scoped to a different session', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-bootstrap?session=some-other-session`,
+      `${fx.url}/ggui/console/sessions/some-other-session/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -223,51 +213,49 @@ describe('GET /ggui/console/session-bootstrap', () => {
     expect(body.error).toBe('cookie_session_mismatch');
   });
 
-  it('returns 200 with a well-shaped McpAppAiGguiMountView on the happy path', async () => {
+  it('returns 200 with a well-shaped slice envelope on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-bootstrap?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      bootstrap: {
-        wsUrl: string;
-        token: string;
-        expiresAt: string;
-        sessionId: string;
-        appId: string;
-        runtimeUrl: string;
-      };
-    };
-    expect(body.bootstrap.sessionId).toBe(fx.sessionId);
-    expect(body.bootstrap.appId).toBe(fx.appId);
-    expect(typeof body.bootstrap.wsUrl).toBe('string');
-    expect(body.bootstrap.wsUrl.length).toBeGreaterThan(0);
-    expect(typeof body.bootstrap.token).toBe('string');
-    expect(body.bootstrap.token.length).toBeGreaterThan(10);
-    expect(typeof body.bootstrap.expiresAt).toBe('string');
+    const envelope = (await res.json()) as Record<string, unknown>;
+    const session = envelope['ai.ggui/session'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(session).toBeDefined();
+    expect(session?.['sessionId']).toBe(fx.sessionId);
+    expect(session?.['appId']).toBe(fx.appId);
+    expect(typeof session?.['wsUrl']).toBe('string');
+    expect((session?.['wsUrl'] as string).length).toBeGreaterThan(0);
+    expect(typeof session?.['wsToken']).toBe('string');
+    expect((session?.['wsToken'] as string).length).toBeGreaterThan(10);
+    expect(typeof session?.['expiresAt']).toBe('string');
     // `<McpAppIframe>` mounts the resource via `srcdoc`; the iframe's
-    // URL is `about:srcdoc` and same-origin paths in the bootstrap
-    // would resolve against that opaque origin. Per commit `34888b8c`
-    // the bootstrap route absolutises the same-origin `runtimeUrl`
-    // to `${req.protocol}://${req.get('host')}${path}` so the inline
-    // shell `<script src=...>` lands on the dev server. Operators
-    // who configured a CDN-absolute `renderer.url` pass through
-    // unchanged. Pin both the absolutised default + the suffix so
-    // a regression of either invariant fails loudly.
-    expect(body.bootstrap.runtimeUrl).toMatch(/^https?:\/\/.+\/_ggui\/iframe-runtime\.js$/);
-    expect(body.bootstrap.runtimeUrl.endsWith('/_ggui/iframe-runtime.js')).toBe(
-      true,
+    // URL is `about:srcdoc` and same-origin paths would resolve against
+    // that opaque origin. The route absolutises the same-origin
+    // `runtimeUrl` to `${req.protocol}://${req.get('host')}${path}` so
+    // the inline shell `<script src=...>` lands on the dev server.
+    // Operators who configured a CDN-absolute `renderer.url` pass
+    // through unchanged. Pin both the absolutised default + the suffix
+    // so a regression of either invariant fails loudly.
+    expect(session?.['runtimeUrl']).toMatch(
+      /^https?:\/\/.+\/_ggui\/iframe-runtime\.js$/,
     );
+    expect(
+      (session?.['runtimeUrl'] as string).endsWith(
+        '/_ggui/iframe-runtime.js',
+      ),
+    ).toBe(true);
   });
 
   it('returns 503 when mcpApps is disabled (no mintBootstrap)', async () => {
     // Same console + session-channel wiring but WITHOUT mcpApps —
-    // the bootstrap route must honestly 503 instead of minting a
-    // bootstrap the subscribe path would reject at handshake.
+    // the meta route must honestly 503 instead of minting a token the
+    // subscribe path would reject at handshake.
     const sessionStore = new InMemorySessionStore();
     const session = await sessionStore.create({ appId: 'app-console' });
     const shortCodeIndex = new InMemoryShortCodeIndex();
@@ -283,7 +271,7 @@ describe('GET /ggui/console/session-bootstrap', () => {
       sessionStore,
       shortCodeIndex,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
     });
     const httpServer = await server.listen(0, '127.0.0.1');
     try {
@@ -301,7 +289,7 @@ describe('GET /ggui/console/session-bootstrap', () => {
         ';',
       )[0];
       const res = await fetch(
-        `${url}/ggui/console/session-bootstrap?session=${session.id}`,
+        `${url}/ggui/console/sessions/${session.id}/meta`,
         {
           headers: { cookie: cookiePair },
         },

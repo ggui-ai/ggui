@@ -66,10 +66,10 @@ export * from './embedding-provider.js';
 export * from './vector-store.js';
 export * from './kv-store.js';
 
-// Live-channel bootstrap/session token primitives — transport-level
+// Live-channel WS / session token primitives — transport-level
 // credential mint + verify. General (not MCP-Apps-specific); MCP Apps
 // outbound delivery is today's only consumer.
-export * from './bootstrap-tokens.js';
+export * from './ws-tokens.js';
 
 // Stable-identity registry for external MCP servers. General seam;
 // MCP Apps inbound hosting is today's primary consumer.

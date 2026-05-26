@@ -1,6 +1,6 @@
 /**
  * `connectViaRegistry` tests — cover the handshake-resolver pipeline
- * on top of `@ggui-ai/channel-client`'s `ChannelRegistry.bind()`.
+ * on top of `@ggui-ai/live-channel`'s `ChannelRegistry.bind()`.
  *
  * Replaces the pre-B3b `subscribe.test.ts`. The six behavioural
  * branches port verbatim — every test from the retired file has a
@@ -39,14 +39,14 @@ import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { ChannelRegistry } from '@ggui-ai/channel-client';
+import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { ChannelRegistry } from '@ggui-ai/live-channel';
 import { connectViaRegistry } from '../registry-subscribe.js';
 import type { ProtocolError } from '../protocol-error.js';
 
 // =============================================================================
 // MockWebSocket — same shape as the pre-B3b subscribe.test.ts mock,
-// ports verbatim because the channel-client's WSTransport touches the
+// ports verbatim because the live-channel's WSTransport touches the
 // same surface (constructor + readyState + on{open,close,message,error}
 // + send/close + statics).
 // =============================================================================
@@ -99,14 +99,14 @@ function installMockWebSocket(): void {
 
 // `satisfies` keeps `wsUrl` / `token` narrowed to `string` so the
 // composed-URL assertion below doesn't trip the optional discriminator.
-const BOOTSTRAP = {
+const SESSION = {
   wsUrl: 'wss://server.example/ws',
-  token: 'tok_abc',
+  wsToken: 'tok_abc',
   sessionId: 'sess_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
-} satisfies McpAppAiGguiMountView;
+} satisfies McpAppAiGguiSessionMeta;
 
 /**
  * Build a registry shaped like the one `runtime.ts` produces — same
@@ -118,9 +118,9 @@ function makeRegistry(): ChannelRegistry {
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: BOOTSTRAP.sessionId,
-        appId: BOOTSTRAP.appId,
-        bootstrap: BOOTSTRAP.token,
+        sessionId: SESSION.sessionId,
+        appId: SESSION.appId,
+        wsToken: SESSION.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
       },
     }),
@@ -142,11 +142,11 @@ describe('connectViaRegistry — happy path', () => {
     vi.useRealTimers();
   });
 
-  it('opens the WS, sends subscribe with bootstrap + supportedVersions, resolves on ack', async () => {
+  it('opens the WS, sends subscribe with wsToken + supportedVersions, resolves on ack', async () => {
     const statuses: ConnectionStatus[] = [];
 
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry: makeRegistry(),
       onStatusChange: (s) => statuses.push(s),
     });
@@ -154,12 +154,12 @@ describe('connectViaRegistry — happy path', () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    // The composed URL threads `bootstrap` as a query string.
+    // The composed URL threads `wsToken` as a query string.
     expect(MockWebSocket.instances[0]?.url).toBe(
-      `wss://server.example/ws?bootstrap=${encodeURIComponent(BOOTSTRAP.token)}`,
+      `wss://server.example/ws?wsToken=${encodeURIComponent(SESSION.wsToken)}`,
     );
 
-    // The channel-client transport initialises its currentStatus to
+    // The live-channel transport initialises its currentStatus to
     // `'connecting'` and only emits transitions. `'open'` is the first
     // real transition the transport announces; `connectViaRegistry`
     // maps that to `'connected'` (mapping `connecting → connected` on
@@ -167,21 +167,21 @@ describe('connectViaRegistry — happy path', () => {
     // observed on the status callback — only `'connected'` lands.
     expect(statuses).toContain('connected');
 
-    // Subscribe payload carries both `bootstrap` (the credential) AND
+    // Subscribe payload carries both `wsToken` (the credential) AND
     // `supportedVersions` (handshake opt-in).
     const sub = JSON.parse(MockWebSocket.instances[0]?.sent[0] ?? '{}') as {
       type: string;
       payload: {
         sessionId: string;
         appId: string;
-        bootstrap: string;
+        wsToken: string;
         supportedVersions: string[];
       };
     };
     expect(sub.type).toBe('subscribe');
-    expect(sub.payload.sessionId).toBe(BOOTSTRAP.sessionId);
-    expect(sub.payload.appId).toBe(BOOTSTRAP.appId);
-    expect(sub.payload.bootstrap).toBe(BOOTSTRAP.token);
+    expect(sub.payload.sessionId).toBe(SESSION.sessionId);
+    expect(sub.payload.appId).toBe(SESSION.appId);
+    expect(sub.payload.wsToken).toBe(SESSION.wsToken);
     expect(sub.payload.supportedVersions).toEqual([...CLIENT_SUPPORTED_VERSIONS]);
 
     // Server emits ack — the promise resolves with the ack payload.
@@ -203,7 +203,7 @@ describe('connectViaRegistry — happy path', () => {
 
   it('treats absent serverVersion as legacy-pass-through (no upgrade error)', async () => {
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry: makeRegistry(),
       onStatusChange: () => {},
     });
@@ -237,7 +237,7 @@ describe('connectViaRegistry — version handshake', () => {
 
   it('rejects with UpgradeRequiredError when ack.serverVersion is unknown to the client', async () => {
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry: makeRegistry(),
       onStatusChange: () => {},
     });
@@ -269,7 +269,7 @@ describe('connectViaRegistry — version handshake', () => {
 
   it('rejects with UpgradeRequiredError when server emits {type:"error", code:"UPGRADE_REQUIRED"} pre-ack', async () => {
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry: makeRegistry(),
       onStatusChange: () => {},
     });
@@ -299,7 +299,7 @@ describe('connectViaRegistry — version handshake', () => {
   it('rejects with a plain Error when server emits a non-upgrade error pre-ack + emits typed ProtocolError', async () => {
     const emitted: ProtocolError[] = [];
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry: makeRegistry(),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
@@ -341,7 +341,7 @@ describe('connectViaRegistry — version handshake', () => {
     });
 
     const handlePromise = connectViaRegistry({
-      bootstrap: BOOTSTRAP,
+      session: SESSION,
       registry,
       onStatusChange: () => {},
     });

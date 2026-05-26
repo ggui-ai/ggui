@@ -33,9 +33,9 @@ import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
-import { ChannelRegistry } from '@ggui-ai/channel-client';
+import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   ClientContractViolationError,
 } from '@ggui-ai/wire';
@@ -284,14 +284,14 @@ class MockWebSocket {
   }
 }
 
-function makeRegistry(meta: McpAppAiGguiMountView): ChannelRegistry {
+function makeRegistry(session: McpAppAiGguiSessionMeta): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: meta.sessionId,
-        appId: meta.appId,
-        bootstrap: meta.token,
+        sessionId: session.sessionId,
+        appId: session.appId,
+        bootstrap: session.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
       },
     }),
@@ -310,12 +310,12 @@ describe('connectViaRegistry — onProtocolError', () => {
     delete (globalThis as { WebSocket?: unknown }).WebSocket;
   });
 
-  function bootstrap(): McpAppAiGguiMountView {
+  function session(): McpAppAiGguiSessionMeta {
     return {
       wsUrl: 'ws://test/ws',
       sessionId: 'sess_1',
       appId: 'app_x',
-      token: 'bootstrap_token',
+      wsToken: 'bootstrap_token',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       runtimeUrl: '/_ggui/iframe-runtime.js',
     };
@@ -324,8 +324,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=version on UPGRADE_REQUIRED error frame + rejects', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrap(),
-      registry: makeRegistry(bootstrap()),
+      session: session(),
+      registry: makeRegistry(session()),
       onStatusChange: (_s: ConnectionStatus) => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -353,8 +353,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=auth on SESSION_NOT_FOUND error frame', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrap(),
-      registry: makeRegistry(bootstrap()),
+      session: session(),
+      registry: makeRegistry(session()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -380,8 +380,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=protocol on unknown error code with extensibly-closed forwarding', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrap(),
-      registry: makeRegistry(bootstrap()),
+      session: session(),
+      registry: makeRegistry(session()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -409,8 +409,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=version when client rejects ack.serverVersion mismatch', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrap(),
-      registry: makeRegistry(bootstrap()),
+      session: session(),
+      registry: makeRegistry(session()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });

@@ -1,4 +1,4 @@
-# @ggui-ai/channel-client
+# @ggui-ai/live-channel
 
 Transport-negotiated channel registry for [ggui](https://ggui.ai) clients.
 
@@ -18,13 +18,13 @@ separates three concerns that are easy to tangle together in a client:
 ## Install
 
 ```bash
-pnpm add @ggui-ai/channel-client
+pnpm add @ggui-ai/live-channel
 ```
 
 ## Usage
 
 ```ts
-import { ChannelRegistry } from "@ggui-ai/channel-client";
+import { ChannelRegistry } from "@ggui-ai/live-channel";
 
 const registry = new ChannelRegistry();
 registry.register(propsUpdateHandler);

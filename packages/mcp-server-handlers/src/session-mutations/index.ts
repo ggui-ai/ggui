@@ -170,10 +170,10 @@ export {
 } from './stream.js';
 export { createGguiSubmitActionHandler } from './submit-action.js';
 export {
-  createGguiRefreshBootstrapHandler,
-  type BootstrapRefreshSeam,
-  type GguiRefreshBootstrapHandlerDeps,
-} from './refresh-bootstrap.js';
+  createGguiRefreshWsTokenHandler,
+  type WsTokenRefreshSeam,
+  type GguiRefreshWsTokenHandlerDeps,
+} from './refresh-ws-token.js';
 export {
   createGguiSyncContextHandler,
   type CreateGguiSyncContextHandlerDeps,
@@ -291,19 +291,20 @@ export {
   type ProvisionalPreviewSkipReason,
 } from './provisional-preview.js';
 
-// Bootstrap-meta projection helpers shared by the
-// `_meta.ggui.bootstrap` builder in `push.ts` AND the public-render
-// `/r/<shortCode>` route's self-contained-shell builder. Exported so
-// any server can run the same projections off the active stack item
-// without duplicating the actionSpec / contextSpec walks.
+// Slice-meta projection helpers shared by the
+// `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` builders
+// in `push.ts` / `update.ts` AND the public-render `/r/<shortCode>`
+// route's self-contained-shell builder. Exported so any server can
+// run the same projections off the active stack item without
+// duplicating the actionSpec / contextSpec walks.
 export {
   deriveBundleOrigins,
   deriveContextSlots,
   derivePropsJson,
   derivePublicEnvProjection,
   deriveContractBundle,
-  deriveStackItemBootstrapView,
+  deriveStackItemMeta,
   deriveWiredActionTools,
   resolveGadgetUrls,
-  type StackItemBootstrapView,
-} from './bootstrap-meta-derivation.js';
+  type StackItemMetaView,
+} from './slice-meta-derivation.js';

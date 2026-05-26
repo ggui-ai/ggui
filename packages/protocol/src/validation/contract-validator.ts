@@ -377,7 +377,7 @@ export function validateActionEnvelope(
  * Compile a contract's runtime-validated sub-schemas into standalone,
  * eval-free ESM validator modules — the producer half of the
  * precompiled-validator channel
- * ({@link CompiledContractValidators} on `McpAppAiGguiMountView`).
+ * ({@link CompiledContractValidators} on `McpAppAiGguiMeta`).
  *
  * The renderer iframe runs under a strict CSP with no `'unsafe-eval'`,
  * so it cannot call `ajv.compile()` (which builds validators via
@@ -399,7 +399,7 @@ export function validateActionEnvelope(
  *     validates `value`.
  *
  * Returns `undefined` when the contract declares no runtime-validated
- * schema at all — the bootstrap projection then omits the field.
+ * schema at all — the slice-meta projection then omits the field.
  */
 export function compileContractValidators(specs: {
   readonly propsSpec?: PropsSpec;

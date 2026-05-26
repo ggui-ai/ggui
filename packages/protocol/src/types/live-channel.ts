@@ -56,28 +56,39 @@ export interface SubscribePayload {
    */
   fromSeq?: number;
   /**
-   * Opaque single-use bootstrap credential for initial subscribe.
+   * Opaque WS auth credential for initial subscribe — the live-channel
+   * counterpart to a bearer token. Symmetric with {@link
+   * SubscribePayload.sessionId}/`appId`/`wsUrl` — names what it auths.
    *
-   * General transport-bootstrap slot — the type system does NOT couple
-   * this field to any integration. Today the only consumer minting these
-   * is the MCP Apps outbound delivery path (`ui://ggui/session`), but
-   * any future bootstrap mechanism (signed-URL share, short-code
-   * auto-login, etc.) reuses the same field with the same semantics:
+   * **Auth-credential string only.** Identity/render fields ride on
+   * the `ai.ggui/session` + `ai.ggui/stack-item` slice meta delivered
+   * through the MCP Apps `_meta` path; this field is purely the WS
+   * subscribe credential.
+   *
+   * General transport-credential slot — the type system does NOT
+   * couple this field to any integration. Today the only consumer
+   * minting these is the MCP Apps outbound delivery path
+   * (`ui://ggui/session`), but any future credential-mint mechanism
+   * (signed-URL share, short-code auto-login, etc.) reuses the same
+   * field with the same semantics:
    *
    *   - Opaque to the client — validated server-side against the
    *     subscribe's `sessionId` + `appId`.
-   *   - Short TTL (seconds-to-minutes); stale tokens are rejected.
-   *   - Single-use; consumed at first successful subscribe.
+   *   - Short TTL (seconds-to-minutes); stale tokens are rejected
+   *     (refresh via `ggui_runtime_refresh_ws_token` within the
+   *     refresh window, otherwise re-handshake).
+   *   - Reusable within TTL (G14, 2026-05-23) so a transient WS drop
+   *     can reconnect without a fresh handshake.
    *
-   * On a successful bootstrap-auth subscribe, the server SHOULD issue
+   * On a successful ws-token-authed subscribe, the server SHOULD issue
    * a longer-lived reconnect credential via {@link AckPayload.sessionToken}.
    *
    * Mutually compatible with upstream bearer-auth (`Authorization`
    * header / `?token=` query). When both are present, server behavior
-   * is implementation-defined; the canonical path is bearer-OR-bootstrap,
-   * not bearer-AND-bootstrap.
+   * is implementation-defined; the canonical path is
+   * bearer-OR-wsToken, not bearer-AND-wsToken.
    */
-  bootstrap?: string;
+  wsToken?: string;
   /**
    * Protocol schema versions this client accepts on the wire. Opt-in
    * — absent is legacy-pass-through (server treats the subscribe as
@@ -136,25 +147,25 @@ export interface AckPayload {
    */
   replayTruncated?: boolean;
   /**
-   * Reconnect credential issued on successful bootstrap-auth subscribe.
+   * Reconnect credential issued on successful ws-token-authed subscribe.
    *
-   * General transport-bootstrap slot — the type system does NOT couple
-   * this field to any integration (same positioning as
-   * {@link SubscribePayload.bootstrap}). Servers that accepted a
-   * bootstrap credential on `subscribe` SHOULD mint a longer-lived
-   * session-scoped token and return it here so the client can reconnect
-   * without re-minting from the original bootstrap source.
+   * General transport-credential slot — the type system does NOT
+   * couple this field to any integration (same positioning as
+   * {@link SubscribePayload.wsToken}). Servers that accepted a WS
+   * token on `subscribe` SHOULD mint a longer-lived session-scoped
+   * token and return it here so the client can reconnect without
+   * re-minting from the original credential source.
    *
    * Semantics:
-   *   - Longer TTL than the bootstrap (minutes-to-hours).
+   *   - Longer TTL than the ws token (minutes-to-hours).
    *   - Bound to the same `sessionId` + `appId`.
    *   - Passed on reconnect via the standard bearer path
    *     (`Authorization: Bearer <sessionToken>` or `?token=`), NOT in
-   *     `SubscribePayload.bootstrap` (which is single-use).
+   *     `SubscribePayload.wsToken` (which is short-TTL and credential-scoped).
    *
-   * Absent when the subscribe was bearer-authed (no bootstrap-bound
+   * Absent when the subscribe was bearer-authed (no ws-token-bound
    * reconnect credential needed) and on servers that don't implement
-   * bootstrap auth.
+   * ws-token auth.
    */
   sessionToken?: string;
   /**
@@ -381,7 +392,7 @@ export interface ChannelPayloadFrame {
  *   - `CHANNEL_UNKNOWN`         — channelName not present in streamSpec.
  *   - `CHANNEL_NOT_LOCAL`       — `source.tool` not in `streamWebSocketLocalTools`; iframe must poll directly.
  *   - `STACK_ITEM_NOT_FOUND`    — `stackItemId` not on the session.
- *   - `SUBSCRIBE_UNAUTHORIZED`  — bootstrap token expired or session-mismatch.
+ *   - `SUBSCRIBE_UNAUTHORIZED`  — WS auth token expired or session-mismatch.
  *   - `POLL_FAILED`             — source.tool invocation threw. `details` carries the error.
  */
 export interface ChannelErrorPayload {

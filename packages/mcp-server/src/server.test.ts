@@ -1559,7 +1559,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         renderBaseUrl: 'http://localhost/r/',
         wsUrl: 'ws://localhost/ws',
       },
-      bootstrapSecret: 'test-secret-for-handshake',
+      wsTokenSecret: 'test-secret-for-handshake',
       ...overrides,
     });
     const httpServer = await server.listen(0, '127.0.0.1');

@@ -77,26 +77,28 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // Bootstrap proxy — forwards the browser's `/api/bootstrap/<shortCode>`
-  // fetch to the ggui MCP server's same-named endpoint. The Anthropic
-  // SDK strips `_meta.ggui.bootstrap` from `tool_result` blocks (the
-  // API spec only allows text content), so the chat UI recovers the
-  // envelope via this side-channel.
+  // Meta proxy — forwards the browser's `/r/<shortCode>` GET (with
+  // `Accept: application/json`) to the ggui MCP server's
+  // content-negotiated public-render endpoint, which returns the slice
+  // envelope. The Anthropic SDK strips `_meta` (incl. the `ai.ggui/*`
+  // slices) from `tool_result` blocks (the API spec only allows text
+  // content), so the chat UI recovers the meta slice pair via this
+  // side-channel.
   //
   // Same proxy posture as `/relay/tools-call`: keeps the browser on
   // a single same-origin endpoint, avoids CORS on the MCP server.
-  const bootstrapMatch = url.pathname.match(/^\/api\/bootstrap\/([^/]+)$/);
-  if (req.method === 'GET' && bootstrapMatch) {
-    const shortCode = bootstrapMatch[1] ?? '';
+  const renderMatch = url.pathname.match(/^\/r\/([^/]+)$/);
+  if (req.method === 'GET' && renderMatch && req.headers['accept']?.includes('application/json')) {
+    const shortCode = renderMatch[1] ?? '';
     try {
       const mcpOrigin = new URL(opts.mcpUrl);
-      mcpOrigin.pathname = `/api/bootstrap/${encodeURIComponent(shortCode)}`;
+      mcpOrigin.pathname = `/r/${encodeURIComponent(shortCode)}`;
       // Forward the browser's `?sig=...&exp=...` to the MCP server's
       // render-signing gate. Stripping the query was a real bug: when
       // the MCP server boots with render-signing on (the default),
       // every `/r/<code>` URL the agent receives carries a sig+exp,
-      // and the matching `/api/bootstrap/<code>` route enforces the
-      // same signature. Dropping the query forced a 403.
+      // and the route enforces the same signature on both HTML and
+      // JSON branches. Dropping the query forces a 403.
       mcpOrigin.search = url.search;
       const upstream = await fetch(mcpOrigin.toString(), {
         headers: { Accept: 'application/json' },

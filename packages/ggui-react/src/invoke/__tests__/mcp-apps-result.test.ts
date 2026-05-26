@@ -1,28 +1,30 @@
 /**
- * Tests for `extractBootstrapMeta` + round-trip parse over the SSE wire
- * — the consumer side of the S1' `@ggui-ai/server` ↔ `@ggui-ai/react`
- * MCP Apps tool-result convention.
+ * Tests for `extractMcpAppAiGguiMeta` + round-trip parse over the SSE
+ * wire — the consumer side of the S1' `@ggui-ai/server` ↔
+ * `@ggui-ai/react` MCP Apps tool-result convention.
  *
  * Sibling test in `@ggui-ai/server` asserts emission shape
  * (`InvokeStream.toolResultPush`). Both tests use the same
- * {@link FIXTURE_BOOTSTRAP} so a green pair proves the bootstrap
+ * {@link FIXTURE_META} so a green pair proves the meta slice pair
  * survives the wire bit-for-bit.
  */
 import { describe, it, expect } from 'vitest';
-import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { InvokeEvent } from '@ggui-ai/protocol';
-import { extractBootstrapMeta } from '../mcp-apps-result';
+import { extractMcpAppAiGguiMeta } from '../mcp-apps-result';
 import { parseSseStream } from '../sse-parse';
 
 /** MUST match `@ggui-ai/server/src/invoke/__tests__/tool-result-push.test.ts`. */
-const FIXTURE_BOOTSTRAP: McpAppAiGguiMountView = {
-  wsUrl: 'wss://mcp.example.test/ws',
-  token: 'bootstrap_token_abc123',
-  expiresAt: '2026-05-01T00:00:00.000Z',
-  sessionId: 'sess_XYZ',
-  appId: 'app_round_trip',
-  runtimeUrl: '/_ggui/iframe-runtime.js',
+const FIXTURE_META: McpAppAiGguiMeta = {
+  session: {
+    wsUrl: 'wss://mcp.example.test/ws',
+    token: 'bootstrap_token_abc123',
+    expiresAt: '2026-05-01T00:00:00.000Z',
+    sessionId: 'sess_XYZ',
+    appId: 'app_round_trip',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+  },
 };
 
 /** Encode a sequence of InvokeEvent JSON payloads as an SSE body. */
@@ -39,47 +41,58 @@ function encodeSse(events: InvokeEvent[]): ReadableStream<Uint8Array> {
   });
 }
 
-describe('extractBootstrapMeta', () => {
-  it('returns the bootstrap on well-shaped content', () => {
+describe('extractMcpAppAiGguiMeta', () => {
+  it('returns the meta pair on well-shaped content', () => {
     const content = {
-      sessionId: FIXTURE_BOOTSTRAP.sessionId,
-      _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
+      sessionId: FIXTURE_META.session?.sessionId,
+      _meta: metaToMcpAppMeta(FIXTURE_META),
     };
-    expect(extractBootstrapMeta(content)).toEqual(FIXTURE_BOOTSTRAP);
+    expect(extractMcpAppAiGguiMeta(content)).toEqual(FIXTURE_META);
   });
 
-  it('returns the bootstrap even when structuredContent is absent', () => {
+  it('returns the meta pair even when structuredContent is absent', () => {
     expect(
-      extractBootstrapMeta({
-        _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
+      extractMcpAppAiGguiMeta({
+        _meta: metaToMcpAppMeta(FIXTURE_META),
       }),
-    ).toEqual(FIXTURE_BOOTSTRAP);
+    ).toEqual(FIXTURE_META);
   });
 
-  it('returns null on non-bootstrap tool_results (legitimate)', () => {
-    // ggui_update / ggui_pop / ggui_request_credential etc. have no bootstrap.
-    expect(extractBootstrapMeta({ ok: true })).toBeNull();
-    expect(extractBootstrapMeta({ _meta: { ggui: {} } })).toBeNull();
-    expect(extractBootstrapMeta({ _meta: { other: {} } })).toBeNull();
+  it('returns null on non-meta tool_results (legitimate)', () => {
+    // ggui_update / ggui_pop / ggui_request_credential etc. have no
+    // ai.ggui/* meta slices.
+    expect(extractMcpAppAiGguiMeta({ ok: true })).toBeNull();
+    expect(extractMcpAppAiGguiMeta({ _meta: { ggui: {} } })).toBeNull();
+    expect(extractMcpAppAiGguiMeta({ _meta: { other: {} } })).toBeNull();
   });
 
-  it('returns null on malformed bootstrap (missing required field)', () => {
-    const partial = { ...FIXTURE_BOOTSTRAP, runtimeUrl: undefined };
-    expect(
-      extractBootstrapMeta({ _meta: mountViewToMcpAppMeta(partial) }),
-    ).toBeNull();
+  it('returns null on malformed session slice (missing required field)', () => {
+    // Drop `runtimeUrl` from the session slice — combiner rejects.
+    const malformed = {
+      _meta: {
+        'ai.ggui/session': {
+          sessionId: FIXTURE_META.session?.sessionId,
+          appId: FIXTURE_META.session?.appId,
+          // runtimeUrl intentionally absent
+          wsUrl: FIXTURE_META.session?.wsUrl,
+          token: FIXTURE_META.session?.token,
+          expiresAt: FIXTURE_META.session?.expiresAt,
+        },
+      },
+    };
+    expect(extractMcpAppAiGguiMeta(malformed)).toBeNull();
   });
 
   it('returns null on null / non-object inputs', () => {
-    expect(extractBootstrapMeta(null)).toBeNull();
-    expect(extractBootstrapMeta(undefined)).toBeNull();
-    expect(extractBootstrapMeta('string')).toBeNull();
-    expect(extractBootstrapMeta(42)).toBeNull();
+    expect(extractMcpAppAiGguiMeta(null)).toBeNull();
+    expect(extractMcpAppAiGguiMeta(undefined)).toBeNull();
+    expect(extractMcpAppAiGguiMeta('string')).toBeNull();
+    expect(extractMcpAppAiGguiMeta(42)).toBeNull();
   });
 });
 
-describe('SSE round-trip: parseSseStream → extractBootstrapMeta', () => {
-  it('recovers the fixture bootstrap bit-for-bit from a tool_result frame', async () => {
+describe('SSE round-trip: parseSseStream → extractMcpAppAiGguiMeta', () => {
+  it('recovers the fixture meta pair bit-for-bit from a tool_result frame', async () => {
     // Hand-built InvokeEvent sequence mirroring what
     // InvokeStream.toolResultPush() emits (sibling server test asserts
     // this emission shape directly).
@@ -107,8 +120,8 @@ describe('SSE round-trip: parseSseStream → extractBootstrapMeta', () => {
           type: 'tool_result',
           tool_use_id: toolUseId,
           content: {
-            sessionId: FIXTURE_BOOTSTRAP.sessionId,
-            _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
+            sessionId: FIXTURE_META.session?.sessionId,
+            _meta: metaToMcpAppMeta(FIXTURE_META),
           },
         },
       },
@@ -129,7 +142,7 @@ describe('SSE round-trip: parseSseStream → extractBootstrapMeta', () => {
     if (!toolResultFrame || toolResultFrame.content_block.type !== 'tool_result') {
       throw new Error('unreachable');
     }
-    const recovered = extractBootstrapMeta(toolResultFrame.content_block.content);
-    expect(recovered).toEqual(FIXTURE_BOOTSTRAP);
+    const recovered = extractMcpAppAiGguiMeta(toolResultFrame.content_block.content);
+    expect(recovered).toEqual(FIXTURE_META);
   });
 });

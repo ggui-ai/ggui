@@ -6,12 +6,14 @@
  * re-export the runtime side-effects.
  *
  * Surface:
- *   - `BootstrapParseFailureReason` — closed union of bootstrap-parse
- *     failure reasons.
- *   - `BootstrapParseResult` — discriminated union returned by
- *     `parseBootstrap()`.
- *   - `parseBootstrap` — the parser itself (consumers wanting to
- *     validate a bootstrap before spawning the iframe).
+ *   - `McpAppAiGguiMetaParseFailureReason` — closed union of slice-meta
+ *     parse failure reasons.
+ *   - `McpAppAiGguiMetaParseResult` — discriminated union returned by
+ *     `parseMetaFromUiInitialize()`.
+ *   - `parseMetaFromUiInitialize` — the parser itself (consumers
+ *     wanting to validate a slice meta before spawning the iframe).
+ *     Also exported as `parseBootstrap` for back-compat with pre-R4
+ *     call sites.
  *   - `RendererBootFailureReason` / `RendererBootFailedMessage` — the
  *     postMessage envelope shape parents observe on boot failure.
  *   - `ProtocolError` — canonical typed union for every failure
@@ -19,7 +21,8 @@
  *     envelope and the `_ggui:contract-error` WS channel.
  *   - `BootstrapFailureReason` — extensibly-closed union of every
  *     reason the 'bootstrap' variant can carry. Consolidates
- *     parse-time and post-parse codes in one place.
+ *     parse-time and post-parse codes in one place. (Wire-visible
+ *     name; kept stable for host postMessage observers.)
  *   - `ProtocolErrorEmitter` — function signature for the
  *     caller-side sink.
  *
@@ -28,20 +31,20 @@
  * runtime contract and should not become a load-bearing public API.
  */
 export type {
-  BootstrapParseFailureReason,
-  BootstrapParseResult,
+  McpAppAiGguiMetaParseFailureReason,
+  McpAppAiGguiMetaParseResult,
 } from './types.js';
 export {
   parseBootstrap,
-  parseBootstrapFromUiInitialize,
-  parseBootstrapFromGlobal,
-  parseBootstrapFromToolResult,
-  validateBootstrapMeta,
-} from './bootstrap.js';
+  parseMetaFromUiInitialize,
+  parseMetaFromGlobal,
+  parseMetaFromToolResult,
+  validateMeta,
+} from './meta-parse.js';
 export type {
   RendererBootFailureReason,
   RendererBootFailedMessage,
-  SelfContainedBootstrap,
+  SelfContainedMcpAppAiGguiMeta,
 } from './runtime.js';
 export type {
   ProtocolError,

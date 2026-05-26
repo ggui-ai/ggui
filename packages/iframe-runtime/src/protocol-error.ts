@@ -38,7 +38,7 @@ import { ClientContractViolationError } from '@ggui-ai/wire';
  * Consolidates three sources:
  *
  *   1. **Parse-time failures** — every member of
- *      `BootstrapParseFailureReason` (`MISSING_TOOL_OUTPUT` /
+ *      `McpAppAiGguiMetaParseFailureReason` (`MISSING_TOOL_OUTPUT` /
  *      `MISSING_META_GGUI_BOOTSTRAP` / `MALFORMED_BOOTSTRAP` /
  *      `EXPIRED_BOOTSTRAP`). `MISSING_META_GGUI_BOOTSTRAP` and
  *      `BOOTSTRAP_META_MISSING` are synonyms — the latter is the
@@ -50,7 +50,7 @@ import { ClientContractViolationError } from '@ggui-ai/wire';
  *   3. **Transport-observable failures** — `BUNDLE_FETCH_FAILED` /
  *      `CSP_VIOLATION` / `SESSION_NOT_FOUND` / `AUTH_REJECTED`. These
  *      fire before the renderer parse path runs, so they're authored
- *      here rather than inside `BootstrapParseFailureReason`.
+ *      here rather than inside `McpAppAiGguiMetaParseFailureReason`.
  *
  * `(string & {})` tail keeps the union extensibly-closed — new wire
  * codes can land without a client bump, while IDE autocomplete

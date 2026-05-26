@@ -75,7 +75,7 @@ describe('ChannelRegistry — transport selection', () => {
     const handle = await registry.bind({
       bootstrap: {
         wsUrl: 'ws://localhost/ws',
-        token: 'bootstrap-token',
+        wsToken: 'bootstrap-token',
         sessionId: 's',
         appId: 'a',
       },
@@ -151,7 +151,7 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
       type: 'props_update',
       onMessage: () => {},
       polling: {
-        url: 'http://test/api/bootstrap/abc',
+        url: 'http://test/r/abc',
         intervalMs: 60_000,
         parse: () => null,
       },
@@ -160,7 +160,7 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
     const handle = await registry.bind({
       bootstrap: {
         wsUrl: 'ws://csp-blocked',
-        token: 'tok',
+        wsToken: 'tok',
         sessionId: 's',
         appId: 'a',
       },
@@ -193,7 +193,9 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
     expect(statuses).not.toContain('failed');
     expect(statuses).toContain('connecting');
     // PollingTransport ticked at least once (fired immediately on start()).
-    expect(fetchImpl).toHaveBeenCalledWith('http://test/api/bootstrap/abc');
+    expect(fetchImpl).toHaveBeenCalledWith('http://test/r/abc', {
+      headers: { accept: 'application/json' },
+    });
     await handle.dispose();
   });
 
@@ -215,7 +217,7 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
     const handle = await registry.bind({
       bootstrap: {
         wsUrl: 'ws://localhost/ws',
-        token: 'tok',
+        wsToken: 'tok',
         sessionId: 's',
         appId: 'a',
       },

@@ -1,31 +1,34 @@
 /**
- * Per-stack-item bootstrap-meta derivation helpers.
+ * Per-stack-item slice-meta derivation helpers.
  *
  * # Why this file exists
  *
- * The protocol has more than one transport that ships a "bootstrap"
- * envelope to the iframe-runtime:
+ * The protocol has more than one transport that ships the `ai.ggui/*`
+ * slice meta to the iframe-runtime:
  *
- *   - **MCP Apps** — `_meta.ggui.bootstrap` on the `ggui_push` tool
- *     result, delivered via the host's tool-call → result postMessage
- *     path (Claude.ai, Claude Desktop).
- *   - **Public-render `/r/<shortCode>`** — inline `__GGUI_BOOTSTRAP__`
- *     global on the self-contained shell HTML, served standalone for
- *     direct browser visits or non-MCP-Apps hosts.
+ *   - **MCP Apps** — `_meta["ai.ggui/session"]` +
+ *     `_meta["ai.ggui/stack-item"]` on the `ggui_push` tool result,
+ *     delivered via the host's tool-call → result postMessage path
+ *     (Claude.ai, Claude Desktop).
+ *   - **Public-render `/r/<shortCode>`** — inline
+ *     `__GGUI_META__` global on the self-contained shell
+ *     HTML (content-negotiated `application/json` returns the same
+ *     slice envelope), served standalone for direct browser visits
+ *     or non-MCP-Apps hosts.
  *   - **Future transports** — ChatShell embeds, WebSocket-only
- *     bootstrap, SSR-prerendered HTML, mobile native, etc.
+ *     session boot, SSR-prerendered HTML, mobile native, etc.
  *
- * Each transport composes the bootstrap payload with its own envelope
+ * Each transport composes the slice meta with its own envelope
  * concerns (sessionId / appId / runtimeUrl / wsUrl / theme / auth /
  * codeUrl), but the *projection of the active stack item itself* is
  * variant-agnostic. Without a single source of truth for that
  * projection, every transport re-implements it, and a field that
  * grows on one path silently drifts on another (the 2026-05-09
- * `propsJson` regression: emitted on `/r/<shortCode>` but not on
- * `_meta.ggui.bootstrap` for component items, so claude.ai's iframe
+ * `propsJson` regression: emitted on `/r/<shortCode>` but not on the
+ * MCP-Apps slice meta for component items, so claude.ai's iframe
  * crashed accessing declared propsSpec fields).
  *
- * {@link deriveStackItemBootstrapView} is the single entry point.
+ * {@link deriveStackItemMeta} is the single entry point.
  * Every transport SHOULD route stack-item-derived fields through it.
  * The lower-level `derive*` helpers stay exported for callers that
  * only need a single field (e.g. legacy code paths during migration).
@@ -78,7 +81,8 @@ import {
  *
  * Pure helper; no I/O. Exported for tests + callers that need the
  * resolved URLs outside `deriveBundleOrigins` (e.g., the iframe
- * runtime's `_meta.ui.bootstrap.gadgets[*].bundleUrl` projection).
+ * runtime's per-gadget `bundleUrl` projection on the
+ * `ai.ggui/session.gadgets[*]` slice).
  *
  * @public
  */
@@ -107,7 +111,7 @@ export function resolveGadgetUrls(
  * otherwise call `resolveGadgetUrls(entry)` independently — one call
  * per gadget per consumer = 2N resolves per push. WeakMap-keyed on
  * the entry object
- * collapses that to N: `deriveStackItemBootstrapView` is the only
+ * collapses that to N: `deriveStackItemMeta` is the only
  * site that mutates entries; subsequent consumers see the cached
  * value.
  *
@@ -460,7 +464,7 @@ export function deriveBundleOrigins(
  * # script-src + 'unsafe-inline'
  *
  * The public-render `/r/<shortCode>` shell embeds the bootstrap
- * payload as an inline `<script>__GGUI_BOOTSTRAP__ = {...}</script>`
+ * payload as an inline `<script>__GGUI_META__ = {...}</script>`
  * tag (the fast-path that skips the bootstrap fetch round-trip).
  * Strict `script-src 'self' <origins>` blocks inline scripts, which
  * would break the iframe boot the moment any library declares a
@@ -548,7 +552,7 @@ export function derivePropsJson(item: SessionStackEntry): string | undefined {
  * empty view — those items have their own shell wiring and don't
  * route through this helper.
  */
-export interface StackItemBootstrapView {
+export interface StackItemMetaView {
   readonly kind?: string;
   readonly propsJson?: string;
   readonly actionNextSteps?: Record<string, string>;
@@ -570,8 +574,9 @@ export interface StackItemBootstrapView {
    *   - MCP Apps host-mounted iframe → `_meta.ui.permissions` on the
    *     ggui_push tool result, which the host translates to an
    *     `allow=""` attribute on the iframe element.
-   *   - Bootstrap inline ⇒ `permissionsPolicy` field on the inline
-   *     `__GGUI_BOOTSTRAP__` for in-renderer surface inspection.
+   *   - Inline `__GGUI_META__` global ⇒ `permissionsPolicy` field
+   *     on the operator-owned credential payload for in-renderer surface
+   *     inspection.
    *
    * Absent ⇒ no permissions requested (default-deny posture).
    */
@@ -615,11 +620,13 @@ export interface StackItemBootstrapView {
     readonly bundleSri?: string;
   }>;
   // `compiledValidators` removed in #109 — validators are now served
-  // via a content-addressable URL (`_meta["ai.ggui/contract"].validatorsUrl`).
-  // Producers call {@link deriveContractBundle} to compute
+  // via a content-addressable URL surfaced on the stack-item slice
+  // (`_meta["ai.ggui/stack-item"].validatorsUrl`). Producers call
+  // {@link deriveContractBundle} to compute
   // `{contractHash, bundleSource}`, write `bundleSource` to their
-  // `CodeStore` at `contractHash`, then emit `bootstrap.contractHash` +
-  // `bootstrap.validatorsUrl` for the iframe-runtime to fetch.
+  // `CodeStore` at `contractHash`, then emit
+  // `stackItem.contractHash` + `stackItem.validatorsUrl` for the
+  // iframe-runtime to fetch.
 }
 
 /**
@@ -756,9 +763,9 @@ export function deriveGadgetRegistrations(
  * server processes and Ajv version bumps).
  *
  * The push handler writes `bundleSource` to its `CodeStore` at
- * `contractHash`, then emits `_meta["ai.ggui/contract"] = {contractHash,
- * validatorsUrl}` — the iframe-runtime fetches the URL + dynamic-imports
- * to resolve validators.
+ * `contractHash`, then emits `contractHash` + `validatorsUrl` on the
+ * `_meta["ai.ggui/stack-item"]` slice — the iframe-runtime fetches the
+ * URL + dynamic-imports to resolve validators.
  *
  * Delegates to `@ggui-ai/protocol`'s {@link computeContractBundle} —
  * the producer half of the channel, colocated with the four runtime
@@ -788,7 +795,7 @@ export async function deriveContractBundle(
 }
 
 /**
- * Build the {@link StackItemBootstrapView} for a stack item — the
+ * Build the {@link StackItemMetaView} for a stack item — the
  * single-entry-point projection function every bootstrap transport
  * SHOULD call. Composing transports take the view, spread it into
  * their own envelope alongside session/auth/runtime concerns. The
@@ -798,9 +805,9 @@ export async function deriveContractBundle(
  *
  * Pure. Same input → identical output, byte-for-byte.
  */
-export function deriveStackItemBootstrapView(
+export function deriveStackItemMeta(
   item: SessionStackEntry,
-): StackItemBootstrapView {
+): StackItemMetaView {
   // MCP Apps items wire through their own shell — no projection here.
   if (item.type === 'mcpApps') return {};
 

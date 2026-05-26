@@ -1,5 +1,9 @@
 /* eslint-disable no-console */
 import { useCallback, useRef, useState } from 'react';
+import {
+  parseMcpAppAiGguiMeta,
+  type McpAppAiGguiMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ChatEntry, StackItemRef, ToolCallEntry } from './types';
 
 interface UseChatResult {
@@ -33,7 +37,7 @@ export function useChat(): UseChatResult {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [stackItems, setStackItems] = useState<StackItemRef[]>([]);
   const [sending, setSending] = useState(false);
-  // Mirror of the latest stackItems for the bootstrap-refetch lookup.
+  // Mirror of the latest stackItems for the meta-refetch lookup.
   // Plain state would close over the snapshot at handleEvent-call time;
   // the ref always reads current.
   const stackItemsRef = useRef<StackItemRef[]>([]);
@@ -80,20 +84,21 @@ export function useChat(): UseChatResult {
   }, []);
 
   /**
-   * Patch the bootstrap field on an existing stack item by id. Used
-   * by the bootstrap-refetch effect after every ggui_push and every
+   * Patch the meta slice pair on an existing stack item by id. Used
+   * by the meta-refetch effect after every ggui_push and every
    * ggui_update tool_result. McpAppIframe's late-arrival forwarder
    * sees the prop transition and posts `ui/notifications/tool-result`
-   * with the fresh `_meta.ggui.bootstrap` into the iframe — same path
-   * the renderer's spec-compliant listener handles on initial mount.
+   * with the fresh `ai.ggui/*` `_meta` slices into the iframe — same
+   * path the renderer's spec-compliant listener handles on initial
+   * mount.
    */
-  const updateStackItemBootstrap = useCallback(
-    (stackItemId: string, bootstrap: Record<string, unknown>) => {
+  const updateStackItemMeta = useCallback(
+    (stackItemId: string, meta: McpAppAiGguiMeta) => {
       setStackItems((prev) => {
         const idx = prev.findIndex((p) => p.stackItemId === stackItemId);
         if (idx < 0) return prev;
         const next = prev.slice();
-        next[idx] = { ...next[idx]!, bootstrap };
+        next[idx] = { ...next[idx]!, meta };
         return next;
       });
     },
@@ -101,53 +106,58 @@ export function useChat(): UseChatResult {
   );
 
   /**
-   * Async fetch of `/api/bootstrap/<shortCode>`. The shortCode is parsed
-   * from a stack-item url like `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`;
-   * the JSON endpoint returns the full bootstrap envelope (live trio +
-   * componentCode + propsJson + theme + capabilities). Recovers the
-   * field set the Anthropic SDK strips from `tool_result._meta`.
+   * Async fetch of `/r/<shortCode>` with `Accept: application/json`.
+   * The shortCode is parsed from a stack-item url like
+   * `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`; the content-negotiated
+   * JSON branch returns the slice envelope (`{ "ai.ggui/session": {...},
+   * "ai.ggui/stack-item": {...} }`) the iframe-runtime needs to re-apply
+   * state. Recovers the field set the Anthropic SDK strips from
+   * `tool_result._meta`.
    *
-   * The `sig`+`exp` query pair is forwarded verbatim — the MCP server's
-   * `/api/bootstrap/:shortCode` route enforces the same render-signing
-   * gate as `/r/:shortCode`, so dropping the query at this layer would
-   * 403 every refetch when render-signing is on (the default).
+   * The `sig`+`exp` query pair is forwarded verbatim — the route
+   * enforces the same render-signing gate on both HTML and JSON branches,
+   * so dropping the query at this layer would 403 every refetch when
+   * render-signing is on (the default).
    */
-  const refetchBootstrap = useCallback(
+  const refetchMeta = useCallback(
     async (stackItemId: string, url: string) => {
       const parsed = parseRenderUrl(url);
       if (!parsed) return;
       const { shortCode, search } = parsed;
       try {
-        const res = await fetch(`/api/bootstrap/${shortCode}${search}`, {
+        const res = await fetch(`/r/${shortCode}${search}`, {
           headers: { Accept: 'application/json' },
         });
         if (!res.ok) return;
-        const bootstrap = (await res.json()) as Record<string, unknown>;
-        updateStackItemBootstrap(stackItemId, bootstrap);
+        const envelope = (await res.json()) as unknown;
+        const parsedMeta = parseMcpAppAiGguiMeta(envelope);
+        if (!parsedMeta.ok) return;
+        updateStackItemMeta(stackItemId, parsedMeta.meta);
       } catch (err) {
-        console.warn('[useChat] bootstrap refetch failed', err);
+        console.warn('[useChat] meta refetch failed', err);
       }
     },
-    [updateStackItemBootstrap],
+    [updateStackItemMeta],
   );
 
   /**
-   * Refetch the bootstrap for an existing stack item by id. Looks up
-   * the cached URL via the stackItems ref and dispatches the same
-   * `/api/bootstrap/<shortCode>` fetch. Used by `ggui_update` results
-   * which don't carry the URL — only `{sessionId, stackItemId}`.
-   * No-op when no matching id is in state (the update lands before
-   * the push registered the item — out-of-order delivery).
+   * Refetch the slice envelope for an existing stack item by id.
+   * Looks up the cached URL via the stackItems ref and dispatches the
+   * same `/r/<shortCode>` JSON-branch fetch. Used by `ggui_update`
+   * results which don't carry the URL — only `{sessionId,
+   * stackItemId}`. No-op when no matching id is in state (the update
+   * lands before the push registered the item — out-of-order
+   * delivery).
    */
-  const refetchBootstrapById = useCallback(
+  const refetchMetaById = useCallback(
     async (stackItemId: string) => {
       const item = stackItemsRef.current.find(
         (p) => p.stackItemId === stackItemId,
       );
       if (!item) return;
-      await refetchBootstrap(stackItemId, item.url);
+      await refetchMeta(stackItemId, item.url);
     },
-    [refetchBootstrap],
+    [refetchMeta],
   );
 
   const send = useCallback(
@@ -218,8 +228,8 @@ export function useChat(): UseChatResult {
               append,
               addStackItem,
               patchToolCall,
-              refetchBootstrap,
-              refetchBootstrapById,
+              refetchMeta,
+              refetchMetaById,
             );
           }
         }
@@ -242,8 +252,8 @@ export function useChat(): UseChatResult {
       append,
       addStackItem,
       patchToolCall,
-      refetchBootstrap,
-      refetchBootstrapById,
+      refetchMeta,
+      refetchMetaById,
     ],
   );
 
@@ -264,8 +274,8 @@ function handleEvent(
     toolUseId: string,
     patch: { readonly result?: unknown; readonly isError?: boolean },
   ) => void,
-  refetchBootstrap: (stackItemId: string, url: string) => Promise<void>,
-  refetchBootstrapById: (stackItemId: string) => Promise<void>,
+  refetchMeta: (stackItemId: string, url: string) => Promise<void>,
+  refetchMetaById: (stackItemId: string) => Promise<void>,
 ): void {
   if (eventType === 'error') {
     const err = (payload as { error?: string }).error ?? 'Unknown error';
@@ -348,7 +358,7 @@ function handleEvent(
       // Sniff for ggui_push's renderer URL to mount the iframe entry.
       // Also handle ggui_update: the result carries no `url` but does
       // carry `{sessionId, stackItemId, updated:true}` — we look up the
-      // matching iframe and refetch its bootstrap so the live mount
+      // matching iframe and refetch its meta so the live mount
       // re-applies post-patch state via spec-compliant postMessage.
       for (const text of textBlocks) {
         let parsed: Record<string, unknown> | null = null;
@@ -371,25 +381,25 @@ function handleEvent(
           };
           addStackItem(item);
           append({ id: `${baseId}.s${i}`, kind: 'stack-item', stackItem: item });
-          // Side-effect fetch of `/api/bootstrap/<shortCode>` — the
+          // Side-effect fetch of `/r/<shortCode>` (JSON branch) — the
           // Anthropic SDK has already stripped `_meta` from the result,
-          // so we recover the envelope from the server-side JSON path.
-          // McpAppIframe's late-arrival path posts it to the iframe on
-          // bootstrap-prop transition.
-          void refetchBootstrap(item.stackItemId, item.url);
+          // so we recover the slice envelope from the server-side JSON
+          // path. McpAppIframe's late-arrival path posts it to the
+          // iframe on meta-prop transition.
+          void refetchMeta(item.stackItemId, item.url);
           continue;
         }
         // ggui_update branch: existing stack item gets new props. The
         // result envelope doesn't carry the URL (only {sessionId,
         // stackItemId, updated}). Look up the cached URL via the
-        // stackItemsRef helper + refetch the bootstrap so the post-
-        // patch propsJson reaches the still-mounted iframe via
+        // stackItemsRef helper + refetch the meta so the post-patch
+        // propsJson reaches the still-mounted iframe via
         // McpAppIframe's late-arrival postMessage path.
         if (
           parsed.updated === true &&
           typeof parsed.stackItemId === 'string'
         ) {
-          void refetchBootstrapById(parsed.stackItemId);
+          void refetchMetaById(parsed.stackItemId);
         }
       }
     }
@@ -450,4 +460,3 @@ function parseRenderUrl(
     return null;
   }
 }
-

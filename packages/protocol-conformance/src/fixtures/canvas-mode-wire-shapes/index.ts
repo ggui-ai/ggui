@@ -3,9 +3,9 @@
  *
  * Exercises the canvas-mode wire additions (protocol draft-2026-05-17):
  *
- *   - `McpAppAiGguiMountView.canvasMode` — discriminator + mutual-exclusion
- *     with `stackItemId`. Canvas iframes are session-scoped; no pinned
- *     item.
+ *   - `McpAppAiGguiSessionMeta.canvasMode` — discriminator + mutual-
+ *     exclusion with `McpAppAiGguiStackItemMeta.stackItemId`. Canvas
+ *     iframes are session-scoped; no pinned item.
  *   - `_ggui:lifecycle` reserved channel + `CanvasLifecyclePayload`
  *     discriminated union (`handshake_started` / `handshake_completed` /
  *     `push_started` / `consume_polling`). Server fires fire-and-forget;

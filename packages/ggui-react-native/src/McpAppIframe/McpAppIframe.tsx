@@ -107,7 +107,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       locale,
       containerDimensions,
       permissions,
-      bootstrap,
+      meta,
       onToolCall,
       onError,
       onUpgradeRequired,
@@ -135,7 +135,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       containerDimensions: resolveContainerDimensions(containerDimensions),
       openLink: openLinkNative,
       onToolCall,
-      ...(bootstrap !== undefined ? { bootstrap } : {}),
+      ...(meta !== undefined ? { meta } : {}),
     });
     useEffect(() => {
       ctxRef.current = {
@@ -144,9 +144,9 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
         containerDimensions: resolveContainerDimensions(containerDimensions),
         openLink: openLinkNative,
         onToolCall,
-        ...(bootstrap !== undefined ? { bootstrap } : {}),
+        ...(meta !== undefined ? { meta } : {}),
       };
-    }, [theme, locale, containerDimensions, onToolCall, bootstrap]);
+    }, [theme, locale, containerDimensions, onToolCall, meta]);
 
     // Delivery helper — host → WebView. Reuses the existing synthesis
     // pattern: escape payload through JSON.parse(JSON.stringify(...))

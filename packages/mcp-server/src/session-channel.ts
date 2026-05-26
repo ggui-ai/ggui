@@ -1889,19 +1889,19 @@ export function createSessionChannelServer(
   ): Promise<AuthResult> {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
-    // Bootstrap gate: when `?bootstrap=` is present AND the channel is
-    // configured with bootstrap plumbing, skip the AuthAdapter entirely
-    // at upgrade. The real identity is established in handleSubscribe
-    // when the subscribe payload's `bootstrap` token is verified
-    // (single-use jti claimed there). This is how MCP Apps iframes
-    // connect — they can't set Authorization headers, and the token
-    // model is subscribe-scoped anyway.
+    // WS-token gate: when `?wsToken=` is present AND the channel is
+    // configured with ws-token-auth plumbing, skip the AuthAdapter
+    // entirely at upgrade. The real identity is established in
+    // handleSubscribe when the subscribe payload's `wsToken` is
+    // verified. This is how MCP Apps iframes connect — they can't set
+    // Authorization headers, and the token model is subscribe-scoped
+    // anyway.
     //
     // URL-gate here is NOT verification — it's a "don't reject the
     // upgrade for missing bearer" signal. The real verify runs at
     // subscribe time; an invalid token reaches that point and is
     // rejected with BOOTSTRAP_INVALID.
-    if (opts.bootstrap && url.searchParams.has('bootstrap')) {
+    if (opts.bootstrap && url.searchParams.has('wsToken')) {
       return {
         identity: {
           kind: 'user',
@@ -2210,24 +2210,24 @@ export function createSessionChannelServer(
       return;
     }
 
-    // Bootstrap-auth path. When `payload.bootstrap` is present, the
-    // MCP Apps iframe is asking us to authenticate it via the
-    // short-lived token minted by `ggui_push`. This REPLACES the
-    // upgrade-time AuthAdapter identity — iframes don't carry bearer
-    // tokens. Mutually-exclusive on purpose.
+    // WS-token-auth path. When `payload.wsToken` is present, the MCP
+    // Apps iframe is asking us to authenticate it via the short-lived
+    // token minted by `ggui_push`. This REPLACES the upgrade-time
+    // AuthAdapter identity — iframes don't carry bearer tokens.
+    // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
     let mintedSessionToken: string | undefined;
-    if (typeof payload.bootstrap === 'string' && payload.bootstrap.length > 0) {
+    if (typeof payload.wsToken === 'string' && payload.wsToken.length > 0) {
       if (!opts.bootstrap) {
         sendError(
           ws,
           'BOOTSTRAP_NOT_SUPPORTED',
-          'This server was not configured with bootstrap-auth plumbing',
+          'This server was not configured with ws-token-auth plumbing',
           message.requestId,
         );
         return;
       }
-      const verifyResult = opts.bootstrap.verify(payload.bootstrap);
+      const verifyResult = opts.bootstrap.verify(payload.wsToken);
       if (!verifyResult.ok) {
         opts.logger.warn('session_channel_bootstrap_rejected', {
           sessionId: payload.sessionId,

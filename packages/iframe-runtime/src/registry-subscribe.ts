@@ -1,12 +1,12 @@
 /**
  * Registry-driven subscribe orchestration — owns the renderer's
- * "I have a parsed bootstrap, now drive the live-channel handshake to
- * first ack" flow on top of `ChannelRegistry.bind()`.
+ * "I have a parsed session-meta, now drive the live-channel handshake
+ * to first ack" flow on top of `ChannelRegistry.bind()`.
  *
  * Replaces the pre-B3b `subscribe()` helper + the `RendererWebSocketManager`
  * lifecycle class. The two retired modules paired a hand-rolled WS
  * manager with a separate handshake helper; B3b unifies both behind
- * the `@ggui-ai/channel-client` library so every WS frame type (push,
+ * the `@ggui-ai/live-channel` library so every WS frame type (push,
  * data, props_update, drain_ack, channel_payload, channel_error,
  * system, feedback) flows through one registry-owned transport.
  *
@@ -14,8 +14,8 @@
  *
  *   1. Caller-supplied `ChannelRegistry` (populated by `runtime.ts`'s
  *      triad-wiring `setup()` with every handler the iframe routes).
- *   2. Compose the WS URL with the bootstrap token threaded as a
- *      `?bootstrap=<encoded>` query string (mirrors the pre-B3b
+ *   2. Compose the WS URL with the WS auth token threaded as a
+ *      `?wsToken=<encoded>` query string (mirrors the pre-B3b
  *      `composeWsUrl` shape so server-side upgrade-path auth keeps
  *      working).
  *   3. Register `ack` + `error` handlers on the registry BEFORE bind
@@ -23,7 +23,9 @@
  *      handshake-resolver closure.
  *   4. Call `registry.bind({bootstrap, onStatusChange})` and capture
  *      the returned typed `WsTransportHandle` (narrow on
- *      `handle.kind === 'ws'`).
+ *      `handle.kind === 'ws'`). The live-channel's `bootstrap`
+ *      argument is its own internal name; the field on the wire is
+ *      `wsToken`.
  *
  * The handshake resolves on the first `ack` (with the symmetric
  * `CLIENT_SUPPORTED_VERSIONS` check) or rejects on:
@@ -46,12 +48,12 @@ import type {
   ContractErrorPayload,
 } from '@ggui-ai/protocol';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChannelRegistry,
   TransportStatus,
   WsTransportHandle,
-} from '@ggui-ai/channel-client';
+} from '@ggui-ai/live-channel';
 import {
   fromAuthFailure,
   fromTransportFailure,
@@ -77,7 +79,13 @@ export interface RegistrySubscribeHandle {
  * concrete implementations; tests pass mocks via the `connectFn` seam.
  */
 export interface ConnectViaRegistryOptions {
-  readonly bootstrap: McpAppAiGguiMountView;
+  /**
+   * Session slice (`McpAppAiGguiSessionMeta`) — the live-channel
+   * credentials this subscribe path actually needs: `sessionId`,
+   * `appId`, `wsUrl`, `wsToken`. The stack-item slice is not consulted
+   * here (it's load-bearing only for the renderer / mount layer).
+   */
+  readonly session: McpAppAiGguiSessionMeta;
   readonly registry: ChannelRegistry;
   /**
    * Fires on every transport-status transition mapped onto the
@@ -132,15 +140,15 @@ export interface ConnectViaRegistryOptions {
 }
 
 /**
- * Compose the WebSocket URL with the bootstrap token threaded as a
+ * Compose the WebSocket URL with the WS auth token threaded as a
  * query parameter. Servers that authenticate the upgrade path read
  * the token from here; the same value also rides inside the subscribe
  * payload so server-side handlers that consume credentials on the
  * subscribe frame see it too.
  */
-function composeWsUrl(base: string, bootstrap: string): string {
+function composeWsUrl(base: string, wsToken: string): string {
   const sep = base.indexOf('?') >= 0 ? '&' : '?';
-  return `${base}${sep}bootstrap=${encodeURIComponent(bootstrap)}`;
+  return `${base}${sep}wsToken=${encodeURIComponent(wsToken)}`;
 }
 
 /**
@@ -237,15 +245,15 @@ export function connectViaRegistry(
       opts.onProtocolError ?? (() => {});
     const emitObserve: ObservabilityEmitter = opts.onObserve ?? (() => {});
 
-    // Defense-in-depth — live mode requires both wsUrl + token. The
+    // Defense-in-depth — live mode requires both wsUrl + wsToken. The
     // caller validates this before invoking; reject early with a
     // typed transport failure if either is missing.
-    const wsUrl = opts.bootstrap.wsUrl;
-    const token = opts.bootstrap.token;
+    const wsUrl = opts.session.wsUrl;
+    const wsToken = opts.session.wsToken;
     if (typeof wsUrl !== 'string' || wsUrl.length === 0 ||
-        typeof token !== 'string' || token.length === 0) {
+        typeof wsToken !== 'string' || wsToken.length === 0) {
       const err = new Error(
-        'connectViaRegistry: bootstrap missing wsUrl/token — live-mode required',
+        'connectViaRegistry: session-meta missing wsUrl/wsToken — live-mode required',
       );
       emitProtocolError(fromTransportFailure('DISCONNECTED', false, err.message));
       reject(err);
@@ -396,24 +404,26 @@ export function connectViaRegistry(
       }
     };
 
-    const composedUrl = composeWsUrl(wsUrl, token);
+    const composedUrl = composeWsUrl(wsUrl, wsToken);
 
-    // `bind()` selects the transport (WS for wsUrl+token bootstraps;
-    // the registry's selection logic narrows on bootstrap shape) and
-    // starts it. We override `bootstrap.wsUrl` with the composed URL
-    // so the registry's WS transport gets the token-threaded variant.
+    // `bind()` selects the transport (WS for wsUrl+wsToken sessions;
+    // the live-channel narrows on its `bootstrap` shape) and starts
+    // it. We override `session.wsUrl` with the composed URL so the
+    // registry's WS transport gets the wsToken-threaded variant. The
+    // live-channel's `bootstrap` arg is its internal name; the field
+    // on the wire is `wsToken`.
     void opts.registry
       .bind({
         bootstrap: {
           wsUrl: composedUrl,
-          token,
-          sessionId: opts.bootstrap.sessionId,
-          appId: opts.bootstrap.appId,
+          wsToken,
+          sessionId: opts.session.sessionId,
+          appId: opts.session.appId,
         },
         onStatusChange: mappedStatusCallback,
       })
       .then((bound) => {
-        // bound is `AnyTransportHandle`. Composed URL + token means
+        // bound is `AnyTransportHandle`. Composed URL + wsToken means
         // the registry selected WSTransport — `kind === 'ws'` is the
         // structural invariant. Narrow defensively.
         if (bound.kind !== 'ws') {
@@ -421,7 +431,7 @@ export function connectViaRegistry(
             settled = true;
             reject(
               new Error(
-                "connectViaRegistry: registry returned non-ws transport despite wsUrl+token bootstrap",
+                "connectViaRegistry: registry returned non-ws transport despite wsUrl+wsToken session-meta",
               ),
             );
           }

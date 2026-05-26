@@ -3,7 +3,7 @@
  * restart.
  *
  * Background: `createGguiServer` mints two HMAC secrets at boot when the
- * caller doesn't pass them — `bootstrapSecret` (signs MCP Apps `_meta.
+ * caller doesn't pass them — `wsTokenSecret` (signs MCP Apps `_meta.
  * ggui.bootstrap.token` so iframes can subscribe to the live-channel WS)
  * and the render-URL signer secret (signs `/r/<code>?sig=&exp=`). Both
  * are process-local `randomBytes(32)` by default — fine for a single

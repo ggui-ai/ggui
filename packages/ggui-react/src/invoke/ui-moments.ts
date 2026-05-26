@@ -19,15 +19,17 @@
  *     HTML. Requires a `sessionResourceOrigin` option; without one no
  *     URL can be built and the moment is skipped.
  *
- *   - **Inline bootstrap.** Agents that call
- *     `stream.toolResultPush(id, bootstrap)` carry `_meta.ggui.bootstrap`
- *     on the tool_result itself; {@link extractBootstrapMeta} pulls it
- *     out, and the shell can build a srcdoc thin shell client-side,
- *     skipping the server round-trip. Forward-looking — kept so future
- *     agents that own full connection material can emit directly
- *     without a session-resource hop.
+ *   - **Inline meta pair.** Agents that call
+ *     `stream.toolResultPush(id, meta)` carry the
+ *     `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
+ *     slices on the tool_result itself; {@link extractMcpAppAiGguiMeta}
+ *     pulls them out as a typed {@link McpAppAiGguiMeta} pair, and the
+ *     shell can build a srcdoc thin shell client-side, skipping the
+ *     server round-trip. Forward-looking — kept so future agents that
+ *     own full connection material can emit directly without a
+ *     session-resource hop.
  *
- * Precedence: the inline bootstrap wins when both signals are present
+ * Precedence: the inline meta pair wins when both signals are present
  * (it is the richer payload). A tool_result with neither signal is not
  * a ggui
  * UI moment — it drops silently (agents legitimately emit other
@@ -38,12 +40,12 @@
  * and render the result.
  */
 import type { ConversationMessage } from './useInvoke';
-import { extractBootstrapMeta } from './mcp-apps-result';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { extractMcpAppAiGguiMeta } from './mcp-apps-result';
+import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
  * A single UI-moment the shell should render. Exactly one
- * `<McpAppIframe>` per moment, keyed by {@link UiMoment.key}.
+ * `<AppRenderer>` per moment, keyed by {@link UiMoment.key}.
  */
 export interface UiMoment {
   /**
@@ -56,9 +58,9 @@ export interface UiMoment {
   /**
    * Stack item id. For session-resource moments this is `stackItemId`
    * from {@link import('@ggui-ai/protocol').GguiPushOutput}. For
-   * inline-bootstrap moments this is `stackItemId` from
-   * {@link McpAppAiGguiMountView} when present, falling back to `key`
-   * (targeting the whole session when no item is pinned).
+   * inline-meta moments this is `stackItemId` from the stack-item slice
+   * when present, falling back to `key` (targeting the whole session
+   * when no item is pinned).
    */
   readonly itemId: string;
 
@@ -66,20 +68,20 @@ export interface UiMoment {
     | {
         readonly kind: 'session-resource';
         /**
-         * Fully-qualified URL the shell passes to
-         * {@link import('@ggui-ai/react').McpAppIframe}'s `resource.uri`.
-         * Shape: `<origin>/ggui/session-resource/item/<sid>/<stackItemId>`.
+         * Fully-qualified URL the shell passes to the MCP-Apps
+         * renderer's `resource.uri`. Shape:
+         * `<origin>/ggui/session-resource/item/<sid>/<stackItemId>`.
          */
         readonly url: string;
       }
     | {
         readonly kind: 'bootstrap-inline';
         /**
-         * Full bootstrap extracted from `_meta.ggui.bootstrap`. The shell
-         * builds a thin-shell HTML client-side and passes it as
-         * `resource.text`.
+         * Parsed {@link McpAppAiGguiMeta} pair extracted from the
+         * tool-result's `_meta` slices. The shell can render the
+         * session + stack-item directly (no second server round-trip).
          */
-        readonly bootstrap: McpAppAiGguiMountView;
+        readonly meta: McpAppAiGguiMeta;
       };
 }
 
@@ -90,7 +92,7 @@ export interface ExtractUiMomentsOptions {
    * `/ggui/session-resource/item/<sessionId>/<stackItemId>`.
    *
    * When absent, session-resource tool_results are skipped — a UI
-   * moment requires either a valid URL or an inline bootstrap.
+   * moment requires either a valid URL or an inline meta pair.
    * Typical value: the agent's own origin (hosted MCP / `ggui serve`
    * endpoint), NOT a third-party. The mount target (the shell /
    * platform iframe) MUST have network access to this origin.
@@ -114,15 +116,15 @@ export function extractUiMoments(
     for (const block of msg.content) {
       if (block.type !== 'tool_result') continue;
 
-      // Inline bootstrap first — it is the richer signal. An agent
+      // Inline meta first — it is the richer signal. An agent
       // that emitted `toolResultPush` carries everything needed, so
       // the server round-trip can be skipped.
-      const bootstrap = extractBootstrapMeta(block.content);
-      if (bootstrap !== null) {
+      const meta = extractMcpAppAiGguiMeta(block.content);
+      if (meta !== null) {
         out.push({
           key: block.tool_use_id,
-          itemId: bootstrap.stackItemId ?? block.tool_use_id,
-          source: { kind: 'bootstrap-inline', bootstrap },
+          itemId: meta.stackItem?.stackItemId ?? block.tool_use_id,
+          source: { kind: 'bootstrap-inline', meta },
         });
         continue;
       }

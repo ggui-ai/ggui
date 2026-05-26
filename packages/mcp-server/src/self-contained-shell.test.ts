@@ -2,7 +2,7 @@
  * Slice 14 (2026-05-08) — `buildSelfContainedShell` injects the full
  * bootstrap envelope, not just `{sessionId, appId, componentCode|kind}`.
  *
- * Pre-Slice-14 the inline `__GGUI_BOOTSTRAP__` global only carried the
+ * Pre-Slice-14 the inline `__GGUI_META__` global only carried the
  * minimum to mount a compiled component on the postMessage shell path.
  * The self-contained `/r/<shortCode>` direct-preview path uses the
  * SAME global as its sole boot source — so anything the runtime needs
@@ -19,19 +19,52 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildSelfContainedShell } from './mcp-apps-outbound.js';
+import {
+  MCP_APP_AI_GGUI_SESSION_META_KEY,
+  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
- * Pull the JSON literal out of the shell HTML's
- * `<script>window.__GGUI_BOOTSTRAP__ = {...};</script>` line.
+ * Pull the slice envelope out of the shell HTML's
+ * `<script>window.__GGUI_META__ = {...};</script>` line.
  *
  * Mirrors what the browser would do: parse the JSON the server
  * stamped, modulo the HTML-escape de-mangling for `<` / `>` / `&` and
  * the JS line-terminator escapes (U+2028 / U+2029) the builder
  * applies. Replacement targets are simple printables so this file
  * itself stays free of irregular whitespace.
+ *
+ * Returns `{session, stackItem?}` — post-R3 the inline global carries
+ * the SAME shape as the wire `_meta` envelope (two keys
+ * `ai.ggui/session` + `ai.ggui/stack-item`), unpacked here for ergonomic
+ * field access. Either slice may be undefined depending on shell inputs
+ * (canvas mode omits stack-item).
  */
-function extractInlineBootstrap(html: string): Record<string, unknown> {
-  const match = html.match(/window\.__GGUI_BOOTSTRAP__ = (.+?);<\/script>/);
+function extractInlineBootstrap(html: string): {
+  session?: Record<string, unknown>;
+  stackItem?: Record<string, unknown>;
+} {
+  const envelope = extractInlineSliceEnvelope(html);
+  return {
+    session: envelope[MCP_APP_AI_GGUI_SESSION_META_KEY] as
+      | Record<string, unknown>
+      | undefined,
+    stackItem: envelope[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY] as
+      | Record<string, unknown>
+      | undefined,
+  };
+}
+
+/**
+ * Pull the raw slice envelope (slice keys intact:
+ * `{"ai.ggui/session": {...}, "ai.ggui/stack-item": {...}}`) out of the
+ * shell HTML's `window.__GGUI_META__` global. The slice-keyed
+ * shape is what `parseMcpAppAiGguiMeta` (and any wire `_meta` consumer)
+ * expects; the destructured-helper `extractInlineBootstrap` derives from
+ * this and offers ergonomic field access for the other tests.
+ */
+function extractInlineSliceEnvelope(html: string): Record<string, unknown> {
+  const match = html.match(/window\.__GGUI_META__ = (.+?);<\/script>/);
   if (!match) {
     throw new Error('inline bootstrap not found in shell HTML');
   }
@@ -50,7 +83,7 @@ const SAMPLE_CODE_URL =
 const SAMPLE_CODE_HASH = 'sha256-abc123';
 
 describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
-  it('inlines runtimeUrl into the bootstrap (closes the blank-page bug)', () => {
+  it('inlines runtimeUrl on the session slice (closes the blank-page bug)', () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -58,11 +91,11 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeUrl: SAMPLE_CODE_URL,
       codeHash: SAMPLE_CODE_HASH,
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['runtimeUrl']).toBe(SAMPLE_RUNTIME_URL);
+    const { session } = extractInlineBootstrap(html);
+    expect(session?.['runtimeUrl']).toBe(SAMPLE_RUNTIME_URL);
   });
 
-  it('inlines contextSlots when supplied', () => {
+  it('inlines contextSlots on the stack-item slice when supplied', () => {
     const slots = [
       {
         name: 'currentStep',
@@ -86,11 +119,11 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeHash: SAMPLE_CODE_HASH,
       contextSlots: slots,
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['contextSlots']).toEqual(slots);
+    const { stackItem } = extractInlineBootstrap(html);
+    expect(stackItem?.['contextSlots']).toEqual(slots);
   });
 
-  it('inlines appCallableTools when supplied non-empty', () => {
+  it('inlines appCallableTools on the session slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -99,14 +132,14 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeHash: SAMPLE_CODE_HASH,
       appCallableTools: ['ggui_runtime_submit_action', 'gmail_archive'],
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['appCallableTools']).toEqual([
+    const { session } = extractInlineBootstrap(html);
+    expect(session?.['appCallableTools']).toEqual([
       'ggui_runtime_submit_action',
       'gmail_archive',
     ]);
   });
 
-  it('inlines actionNextSteps when supplied non-empty', () => {
+  it('inlines actionNextSteps on the stack-item slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -115,13 +148,13 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeHash: SAMPLE_CODE_HASH,
       actionNextSteps: { archive: 'gmail_archive' },
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['actionNextSteps']).toEqual({ archive: 'gmail_archive' });
+    const { stackItem } = extractInlineBootstrap(html);
+    expect(stackItem?.['actionNextSteps']).toEqual({ archive: 'gmail_archive' });
   });
 
-  it('omits the new fields when supplied empty (legacy bootstrap byte-identical)', () => {
+  it('omits optional fields when supplied empty', () => {
     // Empty arrays / records spread to "absent" so consumers see no
-    // change vs the pre-Slice-14 envelope.
+    // change vs an envelope built without these fields.
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -134,12 +167,12 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       gadgets: [],
       publicEnv: {},
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect('appCallableTools' in bootstrap).toBe(false);
-    expect('actionNextSteps' in bootstrap).toBe(false);
-    expect('contextSlots' in bootstrap).toBe(false);
-    expect('gadgets' in bootstrap).toBe(false);
-    expect('publicEnv' in bootstrap).toBe(false);
+    const { session, stackItem } = extractInlineBootstrap(html);
+    expect(session && 'appCallableTools' in session).toBe(false);
+    expect(session && 'gadgets' in session).toBe(false);
+    expect(session && 'publicEnv' in session).toBe(false);
+    expect(stackItem && 'actionNextSteps' in stackItem).toBe(false);
+    expect(stackItem && 'contextSlots' in stackItem).toBe(false);
   });
 
   // Slice 1.3.3/2.2 audit fix — the self-contained shell MUST
@@ -147,7 +180,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   // values). Without these, /r/<shortCode> and resources/read paths
   // render as STDLIB-only iframes, regressing wrapper-using
   // contracts (Leaflet, Mapbox).
-  it('inlines gadgets when supplied (GG.8.2 — per-package channel)', () => {
+  it('inlines gadgets on the session slice when supplied (GG.8.2 — per-package channel)', () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -156,8 +189,8 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeHash: SAMPLE_CODE_HASH,
       gadgets: [{ package: '@ggui-samples/gadget-leaflet' }],
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['gadgets']).toEqual([
+    const { session } = extractInlineBootstrap(html);
+    expect(session?.['gadgets']).toEqual([
       { package: '@ggui-samples/gadget-leaflet' },
     ]);
   });
@@ -171,13 +204,13 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       codeHash: SAMPLE_CODE_HASH,
       publicEnv: { GGUI_PUBLIC_APP_MAPBOX_TOKEN: 'pk.eyJ...' },
     });
-    const bootstrap = extractInlineBootstrap(html);
-    expect(bootstrap['publicEnv']).toEqual({
+    const { session } = extractInlineBootstrap(html);
+    expect(session?.['publicEnv']).toEqual({
       GGUI_PUBLIC_APP_MAPBOX_TOKEN: 'pk.eyJ...',
     });
   });
 
-  it('emits a bootstrap that the iframe-runtime validator accepts (component mode)', async () => {
+  it('emits a slice envelope that the iframe-runtime validator accepts (component mode)', async () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
@@ -193,37 +226,45 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
         },
       ],
     });
-    const bootstrap = extractInlineBootstrap(html);
-    // Round-trip through the runtime's validator. We import lazily to
-    // avoid loading the iframe-runtime bundle at the top of every test
-    // file in this package.
-    const { validateBootstrapMeta } = await import(
-      '@ggui-ai/iframe-runtime'
+    // Post-R3 (#109) the inline global carries the SAME slice envelope
+    // shape as the wire `_meta` — combine, then validate. Lazy imports
+    // keep the iframe-runtime bundle off the package's other tests.
+    const envelope = extractInlineSliceEnvelope(html);
+    const { parseMcpAppAiGguiMeta } = await import(
+      '@ggui-ai/protocol/integrations/mcp-apps'
     );
-    const result = validateBootstrapMeta(bootstrap);
+    const { validateMeta } = await import('@ggui-ai/iframe-runtime');
+    const parsed = parseMcpAppAiGguiMeta(envelope);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const result = validateMeta(parsed.meta);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.runtimeUrl).toBe(SAMPLE_RUNTIME_URL);
-      expect(result.bootstrap.codeUrl).toBe(SAMPLE_CODE_URL);
-      expect(result.bootstrap.contextSlots).toHaveLength(1);
+      expect(result.meta.session.runtimeUrl).toBe(SAMPLE_RUNTIME_URL);
+      expect(result.meta.stackItem?.codeUrl).toBe(SAMPLE_CODE_URL);
+      expect(result.meta.stackItem?.contextSlots).toHaveLength(1);
     }
   });
 
-  it('emits a bootstrap that the iframe-runtime validator accepts (system-card mode)', async () => {
+  it('emits a slice envelope that the iframe-runtime validator accepts (system-card mode)', async () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       systemKind: 'no-credentials',
     });
-    const bootstrap = extractInlineBootstrap(html);
-    const { validateBootstrapMeta } = await import(
-      '@ggui-ai/iframe-runtime'
+    const envelope = extractInlineSliceEnvelope(html);
+    const { parseMcpAppAiGguiMeta } = await import(
+      '@ggui-ai/protocol/integrations/mcp-apps'
     );
-    const result = validateBootstrapMeta(bootstrap);
+    const { validateMeta } = await import('@ggui-ai/iframe-runtime');
+    const parsed = parseMcpAppAiGguiMeta(envelope);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const result = validateMeta(parsed.meta);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.kind).toBe('no-credentials');
+      expect(result.meta.stackItem?.kind).toBe('no-credentials');
     }
   });
 
@@ -238,14 +279,14 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
         token: 'tok-1',
         expiresAt: '2099-01-01T00:00:00Z',
       });
-      const bootstrap = extractInlineBootstrap(html);
-      expect(bootstrap.canvasMode).toBe(true);
-      expect(bootstrap.stackItemId).toBeUndefined();
-      expect(bootstrap.codeUrl).toBeUndefined();
-      expect(bootstrap.kind).toBeUndefined();
-      expect(bootstrap.wsUrl).toBe('wss://example.com/ws');
-      expect(bootstrap.token).toBe('tok-1');
-      expect(bootstrap.sessionId).toBe('sess_canvas');
+      const { session, stackItem } = extractInlineBootstrap(html);
+      expect(session?.canvasMode).toBe(true);
+      // Canvas mode emits no stack-item slice — the canvas iframe
+      // receives stack items via the live channel.
+      expect(stackItem).toBeUndefined();
+      expect(session?.wsUrl).toBe('wss://example.com/ws');
+      expect(session?.wsToken).toBe('tok-1');
+      expect(session?.sessionId).toBe('sess_canvas');
     });
 
     it('throws when canvasMode is combined with stackItemId', () => {

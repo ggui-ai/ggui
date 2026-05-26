@@ -117,7 +117,13 @@ export class PollingTransport implements PollingTransportHandle {
     }
     let body: unknown;
     try {
-      const resp = await fetchImpl(poller.url);
+      // Request the JSON branch on content-negotiated URLs (e.g.
+      // `/r/<shortCode>` returns HTML by default, slice-envelope JSON
+      // when `Accept: application/json` is sent). Servers that ignore
+      // Accept simply continue serving whatever they always served.
+      const resp = await fetchImpl(poller.url, {
+        headers: { accept: 'application/json' },
+      });
       if (!resp.ok) {
         this.opts.logger?.debug?.('channel_polling_non_ok', {
           type: poller.type,

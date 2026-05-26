@@ -26,8 +26,8 @@
  */
 
 import {
-  mountViewToMcpAppMeta,
-  type McpAppAiGguiMountView,
+  metaToMcpAppMeta,
+  type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   McpAppIframeDimensions,
@@ -61,28 +61,31 @@ export interface HostBridgeContext {
   readonly openLink: (url: string) => Promise<void> | void;
   readonly onToolCall?: McpAppIframeProps['onToolCall'];
   /**
-   * Opt-in first-party bootstrap forwarding.
+   * Opt-in first-party `ai.ggui/*` meta forwarding.
    *
    * When present, `dispatchHostBridgeRequest`'s `ui/initialize`
-   * branch adds `toolOutput._meta.ggui.bootstrap = bootstrap` to the
-   * response alongside the existing `theme` / `containerDimensions` /
-   * `locale` adapter-boundary fields. The renderer's `parseBootstrap`
-   * (`packages/iframe-runtime/src/bootstrap.ts`) reads this exact shape.
+   * branch adds `toolOutput._meta` (carrying the
+   * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
+   * slices that are present on the supplied {@link McpAppAiGguiMeta})
+   * to the response alongside the existing `theme` /
+   * `containerDimensions` / `locale` adapter-boundary fields. The
+   * renderer's `parseBootstrap` (`packages/iframe-runtime/src/
+   * bootstrap.ts`) reads this exact shape.
    *
    * When absent (default), the response is `{theme,
    * containerDimensions, locale}` only — no `toolOutput`, no `_meta`.
-   * Third-party MCP App iframes MUST NOT be given a `bootstrap` here:
+   * Third-party MCP App iframes MUST NOT be given `meta` here:
    * leaking outer-app state into a generic MCP App's `ui/initialize`
    * response is exactly the adapter-boundary violation the rule
    * exists to prevent.
    *
-   * Carrier shape mirrors the wire — the same `McpAppAiGguiMountView`
-   * type the server stamps onto the `ggui_push` tool result's
-   * `_meta.ggui.bootstrap` ends up here verbatim. No transformation,
-   * no per-namespace whitelisting; the host's contract is "thread the
-   * forwarded bootstrap through" and that's it.
+   * Carrier shape mirrors the wire — the same
+   * {@link McpAppAiGguiMeta} the server stamps onto the `ggui_push`
+   * tool result's `_meta["ai.ggui/*"]` slices ends up here verbatim.
+   * No transformation, no per-namespace whitelisting; the host's
+   * contract is "thread the forwarded meta through" and that's it.
    */
-  readonly bootstrap?: McpAppAiGguiMountView;
+  readonly meta?: McpAppAiGguiMeta;
 }
 
 export const DEFAULT_HOST_THEME: Readonly<Record<string, string>> = {
@@ -141,23 +144,25 @@ export async function dispatchHostBridgeRequest(
       // `{theme, containerDimensions, locale}` ONLY — no outer-app
       // state leaks into the iframe.
       //
-      // READING-B EXCEPTION (opt-in via `ctx.bootstrap`). When the
-      // host has explicitly threaded a `McpAppAiGguiMountView` for a
+      // READING-B EXCEPTION (opt-in via `ctx.meta`). When the
+      // host has explicitly threaded a `McpAppAiGguiMeta` for a
       // first-party ggui renderer iframe (see `McpAppIframeProps.
-      // bootstrap` JSDoc), augment the result with
-      // `toolOutput._meta.ggui.bootstrap = ctx.bootstrap`. The
-      // renderer's `parseBootstrap` reads exactly that path. The
-      // adapter-boundary rule still applies to every other key —
-      // only `_meta.ggui.bootstrap` is forwarded, scoped by the
-      // ggui namespace.
+      // meta` JSDoc), augment the result with
+      // `toolOutput._meta = metaToMcpAppMeta(ctx.meta)` (the wire
+      // envelope carrying whichever of the `ai.ggui/session` and
+      // `ai.ggui/stack-item` slices are present). The renderer's
+      // `parseBootstrap` reads exactly that path. The adapter-
+      // boundary rule still applies to every other key — only the
+      // `ai.ggui/*` slices are forwarded, scoped by the ggui
+      // namespace.
       const result: Record<string, unknown> = {
         theme: ctx.theme,
         containerDimensions: ctx.containerDimensions,
         locale: ctx.locale,
       };
-      if (ctx.bootstrap !== undefined) {
+      if (ctx.meta !== undefined) {
         result['toolOutput'] = {
-          _meta: mountViewToMcpAppMeta(ctx.bootstrap),
+          _meta: metaToMcpAppMeta(ctx.meta),
         };
       }
       return { jsonrpc: '2.0', id, result };

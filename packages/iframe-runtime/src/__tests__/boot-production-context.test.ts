@@ -270,8 +270,8 @@ describe('bootProduction — runtime.ts source pins F4 wiring', () => {
     expect(bootProductionBody).toContain('installContextRegistry(');
     expect(bootProductionBody).toContain('createContextStateHost(');
     expect(bootProductionBody).toContain('getOuterWrapper');
-    // Slot input must come from the bootstrap envelope, not a hard-
-    // coded list.
-    expect(bootProductionBody).toContain('bootstrap.contextSlots');
+    // Slot input must come from the stack-item slice envelope, not a
+    // hard-coded list.
+    expect(bootProductionBody).toContain('stackItem.contextSlots');
   });
 });

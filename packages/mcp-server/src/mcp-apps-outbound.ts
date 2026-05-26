@@ -44,7 +44,7 @@ import {
   type ContextSpec,
 } from '@ggui-ai/protocol';
 import {
-  deriveStackItemBootstrapView,
+  deriveStackItemMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
   deriveBundleOrigins,
@@ -55,27 +55,30 @@ import {
   MCP_APPS_UI_CAPABILITY,
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
+  MCP_APP_AI_GGUI_SESSION_META_KEY,
+  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
   deriveContextName,
-  type McpAppAiGguiMountView,
+  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiStackItemMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
  * Thin-shell body served from `ui://ggui/session` (C8 pivot).
  *
  * **Architectural role.** The shell is a ~30 LOC bootstrap wrapper -
- * it runs a minimal `ui/initialize` preflight to read
- * `_meta.ggui.bootstrap.runtimeUrl`, then dynamic-script-loads the
- * `@ggui-ai/iframe-runtime` bundle from that URL. Every rendering
+ * it runs a minimal `ui/initialize` preflight to read the
+ * `ai.ggui/session.runtimeUrl` slice field, then dynamic-script-loads
+ * the `@ggui-ai/iframe-runtime` bundle from that URL. Every rendering
  * concern - WS open, subscribe, stack render, component code eval,
  * adapter install - belongs to the renderer bundle (shipped C7a-d),
  * not here.
  *
  * **Why bootstrap-driven URL.** `srcdoc` iframes have `about:srcdoc`
  * as their URL, so relative paths can't resolve to the MCP server's
- * HTTP listener. The server-controlled `runtimeUrl` lands on
- * `_meta.ggui.bootstrap.runtimeUrl` and the shell picks it up from
- * the first `ui/initialize` response - origin-agnostic, works under
- * OSS same-origin AND hosted-cloud CDN deployments.
+ * HTTP listener. The server-controlled `runtimeUrl` lands on the
+ * `ai.ggui/session.runtimeUrl` slice field and the shell picks it up
+ * from the first `ui/initialize` response - origin-agnostic, works
+ * under OSS same-origin AND hosted-cloud CDN deployments.
  *
  * **Why `<script type="module">`.** `@ggui-ai/iframe-runtime` is bundled as
  * ESM (its own runtime.ts:5 declares the contract: "the thin-shell
@@ -93,7 +96,8 @@ import {
  * `postMessage({type:'ggui:bootstrap-failed', reason, message}, '*')`:
  *
  *   - `BOOTSTRAP_META_MISSING` - `ui/initialize` returned without a
- *     valid `_meta.ggui.bootstrap` OR without a `runtimeUrl` field.
+ *     valid `ai.ggui/session` slice OR without a `runtimeUrl` field on
+ *     it.
  *   - `BUNDLE_FETCH_FAILED` - `<script src>` errored (network failure,
  *     404, CSP reject with an observable `error` event).
  *
@@ -148,8 +152,10 @@ const GGUI_SESSION_SHELL_SCRIPT_BODY = `
 //   2. iframe -> host: ui/notifications/initialized
 //   3. host -> iframe: ui/notifications/tool-result (per CallToolResult)
 // On tool-result, derive base URL + shortCode from structuredContent,
-// fetch JSON bootstrap (componentCode + ids + runtimeUrl), set
-// window.__GGUI_BOOTSTRAP__, fetch runtime as blob, inject as script.
+// fetch slice-envelope JSON via GET /r/<shortCode> with
+// Accept: application/json (the content-negotiated JSON branch of the
+// public shell URL), set window.__GGUI_META__ to the envelope,
+// fetch runtime as blob, inject as script.
 // Runtime auto-mounts inline. No nested iframe (claudemcpcontent.com
 // CSP frame-src forbids cross-origin frames). State machine matches
 // buildSelfContainedShell so the same runtime mounts both paths.
@@ -202,24 +208,23 @@ function postBootstrapFailed(reason,message){
   // times out. Reason codes match BootstrapFailureReason.
   try{window.parent.postMessage({type:'ggui:bootstrap-failed',reason:reason,message:message},'*');}catch(e){}
 }
-async function mountFromBootstrap(bootstrap){
+async function mountFromMeta(envelope){
   if(mounted)return;
-  // runtimeUrl is the only load-bearing field at the shell layer —
-  // it tells us which iframe-runtime bundle to fetch. componentCode
-  // is OPTIONAL: present in self-contained-mode bootstraps (the
-  // runtime renders the inlined code without WS), absent in
-  // McpAppAiGguiMountView-shaped bootstraps (the runtime opens the WS
-  // subscription via wsUrl+token to receive the stack). Either is
-  // valid; the runtime decides at boot time. Rejecting on missing
-  // componentCode silently breaks every Path B McpAppAiGguiMountView
-  // delivery, which is the whole point of the inline-bootstrap path.
-  if(!bootstrap||typeof bootstrap.runtimeUrl!=='string'){
+  // Slice envelope shape: { "ai.ggui/session": { runtimeUrl, ... },
+  // "ai.ggui/stack-item": { ... } }. runtimeUrl on the session slice
+  // is the only load-bearing field at the shell layer — it tells us
+  // which iframe-runtime bundle to fetch. Everything else is
+  // optional; the runtime decides at boot time based on the meta
+  // it reads from window.__GGUI_META__.
+  var sessionSlice=envelope&&envelope['ai.ggui/session'];
+  var runtimeUrl=sessionSlice&&sessionSlice.runtimeUrl;
+  if(!envelope||typeof runtimeUrl!=='string'){
     setOverlay('Bootstrap payload malformed.');
     postBootstrapFailed('BOOTSTRAP_MALFORMED','Bootstrap payload malformed.');
     return;
   }
   setOverlay('Loading UI…');
-  window.__GGUI_BOOTSTRAP__=bootstrap;
+  window.__GGUI_META__=envelope;
   // Load the runtime bundle via a direct cross-origin script tag
   // (governed by CSP script-src) instead of fetch + Blob (governed by
   // CSP connect-src). claude.ai's claudemcpcontent.com iframe CSP
@@ -239,7 +244,7 @@ async function mountFromBootstrap(bootstrap){
     // console -- the bundle ships ACAO=* so credentialed mode is
     // unnecessary.
     s.crossOrigin='anonymous';
-    s.src=bootstrap.runtimeUrl;
+    s.src=runtimeUrl;
     s.onload=function(){mounted=true;};
     s.onerror=function(e){
       var msg='Runtime bundle failed to load: '+(e&&e.message||'script error');
@@ -259,51 +264,49 @@ async function mount(toolResult){
   var base=deriveBase(toolResult.url);
   if(!base){setOverlay('Invalid URL in tool result.');return;}
   setOverlay('Loading UI…');
-  var bootstrap;
+  var envelope;
   try{
-    var bRes=await fetch(base+'/api/bootstrap/'+encodeURIComponent(toolResult.shortCode),{
+    // Fallback path: fetch slice envelope from /r/<shortCode> with
+    // Accept: application/json. The content-negotiated JSON branch
+    // returns the SAME projection the HTML branch inlines (single
+    // source of truth post-R4).
+    var bRes=await fetch(base+'/r/'+encodeURIComponent(toolResult.shortCode),{
       cache:'no-store',
       headers:{accept:'application/json'},
     });
-    if(!bRes.ok){setOverlay('Bootstrap fetch failed: HTTP '+bRes.status);return;}
-    bootstrap=await bRes.json();
-  }catch(e){setOverlay('Bootstrap fetch error: '+(e&&e.message||e));return;}
-  return mountFromBootstrap(bootstrap);
+    if(!bRes.ok){setOverlay('Meta fetch failed: HTTP '+bRes.status);return;}
+    envelope=await bRes.json();
+  }catch(e){setOverlay('Meta fetch error: '+(e&&e.message||e));return;}
+  return mountFromMeta(envelope);
 }
-function readBootstrapFromInitResult(result){
+function readMetaFromInitResult(result){
   if(!result||typeof result!=='object')return null;
   var toolOutput=result.toolOutput;
   if(!toolOutput||typeof toolOutput!=='object')return null;
   var meta=toolOutput._meta;
   if(!meta||typeof meta!=='object')return null;
-  var ggui=meta.ggui;
-  if(!ggui||typeof ggui!=='object')return null;
-  var b=ggui.bootstrap;
-  if(!b||typeof b!=='object')return null;
-  // Same loosening as mountFromBootstrap: only runtimeUrl is required
-  // here. McpAppAiGguiMountView forwarded by first-party McpAppIframe
-  // hosts omits componentCode by design (the runtime fetches the
-  // stack via
-  // wsUrl+token). Requiring componentCode at the shell layer turned
-  // every Path B inline-bootstrap delivery into a silent reject.
-  if(typeof b.runtimeUrl!=='string')return null;
-  return b;
+  // Slice-envelope keys (ai.ggui/session + ai.ggui/stack-item).
+  // Only the session slice's runtimeUrl is load-bearing at the
+  // shell layer; the runtime reads everything else off
+  // window.__GGUI_META__ after we set it.
+  var sessionSlice=meta['ai.ggui/session'];
+  if(!sessionSlice||typeof sessionSlice!=='object')return null;
+  if(typeof sessionSlice.runtimeUrl!=='string')return null;
+  return meta;
 }
-function hasGguiMetaPlaceholder(result){
+function hasAiGguiMetaPlaceholder(result){
   // Detect the protocol-violation case where the host signaled
-  // "I tried to deliver bootstrap" (toolOutput._meta.ggui exists)
-  // but the bootstrap field itself is absent or malformed. In that
-  // shape, we fail-fast with BOOTSTRAP_META_MISSING rather than
-  // sitting in the Path-A waiting state forever.
+  // "I tried to deliver meta" (toolOutput._meta carries an
+  // ai.ggui/session key) but it's malformed. Fail-fast with
+  // BOOTSTRAP_META_MISSING rather than waiting forever.
   if(!result||typeof result!=='object')return false;
   var toolOutput=result.toolOutput;
   if(!toolOutput||typeof toolOutput!=='object')return false;
   var meta=toolOutput._meta;
   if(!meta||typeof meta!=='object')return false;
-  var ggui=meta.ggui;
-  return !!ggui&&typeof ggui==='object';
+  return 'ai.ggui/session' in meta;
 }
-function readBootstrapFromCallToolResult(params){
+function readMetaFromCallToolResult(params){
   // MCP Apps spec (specification/2026-01-26/apps.mdx:1145-1155):
   //   ui/notifications/tool-result
   //   params: CallToolResult  // Standard MCP type
@@ -311,20 +314,14 @@ function readBootstrapFromCallToolResult(params){
   // level (NOT under params.toolOutput, which is where the
   // first-party McpAppIframe convention wraps it). Spec-compliant
   // hosts (Claude Desktop, claude.ai Connector, Claude Code) deliver
-  // bootstrap material here.
+  // slice-envelope material here.
   if(!params||typeof params!=='object')return null;
   var meta=params._meta;
   if(!meta||typeof meta!=='object')return null;
-  var ggui=meta.ggui;
-  if(!ggui||typeof ggui!=='object')return null;
-  var b=ggui.bootstrap;
-  if(!b||typeof b!=='object')return null;
-  // Same loosening as readBootstrapFromInitResult / mountFromBootstrap:
-  // only runtimeUrl is required at the shell layer. componentCode is
-  // optional (absent for McpAppAiGguiMountView-shaped bootstraps that
-  // open WS via wsUrl+token).
-  if(typeof b.runtimeUrl!=='string')return null;
-  return b;
+  var sessionSlice=meta['ai.ggui/session'];
+  if(!sessionSlice||typeof sessionSlice!=='object')return null;
+  if(typeof sessionSlice.runtimeUrl!=='string')return null;
+  return meta;
 }
 window.addEventListener('message',function(ev){
   var m=ev&&ev.data;
@@ -338,18 +335,18 @@ window.addEventListener('message',function(ev){
     // Spec-compliant hosts: m.params IS the CallToolResult; _meta is
     // at the top level. Try this FIRST so Claude Desktop / claude.ai
     // Connector / Claude Code land here.
-    var specB=readBootstrapFromCallToolResult(m.params);
-    if(specB){mountFromBootstrap(specB);return;}
-    // First-party McpAppIframe convention: bootstrap nested under
+    var specB=readMetaFromCallToolResult(m.params);
+    if(specB){mountFromMeta(specB);return;}
+    // First-party McpAppIframe convention: slice envelope nested under
     // params.toolOutput._meta. First-party hosts (Studio, Portal,
     // console) use this shape for both init-response and post-init
     // notification.
-    var bb=readBootstrapFromInitResult(m.params);
-    if(bb){mountFromBootstrap(bb);return;}
-    // Path A (last-resort fallback): host posts structuredContent.
-    // {url, shortCode}; shell fetches /api/bootstrap/<shortCode>
-    // over HTTP. The OSS server doesn't mount that endpoint, so this
-    // path is effectively dead unless a hosted operator wires it.
+    var bb=readMetaFromInitResult(m.params);
+    if(bb){mountFromMeta(bb);return;}
+    // Fallback path: host posts structuredContent.{url, shortCode};
+    // shell fetches /r/<shortCode> with Accept: application/json over
+    // HTTP. Works for any operator that fronts the public-render
+    // endpoint at a reachable origin.
     var tr=readToolResult(m.params);
     if(tr)mount(tr);
   }
@@ -365,26 +362,24 @@ postRpc('ui/initialize',{
 }).then(function(result){
   clearTimeout(initTimer);
   postNotification('ui/notifications/initialized',{});
-  // Path B: bootstrap inline in ui/initialize result. Hosts using
-  // <McpAppIframe>'s first-party dispatch deliver bootstrap meta here
+  // Path B: slice envelope inline in ui/initialize result. Hosts
+  // using <McpAppIframe>'s first-party dispatch deliver meta here
   // and never send a separate ui/notifications/tool-result.
-  var b=readBootstrapFromInitResult(result);
-  if(b){mountFromBootstrap(b);return;}
+  var b=readMetaFromInitResult(result);
+  if(b){mountFromMeta(b);return;}
   // Protocol-violation surface: host signalled an attempt
-  // (toolOutput._meta.ggui exists) but bootstrap is missing or
-  // malformed. Fail fast so hosts pinning a typed error envelope
-  // don't sit on the Path-A waiting overlay forever. Only fires
-  // when the meta placeholder is present — a fully absent _meta.ggui
-  // still falls through to Path A waiting.
-  if(hasGguiMetaPlaceholder(result)){
-    var msg='ui/initialize result missing _meta.ggui.bootstrap or runtimeUrl';
+  // (toolOutput._meta carries ai.ggui/session) but it's malformed.
+  // Fail fast so hosts pinning a typed error envelope don't sit on
+  // the Path-A waiting overlay forever.
+  if(hasAiGguiMetaPlaceholder(result)){
+    var msg='ui/initialize result missing valid ai.ggui/session.runtimeUrl';
     setOverlay(msg);
     postBootstrapFailed('BOOTSTRAP_META_MISSING',msg);
     return;
   }
   // Path A: wait for the host to send ui/notifications/tool-result
   // with structuredContent.{url, shortCode}. MCP Apps hosts that don't
-  // implement the reading-B inline-bootstrap convention land here.
+  // implement the reading-B inline-meta convention land here.
   setOverlay('Waiting for tool result…');
 }).catch(function(e){
   clearTimeout(initTimer);
@@ -599,17 +594,18 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // Self-contained shell — third-party MCP Apps host support.
 //
 // **Why this exists.** The legacy `GGUI_SESSION_SHELL_HTML` (above) is a
-// thin postMessage wrapper that depends on the host echoing
-// `_meta.ggui.bootstrap.runtimeUrl` back through `ui/initialize`. That
-// contract is first-party-only — Studio / Portal / console implement
-// the echo. Production MCP Apps hosts (Claude Desktop, claude.ai web)
-// implement the canonical MCP Apps SDK lifecycle, which does NOT
-// commit to forwarding ggui's custom `_meta.ggui` block back. Result:
-// the postMessage round-trip never resolves, the shell hangs at
-// `mounting`, the iframe stays blank.
+// thin postMessage wrapper that depends on the host echoing the
+// `ai.ggui/session.runtimeUrl` slice field back through
+// `ui/initialize`. That contract is first-party-only — Studio /
+// Portal / console implement the echo. Production MCP Apps hosts
+// (Claude Desktop, claude.ai web) implement the canonical MCP Apps
+// SDK lifecycle, which does NOT commit to forwarding ggui's custom
+// `_meta["ai.ggui/*"]` slice block back. Result: the postMessage
+// round-trip never resolves, the shell hangs at `mounting`, the
+// iframe stays blank.
 //
 // **The fix.** Per-session HTML inlines the compiled componentCode +
-// session ids as a `window.__GGUI_BOOTSTRAP__` global BEFORE the
+// session ids as a `window.__GGUI_META__` global BEFORE the
 // runtime bundle's `<script type="module">` runs. The runtime reads
 // the global synchronously, mounts the React component, and never
 // speaks postMessage / opens a WebSocket. The `ui://ggui/session/{
@@ -669,7 +665,7 @@ export interface SelfContainedShellInputs {
    * `<script type="module" src=...>`. MUST be absolute (or root-
    * relative resolvable from the host's iframe origin) — `srcdoc`
    * iframes have `about:srcdoc` as their URL so a bare relative path
-   * cannot resolve. Also inlined on the `__GGUI_BOOTSTRAP__` global so
+   * cannot resolve. Also inlined on the `__GGUI_META__` global so
    * the iframe-runtime's bootstrap validator (which requires
    * `runtimeUrl` across all modes) accepts the envelope.
    */
@@ -704,7 +700,7 @@ export interface SelfContainedShellInputs {
   readonly propsJson?: string;
   /**
    * Names of same-server tools whose `_meta.ui.visibility` includes
-   * `"app"`, mirrored from {@link McpAppAiGguiMountView.appCallableTools}.
+   * `"app"`, mirrored from {@link McpAppAiGguiSessionMeta.appCallableTools}.
    * Forwarded to the iframe-runtime so its dispatch closure can choose
    * Pattern α (direct `tools/call`) over Pattern β (3-message bridge)
    * per wired action — even on the self-contained `/r/<shortCode>`
@@ -714,20 +710,20 @@ export interface SelfContainedShellInputs {
    * Empty / absent → no fallout: the runtime's dispatch routes every
    * action through Pattern β.
    */
-  readonly appCallableTools?: McpAppAiGguiMountView['appCallableTools'];
+  readonly appCallableTools?: McpAppAiGguiSessionMeta['appCallableTools'];
   /**
    * Per-action wired-tool mapping for the active stack item, mirrored
-   * from {@link McpAppAiGguiMountView.actionNextSteps}.
+   * from {@link McpAppAiGguiStackItemMeta.actionNextSteps}.
    */
-  readonly actionNextSteps?: McpAppAiGguiMountView['actionNextSteps'];
+  readonly actionNextSteps?: McpAppAiGguiStackItemMeta['actionNextSteps'];
   /**
    * Per-slot data for the active stack item's `contextSpec`, mirrored
-   * from {@link McpAppAiGguiMountView.contextSlots}. The runtime
+   * from {@link McpAppAiGguiStackItemMeta.contextSlots}. The runtime
    * synthesizes one `React.createContext(default)` per entry at boot.
    * Without this field, contextSpec UIs render with un-seeded
    * Providers.
    */
-  readonly contextSlots?: McpAppAiGguiMountView['contextSlots'];
+  readonly contextSlots?: McpAppAiGguiStackItemMeta['contextSlots'];
   /**
    * Permissions-Policy directive list derived from the active stack
    * item's `clientCapabilities.gadgets[*].permission`.
@@ -744,38 +740,38 @@ export interface SelfContainedShellInputs {
   /**
    * Resolved gadget catalog the iframe runtime dynamically imports at
    * boot. Each entry is `{hook,
-   * package?, bundleUrl?}`. The MCP-Apps `_meta.ggui.bootstrap`
-   * channel already forwards this via `push.ts`; this field is the
-   * symmetric forward for the self-contained shell so `/r/<shortCode>`
-   * and `resources/read` iframes don't render as STDLIB-only when
-   * the contract declares wrappers.
+   * package?, bundleUrl?}`. The MCP-Apps `_meta` slice channel already
+   * forwards this via `push.ts`; this field is the symmetric forward
+   * for the self-contained shell so `/r/<shortCode>` and
+   * `resources/read` iframes don't render as STDLIB-only when the
+   * contract declares wrappers.
    */
-  readonly gadgets?: McpAppAiGguiMountView['gadgets'];
+  readonly gadgets?: McpAppAiGguiSessionMeta['gadgets'];
   /**
    * Content-addressable hash for the active stack item's compiled
    * contract validators, mirrored from
-   * {@link McpAppAiGguiMountView.contractHash}. The iframe-runtime resolves
-   * validators via `fetch({@link validatorsUrl})` + dynamic import.
-   * Paired with {@link validatorsUrl} — present together or absent
-   * together.
+   * {@link McpAppAiGguiStackItemMeta.contractHash}. The iframe-runtime
+   * resolves validators via `fetch({@link validatorsUrl})` + dynamic
+   * import. Paired with {@link validatorsUrl} — present together or
+   * absent together.
    */
-  readonly contractHash?: McpAppAiGguiMountView['contractHash'];
+  readonly contractHash?: McpAppAiGguiStackItemMeta['contractHash'];
   /**
    * URL serving the content-addressable contract-validator bundle,
-   * mirrored from {@link McpAppAiGguiMountView.validatorsUrl}. Symmetric
-   * forward for the self-contained shell so `/r/<shortCode>` and
-   * `resources/read` iframes resolve validators exactly as the
+   * mirrored from {@link McpAppAiGguiStackItemMeta.validatorsUrl}.
+   * Symmetric forward for the self-contained shell so `/r/<shortCode>`
+   * and `resources/read` iframes resolve validators exactly as the
    * MCP-Apps postMessage path does.
    */
-  readonly validatorsUrl?: McpAppAiGguiMountView['validatorsUrl'];
+  readonly validatorsUrl?: McpAppAiGguiStackItemMeta['validatorsUrl'];
   /**
    * Server-filtered public env values that declared wrappers'
    * `requires` cover (minimum-disclosure subset of `App.publicEnv`).
-   * Symmetric with the `_meta.ggui.bootstrap` channel — every
-   * transport that produces a `McpAppAiGguiMountView` envelope MUST
-   * forward this field so wrappers' `getPublicEnv()` reads land.
+   * Symmetric with the `ai.ggui/session` slice channel — every
+   * transport that produces the meta pair MUST forward this field so
+   * wrappers' `getPublicEnv()` reads land.
    */
-  readonly publicEnv?: McpAppAiGguiMountView['publicEnv'];
+  readonly publicEnv?: McpAppAiGguiSessionMeta['publicEnv'];
   /**
    * Live-mode WebSocket URL the iframe-runtime opens to receive
    * `props_update` / `stack_*` frames. When set alongside `token` +
@@ -805,7 +801,7 @@ export interface SelfContainedShellInputs {
  * Build the self-contained shell HTML for a given session.
  *
  * The returned HTML is a complete, standalone document: it inlines the
- * compiled component (base64) + session ids in a `window.__GGUI_BOOTSTRAP__`
+ * compiled component (base64) + session ids in a `window.__GGUI_META__`
  * global, then loads the iframe-runtime bundle via `<script type="module"
  * src={runtimeUrl}>`. The runtime takes over synchronously on import,
  * mounts the component, and the iframe paints WITHOUT any further server
@@ -855,66 +851,33 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
       'buildSelfContainedShell: at least one of `codeUrl`, `systemKind`, or live-mode (`wsUrl` + `token`) must be set',
     );
   }
-  // Inject `runtimeUrl` + the three bootstrap-derivation fields
-  // (`appCallableTools`, `actionNextSteps`, `contextSlots`) into the
-  // inline bootstrap so the iframe-runtime's bootstrap validator
-  // (which requires `runtimeUrl` across all modes + makes
-  // `appCallableTools`/`actionNextSteps`/`contextSlots` observable on
-  // the self-contained path) accepts the envelope. Omitting
-  // `runtimeUrl` from the inline JSON makes every `/r/<shortCode>`
-  // direct-preview a blank white page because `parseBootstrap`
-  // rejects it as MALFORMED.
-  const bootstrap: Record<string, unknown> = {
+  // Build the 2 per-window slices directly (#109 / R3). The inline
+  // global carries the SAME shape as the wire `_meta` envelope so the
+  // iframe-runtime's `parseBootstrapFromGlobal` defers to the same
+  // `parseMcpAppAiGguiMeta` partitioner that the postMessage paths
+  // use. `runtimeUrl` is required across all modes (the shell-bundled
+  // script tag fetches the runtime from there).
+  const session: McpAppAiGguiSessionMeta = {
     sessionId: opts.sessionId,
     appId: opts.appId,
     runtimeUrl: opts.runtimeUrl,
-    // Static-content discriminators — system-card and codeUrl are
-    // mutually exclusive (the iframe-runtime rejects the both-set mix
-    // as MALFORMED). Live-mode credentials (wsUrl/token below) may
-    // coexist with either or stand alone.
-    ...(isSystem ? { kind: opts.systemKind } : {}),
-    ...(!isSystem && hasCodeUrl
-      ? {
-          codeUrl: opts.codeUrl!,
-          ...(opts.codeHash !== undefined ? { codeHash: opts.codeHash } : {}),
-        }
-      : {}),
-    ...(opts.stackItemId !== undefined ? { stackItemId: opts.stackItemId } : {}),
     ...(isCanvas ? { canvasMode: true } : {}),
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
     ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
-    ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
     ...(opts.appCallableTools !== undefined && opts.appCallableTools.length > 0
       ? { appCallableTools: opts.appCallableTools }
-      : {}),
-    ...(opts.actionNextSteps !== undefined &&
-    Object.keys(opts.actionNextSteps).length > 0
-      ? { actionNextSteps: opts.actionNextSteps }
-      : {}),
-    ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
-      ? { contextSlots: opts.contextSlots }
       : {}),
     ...(opts.permissionsPolicy !== undefined && opts.permissionsPolicy.length > 0
       ? { permissionsPolicy: opts.permissionsPolicy }
       : {}),
     // Wrapper catalog the iframe-runtime dynamic-imports at boot.
-    // Symmetric with `_meta.ggui.bootstrap`'s `gadgets` field.
+    // Symmetric with the `ai.ggui/session` wire-slice `gadgets` field.
     // Without this forward, the self-contained shell path
     // (/r/<shortCode>, resources/read) would render as STDLIB-only —
     // wrapper-using contracts (Leaflet, Mapbox) destructure unknown
     // hooks at runtime.
     ...(opts.gadgets !== undefined && opts.gadgets.length > 0
       ? { gadgets: opts.gadgets }
-      : {}),
-    // Content-addressable contract-validator bundle. Iframe-runtime
-    // fetches `validatorsUrl` + dynamic-imports to resolve validators.
-    // Omitted when the contract declares no runtime-validated schema
-    // OR when the server has no CodeStore wired for the bundle write.
-    ...(opts.contractHash !== undefined && opts.validatorsUrl !== undefined
-      ? {
-          contractHash: opts.contractHash,
-          validatorsUrl: opts.validatorsUrl,
-        }
       : {}),
     // Server-filtered public env values that declared wrappers'
     // `requires` cover. Symmetric forward; without it, wrappers
@@ -923,14 +886,65 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     ...(opts.publicEnv !== undefined && Object.keys(opts.publicEnv).length > 0
       ? { publicEnv: opts.publicEnv }
       : {}),
-    // Live-mode trio. parseBootstrap rejects half-live envelopes
-    // (`wsUrl XOR token` MALFORMED), so we forward all three together
+    // Live-mode trio. The iframe-runtime rejects half-live envelopes
+    // (`wsUrl XOR wsToken` MALFORMED), so we forward all three together
     // or none at all — the caller is responsible for pairing them at
     // mint time. `expiresAt` is degrade-able (past-due → static-only)
-    // but is part of the live trio at emit time.
+    // but is part of the live trio at emit time. The `opts.token`
+    // input is renamed to `wsToken` on the slice for wire-field parity.
     ...(opts.wsUrl !== undefined ? { wsUrl: opts.wsUrl } : {}),
-    ...(opts.token !== undefined ? { token: opts.token } : {}),
+    ...(opts.token !== undefined ? { wsToken: opts.token } : {}),
     ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+  };
+
+  // Stack-item slice — what's being rendered NOW. Built only when any
+  // per-push field is set; canvas mode emits no stack-item (the canvas
+  // iframe receives stack items via the live channel, not static
+  // inlining). Static-content discriminators (codeUrl / kind) are
+  // mutually exclusive — the iframe-runtime rejects the both-set mix.
+  const stackItem: McpAppAiGguiStackItemMeta | undefined = (() => {
+    if (isCanvas) return undefined;
+    const si: McpAppAiGguiStackItemMeta = {
+      ...(isSystem ? { kind: opts.systemKind! } : {}),
+      ...(!isSystem && hasCodeUrl
+        ? {
+            codeUrl: opts.codeUrl!,
+            ...(opts.codeHash !== undefined ? { codeHash: opts.codeHash } : {}),
+          }
+        : {}),
+      ...(opts.stackItemId !== undefined
+        ? { stackItemId: opts.stackItemId }
+        : {}),
+      ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
+      ...(opts.actionNextSteps !== undefined &&
+      Object.keys(opts.actionNextSteps).length > 0
+        ? { actionNextSteps: opts.actionNextSteps }
+        : {}),
+      ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
+        ? { contextSlots: opts.contextSlots }
+        : {}),
+      // Content-addressable contract-validator bundle. Iframe-runtime
+      // fetches `validatorsUrl` + dynamic-imports to resolve
+      // validators. Omitted when the contract declares no
+      // runtime-validated schema OR when the server has no CodeStore
+      // wired for the bundle write.
+      ...(opts.contractHash !== undefined && opts.validatorsUrl !== undefined
+        ? {
+            contractHash: opts.contractHash,
+            validatorsUrl: opts.validatorsUrl,
+          }
+        : {}),
+    };
+    return Object.keys(si).length > 0 ? si : undefined;
+  })();
+
+  // Same wire shape as `_meta` — the iframe-runtime's global parser
+  // reuses `parseMcpAppAiGguiMeta` to partition.
+  const bootstrap: Record<string, unknown> = {
+    [MCP_APP_AI_GGUI_SESSION_META_KEY]: session,
+    ...(stackItem !== undefined
+      ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: stackItem }
+      : {}),
   };
 
   // JSON.stringify produces valid JS, but `<` / `>` / `&` / `U+2028`
@@ -958,7 +972,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
 <html lang="en"><head><meta charset="utf-8"><title>ggui session</title></head>
 <body>
 <div id="ggui-root" data-ggui-shell="self-contained"></div>
-<script>window.__GGUI_BOOTSTRAP__ = ${json};</script>
+<script>window.__GGUI_META__ = ${json};</script>
 <script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
 </body></html>`;
 }
@@ -1107,7 +1121,7 @@ export interface GguiSessionResourceTemplateOptions {
  * Top-renderable picked item from the session stack — discriminates
  * between compiled-component items (carry `componentCode`) and
  * server-emitted system cards (carry `kind`). The shell builders
- * stamp one or the other into `__GGUI_BOOTSTRAP__`; the runtime
+ * stamp one or the other into `__GGUI_META__`; the runtime
  * decodes by presence of `kind`.
  */
 type TopRenderable =
@@ -1118,7 +1132,7 @@ type TopRenderable =
       props?: Record<string, unknown>;
       /** Original source entry — carried so the resource handler can
        *  thread the active stack item through
-       *  `deriveStackItemBootstrapView` for projection of permissions /
+       *  `deriveStackItemMeta` for projection of permissions /
        *  contextSlots / actionNextSteps without re-scanning the stack. */
       source: SessionStackEntry;
     }
@@ -1381,7 +1395,7 @@ export function registerGguiSessionResourceTemplate(
         // (the browser-enforced gate ultimately comes from the host's
         // `allow=""` attribute when the host translates
         // `_meta.ui.permissions` — set by McpAppIframe consumers).
-        const view = deriveStackItemBootstrapView(top.source);
+        const view = deriveStackItemMeta(top.source);
         const isSystem = top.kind !== undefined;
 
         // Static-component delivery via codeUrl (T3-1, 2026-05-13). The
@@ -1624,9 +1638,9 @@ function deriveDefaultPropsValues(
 
 function deriveDefaultContextSlots(
   spec: ContextSpec | undefined,
-): McpAppAiGguiMountView['contextSlots'] {
+): McpAppAiGguiStackItemMeta['contextSlots'] {
   if (!spec) return undefined;
-  const collected: NonNullable<McpAppAiGguiMountView['contextSlots']>[number][] = [];
+  const collected: NonNullable<McpAppAiGguiStackItemMeta['contextSlots']>[number][] = [];
   for (const [name, entry] of Object.entries(spec)) {
     if (!entry || typeof entry !== 'object') continue;
     if (entry.schema === undefined || entry.schema === null) continue;

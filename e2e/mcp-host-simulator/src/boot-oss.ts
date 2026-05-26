@@ -7,7 +7,7 @@
  * `HostSimulator` and tear both down in `afterEach`.
  *
  * Defaults:
- *   - `mcpApps: true` + `bootstrapSecret` set so resourceUri pre-fetch
+ *   - `mcpApps: true` + `wsTokenSecret` set so resourceUri pre-fetch
  *     + bootstrap-token mint paths fire end-to-end. Tests that want
  *     plain MCP without App-spec should boot `createGguiServer`
  *     directly — this fixture is opinionated for the host-simulator
@@ -75,7 +75,7 @@ export async function bootOssServer(
       wsUrl,
       renderBaseUrl: `${url}/r/`,
     },
-    bootstrapSecret: 'test-host-simulator-secret-32bytes',
+    wsTokenSecret: 'test-host-simulator-secret-32bytes',
     ...overrides,
   });
   const httpServer = await server.listen(port, '127.0.0.1');

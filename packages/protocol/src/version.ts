@@ -6,10 +6,118 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
- * `McpAppAiGguiMountView.compiledValidators` — precompiled eval-free
+ * R4 — auth-credential `bootstrap` renamed to `wsToken`; aggregate
+ * polling endpoint deleted; console session-meta route renamed
+ * (BREAKING, pre-launch):
+ *
+ *   r4.1. **WS auth-credential field renamed.** The wire field that
+ *      authenticates a live-channel subscribe was named "bootstrap" by
+ *      historical accident — post-R3 the only thing called "bootstrap"
+ *      on the wire was the credential, so the term lost its meaning.
+ *      Renamed everywhere internally to `wsToken` (sharper, symmetric
+ *      with `wsUrl`):
+ *        - {@link SubscribePayload.bootstrap} → `SubscribePayload.wsToken`
+ *        - `?bootstrap=<token>` WS upgrade query → `?wsToken=<token>`
+ *        - `McpAppAiGguiSessionMeta.token` slice field → `wsToken`
+ *        - `ChannelClientBootstrap.token` → `wsToken`
+ *        - `bootstrap-tokens.ts` module → `ws-tokens.ts`
+ *        - `mintBootstrapToken` / `verifyBootstrapToken` →
+ *          `mintWsToken` / `verifyWsToken`
+ *        - `refresh-bootstrap.ts` handler → `refresh-ws-token.ts`
+ *        - `ggui_runtime_refresh_bootstrap` MCP tool →
+ *          `ggui_runtime_refresh_ws_token`
+ *        - Server config `bootstrapSecret` → `wsTokenSecret`
+ *      The boot-lifecycle observable surface is independent and
+ *      survives unchanged: {@link BootstrapFailureReason} +
+ *      `ggui:bootstrap-failed` postMessage describe the boot lifecycle
+ *      (mounting → code-ready → error), not the credential.
+ *
+ *   r4.2. **`/api/bootstrap/:shortCode` deleted; `/r/:shortCode`
+ *      content-negotiated.** The standalone JSON polling endpoint was
+ *      a workaround for `_meta`-stripping hosts + the iframe-runtime's
+ *      `PollingTransport`. The HTML at `/r/<shortCode>` already
+ *      inlines the same projection via `__GGUI_META__`. Replaced
+ *      with one URL, two representations:
+ *        - `GET /r/:shortCode` with `Accept: text/html` (or default) →
+ *          HTML shell (unchanged byte-for-byte).
+ *        - `GET /r/:shortCode` with `Accept: application/json` → slice
+ *          envelope (`{"ai.ggui/session": {...}, "ai.ggui/stack-item":
+ *          {...}}`), same shape as the wire `_meta` and the inline
+ *          `__GGUI_META__` global. Single source of truth.
+ *      Consumers (iframe-runtime polling, sample-agent useChat
+ *      fallback, future cross-host clients) all migrate to the
+ *      content-negotiated endpoint.
+ *
+ *   r4.3. **Inline global renamed.** `window.__GGUI_BOOTSTRAP__` →
+ *      `window.__GGUI_META__`. The "BOOTSTRAP" prefix referred to the
+ *      retired aggregate; the global now carries the slice meta pair
+ *      (same shape as the wire `_meta`), so the name aligns with what
+ *      the global is.
+ *
+ *   r4.4. **Console meta route renamed.**
+ *      `/ggui/console/session-bootstrap?session=<id>` →
+ *      `/ggui/console/sessions/:sessionId/meta`. Same JSON response
+ *      shape (slice envelope post-R3). Console SessionViewer migrated.
+ *
+ *   r4.5. **Server-side `StackItemBootstrapView` →
+ *      `StackItemMetaView`; `deriveStackItemBootstrapView` →
+ *      `deriveStackItemMeta`.** The projection layer's "bootstrap" name
+ *      was the last lingering vestige of the deleted aggregate.
+ *
+ * --------------------------------------------------------------------
+ * R3 — `_meta.ggui.bootstrap` aggregate split into per-stability-window
+ * slices (#109, BREAKING, pre-launch):
+ *
+ *   r3.1. **`_meta.ggui.bootstrap` aggregate DELETED from the wire.**
+ *      The single-key MCP-Apps envelope ggui shipped for the iframe
+ *      runtime is replaced by two per-stability-window keys on `_meta`:
+ *
+ *        - `_meta["ai.ggui/session"]` — mount-time identity, boot
+ *          wiring, live-channel auth, capability advertisements
+ *          ({@link McpAppAiGguiSessionMeta}).
+ *        - `_meta["ai.ggui/stack-item"]` — the active stack item:
+ *          stackItemId, props, action hints, contract pointer,
+ *          component-mode discriminator
+ *          ({@link McpAppAiGguiStackItemMeta}).
+ *
+ *      Hosts cache the session slice keyed by `sessionId`; render-only
+ *      delta pushes carry just `stack-item`. Auth-rotation pushes carry
+ *      just `session`.
+ *
+ *   r3.2. **`McpAppAiGguiMountView` deleted.** The aggregated TS type
+ *      (and its pre-R1 `GguiBootstrapMeta` predecessor) is gone.
+ *      Replaced by {@link McpAppAiGguiMeta} = `{session?, stackItem?}`
+ *      — the parsed slice pair {@link parseMcpAppAiGguiMeta} returns.
+ *      Wire-emitter helpers `mergeSlicesIntoMountView`,
+ *      `splitMountViewIntoSlices`, `mountViewToMcpAppMeta`,
+ *      `slicesToMcpAppMeta`, `combineMcpAppAiGguiMeta` all retired
+ *      in favor of {@link parseMcpAppAiGguiMeta} (parse) +
+ *      {@link metaToMcpAppMeta} (emit).
+ *
+ *   r3.3. **Auth-credential `bootstrap` survives R3.** R3 kept the
+ *      `bootstrap` naming on the auth-credential surface
+ *      ({@link SubscribePayload.wsToken}, `ws-tokens.ts`, the
+ *      `wsTokenSecret` config field, the `mintWsToken` minter, the
+ *      `__GGUI_META__` inline global, and the
+ *      `ggui_runtime_refresh_ws_token` tool) on the principle that
+ *      "bootstrap-the-credential" is a distinct namespace from
+ *      "bootstrap-the-aggregate". R4 (entry above) retired that
+ *      naming too — the credential namespace is now `wsToken` /
+ *      `ws-tokens.*`.
+ *
+ *   r3.4. **Server projection layer renamed in R4.** R3 kept
+ *      `StackItemBootstrapView` + `deriveStackItemBootstrapView` on
+ *      the principle that the projection layer is its own namespace.
+ *      R4 (entry above) renamed both to `StackItemMetaView` +
+ *      `deriveStackItemMeta` — the projection now feeds slice meta
+ *      (`{ "ai.ggui/session", "ai.ggui/stack-item" }`), so the
+ *      "Meta" naming aligns with what the projection produces.
+ *
+ * --------------------------------------------------------------------
+ * `McpAppAiGguiMeta.compiledValidators` — precompiled eval-free
  * runtime validators (ADDITIVE, non-breaking):
  *
- *   - `McpAppAiGguiMountView` (and the server's `StackItemBootstrapView`
+ *   - `McpAppAiGguiMeta` (and the server's `StackItemMetaView`
  *     projection) gain an optional `compiledValidators` field —
  *     `CompiledContractValidators`: ESM validator-module source
  *     strings, one per `propsSpec` / `actionSpec` entry / `streamSpec`
@@ -66,7 +174,7 @@
  * `loadGadgets()` retired — gadgets direct-imported, runtime registry
  * per-package (BREAKING, pre-launch):
  *
- *   v1. **`McpAppAiGguiMountView.gadgets` is per-package.** The channel
+ *   v1. **`McpAppAiGguiMeta.gadgets` is per-package.** The channel
  *      flipped from one entry per hook (`{hook, package?, bundleUrl?,
  *      bundleSri?}`) to one entry per registered gadget PACKAGE
  *      (`{package, bundleUrl?, bundleSri?}` — `package` REQUIRED). The
@@ -213,7 +321,7 @@
  *      origin buckets. `composeContentSecurityPolicy(origins)` formats
  *      them into a `Content-Security-Policy` header value
  *      (`script-src 'self' 'unsafe-inline' <origins>` so the inline
- *      `__GGUI_BOOTSTRAP__` survives, `style-src 'self' 'unsafe-inline'
+ *      `__GGUI_META__` survives, `style-src 'self' 'unsafe-inline'
  *      <origins>`, `connect-src 'self' <origins>`, `img-src 'self'
  *      data: <connect-origins>` so map tiles load). The renderer route
  *      attaches the header on `/r/<shortCode>` ONLY when libraries
@@ -497,7 +605,7 @@
  *      handler from its `codeStore` + `codeBaseUrl` deps. The
  *      `hasPushBootstrapMeta` discriminator collapses from
  *      `{wsUrl-with-token, componentCode, codeUrl, kind}` to
- *      `{wsUrl-with-token, codeUrl, kind}`. `StackItemBootstrapView`
+ *      `{wsUrl-with-token, codeUrl, kind}`. `StackItemMetaView`
  *      drops the field on the projection layer. `buildSelfContainedShell`
  *      accepts `{codeUrl, codeHash}` (or `systemKind`, or live-mode
  *      trio); throws when none are set. `/r/<shortCode>` mints
@@ -508,7 +616,7 @@
  *
  *   q2. **`_meta.ggui.bootstrap.adapters` retired.** The
  *      dormant dynamic-import-at-boot adapter loader is deleted from
- *      the wire surface. `McpAppAiGguiMountView.adapters?` field removed;
+ *      the wire surface. `McpAppAiGguiMeta.adapters?` field removed;
  *      `parseAdapterSpecs` + `installAdapters` + the
  *      `globalThis.__ggui__.adapters` registry slot retired from
  *      iframe-runtime. An earlier change had already moved capability
@@ -554,7 +662,7 @@
  *      `themeId`, `themeMode`, `themeProvider`, `appCallableTools`,
  *      `streamWebSocketLocalTools`) and emits `_meta.ggui.bootstrap`
  *      derived from the just-patched stack item via the shared
- *      `deriveStackItemBootstrapView` projection — byte-identical to
+ *      `deriveStackItemMeta` projection — byte-identical to
  *      `ggui_push`'s bootstrap envelope at the projection boundary.
  *      Strictly additive: prior consumers that ignored `resultMeta` are
  *      unaffected; hosts that DO forward `_meta.ggui.bootstrap` now
@@ -564,7 +672,7 @@
  *      `_meta` only.
  *
  *   p3. **`/r/<shortCode>` mints the live trio (`wsUrl + token + expiresAt`)
- *      and inlines it in `__GGUI_BOOTSTRAP__`.** Previously the public
+ *      and inlines it in `__GGUI_META__`.** Previously the public
  *      render route minted no bootstrap token, so iframe-runtime's
  *      `subscribe.ts` rejected the envelope as "live-mode required" and
  *      never opened a WS — `props_update` and stream frames never reached
@@ -808,7 +916,7 @@
  *      gate with per-contract derivation. `StackItem` gains an
  *      optional `clientCapabilities?: ClientCapabilitiesSpec` field
  *      so push commit-time persists the catalog onto the active stack
- *      item. `StackItemBootstrapView.permissionsPolicy?: readonly
+ *      item. `StackItemMetaView.permissionsPolicy?: readonly
  *      string[]` projects the union-deduplicated directive list every
  *      transport reads — public-render `/r/<shortCode>` emits a
  *      `Permissions-Policy` HTTP response header (`<directive>=(self)`
@@ -818,9 +926,9 @@
  *      iframe-runtime can surface the gate set to in-iframe consumers.
  *      Browser-enforced gates flow from the parent transport; the
  *      iframe-runtime itself cannot mutate Permissions-Policy
- *      post-load. `McpAppAiGguiMountView` gains an optional matching
+ *      post-load. `McpAppAiGguiMeta` gains an optional matching
  *      `permissionsPolicy?: readonly string[]` field;
- *      `validateMcpAppAiGguiMountView` validates the array shape.
+ *      `validateMcpAppAiGguiMeta` validates the array shape.
  *      Boilerplate generator (`@ggui-ai/ui-gen`) reads
  *      `clientCapabilities.gadgets` and emits
  *      one combined `import { hookA, hookB } from '<pkg>'` per
@@ -1036,7 +1144,7 @@
  * --------------------------------------------------------------------
  * Canvas mode (additive):
  *
- *   1. `McpAppAiGguiMountView.canvasMode?: boolean` — discriminator for
+ *   1. `McpAppAiGguiMeta.canvasMode?: boolean` — discriminator for
  *      the iframe-runtime canvas-mount path. When `true`, the runtime
  *      mounts a session-scoped `CanvasShell` (one iframe for the
  *      whole session) instead of the legacy per-stack-item iframe.

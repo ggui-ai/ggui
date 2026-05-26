@@ -16,8 +16,7 @@ import {
   MCP_APPS_UI_CAPABILITY,
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
-  combineMcpAppAiGguiMeta,
-  mergeSlicesIntoMountView,
+  parseMcpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createHash } from 'node:crypto';
 import {
@@ -48,7 +47,7 @@ async function bootOutboundServer(): Promise<Fixture> {
     logger: silentLogger,
     sessionChannel: true,
     mcpApps: true,
-    bootstrapSecret: 'test-secret-32bytes-for-hmac-1234',
+    wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
   });
   const httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -119,7 +118,7 @@ describe('createGguiServer({ mcpApps: true }) — construction', () => {
       logger: silentLogger,
       sessionChannel: true,
       mcpApps: true,
-      bootstrapSecret: 'secret',
+      wsTokenSecret: 'secret',
     });
     expect(server.toolCount).toBeGreaterThan(0);
   });
@@ -236,7 +235,7 @@ describe('end-to-end outbound flow', () => {
     expect(c.text).toContain('data-ggui-shell="thin"');
   });
 
-  it('ggui_push returns structuredContent without bootstrap fields, and _meta.ggui.bootstrap with them', async () => {
+  it('ggui_push returns structuredContent without bootstrap fields, and ai.ggui/* slice meta with them', async () => {
     const result = await handshakeAndPush(client, 'test push');
 
     // structuredContent is model-facing — bootstrap fields must NOT appear.
@@ -256,18 +255,14 @@ describe('end-to-end outbound flow', () => {
     expect(sc.stackItemId).toBeDefined();
     expect(sc.url).toMatch(/^http:\/\/localhost\/r\//);
 
-    // The five `ai.ggui/*` _meta keys decode to a well-shaped bootstrap.
+    // The `ai.ggui/*` _meta slices decode to a well-shaped pair.
     expect(result._meta).toBeDefined();
-    const combined = combineMcpAppAiGguiMeta(result._meta);
-    expect(combined.ok).toBe(true);
-    if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-    expect(merged.view.sessionId).toBeDefined();
-    expect(merged.view.appId).toBeDefined();
-    expect(merged.view.runtimeUrl).toBeDefined();
-
+    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.meta.session?.sessionId).toBeDefined();
+    expect(parsed.meta.session?.appId).toBeDefined();
+    expect(parsed.meta.session?.runtimeUrl).toBeDefined();
   });
 
   it('ggui_push declaration exposes _meta.ui.resourceUri on tools/list', async () => {
@@ -284,15 +279,12 @@ describe('end-to-end outbound flow', () => {
 
   it('ggui_push bootstrap carries runtimeUrl — the URL the thin shell dynamic-script-loads (C8)', async () => {
     const result = await handshakeAndPush(client, 'c8 renderer-url test');
-    const combined = combineMcpAppAiGguiMeta(result._meta);
-    expect(combined.ok).toBe(true);
-    if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
+    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
     // Default same-origin path published by `createGguiServer` when
     // `mcpApps: true` — operators override via `renderer.url`.
-    expect(merged.view.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    expect(parsed.meta.session?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 });
 
@@ -379,13 +371,10 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     const client = await connectClient(fx.httpBase);
     try {
       const result = await handshakeAndPush(client, 'c8 cdn override');
-      const combined = combineMcpAppAiGguiMeta(result._meta);
-      expect(combined.ok).toBe(true);
-      if (!combined.ok) return;
-      const merged = mergeSlicesIntoMountView(combined.slices);
-      expect(merged.ok).toBe(true);
-      if (!merged.ok) return;
-      expect(merged.view.runtimeUrl).toBe(
+      const parsed = parseMcpAppAiGguiMeta(result._meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.meta.session?.runtimeUrl).toBe(
         'https://cdn.example/ggui/renderer.js',
       );
     } finally {
@@ -401,7 +390,7 @@ async function bootOutboundServerWith(
     logger: silentLogger,
     sessionChannel: true,
     mcpApps: true,
-    bootstrapSecret: 'test-secret-32bytes-for-hmac-1234',
+    wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
     ...extra,
   });
   const httpServer = await server.listen(0, '127.0.0.1');
@@ -435,31 +424,30 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     appId: string;
   }> {
     const result = await handshakeAndPush(client, 'bootstrap-test');
-    const combined = combineMcpAppAiGguiMeta(result._meta);
-    if (!combined.ok) {
-      throw new Error(`mintPushBootstrap: combiner failed (${combined.reason})`);
+    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    if (!parsed.ok) {
+      throw new Error(`mintPushBootstrap: combiner failed (${parsed.reason})`);
     }
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    if (!merged.ok) {
-      throw new Error(`mintPushBootstrap: merge failed (${merged.reason})`);
+    const session = parsed.meta.session;
+    if (!session) {
+      throw new Error('mintPushBootstrap: session slice missing');
     }
-    const b = merged.view;
-    if (!b.wsUrl || !b.token) {
+    if (!session.wsUrl || !session.wsToken) {
       throw new Error('mintPushBootstrap: live-mode auth missing');
     }
     return {
-      wsUrl: b.wsUrl,
-      token: b.token,
-      sessionId: b.sessionId,
-      appId: b.appId,
+      wsUrl: session.wsUrl,
+      token: session.wsToken, // local struct retains 'token' for downstream call sites
+      sessionId: session.sessionId,
+      appId: session.appId,
     };
   }
 
   it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {
     const bootstrap = await mintPushBootstrap();
-    // Open WS with ?bootstrap= gate — upgrade-time AuthAdapter is skipped.
+    // Open WS with ?wsToken= gate — upgrade-time AuthAdapter is skipped.
     const ws = new WebSocket(
-      `${fx.wsUrl}?bootstrap=${encodeURIComponent(bootstrap.token)}`,
+      `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', resolve);
@@ -485,7 +473,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
         payload: {
           sessionId: bootstrap.sessionId,
           appId: bootstrap.appId,
-          bootstrap: bootstrap.token,
+          wsToken: bootstrap.token,
         },
       }),
     );
@@ -505,13 +493,13 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     // WS drop reconnects with the SAME envelope (no fresh handshake)
     // as long as the envelope is still inside its TTL. Replay defense
     // is now anchored on the signed `exp` claim + the refresh-window
-    // cap on the original `iat` (see `refreshBootstrapToken`), not
+    // cap on the original `iat` (see `refreshWsToken`), not
     // on a server-side jti-claim Map.
     const bootstrap = await mintPushBootstrap();
 
     async function subscribeWithBootstrap(): Promise<{ ok: true; sessionToken?: string } | { ok: false; code: string }> {
       const ws = new WebSocket(
-        `${fx.wsUrl}?bootstrap=${encodeURIComponent(bootstrap.token)}`,
+        `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
       );
       await new Promise<void>((resolve, reject) => {
         ws.once('open', resolve);
@@ -534,7 +522,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
             payload: {
               sessionId: bootstrap.sessionId,
               appId: bootstrap.appId,
-              bootstrap: bootstrap.token,
+              wsToken: bootstrap.token,
             },
           }),
         );
@@ -559,7 +547,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     const bootstrap = await mintPushBootstrap();
     const tampered = bootstrap.token.slice(0, -3) + 'xyz';
     const ws = new WebSocket(
-      `${fx.wsUrl}?bootstrap=${encodeURIComponent(tampered)}`,
+      `${fx.wsUrl}?wsToken=${encodeURIComponent(tampered)}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', resolve);
@@ -580,7 +568,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
           payload: {
             sessionId: bootstrap.sessionId,
             appId: bootstrap.appId,
-            bootstrap: tampered,
+            wsToken: tampered,
           },
         }),
       );
@@ -594,7 +582,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
   it('rejects a bootstrap token bound to a different session', async () => {
     const bootstrap = await mintPushBootstrap();
     const ws = new WebSocket(
-      `${fx.wsUrl}?bootstrap=${encodeURIComponent(bootstrap.token)}`,
+      `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
     );
     await new Promise<void>((resolve, reject) => {
       ws.once('open', resolve);
@@ -615,7 +603,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
           payload: {
             sessionId: 'different-session',
             appId: bootstrap.appId,
-            bootstrap: bootstrap.token,
+            wsToken: bootstrap.token,
           },
         }),
       );

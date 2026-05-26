@@ -48,15 +48,18 @@ export interface UseInvokeOptions {
    *   - `ggui_push` / `ggui_update` / `ggui_handshake` — paired by
    *     `tool_use_id` with an inline `tool_result` block on the same
    *     assistant turn. Servers built on `@ggui-ai/server` emit these via
-   *     `stream.toolResultPush(id, bootstrap)` so the result's
-   *     `content._meta.ggui.bootstrap` carries the MCP-Apps-shaped
-   *     connection material (`wsUrl` / `token` / `expiresAt` /
-   *     `sessionId` / `appId` / `runtimeUrl` / optional `adapters`) —
-   *     the exact shape `@ggui-ai/protocol/integrations/mcp-apps`
-   *     defines as `PushResultMeta`. Consumers watch for the pair and
-   *     mount `<McpAppIframe>` using `extractBootstrapMeta(content)`
-   *     (exported from this module) to pull the bootstrap off the
-   *     result — NOT by reading a plain `sessionId` field.
+   *     `stream.toolResultPush(id, meta)` so the result's
+   *     `content._meta` carries the per-window `ai.ggui/*` slices
+   *     (`_meta["ai.ggui/session"]` with `wsUrl` / `token` /
+   *     `expiresAt` / `sessionId` / `appId` / `runtimeUrl` + optional
+   *     capability fields, and `_meta["ai.ggui/stack-item"]` with
+   *     `stackItemId` / `propsJson` / contract pointer + component-
+   *     mode discriminator) — the exact shape
+   *     `@ggui-ai/protocol/integrations/mcp-apps` defines as
+   *     {@link McpAppAiGguiMeta}. Consumers watch for the pair and
+   *     mount `<McpAppIframe>` using `extractMcpAppAiGguiMeta(content)`
+   *     (exported from this module) to pull the meta slice pair off
+   *     the result — NOT by reading a plain `sessionId` field.
    *   - `ggui_render_blueprint` — a pure client tool (no server result to
    *     pair with); the consumer resolves the blueprint name locally.
    * ChatShell wires both patterns internally; callers who build their own

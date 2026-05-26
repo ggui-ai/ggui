@@ -123,11 +123,11 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc123',
+      pollingUrl: 'http://ggui.test/r/abc123',
     });
     expect(handler.polling).toBeDefined();
     expect(handler.polling?.url).toBe(
-      'http://ggui.test/api/bootstrap/abc123',
+      'http://ggui.test/r/abc123',
     );
     expect(handler.polling?.intervalMs).toBe(2000);
   });
@@ -137,23 +137,34 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
       pollingIntervalMs: 500,
     });
     expect(handler.polling?.intervalMs).toBe(500);
   });
+
+  // Helper for the slice-envelope shape the polling endpoint
+  // (`GET /r/<shortCode>` with `Accept: application/json`) returns.
+  // The polling parser reads `body['ai.ggui/stack-item']?.propsJson` +
+  // `stackItemId`.
+  function envelope(stackItem: {
+    stackItemId?: string;
+    propsJson?: string;
+  }): unknown {
+    return { 'ai.ggui/stack-item': stackItem };
+  }
 
   it('parse emits the first poll (no last-seen baseline)', () => {
     const stackModel = new StackModel();
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
-    const out = handler.polling!.parse({
+    const out = handler.polling!.parse(envelope({
       stackItemId: 'item_a',
       propsJson: '{"count":0}',
-    });
+    }));
     expect(out).toEqual({ stackItemId: 'item_a', props: { count: 0 } });
   });
 
@@ -162,9 +173,9 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
-    const body = { stackItemId: 'item_a', propsJson: '{"count":0}' };
+    const body = envelope({ stackItemId: 'item_a', propsJson: '{"count":0}' });
     handler.polling!.parse(body); // prime baseline
     expect(handler.polling!.parse(body)).toBeNull();
   });
@@ -174,16 +185,16 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
-    handler.polling!.parse({
+    handler.polling!.parse(envelope({
       stackItemId: 'item_a',
       propsJson: '{"count":0}',
-    });
-    const out = handler.polling!.parse({
+    }));
+    const out = handler.polling!.parse(envelope({
       stackItemId: 'item_a',
       propsJson: '{"count":5}',
-    });
+    }));
     expect(out).toEqual({ stackItemId: 'item_a', props: { count: 5 } });
   });
 
@@ -192,11 +203,11 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
     expect(handler.polling!.parse({})).toBeNull();
-    expect(handler.polling!.parse({ propsJson: '{}' })).toBeNull();
-    expect(handler.polling!.parse({ stackItemId: 'x' })).toBeNull();
+    expect(handler.polling!.parse(envelope({ propsJson: '{}' }))).toBeNull();
+    expect(handler.polling!.parse(envelope({ stackItemId: 'x' }))).toBeNull();
   });
 
   it('parse skips when propsJson is malformed', () => {
@@ -204,13 +215,13 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
     expect(
-      handler.polling!.parse({
+      handler.polling!.parse(envelope({
         stackItemId: 'item_a',
         propsJson: '{not valid json',
-      }),
+      })),
     ).toBeNull();
   });
 
@@ -219,19 +230,19 @@ describe('createPropsUpdateHandler — B5 polling descriptor', () => {
     const handler = createPropsUpdateHandler({
       stackModel,
       getStackRenderer: () => ({}) as never,
-      pollingUrl: 'http://ggui.test/api/bootstrap/abc',
+      pollingUrl: 'http://ggui.test/r/abc',
     });
     expect(
-      handler.polling!.parse({
+      handler.polling!.parse(envelope({
         stackItemId: 'item_a',
         propsJson: '[1,2,3]',
-      }),
+      })),
     ).toBeNull();
     expect(
-      handler.polling!.parse({
+      handler.polling!.parse(envelope({
         stackItemId: 'item_a',
         propsJson: 'null',
-      }),
+      })),
     ).toBeNull();
   });
 });

@@ -5,33 +5,39 @@
  *
  * Covers both recognition paths per Phase 3 Wave 1 close-out:
  *   - option (b) — session-resource URL from `{sessionId, stackItemId}`;
- *   - option (c) — inline bootstrap from `_meta.ggui.bootstrap`.
+ *   - option (c) — inline meta pair from the `ai.ggui/*` slices.
  * Plus precedence (c > b), filtering of non-ggui tool_results, and
  * origin trimming.
  */
 import { describe, it, expect } from 'vitest';
-import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
 
-const BOOTSTRAP_WITH_ITEM: McpAppAiGguiMountView = {
-  wsUrl: 'wss://mcp.example.test/ws',
-  token: 'bootstrap_token_abc',
-  expiresAt: '2026-05-01T00:00:00.000Z',
-  sessionId: 'sess_inline',
-  appId: 'app_inline',
-  runtimeUrl: '/_ggui/iframe-runtime.js',
-  stackItemId: 'item_pinned',
+const META_WITH_ITEM: McpAppAiGguiMeta = {
+  session: {
+    wsUrl: 'wss://mcp.example.test/ws',
+    token: 'bootstrap_token_abc',
+    expiresAt: '2026-05-01T00:00:00.000Z',
+    sessionId: 'sess_inline',
+    appId: 'app_inline',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+  },
+  stackItem: {
+    stackItemId: 'item_pinned',
+  },
 };
 
-const BOOTSTRAP_NO_ITEM: McpAppAiGguiMountView = {
-  wsUrl: 'wss://mcp.example.test/ws',
-  token: 'bootstrap_token_def',
-  expiresAt: '2026-05-01T00:00:00.000Z',
-  sessionId: 'sess_whole',
-  appId: 'app_whole',
-  runtimeUrl: '/_ggui/iframe-runtime.js',
+const META_NO_ITEM: McpAppAiGguiMeta = {
+  session: {
+    wsUrl: 'wss://mcp.example.test/ws',
+    token: 'bootstrap_token_def',
+    expiresAt: '2026-05-01T00:00:00.000Z',
+    sessionId: 'sess_whole',
+    appId: 'app_whole',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+  },
 };
 
 function assistantWith(
@@ -179,14 +185,14 @@ describe('extractUiMoments', () => {
     });
   });
 
-  describe('option (c) — inline bootstrap from _meta.ggui.bootstrap', () => {
-    it('extracts bootstrap and uses bootstrap.stackItemId as itemId when present', () => {
+  describe('option (c) — inline meta from ai.ggui/* slices', () => {
+    it('extracts meta and uses stackItem.stackItemId as itemId when present', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c1',
-            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
           },
         ]),
       ];
@@ -195,18 +201,18 @@ describe('extractUiMoments', () => {
         {
           key: 'toolu_push_c1',
           itemId: 'item_pinned',
-          source: { kind: 'bootstrap-inline', bootstrap: BOOTSTRAP_WITH_ITEM },
+          source: { kind: 'bootstrap-inline', meta: META_WITH_ITEM },
         },
       ]);
     });
 
-    it('falls back to tool_use_id as itemId when bootstrap has no stackItemId', () => {
+    it('falls back to tool_use_id as itemId when meta has no stackItem.stackItemId', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c2',
-            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_NO_ITEM) },
+            content: { _meta: metaToMcpAppMeta(META_NO_ITEM) },
           },
         ]),
       ];
@@ -220,7 +226,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c3',
-            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
           },
         ]),
       ];
@@ -230,7 +236,7 @@ describe('extractUiMoments', () => {
     });
   });
 
-  describe('precedence — inline bootstrap wins over push-coordinates', () => {
+  describe('precedence — inline meta wins over push-coordinates', () => {
     it('when both signals present, chooses bootstrap-inline', () => {
       const messages = [
         assistantWith([
@@ -240,7 +246,7 @@ describe('extractUiMoments', () => {
             content: {
               sessionId: 'push_coord_sid',
               stackItemId: 'push_coord_pid',
-              _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM),
+              _meta: metaToMcpAppMeta(META_WITH_ITEM),
             },
           },
         ]),
@@ -250,7 +256,7 @@ describe('extractUiMoments', () => {
       });
       expect(out).toHaveLength(1);
       expect(out[0]?.source.kind).toBe('bootstrap-inline');
-      // itemId follows bootstrap, not pushCoord.stackItemId
+      // itemId follows stackItem.stackItemId, not pushCoord.stackItemId
       expect(out[0]?.itemId).toBe('item_pinned');
     });
   });
@@ -305,7 +311,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_b',
-            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
           },
         ]),
       ];

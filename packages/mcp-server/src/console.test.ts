@@ -402,7 +402,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
@@ -437,7 +437,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     // Mint the cookie.
     const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
@@ -482,7 +482,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
@@ -510,7 +510,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     // Mint the cookie via HTTP so the token was really produced by
     // the server (don't shortcut the plumbing).
@@ -558,7 +558,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
@@ -611,7 +611,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       sessionChannel: true,
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     const { WebSocket } = await import('ws');
     const wsUrl = fx.url.replace(/^http/, 'ws') + '/ws';
@@ -749,7 +749,7 @@ describe('createGguiServer — console security headers', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'x'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
@@ -875,7 +875,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'y'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'y'.repeat(32),
     });
 
     // Step 1: mint the cookie via HTTP (no shortcut around the
@@ -972,7 +972,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
-      bootstrapSecret: 'deterministic-secret-' + 'z'.repeat(32),
+      wsTokenSecret: 'deterministic-secret-' + 'z'.repeat(32),
     });
     const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',

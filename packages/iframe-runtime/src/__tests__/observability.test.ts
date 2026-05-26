@@ -33,8 +33,8 @@ import {
   UPGRADE_REQUIRED,
 } from '@ggui-ai/protocol/version';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { ChannelRegistry } from '@ggui-ai/channel-client';
+import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   postObservabilityToParent,
   type ObservabilityEvent,
@@ -241,25 +241,25 @@ afterEach(() => {
   globalThis.WebSocket = originalWebSocket;
 });
 
-function bootstrapMeta(): McpAppAiGguiMountView {
+function sessionMeta(): McpAppAiGguiSessionMeta {
   return {
     sessionId: 'sess-c12',
     appId: 'app-c12',
     wsUrl: 'wss://test.invalid/ws',
-    token: 'boot-token',
+    wsToken: 'boot-token',
     expiresAt: '2099-01-01T00:00:00.000Z',
     runtimeUrl: '/_ggui/iframe-runtime.js',
   };
 }
 
-function makeRegistry(meta: McpAppAiGguiMountView): ChannelRegistry {
+function makeRegistry(session: McpAppAiGguiSessionMeta): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: meta.sessionId,
-        appId: meta.appId,
-        bootstrap: meta.token,
+        sessionId: session.sessionId,
+        appId: session.appId,
+        bootstrap: session.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
       },
     }),
@@ -274,8 +274,8 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
   it('emits observedBy=server when the pre-ack error frame is UPGRADE_REQUIRED', async () => {
     const observed: ObservabilityEvent[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrapMeta(),
-      registry: makeRegistry(bootstrapMeta()),
+      session: sessionMeta(),
+      registry: makeRegistry(sessionMeta()),
       onStatusChange: () => {},
       onObserve: (e) => observed.push(e),
     });
@@ -310,8 +310,8 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
   it('emits observedBy=client when the ack advertises an unaccepted serverVersion', async () => {
     const observed: ObservabilityEvent[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrapMeta(),
-      registry: makeRegistry(bootstrapMeta()),
+      session: sessionMeta(),
+      registry: makeRegistry(sessionMeta()),
       onStatusChange: () => {},
       onObserve: (e) => observed.push(e),
     });
@@ -551,8 +551,8 @@ describe('connectViaRegistry — subscribe-failed emission', () => {
     const observed: ObservabilityEvent[] = [];
     const statuses: string[] = [];
     const promise = connectViaRegistry({
-      bootstrap: bootstrapMeta(),
-      registry: makeRegistry(bootstrapMeta()),
+      session: sessionMeta(),
+      registry: makeRegistry(sessionMeta()),
       onStatusChange: (s) => statuses.push(s),
       onObserve: (e) => observed.push(e),
     });

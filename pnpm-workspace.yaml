@@ -6,7 +6,7 @@ packages:
   - "packages/agent-runtime"
   - "packages/artifact-manifest"
   - "packages/blueprint-probe"
-  - "packages/channel-client"
+  - "packages/live-channel"
   - "packages/chat-self-hosted"
   - "packages/console"
   - "packages/design"

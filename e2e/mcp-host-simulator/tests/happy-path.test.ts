@@ -77,15 +77,15 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
         },
       },
     });
-    expect(flow.push.bootstrap, '_meta.ggui.bootstrap must be set').toBeDefined();
-    expect(flow.push.bootstrap?.wsUrl).toMatch(/^ws:\/\//);
-    expect(flow.push.bootstrap?.token).toBeTruthy();
+    expect(flow.push.meta, '_meta ai.ggui slices must be set').toBeDefined();
+    expect(flow.push.meta?.session?.wsUrl).toMatch(/^ws:\/\//);
+    expect(flow.push.meta?.session?.token).toBeTruthy();
     // OSS factory mints bare UUID; pod-side prefixes `sess_` (different
     // convention). Assert non-empty rather than format-specific.
-    expect(flow.push.bootstrap?.sessionId.length ?? 0).toBeGreaterThan(0);
+    expect(flow.push.meta?.session?.sessionId.length ?? 0).toBeGreaterThan(0);
 
     // 4. WS subscribe → ack.
-    const { ack } = await host.subscribeWith(flow.push.bootstrap!);
+    const { ack } = await host.subscribeWith(flow.push.meta!);
     expect(ack.kind, `WS ack expected, got code=${ack.code ?? '(none)'}`).toBe(
       'ack',
     );

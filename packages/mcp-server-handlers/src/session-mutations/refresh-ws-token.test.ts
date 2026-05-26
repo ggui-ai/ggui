@@ -1,5 +1,5 @@
 /**
- * Pins the `ggui_runtime_refresh_bootstrap` handler shape (G14,
+ * Pins the `ggui_runtime_refresh_ws_token` handler shape (G14,
  * 2026-05-23):
  *
  *   - Successful refresh returns `{ok:true, envelope, expiresAt}`.
@@ -15,9 +15,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  createGguiRefreshBootstrapHandler,
-  type BootstrapRefreshSeam,
-} from './refresh-bootstrap.js';
+  createGguiRefreshWsTokenHandler,
+  type WsTokenRefreshSeam,
+} from './refresh-ws-token.js';
 
 const ctx = {
   appId: 'app_1',
@@ -28,13 +28,13 @@ function fakeSeam(
   result:
     | { ok: true; token: string; expiresAt: string }
     | { ok: false; reason: 'window_closed' | 'invalid' },
-): BootstrapRefreshSeam {
+): WsTokenRefreshSeam {
   return { refresh: () => result };
 }
 
-describe('createGguiRefreshBootstrapHandler', () => {
+describe('createGguiRefreshWsTokenHandler', () => {
   it('returns ok:true with the new envelope on a successful refresh', async () => {
-    const handler = createGguiRefreshBootstrapHandler({
+    const handler = createGguiRefreshWsTokenHandler({
       refreshSeam: fakeSeam({
         ok: true,
         token: 'NEW.TOKEN',
@@ -53,7 +53,7 @@ describe('createGguiRefreshBootstrapHandler', () => {
   });
 
   it('returns REFRESH_WINDOW_CLOSED when the seam reports window_closed', async () => {
-    const handler = createGguiRefreshBootstrapHandler({
+    const handler = createGguiRefreshWsTokenHandler({
       refreshSeam: fakeSeam({ ok: false, reason: 'window_closed' }),
     });
     const out = await handler.handler(
@@ -68,7 +68,7 @@ describe('createGguiRefreshBootstrapHandler', () => {
   });
 
   it('returns BOOTSTRAP_INVALID when the seam reports invalid (tampered/malformed/wrong-kind)', async () => {
-    const handler = createGguiRefreshBootstrapHandler({
+    const handler = createGguiRefreshWsTokenHandler({
       refreshSeam: fakeSeam({ ok: false, reason: 'invalid' }),
     });
     const out = await handler.handler(
@@ -80,7 +80,7 @@ describe('createGguiRefreshBootstrapHandler', () => {
   });
 
   it('returns BOOTSTRAP_NOT_SUPPORTED when no refresh seam is wired', async () => {
-    const handler = createGguiRefreshBootstrapHandler();
+    const handler = createGguiRefreshWsTokenHandler();
     const out = await handler.handler(
       { envelope: 'OLD.TOKEN' },
       ctx,
@@ -90,7 +90,7 @@ describe('createGguiRefreshBootstrapHandler', () => {
   });
 
   it('returns BOOTSTRAP_INVALID on input validation failure (missing envelope)', async () => {
-    const handler = createGguiRefreshBootstrapHandler({
+    const handler = createGguiRefreshWsTokenHandler({
       refreshSeam: fakeSeam({
         ok: true,
         token: 'NEW',
@@ -103,8 +103,8 @@ describe('createGguiRefreshBootstrapHandler', () => {
   });
 
   it('exposes runtime audience + app visibility (MCP Apps §401 plumbing)', () => {
-    const handler = createGguiRefreshBootstrapHandler();
-    expect(handler.name).toBe('ggui_runtime_refresh_bootstrap');
+    const handler = createGguiRefreshWsTokenHandler();
+    expect(handler.name).toBe('ggui_runtime_refresh_ws_token');
     expect(handler.audience).toEqual(['runtime']);
     expect(handler._meta).toEqual({ ui: { visibility: ['app'] } });
   });

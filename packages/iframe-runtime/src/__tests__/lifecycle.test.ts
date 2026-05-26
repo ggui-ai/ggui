@@ -24,12 +24,13 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type {
-  McpAppAiGguiMountView,
+  McpAppAiGguiMeta,
+  McpAppAiGguiSessionMeta,
   McpAppLifecycleEvent,
   McpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
-  mountViewToMcpAppMeta,
+  metaToMcpAppMeta,
   isMcpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence } from '../runtime.js';
@@ -164,22 +165,24 @@ describe('makeLifecycleEvent', () => {
 // bootSequence — onLifecycle integration
 // =============================================================================
 
-const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
+const VALID_SESSION: McpAppAiGguiSessionMeta = {
   wsUrl: 'wss://server.example/ws',
-  token: 'tok_abc',
+  wsToken: 'tok_abc',
   sessionId: 'sess_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
+const VALID_META: McpAppAiGguiMeta = { session: VALID_SESSION };
+
 function buildHappyInitResponse(
-  bootstrap: McpAppAiGguiMountView = VALID_BOOTSTRAP,
+  meta: McpAppAiGguiMeta = VALID_META,
 ): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: mountViewToMcpAppMeta(bootstrap),
+        _meta: metaToMcpAppMeta(meta),
         structuredContent: {},
       },
     },
@@ -220,14 +223,14 @@ describe('bootSequence — lifecycle on happy path', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const pinnedBootstrap: McpAppAiGguiMountView = {
-      ...VALID_BOOTSTRAP,
-      stackItemId: 'item_pinned',
+    const pinnedMeta: McpAppAiGguiMeta = {
+      session: VALID_SESSION,
+      stackItem: { stackItemId: 'item_pinned' },
     };
 
     const callUiInitialize = vi
       .fn()
-      .mockResolvedValue(buildHappyInitResponse(pinnedBootstrap));
+      .mockResolvedValue(buildHappyInitResponse(pinnedMeta));
     const connectFn = buildHappyConnect([makeStackItem('item_pinned')]);
 
     await bootSequence({

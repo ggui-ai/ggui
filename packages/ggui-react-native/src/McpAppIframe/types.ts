@@ -12,7 +12,7 @@ import type {
   ProtocolError,
 } from '@ggui-ai/iframe-runtime';
 import type {
-  McpAppAiGguiMountView,
+  McpAppAiGguiMeta,
   McpAppLifecycleEvent,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
@@ -99,15 +99,18 @@ export interface McpAppIframeProps {
   readonly permissions?: McpAppIframePermissions;
 
   /**
-   * Opt-in bootstrap forwarding for first-party ggui renderer WebViews.
+   * Opt-in `ai.ggui/*` meta forwarding for first-party ggui renderer
+   * WebViews.
    *
    * **When set:** the host's `ui/initialize` response gains a
-   * `toolOutput._meta.ggui.bootstrap = <this value>` payload alongside
-   * the existing `theme` / `containerDimensions` / `locale` adapter-
-   * boundary fields. The renderer's `parseBootstrap()` (`packages/
-   * renderer/src/bootstrap.ts`) reads exactly that path and uses it to
-   * fetch the renderer bundle, open the WebSocket, and bootstrap the
-   * session.
+   * `toolOutput._meta` envelope carrying the
+   * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` slices
+   * (whichever are present on the supplied {@link McpAppAiGguiMeta}),
+   * alongside the existing `theme` / `containerDimensions` / `locale`
+   * adapter-boundary fields. The renderer's `parseBootstrap()`
+   * (`packages/renderer/src/bootstrap.ts`) reads exactly that path
+   * and uses it to fetch the renderer bundle, open the WebSocket,
+   * and bootstrap the session.
    *
    * **When absent (default):** behavior is unchanged — the host
    * responds with `{theme, containerDimensions, locale}` only and
@@ -118,8 +121,8 @@ export interface McpAppIframeProps {
    * **Rule of thumb:** set this exactly when the WebView was spawned by
    * following ggui's own resource URI (`ui://ggui/session` or
    * `ui://ggui/session/<sessionId>` etc.) and the host is responsible
-   * for wiring the bootstrap forward — e.g. the console's
-   * `<McpAppIframe>` mount feeds it the bootstrap fetched from
+   * for wiring the meta forward — e.g. the console's
+   * `<McpAppIframe>` mount feeds it the meta fetched from
    * `GET /ggui/console/session-resource`. Do NOT set this for any
    * WebView loading content authored outside ggui's session-resource
    * surface.
@@ -131,7 +134,7 @@ export interface McpAppIframeProps {
    * forwarding does NOT cascade through to third-party content the
    * renderer is itself hosting.
    */
-  readonly bootstrap?: McpAppAiGguiMountView;
+  readonly meta?: McpAppAiGguiMeta;
 
   /**
    * Caller-provided handler for `tools/call` dispatches from the

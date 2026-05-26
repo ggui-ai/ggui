@@ -188,7 +188,7 @@ jobs:
             registry-core
             blueprint-probe
             preview-a2ui
-            channel-client
+            live-channel
             gadgets
             wire
             design
@@ -535,7 +535,7 @@ jobs:
           # preflight ORDER (modulo directory→name renames like
           # ggui-react → @ggui-ai/react).
           PACKAGES=(
-            protocol artifact-manifest gadget-signing wire channel-client
+            protocol artifact-manifest gadget-signing wire live-channel
             design gadgets ui-gen blueprint-probe predefined preview-a2ui
             iframe-runtime react react-native chat-self-hosted agent-runtime
             mcp-server mcp-server-handlers mcp-server-core negotiator

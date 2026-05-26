@@ -26,7 +26,7 @@ import type {
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 // Pre-B3b this imported `RendererWebSocketManager` for the manager
-// type cast. Post-B3b the WS lives in `@ggui-ai/channel-client`; the
+// type cast. Post-B3b the WS lives in `@ggui-ai/live-channel`; the
 // renderer's wire-config exposes a `RendererSendSurface` shape
 // (`{send(msg)}`) that tests stub directly without a cast.
 import {

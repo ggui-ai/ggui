@@ -10,8 +10,7 @@ import {
   type PropsSpec,
   type StackItem,
 } from '@ggui-ai/protocol';
-import { combineMcpAppAiGguiMeta,
-  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { parseMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { InMemorySessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiUpdateHandler,
@@ -494,8 +493,8 @@ describe('createGguiUpdateHandler', () => {
     });
   });
 
-  describe('resultMeta — _meta.ggui.bootstrap emission', () => {
-    it('emits ggui.bootstrap with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
+  describe('resultMeta — ai.ggui/* slice meta emission', () => {
+    it('emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
       // Post-2026-05-13 trim: update.resultMeta is props-only. Once
       // there's any patched props (always the case after a successful
       // update — applyStackItemPatch sets `props: patch`), the envelope
@@ -511,17 +510,18 @@ describe('createGguiUpdateHandler', () => {
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
-      const combined = combineMcpAppAiGguiMeta(meta);
-      expect(combined.ok).toBe(true);
-      if (!combined.ok) return;
-      const merged = mergeSlicesIntoMountView(combined.slices);
-      expect(merged.ok).toBe(true);
-      if (!merged.ok) return;
-      expect(merged.view.propsJson).toBe(JSON.stringify({ x: 2 }));
-      expect(merged.view.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      const parsed = parseMcpAppAiGguiMeta(meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.meta.stackItem?.propsJson).toBe(
+        JSON.stringify({ x: 2 }),
+      );
+      expect(parsed.meta.session?.runtimeUrl).toBe(
+        '/_ggui/iframe-runtime.js',
+      );
     });
 
-    it('emits ggui.bootstrap with propsJson + session/runtime fields on the patched view (props-only post-trim)', async () => {
+    it('emits slice meta with propsJson + session/runtime fields on the patched view (props-only post-trim)', async () => {
       const store = new InMemorySessionStore();
       const { sessionId, stackItemId } = await seedSession({
         store,
@@ -530,7 +530,7 @@ describe('createGguiUpdateHandler', () => {
       const handler = createGguiUpdateHandler({
         sessionStore: store,
         runtimeUrl: '/_ggui/iframe-runtime.js',
-        mintBootstrap: () => ({
+        mintWsToken: () => ({
           wsUrl: 'wss://example.test/ws',
           token: 'tok-1',
           expiresAt: '2099-01-01T00:00:00.000Z',
@@ -540,38 +540,35 @@ describe('createGguiUpdateHandler', () => {
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
-      const combined = combineMcpAppAiGguiMeta(meta);
-      expect(combined.ok).toBe(true);
-      if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-      const b = merged.view;
-      expect(b.sessionId).toBe(sessionId);
-      expect(b.stackItemId).toBe(stackItemId);
-      expect(b.appId).toBe(APP_A);
-      expect(b.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
-      expect(b.wsUrl).toBe('wss://example.test/ws');
-      expect(b.token).toBe('tok-1');
-      expect(b.expiresAt).toBe('2099-01-01T00:00:00.000Z');
+      const parsed = parseMcpAppAiGguiMeta(meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      const { session, stackItem } = parsed.meta;
+      expect(session?.sessionId).toBe(sessionId);
+      expect(stackItem?.stackItemId).toBe(stackItemId);
+      expect(session?.appId).toBe(APP_A);
+      expect(session?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      expect(session?.wsUrl).toBe('wss://example.test/ws');
+      expect(session?.wsToken).toBe('tok-1');
+      expect(session?.expiresAt).toBe('2099-01-01T00:00:00.000Z');
       // propsJson carries the POST-patch props (the source of truth
       // for the spec-compliant postMessage re-apply path).
-      expect(b.propsJson).toBe(JSON.stringify({ count: 5 }));
+      expect(stackItem?.propsJson).toBe(JSON.stringify({ count: 5 }));
       // Post-2026-05-13 trim: update.resultMeta is props-only.
       // Mount-time fields (codeUrl / kind / contextSlots /
-      // actionNextSteps / permissionsPolicy / appCallableTools /
+      // actionNextSteps / appCallableTools /
       // streamWebSocketLocalTools / contract-bundle) are NOT
       // re-emitted on update — the iframe already has them from its
       // initial push bootstrap.
-      expect(b.codeUrl).toBeUndefined();
-      expect(b.kind).toBeUndefined();
-      expect(b.contextSlots).toBeUndefined();
-      expect(b.actionNextSteps).toBeUndefined();
-      expect(b.permissionsPolicy).toBeUndefined();
-      expect(b.appCallableTools).toBeUndefined();
-      expect(b.streamWebSocketLocalTools).toBeUndefined();
-      expect(b.contractHash).toBeUndefined();
-      expect(b.validatorsUrl).toBeUndefined();
+      expect(stackItem?.codeUrl).toBeUndefined();
+      expect(stackItem?.kind).toBeUndefined();
+      expect(stackItem?.contextSlots).toBeUndefined();
+      expect(stackItem?.actionNextSteps).toBeUndefined();
+      expect(session?.permissionsPolicy).toBeUndefined();
+      expect(session?.appCallableTools).toBeUndefined();
+      expect(session?.streamWebSocketLocalTools).toBeUndefined();
+      expect(stackItem?.contractHash).toBeUndefined();
+      expect(stackItem?.validatorsUrl).toBeUndefined();
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {
@@ -587,14 +584,11 @@ describe('createGguiUpdateHandler', () => {
       const input = { stackItemId, kind: 'replace' as const, props: { count: 1 } };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
-      const combined = combineMcpAppAiGguiMeta(meta);
-      expect(combined.ok).toBe(true);
-      if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-      expect(merged.view.themeId).toBe('indigo');
-      expect(merged.view.themeMode).toBe('dark');
+      const parsed = parseMcpAppAiGguiMeta(meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.meta.session?.themeId).toBe('indigo');
+      expect(parsed.meta.session?.themeMode).toBe('dark');
     });
   });
 });

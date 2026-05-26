@@ -93,10 +93,11 @@ export interface UIGenerationRequest<TContext = JsonObject> {
 /**
  * Internal response from UI generation. This is the GENERATOR-OUTPUT
  * shape — `componentCode` is the freshly produced ESM string. Before
- * the stack item commits to the wire, the bootstrap-meta derivation
+ * the stack item commits to the wire, the slice-meta derivation
  * uploads the code body and projects `codeUrl` (a fetchable URL) onto
- * `_meta.ggui.bootstrap` instead of inlining the source. Iframe
- * runtimes fetch the code from `codeUrl`; they never see this field.
+ * the `ai.ggui/stack-item` slice instead of inlining the source.
+ * Iframe runtimes fetch the code from `codeUrl`; they never see this
+ * field.
  */
 export interface UIGenerationResponse {
   stackItemId: string;

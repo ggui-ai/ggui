@@ -16,9 +16,9 @@ import {
   derivePermissionsPolicy,
   derivePropsJson,
   derivePublicEnvProjection,
-  deriveStackItemBootstrapView,
+  deriveStackItemMeta,
   deriveWiredActionTools,
-} from './bootstrap-meta-derivation';
+} from './slice-meta-derivation';
 
 const NOW = '2026-05-09T00:00:00.000Z';
 
@@ -124,7 +124,7 @@ describe('derivePropsJson', () => {
   });
 });
 
-describe('deriveStackItemBootstrapView', () => {
+describe('deriveStackItemMeta', () => {
   // T3-1 (2026-05-13) — the projection no longer carries componentCode.
   // Static-component bytes ride on the push handler's `codeUrl` channel
   // composed from its `codeStore` + `codeBaseUrl` deps. The view now
@@ -133,13 +133,13 @@ describe('deriveStackItemBootstrapView', () => {
   // system variants.
 
   it('component variant: omits componentCode (delivered via codeUrl channel)', () => {
-    const view = deriveStackItemBootstrapView(componentItem());
+    const view = deriveStackItemMeta(componentItem());
     expect((view as Record<string, unknown>).componentCode).toBeUndefined();
     expect(view.kind).toBeUndefined();
   });
 
   it('component variant: includes propsJson when props are present', () => {
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       componentItem({ props: { city: 'Seoul' } }),
     );
     expect(view.propsJson).toBe('{"city":"Seoul"}');
@@ -150,7 +150,7 @@ describe('deriveStackItemBootstrapView', () => {
       save: { label: 'Save', nextStep: 'save_note' },
       undo: { label: 'Undo' },
     };
-    const view = deriveStackItemBootstrapView(componentItem({ actionSpec }));
+    const view = deriveStackItemMeta(componentItem({ actionSpec }));
     // `save` has dispatch.kind='tool' → included. `undo` is agent-routed → excluded.
     expect(view.actionNextSteps).toEqual({ save: 'save_note' });
   });
@@ -159,7 +159,7 @@ describe('deriveStackItemBootstrapView', () => {
     const contextSpec: ContextSpec = {
       count: { schema: { type: 'number' }, default: 0 },
     };
-    const view = deriveStackItemBootstrapView(componentItem({ contextSpec }));
+    const view = deriveStackItemMeta(componentItem({ contextSpec }));
     expect(view.contextSlots).toBeDefined();
     expect(view.contextSlots?.[0]?.name).toBe('count');
     expect(view.contextSlots?.[0]?.default).toBe(0);
@@ -169,14 +169,14 @@ describe('deriveStackItemBootstrapView', () => {
     const streamSpec: StreamSpec = {
       ticks: { schema: { type: 'object' } },
     };
-    const view = deriveStackItemBootstrapView(componentItem({ streamSpec }));
+    const view = deriveStackItemMeta(componentItem({ streamSpec }));
     // No streamSpec field on the View today. If a future field is
     // added, update both the View interface AND this assertion.
     expect((view as Record<string, unknown>).streamSpec).toBeUndefined();
   });
 
   it('system variant: emits kind + propsJson', () => {
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       systemItem({ kind: 'no-credentials', props: { reason: 'demo' } }),
     );
     expect(view.kind).toBe('no-credentials');
@@ -187,12 +187,12 @@ describe('deriveStackItemBootstrapView', () => {
   });
 
   it('system variant: omits kind when empty string', () => {
-    const view = deriveStackItemBootstrapView(systemItem({ kind: '' }));
+    const view = deriveStackItemMeta(systemItem({ kind: '' }));
     expect(view.kind).toBeUndefined();
   });
 
   it('mcpApps variant: returns empty View (separate shell wiring)', () => {
-    const view = deriveStackItemBootstrapView({
+    const view = deriveStackItemMeta({
       id: 'page-1',
       type: 'mcpApps',
       source: {
@@ -206,7 +206,7 @@ describe('deriveStackItemBootstrapView', () => {
   });
 
   it('full component view: every field populated', () => {
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       componentItem({
         props: { city: 'Seoul' },
         actionSpec: { save: { label: 'Save', nextStep: 'save_note' } },
@@ -233,7 +233,7 @@ describe('deriveStackItemBootstrapView', () => {
 
 describe('deriveContractBundle — content-addressable validator bundle', () => {
   it('component variant: returns {contractHash, bundleSource, validators}', async () => {
-    const { deriveContractBundle } = await import('./bootstrap-meta-derivation.js');
+    const { deriveContractBundle } = await import('./slice-meta-derivation.js');
     const bundle = await deriveContractBundle(
       componentItem({
         propsSpec: {
@@ -257,7 +257,7 @@ describe('deriveContractBundle — content-addressable validator bundle', () => 
   });
 
   it('mcpApps / system variants return undefined', async () => {
-    const { deriveContractBundle } = await import('./bootstrap-meta-derivation.js');
+    const { deriveContractBundle } = await import('./slice-meta-derivation.js');
     expect(
       await deriveContractBundle(systemItem({ kind: 'no-credentials' })),
     ).toBeUndefined();
@@ -483,7 +483,7 @@ describe('derivePermissionsPolicy — clientCapabilities → Permissions-Policy 
   });
 });
 
-describe('deriveStackItemBootstrapView — permissionsPolicy projection', () => {
+describe('deriveStackItemMeta — permissionsPolicy projection', () => {
   // Single-entry-point projection. When clientCapabilities declares
   // permissions, the View MUST surface them so every transport
   // (public-render header, MCP Apps _meta, inline bootstrap) reads from
@@ -497,7 +497,7 @@ describe('deriveStackItemBootstrapView — permissionsPolicy projection', () => 
         permission: 'microphone',
       }),
     ];
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.permissionsPolicy).toEqual(['microphone']);
@@ -511,7 +511,7 @@ describe('deriveStackItemBootstrapView — permissionsPolicy projection', () => 
         version: '0.1.0-rc.1',
       }),
     ];
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.permissionsPolicy).toBeUndefined();
@@ -799,7 +799,7 @@ describe('composeContentSecurityPolicy', () => {
     );
   });
 
-  // Bug #1 (Slice 1.1) — the inline `<script>__GGUI_BOOTSTRAP__ = …</script>`
+  // Bug #1 (Slice 1.1) — the inline `<script>__GGUI_META__ = …</script>`
   // tag the renderer embeds on `/r/<shortCode>` requires
   // `'unsafe-inline'` in `script-src`. Without it, declaring any
   // `bundleUrl` would crash the iframe boot the moment a CSP header
@@ -917,7 +917,7 @@ describe('deriveGadgetRegistrations — Slice 3.9 bundleSri threading', () => {
   });
 });
 
-describe('deriveStackItemBootstrapView — contentSecurityPolicy projection', () => {
+describe('deriveStackItemMeta — contentSecurityPolicy projection', () => {
   it('attaches contentSecurityPolicy when libraries declare external origins', () => {
     const gadgetDescriptors: readonly GadgetDescriptor[] = [
       gpkg({
@@ -927,7 +927,7 @@ describe('deriveStackItemBootstrapView — contentSecurityPolicy projection', ()
         bundleUrl: 'https://bundles.example.com/leaflet@1.0/bundle.js',
       }),
     ];
-    const view = deriveStackItemBootstrapView(
+    const view = deriveStackItemMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.contentSecurityPolicy).toContain(
@@ -936,7 +936,7 @@ describe('deriveStackItemBootstrapView — contentSecurityPolicy projection', ()
   });
 
   it('omits contentSecurityPolicy when libraries declare no external origins (regression for 8/16/17/18)', () => {
-    const view = deriveStackItemBootstrapView(componentItem());
+    const view = deriveStackItemMeta(componentItem());
     expect(view.contentSecurityPolicy).toBeUndefined();
   });
 });

@@ -347,7 +347,7 @@ export interface BuildMcpServerBackendOptions {
 
   /**
    * Directory backing the cross-restart persistence bundle. When set,
-   * `bootstrapSecret` + `renderSigning.secret` are read from / minted
+   * `wsTokenSecret` + `renderSigning.secret` are read from / minted
    * into 0600-mode files there so the HMAC keys survive `ggui serve`
    * restart — claude.ai chat-history revisits keep their cached
    * `_meta.ggui.bootstrap.token` + `/r/<code>?sig=&exp=` URLs valid.
@@ -789,7 +789,7 @@ export function buildMcpServerBackend(
     // discriminated union (the `false` shape disables the layer
     // entirely; we always want it on here, so build the object form).
     ...(persistedBootstrapSecret !== undefined
-      ? { bootstrapSecret: persistedBootstrapSecret }
+      ? { wsTokenSecret: persistedBootstrapSecret }
       : {}),
     ...(persistedRenderSignerSecret !== undefined
       ? { renderSigning: { secret: persistedRenderSignerSecret } }

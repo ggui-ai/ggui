@@ -120,7 +120,7 @@ const TRANSITIVE_PACKAGES: ReadonlyArray<{ dir: string; pkgName: string }> = [
   // Drift-check surfaced these as required; add to keep the tarball
   // smoke spec from 404'ing against the public registry.
   { dir: 'artifact-manifest', pkgName: '@ggui-ai/artifact-manifest' },
-  { dir: 'channel-client', pkgName: '@ggui-ai/channel-client' },
+  { dir: 'live-channel', pkgName: '@ggui-ai/live-channel' },
   { dir: 'gadget-signing', pkgName: '@ggui-ai/gadget-signing' },
   { dir: 'gadgets', pkgName: '@ggui-ai/gadgets' },
   { dir: 'negotiator', pkgName: '@ggui-ai/negotiator' },

@@ -10,7 +10,9 @@
  * import {
  *   MCP_APPS_UI_CAPABILITY,
  *   GGUI_SESSION_RESOURCE_URI,
- *   type McpAppAiGguiMountView,
+ *   parseMcpAppAiGguiMeta,
+ *   type McpAppAiGguiSessionMeta,
+ *   type McpAppAiGguiStackItemMeta,
  * } from '@ggui-ai/protocol/integrations/mcp-apps';
  * ```
  *
@@ -77,531 +79,19 @@ export const GGUI_PUSH_UI_META = {
 export type McpAppsToolVisibility = 'model' | 'app';
 
 /**
- * The bootstrap material an MCP Apps view (iframe) needs to mount a
- * ggui-rendered UI. Lives under `_meta.ggui.bootstrap` on the
- * `ggui_push` tool result — **not** on `structuredContent`.
+ * #109 — `McpAppAiGguiMountView` (and its `GguiBootstrapMeta` predecessor)
+ * was deleted in R3. The wire is now decomposed into two slices on
+ * `_meta`:
  *
- * **Not model-visible.** Agents SHOULD NOT consume these fields. They are
- * scoped to the view lifecycle and carry credentials the model has no
- * legitimate use for. The split between `structuredContent` (model-facing)
- * and `_meta.ggui.bootstrap` (view-facing) is the protocol-level isolation
- * that keeps WebSocket credentials out of conversation transcripts.
+ *   - `ai.ggui/session`    → {@link McpAppAiGguiSessionMeta}
+ *   - `ai.ggui/stack-item` → {@link McpAppAiGguiStackItemMeta}
  *
- * **Three boot modes share this single shape**, distinguished by which
- * of the three optional discriminator fields is populated:
- *
- * | Mode             | Discriminator     | What the view does                                  |
- * | ---------------- | ----------------- | --------------------------------------------------- |
- * | live             | `wsUrl` + `token` | Open live-channel WS, subscribe, render agent frames |
- * | static-component | `codeUrl`         | Fetch + mount compiled React component, no WS       |
- * | system-card      | `kind`            | Mount built-in system card by registry id, no WS    |
- *
- * **Mutual-exclusion contract.** A consumer-acceptable bootstrap MUST
- * carry at least one of `{wsUrl-with-token, codeUrl, kind}`.
- * Multiple may coexist (e.g. a server emitting both `codeUrl`
- * AND `wsUrl+token` lets the runtime pick — current iframe-runtime
- * priority is code-then-system-then-live), but at least one MUST
- * be present. A bootstrap with none is MALFORMED.
- *
- * **Live-mode auth semantics** (only relevant when `wsUrl` + `token`
- * are present):
- *   - `token` is session-scoped, short-TTL, single-use on initial
- *     `subscribe`. Consumed at the first bootstrap-auth'd subscribe and
- *     cannot be reused.
- *   - `expiresAt` lets the view skip an obviously-stale bootstrap without
- *     a round-trip. Servers reject expired tokens anyway; this is UX
- *     sugar, not a security control.
- *   - For reconnects, the view should use the longer-lived `sessionToken`
- *     the server issues on the successful bootstrap-auth ack — see
- *     {@link AckPayload.sessionToken}.
- *
- * **Live-mode example:**
- * ```json
- * {
- *   "sessionId": "sess_001", "appId": "app_001",
- *   "runtimeUrl": "/_ggui/iframe-runtime.js",
- *   "wsUrl": "wss://server.example/ws",
- *   "token": "tok_abc", "expiresAt": "2099-01-01T00:00:00.000Z"
- * }
- * ```
- *
- * **Static-component example:**
- * ```json
- * {
- *   "sessionId": "sess_001", "appId": "app_001",
- *   "runtimeUrl": "/_ggui/iframe-runtime.js",
- *   "codeUrl": "https://server.example/code/sha256:abc.js",
- *   "codeHash": "sha256:abc...",
- *   "themeId": "indigo", "propsJson": "{\"name\":\"Ada\"}"
- * }
- * ```
- *
- * **System-card example:**
- * ```json
- * {
- *   "sessionId": "sess_001", "appId": "app_001",
- *   "runtimeUrl": "/_ggui/iframe-runtime.js",
- *   "kind": "loading"
- * }
- * ```
+ * Consumers parse with {@link parseMcpAppAiGguiMeta} and read the
+ * slices directly off the {@link McpAppAiGguiMeta} pair
+ * (e.g. `meta.session.sessionId`, `meta.stackItem?.propsJson`). There
+ * is no longer a flat "mount view" aggregate — that was a workaround
+ * that preserved the pre-decomposition mental model.
  */
-export interface McpAppAiGguiMountView {
-  /**
-   * WebSocket URL the view opens for live mode (e.g.
-   * `wss://server.example/ws`). REQUIRED in live mode; absent in
-   * static-component and system-card modes. When present, MUST be
-   * paired with a non-empty `token` — half-live (one without the
-   * other) is MALFORMED.
-   */
-  readonly wsUrl?: string;
-  /**
-   * Short-TTL single-use bootstrap token, passed as
-   * `SubscribePayload.bootstrap`. REQUIRED in live mode; absent in
-   * the other modes.
-   */
-  readonly token?: string;
-  /**
-   * ISO 8601 UTC timestamp after which the token is no longer accepted.
-   * Optional; meaningful only in live mode (the token it pairs with
-   * may be unbounded TTL when this is absent).
-   */
-  readonly expiresAt?: string;
-  /**
-   * Session id the token binds to. Repeated here (also present on
-   * `structuredContent.sessionId`) so the view has everything it needs
-   * to subscribe from `_meta.ggui.bootstrap` alone — no need to cross-
-   * reference structuredContent. Keeps the view-side boot code small.
-   */
-  readonly sessionId: string;
-  /**
-   * App (tenant) id the token binds to. Required in the subscribe
-   * payload; not necessarily appropriate for structuredContent
-   * (tenant identity is app-facing bootstrap metadata, not typically
-   * part of an agent's typed output surface).
-   */
-  readonly appId: string;
-  /**
-   * URL of the iframe-runtime bundle the iframe should fetch. The
-   * thin-shell HTML's inline JS dynamically appends
-   * `<script src={runtimeUrl}>` to load the runtime. Server controls
-   * this per-session so the shell works in `srcdoc` iframes (which
-   * have no origin of their own) and across local / cloud
-   * deployments.
-   *
-   * OSS `ggui serve` resolves this to `/_ggui/iframe-runtime.js` —
-   * same-origin as the MCP server's HTTP listener. Hosted cloud
-   * serves from a dedicated CDN route. Either way, the server OWNS
-   * the string; the shell does not guess, concatenate, or fall back
-   * to a bundled default.
-   *
-   * Named parties: **server** produces; **thin shell** consumes;
-   * **iframe runtime bundle** is what the URL resolves to. Failure
-   * mode on fetch error: runtime surfaces a `BUNDLE_FETCH_FAILED`
-   * bootstrap failure via `postMessage({type:'ggui:bootstrap-failed',
-   * reason, message})` to the parent (C8 commit 3). Absent or empty
-   * at parse-time is `BOOTSTRAP_META_MISSING` — the shell rejects
-   * the bootstrap without attempting a script load.
-   *
-   * C8 (2026-04-23) made this required. Pre-C8 servers that emit
-   * bootstraps without `runtimeUrl` are incompatible with the
-   * post-C8 thin-shell HTML — the shell pivot (`~175` → `~30` LOC
-   * wrapper) moved all rendering logic out of the shell into the
-   * separately-served iframe-runtime bundle, so the URL is now
-   * load-bearing.
-   * @public
-   */
-  readonly runtimeUrl: string;
-  /**
-   * Optional polling fallback URL the iframe-runtime fetches when its
-   * WebSocket transport is unavailable or fails. Points at the same
-   * `/api/bootstrap/<shortCode>` endpoint the iframe used to initially
-   * load the bootstrap envelope — polling re-fetches it and the
-   * iframe-runtime diffs the `propsJson` field to synthesize
-   * `props_update` frames for live re-render.
-   *
-   * Empirically required for MCP-Apps hosts whose iframe sandbox
-   * blocks `wss://` at the CSP layer regardless of our
-   * `_meta.ui.csp.connectDomains` declaration (Claude Desktop is the
-   * known case; claude.ai Connector honors WS). Without this field,
-   * polling has no URL to hit and live updates silently no-op when
-   * WS is unavailable.
-   *
-   * Producer: server's `/api/bootstrap/<shortCode>` endpoint stamps
-   * this on the response body — same origin as the request, same
-   * shortCode in the path. Consumer: iframe-runtime threads this
-   * through `createPropsUpdateHandler({pollingUrl})` so
-   * `PollingTransport` has a URL to fetch.
-   *
-   * Absent → no polling fallback. WS-only mode is fine for hosts
-   * whose CSP permits `wss://`.
-   *
-   * @public
-   */
-  readonly pollingUrl?: string;
-  /**
-   * Names of same-server tools whose `_meta.ui.visibility` includes
-   * `"app"` and are therefore directly callable from this iframe via
-   * `tools/call` (per MCP-Apps spec §2026-01-26 Visibility rules:
-   * "app" = callable by the app from the same server connection only;
-   * cross-server tool calls are always blocked).
-   *
-   * Used by the iframe-runtime as a capability fingerprint — telemetry
-   * and debug surfaces consult it to know which tool names are reachable
-   * over the host's same-server `tools/call` path (e.g. the iframe-
-   * internal `ggui_runtime_submit_action` and `ggui_runtime_sync_context`
-   * relays). It is NOT consulted to choose a dispatch routing strategy:
-   * every user gesture flows through `ggui_runtime_submit_action`, lands
-   * on the per-stack-item pending-events pipe, and is drained by the
-   * agent's `ggui_consume` long-poll on the next turn. Actions ALWAYS
-   * drive turns through consume — there is no synchronous server-side
-   * dispatch in agent-mediated deployments.
-   *
-   * Producers SHOULD include every same-server-app-visible tool;
-   * consumers MUST treat an absent field as an empty list (legacy
-   * bootstrap envelopes predating this addition).
-   *
-   * @public
-   */
-  readonly appCallableTools?: readonly string[];
-  /**
-   * Per-action `nextStep` hint mapping for the active stack item's
-   * `actionSpec`. Maps `actionName → toolName` where `toolName` is the
-   * value of `actionSpec[name].nextStep` — the optional hint naming the
-   * tool the agent SHOULD call next when the action fires. Only entries
-   * whose `actionSpec[name].nextStep` is declared are projected; actions
-   * without a hint are omitted from the map.
-   *
-   * Producer: server's push handler at push time, sourced from the
-   * resolved stack item's `actionSpec`. Consumer: iframe-runtime, which
-   * mirrors the hint onto outbound `_meta.ggui.userAction` fall-through
-   * envelopes (the inline variant in {@link InlineUserActionMeta.nextStep})
-   * so the agent gets a strong tool-choice steer when chat-shortcut
-   * fallback fires.
-   *
-   * Absent / empty mapping ⇒ no per-action hints; the iframe omits
-   * `nextStep` from the fall-through envelope and the agent picks the
-   * next tool freely.
-   *
-   * @public
-   */
-  readonly actionNextSteps?: Readonly<Record<string, string>>;
-  /**
-   * Per-slot data for the active stack item's `contextSpec`. Each entry
-   * carries the slot name + the JsonSchema for runtime validation +
-   * optional debounceMs override + optional default value.
-   *
-   * Producer: server's push handler at push time, derived from
-   * `activeStackItem.contextSpec`. Consumer: iframe-runtime, which (at
-   * boot) synthesizes one `React.createContext(default)` per entry and
-   * registers it under `globalThis.__ggui__.contexts[contextName]`. The
-   * boilerplate destructures the registered Contexts so the LLM has
-   * them in scope without any import line.
-   *
-   * Absent → empty list; the runtime synthesizes no Contexts; the
-   * `globalThis.__ggui__.contexts` registry is `{}`.
-   *
-   * @public
-   */
-  readonly contextSlots?: ReadonlyArray<{
-    /** Slot key — camelCase JS identifier from `contextSpec`. */
-    readonly name: string;
-    /** PascalCase Context name auto-derived from `name`. The runtime
-     * uses this as the key in `globalThis.__ggui__.contexts`. The
-     * boilerplate uses it in destructuring lines. */
-    readonly contextName: string;
-    /** JsonSchema for the slot value — used by the runtime observer
-     * to validate Provider values before posting `ui/update-model-context`. */
-    readonly schema: JsonSchema;
-    /** Initial value for the slot's React Context Provider. Always
-     * populated by the server via {@link deriveContextDefault}: the
-     * authored `entry.default` if present, otherwise a schema-typed
-     * fallback (`''` / `0` / `false` / `[]` / `{}` / `null`). The
-     * runtime owns useState per slot, so the Provider seed is load-
-     * bearing — `undefined` here would mean
-     * the iframe boots with an indeterminate Provider value. */
-    readonly default: JsonValue;
-    /** Per-slot debounce override in milliseconds. Omitted → runtime
-     * applies `DEFAULT_CONTEXT_DEBOUNCE_MS` (300). `0` = immediate. */
-    readonly debounceMs?: number;
-  }>;
-  /**
-   * Optional stack-item pin. When present, the renderer binds to a
-   * single `StackItem` (identified by `id`) instead of the full session
-   * stack — enables per-card iframes (per-item session-resource
-   * endpoint + renderer single-item mode).
-   *
-   * Absent → renderer renders the whole session stack (default).
-   * Present → renderer filters to `session.stack.find(i => i.id === stackItemId)`
-   * and ignores the rest. Subsequent live-channel updates for other stack
-   * ids are delivered but not rendered.
-   *
-   * Resource URI convention: per-item shells are served at
-   * `ggui://session/<sessionId>/item/<stackItemId>`; whole-session
-   * shells remain at `ggui://session/<sessionId>`.
-   *
-   * The `stackItemId` is the opaque string MCP hosts receive on a
-   * `ggui_push` tool result's `stackItemId` field (or equivalently the
-   * `StackItem.id` in session state). Renderers that don't recognize
-   * the field SHOULD ignore it (falls back to whole-session rendering)
-   * — shape-preserving extensibility is the contract.
-   *
-   * @public
-   */
-  readonly stackItemId?: string;
-  /**
-   * Content-addressable URL the runtime fetches the compiled ES module
-   * from. The discriminator for **static-component** boot mode (2026-05-13
-   * — the inline base64 `componentCode` channel was retired in favor of
-   * always-by-URL delivery).
-   *
-   * Producer: server. Computes `sha256(componentCode)`, writes the bytes
-   * to its `CodeStore`, then emits the URL here. URL shape is
-   * `<publicBaseUrl>/code/<hash>.js` for OSS or `<cdn>/code/<hash>.js`
-   * for hosted cloud — the renderer doesn't care which origin,
-   * `fetch(codeUrl)` works the same.
-   *
-   * Consumer: iframe runtime. Fetches + dynamic-imports the URL. The
-   * response is `Cache-Control: immutable`, so subsequent pushes with
-   * identical code hit the browser cache (and any CDN edge).
-   *
-   * Mutually exclusive at the discriminator level with `wsUrl+token`
-   * (live mode) and `kind` (system-card mode). When `codeStore` isn't
-   * wired, push falls back to live-mode (wsUrl+token) for delivery via
-   * the live-channel stack update.
-   *
-   * @public
-   */
-  readonly codeUrl?: string;
-  /**
-   * Hex-encoded sha256 of the code bytes the URL serves.
-   * Surfaced separately from `codeUrl` so consumers can verify
-   * content integrity (the URL already encodes it, but parsing the
-   * URL is fragile across CDN configurations) and so the agent can
-   * inspect deduplication signals across pushes without parsing the
-   * URL.
-   *
-   * Always paired with `codeUrl`: present together or absent together.
-   *
-   * @public
-   */
-  readonly codeHash?: string;
-  /**
-   * Discriminator for **system-card** boot mode. Stable identifier the
-   * runtime maps via the system-card registry to a built-in component
-   * (no ESM source on the wire). When present, the view does NOT open
-   * a WebSocket — mounting is purely registry-lookup.
-   *
-   * Mutually exclusive at the discriminator level with `codeUrl`
-   * (static-component mode) and `wsUrl+token` (live mode).
-   *
-   * @public
-   */
-  readonly kind?: string;
-  /**
-   * Theme preset id forwarded to the renderer (`getTheme(id)`).
-   * Optional; absent → renderer uses its baked default theme. Used
-   * by the self-contained shell so `ggui.json#theme` takes effect
-   * across both the WS-driven and self-contained paths.
-   *
-   * @public
-   */
-  readonly themeId?: string;
-  /**
-   * Theme color mode (`'light'` | `'dark'`) forwarded to the renderer.
-   * The runtime resolves the dark variant of {@link themeId} via
-   * `getTheme(id, 'dark')` when set; absent / unknown value falls
-   * back to `'light'`.
-   *
-   * @public
-   */
-  readonly themeMode?: 'light' | 'dark';
-  /**
-   * Pre-serialized props for the rendered component (JSON string).
-   * Optional; absent → renderer falls back to empty props. Carried
-   * as a string to sidestep XSS-defensive escape concerns when the
-   * bootstrap is inlined as a JS literal in the self-contained shell.
-   *
-   * @public
-   */
-  readonly propsJson?: string;
-  /**
-   * Permissions-Policy directive list derived from the active stack item's
-   * `DataContract.clientCapabilities.gadgets[*].permission` field.
-   * Browser-capability names (`'camera'`, `'microphone'`,
-   * `'geolocation'`, `'clipboard-write'`, `'clipboard-read'`,
-   * `'notifications'`, …) or arbitrary identifiers for custom
-   * platforms; the host union-deduplicates and emits these as the
-   * iframe's `Permissions-Policy` HTTP header (public-render path)
-   * or `_meta.ui.permissions` (MCP-Apps embedded path).
-   *
-   * The bootstrap MIRRORS the same list inline so the iframe-runtime
-   * can surface the requested set to in-iframe debug overlays /
-   * permission-aware UI. The BROWSER-enforced gate, however, comes
-   * from the parent-page transport (HTTP header or iframe attribute)
-   * — the iframe-runtime itself cannot change Permissions-Policy
-   * post-load; it can only react to what the parent already granted.
-   *
-   * Absent / empty → no permissions requested (default-deny posture).
-   *
-   * @public
-   */
-  readonly permissionsPolicy?: readonly string[];
-  /**
-   * Mirror of
-   * `handshakeOutput.serverCapabilities.streamWebSocketLocalTools` on
-   * the bootstrap envelope, so the iframe-runtime's per-channel
-   * transport router can decide WS-subscribe vs iframe-polling for
-   * each `streamSpec[ch].source.tool` without re-querying the
-   * handshake.
-   *
-   * Producer: the server's push handler at push time, sourced from
-   * `GguiPushHandlerDeps.streamWebSocketLocalTools` (which mirrors the
-   * resolver on the handshake handler). Consumer: iframe-runtime's
-   * channel-transport module, which:
-   *
-   *   - For each `streamSpec[ch]` with `source.tool` declared AND that
-   *     tool name is in this list → fire a `channel_subscribe` WS
-   *     frame; wait for `channel_payload` deliveries.
-   *   - Otherwise → start a per-channel iframe polling loop (default
-   *     10s cadence) that invokes `tools/call` directly through the
-   *     MCP host proxy.
-   *
-   * Absent ⇒ universal iframe-polling fallback (no channel uses the
-   * WS-subscribe path). Present + empty array ⇒ same behavior; the
-   * empty list still says "the WS-subscribe path is supported but no
-   * tool is local".
-   *
-   * @public
-   */
-  readonly streamWebSocketLocalTools?: readonly string[];
-  /**
-   * When `true`, this bootstrap describes a
-   * SESSION-SCOPED canvas iframe (one per session) rather than a
-   * per-stack-item iframe. The canvas:
-   *
-   *   - Subscribes session-wide on the live channel (no `stackItemId` filter).
-   *   - Renders a navigable stack of items, not a single pinned entry.
-   *   - Owns its own chrome — the ggui animator pill + navbar.
-   *   - Requests `pip` / `fullscreen` display modes from the host based
-   *     on stack state.
-   *
-   * Mutually exclusive with `stackItemId`: a canvas iframe never pins
-   * to a single item. Defensive parsers SHOULD reject bootstraps with
-   * both fields set, but the protocol does not require them to.
-   *
-   * Absent / false ⇒ existing inline iframe behavior. Required to be
-   * explicit (rather than overloading absent-`stackItemId`) because
-   * legacy multi-item mode (Studio/Portal/console) ALSO uses
-   * absent-`stackItemId`; the explicit flag disambiguates.
-   */
-  readonly canvasMode?: boolean;
-  /**
-   * Resolved gadget catalog the iframe-runtime dynamically
-   * imports at boot to populate `globalThis.__ggui__.gadgets`.
-   *
-   * One entry per registered gadget **package** (GG.8.2 — the channel
-   * is per-package, not per-hook: a package's whole module namespace
-   * is loaded once and stored under `__ggui__.gadgets[package]`, so
-   * every hook AND component export the package ships is reachable).
-   * STDLIB exports (the 7 first-party browser-capability hooks shipped
-   * by `@ggui-ai/gadgets`) are seeded unconditionally and need NOT
-   * appear here — only operator-registered 3rd-party packages (Leaflet,
-   * Mapbox, …) do. This list is what makes registered packages
-   * reachable inside the iframe.
-   *
-   * Producer: server's bootstrap builder, sourced from
-   * `App.gadgets`. Consumer: iframe-runtime's
-   * `loadGadgetRegistry()` which `await import(target)`s each
-   * package once and stores the module namespace under the
-   * package-name slot.
-   *
-   * Absent or empty → only STDLIB exports are reachable. Generated
-   * components that import an unregistered gadget package fail at the
-   * iframe's ESM module-eval (the rewriter has no shim for it).
-   *
-   * @public
-   */
-  readonly gadgets?: ReadonlyArray<{
-    /** Bare npm package name (e.g. `@my-org/leaflet`). REQUIRED — it
-     * is the registry key the iframe-runtime stores the loaded module
-     * namespace under at `globalThis.__ggui__.gadgets[package]`, and
-     * the bare-specifier load source when `bundleUrl` is absent. */
-    readonly package: string;
-    /** ggui-hosted ESM bundle URL — preferred load source when present
-     * (same-origin posture, CSP-friendly). The iframe
-     * `await import(this)`; absent → the iframe imports the bare
-     * `package` specifier. */
-    readonly bundleUrl?: string;
-    /** SHA-384 SRI hash of the bundle (`sha384-<base64>`).
-     * When present alongside `bundleUrl`, iframe-runtime routes the
-     * load through a `<link rel="modulepreload" integrity>` gate so
-     * the browser refuses execution on hash mismatch. Absent → fall
-     * back to integrity-less dynamic `import()` (back-compat for
-     * in-tree packages and hand-authored ggui.json refs). */
-    readonly bundleSri?: string;
-  }>;
-  /**
-   * Public env values the iframe-runtime installs at
-   * `globalThis.__ggui__.publicEnv` for wrapper hooks to read via
-   * `getPublicEnv(key)`. Keys MUST match
-   * `PUBLIC_ENV_APP_KEY_RE` (`^GGUI_PUBLIC_APP_[A-Z0-9_]+$` — exported
-   * from `@ggui-ai/protocol`). The prefix is the security boundary:
-   * "public" means visible to anyone with iframe-source access.
-   *
-   * Filtered by the producer (push handler) to the **union of
-   * `wrapper.requires` across declared wrappers** — minimum-disclosure
-   * principle. Keys an iframe's wrappers don't ask for never reach
-   * the iframe.
-   *
-   * Producer: server's bootstrap builder, sourced from
-   * `App.publicEnv` cross-referenced against the declared wrappers'
-   * `requires`. Consumer: iframe-runtime's `installGlobalRegistry`
-   * which plants the map verbatim at `__ggui__.publicEnv`.
-   *
-   * Defensive parse: `parseBootstrap` re-validates every key against
-   * the regex; one bad key collapses the whole field to `undefined`
-   * (matches the `gadgets` / `contextSlots` parser posture).
-   *
-   * Absent or empty → no wrapper-readable env values; only wrappers
-   * with no `requires` declarations can mount.
-   *
-   * @public
-   */
-  readonly publicEnv?: Readonly<Record<string, string>>;
-  /**
-   * Content-addressable hash for the active stack item's compiled
-   * contract validators. Stable across pushes — same contract definition
-   * always hashes to the same value via `computeContractBundle`'s
-   * canonical-JSON-of-specs serializer. Paired with {@link validatorsUrl}.
-   *
-   * Producer: server push handler, via
-   * `@ggui-ai/protocol`'s `computeContractBundle`. Consumer:
-   * iframe-runtime's `loadCompiledValidatorsFromUrl`, which fetches
-   * the URL + dynamic-imports the validator bundle.
-   *
-   * Absent → no precompiled validators shipped (contract declares no
-   * runtime-validated specs, OR the server has no CodeStore wired for
-   * the bundle write). The server-side `assertActionContract` gate
-   * remains the authoritative validation surface; client-side fast-fail
-   * degrades to no-op.
-   *
-   * @public
-   */
-  readonly contractHash?: string;
-  /**
-   * URL serving the content-addressable contract-validator bundle —
-   * `<publicBaseUrl>/contract/<contractHash>.js`. Response is an ES
-   * module whose `default` export is a {@link CompiledContractValidators}.
-   * `Cache-Control: immutable` so repeat pushes with the same contract
-   * hit browser cache without a round-trip.
-   *
-   * Always paired with {@link contractHash}: present together or absent
-   * together.
-   *
-   * @public
-   */
-  readonly validatorsUrl?: string;
-}
 
 /**
  * Precompiled, eval-free validators for a contract's runtime-validated
@@ -680,14 +170,13 @@ export function deriveContextName(slotKey: string): string {
 // extension surface.
 //
 // Consumers:
-//   - {@link combineMcpAppAiGguiMeta}(_meta) → {session?, stackItem?}
-//     parses the wire into a slice struct. No required-fields gate;
-//     missing slices come through as undefined.
-//   - {@link mergeSlicesIntoMountView}(slices) → {ok, view}|MISSING_SESSION
-//     flattens slices into a unified {@link McpAppAiGguiMountView} the
-//     iframe-runtime mounts from. Future work: layer over a per-session
-//     cache so render-only updates can omit the session slice.
-//   - {@link slicesToMcpAppMeta}(slices) → `_meta` envelope: emitter
+//   - {@link parseMcpAppAiGguiMeta}(_meta) → {ok, meta: {session?, stackItem?}}
+//     parses the wire into a typed pair. No required-fields gate at
+//     the parser; missing slices come through as undefined. The
+//     "is session required" gate lives in the consumer (iframe-runtime
+//     mounts iff session is present; future per-session cache will let
+//     render-only deltas without a session slice mount via cached state).
+//   - {@link metaToMcpAppMeta}(meta) → `_meta` envelope. Emitter
 //     helper that builds the wire shape from server-built slices.
 // =============================================================================
 
@@ -724,15 +213,65 @@ export const MCP_APP_AI_GGUI_STACK_ITEM_META_KEY = 'ai.ggui/stack-item' as const
  *
  * @public
  */
+/**
+ * Single entry in the {@link McpAppAiGguiSessionMeta.gadgets} catalog.
+ * One per registered gadget package — the iframe-runtime
+ * dynamic-imports each at boot and stores the loaded namespace under
+ * `globalThis.__ggui__.gadgets[package]`.
+ *
+ * @public
+ */
+export interface McpAppGadgetRef {
+  /** Bare npm package name (e.g. `@my-org/leaflet`). REQUIRED — it
+   * is the registry key the iframe-runtime stores the loaded module
+   * namespace under at `globalThis.__ggui__.gadgets[package]`, and
+   * the bare-specifier load source when `bundleUrl` is absent. */
+  readonly package: string;
+  /** ggui-hosted ESM bundle URL — preferred load source when present
+   * (same-origin posture, CSP-friendly). The iframe `await import(this)`;
+   * absent → the iframe imports the bare `package` specifier. */
+  readonly bundleUrl?: string;
+  /** SHA-384 SRI hash of the bundle (`sha384-<base64>`).
+   * When present alongside `bundleUrl`, iframe-runtime routes the
+   * load through a `<link rel="modulepreload" integrity>` gate so
+   * the browser refuses execution on hash mismatch. */
+  readonly bundleSri?: string;
+}
+
+/**
+ * Single entry in {@link McpAppAiGguiStackItemMeta.contextSlots}.
+ * One per `contextSpec` slot — the iframe-runtime synthesizes one
+ * `React.createContext(default)` per entry at boot.
+ *
+ * @public
+ */
+export interface McpAppContextSlot {
+  /** Slot key — camelCase JS identifier from `contextSpec`. */
+  readonly name: string;
+  /** PascalCase Context name auto-derived from `name`. Used as the
+   * registry key in `globalThis.__ggui__.contexts`. */
+  readonly contextName: string;
+  /** JsonSchema for the slot value — used by the runtime observer to
+   * validate Provider values before posting `ui/update-model-context`. */
+  readonly schema: JsonSchema;
+  /** Initial Provider value. Always populated by the server. */
+  readonly default: JsonValue;
+  /** Per-slot debounce override in milliseconds. Omitted → runtime
+   * applies `DEFAULT_CONTEXT_DEBOUNCE_MS` (300). `0` = immediate. */
+  readonly debounceMs?: number;
+}
+
 export interface McpAppAiGguiSessionMeta {
   // Identity
   readonly sessionId: string;
   readonly appId: string;
   readonly runtimeUrl: string;
 
-  // Live-channel auth (paired)
+  // Live-channel auth (paired) — `wsToken` is the opaque WS auth
+  // credential the iframe threads on the WebSocket upgrade as
+  // `?wsToken=<encoded>` and inside `SubscribePayload.wsToken`.
   readonly wsUrl?: string;
-  readonly token?: string;
+  readonly wsToken?: string;
   readonly expiresAt?: string;
 
   // Polling-fallback URL when WS blocked at the host CSP layer
@@ -746,7 +285,7 @@ export interface McpAppAiGguiSessionMeta {
   readonly canvasMode?: boolean;
 
   // Capability accumulators (union across all stack items in the session)
-  readonly gadgets?: McpAppAiGguiMountView['gadgets'];
+  readonly gadgets?: ReadonlyArray<McpAppGadgetRef>;
   readonly publicEnv?: Readonly<Record<string, string>>;
   readonly streamWebSocketLocalTools?: readonly string[];
   readonly appCallableTools?: readonly string[];
@@ -760,7 +299,7 @@ export interface McpAppAiGguiSessionMeta {
  * and always activate together.
  *
  * Mode discriminator (cross-cutting validation in
- * {@link mergeSlicesIntoMountView}): at least one of
+ * consumer-side mount check): at least one of
  * `{ codeUrl, kind, session.wsUrl-with-token }` MUST be present for
  * the iframe to mount. `kind` and `codeUrl` are mutually exclusive.
  *
@@ -773,7 +312,7 @@ export interface McpAppAiGguiStackItemMeta {
   // Render state — what the iframe re-renders on update
   readonly propsJson?: string;
   readonly actionNextSteps?: Readonly<Record<string, string>>;
-  readonly contextSlots?: McpAppAiGguiMountView['contextSlots'];
+  readonly contextSlots?: ReadonlyArray<McpAppContextSlot>;
 
   // Contract pointer (content-addressable). When present, the iframe
   // fetches the validators bundle from `validatorsUrl`; same contract
@@ -792,64 +331,56 @@ export interface McpAppAiGguiStackItemMeta {
 }
 
 /**
- * Parsed wire slices — the structured pair {@link combineMcpAppAiGguiMeta}
+ * Parsed ai.ggui meta — the structured pair {@link parseMcpAppAiGguiMeta}
  * returns. Both keys are optional; an absent slice means "the host
  * cache (or earlier mount) already has it." First-mount pushes
  * typically carry both; render-only deltas carry just `stackItem`.
  *
+ * "Meta" reads as "the ai.ggui parts of the host's `_meta` wire field"
+ * — the typed pair you get after partitioning `_meta` by the two
+ * canonical keys ({@link MCP_APP_AI_GGUI_SESSION_META_KEY} +
+ * {@link MCP_APP_AI_GGUI_STACK_ITEM_META_KEY}).
+ *
  * @public
  */
-export interface McpAppAiGguiSlices {
+export interface McpAppAiGguiMeta {
   readonly session?: McpAppAiGguiSessionMeta;
   readonly stackItem?: McpAppAiGguiStackItemMeta;
 }
 
 /**
- * Discriminated result of {@link combineMcpAppAiGguiMeta}. The combiner
+ * Discriminated result of {@link parseMcpAppAiGguiMeta}. The combiner
  * does structural slice-shape validation only — `MALFORMED_*` reasons
  * surface structurally-invalid slice contents (wrong type, paired
  * fields half-present). Missing slices are NOT failures here; the
- * "is session present" gate lives in {@link mergeSlicesIntoMountView}.
+ * "is session present" gate lives in consumer-side mount check.
  *
  * @public
  */
 export type CombineMcpAppAiGguiMetaResult =
-  | { readonly ok: true; readonly slices: McpAppAiGguiSlices }
+  | { readonly ok: true; readonly meta: McpAppAiGguiMeta }
   | { readonly ok: false; readonly reason: 'MALFORMED_SESSION' | 'MALFORMED_STACK_ITEM' };
 
 /**
- * Discriminated result of {@link mergeSlicesIntoMountView}. The merger
- * flattens slices into a {@link McpAppAiGguiMountView} and enforces
- * that the session slice is present (required for any mount). Once
- * the per-session cache lands (future slice), this gate accepts a
- * cached session in lieu of an incoming slice.
- *
- * @public
- */
-export type MergeSlicesResult =
-  | { readonly ok: true; readonly view: McpAppAiGguiMountView }
-  | { readonly ok: false; readonly reason: 'MISSING_SESSION' };
-
-/**
  * Read the two per-window `_meta` keys off a parsed JSON-RPC `_meta`
- * object and partition them into a {@link McpAppAiGguiSlices} struct.
+ * object and partition them into a {@link McpAppAiGguiMeta} struct.
  *
  * The combiner does STRUCTURAL slice-shape validation only. Missing
  * slices come through as `undefined` (not failures) — first-mount
  * pushes typically carry both `session` + `stackItem`; render-only
  * delta pushes carry just `stackItem`; auth-only refresh pushes carry
  * just `session`. The "is the session required for THIS consumer"
- * gate lives in {@link mergeSlicesIntoMountView}.
+ * gate lives in consumer-side mount check.
  *
  * Field-level optional-field defensive parsing (e.g. context-slot
- * schema narrowing, expiresAt date parse) lives in
- * {@link validateMountView} after the merge.
+ * schema narrowing, expiresAt date parse) lives downstream in the
+ * iframe-runtime's `validateMeta`.
  *
  * @public
  */
-export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaResult {
+export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaResult {
   if (meta === null || typeof meta !== 'object') {
-    return { ok: true, slices: {} };
+    return { ok: true, meta: {} };
   }
   const m = meta as Record<string, unknown>;
 
@@ -871,9 +402,9 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
     ) {
       return { ok: false, reason: 'MALFORMED_SESSION' };
     }
-    // Auth pairing — both wsUrl + token present or both absent.
+    // Auth pairing — both wsUrl + wsToken present or both absent.
     const aw = s.wsUrl;
-    const at = s.token;
+    const at = s.wsToken;
     const ae = s.expiresAt;
     const hasW = typeof aw === 'string' && aw.length > 0;
     const hasT = typeof at === 'string' && at.length > 0;
@@ -885,7 +416,7 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
       sessionId: s.sessionId,
       appId: s.appId,
       runtimeUrl: s.runtimeUrl,
-      ...(hasW && hasT ? { wsUrl: aw as string, token: at as string } : {}),
+      ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
       ...(ae !== undefined ? { expiresAt: ae as string } : {}),
       ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
       ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
@@ -896,7 +427,7 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
         ? { canvasMode: s.canvasMode as boolean }
         : {}),
       ...(s.gadgets !== undefined
-        ? { gadgets: s.gadgets as McpAppAiGguiMountView['gadgets'] }
+        ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
         : {}),
       ...(s.publicEnv !== undefined
         ? { publicEnv: s.publicEnv as Readonly<Record<string, string>> }
@@ -969,7 +500,7 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
       ...(si.contextSlots !== undefined
         ? {
             contextSlots:
-              si.contextSlots as McpAppAiGguiMountView['contextSlots'],
+              si.contextSlots as ReadonlyArray<McpAppContextSlot>,
           }
         : {}),
       ...(validContractPair
@@ -986,185 +517,35 @@ export function combineMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaR
 
   return {
     ok: true,
-    slices: {
+    meta: {
       ...(session !== undefined ? { session } : {}),
       ...(stackItem !== undefined ? { stackItem } : {}),
     },
   };
 }
 
-/**
- * Flatten {@link McpAppAiGguiSlices} into a single
- * {@link McpAppAiGguiMountView} the iframe-runtime mounts from. Enforces
- * that the `session` slice is present (required for any mount).
- *
- * Future work (separate slice): layer a per-session cache so the
- * caller can pass `cachedSession` and accept incoming slices that
- * omit `session`. Until then, every meta destined for an unmounted
- * iframe MUST carry the session slice.
- *
- * @public
- */
-export function mergeSlicesIntoMountView(
-  slices: McpAppAiGguiSlices,
-): MergeSlicesResult {
-  const { session, stackItem } = slices;
-  if (session === undefined) {
-    return { ok: false, reason: 'MISSING_SESSION' };
-  }
-  const view: McpAppAiGguiMountView = {
-    sessionId: session.sessionId,
-    appId: session.appId,
-    runtimeUrl: session.runtimeUrl,
-    ...(session.wsUrl !== undefined && session.token !== undefined
-      ? { wsUrl: session.wsUrl, token: session.token }
-      : {}),
-    ...(session.expiresAt !== undefined ? { expiresAt: session.expiresAt } : {}),
-    ...(session.pollingUrl !== undefined ? { pollingUrl: session.pollingUrl } : {}),
-    ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-    ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
-    ...(session.canvasMode !== undefined ? { canvasMode: session.canvasMode } : {}),
-    ...(session.gadgets !== undefined ? { gadgets: session.gadgets } : {}),
-    ...(session.publicEnv !== undefined ? { publicEnv: session.publicEnv } : {}),
-    ...(session.streamWebSocketLocalTools !== undefined
-      ? { streamWebSocketLocalTools: session.streamWebSocketLocalTools }
-      : {}),
-    ...(session.appCallableTools !== undefined
-      ? { appCallableTools: session.appCallableTools }
-      : {}),
-    ...(session.permissionsPolicy !== undefined
-      ? { permissionsPolicy: session.permissionsPolicy }
-      : {}),
-    ...(stackItem?.stackItemId !== undefined
-      ? { stackItemId: stackItem.stackItemId }
-      : {}),
-    ...(stackItem?.propsJson !== undefined
-      ? { propsJson: stackItem.propsJson }
-      : {}),
-    ...(stackItem?.actionNextSteps !== undefined
-      ? { actionNextSteps: stackItem.actionNextSteps }
-      : {}),
-    ...(stackItem?.contextSlots !== undefined
-      ? { contextSlots: stackItem.contextSlots }
-      : {}),
-    ...(stackItem?.contractHash !== undefined && stackItem?.validatorsUrl !== undefined
-      ? {
-          contractHash: stackItem.contractHash,
-          validatorsUrl: stackItem.validatorsUrl,
-        }
-      : {}),
-    ...(stackItem?.codeUrl !== undefined ? { codeUrl: stackItem.codeUrl } : {}),
-    ...(stackItem?.codeHash !== undefined ? { codeHash: stackItem.codeHash } : {}),
-    ...(stackItem?.kind !== undefined ? { kind: stackItem.kind } : {}),
-  };
-  return { ok: true, view };
-}
+
 
 /**
- * Inverse of {@link mergeSlicesIntoMountView} — partition a flat
- * {@link McpAppAiGguiMountView} into its two per-window slices, for
- * emission as two top-level `_meta` keys.
- *
- * Defensive against hand-built mount views with null/wrong-type
- * optional fields: malformed shapes are dropped from the slice (the
- * field appears absent) rather than crashing the splitter.
- *
- * @public
- */
-export function splitMountViewIntoSlices(
-  view: McpAppAiGguiMountView,
-): McpAppAiGguiSlices {
-  const isObjectNonNull = (v: unknown): v is Record<string, unknown> =>
-    v !== null && typeof v === 'object' && !Array.isArray(v);
-
-  const session: McpAppAiGguiSessionMeta = {
-    sessionId: view.sessionId,
-    appId: view.appId,
-    runtimeUrl: view.runtimeUrl,
-    ...(view.wsUrl !== undefined && view.token !== undefined
-      ? { wsUrl: view.wsUrl, token: view.token }
-      : {}),
-    ...(view.expiresAt !== undefined ? { expiresAt: view.expiresAt } : {}),
-    ...(view.pollingUrl !== undefined ? { pollingUrl: view.pollingUrl } : {}),
-    ...(view.themeId !== undefined ? { themeId: view.themeId } : {}),
-    ...(view.themeMode !== undefined ? { themeMode: view.themeMode } : {}),
-    ...(view.canvasMode !== undefined ? { canvasMode: view.canvasMode } : {}),
-    ...(Array.isArray(view.gadgets) && view.gadgets.length > 0
-      ? { gadgets: view.gadgets }
-      : {}),
-    ...(isObjectNonNull(view.publicEnv) &&
-    Object.keys(view.publicEnv).length > 0
-      ? { publicEnv: view.publicEnv }
-      : {}),
-    ...(view.streamWebSocketLocalTools !== undefined
-      ? { streamWebSocketLocalTools: view.streamWebSocketLocalTools }
-      : {}),
-    ...(Array.isArray(view.appCallableTools) && view.appCallableTools.length > 0
-      ? { appCallableTools: view.appCallableTools }
-      : {}),
-    ...(view.permissionsPolicy !== undefined
-      ? { permissionsPolicy: view.permissionsPolicy }
-      : {}),
-  };
-
-  const stackItemCandidate: McpAppAiGguiStackItemMeta = {
-    ...(view.stackItemId !== undefined ? { stackItemId: view.stackItemId } : {}),
-    ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-    ...(isObjectNonNull(view.actionNextSteps) &&
-    Object.keys(view.actionNextSteps).length > 0
-      ? { actionNextSteps: view.actionNextSteps }
-      : {}),
-    ...(Array.isArray(view.contextSlots) && view.contextSlots.length > 0
-      ? { contextSlots: view.contextSlots }
-      : {}),
-    ...(view.contractHash !== undefined && view.validatorsUrl !== undefined
-      ? { contractHash: view.contractHash, validatorsUrl: view.validatorsUrl }
-      : {}),
-    ...(view.codeUrl !== undefined ? { codeUrl: view.codeUrl } : {}),
-    ...(view.codeHash !== undefined ? { codeHash: view.codeHash } : {}),
-    ...(view.kind !== undefined ? { kind: view.kind } : {}),
-  };
-  const stackItem: McpAppAiGguiStackItemMeta | undefined =
-    Object.keys(stackItemCandidate).length > 0 ? stackItemCandidate : undefined;
-
-  return {
-    session,
-    ...(stackItem !== undefined ? { stackItem } : {}),
-  };
-}
-
-/**
- * Emitter convenience — wrap a server-built {@link McpAppAiGguiSlices}
+ * Emitter convenience — wrap a server-built {@link McpAppAiGguiMeta}
  * struct as the wire `_meta` envelope under the canonical key
  * constants. Drops empty slices.
  *
  * @public
  */
-export function slicesToMcpAppMeta(
-  slices: McpAppAiGguiSlices,
+export function metaToMcpAppMeta(
+  meta: McpAppAiGguiMeta,
 ): Record<string, unknown> {
   return {
-    ...(slices.session
-      ? { [MCP_APP_AI_GGUI_SESSION_META_KEY]: slices.session }
+    ...(meta.session
+      ? { [MCP_APP_AI_GGUI_SESSION_META_KEY]: meta.session }
       : {}),
-    ...(slices.stackItem
-      ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: slices.stackItem }
+    ...(meta.stackItem
+      ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: meta.stackItem }
       : {}),
   };
 }
 
-/**
- * Test + legacy-emitter convenience — take a flat
- * {@link McpAppAiGguiMountView} and produce the wire `_meta` envelope.
- * Equivalent to `slicesToMcpAppMeta(splitMountViewIntoSlices(view))`.
- *
- * @public
- */
-export function mountViewToMcpAppMeta(
-  view: McpAppAiGguiMountView,
-): Record<string, unknown> {
-  return slicesToMcpAppMeta(splitMountViewIntoSlices(view));
-}
 
 // =============================================================================
 // Inbound — third-party MCP Apps hosted inside a ggui session.
@@ -1558,7 +939,7 @@ export function isMcpAppLifecycleMessage(
 
 // `hasPushBootstrapMeta` removed in #109 — its role (validate a
 // `_meta["ai.ggui/bootstrap"]` envelope) is gone with the aggregated
-// key. Use {@link combineMcpAppAiGguiMeta} for structural validation
+// key. Use {@link parseMcpAppAiGguiMeta} for structural validation
 // of the new five-key `_meta` shape.
 
 // =============================================================================

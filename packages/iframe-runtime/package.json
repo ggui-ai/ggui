@@ -41,7 +41,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ggui-ai/channel-client": "workspace:*",
+    "@ggui-ai/live-channel": "workspace:*",
     "@ggui-ai/gadgets": "workspace:*",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/preview-a2ui": "workspace:*",

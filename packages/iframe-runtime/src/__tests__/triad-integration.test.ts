@@ -23,11 +23,14 @@
  * callback to thread through anymore.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { act } from 'react';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type {
+  McpAppAiGguiMeta,
+  McpAppAiGguiSessionMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type TriadHandle, type TriadWiringHooks } from '../runtime.js';
 import {
   buildRootWireConfig,
@@ -39,7 +42,7 @@ import {
   getGlobalRegistry,
 } from '../globals.js';
 import { mergeReservedValidators } from '../validation.js';
-import { ChannelRegistry } from '@ggui-ai/channel-client';
+import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   createChannelErrorHandler,
   createChannelPayloadHandler,
@@ -57,20 +60,22 @@ async function flush(fn?: () => void | Promise<void>): Promise<void> {
   });
 }
 
-const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
+const VALID_SESSION: McpAppAiGguiSessionMeta = {
   wsUrl: 'wss://example/ws',
-  token: 'tok',
+  wsToken: 'tok',
   expiresAt: '2099-01-01T00:00:00.000Z',
   sessionId: 'sess_1',
   appId: 'app_1',
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
+const VALID_META: McpAppAiGguiMeta = { session: VALID_SESSION };
+
 function buildHappyInit(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: mountViewToMcpAppMeta(VALID_BOOTSTRAP),
+        _meta: metaToMcpAppMeta(VALID_META),
         structuredContent: {},
       },
     },
@@ -147,7 +152,8 @@ function buildTestTriadWiring(
   managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null },
 ): TriadWiringHooks {
   return {
-    setup: ({ bootstrap, stackModel, statusRefs }) => {
+    setup: ({ meta, stackModel, statusRefs }) => {
+      const { session } = meta;
       installGlobalRegistry({
         react: { __fake: true },
         reactDom: { __fake: true },
@@ -172,8 +178,8 @@ function buildTestTriadWiring(
       };
 
       const { config: rootConfig, buildScopedConfig } = buildRootWireConfig({
-        sessionId: bootstrap.sessionId,
-        appId: bootstrap.appId,
+        sessionId: session.sessionId,
+        appId: session.appId,
         getStack: () => stackModel.snapshot(),
         manager: shim,
         streamBus,
@@ -200,11 +206,11 @@ function buildTestTriadWiring(
           });
         },
         streamBus,
-        sessionId: bootstrap.sessionId,
+        sessionId: session.sessionId,
       };
       const stackRenderer = new StackRenderer(stackCtx);
 
-      // B3b — wire the same channel-client registry the production
+      // B3b — wire the same live-channel registry the production
       // path builds, with the FULL handler set (every routable WS
       // frame has a registered handler). `bind()` is never called
       // (the test fakes the WS via the connectFn); tests drive
@@ -222,7 +228,7 @@ function buildTestTriadWiring(
       const channelRegistry = new ChannelRegistry({
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
-          payload: { sessionId: bootstrap.sessionId, appId: bootstrap.appId },
+          payload: { sessionId: session.sessionId, appId: session.appId },
         }),
       });
       channelRegistry.register(

@@ -124,15 +124,15 @@ describe('host-simulator: wired-action bridge', () => {
       },
     });
     expect(
-      flow.push.bootstrap,
+      flow.push.meta,
       'bootstrap is required for the wired action',
     ).toBeDefined();
-    const bootstrap = flow.push.bootstrap!;
+    const bootstrap = flow.push.meta!;
 
     const result = await host.simulateWiredAction({
       intent: 'submit',
       data: { name: 'Wanseob', tier: 'pro' },
-      bootstrap,
+      meta: bootstrap,
     });
 
     // (1) actionId is 8 hex chars.
@@ -150,8 +150,8 @@ describe('host-simulator: wired-action bridge', () => {
     expect(result.pendingActionText).toContain(`"actionId":"${result.actionId}"`);
     expect(result.pendingActionText).toContain('"intent":"submit"');
     expect(result.pendingActionText).toContain('"name":"Wanseob"');
-    expect(result.pendingActionText).toContain(`"sessionId":"${bootstrap.sessionId}"`);
-    expect(result.pendingActionText).toContain(`"appId":"${bootstrap.appId}"`);
+    expect(result.pendingActionText).toContain(`"sessionId":"${bootstrap.session?.sessionId}"`);
+    expect(result.pendingActionText).toContain(`"appId":"${bootstrap.session?.appId}"`);
 
     // (4) Consent prompt has the human-readable summary + actionId stamp.
     expect(result.consentText).toContain('**submit**');
@@ -183,17 +183,17 @@ describe('host-simulator: wired-action bridge', () => {
         },
       },
     });
-    const bootstrap = flow.push.bootstrap!;
+    const bootstrap = flow.push.meta!;
 
     const first = await host.simulateWiredAction({
       intent: 'increment',
       data: { by: 1 },
-      bootstrap,
+      meta: bootstrap,
     });
     const second = await host.simulateWiredAction({
       intent: 'reset',
       data: null,
-      bootstrap,
+      meta: bootstrap,
     });
 
     // Different actionIds — different intent + data + firedAt.

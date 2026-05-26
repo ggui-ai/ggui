@@ -85,25 +85,36 @@ function bootstrapUrlFromPushUrl(pushUrl: string | undefined): string {
     throw new Error(`push output missing url: ${String(pushUrl)}`);
   }
   // Push URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
-  // path to `/api/bootstrap/<shortCode>` but PRESERVE the signed query —
+  // path to `/r/<shortCode>` but PRESERVE the signed query —
   // SEC-C.2rev's HMAC gate on /api/bootstrap rejects unsigned reads.
   const parsed = new URL(pushUrl);
   const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
   if (!codeMatch || typeof codeMatch[1] !== 'string') {
     throw new Error(`url has no /r/<shortCode>: ${pushUrl}`);
   }
-  parsed.pathname = `/api/bootstrap/${codeMatch[1]}`;
+  parsed.pathname = `/r/${codeMatch[1]}`;
   return parsed.toString();
 }
 
 async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl));
+  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl), {
+    headers: { Accept: 'application/json' },
+  });
   if (!resp.ok) {
     throw new Error(
       `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
     );
   }
-  return (await resp.json()) as BootstrapJson;
+  // R4: content-negotiated `/r/<shortCode>` returns the slice envelope.
+  // Flatten the stack-item slice into the test's legacy shape.
+  const envelope = (await resp.json()) as Record<string, unknown>;
+  const stackItem =
+    (envelope['ai.ggui/stack-item'] as Record<string, unknown> | undefined) ??
+    {};
+  return {
+    codeHash: typeof stackItem['codeHash'] === 'string' ? stackItem['codeHash'] : undefined,
+    codeUrl: typeof stackItem['codeUrl'] === 'string' ? stackItem['codeUrl'] : undefined,
+  };
 }
 
 async function handshakeAndPush(

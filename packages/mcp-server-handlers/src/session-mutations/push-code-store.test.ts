@@ -4,8 +4,7 @@
  * on the response.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { combineMcpAppAiGguiMeta,
-  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { parseMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { CodeStore, UiGenerator } from '@ggui-ai/mcp-server-core';
 import { sha256Hex } from '@ggui-ai/mcp-server-core';
 import {
@@ -13,7 +12,6 @@ import {
   InMemoryKeyValueStore,
   InMemorySessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { DataContract } from '@ggui-ai/protocol';
 import type { GenerationDeps } from './push.js';
 import { createGguiPushHandler } from './push.js';
@@ -132,7 +130,7 @@ describe('push handler — codeStore wiring', () => {
     expect(out.codeReady).toBe(true);
   });
 
-  it('forwards codeUrl + codeHash onto _meta.ggui.bootstrap', async () => {
+  it('forwards codeUrl + codeHash onto the ai.ggui/stack-item slice meta', async () => {
     const sessionStore = new InMemorySessionStore();
     const kvStore = new InMemoryKeyValueStore();
     const codeStore = makeCodeStore();
@@ -140,7 +138,7 @@ describe('push handler — codeStore wiring', () => {
       sessionStore,
       renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
-      mintBootstrap: () => ({
+      mintWsToken: () => ({
         wsUrl: 'ws://localhost/ws',
         token: 'tok.sig',
         expiresAt: '2026-12-31T00:00:00Z',
@@ -164,26 +162,24 @@ describe('push handler — codeStore wiring', () => {
       { handshakeId, decision: { kind: 'accept' } },
       { appId: 'app-1', requestId: 'req-1' },
     );
-    const combined = combineMcpAppAiGguiMeta(meta);
-    expect(combined.ok).toBe(true);
-    if (!combined.ok) return;
-    const merged = mergeSlicesIntoMountView(combined.slices);
-    expect(merged.ok).toBe(true);
-    if (!merged.ok) return;
-    const bootstrap = merged.view as McpAppAiGguiMountView & {
-      codeUrl?: string;
-      codeHash?: string;
-    };
+    const parsed = parseMcpAppAiGguiMeta(meta);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const stackItem = parsed.meta.stackItem;
+    expect(stackItem).toBeDefined();
+    if (!stackItem) return;
     const expectedHash = sha256Hex(FAKE_CODE);
-    expect(bootstrap.codeUrl).toBe(
+    expect(stackItem.codeUrl).toBe(
       `https://app.example.com/code/${expectedHash}.js`,
     );
-    expect(bootstrap.codeHash).toBe(expectedHash);
+    expect(stackItem.codeHash).toBe(expectedHash);
 
     // T3-1 (2026-05-13) — the inline base64 `componentCode` channel
-    // was retired. The bootstrap MUST NOT carry it; codeUrl is the
-    // sole static-component delivery channel.
-    expect((bootstrap as unknown as Record<string, unknown>).componentCode).toBeUndefined();
+    // was retired. The stack-item slice MUST NOT carry it; codeUrl is
+    // the sole static-component delivery channel.
+    expect(
+      (stackItem as unknown as Record<string, unknown>).componentCode,
+    ).toBeUndefined();
 
     // Regression for 2026-05-13 live claude.ai smoke: push.resultMeta
     // MUST include stackItemId so iframe-runtime's dispatchWiredAction
@@ -191,12 +187,10 @@ describe('push handler — codeStore wiring', () => {
     // submit_action handler returns PIPE_NOT_FOUND (per the fail-loud
     // fix) and the iframe falls through to ui/message — events never
     // drain through the agent's open ggui_consume long-poll. Every
-    // other bootstrap transport (`/r/`, `/api/bootstrap/`,
+    // other slice-meta transport (`/r/`, `/api/bootstrap/`,
     // `ggui_update.resultMeta`) already projects this field; push
     // was the drift point.
-    expect((bootstrap as unknown as { stackItemId?: string }).stackItemId).toBe(
-      output.stackItemId,
-    );
+    expect(stackItem.stackItemId).toBe(output.stackItemId);
   });
 
   it('normalizes trailing slash on codeBaseUrl', async () => {

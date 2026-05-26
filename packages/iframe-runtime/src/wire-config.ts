@@ -47,10 +47,10 @@ import { validateOutboundActionEnvelope } from './validation.js';
 /**
  * Outbound send surface — the minimal shape wire-config calls on the
  * WS transport. Pre-B3b this read off `Pick<RendererWebSocketManager,
- * 'send'>`; post-B3b the WS lives inside `@ggui-ai/channel-client`,
+ * 'send'>`; post-B3b the WS lives inside `@ggui-ai/live-channel`,
  * but wire-config doesn't import the gadget directly — it consumes
  * the shape via this local type so tests can stub `{send: vi.fn()}`
- * without dragging in the channel-client types.
+ * without dragging in the live-channel types.
  *
  * Frames sent here are always `{type: 'action', payload: ...}` or
  * `{type: 'feedback', payload: ...}` envelopes — wire-config never

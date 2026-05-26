@@ -3,9 +3,9 @@
  *
  * The console boots the SAME thin-shell HTML Claude Desktop fetches
  * via MCP `resources/read ui://ggui/session` — no compensation layer
- * inside the iframe. Bootstrap-meta forwarding happens host-side via
- * `<McpAppIframe bootstrap={...}>`, which threads the value through
- * `ui/initialize` in a forwarding path scoped to the `_meta.ggui`
+ * inside the iframe. `ai.ggui/*` meta forwarding happens host-side via
+ * `<McpAppIframe meta={...}>`, which threads the value through
+ * `ui/initialize` in a forwarding path scoped to the `ai.ggui/*`
  * namespace. The iframe child stays portable: it never assumes it is
  * running inside the console.
  *
@@ -16,19 +16,22 @@
  *   2. In parallel:
  *      - GET `/ggui/console/session-resource?session=<sessionId>` →
  *        `ResourceContents` blob whose `text` is the production thin-
- *        shell HTML (no inlined bootstrap).
- *      - GET `/ggui/console/session-bootstrap?session=<sessionId>` →
- *        `{bootstrap: McpAppAiGguiMountView}` JSON.
- *   3. Mount `<McpAppIframe resource={...} bootstrap={...}>`. The host
- *      forwards bootstrap via `ui/initialize`'s `toolOutput._meta.ggui.
- *      bootstrap`; the renderer's `parseBootstrap` reads exactly that
- *      path. All other postMessages (`ggui:renderer-ready`,
- *      `ggui:observe`, `ggui:bootstrap-failed`, `tools/call`) reach
- *      `<McpAppIframe>` natively — no fakeParent override, no
- *      `Object.defineProperty` substitution.
+ *        shell HTML (no inlined meta).
+ *      - GET `/ggui/console/sessions/<sessionId>/meta` →
+ *        slice-envelope JSON (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`,
+ *        the same shape as the wire `_meta`; the
+ *        payload IS the parsed `_meta["ai.ggui/*"]` slice pair).
+ *   3. Mount `<McpAppIframe resource={...} meta={...}>`. The host
+ *      forwards the meta pair via `ui/initialize`'s `toolOutput._meta`
+ *      (carrying the `ai.ggui/session` + `ai.ggui/stack-item` slices);
+ *      the renderer's `parseBootstrap` reads exactly that path. All
+ *      other postMessages (`ggui:renderer-ready`, `ggui:observe`,
+ *      `ggui:bootstrap-failed`, `tools/call`) reach `<McpAppIframe>`
+ *      natively — no fakeParent override, no `Object.defineProperty`
+ *      substitution.
  *
  * Earlier iterations of this viewer consumed a wrapped console shell
- * that inlined the bootstrap + monkey-patched
+ * that inlined the meta + monkey-patched
  * `window.parent.postMessage` from inside the iframe. That layering
  * violation is gone — the iframe child is now portable across any
  * MCP Apps host that supports the prop forwarding path.
@@ -38,7 +41,7 @@
  *   - 404 (short-code miss): explicit not-found card.
  *   - 500/4xx on cookie-mint: error card with status.
  *   - Network fail on either fetch: raw error message.
- *   - Resource OR bootstrap fetch fails (401/403/404/503/network):
+ *   - Resource OR meta fetch fails (401/403/404/503/network):
  *     explicit `resource-failed` state with message — the viewer
  *     needs both blobs to mount.
  *   - `<McpAppIframe onError>`: routed to the error pane.
@@ -68,7 +71,7 @@ function McpAppIframe(_props: McpAppIframeProps): React.JSX.Element {
 }
 interface McpAppIframeProps {
   readonly resource?: unknown;
-  readonly bootstrap?: unknown;
+  readonly meta?: McpAppAiGguiMeta;
   readonly theme?: Record<string, string>;
   readonly containerDimensions?: { width?: number; height?: number };
   readonly onToolCall?: (name: string, args: Record<string, unknown>) => Promise<unknown>;
@@ -81,7 +84,10 @@ interface McpAppIframeRef {
   readonly dispatchAction: (name: string, data: unknown) => void;
 }
 import type { SessionStackEntry, StackItem } from '@ggui-ai/protocol';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  parseMcpAppAiGguiMeta,
+  type McpAppAiGguiMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
@@ -128,15 +134,11 @@ interface SessionResourceResponse {
   readonly contents: readonly SessionResourceContents[];
 }
 
-/**
- * Shape of `GET /ggui/console/session-bootstrap?session=<id>`'s
- * success body (see `packages/mcp-server/src/server.ts`). The
- * `bootstrap` field is the `McpAppAiGguiMountView` that `<McpAppIframe>`
- * threads through `ui/initialize`.
- */
-interface SessionBootstrapResponse {
-  readonly bootstrap: McpAppAiGguiMountView;
-}
+// Slice-envelope response shape — `GET /ggui/console/sessions/:sessionId/meta`
+// returns the raw `{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`
+// envelope the wire `_meta` carries. We parse it via
+// `parseMcpAppAiGguiMeta` (same path the iframe-runtime uses) to lift
+// it into the typed `{session, stackItem}` shape `<McpAppIframe>` consumes.
 
 /**
  * Shape of `GET /ggui/console/session-stack?session=<id>`'s
@@ -163,7 +165,7 @@ type BootstrapState =
       readonly kind: 'ready';
       readonly session: SessionCookieResponse;
       readonly resource: SessionResourceContents;
-      readonly bootstrap: McpAppAiGguiMountView;
+      readonly meta: McpAppAiGguiMeta;
       readonly stack: readonly SessionStackEntry[];
     }
   | { readonly kind: 'not-found' }
@@ -213,10 +215,10 @@ export function SessionViewer({
     return () => controller.abort();
   }, [shortCode]);
 
-  // Step 2 — fetch the session-resource blob, the bootstrap JSON,
+  // Step 2 — fetch the session-resource blob, the meta JSON,
   // and the inspector-side stack snapshot in parallel once the
   // cookie's been minted. Cookie travels via `credentials:
-  // 'same-origin'`. Resource + bootstrap failure transitions the
+  // 'same-origin'`. Resource + meta failure transitions the
   // viewer to `resource-failed` — both are required to mount the
   // iframe. Stack-fetch failure does NOT block the iframe mount;
   // the inspector pane simply renders an empty-stack hint while
@@ -231,7 +233,7 @@ export function SessionViewer({
     void (async () => {
       try {
         const sessionParam = encodeURIComponent(loadingSession.sessionId);
-        const [resourceRes, bootstrapRes, stackRes] = await Promise.all([
+        const [resourceRes, metaRes, stackRes] = await Promise.all([
           fetch(
             `/ggui/console/session-resource?session=${sessionParam}`,
             {
@@ -242,7 +244,7 @@ export function SessionViewer({
             },
           ),
           fetch(
-            `/ggui/console/session-bootstrap?session=${sessionParam}`,
+            `/ggui/console/sessions/${sessionParam}/meta`,
             {
               method: 'GET',
               signal: controller.signal,
@@ -267,10 +269,10 @@ export function SessionViewer({
           });
           return;
         }
-        if (!bootstrapRes.ok) {
+        if (!metaRes.ok) {
           setState({
             kind: 'resource-failed',
-            message: `session-bootstrap fetch returned ${bootstrapRes.status}`,
+            message: `sessions/:id/meta fetch returned ${metaRes.status}`,
           });
           return;
         }
@@ -284,12 +286,15 @@ export function SessionViewer({
           });
           return;
         }
-        const bootstrapBody =
-          (await bootstrapRes.json()) as SessionBootstrapResponse;
-        if (!bootstrapBody.bootstrap) {
+        // Parse slice envelope (`{ "ai.ggui/session": {...},
+        // "ai.ggui/stack-item": {...} }`) the meta route returns into
+        // the typed `{session, stackItem}` pair `<McpAppIframe>` accepts.
+        const metaBody = (await metaRes.json()) as unknown;
+        const parsedMeta = parseMcpAppAiGguiMeta(metaBody);
+        if (!parsedMeta.ok || !parsedMeta.meta.session) {
           setState({
             kind: 'resource-failed',
-            message: 'session-bootstrap response missing `bootstrap` field',
+            message: 'sessions/:id/meta response missing `ai.ggui/session` slice',
           });
           return;
         }
@@ -312,7 +317,7 @@ export function SessionViewer({
           kind: 'ready',
           session: loadingSession,
           resource: first,
-          bootstrap: bootstrapBody.bootstrap,
+          meta: parsedMeta.meta,
           stack,
         });
       } catch (err) {
@@ -371,7 +376,7 @@ export function SessionViewer({
         <LiveViewer
           session={state.session}
           resource={state.resource}
-          bootstrap={state.bootstrap}
+          meta={state.meta}
           stack={state.stack}
           shortCode={shortCode}
         />
@@ -382,24 +387,24 @@ export function SessionViewer({
 
 /**
  * `ready` state — mount `<McpAppIframe>` against the fetched
- * `ResourceContents` + `McpAppAiGguiMountView`. The bootstrap is forwarded
- * via the `bootstrap` prop (`<McpAppIframe bootstrap={...}>`); the
- * host threads it onto `ui/initialize`'s
- * `toolOutput._meta.ggui.bootstrap`. Feeds `onObserve` into the
- * activity ring buffer and `onError` into the error pane. The test-
- * action panel fires notifications through
+ * `ResourceContents` + {@link McpAppAiGguiMeta}. The meta pair is
+ * forwarded via the `meta` prop (`<McpAppIframe meta={...}>`); the
+ * host threads it onto `ui/initialize`'s `toolOutput._meta`
+ * (carrying the `ai.ggui/session` + `ai.ggui/stack-item` slices).
+ * Feeds `onObserve` into the activity ring buffer and `onError` into
+ * the error pane. The test-action panel fires notifications through
  * `iframeRef.current?.dispatchAction`.
  */
 function LiveViewer({
   session,
   resource,
-  bootstrap,
+  meta,
   stack,
   shortCode,
 }: {
   readonly session: SessionCookieResponse;
   readonly resource: SessionResourceContents;
-  readonly bootstrap: McpAppAiGguiMountView;
+  readonly meta: McpAppAiGguiMeta;
   readonly stack: readonly SessionStackEntry[];
   readonly shortCode: string;
 }): ReactElement {
@@ -511,7 +516,7 @@ function LiveViewer({
           <McpAppIframe
             ref={iframeRef}
             resource={resource}
-            bootstrap={bootstrap}
+            meta={meta}
             onObserve={handleObserve}
             onError={handleError}
           />

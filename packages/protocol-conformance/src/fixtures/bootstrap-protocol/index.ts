@@ -2,8 +2,9 @@
  * `bootstrap-protocol` fixture sub-module.
  *
  * Exercises the MCP Apps bootstrap contract (SPEC §8):
- *   - `ui/initialize` tool-result must stamp `_meta.ggui.bootstrap`
- *     with a well-formed envelope.
+ *   - `ui/initialize` tool-result must stamp the per-window
+ *     `_meta["ai.ggui/session"]` (and optionally
+ *     `_meta["ai.ggui/stack-item"]`) slices with well-formed payloads.
  *   - Renderer-bundle fetch must succeed (or surface a typed
  *     `BOOTSTRAP_FAILURE` protocol error).
  *   - Happy-path boot reaches `data-ggui-code-ready="true"` with no
@@ -19,7 +20,7 @@ import bootstrapSuccess from './bootstrap-success.json' with { type: 'json' };
 import type { TestCase } from '../../types.js';
 
 /** All fixtures asserting the bootstrap contract (Protocol #5 — named
- *  failure modes + SPEC §8 `McpAppAiGguiMountView`). */
+ *  failure modes + SPEC §8 `McpAppAiGguiMeta`). */
 export const bootstrapProtocolFixtures: readonly TestCase[] = [
   bootstrapBundleFetchFailed as TestCase,
   bootstrapMetaMissing as TestCase,

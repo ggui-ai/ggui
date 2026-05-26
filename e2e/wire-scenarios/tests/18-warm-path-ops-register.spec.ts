@@ -108,17 +108,28 @@ function bootstrapUrlFromPushUrl(pushUrl: string | undefined): string {
   if (!codeMatch || typeof codeMatch[1] !== 'string') {
     throw new Error(`url has no /r/<shortCode>: ${pushUrl}`);
   }
-  return `http://localhost:${GGUI_PORT}/api/bootstrap/${codeMatch[1]}${parsed.search}`;
+  return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
 }
 
 async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl));
+  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl), {
+    headers: { Accept: 'application/json' },
+  });
   if (!resp.ok) {
     throw new Error(
       `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
     );
   }
-  return (await resp.json()) as BootstrapJson;
+  // R4: slice envelope — flatten the stack-item slice into the legacy
+  // shape the test consumes.
+  const envelope = (await resp.json()) as Record<string, unknown>;
+  const stackItem =
+    (envelope['ai.ggui/stack-item'] as Record<string, unknown> | undefined) ??
+    {};
+  const out: BootstrapJson = {};
+  if (typeof stackItem['codeUrl'] === 'string') out.codeUrl = stackItem['codeUrl'];
+  if (typeof stackItem['codeHash'] === 'string') out.codeHash = stackItem['codeHash'];
+  return out;
 }
 
 describe(

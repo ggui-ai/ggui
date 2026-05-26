@@ -16,7 +16,7 @@
  * ```
  *
  * Transport selection:
- *   - `bootstrap.wsUrl + bootstrap.token` present (both non-empty) →
+ *   - `bootstrap.wsUrl + bootstrap.wsToken` present (both non-empty) →
  *     `WSTransport` (wrapped in `FailoverHandle` so a hard failure
  *     swaps in `PollingTransport` transparently).
  *   - Either missing → `PollingTransport`.
@@ -157,8 +157,8 @@ export class ChannelRegistry {
     const wsViable =
       typeof bootstrap.wsUrl === 'string' &&
       bootstrap.wsUrl.length > 0 &&
-      typeof bootstrap.token === 'string' &&
-      bootstrap.token.length > 0;
+      typeof bootstrap.wsToken === 'string' &&
+      bootstrap.wsToken.length > 0;
     if (wsViable) {
       // Wrap WSTransport in FailoverHandle so a hard failure
       // (never-opened fail-fast OR retry-ladder exhaustion) transparently

@@ -105,7 +105,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
-      bootstrap: {
+      meta: {
         sessionId: 'sess_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },
@@ -129,7 +129,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
-        bootstrap: {
+        meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
@@ -171,7 +171,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
-        bootstrap: {
+        meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
@@ -204,7 +204,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
-        bootstrap: {
+        meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
@@ -242,7 +242,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
-        bootstrap: {
+        meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
@@ -274,7 +274,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
-      bootstrap: {
+      meta: {
         sessionId: 'sess_1',
         appId: 'app_1',
         // actionNextSteps deliberately undefined.
@@ -292,7 +292,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
-      bootstrap: {
+      meta: {
         sessionId: 'sess_1',
         appId: 'app_1',
         actionNextSteps: { send: 'gmail_send' },
@@ -310,7 +310,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
-      bootstrap: {
+      meta: {
         sessionId: 'sess_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },

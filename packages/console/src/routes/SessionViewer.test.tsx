@@ -72,13 +72,18 @@ interface McpAppIframeRefMock {
 
 interface McpAppIframePropsMock {
   readonly resource: { readonly uri: string; readonly mimeType: string; readonly text: string };
-  readonly bootstrap?: {
-    readonly wsUrl: string;
-    readonly token: string;
-    readonly expiresAt: string;
-    readonly sessionId: string;
-    readonly appId: string;
-    readonly runtimeUrl: string;
+  readonly meta?: {
+    readonly session?: {
+      readonly wsUrl?: string;
+      readonly token?: string;
+      readonly expiresAt?: string;
+      readonly sessionId: string;
+      readonly appId: string;
+      readonly runtimeUrl: string;
+    };
+    readonly stackItem?: {
+      readonly stackItemId?: string;
+    };
   };
   readonly onObserve?: (event: { readonly kind: string } & Record<string, unknown>) => void;
   readonly onError?: (err: {
@@ -90,7 +95,7 @@ interface McpAppIframePropsMock {
 const iframeHandles: {
   current: {
     resource: McpAppIframePropsMock['resource'] | null;
-    bootstrap: McpAppIframePropsMock['bootstrap'] | null;
+    meta: McpAppIframePropsMock['meta'] | null;
     onObserve: McpAppIframePropsMock['onObserve'] | null;
     onError: McpAppIframePropsMock['onError'] | null;
     dispatchAction: ReturnType<typeof vi.fn>;
@@ -98,7 +103,7 @@ const iframeHandles: {
 } = {
   current: {
     resource: null,
-    bootstrap: null,
+    meta: null,
     onObserve: null,
     onError: null,
     dispatchAction: vi.fn(),
@@ -108,7 +113,7 @@ const iframeHandles: {
 function resetIframeHandles(): void {
   iframeHandles.current = {
     resource: null,
-    bootstrap: null,
+    meta: null,
     onObserve: null,
     onError: null,
     dispatchAction: vi.fn(),
@@ -119,7 +124,7 @@ vi.mock('@ggui-ai/react', () => {
   const McpAppIframe = forwardRef<McpAppIframeRefMock, McpAppIframePropsMock>(
     function MockMcpAppIframe(props, ref): ReactElement {
       iframeHandles.current.resource = props.resource;
-      iframeHandles.current.bootstrap = props.bootstrap ?? null;
+      iframeHandles.current.meta = props.meta ?? null;
       iframeHandles.current.onObserve = props.onObserve ?? null;
       iframeHandles.current.onError = props.onError ?? null;
       useImperativeHandle(
@@ -133,7 +138,7 @@ vi.mock('@ggui-ai/react', () => {
         <div
           data-testid="mock-mcp-app-iframe"
           data-resource-uri={props.resource.uri}
-          data-bootstrap-session={props.bootstrap?.sessionId ?? ''}
+          data-bootstrap-session={props.meta?.session?.sessionId ?? ''}
         />
       );
     },
@@ -194,15 +199,17 @@ function installFetchMock({
         expiresAt: Date.now() + 3600_000,
       });
     }
-    // session-bootstrap matched BEFORE session-resource because the
-    // former is a longer prefix of the same namespace; without this
-    // ordering, `session-resource` would shadow it.
-    if (url.includes('/ggui/console/session-bootstrap')) {
+    // session-meta matched BEFORE session-resource because the former
+    // is a longer prefix of the same namespace; without this ordering,
+    // `session-resource` would shadow it. Post-R4 the route is
+    // `/ggui/console/sessions/:sessionId/meta` and the body is the
+    // slice envelope (same shape as the wire `_meta`).
+    if (url.includes('/ggui/console/sessions/') && url.endsWith('/meta')) {
       if (bootstrap) return bootstrap();
       return jsonResponse({
-        bootstrap: {
+        'ai.ggui/session': {
           wsUrl: 'wss://test.example/ws',
-          token: 'mock-token',
+          wsToken: 'mock-token',
           expiresAt: '2099-12-31T23:59:59.999Z',
           sessionId: 'sess-xyz',
           appId: 'app-demo',
@@ -267,16 +274,18 @@ describe('SessionViewer — mount pipeline', () => {
       mimeType: 'text/html;profile=mcp-app',
       text: '<html><body data-ggui-shell="thin">shell</body></html>',
     });
-    // Bootstrap is forwarded onto `<McpAppIframe bootstrap>`. The
-    // host threads it through `ui/initialize`'s
-    // `toolOutput._meta.ggui.bootstrap`.
-    expect(iframeHandles.current.bootstrap).toEqual({
-      wsUrl: 'wss://test.example/ws',
-      token: 'mock-token',
-      expiresAt: '2099-12-31T23:59:59.999Z',
-      sessionId: 'sess-xyz',
-      appId: 'app-demo',
-      runtimeUrl: '/_ggui/iframe-runtime.js',
+    // Meta pair is forwarded onto `<McpAppIframe meta>`. The host
+    // threads it through `ui/initialize`'s `toolOutput._meta`
+    // (carrying the `ai.ggui/session` + `ai.ggui/stack-item` slices).
+    expect(iframeHandles.current.meta).toEqual({
+      session: {
+        wsUrl: 'wss://test.example/ws',
+        token: 'mock-token',
+        expiresAt: '2099-12-31T23:59:59.999Z',
+        sessionId: 'sess-xyz',
+        appId: 'app-demo',
+        runtimeUrl: '/_ggui/iframe-runtime.js',
+      },
     });
     // Selector hooks the Playwright lane targets (resource URI is
     // the production constant now; bootstrap-session anchors on the
@@ -333,7 +342,7 @@ describe('SessionViewer — mount pipeline', () => {
     });
   });
 
-  it('transitions to resource-failed when the session-bootstrap fetch returns 503', async () => {
+  it('transitions to resource-failed when the sessions/:id/meta fetch returns 503', async () => {
     installFetchMock({
       bootstrap: async () =>
         new Response(
@@ -348,18 +357,20 @@ describe('SessionViewer — mount pipeline', () => {
       ).toBeTruthy();
     });
     expect(
-      screen.getByText(/session-bootstrap fetch returned 503/i),
+      screen.getByText(/sessions\/:id\/meta fetch returned 503/i),
     ).toBeTruthy();
     expect(screen.queryByTestId('mock-mcp-app-iframe')).toBeNull();
   });
 
-  it('transitions to resource-failed when the session-bootstrap response is missing the bootstrap field', async () => {
+  it('transitions to resource-failed when the sessions/:id/meta response is missing the session slice', async () => {
     installFetchMock({
       bootstrap: async () => jsonResponse({}),
     });
     render(<SessionViewer shortCode="scode0005" />);
     await waitFor(() => {
-      expect(screen.getByText(/missing `bootstrap` field/i)).toBeTruthy();
+      expect(
+        screen.getByText(/missing `ai\.ggui\/session` slice/i),
+      ).toBeTruthy();
     });
     expect(screen.queryByTestId('mock-mcp-app-iframe')).toBeNull();
   });

@@ -11,7 +11,7 @@
  * extraction.
  */
 
-import type { ChannelHandler } from '@ggui-ai/channel-client';
+import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type {
   ChannelErrorPayload,
   ChannelPayloadFrame,

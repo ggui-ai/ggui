@@ -36,10 +36,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
-  combineMcpAppAiGguiMeta,
-  mergeSlicesIntoMountView,
+  parseMcpAppAiGguiMeta,
   MCP_APPS_UI_CAPABILITY,
-  type McpAppAiGguiMountView,
+  type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import WebSocket from 'ws';
 import {
@@ -104,8 +103,13 @@ export interface CallToolResult {
    * normal result without parsing `content[*].text` heuristically.
    */
   readonly isError?: boolean;
-  /** Set when the tool result carries `_meta.ggui.bootstrap`. */
-  readonly bootstrap?: McpAppAiGguiMountView;
+  /**
+   * Parsed {@link McpAppAiGguiMeta} pair from the tool result's
+   * `_meta["ai.ggui/session"]` (and optional `_meta["ai.ggui/stack-item"]`).
+   * Absent when the tool result carries no `ai.ggui/*` slices (every
+   * non-push tool, or a session-resource result that omits them).
+   */
+  readonly meta?: McpAppAiGguiMeta;
   /**
    * The `_meta.ui.resourceUri` declared on the TOOL (from
    * tools/list), if any. Distinct from per-call `_meta.ui.resourceUri`
@@ -237,12 +241,12 @@ export interface SimulateWiredActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
-   * Bootstrap envelope from a prior {@link HostSimulator.callTool}
-   * `ggui_push` — supplies the sessionId + appId the action targets.
-   * Pass the bootstrap object directly; the simulator pulls the
-   * fields it needs.
+   * {@link McpAppAiGguiMeta} pair from a prior
+   * {@link HostSimulator.callTool} `ggui_push` — supplies the
+   * sessionId + appId the action targets. The simulator pulls the
+   * fields it needs off `meta.session` / `meta.stackItem?`.
    */
-  readonly bootstrap: McpAppAiGguiMountView;
+  readonly meta: McpAppAiGguiMeta;
   /** Override `firedAt` for deterministic actionId tests. */
   readonly firedAt?: string;
 }
@@ -433,13 +437,12 @@ export class HostSimulator {
         ? { timeout: options.timeoutMs }
         : undefined,
     );
-    const meta = (result as { _meta?: unknown })._meta;
-    const combined = combineMcpAppAiGguiMeta(meta);
-    let bootstrap: McpAppAiGguiMountView | undefined;
-    if (combined.ok) {
-      const merged = mergeSlicesIntoMountView(combined.slices);
-      if (merged.ok) bootstrap = merged.view;
-    }
+    const rawMeta = (result as { _meta?: unknown })._meta;
+    const parsed = parseMcpAppAiGguiMeta(rawMeta);
+    const meta: McpAppAiGguiMeta | undefined =
+      parsed.ok && (parsed.meta.session !== undefined || parsed.meta.stackItem !== undefined)
+        ? parsed.meta
+        : undefined;
     // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
     // to `true` on tool-handler throws via `createToolError` (server/mcp.js
     // §createToolError). Without surfacing it here, callers can't
@@ -454,7 +457,7 @@ export class HostSimulator {
         ? { structuredContent: result.structuredContent }
         : {}),
       ...(isError ? { isError: true } : {}),
-      ...(bootstrap !== undefined ? { bootstrap } : {}),
+      ...(meta !== undefined ? { meta } : {}),
       ...(toolEntry?.resourceUri !== undefined
         ? { toolResourceUri: toolEntry.resourceUri }
         : {}),
@@ -633,12 +636,13 @@ export class HostSimulator {
    * `keepOpen: true` to retain the WS for streaming-event tests.
    */
   async subscribeWith(
-    bootstrap: McpAppAiGguiMountView,
+    meta: McpAppAiGguiMeta,
     opts: { keepOpen?: boolean } = {},
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
-    if (!bootstrap.wsUrl) {
+    const session = meta.session;
+    if (!session?.wsUrl) {
       throw new Error(
-        'subscribeWith: bootstrap.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
+        'subscribeWith: meta.session.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
       );
     }
     // Thread the bootstrap token on the upgrade URL as `?bootstrap=`.
@@ -648,9 +652,9 @@ export class HostSimulator {
     // too late to gate the HTTP upgrade and would 401. Mirrors the
     // iframe-runtime's `composeWsUrl`; the token also stays in the
     // subscribe payload for servers that consume it there.
-    const upgradeUrl = bootstrap.token
-      ? `${bootstrap.wsUrl}${bootstrap.wsUrl.includes('?') ? '&' : '?'}bootstrap=${encodeURIComponent(bootstrap.token)}`
-      : bootstrap.wsUrl;
+    const upgradeUrl = session.wsToken
+      ? `${session.wsUrl}${session.wsUrl.includes('?') ? '&' : '?'}wsToken=${encodeURIComponent(session.wsToken)}`
+      : session.wsUrl;
     const ws = new WebSocket(upgradeUrl);
     // 15s ack budget — covers the cloud WS handler under bursty
     // 100-worker load (loadgen Phase 3b surfaced 5s as too tight).
@@ -707,14 +711,14 @@ export class HostSimulator {
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
-    //   { type: 'subscribe', payload: { sessionId, appId, bootstrap: token } }
+    //   { type: 'subscribe', payload: { sessionId, appId, wsToken } }
     ws.send(
       JSON.stringify({
         type: 'subscribe',
         payload: {
-          sessionId: bootstrap.sessionId,
-          appId: bootstrap.appId,
-          bootstrap: bootstrap.token,
+          sessionId: session.sessionId,
+          appId: session.appId,
+          wsToken: session.wsToken,
         },
       }),
     );
@@ -752,14 +756,19 @@ export class HostSimulator {
     args: SimulateWiredActionArgs,
   ): Promise<SimulateWiredActionResult> {
     if (!this.client) throw new Error('connect() first');
+    const session = args.meta.session;
+    if (!session) {
+      throw new Error(
+        'simulateWiredAction: meta.session is required (no session slice on the input)',
+      );
+    }
+    const stackItemId = args.meta.stackItem?.stackItemId;
     const built: BuiltWiredAction = buildWiredAction({
       intent: args.intent,
       data: args.data,
-      sessionId: args.bootstrap.sessionId,
-      appId: args.bootstrap.appId,
-      ...(args.bootstrap.stackItemId !== undefined
-        ? { stackItemId: args.bootstrap.stackItemId }
-        : {}),
+      sessionId: session.sessionId,
+      appId: session.appId,
+      ...(stackItemId !== undefined ? { stackItemId } : {}),
       ...(args.firedAt !== undefined ? { firedAt: args.firedAt } : {}),
     });
 

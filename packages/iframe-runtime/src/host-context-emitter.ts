@@ -5,7 +5,7 @@
  *
  *   1. Hold the latest `HostContextProjection` the runtime has captured.
  *      Seeded from the iframe's `ui/initialize` response (Reading-A
- *      path, via `parseBootstrapFromUiInitialize`); updated on every
+ *      path, via `parseMetaFromUiInitialize`); updated on every
  *      `ui/notifications/host-context-changed` postMessage from the host.
  *   2. Echo each fresh value as a `type: 'host_context_observed'`
  *      WebSocket envelope so the server can persist it on
@@ -19,7 +19,7 @@
  *
  *   - Initial seed: `seed(projection, sessionId)` called from
  *     `bootProduction` right after the WS transport is attached and we
- *     know the initial projection from `parseBootstrap.hostContext`.
+ *     know the initial projection from `parseMetaFromUiInitialize.hostContext`.
  *   - Live updates: `attachListener()` installs a `window`-scoped
  *     `message` listener for the spec-defined notification method
  *     `'ui/notifications/host-context-changed'`. The notification's
@@ -33,7 +33,7 @@
  *   - `runtime.ts` is already ~3100 lines; adding another postMessage
  *     listener + state slot bloats it.
  *   - The emission policy (seed + change-merge + dedupe) is testable in
- *     isolation without the WS transport / bootstrap parse / DOM mount.
+ *     isolation without the WS transport / slice-meta parse / DOM mount.
  *   - Future widening (echo more fields, debounce burst changes, etc.)
  *     happens in one place.
  */

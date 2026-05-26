@@ -16,7 +16,7 @@
  * emission previously fired in parallel from `bootSequence`.
  */
 
-import type { ChannelHandler } from '@ggui-ai/channel-client';
+import type { ChannelHandler } from '@ggui-ai/live-channel';
 import {
   CONTRACT_ERROR_CHANNEL,
   LIFECYCLE_CHANNEL,

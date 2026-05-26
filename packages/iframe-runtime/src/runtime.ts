@@ -9,7 +9,8 @@
  * placeholder.
  *
  * Boot sequence:
- *   - Boot from `_meta.ggui.bootstrap` received via `ui/initialize`.
+ *   - Boot from `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
+ *     slices received via `ui/initialize`.
  *   - Open the WebSocket, run the subscribe handshake.
  *   - Render each stack item — either a structural placeholder or,
  *     when the triad hooks are wired, a React mount of `componentCode`.
@@ -31,14 +32,15 @@ import type {
   SessionStackEntry,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { ValidatedMcpAppAiGguiMeta } from './types.js';
 import {
-  parseBootstrap,
-  parseBootstrapFromGlobal,
-  parseBootstrapFromToolResult,
-} from './bootstrap.js';
+  parseMetaFromUiInitialize,
+  parseMetaFromGlobal,
+  parseMetaFromToolResult,
+} from './meta-parse.js';
 import { StackModel } from './stack.js';
-import type { BootstrapParseFailureReason } from './types.js';
+import type { McpAppAiGguiMetaParseFailureReason } from './types.js';
 import type { ModuleNamespace } from './globals.js';
 import {
   attachListener as attachHostContextListener,
@@ -53,7 +55,7 @@ import {
   createChannelTransportRouter,
   type ChannelTransportRouter,
 } from './channel-transport.js';
-import { ChannelRegistry } from '@ggui-ai/channel-client';
+import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   createChannelErrorHandler,
   createChannelPayloadHandler,
@@ -220,7 +222,7 @@ function makeJsonRpcCaller(): (method: string, params?: unknown) => Promise<Json
 
 // =============================================================================
 // In-iframe status DOM lives in `./status-dom.ts` — imported above so
-// the channel-client handlers (which run on the registry-bound
+// the live-channel handlers (which run on the registry-bound
 // transport) can update the same status surface without a circular
 // dep on this module.
 // =============================================================================
@@ -233,14 +235,14 @@ function makeJsonRpcCaller(): (method: string, params?: unknown) => Promise<Json
 
 /**
  * Closed union of failure reasons surfaceable from the boot path.
- * Maps the parse reasons (`BootstrapParseFailureReason`) plus three
- * boot-orchestration reasons that don't have a canonical wire code.
- * The broader `BootstrapFailureReason` extensibly-closed union in
- * `protocol-error.ts` folds these together with transport-observable
+ * Maps the parse reasons (`McpAppAiGguiMetaParseFailureReason`) plus
+ * three boot-orchestration reasons that don't have a canonical wire
+ * code. The broader `BootstrapFailureReason` extensibly-closed union
+ * in `protocol-error.ts` folds these together with transport-observable
  * codes.
  */
 export type RendererBootFailureReason =
-  | BootstrapParseFailureReason
+  | McpAppAiGguiMetaParseFailureReason
   | 'UI_INITIALIZE_FAILED'
   | 'WS_HANDSHAKE_FAILED'
   | 'UPGRADE_REQUIRED';
@@ -304,7 +306,7 @@ export interface BootSequenceOptions {
    * Stand-in for the package's own `connectViaRegistry()`. Tests inject
    * a mock so the boot smoke spec doesn't need a mock-WebSocket layer
    * — the WS lifecycle is already covered by `registry-subscribe.test.ts`
-   * and `@ggui-ai/channel-client`'s transport tests.
+   * and `@ggui-ai/live-channel`'s transport tests.
    *
    * Default: `connectViaRegistry` from `./registry-subscribe.js`.
    */
@@ -427,7 +429,7 @@ export interface TriadWiringHooks {
    * own emitters).
    */
   setup(params: {
-    readonly bootstrap: McpAppAiGguiMountView;
+    readonly meta: ValidatedMcpAppAiGguiMeta;
     readonly stackModel: StackModel;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
@@ -561,13 +563,18 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, stack: stackModel };
   }
 
-  const parsed = parseBootstrap(initResp.result);
+  const parsed = parseMetaFromUiInitialize(initResp.result);
   if (!parsed.ok) {
-    const message = `bootstrap parse failed: ${parsed.reason}`;
+    const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
     emitBootFailure(parsed.reason, message);
     return { ok: false, stack: stackModel };
   }
+
+  // Destructure the parsed slices once — `session` is guaranteed
+  // present on the ok:true arm by `validateSlices`; `stackItem` is
+  // optional (session-only refresh envelopes).
+  const { session, stackItem } = parsed.meta;
 
   // Install the precompiled, eval-free contract validators shipped on
   // the bootstrap BEFORE any wire traffic is validated. Self-contained
@@ -576,7 +583,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // to fall back to in-iframe compilation (CSP-blocked, but no worse
   // than pre-A4).
   setActiveValidatorSet(
-    await loadCompiledValidatorsFromUrl(parsed.bootstrap.validatorsUrl),
+    await loadCompiledValidatorsFromUrl(stackItem?.validatorsUrl),
   );
 
   // Single-item mode. When a per-item resource route served this
@@ -585,8 +592,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // → multi-item render path. The swap happens BEFORE any setAll /
   // upsert so filter semantics apply to the first-frame stack the
   // ack delivers.
-  if (parsed.bootstrap.stackItemId !== undefined) {
-    stackModel = new StackModel({ filterToItemId: parsed.bootstrap.stackItemId });
+  if (stackItem?.stackItemId !== undefined) {
+    stackModel = new StackModel({ filterToItemId: stackItem.stackItemId });
   }
 
   // Canvas mode: when bootstrap.canvasMode
@@ -609,7 +616,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   let canvasOutboundSend:
     | ((msg: WebSocketMessage) => void)
     | null = null;
-  if (parsed.bootstrap.canvasMode === true && opts.canvasMount !== undefined) {
+  if (session.canvasMode === true && opts.canvasMount !== undefined) {
     canvasMountHandle = opts.canvasMount({
       mountTarget: refs.stack,
       callbacks: {
@@ -621,7 +628,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
           canvasOutboundSend?.({
             type: 'canvas_navigated',
             payload: {
-              sessionId: parsed.bootstrap.sessionId,
+              sessionId: session.sessionId,
               previousActiveItemId,
               activeItemId,
             },
@@ -641,8 +648,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
           requestDisplayModeInParent({
             toolName: 'ggui_canvas_shell',
             mode,
-            sessionId: parsed.bootstrap.sessionId,
-            appId: parsed.bootstrap.appId,
+            sessionId: session.sessionId,
+            appId: session.appId,
           });
         },
       },
@@ -671,7 +678,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const triad =
     triadWiring !== undefined
       ? triadWiring.setup({
-          bootstrap: parsed.bootstrap,
+          meta: parsed.meta,
           stackModel,
           renderInto: renderIntoEl,
           statusRefs: refs,
@@ -682,7 +689,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
 
-  setStatus(refs, `Connecting to ${parsed.bootstrap.sessionId}…`, 'connecting');
+  setStatus(refs, `Connecting to ${session.sessionId}…`, 'connecting');
 
   // Boot-without-triad path: we still need a ChannelRegistry to
   // receive frames, because the registry is the only dispatch
@@ -692,7 +699,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const placeholderRegistry =
     triad === null
       ? createPlaceholderRegistry({
-          bootstrap: parsed.bootstrap,
+          session,
           stackModel,
           statusRefs: refs,
         })
@@ -782,7 +789,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
-      bootstrap: parsed.bootstrap,
+      session,
       registry: activeRegistry,
       onStatusChange: (status) => {
         setStatus(
@@ -844,14 +851,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // seed the host-context emitter with the
-  // projection `parseBootstrap` captured from `ui/initialize`'s
+  // projection `parseMetaFromUiInitialize` captured from `ui/initialize`'s
   // `hostContext` field, and install the `host-context-changed`
   // notification listener so subsequent live updates also echo to
   // the server. Both calls are idempotent and no-op when the host
   // didn't emit a HostContext (parsed.hostContext === undefined).
   if (parsed.hostContext !== undefined) {
     seedHostContext({
-      sessionId: parsed.bootstrap.sessionId,
+      sessionId: session.sessionId,
       send: (msg) => handle.handle.send(msg),
       initial: parsed.hostContext,
     });
@@ -876,8 +883,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // stack item id.
   onLifecycle?.(
     makeLifecycleEvent('code-ready', {
-      ...(parsed.bootstrap.stackItemId !== undefined
-        ? { stackItemId: parsed.bootstrap.stackItemId }
+      ...(stackItem?.stackItemId !== undefined
+        ? { stackItemId: stackItem.stackItemId }
         : {}),
     }),
   );
@@ -894,7 +901,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
  * triad with the rich handler set.
  */
 function createPlaceholderRegistry(params: {
-  readonly bootstrap: McpAppAiGguiMountView;
+  readonly session: McpAppAiGguiSessionMeta;
   readonly stackModel: StackModel;
   readonly statusRefs: StatusRefs;
 }): ChannelRegistry {
@@ -902,10 +909,10 @@ function createPlaceholderRegistry(params: {
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: params.bootstrap.sessionId,
-        appId: params.bootstrap.appId,
-        ...(params.bootstrap.token !== undefined
-          ? { bootstrap: params.bootstrap.token }
+        sessionId: params.session.sessionId,
+        appId: params.session.appId,
+        ...(params.session.wsToken !== undefined
+          ? { wsToken: params.session.wsToken }
           : {}),
       },
     }),
@@ -920,7 +927,7 @@ function createPlaceholderRegistry(params: {
 }
 
 /**
- * Frame dispatch lives inside `@ggui-ai/channel-client`'s
+ * Frame dispatch lives inside `@ggui-ai/live-channel`'s
  * `ChannelRegistry`. Every WS frame type (`push`, `data`,
  * `props_update`, `drain_ack`, `feedback`, `channel_payload`,
  * `channel_error`, `system`) has a registered handler in
@@ -973,15 +980,16 @@ function shouldAutostart(): boolean {
 }
 
 // =============================================================================
-// Self-contained bootstrap (`window.__GGUI_BOOTSTRAP__`).
+// Self-contained bootstrap (`window.__GGUI_META__`).
 //
-// The default boot path (postMessage `ui/initialize` → parse `_meta.ggui.
-// bootstrap` → open WebSocket → subscribe → render stack from frames) is
-// strictly first-party: it requires the host to speak ggui's custom
-// postMessage protocol AND a reachable live-channel WebSocket the renderer
-// can subscribe against. MCP Apps hosts in the wild (Claude Desktop,
+// The default boot path (postMessage `ui/initialize` → parse the
+// `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` slices →
+// open WebSocket → subscribe → render stack from frames) is strictly
+// first-party: it requires the host to speak ggui's custom postMessage
+// protocol AND a reachable live-channel WebSocket the renderer can
+// subscribe against. MCP Apps hosts in the wild (Claude Desktop,
 // claude.ai web) speak only the canonical MCP Apps lifecycle and have
-// no commitment to forward `_meta.ggui.bootstrap` back through
+// no commitment to forward those slice keys back through
 // `ui/initialize`. The full first-party path stays intact for callers
 // that own both ends; this self-contained path is what makes the same
 // runtime bundle work in third-party MCP Apps hosts.
@@ -1006,64 +1014,63 @@ function shouldAutostart(): boolean {
 // =============================================================================
 
 /**
- * Self-contained bootstrap shape — alias for the protocol's unified
- * {@link McpAppAiGguiMountView}. Earlier versions of this module had
+ * Self-contained slice-meta shape — alias for {@link
+ * ValidatedMcpAppAiGguiMeta}. Earlier versions of this module had
  * separate `SelfContainedComponentBootstrap` /
- * `SelfContainedSystemBootstrap` narrowings; the protocol's
- * `McpAppAiGguiMountView` now carries `codeUrl` / `kind` / `themeId`
- * / `themeMode` / `propsJson` directly (alongside the existing
- * live-mode `wsUrl` / `token` / `expiresAt` fields), so a single
- * shared validator ({@link validateBootstrapMeta} in `bootstrap.ts`)
- * can produce the full envelope from any of three delivery channels.
+ * `SelfContainedSystemBootstrap` narrowings, then collapsed to a single
+ * `McpAppAiGguiMeta`. Post-#109 the aggregated view is gone:
+ * consumers read the two per-window slices (`session` + `stackItem`)
+ * directly. The same shared parser pipeline produces a {@link
+ * McpAppAiGguiMeta} from any of three delivery channels.
  *
  * The export is kept so downstream consumers (`@ggui-ai/iframe-runtime`
  * barrel, dependent test suites) don't break.
  *
  * @public
  */
-export type SelfContainedBootstrap = McpAppAiGguiMountView;
+export type SelfContainedMcpAppAiGguiMeta = ValidatedMcpAppAiGguiMeta;
 
 /**
- * Read `globalThis.__GGUI_BOOTSTRAP__` synchronously, validate against
- * the unified bootstrap shape, and return the typed bootstrap (or null
+ * Read `globalThis.__GGUI_META__` synchronously, validate against
+ * the unified slice-meta shape, and return the typed meta (or null
  * on absence / malformation).
  *
- * Thin wrapper around {@link parseBootstrapFromGlobal}; preserved for
+ * Thin wrapper around {@link parseMetaFromGlobal}; preserved for
  * back-compat (downstream consumers + tests). Returns `null` instead
- * of `BootstrapParseResult` to match the historical reader contract
- * — the autostart resolver only needs the "valid bootstrap or fall
- * through" signal.
+ * of {@link McpAppAiGguiMetaParseResult} to match the historical
+ * reader contract — the autostart resolver only needs the "valid
+ * meta or fall through" signal.
  */
-export function readSelfContainedBootstrap(): SelfContainedBootstrap | null {
-  const result = parseBootstrapFromGlobal();
-  return result.ok ? result.bootstrap : null;
+export function readSelfContainedMeta(): SelfContainedMcpAppAiGguiMeta | null {
+  const result = parseMetaFromGlobal();
+  return result.ok ? result.meta : null;
 }
 
 /**
- * Extract a {@link SelfContainedBootstrap} from a
+ * Extract a {@link SelfContainedMcpAppAiGguiMeta} from a
  * `ui/notifications/tool-result` JSON-RPC params payload — the
  * postMessage delivery shape MCP Apps hosts (Claude Desktop, claude.ai
  * web) use to push the active tool's `_meta` to the iframe.
  *
- * Thin wrapper around {@link parseBootstrapFromToolResult}; same
- * back-compat motivation as {@link readSelfContainedBootstrap}.
+ * Thin wrapper around {@link parseMetaFromToolResult}; same
+ * back-compat motivation as {@link readSelfContainedMeta}.
  *
  * Owning this extraction inside the runtime (instead of in the shell
  * HTML) is the architectural cure for the "shell-side validator
  * lagged the protocol" bug class: shell + runtime drift becomes
- * impossible because the shell never inspects the bootstrap shape.
+ * impossible because the shell never inspects the slice-meta shape.
  */
-export function extractBootstrapFromToolResult(
+export function extractMetaFromToolResult(
   params: unknown,
-): SelfContainedBootstrap | null {
-  const result = parseBootstrapFromToolResult(params);
-  return result.ok ? result.bootstrap : null;
+): SelfContainedMcpAppAiGguiMeta | null {
+  const result = parseMetaFromToolResult(params);
+  return result.ok ? result.meta : null;
 }
 
 /**
  * Drain `window.__GGUI_PENDING_TOOL_RESULTS__` — the buffer the
  * minimal shell populates while messages arrive between
- * shell-load and runtime-load. Returns the first valid bootstrap
+ * shell-load and runtime-load. Returns the first valid slice meta
  * found; later params (if any) are dropped (each new tool-result
  * supersedes the previous).
  *
@@ -1072,38 +1079,37 @@ export function extractBootstrapFromToolResult(
  * `ui/notifications/tool-result` notifications, populated in
  * arrival order. The runtime drains it on first read.
  */
-function readPendingToolResults(): SelfContainedBootstrap | null {
+function readPendingToolResults(): SelfContainedMcpAppAiGguiMeta | null {
   if (typeof window === 'undefined') return null;
   const raw = (window as unknown as {
     __GGUI_PENDING_TOOL_RESULTS__?: unknown;
   }).__GGUI_PENDING_TOOL_RESULTS__;
   if (!Array.isArray(raw) || raw.length === 0) return null;
   for (const params of raw) {
-    const bootstrap = extractBootstrapFromToolResult(params);
-    if (bootstrap !== null) return bootstrap;
+    const meta = extractMetaFromToolResult(params);
+    if (meta !== null) return meta;
   }
   return null;
 }
 
 /**
  * Listen for a `ui/notifications/tool-result` postMessage from the
- * parent window and resolve to the extracted bootstrap. Times out
+ * parent window and resolve to the extracted slice meta. Times out
  * after `timeoutMs`; resolves `null` on timeout so the caller can
- * fall through to a legacy bootstrap path (e.g.
- * {@link bootProduction}).
+ * fall through to a legacy boot path (e.g. {@link bootProduction}).
  *
  * Pairs with the minimal-shell pattern: shell buffers any tool-
  * results that arrived BEFORE runtime load (read via
  * {@link readPendingToolResults}); this listener catches the ones
  * that arrive AFTER. The two cover the full timing race.
  */
-function awaitToolResultBootstrap(
+function awaitToolResultMeta(
   timeoutMs: number,
-): Promise<SelfContainedBootstrap | null> {
+): Promise<SelfContainedMcpAppAiGguiMeta | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (value: SelfContainedBootstrap | null) => {
+    const settle = (value: SelfContainedMcpAppAiGguiMeta | null) => {
       if (settled) return;
       settled = true;
       window.removeEventListener('message', onMessage);
@@ -1123,8 +1129,8 @@ function awaitToolResultBootstrap(
       ) {
         return;
       }
-      const bootstrap = extractBootstrapFromToolResult(m.params);
-      if (bootstrap !== null) settle(bootstrap);
+      const meta = extractMetaFromToolResult(m.params);
+      if (meta !== null) settle(meta);
     };
     window.addEventListener('message', onMessage);
     const timer = setTimeout(() => settle(null), timeoutMs);
@@ -1139,7 +1145,7 @@ function awaitToolResultBootstrap(
  *
  * Owning this in the runtime (instead of duplicated in every shell
  * builder) is the same architectural fix as
- * {@link extractBootstrapFromToolResult}: anything that observes
+ * {@link extractMetaFromToolResult}: anything that observes
  * mounted-component state belongs alongside the mount, not in the
  * shell.
  */
@@ -1961,7 +1967,7 @@ export function fireDirectToolCall(args: {
 export function routeDispatch(args: {
   readonly actionName: string;
   readonly data: unknown;
-  readonly bootstrap: {
+  readonly meta: {
     readonly sessionId: string;
     readonly stackItemId?: string;
     readonly appId: string;
@@ -1970,11 +1976,11 @@ export function routeDispatch(args: {
   };
   readonly dispatchToolName: string;
 }): void {
-  const { actionName, data, bootstrap, dispatchToolName } = args;
-  const tool = bootstrap.actionNextSteps?.[actionName];
+  const { actionName, data, meta, dispatchToolName } = args;
+  const tool = meta.actionNextSteps?.[actionName];
   const appCallable =
     typeof tool === 'string' &&
-    (bootstrap.appCallableTools ?? []).includes(tool);
+    (meta.appCallableTools ?? []).includes(tool);
 
   if (appCallable && tool !== undefined) {
     fireDirectToolCall({
@@ -1992,9 +1998,9 @@ export function routeDispatch(args: {
       toolName: dispatchToolName,
       intent: actionName,
       data,
-      sessionId: bootstrap.sessionId,
-      stackItemId: bootstrap.stackItemId,
-      appId: bootstrap.appId,
+      sessionId: meta.sessionId,
+      stackItemId: meta.stackItemId,
+      appId: meta.appId,
       ...(tool !== undefined ? { nextStep: tool } : {}),
     });
   }
@@ -2287,7 +2293,7 @@ function installPostMountListener(): void {
   if (postMountListenerInstalled) return;
   if (typeof window === 'undefined') return;
   postMountListenerInstalled = true;
-  let lastBootstrapKey: string | null = null;
+  let lastMetaKey: string | null = null;
   const onMessage = (event: MessageEvent) => {
     const data = event.data as
       | { jsonrpc?: string; method?: string; params?: unknown }
@@ -2301,39 +2307,41 @@ function installPostMountListener(): void {
     ) {
       return;
     }
-    const bootstrap = extractBootstrapFromToolResult(data.params);
-    if (bootstrap === null) return;
+    const meta = extractMetaFromToolResult(data.params);
+    if (meta === null) return;
+    const { session, stackItem } = meta;
+    // The parser guarantees session is present when ok:true; defense.
+    if (session === undefined) return;
     // Cheap dedupe — the host may emit the same tool-result more
     // than once (claude.ai re-broadcasts on iframe re-attach).
-    // Re-mounting the same bootstrap would flicker without changing
+    // Re-mounting the same slice meta would flicker without changing
     // anything visible.
     //
     // `liveTrio` is load-bearing in the dedupe key: hosts (sample-agent,
-    // claude.ai) often emit the initial bootstrap WITHOUT the wsUrl+token
+    // claude.ai) often emit the initial meta WITHOUT the wsUrl+token
     // pair (the Anthropic SDK strips `_meta` from tool results), then
     // refetch + re-emit the FULL envelope. The two envelopes share
     // stackItemId/kind/codeUrl/propsJson but differ on the live trio —
     // without trio in the key, the second arrival deduped silently and
     // bootSelfContained never opened the WS, so `ggui_update` props_update
     // frames fanned to zero subscribers.
-    const codeUrl = 'codeUrl' in bootstrap ? bootstrap.codeUrl : undefined;
     const liveTrio =
-      typeof bootstrap.wsUrl === 'string' &&
-      bootstrap.wsUrl.length > 0 &&
-      typeof bootstrap.token === 'string' &&
-      bootstrap.token.length > 0
+      typeof session.wsUrl === 'string' &&
+      session.wsUrl.length > 0 &&
+      typeof session.wsToken === 'string' &&
+      session.wsToken.length > 0
         ? 'live'
         : '-';
     const key = [
-      bootstrap.stackItemId ?? '-',
-      bootstrap.kind ?? '-',
-      codeUrl ?? '-',
-      bootstrap.propsJson ?? '-',
+      stackItem?.stackItemId ?? '-',
+      stackItem?.kind ?? '-',
+      stackItem?.codeUrl ?? '-',
+      stackItem?.propsJson ?? '-',
       liveTrio,
     ].join('|');
-    if (key === lastBootstrapKey) return;
-    lastBootstrapKey = key;
-    void bootSelfContained(window.document, bootstrap).then(() => {
+    if (key === lastMetaKey) return;
+    lastMetaKey = key;
+    void bootSelfContained(window.document, meta).then(() => {
       // Re-emit last-known contextSpec values after a successful
       // re-mount. The host's WS to the agent server is opaque to the
       // iframe, so "WS reopen ≈ re-mount" is the closest available
@@ -2350,14 +2358,14 @@ function installPostMountListener(): void {
       // survival of stale entries was never load-bearing — only the
       // active slot names are.
       const activeSlotNames = new Set(
-        (bootstrap.contextSlots ?? []).map((s) => s.name),
+        (stackItem?.contextSlots ?? []).map((s) => s.name),
       );
       const reemitIdentity =
-        bootstrap.stackItemId !== undefined
+        stackItem?.stackItemId !== undefined
           ? {
-              sessionId: bootstrap.sessionId,
-              appId: bootstrap.appId,
-              stackItemId: bootstrap.stackItemId,
+              sessionId: session.sessionId,
+              appId: session.appId,
+              stackItemId: stackItem.stackItemId,
             }
           : undefined;
       reemitLastContextValues(
@@ -2390,8 +2398,12 @@ function installPostMountListener(): void {
  */
 async function bootSelfContained(
   doc: Document,
-  bootstrap: SelfContainedBootstrap,
+  meta: SelfContainedMcpAppAiGguiMeta,
 ): Promise<void> {
+  // Destructure once — session is guaranteed by validateSlices on the
+  // ok:true arm; stackItem is optional (session-only refresh envelopes).
+  const { session, stackItem } = meta;
+
   // Lifecycle: `mounting` first, paired with `ggui:renderer-ready` so
   // outer-DOM observers see the same sequence as the postMessage path.
   postRendererReady();
@@ -2413,16 +2425,16 @@ async function bootSelfContained(
     // `__ggui__` dependency. System-card bootstraps carry none (the
     // loader returns the empty set); harmless to call unconditionally.
     setActiveValidatorSet(
-      await loadCompiledValidatorsFromUrl(bootstrap.validatorsUrl),
+      await loadCompiledValidatorsFromUrl(stackItem?.validatorsUrl),
     );
 
     // Parse propsJson up-front — both branches (system card + compiled
     // component) consume props from the same field, just in different
     // shapes downstream.
     let props: Record<string, unknown> | undefined;
-    if (bootstrap.propsJson !== undefined) {
+    if (stackItem?.propsJson !== undefined) {
       try {
-        const parsed: unknown = JSON.parse(bootstrap.propsJson);
+        const parsed: unknown = JSON.parse(stackItem.propsJson);
         if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
           props = parsed as Record<string, unknown>;
         }
@@ -2437,7 +2449,7 @@ async function bootSelfContained(
     // dispatch wire actions). The registry handles unknown kinds via
     // a typed fallback, so a new server emitting a kind this runtime
     // doesn't know still surfaces something visible.
-    if (bootstrap.kind !== undefined) {
+    if (stackItem?.kind !== undefined) {
       const [reactMod, reactDomClient, systemCardsMod] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -2447,13 +2459,13 @@ async function bootSelfContained(
       root.render(
         reactMod.createElement(
           systemCardsMod.SystemCardHost,
-          { kind: bootstrap.kind, props: props ?? {}, themeId: bootstrap.themeId },
+          { kind: stackItem.kind, props: props ?? {}, themeId: session.themeId },
         ),
       );
       postLifecycleToParent(
         makeLifecycleEvent('code-ready', {
-          ...(bootstrap.stackItemId !== undefined
-            ? { stackItemId: bootstrap.stackItemId }
+          ...(stackItem.stackItemId !== undefined
+            ? { stackItemId: stackItem.stackItemId }
             : {}),
         }),
       );
@@ -2466,15 +2478,15 @@ async function bootSelfContained(
     // (content-addressable, immutable cache). T3-1 (2026-05-13) retired
     // the inline base64 `componentCode` channel — every static-component
     // bootstrap is delivered via the URL.
-    if (bootstrap.codeUrl === undefined) {
+    if (stackItem?.codeUrl === undefined) {
       throw new Error(
         'bootSelfContained: bootstrap missing codeUrl (static-component mode requires the URL channel)',
       );
     }
-    const res = await fetch(bootstrap.codeUrl);
+    const res = await fetch(stackItem.codeUrl);
     if (!res.ok) {
       throw new Error(
-        `bootSelfContained: codeUrl fetch failed (${res.status}): ${bootstrap.codeUrl}`,
+        `bootSelfContained: codeUrl fetch failed (${res.status}): ${stackItem.codeUrl}`,
       );
     }
     const componentCode = await res.text();
@@ -2523,7 +2535,7 @@ async function bootSelfContained(
     const composedGadgets =
       await gadgetLoaderMod.loadGadgetRegistry(
         gadgetsMod,
-        bootstrap.gadgets ?? [],
+        session.gadgets ?? [],
       );
 
     // Install `globalThis.__ggui__` BEFORE mountReactRoot — the data-
@@ -2544,7 +2556,7 @@ async function bootSelfContained(
       // Server-filtered public env values for wrapper hooks to read
       // via `getPublicEnv(key)`. Absent ⇒ empty record; wrappers
       // needing values throw at hook-mount.
-      publicEnv: bootstrap.publicEnv ?? {},
+      publicEnv: session.publicEnv ?? {},
     });
 
     // Synthesize one React.createContext(default) per declared
@@ -2557,11 +2569,11 @@ async function bootSelfContained(
     // resolves on the first mount paint.
     const registry = globalsMod.getGlobalRegistry();
     const resolvedSlots: ReadonlyArray<ResolvedContextSlot> =
-      registry !== undefined && bootstrap.contextSlots !== undefined
+      registry !== undefined && stackItem?.contextSlots !== undefined
         ? installContextRegistry(
             registry.contexts,
             reactMod,
-            bootstrap.contextSlots,
+            stackItem.contextSlots,
           )
         : [];
 
@@ -2588,8 +2600,8 @@ async function bootSelfContained(
             .__GGUI_DISPATCH_TOOL__!
         : 'ggui_runtime_submit_action';
     const wireConfig: import('@ggui-ai/wire').WireConfig = {
-      app: { appId: bootstrap.appId, appName: bootstrap.appId },
-      session: { sessionId: bootstrap.sessionId, isConnected: true },
+      app: { appId: session.appId, appName: session.appId },
+      session: { sessionId: session.sessionId, isConnected: true },
       auth: { isAuthenticated: false },
       dispatch: (actionName, data) => {
         // Per-action routing — extracted to {@link routeDispatch} as
@@ -2600,17 +2612,17 @@ async function bootSelfContained(
         routeDispatch({
           actionName,
           data,
-          bootstrap: {
-            sessionId: bootstrap.sessionId,
-            appId: bootstrap.appId,
-            ...(bootstrap.stackItemId !== undefined
-              ? { stackItemId: bootstrap.stackItemId }
+          meta: {
+            sessionId: session.sessionId,
+            appId: session.appId,
+            ...(stackItem?.stackItemId !== undefined
+              ? { stackItemId: stackItem.stackItemId }
               : {}),
-            ...(bootstrap.appCallableTools !== undefined
-              ? { appCallableTools: bootstrap.appCallableTools }
+            ...(session.appCallableTools !== undefined
+              ? { appCallableTools: session.appCallableTools }
               : {}),
-            ...(bootstrap.actionNextSteps !== undefined
-              ? { actionNextSteps: bootstrap.actionNextSteps }
+            ...(stackItem?.actionNextSteps !== undefined
+              ? { actionNextSteps: stackItem.actionNextSteps }
               : {}),
           },
           dispatchToolName,
@@ -2646,12 +2658,12 @@ async function bootSelfContained(
         typeof console !== 'undefined' && typeof console.warn === 'function'
           ? console.warn.bind(console)
           : undefined,
-      ...(bootstrap.stackItemId !== undefined
+      ...(stackItem?.stackItemId !== undefined
         ? {
             identity: {
-              sessionId: bootstrap.sessionId,
-              appId: bootstrap.appId,
-              stackItemId: bootstrap.stackItemId,
+              sessionId: session.sessionId,
+              appId: session.appId,
+              stackItemId: stackItem.stackItemId,
             },
           }
         : {}),
@@ -2676,43 +2688,43 @@ async function bootSelfContained(
     // stacking.
     installAnchorClickInterceptor({
       dispatchToolName,
-      sessionId: bootstrap.sessionId,
-      ...(bootstrap.stackItemId !== undefined
-        ? { stackItemId: bootstrap.stackItemId }
+      sessionId: session.sessionId,
+      ...(stackItem?.stackItemId !== undefined
+        ? { stackItemId: stackItem.stackItemId }
         : {}),
-      appId: bootstrap.appId,
+      appId: session.appId,
     });
     installFullscreenInterceptors({
       dispatchToolName,
-      sessionId: bootstrap.sessionId,
-      ...(bootstrap.stackItemId !== undefined
-        ? { stackItemId: bootstrap.stackItemId }
+      sessionId: session.sessionId,
+      ...(stackItem?.stackItemId !== undefined
+        ? { stackItemId: stackItem.stackItemId }
         : {}),
-      appId: bootstrap.appId,
+      appId: session.appId,
     });
 
     const mountOpts = {
       stackItem: {
-        ...(bootstrap.stackItemId !== undefined ? { id: bootstrap.stackItemId } : {}),
+        ...(stackItem?.stackItemId !== undefined ? { id: stackItem.stackItemId } : {}),
         componentCode,
         ...(props !== undefined ? { props } : {}),
       },
       renderWrapper,
-      ...(bootstrap.themeId !== undefined ? { themeId: bootstrap.themeId } : {}),
-      ...(bootstrap.themeMode !== undefined ? { themeMode: bootstrap.themeMode } : {}),
+      ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
+      ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
       // GG.8.2 — operator-registered 3rd-party gadget packages so the
       // rewriter resolves each direct gadget import to its per-package
       // shim. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
-      ...(bootstrap.gadgets !== undefined
-        ? { gadgetPackages: bootstrap.gadgets.map((g) => g.package) }
+      ...(session.gadgets !== undefined
+        ? { gadgetPackages: session.gadgets.map((g) => g.package) }
         : {}),
     };
     const mount = await reactRendererMod.mountReactRoot(container, mountOpts);
 
     postLifecycleToParent(
       makeLifecycleEvent('code-ready', {
-        ...(bootstrap.stackItemId !== undefined
-          ? { stackItemId: bootstrap.stackItemId }
+        ...(stackItem?.stackItemId !== undefined
+          ? { stackItemId: stackItem.stackItemId }
           : {}),
       }),
     );
@@ -2736,20 +2748,21 @@ async function bootSelfContained(
     // without live updates). When the WS goes down, mount.update()
     // simply stops firing — gracefully degrades.
     if (
-      typeof bootstrap.wsUrl === 'string' &&
-      bootstrap.wsUrl.length > 0 &&
-      typeof bootstrap.token === 'string' &&
-      bootstrap.token.length > 0 &&
-      bootstrap.stackItemId !== undefined
+      typeof session.wsUrl === 'string' &&
+      session.wsUrl.length > 0 &&
+      typeof session.wsToken === 'string' &&
+      session.wsToken.length > 0 &&
+      stackItem?.stackItemId !== undefined
     ) {
-      const targetStackItemId = bootstrap.stackItemId;
+      const targetStackItemId = stackItem.stackItemId;
+      const sessionWsToken = session.wsToken;
       const subscribeRegistry = new ChannelRegistry({
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
           payload: {
-            sessionId: bootstrap.sessionId,
-            appId: bootstrap.appId,
-            bootstrap: bootstrap.token,
+            sessionId: session.sessionId,
+            appId: session.appId,
+            wsToken: sessionWsToken,
           },
         }),
       });
@@ -2775,7 +2788,7 @@ async function bootSelfContained(
         },
       });
       void connectViaRegistry({
-        bootstrap,
+        session,
         registry: subscribeRegistry,
         onStatusChange: () => {
           /* no-op — placeholder UI is not used in self-contained mode */
@@ -2794,8 +2807,8 @@ async function bootSelfContained(
     const message = err instanceof Error ? err.message : String(err);
     // Reuse the existing failure envelope. The reason is a synthesized
     // value because this code path is wholly outside the
-    // `BootstrapParseFailureReason` set (no postMessage parse failed
-    // — there was no postMessage). Hosts pattern-matching legacy
+    // `McpAppAiGguiMetaParseFailureReason` set (no postMessage parse
+    // failed — there was no postMessage). Hosts pattern-matching legacy
     // reason strings see a new value and ignore it; new hosts can
     // route on the explicit code.
     postBootFailure(
@@ -2811,45 +2824,53 @@ async function bootSelfContained(
 }
 
 /**
- * Detect a `McpAppAiGguiMountView` shape inlined onto `__GGUI_BOOTSTRAP__`.
+ * Detect a live-channel bootstrap shape inlined onto `__GGUI_META__`.
  * The first-party session shells (`/s/<shortCode>`,
  * `ui://ggui/session/<sessionId>`, the embedded-ui SessionViewer's
- * thin shell) populate this synchronously before the runtime loads —
- * but the shape is the WS-driven bootstrap (`wsUrl`+`token`+
- * `sessionId`+`appId`+`runtimeUrl`), NOT a `SelfContainedBootstrap`.
+ * thin shell) populate this synchronously before the runtime loads.
+ *
+ * Post-#109 the global carries a slice ENVELOPE (same shape as the
+ * wire `_meta`): `{ "ai.ggui/session": {...}, "ai.ggui/stack-item":
+ * {...} }`. A live-channel shell omits a static stack-item (no codeUrl
+ * / kind) and ships wsUrl+token on the session slice instead.
  *
  * This predicate exists so the autostart path can distinguish
- * "shell-inlined a WS bootstrap, run `bootProduction` immediately"
+ * "shell-inlined a live bootstrap, run `bootProduction` immediately"
  * from "no bootstrap yet, race the tool-result postMessage with a
  * 30s timeout". Without the distinction, OSS shells that never emit
  * a separate `ui/notifications/tool-result` (because the bootstrap
  * is delivered via the `ui/initialize` Reading-B path) hang at
  * `mounting` for the full 30s before `code-ready`.
  */
-function readMcpAppAiGguiMountViewShape(): boolean {
+function readLiveBootstrapShape(): boolean {
   if (typeof window === 'undefined') return false;
-  const raw = (window as unknown as { __GGUI_BOOTSTRAP__?: unknown })
-    .__GGUI_BOOTSTRAP__;
+  const raw = (window as unknown as { __GGUI_META__?: unknown })
+    .__GGUI_META__;
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return false;
   }
   const bag = raw as Record<string, unknown>;
+  const sessionRaw = bag['ai.ggui/session'];
+  if (sessionRaw === null || typeof sessionRaw !== 'object' || Array.isArray(sessionRaw)) {
+    return false;
+  }
+  const sessionBag = sessionRaw as Record<string, unknown>;
   return (
-    typeof bag['wsUrl'] === 'string' &&
-    (bag['wsUrl'] as string).length > 0 &&
-    typeof bag['token'] === 'string' &&
-    (bag['token'] as string).length > 0 &&
-    typeof bag['sessionId'] === 'string' &&
-    (bag['sessionId'] as string).length > 0 &&
-    typeof bag['appId'] === 'string' &&
-    (bag['appId'] as string).length > 0
+    typeof sessionBag['wsUrl'] === 'string' &&
+    (sessionBag['wsUrl'] as string).length > 0 &&
+    typeof sessionBag['token'] === 'string' &&
+    (sessionBag['token'] as string).length > 0 &&
+    typeof sessionBag['sessionId'] === 'string' &&
+    (sessionBag['sessionId'] as string).length > 0 &&
+    typeof sessionBag['appId'] === 'string' &&
+    (sessionBag['appId'] as string).length > 0
   );
 }
 
 /**
  * Hand off to `bootProduction` with the standard wiring (postRendererReady
  * + postBootFailure + observability + lifecycle). Extracted so both the
- * McpAppAiGguiMountView-inlined fast path and the post-tool-result-timeout
+ * live-channel-inlined fast path and the post-tool-result-timeout
  * fallback share one call site — keeps the WS-driven boot semantics
  * single-sourced.
  */
@@ -2892,11 +2913,11 @@ function runBootProduction(): void {
 
 if (shouldAutostart() && typeof window !== 'undefined') {
   // Boot-source resolution, in priority order. Each tier is a
-  // distinct way the host can deliver a {@link SelfContainedBootstrap}
+  // distinct way the host can deliver a {@link SelfContainedMcpAppAiGguiMeta}
   // to the runtime; downstream `bootSelfContained` is the one mount
   // path for all of them.
   //
-  //   1. Inline `__GGUI_BOOTSTRAP__` global — per-session shells
+  //   1. Inline `__GGUI_META__` global — per-session shells
   //      (`/r/<shortCode>`, `ui://ggui/session/<sessionId>`) populate
   //      this synchronously before the runtime loads. Zero round-
   //      trip; no postMessage.
@@ -2908,7 +2929,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
   //      Covers the case where the host posts the tool-result
   //      BEFORE the runtime bundle finishes parsing.
   //
-  //   3. Live postMessage listener — `awaitToolResultBootstrap`
+  //   3. Live postMessage listener — `awaitToolResultMeta`
   //      catches tool-results that arrive AFTER the runtime is
   //      ready (the more common case on Claude Desktop, where the
   //      iframe loads before the agent's tool call resolves).
@@ -2918,68 +2939,68 @@ if (shouldAutostart() && typeof window !== 'undefined') {
   //      that drive the live-channel path. Kept as the terminal
   //      fallback for backwards compatibility.
   //
-  // The architectural goal: ALL bootstrap-shape narrowing happens
+  // The architectural goal: ALL slice-meta-shape narrowing happens
   // inside the runtime (this file). Shells never validate, mount,
   // or transform — they only deliver. That's the cure for the
   // "shell-side validator lagged the protocol" bug class.
   // T3-1 (2026-05-13) — bootSelfContained requires static content
-  // (codeUrl or kind) to mount. Live-only bootstraps (wsUrl+token
+  // (codeUrl or kind) to mount. Live-only metas (wsUrl+token
   // without static content) MUST go through `bootProduction` so the
   // stack item arrives via the live-channel WS subscribe. Pre-T3-1 the
   // inline `componentCode` channel made every push static, so
   // bootSelfContained always had something to mount; post-drop, we
   // dispatch on the discriminator explicitly.
-  const inline = readSelfContainedBootstrap();
+  const inline = readSelfContainedMeta();
   const inlineHasStatic =
     inline !== null
-    && (typeof inline.codeUrl === 'string'
-      || typeof inline.kind === 'string');
+    && (typeof inline.stackItem?.codeUrl === 'string'
+      || typeof inline.stackItem?.kind === 'string');
   if (inline !== null && inlineHasStatic) {
     void bootSelfContained(document, inline);
   } else if (inline !== null) {
-    // Live-only inline bootstrap — hand to bootProduction so it
+    // Live-only inline meta — hand to bootProduction so it
     // re-issues ui/initialize and walks the WS path.
     runBootProduction();
   } else {
     const buffered = readPendingToolResults();
     const bufferedHasStatic =
       buffered !== null
-      && (typeof buffered.codeUrl === 'string'
-        || typeof buffered.kind === 'string');
+      && (typeof buffered.stackItem?.codeUrl === 'string'
+        || typeof buffered.stackItem?.kind === 'string');
     if (buffered !== null && bufferedHasStatic) {
       void bootSelfContained(document, buffered);
     } else if (buffered !== null) {
       runBootProduction();
     } else {
-      // Pre-empt the postMessage tool-result race when `__GGUI_BOOTSTRAP__`
-      // already carries a `McpAppAiGguiMountView` (wsUrl + token + sessionId
-      // + appId) — that shape isn't a `SelfContainedBootstrap`, so
-      // `readSelfContainedBootstrap` returned null, but it IS the
-      // signal that a first-party shell (`/s/<shortCode>`,
-      // `ui://ggui/session/<sessionId>`) has already inlined the WS-
-      // driven boot envelope. Skip the 30s tool-result wait and hand
-      // off to `bootProduction` directly — `bootProduction` re-issues
-      // `ui/initialize` to the host, which re-emits the same bootstrap
-      // back via Reading-B, and the WS path proceeds without delay.
-      // Without this short-circuit, the OSS embedded-ui (which never
-      // sends a separate `ui/notifications/tool-result`) hangs at
+      // Pre-empt the postMessage tool-result race when `__GGUI_META__`
+      // already carries a live-channel envelope (wsUrl + token + sessionId
+      // + appId on `ai.ggui/session`) without a static stack-item slice —
+      // that shape doesn't trip `readSelfContainedMeta` (no codeUrl /
+      // kind to mount), but it IS the signal that a first-party shell
+      // (`/s/<shortCode>`, `ui://ggui/session/<sessionId>`) has already
+      // inlined the WS-driven boot envelope. Skip the 30s tool-result
+      // wait and hand off to `bootProduction` directly — `bootProduction`
+      // re-issues `ui/initialize` to the host, which re-emits the same
+      // meta back via Reading-B, and the WS path proceeds without
+      // delay. Without this short-circuit, the OSS embedded-ui (which
+      // never sends a separate `ui/notifications/tool-result`) hangs at
       // `mounting` for the full 30s timeout before `code-ready`.
-      const hasMcpAppAiGguiMountView = readMcpAppAiGguiMountViewShape();
-      if (hasMcpAppAiGguiMountView) {
+      const hasLiveMetaShape = readLiveBootstrapShape();
+      if (hasLiveMetaShape) {
         runBootProduction();
       } else {
         // Race a postMessage listener against the legacy production
         // boot. Tool-result wins if it arrives within the timeout;
         // otherwise we hand off to the WS-driven path.
         const POSTMESSAGE_BOOT_TIMEOUT_MS = 30_000;
-        void awaitToolResultBootstrap(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
-          (postMessageBootstrap) => {
+        void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
+          (postMessageMeta) => {
             const hasStatic =
-              postMessageBootstrap !== null
-              && (typeof postMessageBootstrap.codeUrl === 'string'
-                || typeof postMessageBootstrap.kind === 'string');
-            if (postMessageBootstrap !== null && hasStatic) {
-              void bootSelfContained(document, postMessageBootstrap);
+              postMessageMeta !== null
+              && (typeof postMessageMeta.stackItem?.codeUrl === 'string'
+                || typeof postMessageMeta.stackItem?.kind === 'string');
+            if (postMessageMeta !== null && hasStatic) {
+              void bootSelfContained(document, postMessageMeta);
               return;
             }
             runBootProduction();
@@ -3000,7 +3021,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
 //
 //   1. Status DOM up.
 //   2. ui/initialize postMessage.
-//   3. parseBootstrap.
+//   3. parseMetaFromUiInitialize.
 //   4. installGlobalRegistry (with real React+ReactDOM+design+wire
 //      module handles).
 //   5. Build StreamBus + root WireConfig.
@@ -3057,7 +3078,10 @@ async function bootProduction(opts: {
   // Triad wiring hook — constructs buses + stack renderer + wire
   // config on demand inside bootSequence.
   const triadWiring: TriadWiringHooks = {
-    setup: ({ bootstrap, stackModel, renderInto, statusRefs, onObserve, onCanvasLifecycle }) => {
+    setup: ({ meta, stackModel, renderInto, statusRefs, onObserve, onCanvasLifecycle }) => {
+      // Destructure once — session is guaranteed present on the
+      // ok:true arm; stackItem may be absent (session-only).
+      const { session, stackItem } = meta;
       // Compose the gadget registry: STDLIB seed PLUS any
       // operator-registered wrappers carried on the bootstrap.
       // Awaited inside the synchronous `setup` callback via an IIFE
@@ -3074,7 +3098,7 @@ async function bootProduction(opts: {
         // seed only; the boot path doesn't wait on wrapper imports.
         .loadGadgetRegistry(
           gadgetsMod,
-          bootstrap.gadgets ?? [],
+          session.gadgets ?? [],
         );
       // Install with the synchronous STDLIB seed first; the WS-driven
       // boot path doesn't await wrapper loads here (the registry
@@ -3096,8 +3120,8 @@ async function bootProduction(opts: {
         gadgets: { '@ggui-ai/gadgets': gadgetsMod },
         // Public env values from the bootstrap. The WS-driven path
         // receives bootstrap synchronously via
-        // setup({bootstrap, ...}) so installing here is correct.
-        publicEnv: bootstrap.publicEnv ?? {},
+        // setup({meta, ...}) so installing here is correct.
+        publicEnv: session.publicEnv ?? {},
       });
       // Merge 3rd-party package namespaces into the LIVE slot object —
       // not a slot replacement. The per-package data-URL shims read
@@ -3125,11 +3149,11 @@ async function bootProduction(opts: {
       // runtime so `useGguiContext(slot)` reads the live tuple.
       const registry = globalsMod.getGlobalRegistry();
       const resolvedSlots: ReadonlyArray<ResolvedContextSlot> =
-        registry !== undefined && bootstrap.contextSlots !== undefined
+        registry !== undefined && stackItem?.contextSlots !== undefined
           ? installContextRegistry(
               registry.contexts,
               reactMod,
-              bootstrap.contextSlots,
+              stackItem.contextSlots,
             )
           : [];
       const ContextStateHost = createContextStateHost({
@@ -3139,12 +3163,12 @@ async function bootProduction(opts: {
           typeof console !== 'undefined' && typeof console.warn === 'function'
             ? console.warn.bind(console)
             : undefined,
-        ...(bootstrap.stackItemId !== undefined
+        ...(stackItem?.stackItemId !== undefined
           ? {
               identity: {
-                sessionId: bootstrap.sessionId,
-                appId: bootstrap.appId,
-                stackItemId: bootstrap.stackItemId,
+                sessionId: session.sessionId,
+                appId: session.appId,
+                stackItemId: stackItem.stackItemId,
               },
             }
           : {}),
@@ -3178,8 +3202,8 @@ async function bootProduction(opts: {
       };
 
       const { config: rootConfig, buildScopedConfig } = buildRootWireConfig({
-        sessionId: bootstrap.sessionId,
-        appId: bootstrap.appId,
+        sessionId: session.sessionId,
+        appId: session.appId,
         getStack: () => stackModel.snapshot(),
         manager,
         streamBus,
@@ -3232,7 +3256,7 @@ async function bootProduction(opts: {
             });
         },
         streamBus,
-        sessionId: bootstrap.sessionId,
+        sessionId: session.sessionId,
       };
       const stackRenderer = new StackRenderer(stackCtx);
 
@@ -3254,12 +3278,12 @@ async function bootProduction(opts: {
       // case (which calls `channelTransport.applyStackItem` on every
       // stack-fold).
       const channelTransport = createChannelTransportRouter({
-        sessionId: bootstrap.sessionId,
-        appId: bootstrap.appId,
-        ...(bootstrap.streamWebSocketLocalTools !== undefined
+        sessionId: session.sessionId,
+        appId: session.appId,
+        ...(session.streamWebSocketLocalTools !== undefined
           ? {
               streamWebSocketLocalTools:
-                bootstrap.streamWebSocketLocalTools,
+                session.streamWebSocketLocalTools,
             }
           : {}),
         send: (msg) => manager.send(msg),
@@ -3300,7 +3324,7 @@ async function bootProduction(opts: {
           : {}),
       });
 
-      // B3b — channel-client registry owns dispatch for every routable
+      // B3b — live-channel registry owns dispatch for every routable
       // WS frame type. Each handler closes over the triad state it
       // needs. `bootSequence` calls `connectFn` (default
       // `connectViaRegistry`) which registers the `ack` + `error`
@@ -3314,10 +3338,10 @@ async function bootProduction(opts: {
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
           payload: {
-            sessionId: bootstrap.sessionId,
-            appId: bootstrap.appId,
-            ...(bootstrap.token !== undefined
-              ? { bootstrap: bootstrap.token }
+            sessionId: session.sessionId,
+            appId: session.appId,
+            ...(session.wsToken !== undefined
+              ? { wsToken: session.wsToken }
               : {}),
           },
         }),
@@ -3355,8 +3379,8 @@ async function bootProduction(opts: {
           // or fails irrecoverably (FailoverHandle swap). Without this
           // wired, polling has no URL and live updates silently no-op
           // outside of WS hosts.
-          ...(bootstrap.pollingUrl !== undefined
-            ? { pollingUrl: bootstrap.pollingUrl }
+          ...(session.pollingUrl !== undefined
+            ? { pollingUrl: session.pollingUrl }
             : {}),
         }),
       );

@@ -73,24 +73,37 @@ function bootstrapUrlFromPushUrl(pushUrl: string | undefined): string {
     throw new Error(`push output missing url: ${String(pushUrl)}`);
   }
   // Push URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
-  // path to `/api/bootstrap/<shortCode>` but preserve the signed query
-  // — SEC-C.2rev's HMAC gate on /api/bootstrap rejects unsigned reads.
+  // host to match the local dev port, preserve path + signed query.
+  // R4: `/api/bootstrap/:shortCode` retired — content-negotiated JSON
+  // branch of `/r/:shortCode` covers the same surface.
   const parsed = new URL(pushUrl);
   const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
   if (!codeMatch || typeof codeMatch[1] !== 'string') {
     throw new Error(`url has no /r/<shortCode>: ${pushUrl}`);
   }
-  return `http://localhost:${GGUI_PORT}/api/bootstrap/${codeMatch[1]}${parsed.search}`;
+  return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
 }
 
 async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl));
+  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl), {
+    headers: { Accept: 'application/json' },
+  });
   if (!resp.ok) {
     throw new Error(
       `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
     );
   }
-  return (await resp.json()) as BootstrapJson;
+  const envelope = (await resp.json()) as Record<string, unknown>;
+  // Flatten the slice-envelope into the test's legacy BootstrapJson shape.
+  const stackItem =
+    (envelope['ai.ggui/stack-item'] as Record<string, unknown> | undefined) ??
+    {};
+  return {
+    codeUrl: typeof stackItem['codeUrl'] === 'string' ? stackItem['codeUrl'] : undefined,
+    codeHash: typeof stackItem['codeHash'] === 'string' ? stackItem['codeHash'] : undefined,
+    stackItemId:
+      typeof stackItem['stackItemId'] === 'string' ? stackItem['stackItemId'] : undefined,
+  };
 }
 
 async function pushOnce(opts: {

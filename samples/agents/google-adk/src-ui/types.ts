@@ -1,5 +1,7 @@
 // Client-side types for the chat shell.
 
+import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+
 export type LayoutMode = 'inline' | 'panel';
 
 /**
@@ -41,13 +43,14 @@ export interface ToolCallEntry {
 
 /**
  * A reference to a ggui-rendered stack item. The host iframe loads
- * `url`, which carries the bootstrap meta inline so the iframe self-
+ * `url`, which carries the meta slice pair inline so the iframe self-
  * subscribes to the live channel.
  *
- * `bootstrap` is the spec-compliant `_meta.ggui.bootstrap` envelope
- * the host forwards to the iframe via postMessage. The Anthropic SDK
- * strips `_meta` from tool_result blocks (the API spec only carries
- * text content), so we recover it via the `/api/bootstrap/<shortCode>`
+ * `meta` is the spec-compliant {@link McpAppAiGguiMeta} pair (parsed
+ * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`) the host
+ * forwards to the iframe via postMessage. The Anthropic SDK strips
+ * `_meta` from tool_result blocks (the API spec only carries text
+ * content), so we recover it via the `/api/bootstrap/<shortCode>`
  * JSON endpoint (fetched asynchronously after the stack item lands or
  * gets updated). When non-undefined, `<McpAppIframe>` posts it to the
  * iframe so iframe-runtime re-applies state without re-subscribing.
@@ -58,6 +61,6 @@ export interface StackItemRef {
   readonly url: string;
   readonly action: string;
   readonly contractHash?: string;
-  /** Last-known bootstrap envelope. Updated on push + every update. */
-  readonly bootstrap?: Record<string, unknown>;
+  /** Last-known meta slice pair. Updated on push + every update. */
+  readonly meta?: McpAppAiGguiMeta;
 }

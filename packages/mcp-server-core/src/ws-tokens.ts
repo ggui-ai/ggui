@@ -1,26 +1,27 @@
 /**
- * Bootstrap & session token mint / verify.
+ * WS-token mint / verify — the live-channel auth credential primitives.
  *
- * Two tiny credential shapes for the live-channel bootstrap flow. Neither
+ * Two tiny credential shapes for the live-channel auth flow. Neither
  * is MCP-Apps-specific — the only integration using them today is MCP
- * Apps outbound delivery, but any future bootstrap mechanism (signed-URL
- * share, short-code auto-login, etc.) can reuse the same primitives.
+ * Apps outbound delivery, but any future short-lived-credential
+ * mechanism (signed-URL share, short-code auto-login, etc.) can reuse
+ * the same primitives.
  *
- *   - **Bootstrap token** — short-TTL signed envelope, minted by
+ *   - **WS token** — short-TTL signed envelope, minted by
  *     `ggui_push` (or equivalent), consumed at live-channel subscribe.
- *     The MCP Apps iframe receives it via `_meta.ggui.bootstrap.token`.
- *     **Reusable within TTL** (G14, 2026-05-23) so a transient WS drop
- *     can reconnect without a fresh handshake. After TTL expiry the
- *     client either refreshes the envelope via
- *     `ggui_runtime_refresh_bootstrap` (allowed within
- *     `DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttl` of the
+ *     The MCP Apps iframe receives it on the
+ *     `_meta["ai.ggui/session"].token` slice. **Reusable within TTL**
+ *     (G14, 2026-05-23) so a transient WS drop can reconnect without a
+ *     fresh handshake. After TTL expiry the client either refreshes
+ *     the envelope via `ggui_runtime_refresh_ws_token` (allowed within
+ *     `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` of the
  *     original `iat`) or re-handshakes.
  *
  *   - **Session token** — longer-TTL, reusable, minted by the session-
- *     channel server on the FIRST successful bootstrap-auth subscribe
+ *     channel server on the FIRST successful ws-token-authed subscribe
  *     and returned in `AckPayload.sessionToken`. The iframe uses it for
  *     live-channel reconnects (over the standard bearer path) so the
- *     original bootstrap source doesn't need to re-mint.
+ *     original token source doesn't need to re-mint.
  *
  * **Format.** Compact `<payload>.<sig>` where `payload` is
  * base64url-encoded JSON and `sig` is the base64url of
@@ -45,7 +46,7 @@
  * **Constant-time comparison.** All HMAC compares go through
  * `crypto.timingSafeEqual` — no early-byte short-circuit.
  *
- * **Replay tracker** (`BootstrapTokenReplayCache`) is still exported for
+ * **Replay tracker** (`WsTokenReplayCache`) is still exported for
  * callers that need explicit single-use semantics (one-time-link share,
  * etc.). The default session-channel verify path does NOT use it post-
  * G14 — that's the whole point of the refresh design.
@@ -55,20 +56,20 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /**
  * Token kinds carried in the `kind` claim. Each discriminator defines
- * a distinct verify surface — a bootstrap token CAN'T verify as a
- * session token even with matching signature + payload.
+ * a distinct verify surface — a ws token CAN'T verify as a session
+ * token even with matching signature + payload.
  *
- *   - `'bootstrap'`   — short-TTL, single-use, ggui_push → iframe.
- *   - `'session'`     — longer-TTL, reusable, reconnect credential.
+ *   - `'ws'`              — short-TTL, single-use, ggui_push → iframe.
+ *   - `'session'`         — longer-TTL, reusable, reconnect credential.
  *   - `'console-session'` — longer-TTL, reusable, issued by the
  *     same-origin console cookie endpoint. Scoped narrowly: only
  *     verified at the live-channel upgrade by console's cookie-auth
  *     hook. NEVER verified on `/mcp` or any bearer ingress.
  */
-export type TokenKind = 'bootstrap' | 'session' | 'console-session';
+export type TokenKind = 'ws' | 'session' | 'console-session';
 
-/** Claims carried in a bootstrap, session, or console-session token. */
-export interface BootstrapTokenClaims {
+/** Claims carried in a ws, session, or console-session token. */
+export interface WsTokenClaims {
   /** Session id the token is scoped to. */
   readonly sessionId: string;
   /** App (tenant) id the token is scoped to. */
@@ -81,7 +82,7 @@ export interface BootstrapTokenClaims {
   readonly exp: number;
   /**
    * Random token id. Reserved for callers that opt into single-use
-   * semantics via {@link BootstrapTokenReplayCache}; the default G14
+   * semantics via {@link WsTokenReplayCache}; the default G14
    * session-channel verify path no longer claims it (multi-use within
    * TTL is the supported recovery posture).
    */
@@ -89,22 +90,22 @@ export interface BootstrapTokenClaims {
 }
 
 /** Default TTLs (seconds). Operators override via mint-call options. */
-export const DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC = 180;
+export const DEFAULT_WS_TOKEN_TTL_SEC = 180;
 export const DEFAULT_SESSION_TOKEN_TTL_SEC = 60 * 60 * 4; // 4 hours
 /**
- * Refresh-window multiplier for bootstrap tokens (G14, 2026-05-23).
+ * Refresh-window multiplier for ws tokens (G14, 2026-05-23).
  *
- * Signature-valid bootstrap tokens are refreshable for
- * `iat + DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttl` seconds —
+ * Signature-valid ws tokens are refreshable for
+ * `iat + DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` seconds —
  * i.e. for one extra TTL window past expiry. Past that, the client
  * must re-handshake (matcher-cache hit makes that cheap).
  *
  * Bounded purely by the original `iat` claim, not server state — the
  * refresh path is stateless. Operators tune the window by overriding
- * `refreshWindowSec` on `refreshBootstrapToken` (or via the cloud
- * pod's `GGUI_BOOTSTRAP_REFRESH_WINDOW_SECONDS` env).
+ * `refreshWindowSec` on `refreshWsToken` (or via the cloud
+ * pod's `GGUI_WS_TOKEN_REFRESH_WINDOW_SECONDS` env).
  */
-export const DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER = 2;
+export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 /**
  * Default console cookie TTL (8 hours). Matches the design note
  * §6.2 — "bound to the server's origin, short-lived (e.g., 8 hours)."
@@ -145,10 +146,10 @@ function sign(payloadB64: string, secret: string): string {
 function mintToken(
   input: MintTokenInput & { kind: TokenKind; defaultTtlSec: number },
   secret: string,
-): { token: string; claims: BootstrapTokenClaims } {
+): { token: string; claims: WsTokenClaims } {
   const now = Math.floor(Date.now() / 1000);
   const ttl = input.ttlSec ?? input.defaultTtlSec;
-  const claims: BootstrapTokenClaims = {
+  const claims: WsTokenClaims = {
     sessionId: input.sessionId,
     appId: input.appId,
     kind: input.kind,
@@ -162,25 +163,25 @@ function mintToken(
 }
 
 /**
- * Mint a short-TTL bootstrap token.
+ * Mint a short-TTL WS auth token.
  *
- * Intended for the live-channel bootstrap flow: the token travels inside
- * `_meta.ggui.bootstrap.token` on a `ggui_push` tool result, is consumed
- * at iframe `subscribe`, and remains valid for `ttlSec` (default 180s)
- * to absorb transient WS drops without a fresh handshake (G14,
- * 2026-05-23). Post-TTL: the iframe MAY refresh via
- * {@link refreshBootstrapToken} for one extra TTL window past `iat`;
+ * Intended for the live-channel auth flow: the token travels on the
+ * `_meta["ai.ggui/session"].token` slice of a `ggui_push` tool result,
+ * is consumed at iframe `subscribe`, and remains valid for `ttlSec`
+ * (default 180s) to absorb transient WS drops without a fresh
+ * handshake (G14, 2026-05-23). Post-TTL: the iframe MAY refresh via
+ * {@link refreshWsToken} for one extra TTL window past `iat`;
  * past that, a fresh handshake is required.
  */
-export function mintBootstrapToken(
+export function mintWsToken(
   input: MintTokenInput,
   secret: string,
-): { token: string; claims: BootstrapTokenClaims } {
+): { token: string; claims: WsTokenClaims } {
   return mintToken(
     {
       ...input,
-      kind: 'bootstrap',
-      defaultTtlSec: DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC,
+      kind: 'ws',
+      defaultTtlSec: DEFAULT_WS_TOKEN_TTL_SEC,
     },
     secret,
   );
@@ -190,7 +191,7 @@ export function mintBootstrapToken(
  * Mint a longer-TTL reusable session token.
  *
  * Issued by the session-channel server on the FIRST successful
- * bootstrap-auth subscribe and returned in `AckPayload.sessionToken`.
+ * ws-token-authed subscribe and returned in `AckPayload.sessionToken`.
  * The iframe persists it (sessionStorage / equivalent) and uses it
  * on reconnects via the standard `Authorization: Bearer <...>` or
  * `?token=<...>` paths. Not single-use.
@@ -198,7 +199,7 @@ export function mintBootstrapToken(
 export function mintSessionToken(
   input: MintTokenInput,
   secret: string,
-): { token: string; claims: BootstrapTokenClaims } {
+): { token: string; claims: WsTokenClaims } {
   return mintToken(
     {
       ...input,
@@ -211,8 +212,8 @@ export function mintSessionToken(
 
 /**
  * Mint an console session token — the same HMAC shape as
- * bootstrap / session, but with `kind: 'console-session'` so it
- * NEVER verifies as a bootstrap or session token. Consumed by
+ * ws / session, but with `kind: 'console-session'` so it
+ * NEVER verifies as a ws or session token. Consumed by
  * console's same-origin cookie at live-channel upgrade.
  *
  * Reusable (not single-use). Default TTL is `DEFAULT_DEVTOOL_SESSION_TTL_SEC`
@@ -221,7 +222,7 @@ export function mintSessionToken(
 export function mintDevtoolSessionToken(
   input: MintTokenInput,
   secret: string,
-): { token: string; claims: BootstrapTokenClaims } {
+): { token: string; claims: WsTokenClaims } {
   return mintToken(
     {
       ...input,
@@ -244,7 +245,7 @@ export type VerifyTokenFailure =
   | 'refresh_window_closed';
 
 export type VerifyTokenResult =
-  | { readonly ok: true; readonly claims: BootstrapTokenClaims }
+  | { readonly ok: true; readonly claims: WsTokenClaims }
   | { readonly ok: false; readonly reason: VerifyTokenFailure };
 
 /**
@@ -278,7 +279,7 @@ export function verifyToken(
   );
   if (!ok) return { ok: false, reason: 'invalid_signature' };
 
-  let claims: BootstrapTokenClaims;
+  let claims: WsTokenClaims;
   try {
     const json = base64urlDecode(payloadB64).toString('utf8');
     const raw = JSON.parse(json) as Record<string, unknown>;
@@ -288,7 +289,7 @@ export function verifyToken(
       typeof raw.iat !== 'number' ||
       typeof raw.exp !== 'number' ||
       typeof raw.jti !== 'string' ||
-      (raw.kind !== 'bootstrap' &&
+      (raw.kind !== 'ws' &&
         raw.kind !== 'session' &&
         raw.kind !== 'console-session')
     ) {
@@ -315,19 +316,19 @@ export function verifyToken(
 }
 
 /**
- * Options for {@link refreshBootstrapToken}.
+ * Options for {@link refreshWsToken}.
  */
-export interface RefreshBootstrapTokenOptions {
+export interface RefreshWsTokenOptions {
   /**
-   * TTL of the NEWLY-minted bootstrap envelope (seconds). Defaults to
-   * {@link DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC}. Operators tune via the
-   * cloud pod's `GGUI_BOOTSTRAP_TTL_SECONDS`.
+   * TTL of the NEWLY-minted ws envelope (seconds). Defaults to
+   * {@link DEFAULT_WS_TOKEN_TTL_SEC}. Operators tune via the
+   * cloud pod's `GGUI_WS_TOKEN_TTL_SECONDS`.
    */
   readonly ttlSec?: number;
   /**
    * Refresh-window length (seconds), measured from the ORIGINAL
    * envelope's `iat`. Defaults to
-   * `DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * (ttlSec ?? DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC)`
+   * `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * (ttlSec ?? DEFAULT_WS_TOKEN_TTL_SEC)`
    * — one extra TTL window past mint time. Past this, the caller
    * MUST re-handshake; the refresh path returns
    * `'refresh_window_closed'`.
@@ -341,7 +342,7 @@ export interface RefreshBootstrapTokenOptions {
 }
 
 /**
- * Result of {@link refreshBootstrapToken}.
+ * Result of {@link refreshWsToken}.
  *
  *   - `ok: true`: caller may swap the old envelope for `token` and
  *     resume normally. The new envelope's `claims.iat` is the refresh
@@ -354,11 +355,11 @@ export interface RefreshBootstrapTokenOptions {
  *     `'wrong_kind'` (legitimate caller whose envelope aged out — do
  *     the cheap re-handshake).
  */
-export type RefreshBootstrapTokenResult =
+export type RefreshWsTokenResult =
   | {
       readonly ok: true;
       readonly token: string;
-      readonly claims: BootstrapTokenClaims;
+      readonly claims: WsTokenClaims;
     }
   | {
       readonly ok: false;
@@ -366,11 +367,11 @@ export type RefreshBootstrapTokenResult =
     };
 
 /**
- * Refresh a (possibly-expired-but-signature-valid) bootstrap token.
+ * Refresh a (possibly-expired-but-signature-valid) ws token.
  *
  * Stateless: verifies HMAC against the same secret used at mint, accepts
  * the envelope if its ORIGINAL `iat` is within the refresh window
- * (`now - iat <= refreshWindowSec`), and mints a fresh bootstrap envelope
+ * (`now - iat <= refreshWindowSec`), and mints a fresh ws envelope
  * with new `iat` + `exp` + `jti`. The new envelope is bound to the SAME
  * `sessionId` + `appId` as the original (a refresh never re-scopes).
  *
@@ -380,23 +381,23 @@ export type RefreshBootstrapTokenResult =
  * (envelope is too old; force the caller back through the handshake
  * cache, which is cheap by design).
  */
-export function refreshBootstrapToken(
+export function refreshWsToken(
   token: string,
   secret: string,
-  opts: RefreshBootstrapTokenOptions = {},
-): RefreshBootstrapTokenResult {
-  const ttlSec = opts.ttlSec ?? DEFAULT_BOOTSTRAP_TOKEN_TTL_SEC;
+  opts: RefreshWsTokenOptions = {},
+): RefreshWsTokenResult {
+  const ttlSec = opts.ttlSec ?? DEFAULT_WS_TOKEN_TTL_SEC;
   const refreshWindowSec =
     opts.refreshWindowSec ??
-    DEFAULT_BOOTSTRAP_REFRESH_WINDOW_MULTIPLIER * ttlSec;
+    DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttlSec;
 
   // Decode + signature-verify WITHOUT the standard expiry check — the
   // whole point of refresh is to accept expired-but-signed envelopes.
   // We reuse `verifyToken`'s machinery for tamper / shape / kind checks
   // and conditionally pass-through `'expired'` because that IS the
   // refresh case.
-  const result = verifyToken(token, secret, 'bootstrap');
-  let claims: BootstrapTokenClaims | undefined;
+  const result = verifyToken(token, secret, 'ws');
+  let claims: WsTokenClaims | undefined;
   if (result.ok) {
     claims = result.claims;
   } else if (result.reason === 'expired') {
@@ -417,7 +418,7 @@ export function refreshBootstrapToken(
           typeof raw.iat === 'number' &&
           typeof raw.exp === 'number' &&
           typeof raw.jti === 'string' &&
-          raw.kind === 'bootstrap'
+          raw.kind === 'ws'
         ) {
           claims = {
             sessionId: raw.sessionId,
@@ -447,12 +448,12 @@ export function refreshBootstrapToken(
     return { ok: false, reason: 'refresh_window_closed' };
   }
 
-  // Mint a fresh bootstrap with the SAME sessionId + appId. New iat,
+  // Mint a fresh ws token with the SAME sessionId + appId. New iat,
   // exp, jti — the new envelope's lifetime starts from `now`, but the
   // refresh window remains anchored to the ORIGINAL iat the caller
   // first received (callers that refresh repeatedly cannot extend the
-  // window arbitrarily — see RefreshBootstrapTokenOptions.refreshWindowSec).
-  const { token: newToken, claims: newClaims } = mintBootstrapToken(
+  // window arbitrarily — see RefreshWsTokenOptions.refreshWindowSec).
+  const { token: newToken, claims: newClaims } = mintWsToken(
     {
       sessionId: claims.sessionId,
       appId: claims.appId,
@@ -465,15 +466,15 @@ export function refreshBootstrapToken(
 
 /**
  * Small in-memory used-jti tracker for callers that opt into single-
- * use bootstrap-token enforcement (one-time share links, etc.). The
+ * use ws-token enforcement (one-time share links, etc.). The
  * default session-channel verify path does NOT use this post-G14 —
- * the bootstrap is multi-use within TTL by design.
+ * the ws token is multi-use within TTL by design.
  *
  * Bounded — entries age out once past their `exp`. Sized for single-
  * process callers; multi-process / multi-host callers would swap this
  * for a shared store (Redis set, DynamoDB conditional-write, etc.).
  */
-export class BootstrapTokenReplayCache {
+export class WsTokenReplayCache {
   private readonly seen = new Map<string, number>();
 
   /** Returns `true` when the jti was NEW (record succeeded). */

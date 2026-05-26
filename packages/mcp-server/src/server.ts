@@ -125,9 +125,9 @@ import {
   CODE_HASH_REGEX,
   isEnumerableVectorStore,
   isTokenRegisteringAuthAdapter,
-  mintBootstrapToken,
+  mintWsToken,
   mintSessionToken,
-  refreshBootstrapToken,
+  refreshWsToken,
   verifyToken,
   createDeterministicBlueprintSelector,
 } from '@ggui-ai/mcp-server-core';
@@ -146,7 +146,10 @@ import { LIFECYCLE_CHANNEL } from '@ggui-ai/protocol';
 import {
   GGUI_SESSION_RESOURCE_MIME,
   GGUI_SESSION_RESOURCE_URI,
-  type McpAppAiGguiMountView,
+  MCP_APP_AI_GGUI_SESSION_META_KEY,
+  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
+  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiStackItemMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   DiscoveredPrimitiveCatalog,
@@ -255,7 +258,7 @@ import {
   createGguiUpdateHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
-  createGguiRefreshBootstrapHandler,
+  createGguiRefreshWsTokenHandler,
   createInMemoryProvisionalPreviewRegistry,
   invalidateGenerationCache,
   listBlueprints,
@@ -270,7 +273,7 @@ import {
   type ProvisionalPreviewEmitter,
   type ProvisionalPreviewConfig,
   type ProvisionalPreviewOutcome,
-  deriveStackItemBootstrapView,
+  deriveStackItemMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
 } from '@ggui-ai/mcp-server-handlers/session-mutations';
@@ -627,9 +630,9 @@ export function defaultHandlers(deps: {
     readonly signRenderUrl?: (shortCode: string) => string;
     /**
      * Optional bootstrap-credential minter. When present, `ggui_push`
-     * results carry `_meta.ggui.bootstrap`. When absent, they don't —
-     * non-MCP-Apps hosts still get `structuredContent.url` as the
-     * fallback link.
+     * results carry the `ai.ggui/session` + `ai.ggui/stack-item` slice
+     * meta. When absent, they don't — non-MCP-Apps hosts still get
+     * `structuredContent.url` as the fallback link.
      */
     readonly mintBootstrap?: (
       sessionId: string,
@@ -638,7 +641,7 @@ export function defaultHandlers(deps: {
     /**
      * URL of the renderer bundle the thin-shell HTML should fetch
      * (C8 — plan §C8). Padded onto
-     * {@link McpAppAiGguiMountView.runtimeUrl} at `resultMeta` time.
+     * {@link McpAppAiGguiSessionMeta.runtimeUrl} at `resultMeta` time.
      * Same-origin default is `/_ggui/iframe-runtime.js`; hosted cloud
      * operators override to a CDN URL. Required when `mintBootstrap`
      * is set (the thin shell depends on it); otherwise ignored.
@@ -653,9 +656,9 @@ export function defaultHandlers(deps: {
     readonly runtimeUrl?: string | (() => string | undefined);
     /**
      * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
-     * `_meta.ggui.bootstrap.themeId` in the `ggui_push` resultMeta so
-     * MCP Apps hosts (claude.ai, Claude Desktop) propagate the
-     * operator's theme into the iframe.
+     * the `ai.ggui/session.themeId` slice field in the `ggui_push`
+     * resultMeta so MCP Apps hosts (claude.ai, Claude Desktop)
+     * propagate the operator's theme into the iframe.
      */
     readonly themeId?: string;
     /** Theme color mode resolved from `ggui.json#theme.mode`. */
@@ -768,7 +771,7 @@ export function defaultHandlers(deps: {
      *
      * Absent: `ggui_push.resultMeta` omits `codeUrl`. The iframe boots
      * via live-mode (wsUrl+token) and receives the stack item via the
-     * live-channel WS subscribe. `/r/<shortCode>` + `/api/bootstrap/<shortCode>`
+     * live-channel WS subscribe. `/r/<shortCode>` (HTML default; JSON branch on `Accept: application/json`)
      * routes ALSO mint `codeUrl` when `codeStore` is set — they derive
      * the base URL from `req.protocol + req.host` when `codeBaseUrl`
      * isn't explicit (works for local dev + tunnel deployments).
@@ -818,7 +821,7 @@ export function defaultHandlers(deps: {
      */
     readonly bootstrapRefresh?: import(
       '@ggui-ai/mcp-server-handlers/session-mutations'
-    ).BootstrapRefreshSeam;
+    ).WsTokenRefreshSeam;
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
@@ -843,22 +846,24 @@ export function defaultHandlers(deps: {
     readonly propsUpdateNotifier?: PropsUpdateNotifier;
     /**
      * Bootstrap-credential minter (live trio). When wired, the
-     * `ggui_update` resultMeta emits `_meta.ggui.bootstrap` so MCP Apps
-     * hosts that re-post `ui/notifications/tool-result` via postMessage
-     * can re-apply patched props on the live mount without re-subscribing.
-     * Mirrors the same field on `push` deps; composing hosts wire both
-     * from the same minter.
+     * `ggui_update` resultMeta emits the `ai.ggui/session` +
+     * `ai.ggui/stack-item` slice pair so MCP Apps hosts that re-post
+     * `ui/notifications/tool-result` via postMessage can re-apply
+     * patched props on the live mount without re-subscribing. Mirrors
+     * the same field on `push` deps; composing hosts wire both from
+     * the same minter.
      */
     readonly mintBootstrap?: (
       sessionId: string,
       appId: string,
     ) => { wsUrl: string; token: string; expiresAt: string };
-    /** Iframe-runtime bundle URL forwarded onto bootstrap.runtimeUrl.
+    /** Iframe-runtime bundle URL forwarded onto the
+     *  `ai.ggui/session.runtimeUrl` slice field.
      *  Function form mirrors push deps — see {@link BuildMcpDeps.push}. */
     readonly runtimeUrl?: string | (() => string | undefined);
-    /** Theme preset id forwarded onto bootstrap.themeId. */
+    /** Theme preset id forwarded onto the `ai.ggui/session.themeId` slice field. */
     readonly themeId?: string;
-    /** Theme color mode forwarded onto bootstrap.themeMode. */
+    /** Theme color mode forwarded onto the `ai.ggui/session.themeMode` slice field. */
     readonly themeMode?: 'light' | 'dark';
     /** Live theme getter — overrides static themeId/themeMode per-update. */
     readonly themeProvider?: () => {
@@ -1139,7 +1144,7 @@ export function defaultHandlers(deps: {
     // tools/list — skip registration entirely.
     if (deps.push.bootstrapRefresh) {
       handlers.push(
-        createGguiRefreshBootstrapHandler({
+        createGguiRefreshWsTokenHandler({
           refreshSeam: deps.push.bootstrapRefresh,
         }) as SharedHandler<ZodRawShape, ZodRawShape>,
       );
@@ -1247,7 +1252,7 @@ export function defaultHandlers(deps: {
         // forward `ui/notifications/tool-result` via postMessage can
         // re-apply patched props on the live mount without a WS round-trip.
         ...(deps.update.mintBootstrap
-          ? { mintBootstrap: deps.update.mintBootstrap }
+          ? { mintWsToken: deps.update.mintBootstrap }
           : {}),
         ...(deps.update.runtimeUrl !== undefined
           ? { runtimeUrl: deps.update.runtimeUrl }
@@ -1437,7 +1442,7 @@ export function defaultHandlers(deps: {
           ? { streamWebSocketLocalTools: deps.push.streamWebSocketLocalTools }
           : {}),
         ...(deps.push.mintBootstrap
-          ? { mintBootstrap: deps.push.mintBootstrap }
+          ? { mintWsToken: deps.push.mintBootstrap }
           : {}),
         ...(deps.push.runtimeUrl !== undefined
           ? { runtimeUrl: deps.push.runtimeUrl }
@@ -1888,7 +1893,7 @@ export interface CreateGguiServerOptions {
   /**
    * Live-theme getter. When set, the `ggui_push` handler reads this
    * on every result-meta computation and embeds the returned `id` /
-   * `mode` into `_meta.ggui.bootstrap`. Pair with
+   * `mode` into the `ai.ggui/session` slice meta. Pair with
    * {@link onThemeConfigChange} so a console save updates the
    * shared state cell the closure reads from. The cell pattern
    * closes the parallel-state-stores bug where the push handler
@@ -2338,10 +2343,10 @@ export interface CreateGguiServerOptions {
    *   2. `ui://ggui/session` is served via `resources/read`.
    *   3. `io.modelcontextprotocol/ui` is advertised in the server's
    *      `initialize` capabilities (under `experimental`).
-   *   4. Each `ggui_push` result carries `_meta.ggui.bootstrap` (wsUrl
-   *      + short-TTL token + expiresAt). The session-channel server
-   *      accepts that token on `subscribe` and issues a longer-TTL
-   *      `sessionToken` in the ack for iframe reconnects.
+   *   4. Each `ggui_push` result carries the `ai.ggui/session` slice
+   *      with wsUrl + short-TTL token + expiresAt. The session-channel
+   *      server accepts that token on `subscribe` and issues a
+   *      longer-TTL `sessionToken` in the ack for iframe reconnects.
    */
   readonly mcpApps?:
     | boolean
@@ -2363,8 +2368,8 @@ export interface CreateGguiServerOptions {
    * The thin-shell HTML served from `ui://ggui/session` dynamic-
    * script-loads the renderer bundle from this URL. The server needs
    * to either (a) serve the bundle itself (default), or (b) publish
-   * the operator-owned URL on `_meta.ggui.bootstrap.runtimeUrl`
-   * so the shell knows where to look.
+   * the operator-owned URL on the `ai.ggui/session.runtimeUrl` slice
+   * field so the shell knows where to look.
    *
    *   - `true` / omitted (default when `mcpApps` is on): serve the
    *     bundle via `express.static` at `/_ggui/iframe-runtime.js` from the
@@ -2410,7 +2415,7 @@ export interface CreateGguiServerOptions {
    *
    * Ignored entirely when MCP Apps is disabled.
    */
-  readonly bootstrapSecret?: string;
+  readonly wsTokenSecret?: string;
 
   /**
    * Enable the pairing transport. Adds `POST /pair` (public, completes a
@@ -2624,7 +2629,7 @@ export interface CreateGguiServerOptions {
    * Render-URL signing config — capability-URL hardening.
    *
    * When set (default), every minted `/r/<code>` URL carries
-   * `?sig=<hmac>&exp=<unix>`. The gate on `/r/` + `/api/bootstrap/`
+   * `?sig=<hmac>&exp=<unix>`. The gate on `/r/` (HTML + JSON branches)
    * verifies the sig + freshness before lookup; tampered or expired
    * URLs return 410.
    *
@@ -2647,7 +2652,7 @@ export interface CreateGguiServerOptions {
 
   /**
    * Per-shortCode rate-limit config. Defends `/r/` and
-   * `/api/bootstrap/` against brute-force scans.
+   * `/r/` (JSON branch) against brute-force scans.
    *
    *   - `windowSeconds` + `limit`: bucket size. Default 60s / 30 hits.
    *   - `false`: disable rate limiting entirely (CI/test convenience).
@@ -2783,7 +2788,7 @@ export interface CreateGguiServerOptions {
          * cookie endpoint resolves shortCode → sessionId by reading
          * it. Throws at construction if the index is absent.
          *
-         * The cookie signing secret is the same {@link bootstrapSecret}
+         * The cookie signing secret is the same {@link wsTokenSecret}
          * used by the MCP Apps bootstrap/session tokens — different
          * token `kind` claims make cross-kind confusion impossible
          * (see `console-auth.ts` isolation comment).
@@ -2887,11 +2892,12 @@ export interface CreateGguiServerOptions {
    * Content-addressable code blob storage. When wired, this server
    * mounts `GET /code/<hash>.js` for the iframe runtime to fetch
    * compiled componentCode by content hash. The push handler writes
-   * to the store before emitting `_meta.ggui.bootstrap.codeUrl`.
+   * to the store before emitting `codeUrl` on the `ai.ggui/stack-item`
+   * slice.
    *
    * Defaults: when omitted the route is NOT mounted; the push
-   * handler falls back to inline base64 `componentCode` on
-   * `_meta.ggui.bootstrap` (legacy delivery channel).
+   * handler falls back to inline base64 `componentCode` on the
+   * `ai.ggui/stack-item` slice (legacy delivery channel).
    *
    * OSS dev wires `FileSystemCodeStore` (rooted at `~/.ggui/code-cache/`)
    * via `ggui-cli/buildMcpServerBackend`. Tests wire
@@ -3413,8 +3419,8 @@ export function createGguiServer(
   //   runtimeEnabled: should we serve `/_ggui/iframe-runtime.js` ourselves?
   //   runtimeConfig:  narrowed object form or `{}`.
   //   runtimePath:    HTTP route under which the bundle is mounted.
-  //   runtimeBootstrapUrl: the URL that lands on
-  //                   `_meta.ggui.bootstrap.runtimeUrl`. Usually
+  //   runtimeBootstrapUrl: the URL that lands on the
+  //                   `ai.ggui/session.runtimeUrl` slice field. Usually
   //                   equal to `runtimePath`; overridden when a
   //                   CDN fronts the bundle.
   //
@@ -3470,7 +3476,7 @@ export function createGguiServer(
         });
 
   // Per-shortCode rate limiter. Same instance services
-  // both /r/ and /api/bootstrap/ — a brute-force scan can't bypass
+  // both /r/ HTML and JSON branches — a brute-force scan can't bypass
   // the limit by alternating routes since the key is the code
   // itself.
   const renderRateLimiter: RenderRateLimiter | undefined =
@@ -3508,7 +3514,7 @@ export function createGguiServer(
   // across instances. Replay cache is single-process; multi-host
   // deployments swap for a shared store later.
   // Live-mode minted credentials. wsUrl/token/expiresAt are optional
-  // on the protocol's McpAppAiGguiMountView (they only apply to live
+  // on the protocol's McpAppAiGguiMeta (they only apply to live
   // mode, not static-component / system-card modes), but THIS minter
   // always sets all three on a successful mint. Promote them
   // back to required at the return-type level so route consumers
@@ -3543,23 +3549,23 @@ export function createGguiServer(
   // config surface small and means operators rotate ONE value.
   // Resolved here so both the MCP Apps block and the console
   // block below can reference the same string.
-  let sharedTokenSecret: string | undefined = opts.bootstrapSecret;
+  let sharedTokenSecret: string | undefined = opts.wsTokenSecret;
   if (mcpAppsEnabled) {
     if (sharedTokenSecret === undefined) {
       sharedTokenSecret = randomBytes(32).toString('hex');
       logger.warn('bootstrap_secret_ephemeral', {
-        hint: 'No `bootstrapSecret` provided — minted a process-local random secret. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
+        hint: 'No `wsTokenSecret` provided — minted a process-local random secret. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
       });
     }
     const secret = sharedTokenSecret;
-    // G14 (2026-05-23): the `BootstrapTokenReplayCache` is no longer
+    // G14 (2026-05-23): the `WsTokenReplayCache` is no longer
     // wired into the default verify path — bootstrap envelopes are
     // multi-use within their TTL so transient WS drops reconnect
     // without a fresh handshake. The replay cache class stays exported
     // from `@ggui-ai/mcp-server-core` for callers that need explicit
     // single-use semantics (one-time-link share, etc.).
     const syncMinter = (sessionId: string, appId: string) => {
-      const { token, claims } = mintBootstrapToken({ sessionId, appId }, secret);
+      const { token, claims } = mintWsToken({ sessionId, appId }, secret);
       return {
         wsUrl,
         token,
@@ -3581,7 +3587,7 @@ export function createGguiServer(
     };
     channelBootstrap = {
       verify: (token) => {
-        const result = verifyToken(token, secret, 'bootstrap');
+        const result = verifyToken(token, secret, 'ws');
         if (result.ok) {
           return {
             ok: true,
@@ -3602,7 +3608,7 @@ export function createGguiServer(
         return token;
       },
       refresh: (token) => {
-        const result = refreshBootstrapToken(token, secret);
+        const result = refreshWsToken(token, secret);
         if (result.ok) {
           return {
             ok: true,
@@ -3973,7 +3979,7 @@ export function createGguiServer(
               sessionStore,
               renderBaseUrl,
               // 2: minted render URLs carry `?sig=&exp=` so
-              // the gate on `/r/` + `/api/bootstrap/` can prove the
+              // the gate on `/r/` (HTML + JSON branches) can prove the
               // URL is unexpired + untampered. Absent when operator
               // booted with `renderSigning: false`.
               ...(renderSigner
@@ -3994,10 +4000,10 @@ export function createGguiServer(
               ...(channelBootstrap
                 ? { bootstrapRefresh: { refresh: channelBootstrap.refresh } }
                 : {}),
-              // Iframe-runtime bundle URL — padded onto
-              // `_meta.ggui.bootstrap.runtimeUrl` by the push
+              // Iframe-runtime bundle URL — padded onto the
+              // `ai.ggui/session.runtimeUrl` slice field by the push
               // handler's resultMeta. C8 made this required on
-              // McpAppAiGguiMountView; we always pass it so handlers
+              // McpAppAiGguiSessionMeta; we always pass it so handlers
               // don't fall back to their hardcoded default.
               // Function form: resolves per-request so a tunnel/proxy
               // operator (X-Forwarded-Host from a loopback peer) gets
@@ -4005,7 +4011,7 @@ export function createGguiServer(
               // breaks under srcdoc iframes (claude.ai).
               runtimeUrl: resolveRuntimeUrlForResultMeta,
               // Forward operator-picked theme onto every
-              // `_meta.ggui.bootstrap.themeId` so MCP Apps hosts
+              // `ai.ggui/session.themeId` slice field so MCP Apps hosts
               // (claude.ai, Claude Desktop) that mount via the
               // postMessage tool-result path propagate the theme into
               // the iframe. Same resolution as the `/r/...` route.
@@ -5204,8 +5210,8 @@ export function createGguiServer(
         res.status(400).type('text/plain').send('shortCode required');
         return;
       }
-      // C.4 rate limit — same instance shared with /api/bootstrap/
-      // so attackers can't bypass by alternating routes.
+      // C.4 rate limit — single chokepoint per shortCode, shared
+      // across the HTML + JSON branches.
       if (renderRateLimiter) {
         const decision = renderRateLimiter.check(shortCode);
         if (!decision.allowed) {
@@ -5221,7 +5227,7 @@ export function createGguiServer(
         }
       }
       try {
-        // Shared gate keeps `/r/` and `/api/bootstrap/` on a single
+        // Shared gate keeps `/r/` and `/r/` (JSON branch) on a single
         // chokepoint. Render-URL sig + exp verification runs inside
         // the gate when a signer is wired; routes here only map
         // outcome codes to status codes.
@@ -5360,6 +5366,70 @@ export function createGguiServer(
           }
         }
         if (!top) {
+          // Content-negotiated branch — when the caller asked for JSON
+          // (polling client, sample-agent useChat fallback), return a
+          // 200 + session-only slice envelope so the consumer can wire
+          // the live channel + retry. The HTML branch falls through to
+          // the auto-polling placeholder for human-visible feedback.
+          const wantsJsonForEmpty =
+            req.accepts(['text/html', 'application/json']) === 'application/json';
+          if (wantsJsonForEmpty) {
+            // Mint the live-mode trio so the consumer can subscribe over
+            // WS and receive the first `push` frame when generation
+            // lands. Without it the polling client can't bootstrap.
+            let emptyLiveCreds:
+              | { wsUrl: string; token: string; expiresAt: string }
+              | undefined;
+            const requestHostForEmpty = req.get('host') ?? '';
+            if (mintBootstrap !== undefined) {
+              const minted = mintBootstrap(session.id, session.appId);
+              let resolvedWsUrl = minted.wsUrl;
+              try {
+                const wsParsed = new URL(minted.wsUrl);
+                if (
+                  (wsParsed.hostname === 'localhost' ||
+                    wsParsed.hostname === '127.0.0.1') &&
+                  requestHostForEmpty.length > 0
+                ) {
+                  const wsScheme = req.protocol === 'https' ? 'wss' : 'ws';
+                  resolvedWsUrl = `${wsScheme}://${requestHostForEmpty}${wsParsed.pathname}${wsParsed.search}`;
+                }
+              } catch {
+                // Leave wsUrl as-is on parse failure.
+              }
+              emptyLiveCreds = {
+                wsUrl: resolvedWsUrl,
+                token: minted.token,
+                expiresAt: minted.expiresAt,
+              };
+            }
+            const pollingBaseOriginEmpty = opts.publicBaseUrl
+              ? opts.publicBaseUrl.replace(/\/$/, '')
+              : `${req.protocol}://${requestHostForEmpty}`;
+            const pollingUrlEmpty = `${pollingBaseOriginEmpty}/r/${encodeURIComponent(shortCode)}`;
+            const emptySession: McpAppAiGguiSessionMeta = {
+              sessionId: session.id,
+              appId: session.appId,
+              runtimeUrl: resolveRuntimeUrlForResultMeta(),
+              pollingUrl: pollingUrlEmpty,
+              ...(renderThemeId !== undefined ? { themeId: renderThemeId } : {}),
+              ...(renderThemeMode !== undefined ? { themeMode: renderThemeMode } : {}),
+              ...(emptyLiveCreds !== undefined
+                ? {
+                    wsUrl: emptyLiveCreds.wsUrl,
+                    wsToken: emptyLiveCreds.token,
+                    expiresAt: emptyLiveCreds.expiresAt,
+                  }
+                : {}),
+            };
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.status(200).json({
+              [MCP_APP_AI_GGUI_SESSION_META_KEY]: emptySession,
+            });
+            return;
+          }
           // Auto-polling placeholder — generation lands async after
           // `ggui_push` returns; the first GET often arrives before
           // componentCode is appended. Reloading every 1.5s gives the
@@ -5378,18 +5448,18 @@ export function createGguiServer(
         }
         // Project the active stack item to the transport-agnostic
         // bootstrap view — same source of truth `push.ts` consumes for
-        // `_meta.ggui.bootstrap`. Adding a new field (e.g. a future
-        // `streamSpecJson` or `adapterPermissions`) means editing one
-        // file (`bootstrap-meta-derivation.ts`) and both transports
+        // the `ai.ggui/*` slice meta pair. Adding a new field (e.g. a
+        // future `streamSpecJson` or `adapterPermissions`) means editing
+        // one file (`slice-meta-derivation.ts`) and both transports
         // pick it up. Drift across transports is structurally
         // impossible.
-        const view = deriveStackItemBootstrapView(top.source);
+        const view = deriveStackItemMeta(top.source);
         // Mint the live-mode trio (wsUrl / token / expiresAt) when the
         // bootstrap minter is wired. Without these, the iframe-runtime
         // mounts the static stack item but rejects WS subscribe with
         // "live-mode required" — `ggui_update` succeeds server-side but
         // the mounted iframe never re-renders until manual reload.
-        // Mirror the same request-host rewrite `/api/bootstrap/<shortCode>`
+        // Mirror the same request-host rewrite `/r/<shortCode>` (JSON branch)
         // does so localhost-default minters land on the request's host
         // when serving through a tunnel.
         let liveCreds:
@@ -5469,12 +5539,12 @@ export function createGguiServer(
           }
         }
         // Forward gadgets + publicEnv on the self-contained shell
-        // path. Both fields
-        // ALREADY flow on `_meta.ggui.bootstrap` (push.ts handler);
-        // omitting them here regresses /r/<shortCode> + resources/read
-        // to STDLIB-only iframes (wrapper hooks unreachable, env
-        // values absent). publicEnv requires the App record's
-        // publicEnv map — re-read here in the render closure.
+        // path. Both fields ALREADY flow on the `ai.ggui/session` slice
+        // meta (push.ts handler); omitting them here regresses
+        // /r/<shortCode> + resources/read to STDLIB-only iframes
+        // (wrapper hooks unreachable, env values absent). publicEnv
+        // requires the App record's publicEnv map — re-read here in
+        // the render closure.
         let renderPublicEnv:
           | Readonly<Record<string, string>>
           | undefined;
@@ -5491,6 +5561,96 @@ export function createGguiServer(
             // Silent — publicEnv stays undefined; wrappers calling
             // getPublicEnv throw at hook-mount with a clear message.
           }
+        }
+        // Polling-fallback URL — same origin as this endpoint, same
+        // shortCode. The iframe-runtime threads this onto its
+        // `props_update` channel so `PollingTransport` has a URL to
+        // re-fetch when the WebSocket transport is unavailable or
+        // fails. The polling client requests `Accept: application/json`,
+        // which routes through the JSON branch below — same projection,
+        // diff-detection on stack-item.propsJson.
+        const pollingBaseOrigin = opts.publicBaseUrl
+          ? opts.publicBaseUrl.replace(/\/$/, '')
+          : `${req.protocol}://${requestHost}`;
+        const pollingUrl = `${pollingBaseOrigin}/r/${encodeURIComponent(shortCode)}`;
+        // Content-negotiation: JSON branch returns the slice envelope
+        // (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`),
+        // same shape as the wire `_meta` and the inline
+        // `__GGUI_META__` global the HTML branch emits. Used by:
+        //   - iframe-runtime PollingTransport (WS-blocked hosts)
+        //   - sample-agents' useChat fallback path when `_meta` was
+        //     stripped by an MCP host (Claude Desktop / claude.ai
+        //     Connector route their `_meta`-stripping hosts here)
+        //   - any future cross-host consumer that needs the same
+        //     bootstrap data but can't run the HTML shell
+        //
+        // Default Accept (`text/html` or no header) → HTML shell. The
+        // body's bytes are identical to today's HTML output below.
+        const wantsJson = req.accepts(['text/html', 'application/json']) === 'application/json';
+        if (wantsJson) {
+          const jsonSession: McpAppAiGguiSessionMeta = {
+            sessionId: session.id,
+            appId: session.appId,
+            runtimeUrl: resolveRuntimeUrlForResultMeta(),
+            pollingUrl,
+            ...(renderThemeId !== undefined ? { themeId: renderThemeId } : {}),
+            ...(renderThemeMode !== undefined ? { themeMode: renderThemeMode } : {}),
+            ...(renderPublicEnv !== undefined &&
+            Object.keys(renderPublicEnv).length > 0
+              ? { publicEnv: renderPublicEnv }
+              : {}),
+            ...(view.gadgets !== undefined && view.gadgets.length > 0
+              ? { gadgets: view.gadgets }
+              : {}),
+            ...(view.permissionsPolicy !== undefined &&
+            view.permissionsPolicy.length > 0
+              ? { permissionsPolicy: view.permissionsPolicy }
+              : {}),
+            ...(liveCreds !== undefined
+              ? {
+                  wsUrl: liveCreds.wsUrl,
+                  wsToken: liveCreds.token,
+                  expiresAt: liveCreds.expiresAt,
+                }
+              : {}),
+          };
+          const jsonStackItem: McpAppAiGguiStackItemMeta | undefined = (() => {
+            const si: McpAppAiGguiStackItemMeta = {
+              stackItemId: top.id,
+              ...(view.kind !== undefined ? { kind: view.kind } : {}),
+              ...(renderCodeUrl !== undefined
+                ? {
+                    codeUrl: renderCodeUrl,
+                    ...(renderCodeHash !== undefined ? { codeHash: renderCodeHash } : {}),
+                  }
+                : {}),
+              ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+              ...(view.actionNextSteps !== undefined
+                ? { actionNextSteps: view.actionNextSteps }
+                : {}),
+              ...(view.contextSlots !== undefined
+                ? { contextSlots: view.contextSlots }
+                : {}),
+              ...(renderContractHash !== undefined &&
+              renderValidatorsUrl !== undefined
+                ? {
+                    contractHash: renderContractHash,
+                    validatorsUrl: renderValidatorsUrl,
+                  }
+                : {}),
+            };
+            return si;
+          })();
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.status(200).json({
+            [MCP_APP_AI_GGUI_SESSION_META_KEY]: jsonSession,
+            ...(jsonStackItem !== undefined
+              ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: jsonStackItem }
+              : {}),
+          });
+          return;
         }
         const html = buildSelfContainedShell({
           sessionId: session.id,
@@ -5574,378 +5734,14 @@ export function createGguiServer(
     });
   }
 
-  // GET /api/bootstrap/:shortCode — JSON bootstrap-envelope endpoint
-  // for the thin-shell's Path A fallback.
-  //
-  // The production thin shell (`GGUI_SESSION_SHELL_HTML`) tries TWO
-  // paths to obtain the bootstrap envelope (`McpAppAiGguiMountView`):
-  //
-  //   Path B (preferred, spec-shaped): read
-  //     `params._meta.ggui.bootstrap` off the host-forwarded
-  //     `ui/notifications/tool-result`. Per the MCP Apps spec at
-  //     `specification/2026-01-26/apps.mdx:1145-1155`, `params` is the
-  //     full `CallToolResult` and `_meta` is in scope. First-party
-  //     hosts (Studio, Portal, console's `<McpAppIframe>`) honor this.
-  //
-  //   Path A (fallback): `fetch(<publicBaseUrl>/api/bootstrap/<shortCode>)`
-  //     when `_meta` is absent. Empirically claude.ai Connector and
-  //     Claude Desktop strip `_meta` from `ui/notifications/tool-result`
-  //     despite the spec, so without this endpoint Path A wedges with
-  //     `Bootstrap fetch error: Failed to fetch`.
-  //
-  // This route mints the SAME envelope the `ggui_push.resultMeta`
-  // callback produces (same `mintBootstrap` minter, same `runtimeUrl`
-  // source, same shape). The shortCode is the capability — knowing it
-  // grants access (mirrors `/r/:shortCode`'s no-auth posture; the agent
-  // already shared it via `structuredContent.url`). The minted token
-  // IS the auth for the subsequent WS subscribe.
-  //
-  // Mount conditions (all required):
-  //   - mcpAppsEnabled — bootstrap minter only constructed for MCP Apps
-  //   - sessionStore   — needed to resolve session.appId on lookup hit
-  //   - shortCodeIndex — needed to resolve shortCode → sessionId
-  //   - mintBootstrap  — minted at server boot when mcpApps is on; this
-  //     is the same gate that keeps `/r/:shortCode` honest
-  //
-  // CORS posture: the iframe runs at the host's sandbox origin (e.g.
-  // `claudemcpcontent.com` for claude.ai web), and fetches this URL on
-  // the public-base-url origin. Without `Access-Control-Allow-Origin`
-  // the browser drops the response. We set `*` because:
-  //   1. The bootstrap is read-only — no state mutation surface.
-  //   2. The minted token is short-lived + single-use + bound to the
-  //      sessionId discovered via the (already-shared) shortCode.
-  //   3. `ext-apps` MCP App hosts that respect `_meta.ui.csp.connect-
-  //      Domains` already gate which origins the iframe is allowed to
-  //      fetch from — the credential is the shortCode in the URL, not
-  //      the originating origin.
-  // `Cache-Control: no-store` because each response carries a fresh
-  // single-use token; caching would mint a token a future caller can't
-  // use (replay cache rejects re-use within TTL).
-  if (
-    mcpAppsEnabled
-    && sessionStore
-    && opts.shortCodeIndex
-    && mintBootstrap
-  ) {
-    const sessionStoreForBootstrap = sessionStore;
-    const shortCodeIndexForBootstrap = opts.shortCodeIndex;
-    const mintBootstrapForRoute = mintBootstrap;
-    app.get('/api/bootstrap/:shortCode', async (req: Request, res: Response) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      const shortCode = req.params['shortCode'];
-      if (typeof shortCode !== 'string' || shortCode.length === 0) {
-        res.status(400).json({
-          error: {
-            code: 'invalid_request',
-            message: 'shortCode path parameter is required',
-          },
-        });
-        return;
-      }
-      // C.4 rate limit — shared instance with /r/ so the limit is
-      // global per shortCode regardless of route.
-      if (renderRateLimiter) {
-        const decision = renderRateLimiter.check(shortCode);
-        if (!decision.allowed) {
-          logger.warn('render_access', {
-            route: '/api/bootstrap/:shortCode',
-            code_prefix: maskShortCode(shortCode),
-            outcome: 'rate_limited',
-            retry_after_seconds: decision.retryAfterSeconds,
-          });
-          res.setHeader('Retry-After', String(decision.retryAfterSeconds));
-          res.status(429).json({
-            error: {
-              code: 'rate_limited',
-              message: 'too many requests for this shortCode',
-            },
-          });
-          return;
-        }
-      }
-      try {
-        // Single gate shared with `/r/` — see render-gate.ts. Sig +
-        // exp verification runs inside the gate when a signer is
-        // wired; this route maps outcome codes to JSON responses.
-        const outcome = await gateShortCode({
-          shortCode,
-          shortCodeIndex: shortCodeIndexForBootstrap,
-          sessionStore: sessionStoreForBootstrap,
-          ...(renderSigner ? { signer: renderSigner } : {}),
-          signedQuery: {
-            sig:
-              typeof req.query['sig'] === 'string'
-                ? req.query['sig']
-                : undefined,
-            exp:
-              typeof req.query['exp'] === 'string'
-                ? req.query['exp']
-                : undefined,
-          },
-        });
-        if (!outcome.ok) {
-          if (outcome.code === 'session_missing' && outcome.logContext) {
-            logger.warn('bootstrap_session_missing', outcome.logContext);
-          }
-          logger.warn('render_access', {
-            route: '/api/bootstrap/:shortCode',
-            code_prefix: maskShortCode(shortCode),
-            outcome: outcome.code,
-          });
-          // Map gate codes to HTTP status + structured error body.
-          const status =
-            outcome.code === 'invalid_signature' ||
-            outcome.code === 'malformed_signature'
-              ? 403
-              : outcome.code === 'expired'
-                ? 410
-                : 404;
-          const code =
-            outcome.code === 'invalid_signature' ||
-            outcome.code === 'malformed_signature'
-              ? 'forbidden'
-              : outcome.code === 'expired'
-                ? 'gone'
-                : 'not_found';
-          const message =
-            outcome.code === 'invalid_signature' ||
-            outcome.code === 'malformed_signature'
-              ? 'signature invalid'
-              : outcome.code === 'expired'
-                ? 'shortCode expired'
-                : 'shortCode not recognised';
-          res.status(status).json({ error: { code, message } });
-          return;
-        }
-        const { session } = outcome;
-        const minted = mintBootstrapForRoute(session.id, session.appId);
-        // Iframe absolute-URL fix: thin shells load the bundle from
-        // contexts whose origin is opaque (`about:srcdoc`) or cross-
-        // origin to this server. The shared resolver derives an
-        // absolute base from X-Forwarded-Host when the TCP peer is
-        // loopback, with `opts.publicBaseUrl` always winning. See
-        // request-context.ts for the trust gate.
-        const absoluteRuntimeUrl = resolveRuntimeUrlForResultMeta();
-        // The `wsUrl` minted at server-boot is public when
-        // `--public-base-url` is set; when it's still the default
-        // `ws://localhost/ws` we rewrite to the request host so the
-        // iframe's WS open lands on this listener regardless of tunnel.
-        // NOTE: wsUrl rewrite still reads `req.get('host')` directly
-        // because the WS token is a credential — auto-deriving it is
-        // deliberately not done here. Operators must set
-        // `--public-base-url` for production-grade WS hardening.
-        const requestHost = req.get('host') ?? '';
-        let resolvedWsUrl = minted.wsUrl;
-        try {
-          const wsParsed = new URL(minted.wsUrl);
-          if (
-            (wsParsed.hostname === 'localhost'
-              || wsParsed.hostname === '127.0.0.1')
-            && requestHost.length > 0
-          ) {
-            const wsScheme = req.protocol === 'https' ? 'wss' : 'ws';
-            resolvedWsUrl = `${wsScheme}://${requestHost}${wsParsed.pathname}${wsParsed.search}`;
-          }
-        } catch {
-          // Malformed `wsUrl` — leave it as-is so the renderer surfaces
-          // the failure through its own bootstrap-failed envelope rather
-          // than us silently rewriting a string we don't understand.
-        }
-        // Project the active stack item through the canonical bootstrap
-        // view — same single source of truth `/r/<shortCode>`,
-        // `ggui_push.resultMeta`, and `ggui_update.resultMeta` use. Without
-        // these fields the iframe-runtime receives a fresh bootstrap on
-        // every ggui_update refetch but has no new props / componentCode
-        // to apply, so the live re-render path silently no-ops. Drift
-        // from the projection broke the spec-compliant postMessage path
-        // (caught by 2026-05-13 live smoke).
-        //
-        // Same top-pick logic the `/r/<shortCode>` route uses: walk the
-        // stack from the tail, pick the first entry that carries either
-        // a componentCode or a system `kind`. McpAppsStackItem entries
-        // (no componentCode + no kind) are skipped — the iframe stays
-        // on whatever code it already mounted from its inline shell.
-        let topSource: SessionStackEntry | null = null;
-        for (let i = session.stack.length - 1; i >= 0; i -= 1) {
-          const entry = session.stack[i];
-          if (!entry || entry.type === 'mcpApps') continue;
-          if (entry.type === 'system') {
-            if (typeof entry.kind === 'string' && entry.kind.length > 0) {
-              topSource = entry;
-              break;
-            }
-            continue;
-          }
-          if (
-            typeof entry.componentCode === 'string'
-            && entry.componentCode.length > 0
-          ) {
-            topSource = entry;
-            break;
-          }
-        }
-        const view = topSource
-          ? deriveStackItemBootstrapView(topSource)
-          : {};
-        // Static-component delivery via codeUrl (T3-1 2026-05-13). Hash
-        // the top stack item's componentCode + write to codeStore when
-        // wired; surface `codeUrl + codeHash` on the bootstrap. Base
-        // URL: explicit `publicBaseUrl` wins (cloud + tunnel-with-flag);
-        // otherwise derive from `req.protocol + req.host` so local dev
-        // and tunnel-without-flag still get a reachable URL (mirrors
-        // the localhost-wsUrl-rewriting pattern below). Without
-        // codeStore, fall through to live-only mode (wsUrl+token still
-        // mint via the minter above).
-        let bootstrapCodeUrl: string | undefined;
-        let bootstrapCodeHash: string | undefined;
-        let bootstrapContractHash: string | undefined;
-        let bootstrapValidatorsUrl: string | undefined;
-        if (
-          topSource
-          && topSource.type !== 'system'
-          && typeof topSource.componentCode === 'string'
-          && topSource.componentCode.length > 0
-          && opts.codeStore
-        ) {
-          try {
-            const hash = opts.codeStore.hashOf(topSource.componentCode);
-            await opts.codeStore.put(hash, topSource.componentCode);
-            bootstrapCodeHash = hash;
-            const base = opts.publicBaseUrl
-              ? opts.publicBaseUrl.replace(/\/$/, '')
-              : `${req.protocol}://${requestHost}`;
-            bootstrapCodeUrl = `${base}/code/${hash}.js`;
-          } catch {
-            // Silent — falls through to live-only mode.
-          }
-        }
-        if (topSource && opts.codeStore) {
-          // Content-addressable contract-validator bundle (#109).
-          try {
-            const bundle = await deriveContractBundle(topSource);
-            if (bundle) {
-              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
-              bootstrapContractHash = bundle.contractHash;
-              const base = opts.publicBaseUrl
-                ? opts.publicBaseUrl.replace(/\/$/, '')
-                : `${req.protocol}://${requestHost}`;
-              bootstrapValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
-            }
-          } catch {
-            // Silent — bundle write failure degrades to no client-side
-            // validators (server-side gate remains authoritative).
-          }
-        }
-        // Same theme cascade push uses — preset theme (operator-picked
-        // via ggui.json) takes priority over default.
-        const themeIdForBootstrap =
-          opts.theme !== undefined && opts.theme.source === 'preset'
-            ? opts.theme.preset
-            : undefined;
-        const themeModeForBootstrap =
-          opts.theme !== undefined && opts.theme.source !== 'default'
-            ? opts.theme.mode
-            : undefined;
-        // Polling-fallback URL — same origin as this endpoint, same
-        // shortCode. The iframe-runtime threads this onto its
-        // `props_update` channel so `PollingTransport` has a URL to
-        // re-fetch when the WebSocket transport is unavailable or
-        // fails. The endpoint we're INSIDE is the same one the iframe
-        // polls on tick — diffing `propsJson` between fetches gives
-        // the iframe a synthesized props_update frame.
-        const pollingBaseOrigin = opts.publicBaseUrl
-          ? opts.publicBaseUrl.replace(/\/$/, '')
-          : `${req.protocol}://${requestHost}`;
-        const bootstrapPollingUrl = `${pollingBaseOrigin}/api/bootstrap/${encodeURIComponent(shortCode)}`;
-        const bootstrap = {
-          wsUrl: resolvedWsUrl,
-          token: minted.token,
-          expiresAt: minted.expiresAt,
-          sessionId: session.id,
-          appId: session.appId,
-          runtimeUrl: absoluteRuntimeUrl,
-          pollingUrl: bootstrapPollingUrl,
-          ...(topSource !== null ? { stackItemId: topSource.id } : {}),
-          ...(themeIdForBootstrap !== undefined
-            ? { themeId: themeIdForBootstrap }
-            : {}),
-          ...(themeModeForBootstrap !== undefined
-            ? { themeMode: themeModeForBootstrap }
-            : {}),
-          ...(bootstrapCodeUrl !== undefined
-            ? { codeUrl: bootstrapCodeUrl }
-            : {}),
-          ...(bootstrapCodeHash !== undefined
-            ? { codeHash: bootstrapCodeHash }
-            : {}),
-          ...(view.kind ? { kind: view.kind } : {}),
-          ...(view.propsJson !== undefined
-            ? { propsJson: view.propsJson }
-            : {}),
-          ...(view.actionNextSteps !== undefined
-            ? { actionNextSteps: view.actionNextSteps }
-            : {}),
-          ...(view.contextSlots !== undefined
-            ? { contextSlots: view.contextSlots }
-            : {}),
-          ...(view.permissionsPolicy !== undefined
-          && view.permissionsPolicy.length > 0
-            ? { permissionsPolicy: view.permissionsPolicy }
-            : {}),
-          // Content-addressable contract-validator bundle (#109). This
-          // Path-A JSON route is the initial bootstrap for claude.ai
-          // Connector / Claude Desktop (they strip `_meta`, so Path B
-          // is unavailable) — the strict-CSP hosts where the renderer
-          // iframe cannot run `ajv.compile()`. Forwarding the URL +
-          // hash here lets those hosts fetch the validators bundle
-          // and dispatch wired actions.
-          ...(bootstrapContractHash !== undefined && bootstrapValidatorsUrl !== undefined
-            ? { contractHash: bootstrapContractHash, validatorsUrl: bootstrapValidatorsUrl }
-            : {}),
-        } as McpAppAiGguiMountView & {
-          stackItemId?: string;
-          themeId?: string;
-          themeMode?: 'light' | 'dark';
-          codeUrl?: string;
-          codeHash?: string;
-          kind?: string;
-          propsJson?: string;
-          permissionsPolicy?: readonly string[];
-        };
-        res.status(200).json(bootstrap);
-      } catch (err) {
-        logger.warn('bootstrap_route_failed', {
-          shortCode,
-          error: String(err),
-        });
-        res.status(500).json({
-          error: {
-            code: 'internal',
-            message: 'bootstrap mint failed',
-          },
-        });
-      }
-    });
-  } else if (mcpAppsEnabled && sessionStore && opts.shortCodeIndex) {
-    // Honest 503 when the bootstrap minter is absent. Reachable only if
-    // a future config combination disables `mintBootstrap` while keeping
-    // the rest of the MCP Apps stack — today that's not exposed as an
-    // option, but the path-A shell will still fetch this URL, and a 404
-    // would mislead the operator into chasing a missing-route ghost.
-    app.get('/api/bootstrap/:shortCode', (_req: Request, res: Response) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.status(503).json({
-        error: {
-          code: 'bootstrap_disabled',
-          message:
-            'Bootstrap minter is not configured. Enable mcpApps and ensure bootstrapSecret + public-base-url are set.',
-        },
-      });
-    });
-  }
+  // `/r/:shortCode` (JSON branch) was retired (R4) — content negotiation
+  // on `/r/:shortCode` covers the same surface. Request HTML by default
+  // (or with `Accept: text/html`) and the iframe shell is served. Send
+  // `Accept: application/json` and the same projection is returned as
+  // the slice envelope (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item":
+  // {...} }`), matching the shape consumers already see on the wire
+  // `_meta` and the inline `__GGUI_META__` global. One URL,
+  // one projection, two representations.
 
   // GET /code/:hash.js — content-addressable componentCode delivery.
   // GET /contract/:hash.js — content-addressable contract-validator-bundle
@@ -5965,7 +5761,7 @@ export function createGguiServer(
   // revalidate"). A second push with the same componentCode / contract
   // hits browser cache for free.
   //
-  // CORS: same `*` posture as `/api/bootstrap/:shortCode` — bytes are
+  // CORS: same `*` posture as `/r/:shortCode` (JSON branch) — bytes are
   // public-by-shortCode anyway (the agent already shared the URL with
   // the host), and the bytes carry no credentials.
   //
@@ -6428,7 +6224,7 @@ export function createGguiServer(
     if (sessionCookieEnabled && sharedTokenSecret === undefined) {
       sharedTokenSecret = randomBytes(32).toString('hex');
       logger.warn('console_cookie_secret_ephemeral', {
-        hint: 'No `bootstrapSecret` provided — minted a process-local random secret for console cookies. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
+        hint: 'No `wsTokenSecret` provided — minted a process-local random secret for console cookies. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
       });
     }
 
@@ -7155,6 +6951,18 @@ export function createGguiServer(
         '/ggui/console/timeline',
       ]) {
         app.use(path, (req, res, next) => {
+          // The per-session meta route (`/ggui/console/sessions/:id/meta`)
+          // gates on the same-origin console cookie, NOT the admin token —
+          // its caller is a same-origin iframe that already proved cookie
+          // possession. Exempt it from this admin-token middleware so
+          // both gates compose cleanly (admin token for `/sessions` list,
+          // cookie for per-session meta).
+          if (
+            path === '/ggui/console/sessions' &&
+            /^\/[^/]+\/meta\/?$/.test(req.path)
+          ) {
+            return next();
+          }
           if (adminGuardForReadEndpoints(req)) return next();
           applyDevtoolSecurityHeaders(res);
           res.status(401).json({ error: 'admin_auth_required' });
@@ -7855,7 +7663,7 @@ export function createGguiServer(
       //      carry an inlined bootstrap — same as production.
       //
       //   2. GET /ggui/console/session-bootstrap?session=<sessionId>
-      //      → returns `{bootstrap: McpAppAiGguiMountView}` JSON. The
+      //      → returns `{bootstrap: McpAppAiGguiMeta}` JSON. The
       //      console feeds this to `<McpAppIframe bootstrap={...}>`,
       //      which forwards it via `ui/initialize`
       //      (`packages/ggui-react/src/McpAppIframe/dispatch.ts`).
@@ -7872,7 +7680,8 @@ export function createGguiServer(
       //   - <McpAppIframe> host (bootstrap forwarder) — receives the
       //     bootstrap JSON via prop and threads it through `ui/initialize`.
       //   - renderer bundle (inside the iframe) — runs the same boot
-      //     code path as production; reads `_meta.ggui.bootstrap`.
+      //     code path as production; reads the `ai.ggui/session` +
+      //     `ai.ggui/stack-item` slice meta pair.
       //
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
@@ -7896,12 +7705,17 @@ export function createGguiServer(
       const gateDevtoolSessionRequest = async (
         req: Request,
         res: Response,
+        explicitSessionId?: string,
       ): Promise<{ sessionId: string; appId: string } | null> => {
-        const sessionIdRaw = req.query['session'];
+        const sessionIdRaw =
+          explicitSessionId !== undefined
+            ? explicitSessionId
+            : req.query['session'];
         if (typeof sessionIdRaw !== 'string' || sessionIdRaw.length === 0) {
           res.status(400).json({
             error: 'invalid_request',
-            message: '`session` query parameter (string) is required',
+            message:
+              '`session` query parameter (or :sessionId path parameter on the meta route) is required',
           });
           return null;
         }
@@ -7986,24 +7800,29 @@ export function createGguiServer(
         },
       );
 
-      // GET /ggui/console/session-bootstrap?session=<sessionId>
-      // → `{bootstrap: McpAppAiGguiMountView}` JSON. Required when the
+      // GET /ggui/console/sessions/:sessionId/meta
+      // → slice-envelope JSON (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`,
+      //   the same shape as the wire `_meta`). Required when the
       //   console is hosting the renderer behind `<McpAppIframe>` and
-      //   needs to feed the iframe a bootstrap via the `bootstrap`
-      //   prop. `mcpApps: true` is required (mintBootstrap presence)
-      //   — 503 otherwise.
+      //   needs to feed the iframe a meta-pair. `mcpApps: true` is
+      //   required (mintWsToken/mintBootstrap presence) — 503 otherwise.
       app.get(
-        '/ggui/console/session-bootstrap',
+        '/ggui/console/sessions/:sessionId/meta',
         async (req: Request, res: Response) => {
           applyDevtoolSecurityHeaders(res);
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          const verified = await gateDevtoolSessionRequest(req, res);
+          const sessionIdFromPath = req.params['sessionId'];
+          const verified = await gateDevtoolSessionRequest(
+            req,
+            res,
+            sessionIdFromPath,
+          );
           if (!verified) return;
           if (!mintBootstrap) {
             res.status(503).json({
               error: 'mcp_apps_disabled',
               message:
-                'Session-bootstrap requires mcpApps: true on the server so the renderer can receive a valid bootstrap token. Enable `mcpApps` on createGguiServer() and retry.',
+                'sessions/:id/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.',
             });
             return;
           }
@@ -8087,27 +7906,39 @@ export function createGguiServer(
                 }
               }
             } catch (err) {
-              cookieLogger.warn('session_bootstrap_validators_failed', {
+              cookieLogger.warn('session_meta_validators_failed', {
                 error: String(err),
                 sessionId: verified.sessionId,
               });
             }
           }
-          const bootstrap: McpAppAiGguiMountView = {
-            wsUrl: resolvedWsUrl,
-            token: minted.token,
-            expiresAt: minted.expiresAt,
+          // Slice-envelope response — same shape as the wire `_meta`
+          // and the inline `__GGUI_META__` global the
+          // `/r/<shortCode>` shell carries. SessionViewer parses with
+          // `parseMcpAppAiGguiMeta` to lift it into the typed
+          // `{session, stackItem}` pair `<McpAppIframe>` consumes.
+          const session: McpAppAiGguiSessionMeta = {
             sessionId: verified.sessionId,
             appId: verified.appId,
             runtimeUrl: absoluteRendererUrl,
-            ...(sessionContractHash !== undefined && sessionValidatorsUrl !== undefined
+            wsUrl: resolvedWsUrl,
+            wsToken: minted.token,
+            expiresAt: minted.expiresAt,
+          };
+          const stackItem: McpAppAiGguiStackItemMeta | undefined =
+            sessionContractHash !== undefined &&
+            sessionValidatorsUrl !== undefined
               ? {
                   contractHash: sessionContractHash,
                   validatorsUrl: sessionValidatorsUrl,
                 }
+              : undefined;
+          res.status(200).json({
+            [MCP_APP_AI_GGUI_SESSION_META_KEY]: session,
+            ...(stackItem !== undefined
+              ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: stackItem }
               : {}),
-          };
-          res.status(200).json({ bootstrap });
+          });
         },
       );
 

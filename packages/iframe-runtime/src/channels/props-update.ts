@@ -1,6 +1,6 @@
 /**
  * `props_update` channel handler — factored out of `runtime.ts` into
- * the `@ggui-ai/channel-client` layer.
+ * the `@ggui-ai/live-channel` layer.
  *
  * Receives a `{stackItemId, props}` payload from the live channel, validates
  * the new props against the stack item's cached `propsSpec`, patches
@@ -18,15 +18,17 @@
  *
  * An OPTIONAL polling descriptor provides a fallback transport —
  * when `polling` is supplied at factory time, `PollingTransport`
- * polls `/api/bootstrap/<shortCode>` and synthesizes a frame
- * whenever `propsJson` diffs from the last seen hash. WS hosts are
- * unaffected (the `polling` descriptor is inert under `WSTransport`).
+ * polls `/r/<shortCode>` with `Accept: application/json` (the
+ * content-negotiated slice-envelope branch of the same URL the HTML
+ * shell loads from) and synthesizes a frame whenever the active
+ * stack-item's `propsJson` diffs from the last seen hash. WS hosts
+ * are unaffected (the `polling` descriptor is inert under `WSTransport`).
  */
 
 import type {
   ChannelHandler,
   ChannelPollingDescriptor,
-} from '@ggui-ai/channel-client';
+} from '@ggui-ai/live-channel';
 import type {
   JsonObject,
   PropsUpdatePayload,
@@ -42,17 +44,19 @@ export interface PropsUpdateHandlerDeps {
   readonly getStackRenderer: () => StackRenderer;
   /**
    * Optional polling fallback URL. When the registry's chosen transport
-   * is `PollingTransport` (e.g. bootstrap missing wsUrl, or
+   * is `PollingTransport` (e.g. session-meta missing wsUrl, or
    * `FailoverHandle` swapped WS → polling after a hard failure), this
-   * URL is fetched on each tick. The response body is expected to carry
-   * `propsJson` + `stackItemId` (the same shape `/api/bootstrap/<code>`
-   * returns); the handler diffs `propsJson` between ticks and synthesizes
-   * a `props_update` frame whenever it changes. WS hosts ignore this
-   * descriptor (polling is inert under `WSTransport`).
+   * URL is fetched on each tick with `Accept: application/json`. The
+   * response body is the slice envelope (`{ "ai.ggui/session": {...},
+   * "ai.ggui/stack-item": {...} }`); the handler reads
+   * `body['ai.ggui/stack-item']?.propsJson` + `stackItemId` and diffs
+   * between ticks, synthesizing a `props_update` frame whenever they
+   * change. WS hosts ignore this descriptor (polling is inert under
+   * `WSTransport`).
    *
-   * Producer: server stamps `bootstrap.pollingUrl` on the bootstrap
-   * envelope. Consumer: iframe-runtime threads it here at handler
-   * registration time. Absent → no polling fallback (WS-only mode).
+   * Producer: server stamps `pollingUrl` on the session-meta slice.
+   * Consumer: iframe-runtime threads it here at handler registration
+   * time. Absent → no polling fallback (WS-only mode).
    */
   readonly pollingUrl?: string;
   /**
@@ -132,25 +136,35 @@ function buildPollingDescriptor(
     intervalMs: deps.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS,
     parse: (body: unknown): PropsUpdatePayload | null => {
       if (body === null || typeof body !== 'object') return null;
-      const propsJson = (body as { propsJson?: unknown }).propsJson;
-      const bootstrapStackItemId = (body as { stackItemId?: unknown })
+      // Slice-envelope shape (`{ "ai.ggui/session": {...},
+      // "ai.ggui/stack-item": {...} }`) — read propsJson + stackItemId
+      // off the stack-item slice. The server returns this shape on
+      // `/r/<shortCode>` with `Accept: application/json`.
+      const stackItemSlice = (body as { ['ai.ggui/stack-item']?: unknown })[
+        'ai.ggui/stack-item'
+      ];
+      if (stackItemSlice === null || typeof stackItemSlice !== 'object') {
+        return null;
+      }
+      const propsJson = (stackItemSlice as { propsJson?: unknown }).propsJson;
+      const sliceStackItemId = (stackItemSlice as { stackItemId?: unknown })
         .stackItemId;
       if (
         typeof propsJson !== 'string' ||
-        typeof bootstrapStackItemId !== 'string' ||
-        bootstrapStackItemId.length === 0
+        typeof sliceStackItemId !== 'string' ||
+        sliceStackItemId.length === 0
       ) {
         return null;
       }
       const hash = fnv1a(propsJson);
       if (
         hash === lastSeenHash &&
-        bootstrapStackItemId === lastSeenStackItemId
+        sliceStackItemId === lastSeenStackItemId
       ) {
         return null; // Unchanged — skip dispatch.
       }
       lastSeenHash = hash;
-      lastSeenStackItemId = bootstrapStackItemId;
+      lastSeenStackItemId = sliceStackItemId;
       let parsedProps: unknown;
       try {
         parsedProps = JSON.parse(propsJson);
@@ -168,7 +182,7 @@ function buildPollingDescriptor(
       // construction — JSON only carries JsonValue-compatible
       // structure. Narrow to the protocol's typed shape.
       return {
-        stackItemId: bootstrapStackItemId,
+        stackItemId: sliceStackItemId,
         props: parsedProps as JsonObject,
       };
     },

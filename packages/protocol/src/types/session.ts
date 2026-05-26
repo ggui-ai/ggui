@@ -170,7 +170,7 @@ export interface StackItem<TProps = JsonObject> {
    * wire; it resolves from each descriptor's `App.gadgets` entry.
    * Snapshot at push-time; never re-resolved at render. Permissions-Policy
    * + CSP + bundle-loader derivation read from this array (see
-   * `bootstrap-meta-derivation.ts`).
+   * `slice-meta-derivation.ts`).
    *
    * Smaller than the full `App.gadgets` (~1-5KB typical); the full
    * catalog stays recoverable from operator config if forensics need it.
@@ -193,7 +193,7 @@ export interface StackItem<TProps = JsonObject> {
    *
    * Absent on initial render until the first context-update fires
    * from the runtime. The bootstrap-meta projection
-   * (`deriveStackItemBootstrapView`) gracefully falls back to
+   * (`deriveStackItemMeta`) gracefully falls back to
    * `entry.default` per slot when this field is absent.
    */
   contextSnapshot?: JsonObject;

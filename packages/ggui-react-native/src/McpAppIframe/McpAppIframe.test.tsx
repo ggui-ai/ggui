@@ -27,7 +27,7 @@ import {
   type ReactTestRenderer,
 } from 'react-test-renderer';
 import type { ResourceContents } from '@modelcontextprotocol/sdk/types.js';
-import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
   classifyRendererEnvelope,
@@ -37,13 +37,15 @@ import {
 } from './dispatch';
 import type { McpAppIframeRef } from './types';
 
-const SAMPLE_BOOTSTRAP: McpAppAiGguiMountView = {
-  wsUrl: 'wss://test.example/ws',
-  token: 'sample-bootstrap-token',
-  expiresAt: '2099-12-31T23:59:59.999Z',
-  sessionId: 'sess-test',
-  appId: 'app-test',
-  runtimeUrl: '/_ggui/iframe-runtime.js',
+const SAMPLE_META: McpAppAiGguiMeta = {
+  session: {
+    wsUrl: 'wss://test.example/ws',
+    token: 'sample-bootstrap-token',
+    expiresAt: '2099-12-31T23:59:59.999Z',
+    sessionId: 'sess-test',
+    appId: 'app-test',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+  },
 };
 
 // -----------------------------------------------------------------------------
@@ -119,25 +121,22 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     }
   });
 
-  it('ui/initialize READING-B — forwards toolOutput._meta.ggui.bootstrap when ctx.bootstrap is set', async () => {
+  it('ui/initialize READING-B — forwards toolOutput._meta ai.ggui slices when ctx.meta is set', async () => {
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 1, method: 'ui/initialize' },
-      makeCtx({ bootstrap: SAMPLE_BOOTSTRAP }),
+      makeCtx({ meta: SAMPLE_META }),
     );
     const result = res?.result as Record<string, unknown>;
     expect(result).toHaveProperty('toolOutput');
     const toolOutput = result['toolOutput'] as Record<string, unknown>;
     // Narrow-exception invariant: ONLY `_meta` under toolOutput.
     expect(Object.keys(toolOutput).sort()).toEqual(['_meta']);
-    const meta = toolOutput['_meta'] as Record<string, unknown>;
-    // ONLY `ggui` under _meta.
-    expect(Object.keys(meta).sort()).toEqual(['ggui']);
-    const ggui = meta['ggui'] as Record<string, unknown>;
-    // ONLY `bootstrap` under _meta.ggui.
-    expect(Object.keys(ggui).sort()).toEqual(['bootstrap']);
-    expect(ggui['bootstrap']).toBe(SAMPLE_BOOTSTRAP);
+    const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
+    // ONLY the `ai.ggui/session` slice present (no stackItem in SAMPLE_META).
+    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/session']);
+    expect(metaEnv['ai.ggui/session']).toBe(SAMPLE_META.session);
     // Adapter-boundary fields still present alongside the forwarded
-    // bootstrap.
+    // ai.ggui meta.
     expect(result['theme']).toEqual({ '--color-primary': '#ff0000' });
     expect(result['locale']).toBe('en-US');
     expect(result['containerDimensions']).toEqual({ width: 640, height: 480 });
@@ -150,18 +149,19 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     // structurally walks the same path the renderer does.
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 7, method: 'ui/initialize' },
-      makeCtx({ bootstrap: SAMPLE_BOOTSTRAP }),
+      makeCtx({ meta: SAMPLE_META }),
     );
     const result = res?.result as Record<string, unknown>;
     const toolOutput = result['toolOutput'] as Record<string, unknown>;
-    const meta = toolOutput['_meta'] as Record<string, unknown>;
-    const ggui = meta['ggui'] as Record<string, unknown>;
-    const bootstrap = ggui['bootstrap'] as McpAppAiGguiMountView;
-    expect(bootstrap.wsUrl).toBe(SAMPLE_BOOTSTRAP.wsUrl);
-    expect(bootstrap.token).toBe(SAMPLE_BOOTSTRAP.token);
-    expect(bootstrap.sessionId).toBe(SAMPLE_BOOTSTRAP.sessionId);
-    expect(bootstrap.appId).toBe(SAMPLE_BOOTSTRAP.appId);
-    expect(bootstrap.runtimeUrl).toBe(SAMPLE_BOOTSTRAP.runtimeUrl);
+    const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
+    const session = metaEnv['ai.ggui/session'] as NonNullable<
+      McpAppAiGguiMeta['session']
+    >;
+    expect(session.wsUrl).toBe(SAMPLE_META.session?.wsUrl);
+    expect(session.token).toBe(SAMPLE_META.session?.token);
+    expect(session.sessionId).toBe(SAMPLE_META.session?.sessionId);
+    expect(session.appId).toBe(SAMPLE_META.session?.appId);
+    expect(session.runtimeUrl).toBe(SAMPLE_META.session?.runtimeUrl);
   });
 
   it('ui/open-link rejects non-http(s) schemes with unsupported-scheme', async () => {

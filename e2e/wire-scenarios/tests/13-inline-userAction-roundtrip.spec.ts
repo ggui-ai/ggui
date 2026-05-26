@@ -238,15 +238,15 @@ describe.skip(
         //    `_meta.ggui.bootstrap` from the iframe's window global.
         const stackItemId = await iframeFrame.locator('html').evaluate(() => {
           const w = window as unknown as {
-            __GGUI_BOOTSTRAP__?: { stackItemId?: string; sessionId?: string };
+            __GGUI_META__?: { stackItemId?: string; sessionId?: string };
           };
-          return w.__GGUI_BOOTSTRAP__?.stackItemId ?? null;
+          return w.__GGUI_META__?.stackItemId ?? null;
         });
         const sessionId = await iframeFrame.locator('html').evaluate(() => {
           const w = window as unknown as {
-            __GGUI_BOOTSTRAP__?: { stackItemId?: string; sessionId?: string };
+            __GGUI_META__?: { stackItemId?: string; sessionId?: string };
           };
-          return w.__GGUI_BOOTSTRAP__?.sessionId ?? null;
+          return w.__GGUI_META__?.sessionId ?? null;
         });
         expect(stackItemId, 'iframe bootstrap missing stackItemId').toBeTruthy();
         expect(sessionId, 'iframe bootstrap missing sessionId').toBeTruthy();

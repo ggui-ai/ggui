@@ -220,10 +220,11 @@ export interface SharedHandler<
    * and `content`), NOT merged into `structuredContent`.
    *
    * This is the canonical seam for attaching APP-FACING metadata — e.g.
-   * `_meta.ggui.bootstrap` carrying the WebSocket bootstrap credentials
-   * the MCP Apps iframe needs. Because `_meta` is not described by
-   * `outputSchema`, agents that typecheck against the tool signature
-   * never see these fields; only hosts that inspect `_meta` do.
+   * the `ai.ggui/session` + `ai.ggui/stack-item` slice pair carrying
+   * the WebSocket bootstrap credentials the MCP Apps iframe needs.
+   * Because `_meta` is not described by `outputSchema`, agents that
+   * typecheck against the tool signature never see these fields; only
+   * hosts that inspect `_meta` do.
    *
    * Returning `undefined` (or omitting the method) means "no `_meta` on
    * this result" — the transport simply doesn't attach the field.
