@@ -2,18 +2,34 @@
  * Slice-meta extraction — three thin envelope extractors that all
  * funnel into one shared validator + projector.
  *
- * The runtime accepts slices from three envelope shapes:
+ * The runtime accepts slices from three envelope shapes, in
+ * spec-canonical priority order:
  *
- *   1. `ui/initialize` response — slices under
- *      `result.toolOutput._meta["ai.ggui/session"]` /
- *      `_meta["ai.ggui/stack-item"]`. Used by first-party
- *      `<McpAppIframe>` Reading-B hosts (Studio, Portal, console).
+ *   1. `ui/notifications/tool-result` postMessage — spec-canonical
+ *      per MCP-Apps SEP-1865. `params` is a `CallToolResult` per the
+ *      spec, so slices live under `params._meta`. We also accept
+ *      `params.toolOutput._meta` as a Reading-B back-compat aliased
+ *      shape (some in-house emitters wrap the CallToolResult inside
+ *      a `toolOutput` field). Spec-strict hosts (`<AppRenderer>`
+ *      from `@mcp-ui/client`, ChatGPT MCP-Apps connector, claude.ai)
+ *      deliver slice meta ONLY through this channel — they do NOT
+ *      echo `toolOutput` on `ui/initialize.result`.
  *   2. `globalThis.__GGUI_META__` — slice envelope inlined
  *      synchronously by `buildSelfContainedShell`. Same slice shape
  *      as the wire `_meta` (just hoisted out of the JSON-RPC frame).
- *   3. `ui/notifications/tool-result` postMessage — slices under
- *      `params._meta` (spec-canonical) or `params.toolOutput._meta`
- *      (Reading-B). Used by Claude Desktop / claude.ai Connector.
+ *      Used by self-contained shells (`/r/` shells pre-R5, console
+ *      embeds, anywhere a per-session HTML shell can inline JSON
+ *      before this bundle loads). Fastest path — no async wait, no
+ *      JSON-RPC round-trip.
+ *   3. `ui/initialize` response Reading-B — slices under
+ *      `result.toolOutput._meta["ai.ggui/session"]` /
+ *      `_meta["ai.ggui/stack-item"]`. This is an OUR-CONVENTION
+ *      echo on top of `McpUiInitializeResult` — the MCP-Apps spec
+ *      `McpUiInitializeResult` type defines only
+ *      `{protocolVersion, hostInfo, hostCapabilities, hostContext}`
+ *      and does NOT carry `toolOutput`. Kept here for back-compat
+ *      with `<McpAppIframe>` (RN; web copy deleted in spec-mig P2)
+ *      + claude.ai's bonus echo.
  *
  * Each extractor reaches the `_meta` object and calls the protocol's
  * {@link parseMcpAppAiGguiMeta} to partition into
@@ -380,12 +396,32 @@ export function validateMeta(
 }
 
 /**
- * Parse slices from a `ui/initialize` postMessage response. The
- * argument is the JSON-RPC `result` field — typically
+ * Parse slices from a `ui/initialize` postMessage response — the
+ * "Reading-B" extractor, an OUR-CONVENTION shape on top of
+ * `McpUiInitializeResult`.
+ *
+ * The argument is the JSON-RPC `result` field — typically
  * `{ toolOutput: { _meta: { "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} } } }`.
  *
- * Spec-canonical for first-party `<McpAppIframe>` Reading-B hosts
- * (Studio, Portal, console).
+ * **Back-compat only.** The MCP-Apps spec
+ * (`McpUiInitializeResult`) defines `{protocolVersion, hostInfo,
+ * hostCapabilities, hostContext}` and does NOT carry `toolOutput`.
+ * Spec-strict hosts (`<AppRenderer>` from `@mcp-ui/client`, ChatGPT
+ * MCP-Apps connector) return `MISSING_TOOL_OUTPUT` from this
+ * extractor by design; they deliver slice meta via the spec-canonical
+ * `ui/notifications/tool-result` postMessage instead — see
+ * {@link parseMetaFromToolResult}.
+ *
+ * Kept exported because:
+ *
+ *   - RN's `<McpAppIframe>` host (the only surviving in-house
+ *     iframe wrapper post-spec-mig P2) still echoes here.
+ *   - claude.ai's host echoes here as a bonus alongside its
+ *     spec-canonical postMessage, so the synchronous read can win
+ *     the race against the postMessage listener.
+ *   - HostContext is captured opportunistically from the surrounding
+ *     `result.hostContext` field per spec (Reading-B + spec-canonical
+ *     hostContext live on the same object).
  */
 export function parseMetaFromUiInitialize(
   uiInitializeResult: unknown,

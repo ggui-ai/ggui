@@ -40,7 +40,11 @@ import {
   parseMetaFromToolResult,
 } from './meta-parse.js';
 import { StackModel } from './stack.js';
-import type { McpAppAiGguiMetaParseFailureReason } from './types.js';
+import type {
+  McpAppAiGguiMetaParseFailureReason,
+  McpAppAiGguiMetaParseResult,
+} from './types.js';
+import { projectHostContext } from '@ggui-ai/protocol';
 import type { ModuleNamespace } from './globals.js';
 import {
   attachListener as attachHostContextListener,
@@ -122,6 +126,20 @@ import {
 // =============================================================================
 
 const RENDERER_VERSION = '0.1.0';
+
+/**
+ * How long the spec-canonical postMessage tier (Tier 3 in
+ * `bootSequence`'s resolver chain + the autostart resolver's race
+ * against `bootProduction`) waits for an inbound
+ * `ui/notifications/tool-result` notification before falling through.
+ *
+ * 30 seconds chosen to span the slowest spec-compliant hosts that
+ * post the tool result LATE (after their `ui/initialize` response
+ * resolves + after the tool call round-trips through the LLM
+ * provider). Faster hosts return immediately on arrival; the timeout
+ * only fires when the host never posts at all.
+ */
+const POSTMESSAGE_BOOT_TIMEOUT_MS = 30_000;
 
 /**
  * Drain-ack listener registry. Module-scoped so the dispatch path can
@@ -394,6 +412,45 @@ export interface BootSequenceOptions {
    * (per-push iframe).
    */
   readonly canvasMount?: CanvasMountHook;
+  /**
+   * Spec-canonical async slice-meta source — wraps a listener for the
+   * inbound `ui/notifications/tool-result` postMessage defined by
+   * MCP Apps (SEP-1865). Called once, BEFORE `callUiInitialize`, so
+   * the listener is in place before any host-side race fires. When
+   * synchronous tiers (`__GGUI_META__` inline global + the
+   * `result.toolOutput._meta` Reading-B convention) yield nothing,
+   * the resolver awaits this Promise as the spec-canonical fallback.
+   *
+   * Resolves to `null` on timeout or absent delivery channel — that
+   * surface signals "no postMessage source available", and the
+   * resolver surfaces the synchronous tier's parse reason instead.
+   *
+   * Production wires this to `awaitToolResultMeta(5000)` via
+   * `bootProduction`. Tests omit this option (default = immediate
+   * `null`) so specs don't hang on the 5s timeout.
+   *
+   * Spec-strict hosts (`<AppRenderer>`, ChatGPT MCP-Apps connector,
+   * any host that issues `ui/initialize` without echoing
+   * `toolOutput`) deliver slice meta EXCLUSIVELY through this
+   * channel. claude.ai delivers via BOTH this channel and the
+   * Reading-B echo (the synchronous tier wins the race); RN's
+   * `<McpAppIframe>` delivers Reading-B only.
+   */
+  readonly awaitPostMessageMeta?: () => Promise<ValidatedMcpAppAiGguiMeta | null>;
+  /**
+   * Slice meta resolved BEFORE bootSequence — the autostart layer
+   * (in `runtime.ts`'s autostart resolver) catches a
+   * `ui/notifications/tool-result` postMessage early, parses it, and
+   * threads the result here so bootSequence doesn't re-await the
+   * same postMessage (the listener has already drained it).
+   *
+   * When present, all three internal resolver tiers (inline global,
+   * Reading-B, async postMessage) are skipped. `callUiInitialize`
+   * still runs — spec mandates the lifecycle handshake regardless of
+   * how slice meta arrives, and `hostContext` is captured from its
+   * result.
+   */
+  readonly preResolvedMeta?: ValidatedMcpAppAiGguiMeta;
 }
 
 /**
@@ -556,6 +613,23 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // duplicate same-state envelopes as a no-op).
   onLifecycle?.(makeLifecycleEvent('mounting'));
 
+  // Install the spec-canonical postMessage listener BEFORE issuing
+  // `ui/initialize`. A spec-strict host (`<AppRenderer>`, ChatGPT
+  // MCP-Apps connector) may post `ui/notifications/tool-result`
+  // concurrently with — or immediately after — its
+  // `ui/initialize` response. Listening early closes the race; if
+  // the synchronous tiers below find slice meta first, the eventual
+  // resolution of this Promise is ignored.
+  //
+  // Skipped entirely when `preResolvedMeta` is set (autostart caught
+  // the postMessage already) or when the caller omits
+  // `awaitPostMessageMeta` (tests default to a no-op resolver to
+  // avoid hanging on the production 5s timeout).
+  const postMessageMetaPromise: Promise<ValidatedMcpAppAiGguiMeta | null> =
+    opts.preResolvedMeta !== undefined
+      ? Promise.resolve(null)
+      : opts.awaitPostMessageMeta?.() ?? Promise.resolve(null);
+
   const initResp = await callUiInitialize();
   if (initResp.error !== undefined || initResp.result === undefined) {
     const message = initResp.error?.message ?? 'ui/initialize returned no result';
@@ -564,18 +638,79 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, stack: stackModel };
   }
 
-  let parsed = parseMetaFromUiInitialize(initResp.result);
-  if (!parsed.ok && parsed.reason === 'MISSING_TOOL_OUTPUT') {
-    // Spec-compliant hosts (claude.ai, Claude Desktop, ChatGPT MCP-Apps
-    // hosts) echo the tool result on `result.toolOutput._meta` per the
-    // MCP Apps `ui/initialize` contract. Non-compliant hosts (notably
-    // `@mcp-ui/client`'s AppRenderer used by our samples) don't — they
-    // omit toolOutput entirely. Fall back to the inline `__GGUI_META__`
-    // global stamped by self-contained shells (`buildSelfContainedHtml`).
-    // This keeps `runBootProduction` resilient to AppRenderer-class
-    // hosts without breaking the spec-canonical fast path.
-    parsed = parseMetaFromGlobal();
+  // Slice-meta resolution — spec-canonical primary, in-house Reading-B
+  // as back-compat fallback.
+  //
+  //   Tier 0  preResolvedMeta — autostart-layer pre-resolution. When
+  //           the autostart's own `awaitToolResultMeta` race caught a
+  //           postMessage before bootSequence ran, it threads the
+  //           parsed slice meta here so we don't re-await the same
+  //           delivery. Skips every tier below.
+  //
+  //   Tier 1  parseMetaFromGlobal — synchronous `__GGUI_META__` inline
+  //           global. Self-contained shells (`buildSelfContainedHtml`,
+  //           per-session resource shells) populate this before this
+  //           bundle's `<script type="module">` evaluates.
+  //           Opportunistic — its absence (the common case for
+  //           postMessage-delivered hosts) never surfaces as a parse
+  //           failure to the caller.
+  //
+  //   Tier 2  parseMetaFromUiInitialize — synchronous Reading-B,
+  //           i.e. `result.toolOutput._meta`. This is OUR in-house
+  //           convention from the `<McpAppIframe>` (RN) era — the
+  //           MCP-Apps spec's `McpUiInitializeResult` does NOT define
+  //           `toolOutput`. Kept here as the second tier because the
+  //           McpAppIframe (RN) consumer still depends on it AND
+  //           claude.ai's host gives it for free as a bonus echo
+  //           (faster than waiting for the postMessage).
+  //
+  //   Tier 3  awaitPostMessageMeta — spec-canonical async fallback.
+  //           Listens for `ui/notifications/tool-result` postMessage
+  //           per MCP-Apps SEP-1865. The ONLY path that works for
+  //           spec-strict hosts (`<AppRenderer>`, ChatGPT MCP-Apps
+  //           connector, any host that doesn't echo toolOutput).
+  //
+  // When all three tiers fail, we surface the Tier 2 failure reason
+  // (most diagnostic — it had a concrete payload to parse), not
+  // Tier 1's (`MALFORMED_BOOTSTRAP` from "global absent" is noise).
+  let parsed: McpAppAiGguiMetaParseResult;
+  if (opts.preResolvedMeta !== undefined) {
+    parsed = { ok: true, meta: opts.preResolvedMeta };
+  } else {
+    const inline = parseMetaFromGlobal();
+    if (inline.ok) {
+      parsed = inline;
+    } else {
+      parsed = parseMetaFromUiInitialize(initResp.result);
+      if (!parsed.ok) {
+        const fromPostMessage = await postMessageMetaPromise;
+        if (fromPostMessage !== null) {
+          parsed = { ok: true, meta: fromPostMessage };
+        }
+      }
+    }
   }
+
+  // hostContext is captured opportunistically from the `ui/initialize`
+  // result regardless of which tier resolved slice meta. Reading-B's
+  // `parseMetaFromUiInitialize` already lifts it inline; for the other
+  // tiers (preResolved / inline global / postMessage) the result
+  // payload would otherwise be ignored. Project it independently so
+  // canvas-mode display-mode escalation works uniformly across
+  // delivery channels.
+  if (parsed.ok && parsed.hostContext === undefined) {
+    const initResultBag =
+      initResp.result !== null
+      && typeof initResp.result === 'object'
+      && !Array.isArray(initResp.result)
+        ? (initResp.result as Record<string, unknown>)
+        : undefined;
+    const hostContext = projectHostContext(initResultBag?.['hostContext']);
+    if (hostContext !== undefined) {
+      parsed = { ...parsed, hostContext };
+    }
+  }
+
   if (!parsed.ok) {
     const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
@@ -2903,8 +3038,16 @@ function readLiveBootstrapShape(): boolean {
  * live-channel-inlined fast path and the post-tool-result-timeout
  * fallback share one call site — keeps the WS-driven boot semantics
  * single-sourced.
+ *
+ * `preResolvedMeta` is threaded in from the autostart resolver when
+ * it has already discovered slice meta — via inline `__GGUI_META__`
+ * global, a buffered `__GGUI_PENDING_TOOL_RESULTS__` entry, or an
+ * early `ui/notifications/tool-result` postMessage. Threading skips
+ * `bootSequence`'s internal resolver chain (which would otherwise
+ * re-await the same postMessage or re-parse the same global), saving
+ * up to the 30s postMessage timeout for spec-strict hosts.
  */
-function runBootProduction(): void {
+function runBootProduction(preResolvedMeta?: ValidatedMcpAppAiGguiMeta): void {
   const callUiInitialize = (): Promise<JsonRpcResponse> => {
     const caller = makeJsonRpcCaller();
     // Per MCP Apps spec (specification/2026-01-26/apps.mdx:554-563),
@@ -2938,48 +3081,47 @@ function runBootProduction(): void {
     },
     onObserve: postObservabilityToParent,
     onLifecycle: postLifecycleToParent,
+    ...(preResolvedMeta !== undefined ? { preResolvedMeta } : {}),
   });
 }
 
 if (shouldAutostart() && typeof window !== 'undefined') {
-  // Boot-source resolution, in priority order. Each tier is a
-  // distinct way the host can deliver a {@link SelfContainedMcpAppAiGguiMeta}
-  // to the runtime; downstream `bootSelfContained` is the one mount
-  // path for all of them.
+  // Boot-source resolution. Three sources of slice meta + the
+  // dispatch between `bootSelfContained` (static, no WS) and
+  // `bootProduction` (live, opens WS subscribe).
   //
   //   1. Inline `__GGUI_META__` global — per-session shells
-  //      (`/r/<shortCode>`, `ui://ggui/session/<sessionId>`) populate
-  //      this synchronously before the runtime loads. Zero round-
-  //      trip; no postMessage.
+  //      (`buildSelfContainedHtml`, `/r/` shells pre-R5, console
+  //      embeds) populate this synchronously before this bundle's
+  //      `<script type="module">` evaluates.
   //
   //   2. Buffered `__GGUI_PENDING_TOOL_RESULTS__` — minimal-shell
-  //      pattern. The shell installs a postMessage listener at
+  //      pattern. A shell installs a postMessage listener at
   //      first-paint, buffers any `ui/notifications/tool-result`
   //      arrivals into the array, and the runtime drains on load.
-  //      Covers the case where the host posts the tool-result
-  //      BEFORE the runtime bundle finishes parsing.
+  //      Covers the host-races-the-bundle case (postMessage arrives
+  //      BEFORE the runtime bundle finishes parsing).
   //
-  //   3. Live postMessage listener — `awaitToolResultMeta`
-  //      catches tool-results that arrive AFTER the runtime is
-  //      ready (the more common case on Claude Desktop, where the
-  //      iframe loads before the agent's tool call resolves).
+  //   3. Live `ui/notifications/tool-result` postMessage — the
+  //      spec-canonical delivery channel per MCP-Apps SEP-1865.
+  //      Listens via `awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS)`.
+  //      The ONLY path for spec-strict hosts (`<AppRenderer>`,
+  //      ChatGPT MCP-Apps connector, claude.ai). Caught meta is
+  //      threaded into `runBootProduction` via `preResolvedMeta` so
+  //      `bootSequence` doesn't re-await the same delivery.
   //
-  //   4. `bootProduction` (legacy `ui/initialize` round-trip + WS
-  //      subscribe) — first-party hosts (Studio, Portal, console)
-  //      that drive the live-channel path. Kept as the terminal
-  //      fallback for backwards compatibility.
+  //   4. `bootProduction` fallthrough — when ALL three sources
+  //      yield nothing (and `readLiveBootstrapShape` short-circuits
+  //      the wait), bootSequence internally walks its own resolver
+  //      chain (inline → Reading-B → postMessage) against the host.
   //
-  // The architectural goal: ALL slice-meta-shape narrowing happens
-  // inside the runtime (this file). Shells never validate, mount,
-  // or transform — they only deliver. That's the cure for the
-  // "shell-side validator lagged the protocol" bug class.
   // T3-1 (2026-05-13) — bootSelfContained requires static content
   // (codeUrl or kind) to mount. Live-only metas (wsUrl+token
   // without static content) MUST go through `bootProduction` so the
-  // stack item arrives via the live-channel WS subscribe. Pre-T3-1 the
-  // inline `componentCode` channel made every push static, so
-  // bootSelfContained always had something to mount; post-drop, we
-  // dispatch on the discriminator explicitly.
+  // stack item arrives via the live-channel WS subscribe. Pre-T3-1
+  // the inline `componentCode` channel made every push static.
+  // Post-drop, we dispatch on the static-content discriminator
+  // explicitly.
   const inline = readSelfContainedMeta();
   const inlineHasStatic =
     inline !== null
@@ -2988,9 +3130,10 @@ if (shouldAutostart() && typeof window !== 'undefined') {
   if (inline !== null && inlineHasStatic) {
     void bootSelfContained(document, inline);
   } else if (inline !== null) {
-    // Live-only inline meta — hand to bootProduction so it
-    // re-issues ui/initialize and walks the WS path.
-    runBootProduction();
+    // Live-only inline meta — hand to bootProduction with the
+    // pre-resolved slice so bootSequence skips re-parsing the same
+    // global it already validated here.
+    runBootProduction(inline);
   } else {
     const buffered = readPendingToolResults();
     const bufferedHasStatic =
@@ -3000,7 +3143,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
     if (buffered !== null && bufferedHasStatic) {
       void bootSelfContained(document, buffered);
     } else if (buffered !== null) {
-      runBootProduction();
+      runBootProduction(buffered);
     } else {
       // Pre-empt the postMessage tool-result race when `__GGUI_META__`
       // already carries a live-channel envelope (wsUrl + token + sessionId
@@ -3021,8 +3164,11 @@ if (shouldAutostart() && typeof window !== 'undefined') {
       } else {
         // Race a postMessage listener against the legacy production
         // boot. Tool-result wins if it arrives within the timeout;
-        // otherwise we hand off to the WS-driven path.
-        const POSTMESSAGE_BOOT_TIMEOUT_MS = 30_000;
+        // otherwise we hand off to the WS-driven path. Live-only
+        // arrivals thread the meta through to `runBootProduction`
+        // as `preResolvedMeta` so spec-strict hosts (AppRenderer,
+        // ChatGPT) don't re-await a second postMessage inside
+        // bootSequence.
         void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
           (postMessageMeta) => {
             const hasStatic =
@@ -3033,7 +3179,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
               void bootSelfContained(document, postMessageMeta);
               return;
             }
-            runBootProduction();
+            runBootProduction(postMessageMeta ?? undefined);
           },
         );
       }
@@ -3083,6 +3229,17 @@ async function bootProduction(opts: {
   readonly notifyParent: (msg: RendererBootFailedMessage | { type: 'ggui:renderer-ready'; version: string }) => void;
   readonly onObserve?: ObservabilityEmitter;
   readonly onLifecycle?: LifecycleEmitter;
+  /**
+   * Pre-resolved slice meta from the autostart layer. When set,
+   * threaded through `bootSequence` so the resolver skips the inline
+   * + Reading-B + postMessage tiers.
+   */
+  readonly preResolvedMeta?: ValidatedMcpAppAiGguiMeta;
+  /**
+   * Async spec-canonical postMessage resolver. Default: listen for
+   * `ui/notifications/tool-result` for {@link POSTMESSAGE_BOOT_TIMEOUT_MS}.
+   */
+  readonly awaitPostMessageMeta?: () => Promise<ValidatedMcpAppAiGguiMeta | null>;
 }): Promise<void> {
   // Dynamic-import the heavy module graph. Done here rather than at
   // top-level so spec files importing runtime.ts for `bootSequence`
@@ -3471,5 +3628,11 @@ async function bootProduction(opts: {
     canvasMount,
     ...(opts.onObserve !== undefined ? { onObserve: opts.onObserve } : {}),
     ...(opts.onLifecycle !== undefined ? { onLifecycle: opts.onLifecycle } : {}),
+    ...(opts.preResolvedMeta !== undefined
+      ? { preResolvedMeta: opts.preResolvedMeta }
+      : {}),
+    awaitPostMessageMeta:
+      opts.awaitPostMessageMeta
+      ?? (() => awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS)),
   });
 }
