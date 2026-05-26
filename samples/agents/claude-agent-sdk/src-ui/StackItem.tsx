@@ -86,7 +86,32 @@ export function StackItem({
     [item.meta],
   );
 
-  const sandbox = useMemo(() => ({ url: new URL(sandboxUrl) }), [sandboxUrl]);
+  // CSP wiring — startSandboxProxyServer defaults to
+  // `script-src 'self' ...` where 'self' is the sandbox proxy's origin
+  // (port 7790). The runtime bundle + WS + /api fetches all live on
+  // the ggui server's origin (port 6781), which the default CSP blocks.
+  // AppRenderer forwards this to the proxy as a `?csp=…` query, which
+  // the proxy expands into `script-src 'self' … <runtimeOrigin>` and
+  // `connect-src 'self' <runtimeOrigin> <wsOrigin>`. Without these,
+  // the runtime bundle silently fails to load and the iframe stays
+  // blank.
+  const sandbox = useMemo(() => {
+    const session = item.meta?.session;
+    const runtimeOrigin = safeUrlOrigin(session?.runtimeUrl);
+    const wsOrigin = safeUrlOrigin(session?.wsUrl);
+    const resourceDomains = runtimeOrigin ? [runtimeOrigin] : [];
+    const connectDomains = [runtimeOrigin, wsOrigin].filter(
+      (s): s is string => s.length > 0,
+    );
+    const csp =
+      resourceDomains.length > 0 || connectDomains.length > 0
+        ? { resourceDomains, connectDomains }
+        : undefined;
+    return {
+      url: new URL(sandboxUrl),
+      ...(csp ? { csp } : {}),
+    };
+  }, [sandboxUrl, item.meta]);
 
   // Tool relay — AppRenderer hands us inner-iframe `tools/call` invocations
   // (`onCallTool`). We proxy through `/relay/tools-call` on the sample
@@ -173,6 +198,20 @@ export function StackItem({
  * loading marker so the iframe isn't fully blank; the next prop
  * transition swaps in the real shell HTML built from the slice pair.
  */
+/**
+ * Extract an origin from a URL string, or return '' if invalid/missing.
+ * Used to thread runtime + WS origins into the sandbox proxy's CSP so
+ * the iframe-runtime bundle + live-channel WS aren't CSP-blocked.
+ */
+function safeUrlOrigin(url: string | undefined): string {
+  if (typeof url !== 'string' || url.length === 0) return '';
+  try {
+    return new URL(url).origin;
+  } catch {
+    return '';
+  }
+}
+
 const LOADING_HTML = `<!doctype html>
 <html><body>
 <div style="font:14px system-ui,sans-serif;color:#666;padding:24px">Loading UI…</div>
