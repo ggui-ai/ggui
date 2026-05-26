@@ -564,7 +564,18 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, stack: stackModel };
   }
 
-  const parsed = parseMetaFromUiInitialize(initResp.result);
+  let parsed = parseMetaFromUiInitialize(initResp.result);
+  if (!parsed.ok && parsed.reason === 'MISSING_TOOL_OUTPUT') {
+    // Spec-compliant hosts (claude.ai, Claude Desktop, ChatGPT MCP-Apps
+    // hosts) echo the tool result on `result.toolOutput._meta` per the
+    // MCP Apps `ui/initialize` contract. Non-compliant hosts (notably
+    // `@mcp-ui/client`'s AppRenderer used by our samples) don't — they
+    // omit toolOutput entirely. Fall back to the inline `__GGUI_META__`
+    // global stamped by self-contained shells (`buildSelfContainedHtml`).
+    // This keeps `runBootProduction` resilient to AppRenderer-class
+    // hosts without breaking the spec-canonical fast path.
+    parsed = parseMetaFromGlobal();
+  }
   if (!parsed.ok) {
     const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
