@@ -3019,16 +3019,27 @@ async function safelyRegisterBlueprint(
   try {
     await registerBlueprint(deps, scope, input);
   } catch (err) {
-    // Best-effort registration — surface failures to operator stderr
-    // so silent cache-write breakage (corrupt embedding model, sqlite
-    // permission issues, etc.) doesn't manifest as opaque cache-miss
-    // symptoms downstream. Caught here, not rethrown — the live push
-    // already produced valid code + the stack item; only the future
-    // cache-hit optimization is lost.
+    // Best-effort registration — the live push already produced valid
+    // code + the stack item; only the future cache-hit optimization is
+    // lost. Caught here, not rethrown.
+    //
+    // Structured JSON for CloudWatch MetricFilter pickup. A bare
+    // freeform `console.warn` text message bled for 6 days before G1
+    // surfaced the cloud S3 Vectors `nonFilterableMetadataKeys` bug
+    // (2026-05-26) — every cache write was failing in production and
+    // no alarm fired. The `msg: 'cache_write_failed'` shape lets
+    // operators wire a metric filter on `{ $.msg = "cache_write_failed" }`
+    // against the pod log group and page on persistent breakage
+    // without grepping freeform text. Mirrors the structured-warn
+    // pattern from `backend/amplify/functions/status-llm-probe`.
     // eslint-disable-next-line no-console
     console.warn(
-      '[safelyRegisterBlueprint] registry write failed (best-effort):',
-      err instanceof Error ? err.message : String(err),
+      JSON.stringify({
+        msg: 'cache_write_failed',
+        scope,
+        error: err instanceof Error ? err.message : String(err),
+        errorName: err instanceof Error ? err.name : undefined,
+      }),
     );
   }
 }
