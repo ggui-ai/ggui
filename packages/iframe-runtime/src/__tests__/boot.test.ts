@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
@@ -42,7 +43,7 @@ function buildHappyInitResponse(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: { ggui: { bootstrap: VALID_BOOTSTRAP } },
+        _meta: bootstrapToMcpAppMeta(VALID_BOOTSTRAP),
         structuredContent: {},
       },
     },
@@ -170,7 +171,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: { ggui: { bootstrap: pinnedBootstrap } },
+          _meta: bootstrapToMcpAppMeta(pinnedBootstrap),
           structuredContent: {},
         },
       },
@@ -221,7 +222,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: { ggui: { bootstrap: pinnedBootstrap } },
+          _meta: bootstrapToMcpAppMeta(pinnedBootstrap),
           structuredContent: {},
         },
       },

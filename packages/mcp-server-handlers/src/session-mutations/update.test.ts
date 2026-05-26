@@ -10,6 +10,7 @@ import {
   type PropsSpec,
   type StackItem,
 } from '@ggui-ai/protocol';
+import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { InMemorySessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiUpdateHandler,
@@ -507,12 +508,14 @@ describe('createGguiUpdateHandler', () => {
       const handler = createGguiUpdateHandler({ sessionStore: store });
       const input = { stackItemId, kind: 'replace' as const, props: { x: 2 } };
       const out = await handler.handler(input, ctx());
-      const meta = (await handler.resultMeta?.(out, input, ctx())) as
-        | { ggui: { bootstrap: Record<string, unknown> } }
-        | undefined;
+      const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
-      expect(meta!.ggui.bootstrap['propsJson']).toBe(JSON.stringify({ x: 2 }));
-      expect(meta!.ggui.bootstrap['runtimeUrl']).toBe('/_ggui/iframe-runtime.js');
+      const combined = combineMcpAppAiGguiMeta(meta);
+      expect(combined.ok).toBe(true);
+      if (combined.ok) {
+        expect(combined.bootstrap.propsJson).toBe(JSON.stringify({ x: 2 }));
+        expect(combined.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      }
     });
 
     it('emits ggui.bootstrap with propsJson + session/runtime fields on the patched view (props-only post-trim)', async () => {
@@ -532,33 +535,37 @@ describe('createGguiUpdateHandler', () => {
       });
       const input = { stackItemId, kind: 'replace' as const, props: { count: 5 } };
       const out = await handler.handler(input, ctx());
-      const meta = (await handler.resultMeta?.(out, input, ctx())) as
-        | { ggui: { bootstrap: Record<string, unknown> } }
-        | undefined;
+      const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
-      const b = meta!.ggui.bootstrap;
-      expect(b['sessionId']).toBe(sessionId);
-      expect(b['stackItemId']).toBe(stackItemId);
-      expect(b['appId']).toBe(APP_A);
-      expect(b['runtimeUrl']).toBe('/_ggui/iframe-runtime.js');
-      expect(b['wsUrl']).toBe('wss://example.test/ws');
-      expect(b['token']).toBe('tok-1');
-      expect(b['expiresAt']).toBe('2099-01-01T00:00:00.000Z');
+      const combined = combineMcpAppAiGguiMeta(meta);
+      expect(combined.ok).toBe(true);
+      if (!combined.ok) return;
+      const b = combined.bootstrap;
+      expect(b.sessionId).toBe(sessionId);
+      expect(b.stackItemId).toBe(stackItemId);
+      expect(b.appId).toBe(APP_A);
+      expect(b.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      expect(b.wsUrl).toBe('wss://example.test/ws');
+      expect(b.token).toBe('tok-1');
+      expect(b.expiresAt).toBe('2099-01-01T00:00:00.000Z');
       // propsJson carries the POST-patch props (the source of truth
       // for the spec-compliant postMessage re-apply path).
-      expect(b['propsJson']).toBe(JSON.stringify({ count: 5 }));
+      expect(b.propsJson).toBe(JSON.stringify({ count: 5 }));
       // Post-2026-05-13 trim: update.resultMeta is props-only.
-      // Mount-time fields (componentCode / kind / contextSlots /
+      // Mount-time fields (codeUrl / kind / contextSlots /
       // actionNextSteps / permissionsPolicy / appCallableTools /
-      // streamWebSocketLocalTools) are NOT re-emitted on update —
-      // the iframe already has them from its initial push bootstrap.
-      expect(b['componentCode']).toBeUndefined();
-      expect(b['kind']).toBeUndefined();
-      expect(b['contextSlots']).toBeUndefined();
-      expect(b['actionNextSteps']).toBeUndefined();
-      expect(b['permissionsPolicy']).toBeUndefined();
-      expect(b['appCallableTools']).toBeUndefined();
-      expect(b['streamWebSocketLocalTools']).toBeUndefined();
+      // streamWebSocketLocalTools / contract-bundle) are NOT
+      // re-emitted on update — the iframe already has them from its
+      // initial push bootstrap.
+      expect(b.codeUrl).toBeUndefined();
+      expect(b.kind).toBeUndefined();
+      expect(b.contextSlots).toBeUndefined();
+      expect(b.actionNextSteps).toBeUndefined();
+      expect(b.permissionsPolicy).toBeUndefined();
+      expect(b.appCallableTools).toBeUndefined();
+      expect(b.streamWebSocketLocalTools).toBeUndefined();
+      expect(b.contractHash).toBeUndefined();
+      expect(b.validatorsUrl).toBeUndefined();
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {
@@ -573,11 +580,12 @@ describe('createGguiUpdateHandler', () => {
       });
       const input = { stackItemId, kind: 'replace' as const, props: { count: 1 } };
       const out = await handler.handler(input, ctx());
-      const meta = (await handler.resultMeta?.(out, input, ctx())) as
-        | { ggui: { bootstrap: Record<string, unknown> } }
-        | undefined;
-      expect(meta!.ggui.bootstrap['themeId']).toBe('indigo');
-      expect(meta!.ggui.bootstrap['themeMode']).toBe('dark');
+      const meta = await handler.resultMeta?.(out, input, ctx());
+      const combined = combineMcpAppAiGguiMeta(meta);
+      expect(combined.ok).toBe(true);
+      if (!combined.ok) return;
+      expect(combined.bootstrap.themeId).toBe('indigo');
+      expect(combined.bootstrap.themeMode).toBe('dark');
     });
   });
 });

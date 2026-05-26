@@ -25,7 +25,10 @@
  * has migrated.
  */
 
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  bootstrapToMcpAppMeta,
+  type GguiBootstrapMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   McpAppIframeDimensions,
   McpAppIframeProps,
@@ -154,7 +157,7 @@ export async function dispatchHostBridgeRequest(
       };
       if (ctx.bootstrap !== undefined) {
         result['toolOutput'] = {
-          _meta: { ggui: { bootstrap: ctx.bootstrap } },
+          _meta: bootstrapToMcpAppMeta(ctx.bootstrap),
         };
       }
       return { jsonrpc: '2.0', id, result };

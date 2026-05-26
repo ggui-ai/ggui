@@ -280,12 +280,12 @@ describe('end-to-end outbound flow', () => {
 
   it('ggui_push bootstrap carries runtimeUrl — the URL the thin shell dynamic-script-loads (C8)', async () => {
     const result = await handshakeAndPush(client, 'c8 renderer-url test');
-    const meta = result._meta as {
-      ggui: { bootstrap: { runtimeUrl: string } };
-    };
+    const combined = combineMcpAppAiGguiMeta(result._meta);
+    expect(combined.ok).toBe(true);
+    if (!combined.ok) return;
     // Default same-origin path published by `createGguiServer` when
     // `mcpApps: true` — operators override via `renderer.url`.
-    expect(meta.ggui.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    expect(combined.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 });
 
@@ -372,10 +372,10 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     const client = await connectClient(fx.httpBase);
     try {
       const result = await handshakeAndPush(client, 'c8 cdn override');
-      const meta = result._meta as {
-        ggui: { bootstrap: { runtimeUrl: string } };
-      };
-      expect(meta.ggui.bootstrap.runtimeUrl).toBe(
+      const combined = combineMcpAppAiGguiMeta(result._meta);
+      expect(combined.ok).toBe(true);
+      if (!combined.ok) return;
+      expect(combined.bootstrap.runtimeUrl).toBe(
         'https://cdn.example/ggui/renderer.js',
       );
     } finally {
@@ -425,12 +425,20 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     appId: string;
   }> {
     const result = await handshakeAndPush(client, 'bootstrap-test');
-    const meta = result._meta as {
-      ggui: {
-        bootstrap: { wsUrl: string; token: string; sessionId: string; appId: string };
-      };
+    const combined = combineMcpAppAiGguiMeta(result._meta);
+    if (!combined.ok) {
+      throw new Error(`mintPushBootstrap: combiner failed (${combined.reason})`);
+    }
+    const b = combined.bootstrap;
+    if (!b.wsUrl || !b.token) {
+      throw new Error('mintPushBootstrap: live-mode auth missing');
+    }
+    return {
+      wsUrl: b.wsUrl,
+      token: b.token,
+      sessionId: b.sessionId,
+      appId: b.appId,
     };
-    return meta.ggui.bootstrap;
   }
 
   it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {

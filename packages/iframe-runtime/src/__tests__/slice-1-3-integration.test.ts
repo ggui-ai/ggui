@@ -19,6 +19,10 @@
 // right value into the next stage.
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import {
+  bootstrapToMcpAppMeta,
+  type GguiBootstrapMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseBootstrap } from '../bootstrap.js';
 import {
   loadGadgetRegistry,
@@ -43,20 +47,17 @@ function buildBootstrapEnvelope(
     bundleSri?: string;
   }>,
 ) {
+  const bootstrap: GguiBootstrapMeta = {
+    wsUrl: 'wss://server.example/ws',
+    token: 'tok_abc',
+    sessionId: 'sess_001',
+    appId: 'app_001',
+    runtimeUrl: '/_ggui/iframe-runtime.js',
+    ...(gadgets !== undefined ? { gadgets } : {}),
+  };
   return {
     toolOutput: {
-      _meta: {
-        ggui: {
-          bootstrap: {
-            wsUrl: 'wss://server.example/ws',
-            token: 'tok_abc',
-            sessionId: 'sess_001',
-            appId: 'app_001',
-            runtimeUrl: '/_ggui/iframe-runtime.js',
-            ...(gadgets !== undefined ? { gadgets } : {}),
-          },
-        },
-      },
+      _meta: bootstrapToMcpAppMeta(bootstrap),
       structuredContent: { sessionId: 'sess_001' },
     },
   };

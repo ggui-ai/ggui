@@ -9,6 +9,7 @@
  * survives the wire bit-for-bit.
  */
 import { describe, it, expect } from 'vitest';
+import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { InvokeEvent } from '@ggui-ai/protocol';
 import { extractBootstrapMeta } from '../mcp-apps-result';
@@ -42,7 +43,7 @@ describe('extractBootstrapMeta', () => {
   it('returns the bootstrap on well-shaped content', () => {
     const content = {
       sessionId: FIXTURE_BOOTSTRAP.sessionId,
-      _meta: { ggui: { bootstrap: FIXTURE_BOOTSTRAP } },
+      _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
     };
     expect(extractBootstrapMeta(content)).toEqual(FIXTURE_BOOTSTRAP);
   });
@@ -50,7 +51,7 @@ describe('extractBootstrapMeta', () => {
   it('returns the bootstrap even when structuredContent is absent', () => {
     expect(
       extractBootstrapMeta({
-        _meta: { ggui: { bootstrap: FIXTURE_BOOTSTRAP } },
+        _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
       }),
     ).toEqual(FIXTURE_BOOTSTRAP);
   });
@@ -65,7 +66,7 @@ describe('extractBootstrapMeta', () => {
   it('returns null on malformed bootstrap (missing required field)', () => {
     const partial = { ...FIXTURE_BOOTSTRAP, runtimeUrl: undefined };
     expect(
-      extractBootstrapMeta({ _meta: { ggui: { bootstrap: partial } } }),
+      extractBootstrapMeta({ _meta: bootstrapToMcpAppMeta(partial) }),
     ).toBeNull();
   });
 
@@ -107,7 +108,7 @@ describe('SSE round-trip: parseSseStream → extractBootstrapMeta', () => {
           tool_use_id: toolUseId,
           content: {
             sessionId: FIXTURE_BOOTSTRAP.sessionId,
-            _meta: { ggui: { bootstrap: FIXTURE_BOOTSTRAP } },
+            _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
           },
         },
       },

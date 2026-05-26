@@ -10,6 +10,7 @@
  * origin trimming.
  */
 import { describe, it, expect } from 'vitest';
+import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
@@ -185,7 +186,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c1',
-            content: { _meta: { ggui: { bootstrap: BOOTSTRAP_WITH_ITEM } } },
+            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];
@@ -205,7 +206,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c2',
-            content: { _meta: { ggui: { bootstrap: BOOTSTRAP_NO_ITEM } } },
+            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_NO_ITEM) },
           },
         ]),
       ];
@@ -219,7 +220,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c3',
-            content: { _meta: { ggui: { bootstrap: BOOTSTRAP_WITH_ITEM } } },
+            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];
@@ -239,7 +240,7 @@ describe('extractUiMoments', () => {
             content: {
               sessionId: 'push_coord_sid',
               stackItemId: 'push_coord_pid',
-              _meta: { ggui: { bootstrap: BOOTSTRAP_WITH_ITEM } },
+              _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM),
             },
           },
         ]),
@@ -304,7 +305,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_b',
-            content: { _meta: { ggui: { bootstrap: BOOTSTRAP_WITH_ITEM } } },
+            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];

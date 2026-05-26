@@ -23,6 +23,7 @@
  * callback to thread through anymore.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { act } from 'react';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -69,7 +70,7 @@ function buildHappyInit(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: { ggui: { bootstrap: VALID_BOOTSTRAP } },
+        _meta: bootstrapToMcpAppMeta(VALID_BOOTSTRAP),
         structuredContent: {},
       },
     },

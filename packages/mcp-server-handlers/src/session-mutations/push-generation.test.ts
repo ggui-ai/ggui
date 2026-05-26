@@ -14,6 +14,7 @@
  *   - no generation deps: existing placeholder behavior preserved.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   BlueprintProvider,
   LlmProvider,
@@ -665,18 +666,10 @@ describe('ggui_push — contextSpec projection', () => {
       appId: 'app-1',
       requestId: 'req-1',
     });
-    const bootstrap = (meta as {
-      ggui: {
-        bootstrap: {
-          contextSlots?: ReadonlyArray<{
-            name: string;
-            contextName: string;
-            default: unknown;
-            debounceMs?: number;
-          }>;
-        };
-      };
-    }).ggui.bootstrap;
+    const combined = combineMcpAppAiGguiMeta(meta);
+    expect(combined.ok).toBe(true);
+    if (!combined.ok) return;
+    const bootstrap = combined.bootstrap;
     expect(bootstrap.contextSlots).toBeDefined();
     expect(bootstrap.contextSlots).toHaveLength(2);
     const byName = Object.fromEntries(
@@ -724,9 +717,9 @@ describe('ggui_push — contextSpec projection', () => {
       appId: 'app-1',
       requestId: 'req-1',
     });
-    const bootstrap = (meta as {
-      ggui: { bootstrap: { contextSlots?: unknown } };
-    }).ggui.bootstrap;
-    expect(bootstrap.contextSlots).toBeUndefined();
+    const combined = combineMcpAppAiGguiMeta(meta);
+    expect(combined.ok).toBe(true);
+    if (!combined.ok) return;
+    expect(combined.bootstrap.contextSlots).toBeUndefined();
   });
 });

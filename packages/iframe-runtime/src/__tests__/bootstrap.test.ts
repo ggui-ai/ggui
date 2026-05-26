@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import {
+  bootstrapToMcpAppMeta,
+  type GguiBootstrapMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseBootstrap } from '../bootstrap.js';
 
 /**
@@ -30,11 +34,7 @@ const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
   return {
     toolOutput: {
-      _meta: {
-        ggui: {
-          bootstrap,
-        },
-      },
+      _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta),
       structuredContent: { sessionId: 'sess_001' },
     },
     ...(hostContext !== undefined ? { hostContext } : {}),
@@ -354,24 +354,24 @@ describe('parseBootstrap — MISSING_META_GGUI_BOOTSTRAP', () => {
     });
   });
 
-  it('rejects when _meta.ggui is absent', () => {
+  it('rejects when the session slice is absent from _meta', () => {
     expect(parseBootstrap({ toolOutput: { _meta: { other: {} } } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
     });
   });
 
-  it('rejects when _meta.ggui.bootstrap is absent', () => {
-    expect(parseBootstrap({ toolOutput: { _meta: { ggui: {} } } })).toEqual({
+  it('rejects when _meta carries an empty object (no per-window keys)', () => {
+    expect(parseBootstrap({ toolOutput: { _meta: {} } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
     });
   });
 
-  it('rejects when _meta.ggui.bootstrap is an array', () => {
+  it('rejects when the bootstrap value is an array (combiner returns MALFORMED_SESSION)', () => {
     expect(parseBootstrap(buildResult([]))).toEqual({
       ok: false,
-      reason: 'MISSING_META_GGUI_BOOTSTRAP',
+      reason: 'MALFORMED_BOOTSTRAP',
     });
   });
 });
@@ -675,13 +675,18 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
     }
   });
 
-  it('accepts empty publicEnv map (no values to expose)', () => {
+  it('treats empty publicEnv as absent (#109 splitter drops empty slices)', () => {
+    // Post-#109: splitBootstrapMeta omits empty publicEnv from the
+    // session slice on the wire, so the combiner-driven parser sees
+    // it as absent (undefined). Empty-map and absent are now
+    // wire-equivalent; consumers that need a defined map default at
+    // their read site.
     const result = parseBootstrap(
       buildResult({ ...happyBootstrap, publicEnv: {} }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.bootstrap.publicEnv).toEqual({});
+      expect(result.bootstrap.publicEnv).toBeUndefined();
     }
   });
 

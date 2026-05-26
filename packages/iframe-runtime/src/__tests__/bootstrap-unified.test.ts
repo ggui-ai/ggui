@@ -24,6 +24,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  bootstrapToMcpAppMeta,
+  type GguiBootstrapMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
   parseBootstrap,
   parseBootstrapFromGlobal,
   parseBootstrapFromToolResult,
@@ -75,14 +79,14 @@ const systemBootstrap = {
 function wrapUiInitialize(bootstrap: unknown): unknown {
   return {
     toolOutput: {
-      _meta: { ggui: { bootstrap } },
+      _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta),
       structuredContent: { sessionId: 'sess_001' },
     },
   };
 }
 
 function wrapToolResult(bootstrap: unknown): unknown {
-  return { _meta: { ggui: { bootstrap } } };
+  return { _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta) };
 }
 
 function setGlobal(bootstrap: unknown): void {

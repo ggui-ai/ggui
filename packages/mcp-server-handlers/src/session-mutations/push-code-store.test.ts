@@ -4,6 +4,7 @@
  * on the response.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { CodeStore, UiGenerator } from '@ggui-ai/mcp-server-core';
 import { sha256Hex } from '@ggui-ai/mcp-server-core';
 import {
@@ -162,8 +163,10 @@ describe('push handler — codeStore wiring', () => {
       { handshakeId, decision: { kind: 'accept' } },
       { appId: 'app-1', requestId: 'req-1' },
     );
-    const bootstrap = (meta as { ggui: { bootstrap: GguiBootstrapMeta } }).ggui
-      .bootstrap as GguiBootstrapMeta & {
+    const combined = combineMcpAppAiGguiMeta(meta);
+    expect(combined.ok).toBe(true);
+    if (!combined.ok) return;
+    const bootstrap = combined.bootstrap as GguiBootstrapMeta & {
       codeUrl?: string;
       codeHash?: string;
     };

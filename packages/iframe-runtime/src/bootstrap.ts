@@ -470,14 +470,19 @@ export function parseBootstrapFromUiInitialize(
   // #109 — combine the five per-window `_meta` keys
   // (`ai.ggui/session` / `auth` / `render` / `contract` / `component`)
   // into the aggregated bootstrap shape, then run the shared
-  // shape validator. `combineMcpAppAiGguiMeta` returns
-  // `{ok:false, reason:'MISSING_SESSION'}` when the session slice is
-  // absent — surfaced here as MISSING_META_GGUI_BOOTSTRAP (the
-  // iframe-runtime's error code doesn't distinguish "no _meta" from
-  // "_meta has no session slice"; both mean "no bootstrap to mount").
+  // shape validator. Map combiner failure modes onto the
+  // iframe-runtime's two distinct reasons:
+  //   - MISSING_SESSION (no session slice at all) → MISSING_META_GGUI_BOOTSTRAP
+  //   - MALFORMED_* (structurally invalid slice contents) → MALFORMED_BOOTSTRAP
   const combined = combineMcpAppAiGguiMeta(meta);
   if (!combined.ok) {
-    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+    return {
+      ok: false,
+      reason:
+        combined.reason === 'MISSING_SESSION'
+          ? 'MISSING_META_GGUI_BOOTSTRAP'
+          : 'MALFORMED_BOOTSTRAP',
+    };
   }
   const validated = validateBootstrapMeta(combined.bootstrap);
   if (!validated.ok) return validated;
@@ -572,11 +577,17 @@ export function parseBootstrapFromToolResult(
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   // #109 — combine the five per-window `_meta` keys then validate the
-  // aggregated shape. See parseBootstrapFromUiInitialize for the
-  // combiner rationale.
+  // aggregated shape. Same MISSING/MALFORMED mapping as
+  // parseBootstrapFromUiInitialize.
   const combined = combineMcpAppAiGguiMeta(meta);
   if (!combined.ok) {
-    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+    return {
+      ok: false,
+      reason:
+        combined.reason === 'MISSING_SESSION'
+          ? 'MISSING_META_GGUI_BOOTSTRAP'
+          : 'MALFORMED_BOOTSTRAP',
+    };
   }
   return validateBootstrapMeta(combined.bootstrap);
 }

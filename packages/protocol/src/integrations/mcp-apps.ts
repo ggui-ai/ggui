@@ -1074,10 +1074,12 @@ export function splitBootstrapMeta(
     ...(bootstrap.themeId !== undefined ? { themeId: bootstrap.themeId } : {}),
     ...(bootstrap.themeMode !== undefined ? { themeMode: bootstrap.themeMode } : {}),
     ...(bootstrap.canvasMode !== undefined ? { canvasMode: bootstrap.canvasMode } : {}),
-    ...(bootstrap.gadgets !== undefined && bootstrap.gadgets.length > 0
+    ...(Array.isArray(bootstrap.gadgets) && bootstrap.gadgets.length > 0
       ? { gadgets: bootstrap.gadgets }
       : {}),
-    ...(bootstrap.publicEnv !== undefined &&
+    ...(bootstrap.publicEnv !== null &&
+    typeof bootstrap.publicEnv === 'object' &&
+    !Array.isArray(bootstrap.publicEnv) &&
     Object.keys(bootstrap.publicEnv).length > 0
       ? { publicEnv: bootstrap.publicEnv }
       : {}),
@@ -1100,17 +1102,24 @@ export function splitBootstrapMeta(
         }
       : undefined;
 
+  // Defensive guards: a malformed bootstrap (e.g. `actionNextSteps:
+  // null` from a hand-built fixture or a producer-side bug) MUST NOT
+  // crash splitBootstrapMeta — defer the malformation to the
+  // combiner+validator on the read side, which has the canonical
+  // defensive-parse posture.
+  const isObjectNonNull = (v: unknown): v is Record<string, unknown> =>
+    v !== null && typeof v === 'object' && !Array.isArray(v);
   const renderCandidate: McpAppAiGguiRenderMeta = {
     ...(bootstrap.stackItemId !== undefined ? { stackItemId: bootstrap.stackItemId } : {}),
     ...(bootstrap.propsJson !== undefined ? { propsJson: bootstrap.propsJson } : {}),
-    ...(bootstrap.actionNextSteps !== undefined &&
+    ...(isObjectNonNull(bootstrap.actionNextSteps) &&
     Object.keys(bootstrap.actionNextSteps).length > 0
       ? { actionNextSteps: bootstrap.actionNextSteps }
       : {}),
-    ...(bootstrap.contextSlots !== undefined && bootstrap.contextSlots.length > 0
+    ...(Array.isArray(bootstrap.contextSlots) && bootstrap.contextSlots.length > 0
       ? { contextSlots: bootstrap.contextSlots }
       : {}),
-    ...(bootstrap.appCallableTools !== undefined &&
+    ...(Array.isArray(bootstrap.appCallableTools) &&
     bootstrap.appCallableTools.length > 0
       ? { appCallableTools: bootstrap.appCallableTools }
       : {}),
@@ -1140,6 +1149,38 @@ export function splitBootstrapMeta(
     ...(render !== undefined ? { render } : {}),
     ...(contract !== undefined ? { contract } : {}),
     ...(component !== undefined ? { component } : {}),
+  };
+}
+
+/**
+ * Convenience for emitters + tests: take a {@link GguiBootstrapMeta}
+ * and produce the `_meta` envelope shape with the five per-window
+ * keys (`ai.ggui/session` / `auth` / `render` / `contract` / `component`),
+ * dropping empty slices.
+ *
+ * Equivalent to calling {@link splitBootstrapMeta} and spreading each
+ * non-undefined slice under its canonical key constant; centralizes
+ * the spread so every caller agrees on which keys are emitted and
+ * under what names.
+ *
+ * @public
+ */
+export function bootstrapToMcpAppMeta(
+  bootstrap: GguiBootstrapMeta,
+): Record<string, unknown> {
+  const split = splitBootstrapMeta(bootstrap);
+  return {
+    [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
+    ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
+    ...(split.render
+      ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render }
+      : {}),
+    ...(split.contract
+      ? { [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: split.contract }
+      : {}),
+    ...(split.component
+      ? { [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: split.component }
+      : {}),
   };
 }
 
