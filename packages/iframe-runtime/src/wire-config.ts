@@ -251,6 +251,32 @@ export interface BuildRootWireConfigOptions {
    * (host inspector vs operator telemetry).
    */
   readonly onObserve?: ObservabilityEmitter;
+  /**
+   * Optional outbound action sink. When provided, REPLACES the
+   * default WS-frame send (`manager.send({type:'action', payload})`).
+   *
+   * The WS live-channel exists for streamSpec subscriptions (inbound
+   * `ggui_emit` fanout + `props_update` + `push` + `data` + `feedback`
+   * + `drain_ack` + `channel_payload`). Outbound user actions belong
+   * on a different pipe — per MCP-Apps spec §401, the iframe relays
+   * `tools/call:ggui_runtime_submit_action` through the host (the
+   * `_meta.ui.visibility:['app']` channel), and the server's MCP
+   * handler appends to `pendingEventConsumer` so `ggui_consume`
+   * wakes the agent.
+   *
+   * The default `manager.send({type:'action'})` path writes to the
+   * session ledger only — it has no downstream consumer in OSS (no
+   * `wiredActionRouter`, no bridge to `pendingEventConsumer`).
+   * Production callers MUST supply this option to reach the agent.
+   *
+   * Called AFTER outbound validation passes. Receives the validated
+   * {@link ActionEnvelope}; caller extracts payload.action +
+   * payload.data + slice meta to route via the host's tools/call
+   * relay (see iframe-runtime's `routeDispatch`).
+   *
+   * Tests omit this opt to exercise the legacy WS-frame path.
+   */
+  readonly onDispatchEnvelope?: (envelope: ActionEnvelope) => void;
 }
 
 /**
@@ -357,7 +383,16 @@ export function buildRootWireConfig(
       );
       return;
     }
-    sendActionEnvelope(opts.manager, envelope);
+    if (opts.onDispatchEnvelope !== undefined) {
+      // Spec-canonical path — the iframe-runtime's LIVE-mode boot
+      // wires this to `routeDispatch`, which postMessages
+      // `tools/call:ggui_runtime_submit_action` through the MCP-Apps
+      // host relay. The default WS-frame send below is retained for
+      // tests + legacy callers that don't relay tools/call.
+      opts.onDispatchEnvelope(envelope);
+    } else {
+      sendActionEnvelope(opts.manager, envelope);
+    }
     // Observability: a wired-tool dispatch is a `data:submit` whose
     // resolved action has a `tool` binding. Plain agent-routed actions
     // (no `tool` on the actionSpec) fire a `dispatch` activity row in

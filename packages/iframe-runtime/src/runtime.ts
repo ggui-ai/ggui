@@ -2129,6 +2129,25 @@ export function fireDirectToolCall(args: {
  *
  * @internal — exported for unit tests + production reuse.
  */
+export function resolveDispatchToolName(): string {
+  // Operator escape hatch — `window.__GGUI_DISPATCH_TOOL__` lets a
+  // host override the receiver tool name when running ggui under a
+  // server that publishes the spec-canonical receiver under a
+  // different name (the agent SDK extension surface). Default:
+  // `ggui_runtime_submit_action` per the OSS handler at
+  // `@ggui-ai/mcp-server-handlers::createGguiSubmitActionHandler`.
+  if (typeof window === 'undefined') return 'ggui_runtime_submit_action';
+  const override = (
+    window as unknown as { __GGUI_DISPATCH_TOOL__?: unknown }
+  ).__GGUI_DISPATCH_TOOL__;
+  return typeof override === 'string' && override.length > 0
+    ? override
+    : 'ggui_runtime_submit_action';
+}
+
+/**
+ * @internal — exported for unit tests + production reuse.
+ */
 export function routeDispatch(args: {
   readonly actionName: string;
   readonly data: unknown;
@@ -2756,14 +2775,7 @@ async function bootSelfContained(
     // claude.ai (the host-side scope:['app'] firewall blocks
     // tool-result feedback from reaching the model). Empirically
     // confirmed in a protocol probe.
-    const dispatchToolName =
-      typeof window !== 'undefined' &&
-      typeof (
-        window as unknown as { __GGUI_DISPATCH_TOOL__?: string }
-      ).__GGUI_DISPATCH_TOOL__ === 'string'
-        ? (window as unknown as { __GGUI_DISPATCH_TOOL__?: string })
-            .__GGUI_DISPATCH_TOOL__!
-        : 'ggui_runtime_submit_action';
+    const dispatchToolName = resolveDispatchToolName();
     const wireConfig: import('@ggui-ai/wire').WireConfig = {
       app: { appId: session.appId, appName: session.appId },
       session: { sessionId: session.sessionId, isConnected: true },
@@ -3388,6 +3400,20 @@ async function bootProduction(opts: {
         },
       };
 
+      // Spec-canonical outbound dispatch. The WS pipe is for streamSpec
+      // subscriptions ONLY (inbound `ggui_emit` fanout + `props_update` +
+      // `push` + `data` + `feedback` + `drain_ack` + `channel_payload`).
+      // Outbound user actions go through the MCP-Apps host relay per
+      // spec §401: postMessage `tools/call:ggui_runtime_submit_action`
+      // to the parent → `AppRenderer.onCallTool` → sample agent's
+      // `/relay/tools-call` → ggui MCP server →
+      // `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
+      // → `ggui_consume` wakes the agent. The server's WS
+      // `handleInboundAction` writes to the session ledger only — no
+      // downstream consumer — so the WS action path silently drops
+      // clicks. `routeDispatch` is the same helper `bootSelfContained`
+      // uses; threading it here aligns LIVE-mode with self-contained.
+      const dispatchToolName = resolveDispatchToolName();
       const { config: rootConfig, buildScopedConfig } = buildRootWireConfig({
         sessionId: session.sessionId,
         appId: session.appId,
@@ -3395,6 +3421,37 @@ async function bootProduction(opts: {
         manager,
         streamBus,
         ...(onObserve !== undefined ? { onObserve } : {}),
+        onDispatchEnvelope: (envelope) => {
+          if (envelope.type !== 'data:submit') return;
+          const payload = envelope.payload as
+            | { action?: unknown; data?: unknown; tool?: unknown }
+            | undefined;
+          if (
+            payload === undefined
+            || typeof payload.action !== 'string'
+            || payload.action.length === 0
+          ) {
+            return;
+          }
+          routeDispatch({
+            actionName: payload.action,
+            data: payload.data,
+            meta: {
+              sessionId: session.sessionId,
+              appId: session.appId,
+              ...(stackItem?.stackItemId !== undefined
+                ? { stackItemId: stackItem.stackItemId }
+                : {}),
+              ...(session.appCallableTools !== undefined
+                ? { appCallableTools: session.appCallableTools }
+                : {}),
+              ...(stackItem?.actionNextSteps !== undefined
+                ? { actionNextSteps: stackItem.actionNextSteps }
+                : {}),
+            },
+            dispatchToolName,
+          });
+        },
       });
 
       // containerFor: mint a `<div data-ggui-stack-item-root="<id>">`
