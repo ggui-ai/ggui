@@ -1556,7 +1556,6 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       logger: silentLogger,
       sessionChannel: true,
       mcpApps: {
-        renderBaseUrl: 'http://localhost/r/',
         wsUrl: 'ws://localhost/ws',
       },
       wsTokenSecret: 'test-secret-for-handshake',
@@ -1687,8 +1686,11 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
 
       // 2. Paired push consumes the record via decision:accept — the
       //    handshake's stored suggestion contract is the effective
-      //    contract. Post-2026-05-13 trim: structuredContent is
-      //    {stackItemId, nextStep?, url, action} — no sessionId echo.
+      //    contract. Post-R5 (fix-A 2026-05-26): structuredContent is
+      //    {stackItemId, nextStep?, action} — no sessionId echo, no
+      //    `url` (the `/r/<shortCode>` route was deleted; hosts mount
+      //    via `_meta.ui.resourceUri` or resolve `{sessionId,
+      //    stackItemId}` via their own session-resource endpoint).
       const pushResult = await client.callTool({
         name: 'ggui_push',
         arguments: {
@@ -1697,12 +1699,12 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         },
       });
       expect(pushResult.isError).toBeFalsy();
-      const pushContent = pushResult.structuredContent as {
-        stackItemId: string;
-        url?: string;
-      };
+      const pushContent = pushResult.structuredContent as Record<
+        string,
+        unknown
+      >;
       expect(pushContent.stackItemId).toBeTruthy();
-      expect(pushContent.url).toMatch(/^http:\/\/localhost\/r\//);
+      expect(Object.keys(pushContent)).not.toContain('url');
     } finally {
       await client.close();
     }

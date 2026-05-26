@@ -42,10 +42,10 @@ export async function bootOssServer(
   overrides: Parameters<typeof createGguiServer>[0] = {},
 ): Promise<OssFixture> {
   // Two-phase boot: listen first to learn the port, THEN re-build the
-  // server with mcpApps wsUrl/renderBaseUrl pointing at the real
-  // address. The OSS factory needs the WS URL at construct time so
-  // bootstrap-token mint emits a connectable wsUrl rather than the
-  // default `ws://localhost/ws` (which fails on port 80 by default).
+  // server with mcpApps.wsUrl pointing at the real address. The OSS
+  // factory needs the WS URL at construct time so bootstrap-token mint
+  // emits a connectable wsUrl rather than the default `ws://localhost/ws`
+  // (which fails on port 80 by default).
   //
   // We use a lightweight pre-listen pattern: start a throwaway
   // listener to grab a free port, close it, then boot the real server
@@ -69,11 +69,10 @@ export async function bootOssServer(
     logger: silentLogger,
     sessionChannel: true,
     mcpApps: {
-      // Explicit URLs so bootstrap tokens carry a connectable wsUrl —
+      // Explicit `wsUrl` so bootstrap tokens carry a connectable URL —
       // without this, the OSS default emits `ws://localhost/ws`
       // (port 80) which fails in tests.
       wsUrl,
-      renderBaseUrl: `${url}/r/`,
     },
     wsTokenSecret: 'test-host-simulator-secret-32bytes',
     ...overrides,

@@ -606,12 +606,12 @@ export function defaultHandlers(deps: {
   };
   readonly push?: {
     readonly sessionStore: SessionStore;
-    readonly renderBaseUrl: string;
     /**
      * Optional bootstrap-credential minter. When present, `ggui_push`
      * results carry the `ai.ggui/session` + `ai.ggui/stack-item` slice
-     * meta. When absent, they don't — non-MCP-Apps hosts still get
-     * `structuredContent.url` as the fallback link.
+     * meta. When absent, they don't — non-MCP-Apps hosts read
+     * `{sessionId, stackItemId}` off structuredContent and resolve
+     * the session-resource themselves.
      */
     readonly mintBootstrap?: (
       sessionId: string,
@@ -1412,7 +1412,6 @@ export function defaultHandlers(deps: {
           ? { appMetadataStore: deps.appMetadataStore }
           : {}),
         pendingEventConsumer,
-        renderBaseUrl: deps.push.renderBaseUrl,
         appCallableTools: appCallableToolsProvider,
         ...(deps.push.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.push.streamWebSocketLocalTools }
@@ -2306,10 +2305,8 @@ export interface CreateGguiServerOptions {
    *     surface.
    *   - `true`: enable with sensible defaults. Requires
    *     `sessionChannel: true` so the iframe has a WebSocket to open;
-   *     throws at construction otherwise. `renderBaseUrl` defaults to
-   *     `"http://localhost/r/"` (dev-sensible; production operators
-   *     override).
-   *   - `{ renderBaseUrl?, shellHtml?, wsUrl? }`: explicit config.
+   *     throws at construction otherwise.
+   *   - `{ shellHtml?, wsUrl? }`: explicit config.
    *
    * When enabled, FOUR things happen on every fresh per-request
    * `McpServer`:
@@ -2327,7 +2324,6 @@ export interface CreateGguiServerOptions {
   readonly mcpApps?:
     | boolean
     | {
-        readonly renderBaseUrl?: string;
         readonly shellHtml?: string;
         /**
          * External WebSocket URL the iframe should open, visible to
@@ -3342,8 +3338,6 @@ export function createGguiServer(
     typeof opts.mcpApps === 'object' && opts.mcpApps !== null
       ? opts.mcpApps
       : {};
-  const renderBaseUrl =
-    mcpAppsConfig.renderBaseUrl ?? 'http://localhost/r/';
   const wsUrl = mcpAppsConfig.wsUrl ?? 'ws://localhost/ws';
 
   // Iframe-runtime bundle mount resolution (C8 — plan §C8).
@@ -3875,7 +3869,6 @@ export function createGguiServer(
         ? {
             push: {
               sessionStore,
-              renderBaseUrl,
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC
@@ -7197,7 +7190,6 @@ export function createGguiServer(
             sessionId: string;
             shortCode: string;
             stackItemId: string;
-            url: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
           }
@@ -7225,7 +7217,6 @@ export function createGguiServer(
             sessionId: string;
             stackItemId: string;
             shortCode: string;
-            url: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
           };
@@ -7233,7 +7224,6 @@ export function createGguiServer(
             sessionId: result.sessionId,
             shortCode: result.shortCode,
             stackItemId: result.stackItemId,
-            url: result.url,
             codeReady: result.codeReady,
             ...(result.cache ? { cache: result.cache } : {}),
           };

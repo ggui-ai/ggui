@@ -66,7 +66,6 @@ async function boot(): Promise<BootedFixture> {
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     sessionChannel: true,
     mcpApps: {
-      renderBaseUrl: 'http://127.0.0.1/r/',
       wsUrl: 'ws://127.0.0.1/ws',
     },
     shortCodeIndex: new InMemoryShortCodeIndex(),
@@ -267,15 +266,15 @@ describe('Contacts MCP mounted on createGguiServer — real /mcp wire', () => {
         },
       });
       // Post-handshake-first push response: structuredContent carries
-      // `{stackItemId, url, action}` — sessionId now lives on
+      // `{stackItemId, action}` — sessionId now lives on
       // `_meta.ggui.bootstrap.sessionId` (MCP Apps spec channel).
       const structured = result.structuredContent as {
         stackItemId: string;
-        url: string;
         action: string;
       };
       expect(structured.stackItemId).toBeTruthy();
-      expect(structured.url).toMatch(/^http:\/\/127\.0\.0\.1\/r\//);
+      // Post-R5 (fix-A 2026-05-26): no dead `url` on structuredContent.
+      expect(Object.keys(structured)).not.toContain('url');
       const bootstrapSessionId = (
         result._meta as
           | { ggui?: { bootstrap?: { sessionId?: string } } }

@@ -349,8 +349,8 @@ export interface GguiPushHandlerDeps {
    * Bootstrap-credential minter for the MCP Apps outbound path. When
    * present, the handler's `resultMeta` emits the live-auth trio on
    * the `ai.ggui/session` slice. When ABSENT, no `_meta` is emitted —
-   * the path still works end-to-end for non-MCP-Apps hosts that just
-   * need the `url` fallback.
+   * non-MCP-Apps hosts read `{sessionId, stackItemId}` straight off
+   * `structuredContent` and resolve the session-resource themselves.
    *
    * Returns the live-auth fields on the session slice —
    * `{wsUrl, token, expiresAt}`. The handler adds `sessionId` + `appId`
@@ -468,13 +468,6 @@ export interface GguiPushHandlerDeps {
    */
   readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
 
-  /**
-   * Base URL (including trailing slash if needed) the returned `url`
-   * resolves to. E.g. `'https://app.example.com/r/'`. The handler
-   * appends the generated `shortCode` to form the user-facing render
-   * URL. Required — no sensible default across deployments.
-   */
-  readonly renderBaseUrl: string;
   /**
    * Provisional preview orchestration seam. When present AND the
    * per-push gate passes, the handler fires a background preview
@@ -916,19 +909,22 @@ const inputSchema = {
 /**
  * Output raw-shape — minimum LLM-actionable surface (2026-05-13).
  *
- * Pre-launch, no back-compat. Four fields, all load-bearing:
+ * Pre-launch, no back-compat. Three fields, all load-bearing:
  *   - `stackItemId` — agent's handle for follow-up tool calls
  *     (ggui_consume, ggui_update).
  *   - `nextStep` — terse recovery hint (tool + args). Emitted only
  *     when the contract has actionSpec; pure-display pushes omit.
- *   - `url` — clickable surface URL for hosts that surface
- *     `structuredContent.url` (claude.ai, ChatGPT custom connectors).
  *   - `action` — negotiator's decision (`create | reuse | update |
  *     replace | compose`). May inform the agent's follow-up prompt.
  *
  * Retired this slice (all redundant or unused):
  *   - `sessionId` / `handshakeId` — agent passed these IN; echoes.
- *   - `shortCode` — redundant with `url`'s tail.
+ *   - `shortCode` — redundant with the now-deleted `url` tail.
+ *   - `url` — post-R5 the `/r/` shortCode route was deleted; every
+ *     host either mounts via `_meta.ui.resourceUri` or resolves
+ *     `{sessionId, stackItemId}` via `session-resource/item/...`.
+ *     Leaving the dead URL on the wire had models hallucinating
+ *     links that resolve nowhere.
  *   - `codeReady` — server-side state; LLM doesn't branch on it.
  *   - `decision` — every field was duplicate (action), input echo
  *     (contract), post-hoc prose (reasoning), or internal cache
@@ -950,7 +946,6 @@ const outputSchema = {
       args: z.object({ stackItemId: z.string() }),
     })
     .optional(),
-  url: z.string().url(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'compose']),
 } as const;
 
@@ -959,8 +954,8 @@ const outputSchema = {
  * downstream seams need (resultMeta, postSuccessHook, cloud
  * persistence, test assertions). The LLM-visible serialization is
  * the smaller `outputSchema` subset (`{stackItemId, nextStep?,
- * url, action}`); zod's `.parse()` strips the extras before they
- * land on `structuredContent`.
+ * action}`); zod's `.parse()` strips the extras before they land on
+ * `structuredContent`.
  *
  * In the future, when no consumer needs the extras anymore, this
  * type can collapse into the lean shape. Today the cloud pod's
@@ -976,7 +971,6 @@ type PushOutput = {
     readonly tool: 'ggui_consume';
     readonly args: { readonly stackItemId: string };
   };
-  url: string;
   action: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
   // Internal seams (stripped from JSON-RPC envelope by outputSchema):
   sessionId: string;
@@ -1054,7 +1048,7 @@ export function createGguiPushHandler(
         // 5. Wire surface — DataContract overview.
         "WIRE SURFACE (DataContract). PLACEMENT RULE for the two inbound specs: actionSpec carries DISCRETE EVENTS that drive the agent's next turn (submit, send, confirm, cancel, choose). contextSpec carries STATE the agent observes (draft text, slider value, current selection, in-progress list items). The single test: does this thing need the agent's next-turn reasoning? Yes → actionSpec. No → contextSpec. There is no third category — no `terminal` flag, no `consumeSpec`, no `interaction` mode. Specs (every entry is a WRAPPER that contains a JSON Schema in `schema:` — the JSON Schema does NOT sit flat at the entry level):  • propsSpec.properties[name].{schema, required?, default?} — initial render values, validated against propsSpec.  • actionSpec[name].{label, schema?, nextStep?, confirm?, icon?} — clicks. `nextStep` is an OPTIONAL string naming the agent's intended next tool call (e.g. nextStep:'todo_toggle'); the named tool MUST also be declared in `agentCapabilities.tools`. Omit nextStep for actions the agent composes freely from any toolset.  • contextSpec[slot].{schema, default?} — observable client state (counters, toggles, slider values). Use slot setter; NOT useAction.  • streamSpec[channel].{schema, mode?, replay?, source?} — live updates from agent to UI (outbound).  • agentCapabilities.tools[name].{description?, inputSchema?, outputSchema?} — declarative catalog of every MCP tool the contract references from actionSpec.nextStep or streamSpec.source.tool.",
         // 6. Hosting hint — what the result looks like.
-        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/session and streams on the live channel; otherwise returns a clickable url.',
+        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/session and streams on the live channel; other hosts resolve `{sessionId, stackItemId}` from structuredContent and render via their own session-resource fetch.',
       ].join(' '),
     // No `allowedFor` — same toolset on every pod kind. The user-pod
     // posture (universal MCP for end-users) and the app-pod
@@ -1491,7 +1485,6 @@ export function createGguiPushHandler(
       }
 
       const shortCode = generateShortCode();
-      const url = `${deps.renderBaseUrl}${shortCode}`;
 
       // Record shortCode → session binding for same-origin console
       // viewer lookups. Best-effort: an index write rejection does NOT
@@ -1964,7 +1957,6 @@ export function createGguiPushHandler(
       //     from this rich in-memory object.
       const result: PushOutput = {
         stackItemId,
-        url,
         action,
         sessionId,
         shortCode,

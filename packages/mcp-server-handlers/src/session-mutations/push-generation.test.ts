@@ -180,7 +180,6 @@ describe('ggui_push — real generator wiring', () => {
 
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: preview,
       generation: makeGenerationDeps({ uiGenerator }),
@@ -239,7 +238,6 @@ describe('ggui_push — real generator wiring', () => {
 
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: preview,
       generation: makeGenerationDeps({ uiGenerator }),
@@ -285,7 +283,6 @@ describe('ggui_push — real generator wiring', () => {
 
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: preview,
       generation: makeGenerationDeps({
@@ -329,7 +326,6 @@ describe('ggui_push — real generator wiring', () => {
 
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: preview,
       generation: makeGenerationDeps({ uiGenerator }),
@@ -390,7 +386,6 @@ describe('ggui_push — real generator wiring', () => {
     const kvStore = new InMemoryKeyValueStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       generation: makeGenerationDeps({ uiGenerator }),
     });
@@ -413,7 +408,6 @@ describe('ggui_push — real generator wiring', () => {
     const kvStore = new InMemoryKeyValueStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
     });
     const handshakeId = await seedHandshake(kvStore, {
@@ -452,7 +446,6 @@ describe('ggui_push — real generator wiring', () => {
     const kvStore = new InMemoryKeyValueStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       generation: makeGenerationDeps({
         uiGenerator,
@@ -525,7 +518,6 @@ describe('ggui_push — Phase 3.1b cloud seam (generator override)', () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiPushHandler({
         sessionStore,
-        renderBaseUrl: 'http://localhost/r/',
         handshakeStore: kvStore,
         generation: makeGenerationDeps({
           uiGenerator: ossGenerator,
@@ -568,7 +560,6 @@ describe('ggui_push — Phase 3.1b cloud seam (generator override)', () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiPushHandler({
         sessionStore,
-        renderBaseUrl: 'http://localhost/r/',
         handshakeStore: kvStore,
         generation: makeGenerationDeps({ uiGenerator: ossGenerator }),
         generator: override,
@@ -638,7 +629,6 @@ describe('ggui_push — contextSpec projection', () => {
     const kvStore = new InMemoryKeyValueStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       generation: makeGenerationDeps({ uiGenerator }),
     });
@@ -704,7 +694,6 @@ describe('ggui_push — contextSpec projection', () => {
     const kvStore = new InMemoryKeyValueStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       generation: makeGenerationDeps({ uiGenerator }),
     });

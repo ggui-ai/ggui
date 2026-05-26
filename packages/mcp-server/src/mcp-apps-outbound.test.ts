@@ -253,7 +253,11 @@ describe('end-to-end outbound flow', () => {
       expect(scKeys).not.toContain(bootstrapKey);
     }
     expect(sc.stackItemId).toBeDefined();
-    expect(sc.url).toMatch(/^http:\/\/localhost\/r\//);
+    // Post-R5 cleanup: there is no `url` field on structuredContent.
+    // The `/r/<shortCode>` route was deleted; every host either
+    // mounts via `_meta.ui.resourceUri` or resolves the session
+    // resource from `{sessionId, stackItemId}` itself.
+    expect(scKeys).not.toContain('url');
 
     // The `ai.ggui/*` _meta slices decode to a well-shaped pair.
     expect(result._meta).toBeDefined();

@@ -24,14 +24,13 @@
  *     In-memory is correct for the OSS first-run: session state lives
  *     in memory unless the operator opts into sqlite, so a matching
  *     index lifetime is what operators expect.
- *   - `mcpApps: { renderBaseUrl, wsUrl }` — registers the `ggui_push`
- *     tool with MCP Apps `_meta.ui.*` declaration, serves
- *     `ui://ggui/session`, and advertises the `io.modelcontextprotocol/ui`
- *     capability. Without this the console `/s/<shortCode>` viewer
- *     is orphaned — there's no tool minting shortCodes. Resolved host +
- *     port are mandatory so the agent-returned `url` resolves to this
- *     same server's `/s/` endpoint. See §2.4.1 "sole entry-point tool"
- *     lock in the OSS-split plan.
+ *   - `mcpApps: { wsUrl }` — registers the `ggui_push` tool with
+ *     MCP Apps `_meta.ui.*` declaration, serves `ui://ggui/session`,
+ *     and advertises the `io.modelcontextprotocol/ui` capability.
+ *     `wsUrl` is the live-channel URL the spawned iframe subscribes
+ *     to; resolved host + port are mandatory so it points back at
+ *     this same process. See §2.4.1 "sole entry-point tool" lock
+ *     in the OSS-split plan.
  *
  * Embedding hosts that want a different shape (no landing page, no
  * pairing, programmatic control) compose `createGguiServer()` directly
@@ -104,19 +103,18 @@ export interface BuildMcpServerBackendOptions {
    */
   readonly cliVersion: string;
   /**
-   * Bind host used to compose the MCP Apps `renderBaseUrl` + `wsUrl`.
+   * Bind host used to compose the MCP Apps `wsUrl` and `runtime.url`.
    * Must be the same host the CLI then passes to `listen()`; otherwise
-   * the shortCode URLs the agent receives will point somewhere the
-   * browser can't reach.
+   * those URLs will point somewhere the iframe browser can't reach.
    */
   readonly host: string;
   /**
    * Bind port used to compose the MCP Apps URLs. MUST be a concrete
-   * port (not `0`) — the agent-returned URL is captured at composition
-   * time, so deferring to an OS-assigned port would leave `ggui_push`
-   * emitting a broken link. Callers that started with `--port 0`
-   * should pre-resolve a free port via {@link pickFreePort} before
-   * constructing the backend.
+   * port (not `0`) — the iframe-facing URLs (`wsUrl`, `runtime.url`)
+   * are captured at composition time, so deferring to an OS-assigned
+   * port would leave them pointing at the wrong port. Callers that
+   * started with `--port 0` should pre-resolve a free port via
+   * {@link pickFreePort} before constructing the backend.
    */
   readonly port: number;
   /**
@@ -288,11 +286,10 @@ export interface BuildMcpServerBackendOptions {
 
   /**
    * Public base URL that replaces `http://<host>:<port>` when
-   * composing `mcpApps.renderBaseUrl`, `mcpApps.wsUrl`, and
-   * `runtime.url`. Set this when the server is being reached
-   * through a tunnel (cloudflare, ngrok, …) so URLs the agent
-   * receives resolve from the MCP host's perspective rather than
-   * `localhost`.
+   * composing `mcpApps.wsUrl` and `runtime.url`. Set this when the
+   * server is being reached through a tunnel (cloudflare, ngrok, …)
+   * so URLs the iframe receives resolve from the MCP host's
+   * perspective rather than `localhost`.
    *
    * Required shape: `http://…` or `https://…`, no trailing slash.
    * The `wsUrl` is derived by replacing the scheme with `ws`/`wss`.
@@ -444,7 +441,7 @@ export interface BuildMcpServerBackendOptions {
  * chosen number. Exported so the CLI (`cli.ts::runServeCommand`) and
  * the integration tests can resolve `--port 0` to a concrete port
  * BEFORE constructing the backend — {@link buildMcpServerBackend}
- * captures the port in the composed `mcpApps.renderBaseUrl` / `wsUrl`
+ * captures the port in the composed `mcpApps.wsUrl` / `runtime.url`
  * at construction time, so the caller must know it up-front.
  *
  * Tiny race window: another process could claim the port between our
@@ -487,13 +484,13 @@ export function buildMcpServerBackend(
       `buildMcpServerBackend: \`port\` must be a concrete TCP port (1..65535), got ${opts.port}. Resolve \`--port 0\` via pickFreePort() before composing.`,
     );
   }
-  // `baseUrl` feeds `mcpApps.renderBaseUrl` + `runtime.url`; `wsBaseUrl`
-  // feeds `mcpApps.wsUrl`. With `--public-base-url`, both derive from
-  // the operator-provided tunnel URL so the agent emits links that
-  // resolve from the remote host's perspective. Without it, both fall
-  // back to the local bind. The shape was validated at flag-parse
-  // time (`http://`/`https://`, no trailing slash); we just substitute
-  // the scheme for ws/wss to derive the live-channel URL.
+  // `baseUrl` feeds `runtime.url`; `wsBaseUrl` feeds `mcpApps.wsUrl`.
+  // With `--public-base-url`, both derive from the operator-provided
+  // tunnel URL so the URLs the iframe receives resolve from the remote
+  // host's perspective. Without it, both fall back to the local bind.
+  // The shape was validated at flag-parse time (`http://`/`https://`,
+  // no trailing slash); we just substitute the scheme for ws/wss to
+  // derive the live-channel URL.
   const baseUrl = opts.publicBaseUrl ?? `http://${opts.host}:${opts.port}`;
   const wsBaseUrl = baseUrl.replace(/^http(s?):\/\//, 'ws$1://');
   // Router over the mount handler bundle. Computed once; absent
@@ -950,18 +947,13 @@ export function buildMcpServerBackend(
     ...(opts.onThemeConfigChange
       ? { onThemeConfigChange: opts.onThemeConfigChange }
       : {}),
-    // Register `ggui_push` + serve `ui://ggui/session`. URLs point at
-    // this server's own console viewer + live channel — same-origin,
-    // same process. Without this, `ggui_push` is absent and the `/s/`
-    // viewer can never resolve (nothing mints shortCodes).
+    // Register `ggui_push` + serve `ui://ggui/session`. The `wsUrl`
+    // is the live-channel URL published on `_meta["ai.ggui/session"]`
+    // so iframes opened by an MCP Apps host (Claude Desktop, Claude
+    // Code, claude.ai) can subscribe back to this same process.
+    // First-party hosts (Studio, Portal, console) consume
+    // `_meta.ui.resourceUri` instead and never hit the URL directly.
     mcpApps: {
-      // The `/r/` route serves the public self-contained shell that
-      // any MCP Apps host (Claude Desktop, Claude Code, claude.ai)
-      // can render directly — `structuredContent.url` lands on it
-      // as a full HTML page. First-party hosts (Studio, Portal,
-      // console) consume `_meta.ui.resourceUri` and never hit the
-      // URL directly, so the same prefix works for everyone.
-      renderBaseUrl: `${baseUrl}/r/`,
       wsUrl: `${wsBaseUrl}/ws`,
     },
     // Task #382 — `runtimeUrl` MUST be absolute. The thin-shell HTML

@@ -312,19 +312,22 @@ export const pushInputSchema = z.object({
 
 /**
  * Wire-output shape — intentionally lean: `{stackItemId, nextStep?,
- * url, action}`. The handler carries `sessionId`, `shortCode`,
- * `codeReady`, `handshakeId`, `decision`, `contract`, `contractHash`,
- * `cache`, `codeUrl`, `codeHash` on its internal `PushOutput` TS shape
- * for telemetry / post-classify tracing — zod strips them before
+ * action}`. The handler carries `sessionId`, `shortCode`, `codeReady`,
+ * `handshakeId`, `decision`, `contract`, `contractHash`, `cache`,
+ * `codeUrl`, `codeHash` on its internal `PushOutput` TS shape for
+ * telemetry / post-classify tracing — zod strips them before
  * structuredContent serialization.
  *
  * The iframe receives bootstrap credentials (`wsUrl`, `token`,
  * `expiresAt`) via the `ai.ggui/session` slice meta, not via this
- * response.
+ * response. There is no clickable `url` field — post-R5 the `/r/`
+ * shortCode route was deleted (every host either resolves the
+ * `_meta.ui.resourceUri` iframe or reads `{sessionId, stackItemId}`
+ * via `session-resource/item/...`). Leaving a dead URL on the wire
+ * had the model hallucinating links that resolve nowhere.
  */
 export const pushOutputSchema = z.object({
   stackItemId: z.string(),
-  url: z.string().url(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'compose', 'declined']),
   /**
    * Wire-shape recovery hint for the next call. Emitted ONLY when the

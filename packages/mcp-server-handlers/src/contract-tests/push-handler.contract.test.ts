@@ -22,6 +22,5 @@ runPushHandlerContract('OSS-in-memory', {
   createDeps: () => ({
     sessionStore: new InMemorySessionStore(),
     handshakeStore: new InMemoryKeyValueStore(),
-    renderBaseUrl: 'http://localhost/r/',
   }),
 });

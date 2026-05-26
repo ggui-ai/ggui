@@ -98,7 +98,6 @@ describe('push handler — codeStore wiring', () => {
     const codeStore = makeCodeStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       codeStore,
       codeBaseUrl: 'https://app.example.com',
@@ -136,7 +135,6 @@ describe('push handler — codeStore wiring', () => {
     const codeStore = makeCodeStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       mintWsToken: () => ({
         wsUrl: 'ws://localhost/ws',
@@ -199,7 +197,6 @@ describe('push handler — codeStore wiring', () => {
     const codeStore = makeCodeStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       codeStore,
       codeBaseUrl: 'https://app.example.com/',
@@ -227,7 +224,6 @@ describe('push handler — codeStore wiring', () => {
     const codeStore = makeCodeStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       codeStore,
       generation: makeGenerationDeps(),
@@ -252,7 +248,6 @@ describe('push handler — codeStore wiring', () => {
     const codeStore = makeCodeStore();
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       codeStore,
       codeBaseUrl: 'https://app.example.com',
@@ -285,7 +280,6 @@ describe('push handler — codeStore wiring', () => {
     };
     const handler = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       codeStore: failingStore,
       codeBaseUrl: 'https://app.example.com',

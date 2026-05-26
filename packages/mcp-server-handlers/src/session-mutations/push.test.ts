@@ -59,7 +59,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await expect(
         handler.handler({ decision: { kind: 'accept' } }, CTX),
@@ -73,7 +72,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await expect(
         handler.handler({ handshakeId }, CTX),
@@ -87,7 +85,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await expect(
         handler.handler(
@@ -106,7 +103,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -115,7 +111,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       expect(out.sessionId).toBeTruthy();
       expect(out.stackItemId).toBeTruthy();
       expect(out.shortCode).toBeTruthy();
-      expect(out.url).toContain(out.shortCode);
       expect(out.action).toBe('reuse');
       expect(out.handshakeId).toBe(handshakeId);
       expect(out.contractHash).toBeDefined();
@@ -128,7 +123,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -152,7 +146,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -178,7 +171,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         {
@@ -206,7 +198,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await expect(
         handler.handler(
@@ -223,7 +214,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       await expect(
         handler.handler(
@@ -247,7 +237,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -266,7 +255,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -291,7 +279,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -314,7 +301,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -335,7 +321,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
       });
       const out = await handler.handler(
         { handshakeId, decision: { kind: 'accept' } },
@@ -360,7 +345,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
         canvasLifecycle: {
           emit(sessionId, payload) {
             emits.push({ sessionId, payload: payload as never });
@@ -384,7 +368,6 @@ describe('createGguiPushHandler — MVB-5', () => {
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,
-        renderBaseUrl: 'https://test/',
         // No canvasLifecycle dep — must no-op cleanly.
       });
       await expect(

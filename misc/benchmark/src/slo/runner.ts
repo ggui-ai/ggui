@@ -122,7 +122,6 @@ export async function runSloCase(
   const handshakeHandler = createGguiHandshakeHandler({ kvStore });
   const handler = createGguiPushHandler({
     sessionStore,
-    renderBaseUrl: 'http://localhost/r/',
     handshakeStore: kvStore,
     provisionalPreview: previewDeps,
   });

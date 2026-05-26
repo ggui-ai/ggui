@@ -202,7 +202,6 @@ export function runPushHandlerContract(
           expect(out.sessionId).toBeTruthy();
           expect(out.stackItemId).toBeTruthy();
           expect(out.shortCode).toBeTruthy();
-          expect(out.url).toContain(out.shortCode);
           expect(out.action).toBe('create');
           expect(out.handshakeId).toBe('hs-happy');
           expect(out.contractHash).toBeDefined();

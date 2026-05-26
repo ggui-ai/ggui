@@ -233,10 +233,22 @@ describe('ggui_push — MVB-5 decision discriminator', () => {
   it('round-trips a push output', () => {
     const out = {
       stackItemId: 'item_1',
-      url: 'https://render.ggui.ai/abc12345',
       action: 'create' as const,
     };
     expect(pushOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
+    const parsed = pushOutputSchema.parse({
+      stackItemId: 'item_1',
+      action: 'create',
+      // Dead field — post-R5 the `/r/<shortCode>` route was deleted.
+      // Defensive: a sender that hasn't migrated yet must not poison
+      // the wire output with a hallucination-bait URL.
+      url: 'https://stale-render.example.com/abc12345',
+    } as unknown as Record<string, unknown>);
+    expect(parsed).toEqual({ stackItemId: 'item_1', action: 'create' });
+    expect(Object.keys(parsed)).not.toContain('url');
   });
 });
 

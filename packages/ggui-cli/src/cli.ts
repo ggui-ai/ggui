@@ -523,10 +523,10 @@ async function runServeCommand(args: string[]): Promise<number> {
   }
 
   // Resolve `--port 0` BEFORE composing the backend. `createGguiServer`
-  // captures `mcpApps.renderBaseUrl` + `wsUrl` at construction time, so
-  // we need a concrete port to emit URLs the agent can hand to a
-  // browser. A tiny race window exists between close + bind; surface
-  // the bind failure cleanly if it loses.
+  // captures `mcpApps.wsUrl` + `runtime.url` at construction time, so
+  // we need a concrete port to emit URLs the iframe can connect to.
+  // A tiny race window exists between close + bind; surface the bind
+  // failure cleanly if it loses.
   //
   // Resolved BEFORE the BYOK probe (vs. previous ordering) because
   // the no-credentials fallback card needs the absolute settings URL

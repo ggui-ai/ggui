@@ -165,7 +165,7 @@ describe('buildMcpServerBackend', () => {
   });
 
   async function boot(): Promise<{ url: string; port: number }> {
-    // `mcpApps.renderBaseUrl` / `wsUrl` are captured at composition
+    // `mcpApps.wsUrl` + `runtime.url` are captured at composition
     // time, so the port must be resolved before `buildMcpServerBackend`
     // runs — matches the CLI's `runServeCommand` ordering.
     const port = await pickFreePort();
@@ -373,12 +373,13 @@ describe('buildMcpServerBackend', () => {
     expect(push?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
   });
 
-  it('the composed `ggui_push` shortCode URL resolves to this server', async () => {
-    // End-to-end: drive the canonical handshake-first flow and confirm
-    // the returned `url` points back at the same server the CLI bound.
-    // Without the port/host plumbing, `mcpApps.renderBaseUrl` defaults
-    // to `http://localhost/r/` — a broken link the agent would hand
-    // the operator.
+  it('the composed `ggui_push` structuredContent carries a stackItemId — and no dead `url` field', async () => {
+    // End-to-end: drive the canonical handshake-first flow and assert
+    // the LLM-visible surface. Post-R5 the `/r/<shortCode>` route was
+    // deleted; the wire-output schema no longer ships a `url` (it was
+    // hallucination bait — see fix-A 2026-05-26). Hosts mount via
+    // `_meta.ui.resourceUri` or resolve `{sessionId, stackItemId}`
+    // through their own session-resource endpoint.
     const { url } = await boot();
     const token = await mintPairToken(backend!, url, 'ggui-push-smoke');
     const { body } = await pushOverMcp({
@@ -388,17 +389,10 @@ describe('buildMcpServerBackend', () => {
       id: 'shortcode-url-smoke',
     });
     const result = body.result as {
-      structuredContent: { url: string };
+      structuredContent: Record<string, unknown>;
     };
-    // Post-ea26d3481: lean push response on the accept path omits a
-    // top-level `shortCode`; the shortCode is embedded in the URL
-    // path. Assert URL shape directly: `<base>/r/<shortCode>` with a
-    // non-empty 8+ char shortCode.
-    expect(result.structuredContent.url).toMatch(
-      new RegExp(
-        `^${url.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}/r/[a-z0-9]{8,}(\\?.*)?$`,
-      ),
-    );
+    expect(typeof result.structuredContent.stackItemId).toBe('string');
+    expect(Object.keys(result.structuredContent)).not.toContain('url');
   });
 
   it('publishes an absolute `runtimeUrl` on `_meta.ggui.bootstrap` (Task #382 — srcdoc posture)', async () => {

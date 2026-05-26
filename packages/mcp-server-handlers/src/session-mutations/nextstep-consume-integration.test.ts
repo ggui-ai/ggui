@@ -66,7 +66,6 @@ describe('Phase 5.3 — push.nextStep → consume integration', () => {
     const pushTool = createGguiPushHandler({
       sessionStore,
       pendingEventConsumer,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: makeMinimalPreviewDeps(),
     });
@@ -150,7 +149,6 @@ describe('Phase 5.3 — push.nextStep → consume integration', () => {
     const handshakeTool = createGguiHandshakeHandler({ kvStore });
     const pushTool = createGguiPushHandler({
       sessionStore,
-      renderBaseUrl: 'http://localhost/r/',
       handshakeStore: kvStore,
       provisionalPreview: makeMinimalPreviewDeps(),
     });

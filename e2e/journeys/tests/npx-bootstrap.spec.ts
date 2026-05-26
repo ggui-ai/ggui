@@ -69,7 +69,6 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { WebSocket as NodeWebSocket } from 'ws';
 import { OUTERMOST_ROOT, packagePath } from './workspace-paths';
 
 // Publishable-package paths resolve CONTEXT-INDEPENDENTLY via
@@ -263,7 +262,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     }
   });
 
-  test('boot → MCP → ggui_push → console viewer', async ({ page }) => {
+  test('boot → MCP → ggui_push → console viewer', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     // ── 1. Health shape ────────────────────────────────────────────
@@ -361,7 +360,6 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
       content?: ReadonlyArray<{ type: string; text: string }>;
       structuredContent?: {
         stackItemId: string;
-        url: string;
         action: string;
         nextStep?: { tool: string; args: { stackItemId: string } };
       };
@@ -391,18 +389,12 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // implicitly minted the session; post-`ggui_new_session` the session
     // already exists by the time push runs.
     expect(['create', 'reuse']).toContain(out.action);
-    // Slice 5 retired the embedded-ui /s/<shortCode> SPA route in
-    // favour of the same-origin `/r/<shortCode>` HTTP fallback (the
-    // `renderBaseUrl` default for OSS). The shortCode alphabet matches
-    // `push.ts::generateShortCode` (`abcdefghjkmnpqrstuvwxyz23456789`).
-    const urlMatch = new URL(out.url).pathname.match(/^\/[rs]\/([a-z0-9]+)$/);
-    expect(urlMatch, `push url is not /r/<shortCode>: ${out.url}`).not.toBeNull();
-    const derivedShortCode = urlMatch![1]!;
-    expect(derivedShortCode).toMatch(/^[abcdefghjkmnpqrstuvwxyz23456789]+$/);
-    // The render URL carries a signed `?sig=…&exp=…` query (capability-
-    // URL signing) — assert the origin + `/r/<shortCode>` path prefix,
-    // not an exact string that would reject the signature params.
-    expect(out.url.startsWith(`${baseUrl}/r/${derivedShortCode}`)).toBe(true);
+    // Post-R5 (fix-A 2026-05-26): there is no `url` field on
+    // structuredContent. The `/r/<shortCode>` route was deleted; hosts
+    // mount via `_meta.ui.resourceUri` or resolve
+    // `{sessionId, stackItemId}` through their own session-resource
+    // endpoint. Assert the dead field really is gone.
+    expect(Object.keys(out)).not.toContain('url');
 
     const sessionSlice = pushResult._meta?.['ai.ggui/session'];
     expect(sessionSlice).toBeTruthy();
@@ -442,133 +434,22 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     expect(landing.headers.get('x-frame-options')).toBe('DENY');
     expect(landing.headers.get('x-content-type-options')).toBe('nosniff');
 
-    // ── 6. Live session viewer — /s/<shortCode> ────────────────────
+    // ── 6. Live session viewer ────────────────────────────────────
     //
-    // Four invariants prove end-to-end:
-    //   (a) GET /s/<shortCode> returns the SPA HTML shell + the React
-    //       tree hydrates (title, root div, no pageerror). The
-    //       `getStableRoute` snapshot cache in
-    //       `packages/console/src/router.ts` is load-bearing here:
-    //       without it the `<App/>` tree collapsed with "Maximum
-    //       update depth exceeded" on every mount.
-    //   (b) POST /ggui/console/session-cookie resolves the real
-    //       shortCode minted by `ggui_push` (not a fixture) and returns
-    //       a same-origin HTTP-only cookie. Exact shape pinned in
-    //       `packages/mcp-server/src/console-auth.ts`.
-    //   (c) A cookie-authenticated live-channel WebSocket upgrade at /ws
-    //       acks a `subscribe` for the cookie-bound session. This is
-    //       the single most-load-bearing OSS-hero invariant: cookie
-    //       mint → WS upgrade → session-channel binding all wired
-    //       against the same `shortCodeIndex` / `sessionStore` the
-    //       `ggui_push` call populated.
-    //   (d) The React SessionViewer reaches its live `connected` state
-    //       and renders the truthful empty-state — the viewer's own
-    //       `GguiProvider`/`GguiSession` wiring works end-to-end.
+    // POST-R5 (fix-A 2026-05-26): the `/r/<shortCode>` SPA route was
+    // deleted; the cookie-mint-by-shortCode flow that depended on
+    // `out.url` is no longer reachable from this surface. The cookie
+    // → /ws subscribe → ack invariants moved to direct unit coverage
+    // (`mcp-server/src/console-cookie.test.ts`, `session-channel.test.ts`)
+    // since the spec-level driver no longer has a shortCode in hand.
     //
-    // (b) + (c) additionally run via direct `fetch` + `ws` to pin the
-    // wire invariants independent of the React renderer, matching the
-    // unit-level `packages/mcp-server/src/console.test.ts::"full
-    // ceremony"` coverage.
-
-    // Surface any mount-time React crashes as explicit failures rather
-    // than silent blank renders — a regression in the `getStableRoute`
-    // cache would show up here as a `pageerror`.
-    const pageErrors: string[] = [];
-    page.on('pageerror', (err) => {
-      pageErrors.push(err.message);
-    });
-
-    // (a) SPA HTML shell + React mount. `networkidle` waits for the
-    // cookie POST + WS upgrade to complete, so the viewer has had a
-    // chance to reach its live state before we start asserting.
-    await page.goto(out.url, { waitUntil: 'networkidle', timeout: 20_000 });
-    // The /r/<shortCode> route serves the thin-shell HTML
-    // (GGUI_SESSION_SHELL_HTML, `<title>ggui session</title>`)
-    // post-Slice-5 — the embedded-ui SPA route is gone, so the page
-    // title is whatever the hosting iframe shell sets, not the
-    // operator console title.
-    await expect(page).toHaveTitle(/ggui/);
-
-    // (b) Cookie mint against the REAL shortCode the agent's push
-    // produced. 200 + Set-Cookie proves shortCodeIndex is threaded
-    // into the cookie endpoint AND `ggui_push` wrote through to it.
-    const mintRes = await fetch(`${baseUrl}/ggui/console/session-cookie`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ shortCode: derivedShortCode }),
-    });
-    expect(mintRes.status).toBe(200);
-    const mintBody = (await mintRes.json()) as {
-      sessionId: string;
-      appId: string;
-      expiresAt: number;
-    };
-    // Cookie endpoint returns the SAME session the push created —
-    // silent mismatch here would mean short-code collisions on the
-    // index or push not writing through.
-    expect(mintBody.sessionId).toBe(mintedSessionId);
-    expect(mintBody.appId).toBe('builder'); // default InMemoryAuthAdapter identity → defaultAppIdFromIdentity('builder')
-    const setCookie = mintRes.headers.get('set-cookie') ?? '';
-    const cookiePair = setCookie.split(';')[0];
-    expect(cookiePair).toMatch(/^ggui_console_session=/);
-
-    // (c) Cookie-authenticated /ws subscribe → ack. Proves the full
-    // mint → upgrade → bind → ack path without depending on the SPA.
-    const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/ws`;
-    const ws = new NodeWebSocket(wsUrl, { headers: { cookie: cookiePair } });
-    const ack = await new Promise<{ type: string }>((done, fail) => {
-      const timer = setTimeout(
-        () => fail(new Error('live-channel ack timeout after 10s')),
-        10_000,
-      );
-      ws.on('open', () => {
-        ws.send(
-          JSON.stringify({
-            type: 'subscribe',
-            payload: { sessionId: mintedSessionId, appId: 'builder' },
-            requestId: 'e2e-sub-1',
-          }),
-        );
-      });
-      ws.on('message', (raw) => {
-        const msg = JSON.parse(String(raw)) as { type: string };
-        if (msg.type === 'ack') {
-          clearTimeout(timer);
-          done(msg);
-        }
-      });
-      ws.on('error', (err: Error) => {
-        clearTimeout(timer);
-        fail(err);
-      });
-    });
-    expect(ack.type).toBe('ack');
-    ws.close();
-
-    // (d) /r/<shortCode> render surface. Pre-Slice-5 this navigated
-    // to the embedded-ui SessionViewer SPA at /s/<shortCode> and
-    // asserted on its `<h1>Live session.</h1>` + `<code>` nodes. The
-    // SPA was retired alongside the user zone; /r/<shortCode> now
-    // serves either the self-contained shell (when componentCode is
-    // available) or the 202 "Generating UI…" polling placeholder
-    // (when codeReady:false — our case here without an LLM key).
-    // Either body is acceptable for the no-BYOK "reaches the viewer
-    // without crashing" claim; the polling placeholder is the
-    // expected steady state until a generator BYOK is wired. The
-    // page title check above already covers the load. Live-BYOK
-    // specs (`live-generation.spec.ts`, `chat-generation.spec.ts`)
-    // exercise the populated render path.
-    const renderBody = await page.content();
-    expect(renderBody).toMatch(/Generating UI…|ggui-shell|ggui-root/i);
-
-    // Final gate: no uncaught React errors during mount. Regressing
-    // the `getStableRoute` cache would trip this before any of the
-    // positive assertions fired, but keeping the check at the end
-    // covers downstream mount-time crashes (GguiProvider, etc.) too.
-    expect(pageErrors, `unexpected browser pageerrors: ${pageErrors.join(' | ')}`).toEqual([]);
+    // Restoring an end-to-end equivalent — `<McpAppIframe>` driving
+    // the session-resource endpoint (`/ggui/session-resource/item/...`)
+    // and a Playwright shell rendering the inner iframe — is queued
+    // for the post-R5 e2e refresh slice. This block is intentionally
+    // empty: the typecheck/lint surface stays clean, the spec still
+    // exercises the bootstrap path through step 5 above, and the
+    // deletion is a single git diff (no dead-code rot left behind).
   });
 });
 

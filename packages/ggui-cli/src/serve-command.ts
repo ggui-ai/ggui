@@ -67,12 +67,12 @@ export interface ParsedServeFlags {
    */
   devAllowAll: boolean;
   /**
-   * Override the public base URL used to compose `mcpApps.renderBaseUrl`,
-   * `mcpApps.wsUrl`, and `runtime.url`. Without this, the URLs derive
-   * from `--host:--port`, which only resolves from the same machine.
+   * Override the public base URL used to compose `mcpApps.wsUrl`
+   * and `runtime.url`. Without this, the URLs derive from
+   * `--host:--port`, which only resolves from the same machine.
    * Set to a tunnel URL (`https://<random>.trycloudflare.com`) when
-   * testing against a remote MCP host so iframe-runtime + `/r/<code>`
-   * links resolve from the host's perspective.
+   * testing against a remote MCP host so the iframe-runtime + live
+   * channel resolve from the host's perspective.
    *
    * Trailing slash is stripped on parse. Must include scheme
    * (`http://` or `https://`); the `wsUrl` is derived by replacing the
