@@ -51,7 +51,7 @@ import {
   type StackItem,
 } from '@ggui-ai/protocol';
 import {
-  AI_GGUI_BOOTSTRAP_META_KEY,
+  MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY,
   GGUI_PUSH_UI_META,
   type GguiBootstrapMeta,
   type PushResultMeta,
@@ -2275,7 +2275,7 @@ export function createGguiPushHandler(
       // inside it — gives compile-time validation of `ggui`, `ui`, and
       // `ui/resourceUri` without an erasure cast at return time.
       const meta: Record<string, unknown> = {
-        [AI_GGUI_BOOTSTRAP_META_KEY]: bootstrap,
+        [MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY]: bootstrap,
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,

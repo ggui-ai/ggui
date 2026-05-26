@@ -47,7 +47,7 @@ import type {
   GguiBootstrapMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { PUBLIC_ENV_APP_KEY_RE, projectHostContext } from '@ggui-ai/protocol';
-import { AI_GGUI_BOOTSTRAP_META_KEY } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { BootstrapParseResult } from './types.js';
 
 /**
@@ -485,7 +485,7 @@ export function parseBootstrapFromUiInitialize(
   // Renamed from nested `_meta.ggui.bootstrap` (malformed under spec
   // grammar) to `_meta["ai.ggui/bootstrap"]` 2026-05-26. See
   // docs/protocol/extensions/ai.ggui-bootstrap.md.
-  const bootstrap = meta[AI_GGUI_BOOTSTRAP_META_KEY];
+  const bootstrap = meta[MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY];
   if (!isPlainObject(bootstrap)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
@@ -583,7 +583,7 @@ export function parseBootstrapFromToolResult(
   }
   // SEP-2133 vendor-extension grammar — see parseBootstrapFromUiInitialize
   // for the rename rationale.
-  const bootstrap = meta[AI_GGUI_BOOTSTRAP_META_KEY];
+  const bootstrap = meta[MCP_APP_AI_GGUI_BOOTSTRAP_META_KEY];
   if (!isPlainObject(bootstrap)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
