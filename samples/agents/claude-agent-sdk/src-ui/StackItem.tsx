@@ -2,6 +2,7 @@
 import { useCallback, useMemo } from 'react';
 import {
   AppRenderer,
+  buildAppRendererToolResult,
   type RequestHandlerExtra,
 } from '@ggui-ai/react';
 import type {
@@ -80,15 +81,10 @@ export function StackItem({
   // every `ggui_update`. Without this, prop changes after the first
   // mount never reach the iframe-runtime (it would only see the initial
   // `__GGUI_META__` global, then nothing).
-  const toolResult = useMemo<CallToolResult | undefined>(() => {
-    if (!item.meta) return undefined;
-    const envelope = toMcpAppEnvelope(item.meta);
-    return {
-      content: [],
-      structuredContent: {},
-      _meta: envelope,
-    } as CallToolResult;
-  }, [item.meta]);
+  const toolResult = useMemo<CallToolResult | undefined>(
+    () => (item.meta ? buildAppRendererToolResult(item.meta) : undefined),
+    [item.meta],
+  );
 
   const sandbox = useMemo(() => ({ url: new URL(sandboxUrl) }), [sandboxUrl]);
 

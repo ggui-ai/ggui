@@ -231,7 +231,12 @@ export { useStackNavigation } from './hooks/useStackNavigation';
 export type { UseStackNavigationOptions, UseStackNavigationReturn } from './hooks/useStackNavigation';
 export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
-export { extractBootstrapMeta, extractUiMoments } from './invoke/index';
+export {
+  extractBootstrapMeta,
+  extractMcpAppAiGguiMeta,
+  buildAppRendererToolResult,
+  extractUiMoments,
+} from './invoke/index';
 export type { UiMoment, ExtractUiMomentsOptions } from './invoke/index';
 export { useGenerate } from './hooks/useGenerate';
 export type { UseGenerateOptions, UseGenerateReturn, GenerateOptions, GenerateResult } from './hooks/useGenerate';

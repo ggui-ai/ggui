@@ -18,8 +18,10 @@
  * extractMcpAppAiGguiMeta} on the client with the original meta
  * recovered bit-for-bit.
  */
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   parseMcpAppAiGguiMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
@@ -61,3 +63,37 @@ export function extractMcpAppAiGguiMeta(
  * pre-R4; downstream consumers (samples, app shells) keep working.
  */
 export const extractBootstrapMeta = extractMcpAppAiGguiMeta;
+
+/**
+ * Build a {@link CallToolResult} carrying the `ai.ggui/*` slice envelope
+ * on `_meta`, ready to hand to `<AppRenderer toolResult={...}>` so it
+ * forwards the envelope to the inner iframe via the spec-canonical
+ * `ui/notifications/tool-result` postMessage. iframe-runtime re-applies
+ * state from this envelope on every `ggui_update` after first mount.
+ *
+ * The lone `as CallToolResult` cast in this helper bridges Zod's
+ * `$loose` mode on the MCP SDK's `CallToolResultSchema._meta`: the
+ * runtime schema accepts our `ai.ggui/*` extension keys, but the TS-
+ * inferred type only enumerates the schema-declared keys
+ * (`progressToken`, `io.modelcontextprotocol/related-task`). One
+ * centrally-documented cast here is the minimum-cast pattern; call
+ * sites get a typed API.
+ *
+ * @example
+ * ```tsx
+ * const toolResult = useMemo(() =>
+ *   item.meta ? buildAppRendererToolResult(item.meta) : undefined,
+ *   [item.meta],
+ * );
+ * return <AppRenderer toolResult={toolResult} ... />;
+ * ```
+ */
+export function buildAppRendererToolResult(
+  meta: McpAppAiGguiMeta,
+): CallToolResult {
+  return {
+    content: [],
+    structuredContent: {},
+    _meta: toMcpAppEnvelope(meta),
+  } as CallToolResult;
+}
