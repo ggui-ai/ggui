@@ -87,7 +87,6 @@ async function bootWithSession(opts?: {
     sessionStore,
     shortCodeIndex,
     wsTokenSecret: SECRET,
-    renderSigning: false,
     codeStore: new InMemoryCodeStore(),
     publicBaseUrl: 'https://test.example',
   });

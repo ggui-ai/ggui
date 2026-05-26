@@ -402,22 +402,6 @@ export interface GguiPushHandlerDeps {
    */
   readonly runtimeUrl?: string | (() => string | undefined);
   /**
-   * Optional URL-signing hook. When wired, the freshly-minted render
-   * URL is suffixed with `?sig=<hmac>&exp=<unix>`. The gate on
-   * `/r/<code>` and `/api/bootstrap/<code>` rejects the URL when
-   * the sig is absent, tampered, or past expiry — see
-   * `packages/mcp-server/src/render-signing.ts`.
-   *
-   * Receives the freshly-minted shortCode and returns the query
-   * suffix to append (NO leading `?` or `&` — the handler picks the
-   * separator). Returns the empty string when the operator opted
-   * out of signing (`--no-render-signing`); the URL ships as-is.
-   *
-   * Implemented as a one-shot function so the handler stays
-   * agnostic about whether signing exists or how it's keyed.
-   */
-  readonly signRenderUrl?: (shortCode: string) => string;
-  /**
    * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
    * the `ai.ggui/session.themeId` slice field so MCP Apps hosts
    * (claude.ai web, Claude Desktop) that mount via
@@ -1507,19 +1491,7 @@ export function createGguiPushHandler(
       }
 
       const shortCode = generateShortCode();
-      // Build URL with optional signing suffix. The suffix is a
-      // capability-URL hardening measure — present when the server
-      // boots with the default signer wired, absent under
-      // `--no-render-signing`.
-      const signedSuffix = deps.signRenderUrl
-        ? deps.signRenderUrl(shortCode)
-        : '';
-      const separator = signedSuffix.length === 0
-        ? ''
-        : deps.renderBaseUrl.includes('?')
-          ? '&'
-          : '?';
-      const url = `${deps.renderBaseUrl}${shortCode}${separator}${signedSuffix}`;
+      const url = `${deps.renderBaseUrl}${shortCode}`;
 
       // Record shortCode → session binding for same-origin console
       // viewer lookups. Best-effort: an index write rejection does NOT

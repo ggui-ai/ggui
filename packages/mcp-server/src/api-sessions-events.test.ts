@@ -81,7 +81,6 @@ async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
     sessionStore,
     shortCodeIndex,
     wsTokenSecret: SECRET,
-    renderSigning: false,
     codeStore: new InMemoryCodeStore(),
     publicBaseUrl: 'https://test.example',
   });

@@ -300,10 +300,6 @@ import {
   resolveRuntimeUrl,
 } from './request-context.js';
 import {
-  createRenderSigner,
-  type RenderSigner,
-} from './render-signing.js';
-import {
   DEFAULT_PAIRING_ADMIN_INIT_PATH,
   DEFAULT_PAIRING_PATH,
   mountPairingTransport,
@@ -611,13 +607,6 @@ export function defaultHandlers(deps: {
   readonly push?: {
     readonly sessionStore: SessionStore;
     readonly renderBaseUrl: string;
-    /**
-     * Optional render-URL signer. Returns the query suffix to append
-     * to a minted URL (`sig=...&exp=...`, no leading `?` or `&`).
-     * Absent when `renderSigning: false` is set on boot.
-     * Mirrors the handler-side dep with the same name.
-     */
-    readonly signRenderUrl?: (shortCode: string) => string;
     /**
      * Optional bootstrap-credential minter. When present, `ggui_push`
      * results carry the `ai.ggui/session` + `ai.ggui/stack-item` slice
@@ -1424,9 +1413,6 @@ export function defaultHandlers(deps: {
           : {}),
         pendingEventConsumer,
         renderBaseUrl: deps.push.renderBaseUrl,
-        ...(deps.push.signRenderUrl
-          ? { signRenderUrl: deps.push.signRenderUrl }
-          : {}),
         appCallableTools: appCallableToolsProvider,
         ...(deps.push.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.push.streamWebSocketLocalTools }
@@ -2616,31 +2602,6 @@ export interface CreateGguiServerOptions {
   readonly publicBaseUrl?: string;
 
   /**
-   * Render-URL signing config — capability-URL hardening.
-   *
-   * When set (default), every minted `/r/<code>` URL carries
-   * `?sig=<hmac>&exp=<unix>`. The gate on `/r/` (HTML + JSON branches)
-   * verifies the sig + freshness before lookup; tampered or expired
-   * URLs return 410.
-   *
-   *   - `secret`: 32-byte hex key. When omitted, a fresh random key
-   *     is minted at boot — restart = every outstanding URL dies
-   *     (good for incident response, bad if you don't want it).
-   *     Pin a stable secret to survive restarts.
-   *   - `ttlSeconds`: URL lifetime. Defaults to 24h (86400s).
-   *   - Set `renderSigning: false` to disable the layer entirely
-   *     (`--no-render-signing`). URLs revert to the plain unsigned
-   *     form. Use for legacy hosts that strip query strings or
-   *     tooling that pre-records URLs.
-   */
-  readonly renderSigning?:
-    | false
-    | {
-        readonly secret?: string;
-        readonly ttlSeconds?: number;
-      };
-
-  /**
    * Override path for `~/.ggui/oauth-providers.json`. Mainly for
    * tests + per-deployment isolation. Defaults to the home-relative
    * path resolved by `createOAuthProvidersStore`.
@@ -3428,24 +3389,6 @@ export function createGguiServer(
       runtimeUrl: runtimeBootstrapUrl,
     }) ?? runtimeBootstrapUrl;
 
-  // Render-URL signer. Default-on with auto-minted secret;
-  // explicit `renderSigning: false` disables. The same instance feeds
-  // both push (which signs minted URLs) and the gate (which verifies
-  // them) — process-local secret means a restart invalidates every
-  // outstanding URL, which is the intended nuclear-revoke knob unless
-  // the operator pinned an explicit secret.
-  const renderSigner: RenderSigner | undefined =
-    opts.renderSigning === false
-      ? undefined
-      : createRenderSigner({
-          ...(opts.renderSigning?.secret !== undefined
-            ? { secret: opts.renderSigning.secret }
-            : {}),
-          ...(opts.renderSigning?.ttlSeconds !== undefined
-            ? { ttlSeconds: opts.renderSigning.ttlSeconds }
-            : {}),
-        });
-
   // Session store is resolved here (not lazy-inside-sessionChannel)
   // when mcpApps is on, because ggui_push needs it at handler-factory
   // time, BEFORE the session-channel factory runs.
@@ -3933,18 +3876,6 @@ export function createGguiServer(
             push: {
               sessionStore,
               renderBaseUrl,
-              // 2: minted render URLs carry `?sig=&exp=` so
-              // the gate on `/r/` (HTML + JSON branches) can prove the
-              // URL is unexpired + untampered. Absent when operator
-              // booted with `renderSigning: false`.
-              ...(renderSigner
-                ? {
-                    signRenderUrl: (shortCode: string) => {
-                      const { sig, exp } = renderSigner.sign(shortCode);
-                      return renderSigner.toQuerySuffix({ sig, exp });
-                    },
-                  }
-                : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC
