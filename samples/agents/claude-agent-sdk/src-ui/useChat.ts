@@ -242,6 +242,7 @@ export function useChat(): UseChatResult {
               `${turnId}.${counter}`,
               append,
               addStackItem,
+              updateStackItemMeta,
               patchToolCall,
               refetchStateById,
             );
@@ -265,6 +266,7 @@ export function useChat(): UseChatResult {
     [
       append,
       addStackItem,
+      updateStackItemMeta,
       patchToolCall,
       refetchStateById,
     ],
@@ -283,6 +285,7 @@ function handleEvent(
   baseId: string,
   append: (e: ChatEntry) => void,
   addStackItem: (s: StackItemRef) => void,
+  updateStackItemMeta: (stackItemId: string, meta: McpAppAiGguiMeta) => void,
   patchToolCall: (
     toolUseId: string,
     patch: { readonly result?: unknown; readonly isError?: boolean },
@@ -325,11 +328,43 @@ function handleEvent(
     // tool_result replay — Anthropic forwards every tool's result as a
     // user-role message after the SDK invokes the tool. We (a) attach
     // the result to the matching tool-call entry via toolUseId so the
-    // expand UI shows full call+result side-by-side, and (b) sniff for
-    // a sessionId+stackItemId to spawn / update a stack-item entry.
-    const content = ((msg.message as { content?: unknown[] })?.content ?? []) as Array<
-      Record<string, unknown>
-    >;
+    // expand UI shows full call+result side-by-side, and (b) extract
+    // sessionId+stackItemId to spawn / update a stack-item entry.
+    //
+    // KEY INSIGHT: Anthropic Agent SDK preserves the FULL original MCP
+    // tool result on `tool_use_result` (sibling of `message`), even
+    // though `message.content` is stripped to Anthropic-API-spec-
+    // compliant blocks (no structuredContent, no _meta). This is the
+    // ONLY place we can read ggui_push's `{sessionId, stackItemId, ...}`
+    // structured fields and — crucially — the inline slice envelope on
+    // `_meta["ai.ggui/*"]`. When `_meta` is present we skip the
+    // wsToken-gated /state poll entirely, sidestepping the chicken-and-
+    // egg first-mount race.
+    const fullToolResult = (payload as { tool_use_result?: unknown })
+      .tool_use_result;
+    const sc: Record<string, unknown> | undefined =
+      fullToolResult && typeof fullToolResult === 'object'
+        ? ((fullToolResult as { structuredContent?: unknown })
+            .structuredContent as Record<string, unknown> | undefined)
+        : undefined;
+    const tmRaw =
+      fullToolResult && typeof fullToolResult === 'object'
+        ? (fullToolResult as { _meta?: unknown })._meta
+        : undefined;
+    let initialMeta: McpAppAiGguiMeta | undefined;
+    if (tmRaw !== undefined && tmRaw !== null) {
+      const parsedMeta = parseMcpAppAiGguiMeta(tmRaw);
+      if (
+        parsedMeta.ok &&
+        (parsedMeta.meta.session !== undefined ||
+          parsedMeta.meta.stackItem !== undefined)
+      ) {
+        initialMeta = parsedMeta.meta;
+      }
+    }
+
+    const content = ((msg.message as { content?: unknown[] })?.content ??
+      []) as Array<Record<string, unknown>>;
     let i = 0;
     for (const block of content) {
       i += 1;
@@ -343,81 +378,63 @@ function handleEvent(
         : typeof block.content === 'string'
           ? [block.content as string]
           : [];
-      // Build a structured result payload: prefer parsed JSON if every
-      // text block parses, otherwise keep the joined raw text. The
-      // expand UI prints whatever we hand it.
-      const parsedTexts: unknown[] = [];
-      let allParsed = textBlocks.length > 0;
-      for (const t of textBlocks) {
-        try {
-          parsedTexts.push(JSON.parse(t));
-        } catch {
-          allParsed = false;
-          break;
-        }
-      }
-      const result: unknown = allParsed
-        ? parsedTexts.length === 1
-          ? parsedTexts[0]
-          : parsedTexts
-        : textBlocks.join('\n');
+      // Patch the tool-call entry with the structured result if available
+      // (richer than the stripped text); fall back to joined text otherwise.
+      const result: unknown = sc ?? textBlocks.join('\n');
       if (toolUseId.length > 0) {
         patchToolCall(toolUseId, {
           result,
           ...(block.is_error === true ? { isError: true } : {}),
         });
       }
-      // Sniff for ggui_push's session/stackItem ids to mount the iframe
-      // entry. Also handle ggui_update: result carries {sessionId,
-      // stackItemId, updated:true} — refresh the cached meta via
-      // /api/sessions/:id/state.
-      for (const text of textBlocks) {
-        let parsed: Record<string, unknown> | null = null;
-        try {
-          parsed = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          /* not JSON */
-        }
-        if (!parsed) continue;
-        // ggui_push branch — new stack item entering the chat log.
-        // Spec-canonical: prefer the session+stackItem ids over the
-        // `url` field (R5 retired the public `/r/<shortCode>` URL).
-        if (
-          typeof parsed.sessionId === 'string' &&
-          typeof parsed.stackItemId === 'string' &&
-          parsed.updated !== true
-        ) {
-          const sessionId = parsed.sessionId;
-          const stackItemId = parsed.stackItemId;
-          const item: StackItemRef = {
-            stackItemId,
-            sessionId,
-            action: String(parsed.action ?? 'create'),
-            ...(typeof parsed.contractHash === 'string'
-              ? { contractHash: parsed.contractHash }
-              : {}),
-          };
-          addStackItem(item);
-          append({ id: `${baseId}.s${i}`, kind: 'stack-item', stackItem: item });
-          // R5: recover the slice envelope via the wsToken-gated state
-          // endpoint. The Anthropic SDK has already stripped `_meta`.
-          // First call typically 401s (no wsToken yet) — that's expected;
-          // the iframe shows a loading placeholder until ggui_update or
-          // another push lands and a wsToken becomes available.
+      // ggui-specific routing: read from structuredContent (preserved on
+      // tool_use_result), NOT from text blocks (Anthropic SDK strips
+      // structuredContent + _meta from the model-visible content array).
+      if (!sc) continue;
+      // ggui_push branch — new stack item entering the chat log.
+      if (
+        typeof sc.sessionId === 'string' &&
+        typeof sc.stackItemId === 'string' &&
+        sc.updated !== true
+      ) {
+        const sessionId = sc.sessionId;
+        const stackItemId = sc.stackItemId;
+        const item: StackItemRef = {
+          stackItemId,
+          sessionId,
+          action: String(sc.action ?? 'create'),
+          ...(typeof sc.contractHash === 'string'
+            ? { contractHash: sc.contractHash }
+            : {}),
+          ...(initialMeta ? { meta: initialMeta } : {}),
+        };
+        addStackItem(item);
+        append({
+          id: `${baseId}.s${i}`,
+          kind: 'stack-item',
+          stackItem: item,
+        });
+        // No /state poll needed when the slice envelope rode inline on
+        // tool_use_result._meta — that's the fast path. Fall back to the
+        // wsToken-gated /state endpoint only when _meta is absent (e.g.
+        // a fixture-only tool that didn't stamp the ggui slice envelope).
+        if (!initialMeta) {
           void refetchStateById(stackItemId, sessionId);
-          continue;
         }
-        // ggui_update branch — existing stack item gets new props. The
-        // result envelope carries {sessionId, stackItemId, updated:true}.
-        // Re-fetch /state so AppRenderer sees a fresh `toolResult` /
-        // `_meta` prop and forwards it to the inner iframe via the
-        // spec-compliant `ui/notifications/tool-result` postMessage.
-        if (
-          parsed.updated === true &&
-          typeof parsed.stackItemId === 'string' &&
-          typeof parsed.sessionId === 'string'
-        ) {
-          void refetchStateById(parsed.stackItemId, parsed.sessionId);
+        continue;
+      }
+      // ggui_update branch — existing stack item gets new props.
+      if (
+        sc.updated === true &&
+        typeof sc.stackItemId === 'string' &&
+        typeof sc.sessionId === 'string'
+      ) {
+        const stackItemId = sc.stackItemId;
+        const sessionId = sc.sessionId;
+        if (initialMeta) {
+          updateStackItemMeta(stackItemId, initialMeta);
+        } else {
+          void refetchStateById(stackItemId, sessionId);
         }
       }
     }
