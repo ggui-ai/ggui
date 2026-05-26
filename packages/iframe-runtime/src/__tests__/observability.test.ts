@@ -33,7 +33,7 @@ import {
   UPGRADE_REQUIRED,
 } from '@ggui-ai/protocol/version';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { ChannelRegistry } from '@ggui-ai/channel-client';
 import {
   postObservabilityToParent,
@@ -241,7 +241,7 @@ afterEach(() => {
   globalThis.WebSocket = originalWebSocket;
 });
 
-function bootstrapMeta(): GguiBootstrapMeta {
+function bootstrapMeta(): McpAppAiGguiMountView {
   return {
     sessionId: 'sess-c12',
     appId: 'app-c12',
@@ -252,7 +252,7 @@ function bootstrapMeta(): GguiBootstrapMeta {
   };
 }
 
-function makeRegistry(meta: GguiBootstrapMeta): ChannelRegistry {
+function makeRegistry(meta: McpAppAiGguiMountView): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',

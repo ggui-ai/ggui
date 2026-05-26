@@ -56,7 +56,7 @@ import {
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
   deriveContextName,
-  type GguiBootstrapMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
@@ -208,10 +208,10 @@ async function mountFromBootstrap(bootstrap){
   // it tells us which iframe-runtime bundle to fetch. componentCode
   // is OPTIONAL: present in self-contained-mode bootstraps (the
   // runtime renders the inlined code without WS), absent in
-  // GguiBootstrapMeta-shaped bootstraps (the runtime opens the WS
+  // McpAppAiGguiMountView-shaped bootstraps (the runtime opens the WS
   // subscription via wsUrl+token to receive the stack). Either is
   // valid; the runtime decides at boot time. Rejecting on missing
-  // componentCode silently breaks every Path B GguiBootstrapMeta
+  // componentCode silently breaks every Path B McpAppAiGguiMountView
   // delivery, which is the whole point of the inline-bootstrap path.
   if(!bootstrap||typeof bootstrap.runtimeUrl!=='string'){
     setOverlay('Bootstrap payload malformed.');
@@ -281,7 +281,7 @@ function readBootstrapFromInitResult(result){
   var b=ggui.bootstrap;
   if(!b||typeof b!=='object')return null;
   // Same loosening as mountFromBootstrap: only runtimeUrl is required
-  // here. GguiBootstrapMeta forwarded by first-party McpAppIframe
+  // here. McpAppAiGguiMountView forwarded by first-party McpAppIframe
   // hosts omits componentCode by design (the runtime fetches the
   // stack via
   // wsUrl+token). Requiring componentCode at the shell layer turned
@@ -321,7 +321,7 @@ function readBootstrapFromCallToolResult(params){
   if(!b||typeof b!=='object')return null;
   // Same loosening as readBootstrapFromInitResult / mountFromBootstrap:
   // only runtimeUrl is required at the shell layer. componentCode is
-  // optional (absent for GguiBootstrapMeta-shaped bootstraps that
+  // optional (absent for McpAppAiGguiMountView-shaped bootstraps that
   // open WS via wsUrl+token).
   if(typeof b.runtimeUrl!=='string')return null;
   return b;
@@ -704,7 +704,7 @@ export interface SelfContainedShellInputs {
   readonly propsJson?: string;
   /**
    * Names of same-server tools whose `_meta.ui.visibility` includes
-   * `"app"`, mirrored from {@link GguiBootstrapMeta.appCallableTools}.
+   * `"app"`, mirrored from {@link McpAppAiGguiMountView.appCallableTools}.
    * Forwarded to the iframe-runtime so its dispatch closure can choose
    * Pattern α (direct `tools/call`) over Pattern β (3-message bridge)
    * per wired action — even on the self-contained `/r/<shortCode>`
@@ -714,20 +714,20 @@ export interface SelfContainedShellInputs {
    * Empty / absent → no fallout: the runtime's dispatch routes every
    * action through Pattern β.
    */
-  readonly appCallableTools?: GguiBootstrapMeta['appCallableTools'];
+  readonly appCallableTools?: McpAppAiGguiMountView['appCallableTools'];
   /**
    * Per-action wired-tool mapping for the active stack item, mirrored
-   * from {@link GguiBootstrapMeta.actionNextSteps}.
+   * from {@link McpAppAiGguiMountView.actionNextSteps}.
    */
-  readonly actionNextSteps?: GguiBootstrapMeta['actionNextSteps'];
+  readonly actionNextSteps?: McpAppAiGguiMountView['actionNextSteps'];
   /**
    * Per-slot data for the active stack item's `contextSpec`, mirrored
-   * from {@link GguiBootstrapMeta.contextSlots}. The runtime
+   * from {@link McpAppAiGguiMountView.contextSlots}. The runtime
    * synthesizes one `React.createContext(default)` per entry at boot.
    * Without this field, contextSpec UIs render with un-seeded
    * Providers.
    */
-  readonly contextSlots?: GguiBootstrapMeta['contextSlots'];
+  readonly contextSlots?: McpAppAiGguiMountView['contextSlots'];
   /**
    * Permissions-Policy directive list derived from the active stack
    * item's `clientCapabilities.gadgets[*].permission`.
@@ -750,32 +750,32 @@ export interface SelfContainedShellInputs {
    * and `resources/read` iframes don't render as STDLIB-only when
    * the contract declares wrappers.
    */
-  readonly gadgets?: GguiBootstrapMeta['gadgets'];
+  readonly gadgets?: McpAppAiGguiMountView['gadgets'];
   /**
    * Content-addressable hash for the active stack item's compiled
    * contract validators, mirrored from
-   * {@link GguiBootstrapMeta.contractHash}. The iframe-runtime resolves
+   * {@link McpAppAiGguiMountView.contractHash}. The iframe-runtime resolves
    * validators via `fetch({@link validatorsUrl})` + dynamic import.
    * Paired with {@link validatorsUrl} — present together or absent
    * together.
    */
-  readonly contractHash?: GguiBootstrapMeta['contractHash'];
+  readonly contractHash?: McpAppAiGguiMountView['contractHash'];
   /**
    * URL serving the content-addressable contract-validator bundle,
-   * mirrored from {@link GguiBootstrapMeta.validatorsUrl}. Symmetric
+   * mirrored from {@link McpAppAiGguiMountView.validatorsUrl}. Symmetric
    * forward for the self-contained shell so `/r/<shortCode>` and
    * `resources/read` iframes resolve validators exactly as the
    * MCP-Apps postMessage path does.
    */
-  readonly validatorsUrl?: GguiBootstrapMeta['validatorsUrl'];
+  readonly validatorsUrl?: McpAppAiGguiMountView['validatorsUrl'];
   /**
    * Server-filtered public env values that declared wrappers'
    * `requires` cover (minimum-disclosure subset of `App.publicEnv`).
    * Symmetric with the `_meta.ggui.bootstrap` channel — every
-   * transport that produces a `GguiBootstrapMeta` envelope MUST
+   * transport that produces a `McpAppAiGguiMountView` envelope MUST
    * forward this field so wrappers' `getPublicEnv()` reads land.
    */
-  readonly publicEnv?: GguiBootstrapMeta['publicEnv'];
+  readonly publicEnv?: McpAppAiGguiMountView['publicEnv'];
   /**
    * Live-mode WebSocket URL the iframe-runtime opens to receive
    * `props_update` / `stack_*` frames. When set alongside `token` +
@@ -1624,9 +1624,9 @@ function deriveDefaultPropsValues(
 
 function deriveDefaultContextSlots(
   spec: ContextSpec | undefined,
-): GguiBootstrapMeta['contextSlots'] {
+): McpAppAiGguiMountView['contextSlots'] {
   if (!spec) return undefined;
-  const collected: NonNullable<GguiBootstrapMeta['contextSlots']>[number][] = [];
+  const collected: NonNullable<McpAppAiGguiMountView['contextSlots']>[number][] = [];
   for (const [name, entry] of Object.entries(spec)) {
     if (!entry || typeof entry !== 'object') continue;
     if (entry.schema === undefined || entry.schema === null) continue;

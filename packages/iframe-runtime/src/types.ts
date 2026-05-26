@@ -5,7 +5,7 @@
  * bootstrap-parse outcome union + the renderer-host postMessage
  * frames. The wire shapes consumed FROM the network
  * (`SubscribePayload`, `AckPayload`, `WebSocketMessage`,
- * `GguiBootstrapMeta`) come from `@ggui-ai/protocol` and are imported
+ * `McpAppAiGguiMountView`) come from `@ggui-ai/protocol` and are imported
  * as `type` only so esbuild emits no runtime require for the protocol
  * package — the bundle stays self-contained.
  *
@@ -14,7 +14,7 @@
  * class. The `RendererWebSocketManagerOptions` type that pre-B3b
  * declared the manager's constructor bag has been retired.
  */
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { HostContextProjection } from '@ggui-ai/protocol';
 
 // =============================================================================
@@ -39,7 +39,7 @@ import type { HostContextProjection } from '@ggui-ai/protocol';
  *   - `MALFORMED_BOOTSTRAP` — `_meta.ggui.bootstrap` is present but
  *     missing one of the four required string fields (`wsUrl`,
  *     `token`, `sessionId`, `appId`) — i.e. it doesn't satisfy
- *     `GguiBootstrapMeta`.
+ *     `McpAppAiGguiMountView`.
  *   - `EXPIRED_BOOTSTRAP` — `expiresAt` is set and parses to a
  *     timestamp in the past. UX sugar; servers reject expired tokens
  *     anyway, but we skip the round-trip when the proof is on hand.
@@ -73,7 +73,7 @@ export type BootstrapParseFailureReason =
 export type BootstrapParseResult =
   | {
       readonly ok: true;
-      readonly bootstrap: GguiBootstrapMeta;
+      readonly bootstrap: McpAppAiGguiMountView;
       readonly hostContext?: HostContextProjection;
     }
   | { readonly ok: false; readonly reason: BootstrapParseFailureReason };

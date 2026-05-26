@@ -53,7 +53,7 @@ import type { GguiContextRegistry } from './globals.js';
 
 /**
  * Wire-shape entry for a single contextSpec slot, mirrored from
- * {@link import('@ggui-ai/protocol/integrations/mcp-apps').GguiBootstrapMeta.contextSlots}.
+ * {@link import('@ggui-ai/protocol/integrations/mcp-apps').McpAppAiGguiMountView.contextSlots}.
  */
 export interface ContextSlotInfo {
   readonly name: string;

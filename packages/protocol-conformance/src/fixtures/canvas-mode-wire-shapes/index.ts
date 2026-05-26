@@ -3,7 +3,7 @@
  *
  * Exercises the canvas-mode wire additions (protocol draft-2026-05-17):
  *
- *   - `GguiBootstrapMeta.canvasMode` — discriminator + mutual-exclusion
+ *   - `McpAppAiGguiMountView.canvasMode` — discriminator + mutual-exclusion
  *     with `stackItemId`. Canvas iframes are session-scoped; no pinned
  *     item.
  *   - `_ggui:lifecycle` reserved channel + `CanvasLifecyclePayload`

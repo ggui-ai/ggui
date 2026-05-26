@@ -26,8 +26,8 @@
  */
 
 import {
-  bootstrapToMcpAppMeta,
-  type GguiBootstrapMeta,
+  mountViewToMcpAppMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   McpAppIframeDimensions,
@@ -76,13 +76,13 @@ export interface HostBridgeContext {
    * response is exactly the adapter-boundary violation the rule
    * exists to prevent.
    *
-   * Carrier shape mirrors the wire — the same `GguiBootstrapMeta`
+   * Carrier shape mirrors the wire — the same `McpAppAiGguiMountView`
    * type the server stamps onto the `ggui_push` tool result's
    * `_meta.ggui.bootstrap` ends up here verbatim. No transformation,
    * no per-namespace whitelisting; the host's contract is "thread the
    * forwarded bootstrap through" and that's it.
    */
-  readonly bootstrap?: GguiBootstrapMeta;
+  readonly bootstrap?: McpAppAiGguiMountView;
 }
 
 export const DEFAULT_HOST_THEME: Readonly<Record<string, string>> = {
@@ -142,7 +142,7 @@ export async function dispatchHostBridgeRequest(
       // state leaks into the iframe.
       //
       // READING-B EXCEPTION (opt-in via `ctx.bootstrap`). When the
-      // host has explicitly threaded a `GguiBootstrapMeta` for a
+      // host has explicitly threaded a `McpAppAiGguiMountView` for a
       // first-party ggui renderer iframe (see `McpAppIframeProps.
       // bootstrap` JSDoc), augment the result with
       // `toolOutput._meta.ggui.bootstrap = ctx.bootstrap`. The
@@ -157,7 +157,7 @@ export async function dispatchHostBridgeRequest(
       };
       if (ctx.bootstrap !== undefined) {
         result['toolOutput'] = {
-          _meta: bootstrapToMcpAppMeta(ctx.bootstrap),
+          _meta: mountViewToMcpAppMeta(ctx.bootstrap),
         };
       }
       return { jsonrpc: '2.0', id, result };

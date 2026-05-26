@@ -14,7 +14,8 @@
  *   - no generation deps: existing placeholder behavior preserved.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   BlueprintProvider,
   LlmProvider,
@@ -669,7 +670,10 @@ describe('ggui_push — contextSpec projection', () => {
     const combined = combineMcpAppAiGguiMeta(meta);
     expect(combined.ok).toBe(true);
     if (!combined.ok) return;
-    const bootstrap = combined.bootstrap;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    const bootstrap = merged.view;
     expect(bootstrap.contextSlots).toBeDefined();
     expect(bootstrap.contextSlots).toHaveLength(2);
     const byName = Object.fromEntries(
@@ -720,6 +724,9 @@ describe('ggui_push — contextSpec projection', () => {
     const combined = combineMcpAppAiGguiMeta(meta);
     expect(combined.ok).toBe(true);
     if (!combined.ok) return;
-    expect(combined.bootstrap.contextSlots).toBeUndefined();
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    expect(merged.view.contextSlots).toBeUndefined();
   });
 });

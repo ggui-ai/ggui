@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bootstrapToMcpAppMeta,
-  type GguiBootstrapMeta,
+  mountViewToMcpAppMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseBootstrap } from '../bootstrap.js';
 
@@ -34,7 +34,7 @@ const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
   return {
     toolOutput: {
-      _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta),
+      _meta: mountViewToMcpAppMeta(bootstrap as McpAppAiGguiMountView),
       structuredContent: { sessionId: 'sess_001' },
     },
     ...(hostContext !== undefined ? { hostContext } : {}),
@@ -676,7 +676,7 @@ describe('parseBootstrap — Slice 2.0 publicEnv', () => {
   });
 
   it('treats empty publicEnv as absent (#109 splitter drops empty slices)', () => {
-    // Post-#109: splitBootstrapMeta omits empty publicEnv from the
+    // Post-#109: splitMountViewIntoSlices omits empty publicEnv from the
     // session slice on the wire, so the combiner-driven parser sees
     // it as absent (undefined). Empty-map and absent are now
     // wire-equivalent; consumers that need a defined map default at

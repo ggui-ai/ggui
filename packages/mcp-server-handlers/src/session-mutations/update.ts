@@ -54,11 +54,9 @@ import {
   type SessionStackEntry,
 } from '@ggui-ai/protocol';
 import {
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_AUTH_META_KEY,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  splitBootstrapMeta,
-  type GguiBootstrapMeta,
+  slicesToMcpAppMeta,
+  splitMountViewIntoSlices,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
@@ -583,7 +581,7 @@ export function createGguiUpdateHandler(
         ?? sessionThemeId
         ?? deps.themeId;
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
-      const bootstrap: GguiBootstrapMeta = {
+      const bootstrap: McpAppAiGguiMountView = {
         ...partial,
         sessionId: output.sessionId,
         appId: ctx.appId,
@@ -597,19 +595,12 @@ export function createGguiUpdateHandler(
           : {}),
         ...(view.propsJson ? { propsJson: view.propsJson } : {}),
       };
-      // Split into the five per-window `_meta` keys (#109). update.ts
-      // only ever refreshes propsJson + theme; contract+component
-      // slices are absent (validators + componentCode stay on the
-      // initial bootstrap from push.ts).
-      const split = splitBootstrapMeta(bootstrap);
-      const out: Record<string, unknown> = {
-        [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
-        ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
-        ...(split.render
-          ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render }
-          : {}),
-      };
-      return out;
+      // Emit the two-slice `_meta` shape (#109). update.ts only ever
+      // refreshes propsJson + theme; the stack-item slice carries the
+      // render delta (propsJson), the session slice carries
+      // identity/theme. Contract+component pointers stay on the
+      // initial bootstrap from push.ts.
+      return slicesToMcpAppMeta(splitMountViewIntoSlices(bootstrap));
     },
   };
 }

@@ -2,7 +2,7 @@
  * Slice 14 (2026-05-08) — envelope-equivalence + per-mode validation
  * for the unified bootstrap parser.
  *
- * The runtime now extracts a single {@link GguiBootstrapMeta} from
+ * The runtime now extracts a single {@link McpAppAiGguiMountView} from
  * three envelope shapes via three thin wrappers
  * ({@link parseBootstrapFromUiInitialize},
  * {@link parseBootstrapFromGlobal},
@@ -24,8 +24,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  bootstrapToMcpAppMeta,
-  type GguiBootstrapMeta,
+  mountViewToMcpAppMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   parseBootstrap,
@@ -79,14 +79,14 @@ const systemBootstrap = {
 function wrapUiInitialize(bootstrap: unknown): unknown {
   return {
     toolOutput: {
-      _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta),
+      _meta: mountViewToMcpAppMeta(bootstrap as McpAppAiGguiMountView),
       structuredContent: { sessionId: 'sess_001' },
     },
   };
 }
 
 function wrapToolResult(bootstrap: unknown): unknown {
-  return { _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta) };
+  return { _meta: mountViewToMcpAppMeta(bootstrap as McpAppAiGguiMountView) };
 }
 
 function setGlobal(bootstrap: unknown): void {

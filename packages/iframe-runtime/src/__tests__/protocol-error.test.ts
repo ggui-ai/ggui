@@ -33,7 +33,7 @@ import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import { ChannelRegistry } from '@ggui-ai/channel-client';
 import {
@@ -284,7 +284,7 @@ class MockWebSocket {
   }
 }
 
-function makeRegistry(meta: GguiBootstrapMeta): ChannelRegistry {
+function makeRegistry(meta: McpAppAiGguiMountView): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
@@ -310,7 +310,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     delete (globalThis as { WebSocket?: unknown }).WebSocket;
   });
 
-  function bootstrap(): GguiBootstrapMeta {
+  function bootstrap(): McpAppAiGguiMountView {
     return {
       wsUrl: 'ws://test/ws',
       sessionId: 'sess_1',

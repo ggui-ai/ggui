@@ -10,7 +10,8 @@ import {
   type PropsSpec,
   type StackItem,
 } from '@ggui-ai/protocol';
-import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { InMemorySessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiUpdateHandler,
@@ -512,10 +513,12 @@ describe('createGguiUpdateHandler', () => {
       expect(meta).toBeDefined();
       const combined = combineMcpAppAiGguiMeta(meta);
       expect(combined.ok).toBe(true);
-      if (combined.ok) {
-        expect(combined.bootstrap.propsJson).toBe(JSON.stringify({ x: 2 }));
-        expect(combined.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
-      }
+      if (!combined.ok) return;
+      const merged = mergeSlicesIntoMountView(combined.slices);
+      expect(merged.ok).toBe(true);
+      if (!merged.ok) return;
+      expect(merged.view.propsJson).toBe(JSON.stringify({ x: 2 }));
+      expect(merged.view.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     });
 
     it('emits ggui.bootstrap with propsJson + session/runtime fields on the patched view (props-only post-trim)', async () => {
@@ -540,7 +543,10 @@ describe('createGguiUpdateHandler', () => {
       const combined = combineMcpAppAiGguiMeta(meta);
       expect(combined.ok).toBe(true);
       if (!combined.ok) return;
-      const b = combined.bootstrap;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+      const b = merged.view;
       expect(b.sessionId).toBe(sessionId);
       expect(b.stackItemId).toBe(stackItemId);
       expect(b.appId).toBe(APP_A);
@@ -584,8 +590,11 @@ describe('createGguiUpdateHandler', () => {
       const combined = combineMcpAppAiGguiMeta(meta);
       expect(combined.ok).toBe(true);
       if (!combined.ok) return;
-      expect(combined.bootstrap.themeId).toBe('indigo');
-      expect(combined.bootstrap.themeMode).toBe('dark');
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+      expect(merged.view.themeId).toBe('indigo');
+      expect(merged.view.themeMode).toBe('dark');
     });
   });
 });

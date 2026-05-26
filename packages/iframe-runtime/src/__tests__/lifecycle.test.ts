@@ -24,12 +24,12 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type {
-  GguiBootstrapMeta,
+  McpAppAiGguiMountView,
   McpAppLifecycleEvent,
   McpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
-  bootstrapToMcpAppMeta,
+  mountViewToMcpAppMeta,
   isMcpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence } from '../runtime.js';
@@ -164,7 +164,7 @@ describe('makeLifecycleEvent', () => {
 // bootSequence — onLifecycle integration
 // =============================================================================
 
-const VALID_BOOTSTRAP: GguiBootstrapMeta = {
+const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
   wsUrl: 'wss://server.example/ws',
   token: 'tok_abc',
   sessionId: 'sess_001',
@@ -174,12 +174,12 @@ const VALID_BOOTSTRAP: GguiBootstrapMeta = {
 };
 
 function buildHappyInitResponse(
-  bootstrap: GguiBootstrapMeta = VALID_BOOTSTRAP,
+  bootstrap: McpAppAiGguiMountView = VALID_BOOTSTRAP,
 ): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: bootstrapToMcpAppMeta(bootstrap),
+        _meta: mountViewToMcpAppMeta(bootstrap),
         structuredContent: {},
       },
     },
@@ -220,7 +220,7 @@ describe('bootSequence — lifecycle on happy path', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const pinnedBootstrap: GguiBootstrapMeta = {
+    const pinnedBootstrap: McpAppAiGguiMountView = {
       ...VALID_BOOTSTRAP,
       stackItemId: 'item_pinned',
     };

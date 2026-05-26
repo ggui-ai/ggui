@@ -8,7 +8,7 @@
  * `wsUrl` / `token` / `expiresAt` / `sessionId` / `appId` / `runtimeUrl`
  * / optional `adapters`) lives in
  * `@ggui-ai/protocol/integrations/mcp-apps` (`PushResultMeta` +
- * `GguiBootstrapMeta`). These helpers are the ergonomic seam the
+ * `McpAppAiGguiMountView`). These helpers are the ergonomic seam the
  * `@ggui-ai/react` consumer uses to pull the bootstrap out of a
  * `tool_result` content payload without duplicating the type-narrowing
  * logic in every shell. `<McpAppIframe>` mounts from the extracted
@@ -22,11 +22,12 @@
  */
 import {
   combineMcpAppAiGguiMeta,
-  type GguiBootstrapMeta,
+  mergeSlicesIntoMountView,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
- * Extract the {@link GguiBootstrapMeta} from a `tool_result.content`
+ * Extract the {@link McpAppAiGguiMountView} from a `tool_result.content`
  * payload emitted by a server that called
  * {@link import('@ggui-ai/server').InvokeStream.toolResultPush}.
  *
@@ -48,9 +49,11 @@ import {
  * }
  * ```
  */
-export function extractBootstrapMeta(content: unknown): GguiBootstrapMeta | null {
+export function extractBootstrapMeta(content: unknown): McpAppAiGguiMountView | null {
   if (content === null || typeof content !== 'object') return null;
   const meta = (content as { _meta?: unknown })._meta;
   const combined = combineMcpAppAiGguiMeta(meta);
-  return combined.ok ? combined.bootstrap : null;
+  if (!combined.ok) return null;
+  const merged = mergeSlicesIntoMountView(combined.slices);
+  return merged.ok ? merged.view : null;
 }

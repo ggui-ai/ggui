@@ -51,14 +51,10 @@ import {
   type StackItem,
 } from '@ggui-ai/protocol';
 import {
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_AUTH_META_KEY,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  MCP_APP_AI_GGUI_CONTRACT_META_KEY,
-  MCP_APP_AI_GGUI_COMPONENT_META_KEY,
   GGUI_PUSH_UI_META,
-  splitBootstrapMeta,
-  type GguiBootstrapMeta,
+  slicesToMcpAppMeta,
+  splitMountViewIntoSlices,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AppMetadataStore,
@@ -353,14 +349,14 @@ export interface GguiPushHandlerDeps {
    * When ABSENT, no `_meta` is emitted — the path still works end-to-end
    * for non-MCP-Apps hosts that just need the `url` fallback.
    *
-   * Returns the transport-level portion of `GguiBootstrapMeta` —
+   * Returns the transport-level portion of `McpAppAiGguiMountView` —
    * `{wsUrl, token, expiresAt}`. The handler adds `sessionId` + `appId`
    * from the push context itself, plus `runtimeUrl` from the separate
    * `runtimeUrl` dep (server-level config, not minter-scoped).
    */
   // Live-mode credential minter. Returns the WS subscribe target +
   // the single-use bootstrap token + its expiry. The protocol's
-  // `GguiBootstrapMeta.wsUrl/token/expiresAt` are optional (only live
+  // `McpAppAiGguiMountView.wsUrl/token/expiresAt` are optional (only live
   // mode populates them); a minter that's wired AT ALL is by
   // construction the live-mode minter, so the return shape pins them
   // required so consumers don't have to narrow. Set this to
@@ -382,7 +378,7 @@ export interface GguiPushHandlerDeps {
   readonly defaultGenerator?: string;
   /**
    * URL of the renderer bundle the thin shell should fetch. Padded
-   * onto {@link GguiBootstrapMeta.runtimeUrl} at `resultMeta` time
+   * onto {@link McpAppAiGguiMountView.runtimeUrl} at `resultMeta` time
    * alongside `sessionId` / `appId`. Separate dep (not a field on
    * `mintBootstrap`'s return) because the URL is a server-config
    * value (same for every session), not a per-mint credential.
@@ -2216,7 +2212,7 @@ export function createGguiPushHandler(
         }
       }
 
-      const bootstrap: GguiBootstrapMeta = {
+      const bootstrap: McpAppAiGguiMountView = {
         ...partial,
         sessionId: output.sessionId,
         appId: ctx.appId,
@@ -2299,26 +2295,14 @@ export function createGguiPushHandler(
         return undefined;
       }
 
-      // Split the aggregated bootstrap into the five per-window
-      // `_meta` keys (#109). Hosts that forward `_meta` to views may
-      // cache the `session` slice for the session's lifetime, rotate
-      // `auth` on token refresh, and stream just `render` per push.
-      // `contract` is content-addressable — same hash on repeat
-      // pushes ⇒ browser HTTP cache returns the validators without a
-      // round-trip.
-      const split = splitBootstrapMeta(bootstrap);
+      // Split the aggregated mount view into the two per-window `_meta`
+      // keys (#109). Hosts that forward `_meta` to views may cache the
+      // `session` slice for the session's lifetime; render-only deltas
+      // can emit just `stack-item`. The contract pointer is
+      // content-addressable — same hash on repeat pushes ⇒ browser
+      // HTTP cache returns the validators without a round-trip.
       const meta: Record<string, unknown> = {
-        [MCP_APP_AI_GGUI_SESSION_META_KEY]: split.session,
-        ...(split.auth ? { [MCP_APP_AI_GGUI_AUTH_META_KEY]: split.auth } : {}),
-        ...(split.render
-          ? { [MCP_APP_AI_GGUI_RENDER_META_KEY]: split.render }
-          : {}),
-        ...(split.contract
-          ? { [MCP_APP_AI_GGUI_CONTRACT_META_KEY]: split.contract }
-          : {}),
-        ...(split.component
-          ? { [MCP_APP_AI_GGUI_COMPONENT_META_KEY]: split.component }
-          : {}),
+        ...slicesToMcpAppMeta(splitMountViewIntoSlices(bootstrap)),
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,

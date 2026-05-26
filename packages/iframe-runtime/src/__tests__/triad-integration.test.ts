@@ -23,11 +23,11 @@
  * callback to thread through anymore.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { act } from 'react';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type TriadHandle, type TriadWiringHooks } from '../runtime.js';
 import {
   buildRootWireConfig,
@@ -57,7 +57,7 @@ async function flush(fn?: () => void | Promise<void>): Promise<void> {
   });
 }
 
-const VALID_BOOTSTRAP: GguiBootstrapMeta = {
+const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
   wsUrl: 'wss://example/ws',
   token: 'tok',
   expiresAt: '2099-01-01T00:00:00.000Z',
@@ -70,7 +70,7 @@ function buildHappyInit(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: bootstrapToMcpAppMeta(VALID_BOOTSTRAP),
+        _meta: mountViewToMcpAppMeta(VALID_BOOTSTRAP),
         structuredContent: {},
       },
     },

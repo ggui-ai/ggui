@@ -6,7 +6,7 @@
  *     production thin-shell HTML wrapped as a ResourceContents blob.
  *     NO inlined bootstrap — console fetches that separately.
  *   - `GET /ggui/console/session-bootstrap?session=<id>` — returns
- *     `{bootstrap: GguiBootstrapMeta}` JSON. Console feeds this to
+ *     `{bootstrap: McpAppAiGguiMountView}` JSON. Console feeds this to
  *     `<McpAppIframe bootstrap={...}>` which forwards via Reading B.
  *
  * Both routes share the cookie-auth + session-scope gate. The
@@ -223,7 +223,7 @@ describe('GET /ggui/console/session-bootstrap', () => {
     expect(body.error).toBe('cookie_session_mismatch');
   });
 
-  it('returns 200 with a well-shaped GguiBootstrapMeta on the happy path', async () => {
+  it('returns 200 with a well-shaped McpAppAiGguiMountView on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
       `${fx.url}/ggui/console/session-bootstrap?session=${fx.sessionId}`,

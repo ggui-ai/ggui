@@ -46,7 +46,7 @@ import type {
   ContractErrorPayload,
 } from '@ggui-ai/protocol';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChannelRegistry,
   TransportStatus,
@@ -77,7 +77,7 @@ export interface RegistrySubscribeHandle {
  * concrete implementations; tests pass mocks via the `connectFn` seam.
  */
 export interface ConnectViaRegistryOptions {
-  readonly bootstrap: GguiBootstrapMeta;
+  readonly bootstrap: McpAppAiGguiMountView;
   readonly registry: ChannelRegistry;
   /**
    * Fires on every transport-status transition mapped onto the

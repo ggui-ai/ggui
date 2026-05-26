@@ -19,7 +19,7 @@ import bootstrapSuccess from './bootstrap-success.json' with { type: 'json' };
 import type { TestCase } from '../../types.js';
 
 /** All fixtures asserting the bootstrap contract (Protocol #5 — named
- *  failure modes + SPEC §8 `GguiBootstrapMeta`). */
+ *  failure modes + SPEC §8 `McpAppAiGguiMountView`). */
 export const bootstrapProtocolFixtures: readonly TestCase[] = [
   bootstrapBundleFetchFailed as TestCase,
   bootstrapMetaMissing as TestCase,

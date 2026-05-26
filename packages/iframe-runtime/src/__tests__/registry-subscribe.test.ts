@@ -39,7 +39,7 @@ import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { ChannelRegistry } from '@ggui-ai/channel-client';
 import { connectViaRegistry } from '../registry-subscribe.js';
 import type { ProtocolError } from '../protocol-error.js';
@@ -106,7 +106,7 @@ const BOOTSTRAP = {
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
-} satisfies GguiBootstrapMeta;
+} satisfies McpAppAiGguiMountView;
 
 /**
  * Build a registry shaped like the one `runtime.ts` produces — same

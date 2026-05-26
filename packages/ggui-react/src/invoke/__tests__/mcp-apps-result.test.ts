@@ -9,14 +9,14 @@
  * survives the wire bit-for-bit.
  */
 import { describe, it, expect } from 'vitest';
-import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { InvokeEvent } from '@ggui-ai/protocol';
 import { extractBootstrapMeta } from '../mcp-apps-result';
 import { parseSseStream } from '../sse-parse';
 
 /** MUST match `@ggui-ai/server/src/invoke/__tests__/tool-result-push.test.ts`. */
-const FIXTURE_BOOTSTRAP: GguiBootstrapMeta = {
+const FIXTURE_BOOTSTRAP: McpAppAiGguiMountView = {
   wsUrl: 'wss://mcp.example.test/ws',
   token: 'bootstrap_token_abc123',
   expiresAt: '2026-05-01T00:00:00.000Z',
@@ -43,7 +43,7 @@ describe('extractBootstrapMeta', () => {
   it('returns the bootstrap on well-shaped content', () => {
     const content = {
       sessionId: FIXTURE_BOOTSTRAP.sessionId,
-      _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
+      _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
     };
     expect(extractBootstrapMeta(content)).toEqual(FIXTURE_BOOTSTRAP);
   });
@@ -51,7 +51,7 @@ describe('extractBootstrapMeta', () => {
   it('returns the bootstrap even when structuredContent is absent', () => {
     expect(
       extractBootstrapMeta({
-        _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
+        _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
       }),
     ).toEqual(FIXTURE_BOOTSTRAP);
   });
@@ -66,7 +66,7 @@ describe('extractBootstrapMeta', () => {
   it('returns null on malformed bootstrap (missing required field)', () => {
     const partial = { ...FIXTURE_BOOTSTRAP, runtimeUrl: undefined };
     expect(
-      extractBootstrapMeta({ _meta: bootstrapToMcpAppMeta(partial) }),
+      extractBootstrapMeta({ _meta: mountViewToMcpAppMeta(partial) }),
     ).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe('SSE round-trip: parseSseStream → extractBootstrapMeta', () => {
           tool_use_id: toolUseId,
           content: {
             sessionId: FIXTURE_BOOTSTRAP.sessionId,
-            _meta: bootstrapToMcpAppMeta(FIXTURE_BOOTSTRAP),
+            _meta: mountViewToMcpAppMeta(FIXTURE_BOOTSTRAP),
           },
         },
       },

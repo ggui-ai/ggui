@@ -109,7 +109,7 @@ describe('GET /api/bootstrap/:shortCode', () => {
     }
   });
 
-  it('returns 200 + a well-shaped GguiBootstrapMeta on the happy path', async () => {
+  it('returns 200 + a well-shaped McpAppAiGguiMountView on the happy path', async () => {
     fx = await bootWithSession();
     const res = await fetch(`${fx.url}/api/bootstrap/${fx.shortCode}`);
     expect(res.status).toBe(200);

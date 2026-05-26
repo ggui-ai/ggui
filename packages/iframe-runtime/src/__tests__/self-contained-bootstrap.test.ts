@@ -10,8 +10,8 @@
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
-  bootstrapToMcpAppMeta,
-  type GguiBootstrapMeta,
+  mountViewToMcpAppMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   extractBootstrapFromToolResult,
@@ -26,7 +26,7 @@ const SAMPLE_CODE_URL = 'https://app.example.com/code/abc123.js';
 const SAMPLE_RUNTIME_URL = '/_ggui/iframe-runtime.js';
 
 function buildToolResultParams(bootstrap: unknown): unknown {
-  return { _meta: bootstrapToMcpAppMeta(bootstrap as GguiBootstrapMeta) };
+  return { _meta: mountViewToMcpAppMeta(bootstrap as McpAppAiGguiMountView) };
 }
 
 describe('extractBootstrapFromToolResult — Slice 3 codeUrl', () => {

@@ -17,6 +17,7 @@ import {
   GGUI_SESSION_RESOURCE_URI,
   GGUI_SESSION_RESOURCE_MIME,
   combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createHash } from 'node:crypto';
 import {
@@ -259,11 +260,14 @@ describe('end-to-end outbound flow', () => {
     expect(result._meta).toBeDefined();
     const combined = combineMcpAppAiGguiMeta(result._meta);
     expect(combined.ok).toBe(true);
-    if (combined.ok) {
-      expect(combined.bootstrap.sessionId).toBeDefined();
-      expect(combined.bootstrap.appId).toBeDefined();
-      expect(combined.bootstrap.runtimeUrl).toBeDefined();
-    }
+    if (!combined.ok) return;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    expect(merged.view.sessionId).toBeDefined();
+    expect(merged.view.appId).toBeDefined();
+    expect(merged.view.runtimeUrl).toBeDefined();
+
   });
 
   it('ggui_push declaration exposes _meta.ui.resourceUri on tools/list', async () => {
@@ -283,9 +287,12 @@ describe('end-to-end outbound flow', () => {
     const combined = combineMcpAppAiGguiMeta(result._meta);
     expect(combined.ok).toBe(true);
     if (!combined.ok) return;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
     // Default same-origin path published by `createGguiServer` when
     // `mcpApps: true` — operators override via `renderer.url`.
-    expect(combined.bootstrap.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    expect(merged.view.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 });
 
@@ -375,7 +382,10 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
       const combined = combineMcpAppAiGguiMeta(result._meta);
       expect(combined.ok).toBe(true);
       if (!combined.ok) return;
-      expect(combined.bootstrap.runtimeUrl).toBe(
+      const merged = mergeSlicesIntoMountView(combined.slices);
+      expect(merged.ok).toBe(true);
+      if (!merged.ok) return;
+      expect(merged.view.runtimeUrl).toBe(
         'https://cdn.example/ggui/renderer.js',
       );
     } finally {
@@ -429,7 +439,11 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     if (!combined.ok) {
       throw new Error(`mintPushBootstrap: combiner failed (${combined.reason})`);
     }
-    const b = combined.bootstrap;
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    if (!merged.ok) {
+      throw new Error(`mintPushBootstrap: merge failed (${merged.reason})`);
+    }
+    const b = merged.view;
     if (!b.wsUrl || !b.token) {
       throw new Error('mintPushBootstrap: live-mode auth missing');
     }

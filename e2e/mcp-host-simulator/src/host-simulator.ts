@@ -37,8 +37,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView,
   MCP_APPS_UI_CAPABILITY,
-  type GguiBootstrapMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import WebSocket from 'ws';
 import {
@@ -104,7 +105,7 @@ export interface CallToolResult {
    */
   readonly isError?: boolean;
   /** Set when the tool result carries `_meta.ggui.bootstrap`. */
-  readonly bootstrap?: GguiBootstrapMeta;
+  readonly bootstrap?: McpAppAiGguiMountView;
   /**
    * The `_meta.ui.resourceUri` declared on the TOOL (from
    * tools/list), if any. Distinct from per-call `_meta.ui.resourceUri`
@@ -241,7 +242,7 @@ export interface SimulateWiredActionArgs {
    * Pass the bootstrap object directly; the simulator pulls the
    * fields it needs.
    */
-  readonly bootstrap: GguiBootstrapMeta;
+  readonly bootstrap: McpAppAiGguiMountView;
   /** Override `firedAt` for deterministic actionId tests. */
   readonly firedAt?: string;
 }
@@ -434,7 +435,11 @@ export class HostSimulator {
     );
     const meta = (result as { _meta?: unknown })._meta;
     const combined = combineMcpAppAiGguiMeta(meta);
-    const bootstrap = combined.ok ? combined.bootstrap : undefined;
+    let bootstrap: McpAppAiGguiMountView | undefined;
+    if (combined.ok) {
+      const merged = mergeSlicesIntoMountView(combined.slices);
+      if (merged.ok) bootstrap = merged.view;
+    }
     // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
     // to `true` on tool-handler throws via `createToolError` (server/mcp.js
     // §createToolError). Without surfacing it here, callers can't
@@ -628,7 +633,7 @@ export class HostSimulator {
    * `keepOpen: true` to retain the WS for streaming-event tests.
    */
   async subscribeWith(
-    bootstrap: GguiBootstrapMeta,
+    bootstrap: McpAppAiGguiMountView,
     opts: { keepOpen?: boolean } = {},
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
     if (!bootstrap.wsUrl) {

@@ -18,7 +18,7 @@
  *        `ResourceContents` blob whose `text` is the production thin-
  *        shell HTML (no inlined bootstrap).
  *      - GET `/ggui/console/session-bootstrap?session=<sessionId>` →
- *        `{bootstrap: GguiBootstrapMeta}` JSON.
+ *        `{bootstrap: McpAppAiGguiMountView}` JSON.
  *   3. Mount `<McpAppIframe resource={...} bootstrap={...}>`. The host
  *      forwards bootstrap via `ui/initialize`'s `toolOutput._meta.ggui.
  *      bootstrap`; the renderer's `parseBootstrap` reads exactly that
@@ -81,7 +81,7 @@ interface McpAppIframeRef {
   readonly dispatchAction: (name: string, data: unknown) => void;
 }
 import type { SessionStackEntry, StackItem } from '@ggui-ai/protocol';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
@@ -131,11 +131,11 @@ interface SessionResourceResponse {
 /**
  * Shape of `GET /ggui/console/session-bootstrap?session=<id>`'s
  * success body (see `packages/mcp-server/src/server.ts`). The
- * `bootstrap` field is the `GguiBootstrapMeta` that `<McpAppIframe>`
+ * `bootstrap` field is the `McpAppAiGguiMountView` that `<McpAppIframe>`
  * threads through `ui/initialize`.
  */
 interface SessionBootstrapResponse {
-  readonly bootstrap: GguiBootstrapMeta;
+  readonly bootstrap: McpAppAiGguiMountView;
 }
 
 /**
@@ -163,7 +163,7 @@ type BootstrapState =
       readonly kind: 'ready';
       readonly session: SessionCookieResponse;
       readonly resource: SessionResourceContents;
-      readonly bootstrap: GguiBootstrapMeta;
+      readonly bootstrap: McpAppAiGguiMountView;
       readonly stack: readonly SessionStackEntry[];
     }
   | { readonly kind: 'not-found' }
@@ -382,7 +382,7 @@ export function SessionViewer({
 
 /**
  * `ready` state — mount `<McpAppIframe>` against the fetched
- * `ResourceContents` + `GguiBootstrapMeta`. The bootstrap is forwarded
+ * `ResourceContents` + `McpAppAiGguiMountView`. The bootstrap is forwarded
  * via the `bootstrap` prop (`<McpAppIframe bootstrap={...}>`); the
  * host threads it onto `ui/initialize`'s
  * `toolOutput._meta.ggui.bootstrap`. Feeds `onObserve` into the
@@ -399,7 +399,7 @@ function LiveViewer({
 }: {
   readonly session: SessionCookieResponse;
   readonly resource: SessionResourceContents;
-  readonly bootstrap: GguiBootstrapMeta;
+  readonly bootstrap: McpAppAiGguiMountView;
   readonly stack: readonly SessionStackEntry[];
   readonly shortCode: string;
 }): ReactElement {

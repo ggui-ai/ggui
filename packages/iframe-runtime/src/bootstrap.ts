@@ -2,7 +2,7 @@
  * Bootstrap-meta extraction — single shared validator + three thin
  * extractors for the three envelope shapes the iframe-runtime accepts.
  *
- * Three boot modes share one {@link GguiBootstrapMeta} shape, distinguished
+ * Three boot modes share one {@link McpAppAiGguiMountView} shape, distinguished
  * by which of the three discriminator fields is populated:
  *
  *   - **live** — `wsUrl` + `token` + `runtimeUrl`; runtime opens
@@ -43,10 +43,13 @@
  * back arrays, primitives, null — all rejected by the same code path.
  */
 import type {
-  GguiBootstrapMeta,
+  McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { PUBLIC_ENV_APP_KEY_RE, projectHostContext } from '@ggui-ai/protocol';
-import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { BootstrapParseResult } from './types.js';
 
 /**
@@ -78,7 +81,7 @@ function isNonEmptyString(value: unknown): value is string {
  * stripped envelopes down to this layer).
  *
  * Validates the three-mode discriminator + the optional fields per
- * the {@link GguiBootstrapMeta} contract. Returns a discriminated
+ * the {@link McpAppAiGguiMountView} contract. Returns a discriminated
  * {@link BootstrapParseResult} the caller surfaces verbatim.
  *
  * Invariants enforced here (see module docblock for the wire contract):
@@ -217,7 +220,7 @@ export function validateBootstrapMeta(
   // canvasMode — discriminator for the canvas-mount path in
   // `runtime.ts` (consumed at the `parsed.bootstrap.canvasMode === true`
   // gate). Mutually exclusive with stackItemId per the
-  // `GguiBootstrapMeta` contract; the validator does not enforce the
+  // `McpAppAiGguiMountView` contract; the validator does not enforce the
   // exclusion here because (a) producers already gate it
   // server-side, and (b) the consumer branches on canvasMode FIRST so
   // a stray stackItemId is harmless. Defensive parse: strictly boolean
@@ -255,7 +258,7 @@ export function validateBootstrapMeta(
   // `schema` + a present `default`. Malformed entries cause the WHOLE
   // field to default to `[]` rather than partially trusting it.
   const contextSlotsRaw = raw['contextSlots'];
-  type ContextSlot = NonNullable<GguiBootstrapMeta['contextSlots']>[number];
+  type ContextSlot = NonNullable<McpAppAiGguiMountView['contextSlots']>[number];
   const contextSlots: ReadonlyArray<ContextSlot> = (() => {
     if (!Array.isArray(contextSlotsRaw)) return [];
     const collected: ContextSlot[] = [];
@@ -335,7 +338,7 @@ export function validateBootstrapMeta(
   // than a half-populated registry with a corrupted entry).
   const gadgetsRaw = raw['gadgets'];
   type GadgetPackageEntry = NonNullable<
-    GguiBootstrapMeta['gadgets']
+    McpAppAiGguiMountView['gadgets']
   >[number];
   const gadgets: ReadonlyArray<GadgetPackageEntry> | undefined = (() => {
     if (gadgetsRaw === undefined) return undefined;
@@ -411,7 +414,7 @@ export function validateBootstrapMeta(
   // live-mode fields so downstream readers (e.g. `readGguiBootstrap-
   // MetaShape`) don't shortcut into `runBootProduction`. The static
   // mount path in `bootSelfContained` doesn't need them.
-  const result: GguiBootstrapMeta = {
+  const result: McpAppAiGguiMountView = {
     sessionId,
     appId,
     runtimeUrl,
@@ -467,24 +470,21 @@ export function parseBootstrapFromUiInitialize(
   if (!isPlainObject(meta)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  // #109 — combine the five per-window `_meta` keys
-  // (`ai.ggui/session` / `auth` / `render` / `contract` / `component`)
-  // into the aggregated bootstrap shape, then run the shared
-  // shape validator. Map combiner failure modes onto the
-  // iframe-runtime's two distinct reasons:
-  //   - MISSING_SESSION (no session slice at all) → MISSING_META_GGUI_BOOTSTRAP
-  //   - MALFORMED_* (structurally invalid slice contents) → MALFORMED_BOOTSTRAP
+  // #109 — combine the two per-window `_meta` keys
+  // (`ai.ggui/session` / `ai.ggui/stack-item`) into slices, then merge
+  // into the flat MountView the iframe consumes. Map failure modes:
+  //   - combiner MALFORMED_* → MALFORMED_BOOTSTRAP
+  //   - merge MISSING_SESSION → MISSING_META_GGUI_BOOTSTRAP
+  //   - validateMountView surfaces field-level reasons
   const combined = combineMcpAppAiGguiMeta(meta);
   if (!combined.ok) {
-    return {
-      ok: false,
-      reason:
-        combined.reason === 'MISSING_SESSION'
-          ? 'MISSING_META_GGUI_BOOTSTRAP'
-          : 'MALFORMED_BOOTSTRAP',
-    };
+    return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  const validated = validateBootstrapMeta(combined.bootstrap);
+  const merged = mergeSlicesIntoMountView(combined.slices);
+  if (!merged.ok) {
+    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+  }
+  const validated = validateBootstrapMeta(merged.view);
   if (!validated.ok) return validated;
 
   // opportunistically capture HostContext from
@@ -576,18 +576,16 @@ export function parseBootstrapFromToolResult(
   if (meta === undefined) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  // #109 — combine the five per-window `_meta` keys then validate the
-  // aggregated shape. Same MISSING/MALFORMED mapping as
+  // #109 — combine the two per-window `_meta` keys, merge into view,
+  // then validate. Same MISSING/MALFORMED mapping as
   // parseBootstrapFromUiInitialize.
   const combined = combineMcpAppAiGguiMeta(meta);
   if (!combined.ok) {
-    return {
-      ok: false,
-      reason:
-        combined.reason === 'MISSING_SESSION'
-          ? 'MISSING_META_GGUI_BOOTSTRAP'
-          : 'MALFORMED_BOOTSTRAP',
-    };
+    return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  return validateBootstrapMeta(combined.bootstrap);
+  const merged = mergeSlicesIntoMountView(combined.slices);
+  if (!merged.ok) {
+    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
+  }
+  return validateBootstrapMeta(merged.view);
 }

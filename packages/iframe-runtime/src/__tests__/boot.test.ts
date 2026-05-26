@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
 
@@ -30,7 +30,7 @@ import type { ConnectFn } from '../registry-subscribe.js';
  * the recorder.
  */
 
-const VALID_BOOTSTRAP: GguiBootstrapMeta = {
+const VALID_BOOTSTRAP: McpAppAiGguiMountView = {
   wsUrl: 'wss://server.example/ws',
   token: 'tok_abc',
   sessionId: 'sess_001',
@@ -43,7 +43,7 @@ function buildHappyInitResponse(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: bootstrapToMcpAppMeta(VALID_BOOTSTRAP),
+        _meta: mountViewToMcpAppMeta(VALID_BOOTSTRAP),
         structuredContent: {},
       },
     },
@@ -163,7 +163,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const pinnedItem = makeStackItem('item_pinned', 'the pinned one');
     const otherItem = makeStackItem('item_other', 'sibling');
 
-    const pinnedBootstrap: GguiBootstrapMeta = {
+    const pinnedBootstrap: McpAppAiGguiMountView = {
       ...VALID_BOOTSTRAP,
       stackItemId: 'item_pinned',
     };
@@ -171,7 +171,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: bootstrapToMcpAppMeta(pinnedBootstrap),
+          _meta: mountViewToMcpAppMeta(pinnedBootstrap),
           structuredContent: {},
         },
       },
@@ -214,7 +214,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
 
     const ackOnlyItem = makeStackItem('item_only', 'unrelated');
 
-    const pinnedBootstrap: GguiBootstrapMeta = {
+    const pinnedBootstrap: McpAppAiGguiMountView = {
       ...VALID_BOOTSTRAP,
       stackItemId: 'item_missing',
     };
@@ -222,7 +222,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: bootstrapToMcpAppMeta(pinnedBootstrap),
+          _meta: mountViewToMcpAppMeta(pinnedBootstrap),
           structuredContent: {},
         },
       },

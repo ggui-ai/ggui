@@ -4,7 +4,8 @@
  * on the response.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { combineMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { combineMcpAppAiGguiMeta,
+  mergeSlicesIntoMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { CodeStore, UiGenerator } from '@ggui-ai/mcp-server-core';
 import { sha256Hex } from '@ggui-ai/mcp-server-core';
 import {
@@ -12,7 +13,7 @@ import {
   InMemoryKeyValueStore,
   InMemorySessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { DataContract } from '@ggui-ai/protocol';
 import type { GenerationDeps } from './push.js';
 import { createGguiPushHandler } from './push.js';
@@ -166,7 +167,10 @@ describe('push handler — codeStore wiring', () => {
     const combined = combineMcpAppAiGguiMeta(meta);
     expect(combined.ok).toBe(true);
     if (!combined.ok) return;
-    const bootstrap = combined.bootstrap as GguiBootstrapMeta & {
+    const merged = mergeSlicesIntoMountView(combined.slices);
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+    const bootstrap = merged.view as McpAppAiGguiMountView & {
       codeUrl?: string;
       codeHash?: string;
     };

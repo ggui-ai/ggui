@@ -10,12 +10,12 @@
  * origin trimming.
  */
 import { describe, it, expect } from 'vitest';
-import { bootstrapToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { mountViewToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
 
-const BOOTSTRAP_WITH_ITEM: GguiBootstrapMeta = {
+const BOOTSTRAP_WITH_ITEM: McpAppAiGguiMountView = {
   wsUrl: 'wss://mcp.example.test/ws',
   token: 'bootstrap_token_abc',
   expiresAt: '2026-05-01T00:00:00.000Z',
@@ -25,7 +25,7 @@ const BOOTSTRAP_WITH_ITEM: GguiBootstrapMeta = {
   stackItemId: 'item_pinned',
 };
 
-const BOOTSTRAP_NO_ITEM: GguiBootstrapMeta = {
+const BOOTSTRAP_NO_ITEM: McpAppAiGguiMountView = {
   wsUrl: 'wss://mcp.example.test/ws',
   token: 'bootstrap_token_def',
   expiresAt: '2026-05-01T00:00:00.000Z',
@@ -186,7 +186,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c1',
-            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];
@@ -206,7 +206,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c2',
-            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_NO_ITEM) },
+            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_NO_ITEM) },
           },
         ]),
       ];
@@ -220,7 +220,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c3',
-            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];
@@ -240,7 +240,7 @@ describe('extractUiMoments', () => {
             content: {
               sessionId: 'push_coord_sid',
               stackItemId: 'push_coord_pid',
-              _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM),
+              _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM),
             },
           },
         ]),
@@ -305,7 +305,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_b',
-            content: { _meta: bootstrapToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
+            content: { _meta: mountViewToMcpAppMeta(BOOTSTRAP_WITH_ITEM) },
           },
         ]),
       ];

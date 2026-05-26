@@ -39,7 +39,7 @@
  */
 import type { ConversationMessage } from './useInvoke';
 import { extractBootstrapMeta } from './mcp-apps-result';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
  * A single UI-moment the shell should render. Exactly one
@@ -57,7 +57,7 @@ export interface UiMoment {
    * Stack item id. For session-resource moments this is `stackItemId`
    * from {@link import('@ggui-ai/protocol').GguiPushOutput}. For
    * inline-bootstrap moments this is `stackItemId` from
-   * {@link GguiBootstrapMeta} when present, falling back to `key`
+   * {@link McpAppAiGguiMountView} when present, falling back to `key`
    * (targeting the whole session when no item is pinned).
    */
   readonly itemId: string;
@@ -79,7 +79,7 @@ export interface UiMoment {
          * builds a thin-shell HTML client-side and passes it as
          * `resource.text`.
          */
-        readonly bootstrap: GguiBootstrapMeta;
+        readonly bootstrap: McpAppAiGguiMountView;
       };
 }
 

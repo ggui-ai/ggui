@@ -146,7 +146,7 @@ import { LIFECYCLE_CHANNEL } from '@ggui-ai/protocol';
 import {
   GGUI_SESSION_RESOURCE_MIME,
   GGUI_SESSION_RESOURCE_URI,
-  type GguiBootstrapMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   DiscoveredPrimitiveCatalog,
@@ -638,7 +638,7 @@ export function defaultHandlers(deps: {
     /**
      * URL of the renderer bundle the thin-shell HTML should fetch
      * (C8 — plan §C8). Padded onto
-     * {@link GguiBootstrapMeta.runtimeUrl} at `resultMeta` time.
+     * {@link McpAppAiGguiMountView.runtimeUrl} at `resultMeta` time.
      * Same-origin default is `/_ggui/iframe-runtime.js`; hosted cloud
      * operators override to a CDN URL. Required when `mintBootstrap`
      * is set (the thin shell depends on it); otherwise ignored.
@@ -3508,7 +3508,7 @@ export function createGguiServer(
   // across instances. Replay cache is single-process; multi-host
   // deployments swap for a shared store later.
   // Live-mode minted credentials. wsUrl/token/expiresAt are optional
-  // on the protocol's GguiBootstrapMeta (they only apply to live
+  // on the protocol's McpAppAiGguiMountView (they only apply to live
   // mode, not static-component / system-card modes), but THIS minter
   // always sets all three on a successful mint. Promote them
   // back to required at the return-type level so route consumers
@@ -3997,7 +3997,7 @@ export function createGguiServer(
               // Iframe-runtime bundle URL — padded onto
               // `_meta.ggui.bootstrap.runtimeUrl` by the push
               // handler's resultMeta. C8 made this required on
-              // GguiBootstrapMeta; we always pass it so handlers
+              // McpAppAiGguiMountView; we always pass it so handlers
               // don't fall back to their hardcoded default.
               // Function form: resolves per-request so a tunnel/proxy
               // operator (X-Forwarded-Host from a loopback peer) gets
@@ -5578,7 +5578,7 @@ export function createGguiServer(
   // for the thin-shell's Path A fallback.
   //
   // The production thin shell (`GGUI_SESSION_SHELL_HTML`) tries TWO
-  // paths to obtain the bootstrap envelope (`GguiBootstrapMeta`):
+  // paths to obtain the bootstrap envelope (`McpAppAiGguiMountView`):
   //
   //   Path B (preferred, spec-shaped): read
   //     `params._meta.ggui.bootstrap` off the host-forwarded
@@ -5904,7 +5904,7 @@ export function createGguiServer(
           ...(bootstrapContractHash !== undefined && bootstrapValidatorsUrl !== undefined
             ? { contractHash: bootstrapContractHash, validatorsUrl: bootstrapValidatorsUrl }
             : {}),
-        } as GguiBootstrapMeta & {
+        } as McpAppAiGguiMountView & {
           stackItemId?: string;
           themeId?: string;
           themeMode?: 'light' | 'dark';
@@ -7855,7 +7855,7 @@ export function createGguiServer(
       //      carry an inlined bootstrap — same as production.
       //
       //   2. GET /ggui/console/session-bootstrap?session=<sessionId>
-      //      → returns `{bootstrap: GguiBootstrapMeta}` JSON. The
+      //      → returns `{bootstrap: McpAppAiGguiMountView}` JSON. The
       //      console feeds this to `<McpAppIframe bootstrap={...}>`,
       //      which forwards it via `ui/initialize`
       //      (`packages/ggui-react/src/McpAppIframe/dispatch.ts`).
@@ -7987,7 +7987,7 @@ export function createGguiServer(
       );
 
       // GET /ggui/console/session-bootstrap?session=<sessionId>
-      // → `{bootstrap: GguiBootstrapMeta}` JSON. Required when the
+      // → `{bootstrap: McpAppAiGguiMountView}` JSON. Required when the
       //   console is hosting the renderer behind `<McpAppIframe>` and
       //   needs to feed the iframe a bootstrap via the `bootstrap`
       //   prop. `mcpApps: true` is required (mintBootstrap presence)
@@ -8093,7 +8093,7 @@ export function createGguiServer(
               });
             }
           }
-          const bootstrap: GguiBootstrapMeta = {
+          const bootstrap: McpAppAiGguiMountView = {
             wsUrl: resolvedWsUrl,
             token: minted.token,
             expiresAt: minted.expiresAt,

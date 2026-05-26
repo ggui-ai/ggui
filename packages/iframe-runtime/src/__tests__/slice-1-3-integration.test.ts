@@ -20,8 +20,8 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-  bootstrapToMcpAppMeta,
-  type GguiBootstrapMeta,
+  mountViewToMcpAppMeta,
+  type McpAppAiGguiMountView,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseBootstrap } from '../bootstrap.js';
 import {
@@ -47,7 +47,7 @@ function buildBootstrapEnvelope(
     bundleSri?: string;
   }>,
 ) {
-  const bootstrap: GguiBootstrapMeta = {
+  const bootstrap: McpAppAiGguiMountView = {
     wsUrl: 'wss://server.example/ws',
     token: 'tok_abc',
     sessionId: 'sess_001',
@@ -57,7 +57,7 @@ function buildBootstrapEnvelope(
   };
   return {
     toolOutput: {
-      _meta: bootstrapToMcpAppMeta(bootstrap),
+      _meta: mountViewToMcpAppMeta(bootstrap),
       structuredContent: { sessionId: 'sess_001' },
     },
   };

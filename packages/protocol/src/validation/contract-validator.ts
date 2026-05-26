@@ -377,7 +377,7 @@ export function validateActionEnvelope(
  * Compile a contract's runtime-validated sub-schemas into standalone,
  * eval-free ESM validator modules — the producer half of the
  * precompiled-validator channel
- * ({@link CompiledContractValidators} on `GguiBootstrapMeta`).
+ * ({@link CompiledContractValidators} on `McpAppAiGguiMountView`).
  *
  * The renderer iframe runs under a strict CSP with no `'unsafe-eval'`,
  * so it cannot call `ajv.compile()` (which builds validators via

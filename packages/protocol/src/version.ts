@@ -6,10 +6,10 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
- * `GguiBootstrapMeta.compiledValidators` — precompiled eval-free
+ * `McpAppAiGguiMountView.compiledValidators` — precompiled eval-free
  * runtime validators (ADDITIVE, non-breaking):
  *
- *   - `GguiBootstrapMeta` (and the server's `StackItemBootstrapView`
+ *   - `McpAppAiGguiMountView` (and the server's `StackItemBootstrapView`
  *     projection) gain an optional `compiledValidators` field —
  *     `CompiledContractValidators`: ESM validator-module source
  *     strings, one per `propsSpec` / `actionSpec` entry / `streamSpec`
@@ -66,7 +66,7 @@
  * `loadGadgets()` retired — gadgets direct-imported, runtime registry
  * per-package (BREAKING, pre-launch):
  *
- *   v1. **`GguiBootstrapMeta.gadgets` is per-package.** The channel
+ *   v1. **`McpAppAiGguiMountView.gadgets` is per-package.** The channel
  *      flipped from one entry per hook (`{hook, package?, bundleUrl?,
  *      bundleSri?}`) to one entry per registered gadget PACKAGE
  *      (`{package, bundleUrl?, bundleSri?}` — `package` REQUIRED). The
@@ -508,7 +508,7 @@
  *
  *   q2. **`_meta.ggui.bootstrap.adapters` retired.** The
  *      dormant dynamic-import-at-boot adapter loader is deleted from
- *      the wire surface. `GguiBootstrapMeta.adapters?` field removed;
+ *      the wire surface. `McpAppAiGguiMountView.adapters?` field removed;
  *      `parseAdapterSpecs` + `installAdapters` + the
  *      `globalThis.__ggui__.adapters` registry slot retired from
  *      iframe-runtime. An earlier change had already moved capability
@@ -818,9 +818,9 @@
  *      iframe-runtime can surface the gate set to in-iframe consumers.
  *      Browser-enforced gates flow from the parent transport; the
  *      iframe-runtime itself cannot mutate Permissions-Policy
- *      post-load. `GguiBootstrapMeta` gains an optional matching
+ *      post-load. `McpAppAiGguiMountView` gains an optional matching
  *      `permissionsPolicy?: readonly string[]` field;
- *      `validateGguiBootstrapMeta` validates the array shape.
+ *      `validateMcpAppAiGguiMountView` validates the array shape.
  *      Boilerplate generator (`@ggui-ai/ui-gen`) reads
  *      `clientCapabilities.gadgets` and emits
  *      one combined `import { hookA, hookB } from '<pkg>'` per
@@ -1036,7 +1036,7 @@
  * --------------------------------------------------------------------
  * Canvas mode (additive):
  *
- *   1. `GguiBootstrapMeta.canvasMode?: boolean` — discriminator for
+ *   1. `McpAppAiGguiMountView.canvasMode?: boolean` — discriminator for
  *      the iframe-runtime canvas-mount path. When `true`, the runtime
  *      mounts a session-scoped `CanvasShell` (one iframe for the
  *      whole session) instead of the legacy per-stack-item iframe.

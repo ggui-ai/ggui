@@ -98,7 +98,7 @@ export type TransportKind = 'ws' | 'polling';
 
 /**
  * Bootstrap shape the registry reads to pick a transport. Mirrors the
- * subset of `GguiBootstrapMeta` the transport layer needs — keeping
+ * subset of `McpAppAiGguiMountView` the transport layer needs — keeping
  * the type local lets the gadget stay protocol-version-agnostic at
  * the import boundary (consumers thread in the concrete bootstrap).
  *

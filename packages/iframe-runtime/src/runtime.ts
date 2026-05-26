@@ -31,7 +31,7 @@ import type {
   SessionStackEntry,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   parseBootstrap,
   parseBootstrapFromGlobal,
@@ -427,7 +427,7 @@ export interface TriadWiringHooks {
    * own emitters).
    */
   setup(params: {
-    readonly bootstrap: GguiBootstrapMeta;
+    readonly bootstrap: McpAppAiGguiMountView;
     readonly stackModel: StackModel;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
@@ -894,7 +894,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
  * triad with the rich handler set.
  */
 function createPlaceholderRegistry(params: {
-  readonly bootstrap: GguiBootstrapMeta;
+  readonly bootstrap: McpAppAiGguiMountView;
   readonly stackModel: StackModel;
   readonly statusRefs: StatusRefs;
 }): ChannelRegistry {
@@ -1007,10 +1007,10 @@ function shouldAutostart(): boolean {
 
 /**
  * Self-contained bootstrap shape — alias for the protocol's unified
- * {@link GguiBootstrapMeta}. Earlier versions of this module had
+ * {@link McpAppAiGguiMountView}. Earlier versions of this module had
  * separate `SelfContainedComponentBootstrap` /
  * `SelfContainedSystemBootstrap` narrowings; the protocol's
- * `GguiBootstrapMeta` now carries `codeUrl` / `kind` / `themeId`
+ * `McpAppAiGguiMountView` now carries `codeUrl` / `kind` / `themeId`
  * / `themeMode` / `propsJson` directly (alongside the existing
  * live-mode `wsUrl` / `token` / `expiresAt` fields), so a single
  * shared validator ({@link validateBootstrapMeta} in `bootstrap.ts`)
@@ -1021,7 +1021,7 @@ function shouldAutostart(): boolean {
  *
  * @public
  */
-export type SelfContainedBootstrap = GguiBootstrapMeta;
+export type SelfContainedBootstrap = McpAppAiGguiMountView;
 
 /**
  * Read `globalThis.__GGUI_BOOTSTRAP__` synchronously, validate against
@@ -2811,7 +2811,7 @@ async function bootSelfContained(
 }
 
 /**
- * Detect a `GguiBootstrapMeta` shape inlined onto `__GGUI_BOOTSTRAP__`.
+ * Detect a `McpAppAiGguiMountView` shape inlined onto `__GGUI_BOOTSTRAP__`.
  * The first-party session shells (`/s/<shortCode>`,
  * `ui://ggui/session/<sessionId>`, the embedded-ui SessionViewer's
  * thin shell) populate this synchronously before the runtime loads —
@@ -2826,7 +2826,7 @@ async function bootSelfContained(
  * is delivered via the `ui/initialize` Reading-B path) hang at
  * `mounting` for the full 30s before `code-ready`.
  */
-function readGguiBootstrapMetaShape(): boolean {
+function readMcpAppAiGguiMountViewShape(): boolean {
   if (typeof window === 'undefined') return false;
   const raw = (window as unknown as { __GGUI_BOOTSTRAP__?: unknown })
     .__GGUI_BOOTSTRAP__;
@@ -2849,7 +2849,7 @@ function readGguiBootstrapMetaShape(): boolean {
 /**
  * Hand off to `bootProduction` with the standard wiring (postRendererReady
  * + postBootFailure + observability + lifecycle). Extracted so both the
- * GguiBootstrapMeta-inlined fast path and the post-tool-result-timeout
+ * McpAppAiGguiMountView-inlined fast path and the post-tool-result-timeout
  * fallback share one call site — keeps the WS-driven boot semantics
  * single-sourced.
  */
@@ -2952,7 +2952,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
       runBootProduction();
     } else {
       // Pre-empt the postMessage tool-result race when `__GGUI_BOOTSTRAP__`
-      // already carries a `GguiBootstrapMeta` (wsUrl + token + sessionId
+      // already carries a `McpAppAiGguiMountView` (wsUrl + token + sessionId
       // + appId) — that shape isn't a `SelfContainedBootstrap`, so
       // `readSelfContainedBootstrap` returned null, but it IS the
       // signal that a first-party shell (`/s/<shortCode>`,
@@ -2964,8 +2964,8 @@ if (shouldAutostart() && typeof window !== 'undefined') {
       // Without this short-circuit, the OSS embedded-ui (which never
       // sends a separate `ui/notifications/tool-result`) hangs at
       // `mounting` for the full 30s timeout before `code-ready`.
-      const hasGguiBootstrapMeta = readGguiBootstrapMetaShape();
-      if (hasGguiBootstrapMeta) {
+      const hasMcpAppAiGguiMountView = readMcpAppAiGguiMountViewShape();
+      if (hasMcpAppAiGguiMountView) {
         runBootProduction();
       } else {
         // Race a postMessage listener against the legacy production

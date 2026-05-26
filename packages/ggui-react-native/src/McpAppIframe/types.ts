@@ -12,7 +12,7 @@ import type {
   ProtocolError,
 } from '@ggui-ai/iframe-runtime';
 import type {
-  GguiBootstrapMeta,
+  McpAppAiGguiMountView,
   McpAppLifecycleEvent,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
@@ -131,7 +131,7 @@ export interface McpAppIframeProps {
    * forwarding does NOT cascade through to third-party content the
    * renderer is itself hosting.
    */
-  readonly bootstrap?: GguiBootstrapMeta;
+  readonly bootstrap?: McpAppAiGguiMountView;
 
   /**
    * Caller-provided handler for `tools/call` dispatches from the

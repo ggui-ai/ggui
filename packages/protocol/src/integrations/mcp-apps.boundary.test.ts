@@ -13,7 +13,7 @@
  *   1. Type-level `@ts-expect-error` locks — fail at `tsc` if the
  *      forbidden import path resolves or a forbidden field appears.
  *   2. Runtime locks — scan the core module sources for forbidden
- *      identifiers (`McpApps*`, `GguiBootstrapMeta`, `MCP_APPS_*`,
+ *      identifiers (`McpApps*`, `McpAppAiGguiMountView`, `MCP_APPS_*`,
  *      `GGUI_SESSION_*`, `'mcpApps'` discriminator). These run against
  *      the compiled-sources string so structural drift in a PR is
  *      caught by CI regardless of the type-level angle.
@@ -33,7 +33,7 @@ import { describe, expect, it } from 'vitest';
 // these types. If this import breaks, the whole slice is miswired.
 import type {
   McpAppsStackItem,
-  GguiBootstrapMeta,
+  McpAppAiGguiMountView,
   McpAppsSource,
   McpAppsCsp,
   McpAppsPermissions,
@@ -127,7 +127,7 @@ describe('ActionEnvelope boundary lock (type-level)', () => {
         sessionId: 's',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
-      } satisfies GguiBootstrapMeta,
+      } satisfies McpAppAiGguiMountView,
     };
     expect([env1, env2, env3, env4, env5].map((e) => e.sessionId)).toEqual(
       Array(5).fill('s'),
@@ -229,8 +229,8 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
   // deliberately framed as GENERAL transport-bootstrap credentials
   // (opaque strings), NOT as MCP-Apps-typed fields. This lock ensures
   // a future change doesn't accidentally narrow them to
-  // `GguiBootstrapMeta`-shaped objects.
-  it('SubscribePayload.bootstrap is a string, not a GguiBootstrapMeta', () => {
+  // `McpAppAiGguiMountView`-shaped objects.
+  it('SubscribePayload.bootstrap is a string, not a McpAppAiGguiMountView', () => {
     const s: SubscribePayload = {
       sessionId: 'x',
       appId: 'a',
@@ -248,7 +248,7 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
         sessionId: 's',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
-      } satisfies GguiBootstrapMeta,
+      } satisfies McpAppAiGguiMountView,
     };
     expect(s2).toBeDefined();
   });
@@ -264,7 +264,7 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
   });
 });
 
-describe('GguiBootstrapMeta / PushResultMeta visibility to external tools', () => {
+describe('McpAppAiGguiMountView / PushResultMeta visibility to external tools', () => {
   it('McpAppsStackItem structurally forbids component-variant fields', () => {
     // These fields are `?: never` on McpAppsStackItem — tests encode
     // that restriction at the type level. `?: never` makes the field
@@ -340,7 +340,7 @@ function readSource(rel: string): string {
 /** Tokens that must NEVER appear in core (non-integrations) modules. */
 const FORBIDDEN_TOKENS = [
   'McpApps', // McpAppsStackItem / McpAppsSource / etc.
-  'GguiBootstrapMeta',
+  'McpAppAiGguiMountView',
   'MCP_APPS_UI_CAPABILITY',
   'GGUI_SESSION_RESOURCE_URI',
   'GGUI_SESSION_RESOURCE_MIME',
@@ -410,7 +410,7 @@ describe('SessionStackEntry discriminator is the ONE place mcpApps enters core',
     // But must NOT pull in any other MCP Apps symbol — those belong
     // at the integrations subpath, not in core session typing.
     const BANNED_IN_SESSION = [
-      'GguiBootstrapMeta',
+      'McpAppAiGguiMountView',
       'MCP_APPS_UI_CAPABILITY',
       'GGUI_SESSION_RESOURCE_URI',
       'GGUI_SESSION_RESOURCE_MIME',

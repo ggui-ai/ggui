@@ -27,7 +27,7 @@ import {
   type ReactTestRenderer,
 } from 'react-test-renderer';
 import type { ResourceContents } from '@modelcontextprotocol/sdk/types.js';
-import type { GguiBootstrapMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiMountView } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
   classifyRendererEnvelope,
@@ -37,7 +37,7 @@ import {
 } from './dispatch';
 import type { McpAppIframeRef } from './types';
 
-const SAMPLE_BOOTSTRAP: GguiBootstrapMeta = {
+const SAMPLE_BOOTSTRAP: McpAppAiGguiMountView = {
   wsUrl: 'wss://test.example/ws',
   token: 'sample-bootstrap-token',
   expiresAt: '2099-12-31T23:59:59.999Z',
@@ -156,7 +156,7 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     const toolOutput = result['toolOutput'] as Record<string, unknown>;
     const meta = toolOutput['_meta'] as Record<string, unknown>;
     const ggui = meta['ggui'] as Record<string, unknown>;
-    const bootstrap = ggui['bootstrap'] as GguiBootstrapMeta;
+    const bootstrap = ggui['bootstrap'] as McpAppAiGguiMountView;
     expect(bootstrap.wsUrl).toBe(SAMPLE_BOOTSTRAP.wsUrl);
     expect(bootstrap.token).toBe(SAMPLE_BOOTSTRAP.token);
     expect(bootstrap.sessionId).toBe(SAMPLE_BOOTSTRAP.sessionId);
