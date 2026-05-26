@@ -259,6 +259,44 @@ export interface SessionStore {
   appendEvent(input: AppendEventInput): Promise<number>;
 
   /**
+   * List events for a session with `seq > sinceSeq`, capped at `limit`.
+   *
+   * Backs the R7 `GET /api/sessions/:id/events?sinceSequence=N&limit=M`
+   * HTTP endpoint and the WS-subscribe `sinceSequence` cursor replay
+   * (`SubscribePayload.sinceSequence`). Returns `{events, lastSequence,
+   * hasMore, horizonSeq}` where:
+   *
+   *   - `events` — strictly ascending by `seq`, only entries with
+   *     `seq > sinceSeq`, up to `limit` items.
+   *   - `lastSequence` — the session's current high-water mark
+   *     (`Session.eventSequence`) regardless of pagination. Clients use
+   *     this to advance their cursor on empty pages.
+   *   - `hasMore` — `true` when the page was truncated by `limit`.
+   *   - `horizonSeq` — the lowest `seq` the implementation can still
+   *     replay (events with `seq <= horizonSeq` have been evicted from
+   *     the bounded retention window). `0` means "no horizon — full
+   *     history is replayable since session creation". A caller's
+   *     `sinceSeq < horizonSeq` MUST be treated as
+   *     REPLAY_HORIZON_PASSED.
+   *
+   * Returns `null` when the session does not exist (404-equivalent;
+   * distinct from an empty `events[]` page on a live session).
+   *
+   * Implementations MUST honor `limit` strictly — even if more events
+   * are available, `events.length <= limit`.
+   */
+  listEventsSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{
+    readonly events: readonly SessionEvent[];
+    readonly lastSequence: number;
+    readonly hasMore: boolean;
+    readonly horizonSeq: number;
+  } | null>;
+
+  /**
    * Subscribe to the append-only event stream for a session.
    *
    * **Normative semantics** (every implementation MUST satisfy these):

@@ -275,6 +275,9 @@ describe('GET /ggui/console/sessions', () => {
       async appendEvent() {
         return 1;
       },
+      async listEventsSince() {
+        return { events: [], lastSequence: 0, hasMore: false, horizonSeq: 0 };
+      },
       observe() {
         return { [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }) } as never;
       },

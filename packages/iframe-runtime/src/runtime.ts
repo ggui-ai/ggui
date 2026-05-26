@@ -71,7 +71,7 @@ import {
   type ConnectFn,
   type RegistrySubscribeHandle,
 } from './registry-subscribe.js';
-import { buildSnapshotPolling } from './snapshot-polling.js';
+import { buildEventsPolling } from './events-polling.js';
 import {
   ensureStatusDom,
   refreshStackDom,
@@ -824,17 +824,20 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       onResubscribeAck: (ack) => {
         void applyAckStack(ack);
       },
-      // R6 — registry-level polling fallback. Composed once at bind
-      // time from `session.pollingUrl` (server-stamped wsToken-gated
-      // /api/sessions/<id>/state URL) + `session.lastSequence` (R7
-      // cursor seed). FailoverHandle uses this when WS reaches
+      // R7 — registry-level events-polling fallback. Composed once at
+      // bind time from `session.pollingUrl` (server-stamped wsToken-
+      // gated /api/sessions/<id>/events URL) + `session.lastSequence`
+      // (cursor seed). FailoverHandle uses this when WS reaches
       // 'failed'; absent → no polling fallback (WS-only mode).
+      //
+      // Same cursor model as the WS subscribe `sinceSequence` replay
+      // path — switching transports does not lose events.
       ...(typeof session.pollingUrl === 'string' && session.pollingUrl.length > 0
         ? {
-            polling: buildSnapshotPolling({
-              url: session.pollingUrl,
+            polling: buildEventsPolling({
+              baseUrl: session.pollingUrl,
               ...(session.lastSequence !== undefined
-                ? { seedLastSequence: session.lastSequence }
+                ? { initialSinceSequence: session.lastSequence }
                 : {}),
             }),
           }

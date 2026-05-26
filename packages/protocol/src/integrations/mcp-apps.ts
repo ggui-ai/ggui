@@ -274,7 +274,11 @@ export interface McpAppAiGguiSessionMeta {
   readonly wsToken?: string;
   readonly expiresAt?: string;
 
-  // Polling-fallback URL when WS blocked at the host CSP layer
+  // Polling-fallback URL when WS blocked at the host CSP layer.
+  // R7: points to `/api/sessions/<sessionId>/events?wsToken=<token>`
+  // (cursor-replay endpoint). The iframe-runtime composes per-tick
+  // `&sinceSequence=<cursor>&limit=<N>` against this base. Companion
+  // to `session.lastSequence` which seeds the initial cursor.
   readonly pollingUrl?: string;
 
   // Theme (resolved at mount; rarely changes mid-session)

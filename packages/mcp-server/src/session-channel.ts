@@ -2467,6 +2467,66 @@ export function createSessionChannelServer(
       ...(message.requestId ? { requestId: message.requestId } : {}),
     });
 
+    // R7 — SessionEvent ledger replay. When `payload.sinceSequence` is
+    // present, fetch events with `seq > sinceSequence` from the per-
+    // session ledger and emit each as a `session_event` wire frame
+    // BEFORE the per-channel stream-buffer replay. Consumers dispatch
+    // by `event.type` to fold the wire-frame-equivalent handler
+    // (push/props_update/etc.) — same cursor model as the HTTP
+    // `/api/sessions/:id/events?sinceSequence=N` endpoint.
+    //
+    // Horizon gate: a cursor below the server's replay horizon OR
+    // above `lastSequence` (stale from a different deployment) emits
+    // an error frame with `code: 'REPLAY_HORIZON_PASSED'` and skips
+    // the replay. Client recovery: re-mount from a fresh /state read.
+    if (payload.sinceSequence !== undefined) {
+      const sinceSeq = payload.sinceSequence;
+      if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
+        sendError(
+          ws,
+          'INVALID_SINCE_SEQUENCE',
+          'sinceSequence must be a non-negative integer',
+          message.requestId,
+        );
+      } else {
+        const ledger = await opts.sessionStore.listEventsSince(
+          session.id,
+          sinceSeq,
+          // Server-side cap matches the HTTP route's default (100).
+          // Stress + replay-from-zero workloads cap here.
+          100,
+        );
+        if (ledger === null) {
+          // Session disappeared between resolve and ledger read —
+          // already handled by the broader error envelope path; nothing
+          // to do here.
+        } else if (
+          sinceSeq > ledger.lastSequence ||
+          sinceSeq < ledger.horizonSeq
+        ) {
+          sendError(
+            ws,
+            'REPLAY_HORIZON_PASSED',
+            `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
+            message.requestId,
+            { currentSequence: ledger.lastSequence },
+          );
+        } else {
+          for (const event of ledger.events) {
+            send(ws, {
+              type: 'session_event',
+              payload: {
+                sequence: event.seq,
+                emittedAt: new Date(event.timestamp).toISOString(),
+                type: event.type,
+                payload: event.data,
+              },
+            });
+          }
+        }
+      }
+    }
+
     // Send replay frames AFTER the ack. Ordering by `seq` ASC — the
     // buffer returns them pre-sorted. Client sees ack(streamSeq=N) →
     // up to N replay `data` frames → live tail (seq > N). No explicit

@@ -139,6 +139,15 @@ function makeSeededStore(
       });
       return seeded.eventSequence;
     },
+    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
+      if (sessionId !== seeded.id) return null;
+      return {
+        events: [],
+        lastSequence: seeded.eventSequence,
+        hasMore: false,
+        horizonSeq: 0,
+      };
+    },
     observe(_id: string, _opts?: ObserveOptions): AsyncIterable<SessionEvent> {
       throw new Error('observe is not exercised by these tests');
     },

@@ -131,6 +131,16 @@ function makeMultiSessionStore(sessionIds: readonly string[]): SessionStore {
       void ev;
       return found.eventSequence;
     },
+    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
+      const found = seededById.get(sessionId);
+      if (!found) return null;
+      return {
+        events: [],
+        lastSequence: found.eventSequence,
+        hasMore: false,
+        horizonSeq: 0,
+      };
+    },
     observe(_id: string, _opts?: ObserveOptions): AsyncIterable<SessionEvent> {
       throw new Error('observe is not exercised by these tests');
     },

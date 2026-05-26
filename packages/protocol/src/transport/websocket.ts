@@ -48,6 +48,7 @@ import type {
   DrainAckPayload,
 } from '../types/live-channel';
 import type { HostContextObservedPayload } from '../types/host-context';
+import type { SessionEvent } from '../types/session-event';
 
 /**
  * WebSocket message types for client-server communication.
@@ -85,7 +86,9 @@ export type WebSocketMessageType =
   // ─── Canvas-mode host-context capture ───
   | 'host_context_observed' // Client → Server: iframe echoes McpUiHostContext from ui/initialize + on host-context-changed
   // ─── Canvas-mode user navigation ───
-  | 'canvas_navigated'; // Client → Server: user back-navigated; server updates activeStackItemId + may abort cold-gen for the popped item
+  | 'canvas_navigated' // Client → Server: user back-navigated; server updates activeStackItemId + may abort cold-gen for the popped item
+  // ─── R7 SessionEvent ledger replay ───
+  | 'session_event'; // Server → Client: one SessionEvent from the per-session ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
 
 /** Fields shared by all WebSocket message variants. */
 interface WsMessageBase {
@@ -158,7 +161,15 @@ export type WebSocketMessage =
   // canvas (popping a stack item from the local NavStackModel). The
   // server updates `session.activeStackItemId` to the new top and MAY
   // abort in-flight cold-gen for the previous active item.
-  | (WsMessageBase & { type: 'canvas_navigated'; payload: CanvasNavigatedPayload });
+  | (WsMessageBase & { type: 'canvas_navigated'; payload: CanvasNavigatedPayload })
+  // R7 — SessionEvent ledger replay frame (Server → Client only).
+  // Emitted before the live tail when SubscribePayload.sinceSequence
+  // is set; one frame per ledger entry with `sequence > sinceSequence`.
+  // The payload IS the full SessionEvent (sequence + emittedAt + type +
+  // payload). Consumers dispatch by `payload.type` to fold the wire-
+  // frame-equivalent handler (push → push handler, props_update →
+  // props_update handler, etc.) — the unification R7 lands.
+  | (WsMessageBase & { type: 'session_event'; payload: SessionEvent });
 
 /**
  * Payload for the canvas-mode `canvas_navigated` message. Emitted by

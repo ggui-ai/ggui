@@ -291,6 +291,37 @@ export class InMemorySessionStore implements SessionStore {
     return seq;
   }
 
+  async listEventsSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{
+    readonly events: readonly SessionEvent[];
+    readonly lastSequence: number;
+    readonly hasMore: boolean;
+    readonly horizonSeq: number;
+  } | null> {
+    const bucket = this.buckets.get(sessionId);
+    if (!bucket) return null;
+    // In-memory keeps every event for the session's lifetime — no
+    // horizon eviction. `horizonSeq=0` ⇒ full history is always
+    // replayable for as long as the session lives in the bucket.
+    const horizonSeq = 0;
+    const lastSequence = bucket.session.eventSequence;
+    if (sinceSeq < horizonSeq) {
+      return { events: [], lastSequence, hasMore: false, horizonSeq };
+    }
+    const filtered: SessionEvent[] = [];
+    for (const event of bucket.events) {
+      if (event.seq <= sinceSeq) continue;
+      if (filtered.length >= limit) {
+        return { events: filtered, lastSequence, hasMore: true, horizonSeq };
+      }
+      filtered.push(event);
+    }
+    return { events: filtered, lastSequence, hasMore: false, horizonSeq };
+  }
+
   observe(id: string, opts: ObserveOptions = {}): AsyncIterable<SessionEvent> {
     const fromSeq = opts.fromSeq ?? 1;
     const tail = opts.tail ?? true;

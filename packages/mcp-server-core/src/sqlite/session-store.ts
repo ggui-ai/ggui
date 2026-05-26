@@ -163,6 +163,7 @@ export class SqliteSessionStore implements SessionStore {
     bumpSequenceAndClose: SqliteStatement<unknown[]>;
     bumpSequence: SqliteStatement<unknown[]>;
     selectEventsFromSeq: SqliteStatement<unknown[], EventRow>;
+    selectEventsSinceLimited: SqliteStatement<unknown[], EventRow>;
     upsertPageIndex: SqliteStatement<unknown[]>;
     deletePageIndexEntry: SqliteStatement<unknown[]>;
     selectPageIndex: SqliteStatement<
@@ -262,6 +263,13 @@ export class SqliteSessionStore implements SessionStore {
       ),
       selectEventsFromSeq: this.db.prepare<unknown[], EventRow>(
         `SELECT * FROM session_events WHERE session_id = ? AND seq >= ? ORDER BY seq ASC`,
+      ),
+      // R7 — `listEventsSince(sessionId, sinceSeq, limit)` backing.
+      // STRICT inequality (`seq > ?`) since callers pass their cursor
+      // and want only events newer than what they've already seen.
+      // We fetch `limit + 1` to compute `hasMore` in a single query.
+      selectEventsSinceLimited: this.db.prepare<unknown[], EventRow>(
+        `SELECT * FROM session_events WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
       ),
       upsertPageIndex: this.db.prepare<unknown[]>(
         `INSERT INTO session_stack_item_index (stack_item_id, session_id, app_id) VALUES (?, ?, ?)
@@ -537,6 +545,42 @@ export class SqliteSessionStore implements SessionStore {
     // observers should never see an event that might be rolled back.
     this.wakeWaiters(input.sessionId, event);
     return seq;
+  }
+
+  async listEventsSince(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{
+    readonly events: readonly SessionEvent[];
+    readonly lastSequence: number;
+    readonly hasMore: boolean;
+    readonly horizonSeq: number;
+  } | null> {
+    const row = this.stmts.getSession.get(sessionId) as SessionRow | undefined;
+    if (!row) return null;
+    const lastSequence = row.event_sequence;
+    // Sqlite store keeps every event for the session's lifetime — no
+    // horizon eviction. `horizonSeq=0` ⇒ full history is replayable
+    // until the session is deleted.
+    const horizonSeq = 0;
+    if (sinceSeq < horizonSeq) {
+      return { events: [], lastSequence, hasMore: false, horizonSeq };
+    }
+    // Fetch limit + 1 to detect hasMore without a second query.
+    const fetched = this.stmts.selectEventsSinceLimited.all(
+      sessionId,
+      sinceSeq,
+      limit + 1,
+    ) as EventRow[];
+    let hasMore = false;
+    let pageRows = fetched;
+    if (fetched.length > limit) {
+      hasMore = true;
+      pageRows = fetched.slice(0, limit);
+    }
+    const events = pageRows.map(rowToEvent);
+    return { events, lastSequence, hasMore, horizonSeq };
   }
 
   observe(id: string, opts: ObserveOptions = {}): AsyncIterable<SessionEvent> {

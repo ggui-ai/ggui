@@ -185,6 +185,17 @@ function makeSeededStore(
       });
       return seeded.eventSequence;
     },
+    async listEventsSince(sessionId: string, sinceSeq: number, limit: number) {
+      if (sessionId !== seeded.id) return null;
+      const filtered = recordedEvents.filter((e) => e.seq > sinceSeq);
+      const hasMore = filtered.length > limit;
+      return {
+        events: filtered.slice(0, limit),
+        lastSequence: seeded.eventSequence,
+        hasMore,
+        horizonSeq: 0,
+      };
+    },
     observe(_id: string, _opts?: ObserveOptions): AsyncIterable<SessionEvent> {
       throw new Error('observe is not exercised by session-channel tests');
     },
@@ -813,6 +824,15 @@ function makeMutableStore(): {
       session.eventSequence += 1;
       return session.eventSequence;
     },
+    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
+      if (sessionId !== session.id) return null;
+      return {
+        events: [],
+        lastSequence: session.eventSequence,
+        hasMore: false,
+        horizonSeq: 0,
+      };
+    },
     observe(_id: string, _opts?: ObserveOptions): AsyncIterable<SessionEvent> {
       throw new Error('observe not used by channel-enforcement contract');
     },
@@ -1006,6 +1026,23 @@ function subscribeFrame(
     appId: TEST_APP_ID,
     role: 'user',
     ...(fromSeq !== undefined ? { fromSeq } : {}),
+  };
+  return { type: 'subscribe', payload, requestId: 'sub-1' };
+}
+
+/**
+ * R7 — subscribe with a SessionEvent ledger cursor (`sinceSequence`).
+ * Distinct from `fromSeq` (per-stream-channel replay) — see
+ * `SubscribePayload.sinceSequence` docstring.
+ */
+function subscribeFrameWithSinceSequence(
+  sinceSequence: number,
+): WebSocketMessage & { type: 'subscribe' } {
+  const payload: SubscribePayload = {
+    sessionId: TEST_SESSION_ID,
+    appId: TEST_APP_ID,
+    role: 'user',
+    sinceSequence,
   };
   return { type: 'subscribe', payload, requestId: 'sub-1' };
 }
@@ -1413,6 +1450,149 @@ describe('OSS /ws — replay semantics end-to-end', () => {
     // Seq is strictly increasing.
     for (let i = 1; i < seqs.length; i++) {
       expect(seqs[i]).toBeGreaterThan(seqs[i - 1]!);
+    }
+    ws.close();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// R7 — SessionEvent ledger replay via subscribe.sinceSequence
+// ─────────────────────────────────────────────────────────────────────
+//
+// Distinct cursor model from `fromSeq` (per-stream-channel replay).
+// Same ledger the HTTP `/api/sessions/:id/events?sinceSequence=N`
+// endpoint reads from; the WS path emits each ledger entry as a
+// `session_event` wire frame BEFORE entering live-stream mode.
+//
+// Three cases:
+//   - No sinceSequence (existing behavior): no SessionEvent frames.
+//   - sinceSequence with available history: replay in order.
+//   - sinceSequence past lastSequence: REPLAY_HORIZON_PASSED error.
+
+describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
+  let fix: Fixture | null = null;
+
+  afterEach(async () => {
+    if (fix) {
+      await fix.server.close();
+      fix = null;
+    }
+  });
+
+  it("no sinceSequence — subscriber sees only ack, no session_event frames", async () => {
+    const store = makeSeededStore([makeStackItem()]);
+    // Seed two events directly via the store's appendEvent.
+    await store.appendEvent({
+      sessionId: TEST_SESSION_ID,
+      type: 'ui.created',
+      data: { label: 'first' },
+    });
+    await store.appendEvent({
+      sessionId: TEST_SESSION_ID,
+      type: 'ui.updated',
+      data: { label: 'second' },
+    });
+    fix = await boot({ sessionStore: store });
+    const ws = await connectAuthed(fix.wsUrl);
+    const inbox = attachInbox(ws);
+    sendMessage(ws, subscribeFrame(undefined));
+    await inbox.waitFor(1);
+    await inbox.waitIdle(50);
+    const sessionEvents = inbox.frames.filter(
+      (f) => f.type === 'session_event',
+    );
+    expect(sessionEvents).toHaveLength(0);
+    expect(inbox.frames[0]?.type).toBe('ack');
+    ws.close();
+  });
+
+  it("sinceSequence=0 — subscriber gets full ledger replayed as session_event frames before live tail", async () => {
+    const store = makeSeededStore([makeStackItem()]);
+    await store.appendEvent({
+      sessionId: TEST_SESSION_ID,
+      type: 'ui.created',
+      data: { label: 'one' },
+    });
+    await store.appendEvent({
+      sessionId: TEST_SESSION_ID,
+      type: 'ui.updated',
+      data: { label: 'two' },
+    });
+    fix = await boot({ sessionStore: store });
+    const ws = await connectAuthed(fix.wsUrl);
+    const inbox = attachInbox(ws);
+    sendMessage(ws, subscribeFrameWithSinceSequence(0));
+    await inbox.waitFor(3); // 1 ack + 2 session_event
+    await inbox.waitIdle(50);
+    expect(inbox.frames.length).toBeGreaterThanOrEqual(3);
+    expect(inbox.frames[0]?.type).toBe('ack');
+    const sessionEvents = inbox.frames.filter(
+      (f) => f.type === 'session_event',
+    );
+    expect(sessionEvents).toHaveLength(2);
+    const first = sessionEvents[0];
+    const second = sessionEvents[1];
+    if (first?.type === 'session_event' && second?.type === 'session_event') {
+      expect(first.payload.sequence).toBe(1);
+      expect(first.payload.type).toBe('ui.created');
+      expect(second.payload.sequence).toBe(2);
+      expect(second.payload.type).toBe('ui.updated');
+    }
+    ws.close();
+  });
+
+  it("sinceSequence=N — subscriber gets only events with seq > N", async () => {
+    const store = makeSeededStore([makeStackItem()]);
+    for (let i = 0; i < 4; i++) {
+      await store.appendEvent({
+        sessionId: TEST_SESSION_ID,
+        type: 'ui.created',
+        data: { i },
+      });
+    }
+    fix = await boot({ sessionStore: store });
+    const ws = await connectAuthed(fix.wsUrl);
+    const inbox = attachInbox(ws);
+    sendMessage(ws, subscribeFrameWithSinceSequence(2));
+    await inbox.waitFor(3); // ack + 2 session_event
+    await inbox.waitIdle(50);
+    const sessionEvents = inbox.frames.filter(
+      (f) => f.type === 'session_event',
+    );
+    expect(sessionEvents).toHaveLength(2);
+    if (
+      sessionEvents[0]?.type === 'session_event' &&
+      sessionEvents[1]?.type === 'session_event'
+    ) {
+      expect(sessionEvents[0].payload.sequence).toBe(3);
+      expect(sessionEvents[1].payload.sequence).toBe(4);
+    }
+    ws.close();
+  });
+
+  it("sinceSequence past lastSequence — emits REPLAY_HORIZON_PASSED error", async () => {
+    const store = makeSeededStore([makeStackItem()]);
+    await store.appendEvent({
+      sessionId: TEST_SESSION_ID,
+      type: 'ui.created',
+      data: { label: 'only' },
+    });
+    fix = await boot({ sessionStore: store });
+    const ws = await connectAuthed(fix.wsUrl);
+    const inbox = attachInbox(ws);
+    sendMessage(ws, subscribeFrameWithSinceSequence(99));
+    await inbox.waitFor(2); // ack + error
+    await inbox.waitIdle(50);
+    const errors = inbox.frames.filter((f) => f.type === 'error');
+    expect(errors).toHaveLength(1);
+    const err = errors[0];
+    if (err?.type === 'error') {
+      expect(err.payload.code).toBe('REPLAY_HORIZON_PASSED');
+      // currentSequence carried in details for client recovery.
+      const details = err.payload.details as
+        | { currentSequence?: number }
+        | undefined;
+      expect(details?.currentSequence).toBe(1);
     }
     ws.close();
   });

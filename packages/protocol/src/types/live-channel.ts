@@ -90,6 +90,35 @@ export interface SubscribePayload {
    */
   wsToken?: string;
   /**
+   * SessionEvent ledger cursor for R7 wire-frame replay (push,
+   * props_update, update, …). When present, the server replays events
+   * with `sequence > sinceSequence` to the subscriber as ordinary
+   * outbound frames BEFORE the subscription enters live-stream mode.
+   *
+   * Semantics:
+   *   - Omitted → fresh subscribe; no replay. The subscriber sees only
+   *     live frames emitted after the subscription opens.
+   *   - `0` → replay every event the server still retains (subject to
+   *     the bounded ring buffer's horizon).
+   *   - `N` → replay events with `sequence > N`. Use the `lastSequence`
+   *     the client tracked from prior events / `/state` reads /
+   *     `SessionEvent.sequence` ack-fields.
+   *   - `N` below the server's replay horizon → server emits an
+   *     `error` frame with `code: 'REPLAY_HORIZON_PASSED'` carrying
+   *     `details: {currentSequence: <server's high-water mark>}`. Client
+   *     recovery: re-mount from a fresh snapshot (`/state`) and reset
+   *     cursor to `currentSequence`.
+   *
+   * **Distinct from `fromSeq`.** `fromSeq` is for per-stream-channel
+   * `StreamEnvelope` replay (declared `streamSpec[name].replay`
+   * policy); `sinceSequence` is for the session-level SessionEvent
+   * ledger (push/update/props_update/etc.). Both cursors travel on the
+   * same subscribe frame and the server honors them independently —
+   * `sinceSequence` events replay first, then per-channel `fromSeq`
+   * envelopes, then the live tail.
+   */
+  sinceSequence?: number;
+  /**
    * Protocol schema versions this client accepts on the wire. Opt-in
    * — absent is legacy-pass-through (server treats the subscribe as
    * version-agnostic).

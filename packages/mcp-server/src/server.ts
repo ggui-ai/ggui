@@ -5370,6 +5370,180 @@ export function createGguiServer(
     });
   }
 
+  // R7 — GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M
+  //
+  // Cursor-replay read from the SessionEvent ledger (`bc524f2f0` in
+  // cloud; in-memory + sqlite stores OSS). Returns events with
+  // `sequence > sinceSequence`, up to `limit` (default 100, max 500).
+  //
+  // Unification: WS subscribe's `sinceSequence` cursor and this HTTP
+  // endpoint read from the SAME ledger via the same `listEventsSince`
+  // SessionStore method. Different transports, same cursor model —
+  // that's R7's payoff.
+  //
+  // Auth: wsToken-gated, identical posture to /state.
+  //
+  // Responses:
+  //   - 200 — `{events, lastSequence, hasMore}` (matches
+  //     `EventsResponse` from @ggui-ai/protocol/integrations/mcp-apps).
+  //   - 401 — wsToken missing / invalid / wrong-scope.
+  //   - 404 — sessionId does not resolve.
+  //   - 410 — `{reason: 'REPLAY_HORIZON_PASSED', currentSequence}` when
+  //     `sinceSequence` is below the server's replay horizon OR strictly
+  //     greater than `lastSequence` (cursor is from a stale deployment
+  //     or the session was reset). Clients re-mount from /state.
+  if (
+    mcpAppsEnabled &&
+    sessionStore &&
+    sharedTokenSecret !== undefined
+  ) {
+    const sessionStoreForEvents = sessionStore;
+    const eventsSecret = sharedTokenSecret;
+    app.get('/api/sessions/:sessionId/events', async (req, res) => {
+      const sessionId = req.params['sessionId'];
+      if (typeof sessionId !== 'string' || sessionId.length === 0) {
+        res.status(400).type('text/plain').send('sessionId required');
+        return;
+      }
+      const wsTokenRaw = req.query['wsToken'];
+      const wsToken = typeof wsTokenRaw === 'string' ? wsTokenRaw : '';
+      if (wsToken.length === 0) {
+        res.status(401).type('text/plain').send('wsToken query required');
+        return;
+      }
+      const verify = verifyToken(wsToken, eventsSecret, 'ws');
+      if (!verify.ok) {
+        if (verify.reason === 'expired') {
+          res.status(410).type('text/plain').send('wsToken expired');
+          return;
+        }
+        res.status(401).type('text/plain').send('wsToken invalid');
+        return;
+      }
+      if (verify.claims.sessionId !== sessionId) {
+        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        return;
+      }
+      // Parse + validate sinceSequence (required, non-negative integer)
+      // and limit (optional, 1..500, default 100).
+      //
+      // sinceSequence is REQUIRED — explicit cursor reads only. A missing
+      // query is a caller bug (no sensible default; `0` means "replay
+      // everything" which we don't want to fire unintentionally).
+      const sinceSequenceRaw = req.query['sinceSequence'];
+      if (typeof sinceSequenceRaw !== 'string' || sinceSequenceRaw.length === 0) {
+        res
+          .status(400)
+          .type('text/plain')
+          .send('sinceSequence query required (non-negative integer)');
+        return;
+      }
+      const sinceSequence = Number(sinceSequenceRaw);
+      if (!Number.isInteger(sinceSequence) || sinceSequence < 0) {
+        res
+          .status(400)
+          .type('text/plain')
+          .send('sinceSequence must be a non-negative integer');
+        return;
+      }
+      const limitRaw = req.query['limit'];
+      let limit = 100;
+      if (typeof limitRaw === 'string' && limitRaw.length > 0) {
+        const parsed = Number(limitRaw);
+        if (
+          !Number.isInteger(parsed) ||
+          parsed < 1 ||
+          parsed > 500
+        ) {
+          res
+            .status(400)
+            .type('text/plain')
+            .send('limit must be an integer in [1, 500]');
+          return;
+        }
+        limit = parsed;
+      }
+      let result;
+      try {
+        result = await sessionStoreForEvents.listEventsSince(
+          sessionId,
+          sinceSequence,
+          limit,
+        );
+      } catch (err) {
+        logger.warn('events_read_failed', {
+          sessionId,
+          error: String(err),
+        });
+        res.status(500).type('text/plain').send('internal error');
+        return;
+      }
+      if (result === null) {
+        // 404 — session not found. Distinct from 410 (cursor stale on
+        // a live session) so polling clients can branch.
+        res.status(404).type('text/plain').send('session not found');
+        return;
+      }
+      // Tenancy gate (round 2): the wsToken's appId MUST match the
+      // session's appId. We need the session record to check — fetch
+      // it. listEventsSince validated the session exists.
+      const session = await sessionStoreForEvents.get(sessionId);
+      if (!session) {
+        res.status(404).type('text/plain').send('session not found');
+        return;
+      }
+      if (verify.claims.appId !== session.appId) {
+        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        return;
+      }
+      // Replay-horizon gate. Two cases collapse to REPLAY_HORIZON_PASSED:
+      //   (a) sinceSequence < horizonSeq — events evicted (cloud TTL,
+      //       in-mem never).
+      //   (b) sinceSequence > lastSequence — cursor from a different
+      //       deployment / reset session; the server has no events
+      //       beyond what it knows, and we can't safely advance.
+      if (sinceSequence > result.lastSequence) {
+        res
+          .status(410)
+          .type('application/json')
+          .json({
+            reason: 'REPLAY_HORIZON_PASSED',
+            currentSequence: result.lastSequence,
+          });
+        return;
+      }
+      if (sinceSequence < result.horizonSeq) {
+        res
+          .status(410)
+          .type('application/json')
+          .json({
+            reason: 'REPLAY_HORIZON_PASSED',
+            currentSequence: result.lastSequence,
+          });
+        return;
+      }
+      // Project store-level SessionEvent rows onto the protocol's
+      // wire-frame ledger shape (`SessionEvent` from @ggui-ai/protocol).
+      // The two shapes differ only in field names: store uses `seq` +
+      // `timestamp` (ms epoch); protocol uses `sequence` + `emittedAt`
+      // (ISO 8601).
+      const events = result.events.map((event) => ({
+        sequence: event.seq,
+        emittedAt: new Date(event.timestamp).toISOString(),
+        type: event.type,
+        payload: event.data,
+      }));
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).json({
+        events,
+        lastSequence: result.lastSequence,
+        hasMore: result.hasMore,
+      });
+    });
+  }
+
   // GET /code/:hash.js — content-addressable componentCode delivery.
   // GET /contract/:hash.js — content-addressable contract-validator-bundle
   //   delivery (#109).
