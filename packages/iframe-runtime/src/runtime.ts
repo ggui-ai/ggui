@@ -2877,8 +2877,8 @@ function readLiveBootstrapShape(): boolean {
   return (
     typeof sessionBag['wsUrl'] === 'string' &&
     (sessionBag['wsUrl'] as string).length > 0 &&
-    typeof sessionBag['token'] === 'string' &&
-    (sessionBag['token'] as string).length > 0 &&
+    typeof sessionBag['wsToken'] === 'string' &&
+    (sessionBag['wsToken'] as string).length > 0 &&
     typeof sessionBag['sessionId'] === 'string' &&
     (sessionBag['sessionId'] as string).length > 0 &&
     typeof sessionBag['appId'] === 'string' &&
