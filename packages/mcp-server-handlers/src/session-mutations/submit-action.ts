@@ -200,6 +200,39 @@ export interface GguiSubmitActionHandlerDeps {
    * is present and lets drain_ack dismiss the toast).
    */
   readonly activeConsumerRegistry?: ActiveConsumerRegistry;
+  /**
+   * Optional append-only event ledger. When wired, the handler
+   * dual-writes every successful dispatch envelope to BOTH:
+   *
+   *   1. {@link pendingEventConsumer.append} — the queue that wakes
+   *      `ggui_consume` (load-bearing for the live click loop;
+   *      throws → `PIPE_NOT_FOUND`).
+   *   2. `sessionStore.appendEvent({type:'user.submitted', data})` —
+   *      the retained audit ledger (best-effort; errors logged but
+   *      do NOT fail the dispatch — the user's gesture reaching the
+   *      agent is more important than audit persistence).
+   *
+   * The two streams have orthogonal semantics by design (per
+   * `pending-event-consumer.ts`): queue drains on every consume,
+   * ledger is append-only retained. The dual-write restores the
+   * audit visibility the pre-spec-mig WS `handleInboundAction` path
+   * had (operator-side SessionInspector queries, cross-process
+   * replay, hosted multi-pod observability).
+   *
+   * Absence is tolerated — the handler falls back to queue-only
+   * writes. Tests + minimal composers can omit; production OSS +
+   * cloud wire it from the shared session store.
+   */
+  readonly sessionStore?: import('@ggui-ai/mcp-server-core').SessionStore;
+  /**
+   * Optional logger for best-effort audit-write failures. When the
+   * dual-write to `sessionStore.appendEvent` errors (e.g., SQLite
+   * write contention, DynamoDB throttle), we log + swallow rather
+   * than fail the dispatch. Absent → silent swallow.
+   */
+  readonly logger?: {
+    readonly warn?: (msg: string, data?: Record<string, unknown>) => void;
+  };
 }
 
 export function createGguiSubmitActionHandler(
@@ -309,16 +342,49 @@ export function createGguiSubmitActionHandler(
           firedAt: env.firedAt,
         };
         try {
-          await deps.pendingEventConsumer.append(env.stackItemId, {
-            // Use the iframe-supplied `actionId` as the pipe entry's
-            // stable id so consume's drain_ack frame carries the SAME
-            // id the iframe-runtime's toast resolution is keyed on.
-            // Without this, drain_ack rows ship with `id: ''` and the
-            // iframe can't match the frame against its outstanding toast.
-            id: env.actionId,
-            envelope: actionEnvelope,
-            createdAt: env.firedAt,
-          });
+          // Dual-write: queue (load-bearing) + ledger (best-effort
+          // audit). Fired concurrently via `Promise.allSettled` so
+          // each outcome is inspected independently — queue rejection
+          // re-thrown to surface as `PIPE_NOT_FOUND`; ledger rejection
+          // logged + swallowed so audit-store hiccups never silence
+          // the user's click. The audit fires regardless of queue
+          // success — the gesture happened either way, and the ledger
+          // reflects that. Pre-spec-mig the WS `handleInboundAction`
+          // path wrote the audit row; this restores it.
+          const ledgerWrite: Promise<unknown> = deps.sessionStore
+            ? deps.sessionStore.appendEvent({
+                sessionId: env.sessionId,
+                type: 'user.submitted',
+                data: actionEnvelope,
+              })
+            : Promise.resolve();
+          const [queueResult, ledgerResult] = await Promise.allSettled([
+            deps.pendingEventConsumer.append(env.stackItemId, {
+              // Use the iframe-supplied `actionId` as the pipe entry's
+              // stable id so consume's drain_ack frame carries the SAME
+              // id the iframe-runtime's toast resolution is keyed on.
+              // Without this, drain_ack rows ship with `id: ''` and the
+              // iframe can't match the frame against its outstanding toast.
+              id: env.actionId,
+              envelope: actionEnvelope,
+              createdAt: env.firedAt,
+            }),
+            ledgerWrite,
+          ]);
+          if (queueResult.status === 'rejected') {
+            throw queueResult.reason;
+          }
+          if (ledgerResult.status === 'rejected') {
+            deps.logger?.warn?.('submit_action_ledger_write_failed', {
+              sessionId: env.sessionId,
+              stackItemId: env.stackItemId,
+              actionId: env.actionId,
+              error:
+                ledgerResult.reason instanceof Error
+                  ? ledgerResult.reason.message
+                  : String(ledgerResult.reason),
+            });
+          }
           // Pipe append succeeded — query the active-consumer registry
           // (if wired) so the iframe knows whether an in-flight
           // `ggui_consume` long-poll will drain this event soon. When

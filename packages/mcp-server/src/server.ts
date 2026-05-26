@@ -1071,15 +1071,23 @@ export function defaultHandlers(deps: {
     createGetExampleBlueprintsHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
     createListAvailablePrimitivesHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
     createValidateBlueprintHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
-    // `ggui_runtime_submit_action` — wired-action receiver. Registered as
-    // app-visible (`_meta.ui.visibility: ['app']`) per MCP Apps spec
-    // §401 so iframe-issued `tools/call` invocations land here
-    // instead of being rejected. No deps today — minimal echo
-    // handler. Future slice routes the action onto the session
-    // channel as an ActionEnvelope so agents can react.
+    // `ggui_runtime_submit_action` — wired-action receiver. Registered
+    // as app-visible (`_meta.ui.visibility: ['app']`) per MCP Apps
+    // spec §401 so iframe-issued `tools/call` invocations land here
+    // instead of being rejected. Dual-writes every dispatch to BOTH
+    // `pendingEventConsumer` (wakes `ggui_consume`) AND `sessionStore`
+    // (audit ledger for SessionInspector + cross-process replay) —
+    // restores the audit visibility the pre-spec-mig WS handler
+    // (`handleInboundAction`) used to provide. `sessionStore` is
+    // optional — passed through from `deps.push.sessionStore` when
+    // bound; absent → ledger write is skipped, queue still fires.
     createGguiSubmitActionHandler({
       pendingEventConsumer,
       activeConsumerRegistry,
+      ...(deps.push?.sessionStore
+        ? { sessionStore: deps.push.sessionStore }
+        : {}),
+      ...(deps.logger ? { logger: deps.logger } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
     // `ggui_list_gadgets` — per-app discovery. Returns the registered
     // gadget catalog (stdlib seed by default). Reads `app.gadgets`
