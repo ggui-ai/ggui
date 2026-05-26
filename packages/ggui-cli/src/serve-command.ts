@@ -204,9 +204,8 @@ export interface ParsedServeFlags {
    * `ggui serve` reads or mints the HMAC secrets (and, in later
    * slices, SessionStore + ShortCodeIndex + VectorStore + paired
    * bearers) under `getPersistentDir(projectRoot)` so a server
-   * restart doesn't invalidate cached `_meta.ggui.bootstrap.token` +
-   * `/r/<code>?sig=&exp=` URLs — claude.ai chat-history revisits
-   * keep working.
+   * restart doesn't invalidate cached `_meta["ai.ggui/session"].wsToken`
+   * envelopes — claude.ai chat-history revisits keep working.
    *
    * With `--ephemeral`, every restart mints fresh HMAC secrets (the
    * legacy behavior). Use for tests / CI loops that don't want files
@@ -1084,9 +1083,9 @@ Persistent storage (default-on; opt-out via --ephemeral):
   Bundle layout:
 
     .ggui/persistent/
-      ├── bootstrap-secret.hex      (HMAC, 0600)
+      ├── ws-token-secret.hex       (HMAC, 0600)
       ├── render-signer-secret.hex  (HMAC, 0600)
-      ├── short-codes.sqlite        (/r/<code> + /api/bootstrap/<code> resolution)
+      ├── short-codes.sqlite        (signed render-URL resolution)
       ├── sessions.sqlite           (SessionStore — stack items + event history)
       ├── vectors.sqlite            (RAG corpus)
       └── keys.json                 (paired bearers)

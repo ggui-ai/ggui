@@ -347,10 +347,10 @@ export interface BuildMcpServerBackendOptions {
 
   /**
    * Directory backing the cross-restart persistence bundle. When set,
-   * `wsTokenSecret` + `renderSigning.secret` are read from / minted
-   * into 0600-mode files there so the HMAC keys survive `ggui serve`
-   * restart — claude.ai chat-history revisits keep their cached
-   * `_meta.ggui.bootstrap.token` + `/r/<code>?sig=&exp=` URLs valid.
+   * `wsTokenSecret` is read from / minted into a 0600-mode file there
+   * so the HMAC key survives `ggui serve` restart — claude.ai
+   * chat-history revisits keep their cached
+   * `_meta["ai.ggui/session"].wsToken` valid across reboots.
    *
    * Absent / undefined = the legacy ephemeral behavior (every restart
    * mints fresh secrets; cached tokens fail HMAC verify). The CLI sets
@@ -418,7 +418,7 @@ export interface BuildMcpServerBackendOptions {
    * `ggui.json#app.publicEnv`. Each key MUST match
    * `^GGUI_PUBLIC_APP_[A-Z0-9_]+$`. The server projects only the keys
    * that some registered wrapper's `requires` references, onto
-   * `_meta.ggui.bootstrap.publicEnv` and ultimately
+   * `_meta["ai.ggui/session"].publicEnv` and ultimately
    * `globalThis.__ggui__.publicEnv` for `getPublicEnv()` to read.
    *
    * Omitted ⇒ field absent on the App record (no values projected;
@@ -601,17 +601,17 @@ export function buildMcpServerBackend(
     emailFromAddress = process.env.GGUI_EMAIL_FROM?.trim() || defaultFromAddress;
   }
   // Resolve cross-restart HMAC secrets. When the caller declared a
-  // persistent dir, read-or-mint `bootstrap-secret.hex` +
+  // persistent dir, read-or-mint `ws-token-secret.hex` +
   // `render-signer-secret.hex` (32 bytes / 64 hex chars, 0600). Both
   // get threaded into `createGguiServer` below so the server stops
   // minting fresh process-local secrets every boot — the precondition
-  // for any cached `_meta.ggui.bootstrap.token` or `/r/<code>?sig=&exp=`
-  // URL surviving a restart. Absent dir = legacy ephemeral behavior.
-  let persistedBootstrapSecret: string | undefined;
+  // for any cached `_meta["ai.ggui/session"].wsToken` surviving a
+  // restart. Absent dir = legacy ephemeral behavior.
+  let persistedWsTokenSecret: string | undefined;
   let persistedRenderSignerSecret: string | undefined;
   if (opts.persistentDir !== undefined) {
-    persistedBootstrapSecret = readOrMintHexSecret(
-      join(opts.persistentDir, 'bootstrap-secret.hex'),
+    persistedWsTokenSecret = readOrMintHexSecret(
+      join(opts.persistentDir, 'ws-token-secret.hex'),
     );
     persistedRenderSignerSecret = readOrMintHexSecret(
       join(opts.persistentDir, 'render-signer-secret.hex'),
@@ -788,8 +788,8 @@ export function buildMcpServerBackend(
     // process. Render-signer.secret rides on the `renderSigning`
     // discriminated union (the `false` shape disables the layer
     // entirely; we always want it on here, so build the object form).
-    ...(persistedBootstrapSecret !== undefined
-      ? { wsTokenSecret: persistedBootstrapSecret }
+    ...(persistedWsTokenSecret !== undefined
+      ? { wsTokenSecret: persistedWsTokenSecret }
       : {}),
     ...(persistedRenderSignerSecret !== undefined
       ? { renderSigning: { secret: persistedRenderSignerSecret } }
@@ -902,10 +902,10 @@ export function buildMcpServerBackend(
     // absent = no welcome page (SPA index handler still owns `/`).
     ...(opts.welcomePage ? { welcomePage: opts.welcomePage } : {}),
     // Default to in-memory; caller substitutes a persistent impl
-    // (SqliteShortCodeIndex under `persistentDir`) so cached
-    // `/api/bootstrap/<code>` lookups survive a restart. Without
-    // that, /r/<code> 404s the moment the agent's host (claude.ai)
-    // replays its cached `_meta.ggui.bootstrap` envelope.
+    // (SqliteShortCodeIndex under `persistentDir`) so cached short-code
+    // lookups survive a restart. Used by render-URL signing and
+    // legacy compat paths; post-R5 the primary mount path is the
+    // ui://ggui/session resource (auth-bearer-gated), not shortCodes.
     shortCodeIndex: opts.shortCodeIndex ?? new InMemoryShortCodeIndex(),
     // Content-addressable componentCode delivery. The OSS dev default
     // is filesystem-backed at `~/.ggui/code-cache/` (override via
@@ -973,7 +973,7 @@ export function buildMcpServerBackend(
     // URL built from the CLI's own known `baseUrl` makes srcdoc mount
     // work without operator action. The server still serves the bundle
     // at `/_ggui/iframe-runtime.js` under `runtimePath`; this overrides
-    // only the URL published on `_meta.ggui.bootstrap.runtimeUrl`.
+    // only the URL published on `_meta["ai.ggui/session"].runtimeUrl`.
     runtime: { url: `${baseUrl}${RUNTIME_BUNDLE_URL_PATH}` },
     // OSS first-run default: provisional A2UI preview is on. The
     // deterministic emitter from `@ggui-ai/preview-a2ui/emitters`

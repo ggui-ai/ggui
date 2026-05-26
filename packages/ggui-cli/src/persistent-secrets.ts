@@ -3,13 +3,13 @@
  * restart.
  *
  * Background: `createGguiServer` mints two HMAC secrets at boot when the
- * caller doesn't pass them — `wsTokenSecret` (signs MCP Apps `_meta.
- * ggui.bootstrap.token` so iframes can subscribe to the live-channel WS)
- * and the render-URL signer secret (signs `/r/<code>?sig=&exp=`). Both
- * are process-local `randomBytes(32)` by default — fine for a single
+ * caller doesn't pass them — `wsTokenSecret` (signs the
+ * `_meta["ai.ggui/session"].wsToken` envelope so iframes can subscribe
+ * to the live-channel WS) and the render-URL signer secret. Both are
+ * process-local `randomBytes(32)` by default — fine for a single
  * process lifetime, fatal for "revisit a claude.ai chat history after a
- * restart": the cached bootstrap token + cached render URL fail HMAC
- * verify against the freshly-minted secret.
+ * restart": the cached wsToken fails HMAC verify against the freshly-
+ * minted secret.
  *
  * Persisting the secrets to a 0600-mode file makes those tokens valid
  * across restarts, which is the precondition for any rehydrate path
