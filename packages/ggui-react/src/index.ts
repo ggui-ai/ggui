@@ -74,8 +74,9 @@ export type {
 } from '@ggui-ai/protocol';
 
 // ProtocolError typed union — the canonical shape for every failure
-// the renderer classifies outward. `<McpAppIframe onError>` surfaces
-// it; embedding apps pattern-match on `err.kind`. The sibling package
+// the renderer classifies outward. `<AppRenderer onError>` (from
+// `@mcp-ui/client`, re-exported below) surfaces it; embedding apps
+// pattern-match on `err.kind`. The sibling package
 // `@ggui-ai/iframe-runtime` owns the declaration; `@ggui-ai/react`
 // re-exports it so consumers pulling from the React SDK don't need a
 // direct renderer import.
@@ -86,14 +87,14 @@ export type {
   // Bootstrap-failure postMessage envelope shape — the parent receives
   // `{type:'ggui:bootstrap-failed', reason, message}` from the iframe
   // on any pre-renderer or post-renderer boot failure. Host apps
-  // (and the `<McpAppIframe onError>` wrapper) read this shape when
+  // (and the `<AppRenderer onError>` wrapper) read this shape when
   // classifying iframe-origin failures.
   RendererBootFailedMessage,
-  // `<McpAppIframe onObserve>` emission union. Embedding apps
+  // `<AppRenderer onError>` emission union. Embedding apps
   // pattern-match on `event.kind` (`wired-tool-invoked` /
   // `contract-error-emitted` / `schema-version-mismatch` /
   // `subscribe-failed` / `auth-required` / unknown tail). Re-exported
-  // here so host apps wiring the onObserve callback don't need a
+  // here so host apps wiring the onError callback don't need a
   // direct `@ggui-ai/iframe-runtime` import; same boundary posture as
   // `ProtocolError` above.
   ObservabilityEvent,
