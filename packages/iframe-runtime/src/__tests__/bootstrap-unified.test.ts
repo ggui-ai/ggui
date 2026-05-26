@@ -24,7 +24,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
@@ -107,14 +107,14 @@ const systemBootstrap = {
 function wrapUiInitialize(bootstrap: unknown): unknown {
   return {
     toolOutput: {
-      _meta: metaToMcpAppMeta(flatToMeta(bootstrap)),
+      _meta: toMcpAppEnvelope(flatToMeta(bootstrap)),
       structuredContent: { sessionId: 'sess_001' },
     },
   };
 }
 
 function wrapToolResult(bootstrap: unknown): unknown {
-  return { _meta: metaToMcpAppMeta(flatToMeta(bootstrap)) };
+  return { _meta: toMcpAppEnvelope(flatToMeta(bootstrap)) };
 }
 
 /**
@@ -123,7 +123,7 @@ function wrapToolResult(bootstrap: unknown): unknown {
  */
 function setGlobal(bootstrap: unknown): void {
   (globalThis as unknown as { __GGUI_META__?: unknown })
-    .__GGUI_META__ = metaToMcpAppMeta(flatToMeta(bootstrap));
+    .__GGUI_META__ = toMcpAppEnvelope(flatToMeta(bootstrap));
 }
 
 describe('Slice 14 — envelope equivalence', () => {

@@ -53,7 +53,7 @@ import {
 } from '@ggui-ai/protocol';
 import {
   GGUI_PUSH_UI_META,
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
@@ -2337,7 +2337,7 @@ export function createGguiPushHandler(
         ...(Object.keys(stackItem).length > 0 ? { stackItem } : {}),
       };
       const meta: Record<string, unknown> = {
-        ...metaToMcpAppMeta(ggui),
+        ...toMcpAppEnvelope(ggui),
         ui: perCallUiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,

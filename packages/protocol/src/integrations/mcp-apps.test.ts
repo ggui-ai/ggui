@@ -16,7 +16,7 @@ import {
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
   parseMcpAppAiGguiMeta,
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   deriveContextName,
   isGguiUserActionMeta,
   isMcpAppsStackItem,
@@ -724,13 +724,13 @@ describe('parseMcpAppAiGguiMeta', () => {
   });
 });
 
-describe('metaToMcpAppMeta', () => {
+describe('toMcpAppEnvelope', () => {
   it('emits an empty envelope for empty meta', () => {
-    expect(metaToMcpAppMeta({})).toEqual({});
+    expect(toMcpAppEnvelope({})).toEqual({});
   });
 
   it('emits only the session key when stack-item is absent', () => {
-    const out = metaToMcpAppMeta({
+    const out = toMcpAppEnvelope({
       session: { sessionId: 's', appId: 'a', runtimeUrl: '/r' },
     });
     expect(out[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
@@ -738,7 +738,7 @@ describe('metaToMcpAppMeta', () => {
   });
 
   it('emits both keys when both slices are present', () => {
-    const out = metaToMcpAppMeta({
+    const out = toMcpAppEnvelope({
       session: { sessionId: 's', appId: 'a', runtimeUrl: '/r' },
       stackItem: { stackItemId: 'st-1' },
     });
@@ -772,7 +772,7 @@ describe('combine ⇔ emit round-trip', () => {
         validatorsUrl: '/contract/sha256:abc.js',
       },
     };
-    const wire = metaToMcpAppMeta(meta);
+    const wire = toMcpAppEnvelope(meta);
     expect(wire[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
     expect(wire[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeDefined();
     const parsed = parseMcpAppAiGguiMeta(wire);

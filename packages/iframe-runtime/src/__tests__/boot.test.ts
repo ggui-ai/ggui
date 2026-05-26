@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type {
   McpAppAiGguiMeta,
@@ -49,7 +49,7 @@ function buildHappyInitResponse(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: metaToMcpAppMeta(VALID_META),
+        _meta: toMcpAppEnvelope(VALID_META),
         structuredContent: {},
       },
     },
@@ -180,7 +180,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: metaToMcpAppMeta(pinnedMeta),
+          _meta: toMcpAppEnvelope(pinnedMeta),
           structuredContent: {},
         },
       },
@@ -231,7 +231,7 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     const callUiInitialize = vi.fn().mockResolvedValue({
       result: {
         toolOutput: {
-          _meta: metaToMcpAppMeta(pinnedMeta),
+          _meta: toMcpAppEnvelope(pinnedMeta),
           structuredContent: {},
         },
       },

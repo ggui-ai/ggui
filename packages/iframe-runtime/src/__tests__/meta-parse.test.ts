@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
@@ -26,7 +26,7 @@ const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 /**
  * Field names that belong on the session slice. Used by {@link flatToMeta}
  * to split a flat fixture input into the two-slice envelope shape that
- * `metaToMcpAppMeta` consumes. Kept in sync with `McpAppAiGguiSessionMeta`.
+ * `toMcpAppEnvelope` consumes. Kept in sync with `McpAppAiGguiSessionMeta`.
  */
 const SESSION_FIELDS = new Set<string>([
   'sessionId',
@@ -85,7 +85,7 @@ function flatToMeta(flat: unknown): McpAppAiGguiMeta {
 function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
   return {
     toolOutput: {
-      _meta: metaToMcpAppMeta(flatToMeta(bootstrap)),
+      _meta: toMcpAppEnvelope(flatToMeta(bootstrap)),
       structuredContent: { sessionId: 'sess_001' },
     },
     ...(hostContext !== undefined ? { hostContext } : {}),

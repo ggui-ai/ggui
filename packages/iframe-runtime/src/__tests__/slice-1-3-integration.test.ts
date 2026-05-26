@@ -20,7 +20,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -59,7 +59,7 @@ function buildBootstrapEnvelope(
   const meta: McpAppAiGguiMeta = { session };
   return {
     toolOutput: {
-      _meta: metaToMcpAppMeta(meta),
+      _meta: toMcpAppEnvelope(meta),
       structuredContent: { sessionId: 'sess_001' },
     },
   };

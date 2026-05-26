@@ -8,7 +8,7 @@ import type {
   CallToolRequest,
   CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { StackItemRef } from './types';
 import { buildSelfContainedHtml } from './html';
 
@@ -70,7 +70,7 @@ export function StackItem({
     if (!item.meta) {
       return LOADING_HTML;
     }
-    const envelope = metaToMcpAppMeta(item.meta);
+    const envelope = toMcpAppEnvelope(item.meta);
     return buildSelfContainedHtml(envelope);
   }, [item.meta]);
 
@@ -82,7 +82,7 @@ export function StackItem({
   // `__GGUI_META__` global, then nothing).
   const toolResult = useMemo<CallToolResult | undefined>(() => {
     if (!item.meta) return undefined;
-    const envelope = metaToMcpAppMeta(item.meta);
+    const envelope = toMcpAppEnvelope(item.meta);
     return {
       content: [],
       structuredContent: {},

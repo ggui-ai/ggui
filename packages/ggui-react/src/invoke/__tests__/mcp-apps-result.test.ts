@@ -9,7 +9,7 @@
  * survives the wire bit-for-bit.
  */
 import { describe, it, expect } from 'vitest';
-import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { InvokeEvent } from '@ggui-ai/protocol';
 import { extractMcpAppAiGguiMeta } from '../mcp-apps-result';
@@ -45,7 +45,7 @@ describe('extractMcpAppAiGguiMeta', () => {
   it('returns the meta pair on well-shaped content', () => {
     const content = {
       sessionId: FIXTURE_META.session?.sessionId,
-      _meta: metaToMcpAppMeta(FIXTURE_META),
+      _meta: toMcpAppEnvelope(FIXTURE_META),
     };
     expect(extractMcpAppAiGguiMeta(content)).toEqual(FIXTURE_META);
   });
@@ -53,7 +53,7 @@ describe('extractMcpAppAiGguiMeta', () => {
   it('returns the meta pair even when structuredContent is absent', () => {
     expect(
       extractMcpAppAiGguiMeta({
-        _meta: metaToMcpAppMeta(FIXTURE_META),
+        _meta: toMcpAppEnvelope(FIXTURE_META),
       }),
     ).toEqual(FIXTURE_META);
   });
@@ -121,7 +121,7 @@ describe('SSE round-trip: parseSseStream → extractMcpAppAiGguiMeta', () => {
           tool_use_id: toolUseId,
           content: {
             sessionId: FIXTURE_META.session?.sessionId,
-            _meta: metaToMcpAppMeta(FIXTURE_META),
+            _meta: toMcpAppEnvelope(FIXTURE_META),
           },
         },
       },

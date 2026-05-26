@@ -26,7 +26,7 @@
  */
 
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
@@ -148,7 +148,7 @@ export async function dispatchHostBridgeRequest(
       // host has explicitly threaded a `McpAppAiGguiMeta` for a
       // first-party ggui renderer iframe (see `McpAppIframeProps.
       // meta` JSDoc), augment the result with
-      // `toolOutput._meta = metaToMcpAppMeta(ctx.meta)` (the wire
+      // `toolOutput._meta = toMcpAppEnvelope(ctx.meta)` (the wire
       // envelope carrying whichever of the `ai.ggui/session` and
       // `ai.ggui/stack-item` slices are present). The renderer's
       // `parseBootstrap` reads exactly that path. The adapter-
@@ -162,7 +162,7 @@ export async function dispatchHostBridgeRequest(
       };
       if (ctx.meta !== undefined) {
         result['toolOutput'] = {
-          _meta: metaToMcpAppMeta(ctx.meta),
+          _meta: toMcpAppEnvelope(ctx.meta),
         };
       }
       return { jsonrpc: '2.0', id, result };

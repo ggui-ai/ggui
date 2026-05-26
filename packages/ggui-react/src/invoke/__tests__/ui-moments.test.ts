@@ -10,7 +10,7 @@
  * origin trimming.
  */
 import { describe, it, expect } from 'vitest';
-import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
@@ -192,7 +192,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c1',
-            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
+            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
           },
         ]),
       ];
@@ -212,7 +212,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c2',
-            content: { _meta: metaToMcpAppMeta(META_NO_ITEM) },
+            content: { _meta: toMcpAppEnvelope(META_NO_ITEM) },
           },
         ]),
       ];
@@ -226,7 +226,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_c3',
-            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
+            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
           },
         ]),
       ];
@@ -246,7 +246,7 @@ describe('extractUiMoments', () => {
             content: {
               sessionId: 'push_coord_sid',
               stackItemId: 'push_coord_pid',
-              _meta: metaToMcpAppMeta(META_WITH_ITEM),
+              _meta: toMcpAppEnvelope(META_WITH_ITEM),
             },
           },
         ]),
@@ -311,7 +311,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_push_b',
-            content: { _meta: metaToMcpAppMeta(META_WITH_ITEM) },
+            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
           },
         ]),
       ];

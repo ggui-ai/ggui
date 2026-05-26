@@ -17,7 +17,7 @@
  * Compose the iframe HTML for one stack item from a slice envelope.
  *
  * @param envelope - Wire-shape `{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`
- *                   from `metaToMcpAppMeta(meta)`.
+ *                   from `toMcpAppEnvelope(meta)`.
  */
 export function buildSelfContainedHtml(envelope: Record<string, unknown>): string {
   const sessionSlice = envelope['ai.ggui/session'] as

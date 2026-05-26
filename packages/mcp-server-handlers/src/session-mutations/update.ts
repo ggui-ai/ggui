@@ -54,7 +54,7 @@ import {
   type SessionStackEntry,
 } from '@ggui-ai/protocol';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
@@ -634,7 +634,7 @@ export function createGguiUpdateHandler(
         session,
         ...(stackItem !== undefined ? { stackItem } : {}),
       };
-      return metaToMcpAppMeta(meta);
+      return toMcpAppEnvelope(meta);
     },
   };
 }

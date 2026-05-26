@@ -10,7 +10,7 @@
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
@@ -53,7 +53,7 @@ function flatToMeta(flat: unknown): McpAppAiGguiMeta {
 }
 
 function buildToolResultParams(bootstrap: unknown): unknown {
-  return { _meta: metaToMcpAppMeta(flatToMeta(bootstrap)) };
+  return { _meta: toMcpAppEnvelope(flatToMeta(bootstrap)) };
 }
 
 /**
@@ -64,7 +64,7 @@ function buildToolResultParams(bootstrap: unknown): unknown {
  */
 function setGlobalFromFlat(flat: unknown): void {
   (globalThis as unknown as { __GGUI_META__?: unknown })
-    .__GGUI_META__ = metaToMcpAppMeta(flatToMeta(flat));
+    .__GGUI_META__ = toMcpAppEnvelope(flatToMeta(flat));
 }
 
 describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {

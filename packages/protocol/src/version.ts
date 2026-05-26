@@ -92,7 +92,7 @@
  *      `splitMountViewIntoSlices`, `mountViewToMcpAppMeta`,
  *      `slicesToMcpAppMeta`, `combineMcpAppAiGguiMeta` all retired
  *      in favor of {@link parseMcpAppAiGguiMeta} (parse) +
- *      {@link metaToMcpAppMeta} (emit).
+ *      {@link toMcpAppEnvelope} (emit).
  *
  *   r3.3. **Auth-credential `bootstrap` survives R3.** R3 kept the
  *      `bootstrap` naming on the auth-credential surface

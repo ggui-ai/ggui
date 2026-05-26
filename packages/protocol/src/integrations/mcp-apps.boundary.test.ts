@@ -50,14 +50,14 @@ import {
   GGUI_SESSION_RESOURCE_MIME,
   GGUI_PUSH_UI_META,
   parseMcpAppAiGguiMeta,
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
 } from './mcp-apps';
 
 // Compile-time existence locks. Imports above prove these names live at
 // the canonical MCP-Apps integrations subpath; if any breaks at compile
 // time, the boundary surface has drifted away from its locked location.
 type _ExistenceTypeLocks = [McpAppAiGguiMeta, McpAppAiGguiStackItemMeta];
-const _existenceValueLocks = [parseMcpAppAiGguiMeta, metaToMcpAppMeta] as const;
+const _existenceValueLocks = [parseMcpAppAiGguiMeta, toMcpAppEnvelope] as const;
 void _existenceValueLocks;
 
 // Also import the core protocol types — the boundary-lock tests below
@@ -366,7 +366,7 @@ const FORBIDDEN_TOKENS = [
   'isMcpAppsStackItem',
   'validateMcpAppsStackItem',
   'parseMcpAppAiGguiMeta',
-  'metaToMcpAppMeta',
+  'toMcpAppEnvelope',
 ];
 
 // `types/session.ts` is the ONE core module that legitimately imports

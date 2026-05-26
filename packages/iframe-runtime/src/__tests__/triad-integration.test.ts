@@ -23,7 +23,7 @@
  * callback to thread through anymore.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { act } from 'react';
 import type { SessionStackEntry } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -75,7 +75,7 @@ function buildHappyInit(): { result: unknown } {
   return {
     result: {
       toolOutput: {
-        _meta: metaToMcpAppMeta(VALID_META),
+        _meta: toMcpAppEnvelope(VALID_META),
         structuredContent: {},
       },
     },

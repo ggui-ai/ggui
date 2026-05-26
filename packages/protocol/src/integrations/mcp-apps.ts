@@ -176,7 +176,7 @@ export function deriveContextName(slotKey: string): string {
 //     "is session required" gate lives in the consumer (iframe-runtime
 //     mounts iff session is present; future per-session cache will let
 //     render-only deltas without a session slice mount via cached state).
-//   - {@link metaToMcpAppMeta}(meta) → `_meta` envelope. Emitter
+//   - {@link toMcpAppEnvelope}(meta) → `_meta` envelope. Emitter
 //     helper that builds the wire shape from server-built slices.
 // =============================================================================
 
@@ -558,7 +558,7 @@ export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaRes
  *
  * @public
  */
-export function metaToMcpAppMeta(
+export function toMcpAppEnvelope(
   meta: McpAppAiGguiMeta,
 ): Record<string, unknown> {
   return {

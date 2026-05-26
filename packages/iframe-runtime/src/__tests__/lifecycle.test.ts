@@ -30,7 +30,7 @@ import type {
   McpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
-  metaToMcpAppMeta,
+  toMcpAppEnvelope,
   isMcpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence } from '../runtime.js';
@@ -182,7 +182,7 @@ function buildHappyInitResponse(
   return {
     result: {
       toolOutput: {
-        _meta: metaToMcpAppMeta(meta),
+        _meta: toMcpAppEnvelope(meta),
         structuredContent: {},
       },
     },
