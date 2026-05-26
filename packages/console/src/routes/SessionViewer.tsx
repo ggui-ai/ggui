@@ -58,6 +58,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -404,7 +405,13 @@ function LiveViewer({
     [envelope],
   );
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the listener is wired
+  // synchronously during the commit phase — BEFORE the test (or any
+  // real-world iframe) can race ahead and post a `ui/initialize`
+  // message at the moment the iframe is observable in the DOM.
+  // Passive useEffect runs in a later microtask; that opens a race
+  // window where the iframe is mounted but no listener is attached.
+  useLayoutEffect(() => {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [handleMessage]);
