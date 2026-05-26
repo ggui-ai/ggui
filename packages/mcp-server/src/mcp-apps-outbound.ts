@@ -151,14 +151,18 @@ const GGUI_SESSION_SHELL_SCRIPT_BODY = `
 //   1. iframe -> host: ui/initialize
 //   2. iframe -> host: ui/notifications/initialized
 //   3. host -> iframe: ui/notifications/tool-result (per CallToolResult)
-// On tool-result, derive base URL + shortCode from structuredContent,
-// fetch slice-envelope JSON via GET /r/<shortCode> with
-// Accept: application/json (the content-negotiated JSON branch of the
-// public shell URL), set window.__GGUI_META__ to the envelope,
-// fetch runtime as blob, inject as script.
+// On tool-result, read the slice envelope from _meta (spec-canonical
+// CallToolResult _meta at the top level, or the first-party
+// params.toolOutput._meta shape), set window.__GGUI_META__ to the
+// envelope, fetch runtime as blob, inject as script.
 // Runtime auto-mounts inline. No nested iframe (claudemcpcontent.com
 // CSP frame-src forbids cross-origin frames). State machine matches
 // buildSelfContainedShell so the same runtime mounts both paths.
+//
+// R5 (2026-05-26): the historic /r/<shortCode> HTTP fallback was
+// removed along with the bearer-by-obscurity model -- hosts that strip
+// _meta no longer have a recovery path here. Spec-canonical hosts
+// deliver _meta inline and are unaffected.
 var rpcId=1,pending={};
 var rootEl=document.getElementById('ggui-root');
 rootEl.style.cssText='display:flex;flex-direction:column;height:100%;min-height:300px;margin:0';
@@ -176,29 +180,6 @@ function postRpc(method,params){
     try{window.parent.postMessage({jsonrpc:'2.0',id:id,method:method,params:params||{}},'*');}
     catch(e){delete pending[id];rej(e);}
   });
-}
-function readToolResult(p){
-  if(!p)return null;
-  var sc=p.structuredContent;
-  if(sc&&typeof sc.url==='string'&&typeof sc.shortCode==='string'){
-    return {url:sc.url,shortCode:sc.shortCode};
-  }
-  if(Array.isArray(p.content)){
-    for(var i=0;i<p.content.length;i++){
-      var c=p.content[i];
-      if(c&&c.type==='text'&&typeof c.text==='string'){
-        try{var j=JSON.parse(c.text);
-          if(j&&typeof j.url==='string'&&typeof j.shortCode==='string'){
-            return {url:j.url,shortCode:j.shortCode};
-          }
-        }catch(e){}
-      }
-    }
-  }
-  return null;
-}
-function deriveBase(url){
-  try{var u=new URL(url);return u.origin;}catch(e){return null;}
 }
 function postBootstrapFailed(reason,message){
   // Surface every shell-layer bootstrap-failure path as a typed
@@ -258,26 +239,6 @@ async function mountFromMeta(envelope){
     setOverlay(msg);
     postBootstrapFailed('BUNDLE_FETCH_FAILED',msg);
   }
-}
-async function mount(toolResult){
-  if(mounted)return;
-  var base=deriveBase(toolResult.url);
-  if(!base){setOverlay('Invalid URL in tool result.');return;}
-  setOverlay('Loading UI…');
-  var envelope;
-  try{
-    // Fallback path: fetch slice envelope from /r/<shortCode> with
-    // Accept: application/json. The content-negotiated JSON branch
-    // returns the SAME projection the HTML branch inlines (single
-    // source of truth post-R4).
-    var bRes=await fetch(base+'/r/'+encodeURIComponent(toolResult.shortCode),{
-      cache:'no-store',
-      headers:{accept:'application/json'},
-    });
-    if(!bRes.ok){setOverlay('Meta fetch failed: HTTP '+bRes.status);return;}
-    envelope=await bRes.json();
-  }catch(e){setOverlay('Meta fetch error: '+(e&&e.message||e));return;}
-  return mountFromMeta(envelope);
 }
 function readMetaFromInitResult(result){
   if(!result||typeof result!=='object')return null;
@@ -343,12 +304,11 @@ window.addEventListener('message',function(ev){
     // notification.
     var bb=readMetaFromInitResult(m.params);
     if(bb){mountFromMeta(bb);return;}
-    // Fallback path: host posts structuredContent.{url, shortCode};
-    // shell fetches /r/<shortCode> with Accept: application/json over
-    // HTTP. Works for any operator that fronts the public-render
-    // endpoint at a reachable origin.
-    var tr=readToolResult(m.params);
-    if(tr)mount(tr);
+    // R5 (2026-05-26) -- the /r/<shortCode> HTTP fallback was removed
+    // along with the bearer-by-obscurity model. Hosts that strip
+    // _meta on the tool-result wire have no fallback path here;
+    // spec-canonical hosts deliver meta inline and land in the two
+    // branches above.
   }
 });
 setOverlay('Initializing…');

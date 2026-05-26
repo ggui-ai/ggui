@@ -6,6 +6,12 @@
  *   GET  /chat.js, /chat.css   static
  *   POST /chat            { prompt } → SSE stream of SDKMessage events
  *
+ * Also boots a second-port sandbox-proxy server (via
+ * `@ggui-ai/dev-stack`'s `startSandboxProxyServer`) so AppRenderer's
+ * spec-mandated different-origin sandbox host is available without
+ * extra setup. The chosen URL is injected into the host HTML as a
+ * `window.GGUI_SANDBOX_PROXY_URL` global the React Chat reads.
+ *
  * No framework dependency — node:http only. Keeps the sample's
  * `node_modules/` tiny so the test harness boots fast.
  */
@@ -14,6 +20,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  startSandboxProxyServer,
+  type SandboxProxyServerHandle,
+} from '@ggui-ai/dev-stack';
 import { runAgent } from './agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -46,11 +56,22 @@ export interface ServerOptions {
   readonly model?: string;
   /** Optional override; passed straight through to runAgent. */
   readonly systemPrompt?: string | null;
+  /**
+   * Port for the sandbox-proxy server (default: agent port + 1000).
+   * Per MCP Apps spec, the sandbox must live on a different origin
+   * from the host. Pass `0` to let the OS pick.
+   */
+  readonly sandboxProxyPort?: number;
 }
 
 export async function startServer(opts: ServerOptions): Promise<void> {
+  const sandboxProxyPort = opts.sandboxProxyPort ?? opts.port + 1000;
+  const sandboxProxy = await startSandboxProxyServer({ port: sandboxProxyPort });
+
+  const ctx: ServerContext = { ...opts, sandboxProxy };
+
   const server = createServer((req, res) => {
-    handleRequest(req, res, opts).catch((err) => {
+    handleRequest(req, res, ctx).catch((err) => {
       console.error('[sample-agent] request handler error:', err);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -65,40 +86,36 @@ export async function startServer(opts: ServerOptions): Promise<void> {
         `[sample-agent] chat UI ready: http://localhost:${opts.port}`,
       );
       console.log(`[sample-agent] talking to ggui MCP: ${opts.mcpUrl}`);
+      console.log(`[sample-agent] sandbox proxy: ${sandboxProxy.url}`);
       resolve();
     });
   });
 }
 
+interface ServerContext extends ServerOptions {
+  readonly sandboxProxy: SandboxProxyServerHandle;
+}
+
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  opts: ServerOptions,
+  opts: ServerContext,
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // Meta proxy — forwards the browser's `/r/<shortCode>` GET (with
-  // `Accept: application/json`) to the ggui MCP server's
-  // content-negotiated public-render endpoint, which returns the slice
-  // envelope. The Anthropic SDK strips `_meta` (incl. the `ai.ggui/*`
-  // slices) from `tool_result` blocks (the API spec only allows text
-  // content), so the chat UI recovers the meta slice pair via this
-  // side-channel.
-  //
-  // Same proxy posture as `/relay/tools-call`: keeps the browser on
-  // a single same-origin endpoint, avoids CORS on the MCP server.
-  const renderMatch = url.pathname.match(/^\/r\/([^/]+)$/);
-  if (req.method === 'GET' && renderMatch && req.headers['accept']?.includes('application/json')) {
-    const shortCode = renderMatch[1] ?? '';
+  // R5 — `/api/sessions/:sessionId/state?wsToken=...` proxy to the ggui
+  // MCP server. The state endpoint replaced the bearer-by-obscurity
+  // `/r/<shortCode>` URL; the browser fetches state via this same-origin
+  // path so we don't have to CORS-enable the MCP server.
+  const stateMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/state$/);
+  if (req.method === 'GET' && stateMatch) {
+    const sessionId = stateMatch[1] ?? '';
     try {
       const mcpOrigin = new URL(opts.mcpUrl);
-      mcpOrigin.pathname = `/r/${encodeURIComponent(shortCode)}`;
-      // Forward the browser's `?sig=...&exp=...` to the MCP server's
-      // render-signing gate. Stripping the query was a real bug: when
-      // the MCP server boots with render-signing on (the default),
-      // every `/r/<code>` URL the agent receives carries a sig+exp,
-      // and the route enforces the same signature on both HTML and
-      // JSON branches. Dropping the query forces a 403.
+      mcpOrigin.pathname = `/api/sessions/${encodeURIComponent(sessionId)}/state`;
+      // Forward the browser's wsToken query verbatim — the MCP server
+      // gates this endpoint on token signature, session ownership, and
+      // appId match; dropping the query forces 401.
       mcpOrigin.search = url.search;
       const upstream = await fetch(mcpOrigin.toString(), {
         headers: { Accept: 'application/json' },
@@ -113,7 +130,7 @@ async function handleRequest(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: `bootstrap proxy error: ${message}` }));
+      res.end(JSON.stringify({ error: `state proxy error: ${message}` }));
     }
     return;
   }
@@ -302,8 +319,22 @@ async function handleRequest(
     const mime = MIME[ext] ?? 'application/octet-stream';
     try {
       const content = await readFile(join(PUBLIC_DIR, filename));
-      res.writeHead(200, { 'Content-Type': mime });
-      res.end(content);
+      // Inject the sandbox-proxy URL as a window global into the host
+      // HTML so the React Chat can pass it to AppRenderer's
+      // sandbox.url prop. Only mutates `*.html` payloads; everything
+      // else (JS, CSS, fonts) ships verbatim.
+      if (ext === '.html') {
+        const html = content.toString('utf-8');
+        const injected = html.replace(
+          '</head>',
+          `<script>window.GGUI_SANDBOX_PROXY_URL = ${JSON.stringify(opts.sandboxProxy.url)};</script></head>`,
+        );
+        res.writeHead(200, { 'Content-Type': mime });
+        res.end(injected);
+      } else {
+        res.writeHead(200, { 'Content-Type': mime });
+        res.end(content);
+      }
     } catch {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('not found');

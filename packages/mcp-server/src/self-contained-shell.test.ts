@@ -4,13 +4,13 @@
  *
  * Pre-Slice-14 the inline `__GGUI_META__` global only carried the
  * minimum to mount a compiled component on the postMessage shell path.
- * The self-contained `/r/<shortCode>` direct-preview path uses the
- * SAME global as its sole boot source — so anything the runtime needs
- * (`runtimeUrl` for the bundle URL, `contextSlots` for Provider seeds,
- * `appCallableTools` / `actionNextSteps` for dispatch routing) had to
- * be inlined too. Without these, contextSpec UIs blank-page'd at the
- * direct-preview URL because the runtime's bootstrap validator rejected
- * the envelope as MALFORMED.
+ * The self-contained per-session resource (`ui://ggui/session/<id>`)
+ * direct-preview path uses the SAME global as its sole boot source —
+ * so anything the runtime needs (`runtimeUrl` for the bundle URL,
+ * `contextSlots` for Provider seeds, `appCallableTools` /
+ * `actionNextSteps` for dispatch routing) had to be inlined too.
+ * Without these, contextSpec UIs blank-page'd because the runtime's
+ * bootstrap validator rejected the envelope as MALFORMED.
  *
  * This suite locks the inline-bootstrap shape against the runtime's
  * validator: the HTML the shell emits MUST contain a JSON literal
@@ -177,9 +177,9 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   // Slice 1.3.3/2.2 audit fix — the self-contained shell MUST
   // forward `gadgets` (wrapper catalog) + `publicEnv` (env
-  // values). Without these, /r/<shortCode> and resources/read paths
-  // render as STDLIB-only iframes, regressing wrapper-using
-  // contracts (Leaflet, Mapbox).
+  // values). Without these, the resources/read path renders as
+  // STDLIB-only iframes, regressing wrapper-using contracts
+  // (Leaflet, Mapbox).
   it('inlines gadgets on the session slice when supplied (GG.8.2 — per-package channel)', () => {
     const html = buildSelfContainedShell({
       sessionId: 'sess_001',

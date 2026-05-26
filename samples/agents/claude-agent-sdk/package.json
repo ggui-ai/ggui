@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/agent-claude-sdk",
   "version": "0.0.1",
-  "description": "Reference sample: a Claude Agent SDK app that hosts the ggui MCP server, with a React chat UI built on @ggui-ai/react's <McpAppIframe>. Boots an HTTP server (port 6790) that serves the chat shell + an SSE-streamed /chat endpoint. Real LLM via ANTHROPIC_API_KEY. Used both as developer reference and as a fixture for the Playwright matrix e2e under e2e/tests/agent-loop/. Not published.",
+  "description": "Reference sample: a Claude Agent SDK app that hosts the ggui MCP server, with a React chat UI built on @ggui-ai/react's <AppRenderer> + @ggui-ai/dev-stack's sandbox-proxy. Boots an HTTP server (port 6790) + sandbox-proxy server (port 7790) and serves the chat shell + an SSE-streamed /chat endpoint. Real LLM via ANTHROPIC_API_KEY. Used both as developer reference and as a fixture for the Playwright matrix e2e under e2e/tests/agent-loop/. Not published.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.76",
+    "@ggui-ai/dev-stack": "workspace:*",
     "@ggui-ai/react": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.0",
     "dotenv": "^16.4.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

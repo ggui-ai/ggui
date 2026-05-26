@@ -42,23 +42,26 @@ export interface ToolCallEntry {
 }
 
 /**
- * A reference to a ggui-rendered stack item. The host iframe loads
- * `url`, which carries the meta slice pair inline so the iframe self-
- * subscribes to the live channel.
+ * A reference to a ggui-rendered stack item.
  *
- * `meta` is the spec-compliant {@link McpAppAiGguiMeta} pair (parsed
- * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`) the host
- * forwards to the iframe via postMessage. The Anthropic SDK strips
- * `_meta` from tool_result blocks (the API spec only carries text
- * content), so we recover it via the `/api/bootstrap/<shortCode>`
- * JSON endpoint (fetched asynchronously after the stack item lands or
- * gets updated). When non-undefined, `<McpAppIframe>` posts it to the
- * iframe so iframe-runtime re-applies state without re-subscribing.
+ * **R5 shape change.** The old `url` field pointed at the public
+ * `/r/<shortCode>` HTTP shell (bearer-by-obscurity). R5 retired that
+ * surface; the host now reconstructs the iframe HTML CLIENT-SIDE from
+ * the slice envelope (see `StackItem.tsx` + `html.ts`).
+ *
+ * `meta` is the parsed `McpAppAiGguiMeta` pair (session + stackItem
+ * slices). When non-undefined, `StackItem.tsx` builds the inline
+ * `__GGUI_META__` HTML and forwards a tool_result carrying the
+ * envelope to AppRenderer so the inner iframe receives
+ * `ui/notifications/tool-result` on every update.
+ *
+ * `meta` is initially undefined for SDKs that strip `_meta` from
+ * tool_results (Anthropic). `useChat` re-fetches via the wsToken-gated
+ * `/api/sessions/:sessionId/state` endpoint to populate / refresh it.
  */
 export interface StackItemRef {
   readonly stackItemId: string;
   readonly sessionId: string;
-  readonly url: string;
   readonly action: string;
   readonly contractHash?: string;
   /** Last-known meta slice pair. Updated on push + every update. */

@@ -754,7 +754,7 @@ describe('combine ⇔ emit round-trip', () => {
         sessionId: 'sess-1',
         appId: 'app-1',
         runtimeUrl: '/_ggui/iframe-runtime.js',
-        pollingUrl: '/r/abc',
+        pollingUrl: '/api/sessions/sess-1/state',
         themeId: 'indigo',
         themeMode: 'dark',
         canvasMode: true,

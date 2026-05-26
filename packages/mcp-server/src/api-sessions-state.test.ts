@@ -2,11 +2,11 @@
  * Tests for `GET /api/sessions/:sessionId/state?wsToken=<token>` — the
  * R6 wsToken-gated snapshot read of the current session state.
  *
- * # Why a separate file from `public-bootstrap.test.ts`
+ * # Auth surface
  *
- * `/r/<shortCode>` (JSON branch) is shortCode-gated; `/api/sessions/...`
- * is wsToken-gated. Distinct auth surfaces, distinct mount conditions,
- * distinct invariants. Sharing a fixture would smear the two contracts.
+ * wsToken-gated (R5 retired the earlier `/r/<shortCode>` shortCode-gated
+ * surface entirely; this is now the only HTTP read path for session
+ * state).
  *
  * # What this proves
  *
@@ -15,9 +15,8 @@
  *   - Auth gates: 401 on missing/invalid/wrong-scope wsToken, 410 on
  *     expired, 404 on missing session.
  *   - Slice projection: top renderable stack item flows through the
- *     same `deriveStackItemMeta` helper push / `/r/` JSON branch use,
- *     so polling clients see the same render shape regardless of
- *     entry point.
+ *     same `deriveStackItemMeta` helper push uses, so polling clients
+ *     see the same render shape regardless of entry point.
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser).
  */

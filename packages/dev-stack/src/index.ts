@@ -94,6 +94,15 @@ export {
   type PolicyOutcome,
 } from './dev-server/auth.js';
 
+// MCP-Apps sandbox proxy — second HTTP server on a different origin
+// that serves `sandbox.html` for `<AppRenderer>`'s two-iframe
+// sandboxing pattern (R5; see ./dev-server/sandbox-proxy.ts).
+export {
+  startSandboxProxyServer,
+  type SandboxProxyServerOptions,
+  type SandboxProxyServerHandle,
+} from './dev-server/sandbox-proxy.js';
+
 // Orchestration — the seam every local-dev host composes against.
 export {
   runDev,

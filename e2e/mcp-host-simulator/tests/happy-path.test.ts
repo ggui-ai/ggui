@@ -79,7 +79,7 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     });
     expect(flow.push.meta, '_meta ai.ggui slices must be set').toBeDefined();
     expect(flow.push.meta?.session?.wsUrl).toMatch(/^ws:\/\//);
-    expect(flow.push.meta?.session?.token).toBeTruthy();
+    expect(flow.push.meta?.session?.wsToken).toBeTruthy();
     // OSS factory mints bare UUID; pod-side prefixes `sess_` (different
     // convention). Assert non-empty rather than format-specific.
     expect(flow.push.meta?.session?.sessionId.length ?? 0).toBeGreaterThan(0);

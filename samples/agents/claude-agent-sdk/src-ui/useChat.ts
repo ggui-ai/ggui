@@ -32,6 +32,15 @@ interface UseChatResult {
  *                       this session. Latest at the end. Useful for
  *                       panel mode where we show only the top.
  *   - `sending`       — true while an SSE stream is in progress.
+ *
+ * **R5 meta-recovery path.** The Anthropic SDK strips `_meta` from
+ * `tool_result` blocks (the API spec only allows text content), so we
+ * have to recover the `ai.ggui/*` slice envelope another way. R5
+ * dropped the `/r/<shortCode>` HTTP fallback (bearer-by-obscurity); the
+ * replacement is the wsToken-gated `GET /api/sessions/:sessionId/state`
+ * endpoint. We poll it once after each ggui_push / ggui_update result
+ * lands and surface the parsed meta on the matching StackItemRef.
+ * StackItem.tsx builds the iframe HTML from the meta on each render.
  */
 export function useChat(): UseChatResult {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
@@ -86,11 +95,12 @@ export function useChat(): UseChatResult {
   /**
    * Patch the meta slice pair on an existing stack item by id. Used
    * by the meta-refetch effect after every ggui_push and every
-   * ggui_update tool_result. McpAppIframe's late-arrival forwarder
-   * sees the prop transition and posts `ui/notifications/tool-result`
-   * with the fresh `ai.ggui/*` `_meta` slices into the iframe — same
-   * path the renderer's spec-compliant listener handles on initial
-   * mount.
+   * ggui_update tool_result. StackItem.tsx rebuilds its inline HTML
+   * (and the toolResult forwarded to AppRenderer) whenever this meta
+   * field transitions, so the iframe-runtime sees fresh state
+   * either as the initial `__GGUI_META__` global (first mount) or as a
+   * spec-canonical `ui/notifications/tool-result` frame (subsequent
+   * updates).
    */
   const updateStackItemMeta = useCallback(
     (stackItemId: string, meta: McpAppAiGguiMeta) => {
@@ -106,58 +116,63 @@ export function useChat(): UseChatResult {
   );
 
   /**
-   * Async fetch of `/r/<shortCode>` with `Accept: application/json`.
-   * The shortCode is parsed from a stack-item url like
-   * `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`; the content-negotiated
-   * JSON branch returns the slice envelope (`{ "ai.ggui/session": {...},
-   * "ai.ggui/stack-item": {...} }`) the iframe-runtime needs to re-apply
-   * state. Recovers the field set the Anthropic SDK strips from
-   * `tool_result._meta`.
+   * Recover the slice envelope via the R6 wsToken-gated state endpoint.
+   * The previous `/r/<shortCode>` HTTP path was retired in R5; the
+   * `/api/sessions/:sessionId/state` endpoint is the spec-canonical
+   * replacement and the only way to read session state via HTTP after
+   * R5.
    *
-   * The `sig`+`exp` query pair is forwarded verbatim — the route
-   * enforces the same render-signing gate on both HTML and JSON branches,
-   * so dropping the query at this layer would 403 every refetch when
-   * render-signing is on (the default).
+   * The wsToken lives on the slice envelope itself (`session.wsToken`)
+   * — chicken-and-egg solved by the fact that the FIRST envelope arrives
+   * inline on tool_result `_meta` (when the SDK doesn't strip it) or is
+   * already cached from a previous tick. The hook holds the
+   * most-recently-known meta in `stackItemsRef`; the polling fetch
+   * carries forward the previously-seen wsToken.
+   *
+   * Returns null when no wsToken is reachable (first tick on a strip-
+   * happy SDK like Anthropic; the iframe shows the loading placeholder
+   * until the next /state poll succeeds).
    */
-  const refetchMeta = useCallback(
-    async (stackItemId: string, url: string) => {
-      const parsed = parseRenderUrl(url);
-      if (!parsed) return;
-      const { shortCode, search } = parsed;
+  const refetchStateById = useCallback(
+    async (stackItemId: string, sessionId: string) => {
+      const existing = stackItemsRef.current.find(
+        (p) => p.stackItemId === stackItemId,
+      );
+      const wsToken = existing?.meta?.session?.wsToken;
+      if (!sessionId) return;
+      const search =
+        typeof wsToken === 'string' && wsToken.length > 0
+          ? `?wsToken=${encodeURIComponent(wsToken)}`
+          : '';
       try {
-        const res = await fetch(`/r/${shortCode}${search}`, {
-          headers: { Accept: 'application/json' },
-        });
-        if (!res.ok) return;
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(sessionId)}/state${search}`,
+          { headers: { Accept: 'application/json' } },
+        );
+        if (!res.ok) {
+          if (res.status === 401) {
+            // No wsToken or invalid — we expect this on the very first
+            // call when the SDK stripped _meta. The /state endpoint is
+            // wsToken-gated by design; without an inline _meta delivery
+            // we have no credential to present. Iframe stays in the
+            // loading state.
+            console.warn(
+              '[useChat] /state 401 — no wsToken yet; iframe will retry on the next push/update.',
+            );
+            return;
+          }
+          console.warn('[useChat] /state non-2xx', res.status);
+          return;
+        }
         const envelope = (await res.json()) as unknown;
         const parsedMeta = parseMcpAppAiGguiMeta(envelope);
         if (!parsedMeta.ok) return;
         updateStackItemMeta(stackItemId, parsedMeta.meta);
       } catch (err) {
-        console.warn('[useChat] meta refetch failed', err);
+        console.warn('[useChat] /state refetch failed', err);
       }
     },
     [updateStackItemMeta],
-  );
-
-  /**
-   * Refetch the slice envelope for an existing stack item by id.
-   * Looks up the cached URL via the stackItems ref and dispatches the
-   * same `/r/<shortCode>` JSON-branch fetch. Used by `ggui_update`
-   * results which don't carry the URL — only `{sessionId,
-   * stackItemId}`. No-op when no matching id is in state (the update
-   * lands before the push registered the item — out-of-order
-   * delivery).
-   */
-  const refetchMetaById = useCallback(
-    async (stackItemId: string) => {
-      const item = stackItemsRef.current.find(
-        (p) => p.stackItemId === stackItemId,
-      );
-      if (!item) return;
-      await refetchMeta(stackItemId, item.url);
-    },
-    [refetchMeta],
   );
 
   const send = useCallback(
@@ -228,8 +243,7 @@ export function useChat(): UseChatResult {
               append,
               addStackItem,
               patchToolCall,
-              refetchMeta,
-              refetchMetaById,
+              refetchStateById,
             );
           }
         }
@@ -252,8 +266,7 @@ export function useChat(): UseChatResult {
       append,
       addStackItem,
       patchToolCall,
-      refetchMeta,
-      refetchMetaById,
+      refetchStateById,
     ],
   );
 
@@ -274,8 +287,7 @@ function handleEvent(
     toolUseId: string,
     patch: { readonly result?: unknown; readonly isError?: boolean },
   ) => void,
-  refetchMeta: (stackItemId: string, url: string) => Promise<void>,
-  refetchMetaById: (stackItemId: string) => Promise<void>,
+  refetchStateById: (stackItemId: string, sessionId: string) => Promise<void>,
 ): void {
   if (eventType === 'error') {
     const err = (payload as { error?: string }).error ?? 'Unknown error';
@@ -314,7 +326,7 @@ function handleEvent(
     // user-role message after the SDK invokes the tool. We (a) attach
     // the result to the matching tool-call entry via toolUseId so the
     // expand UI shows full call+result side-by-side, and (b) sniff for
-    // a `url` to spawn a stack-item entry (the rendered iframe).
+    // a sessionId+stackItemId to spawn / update a stack-item entry.
     const content = ((msg.message as { content?: unknown[] })?.content ?? []) as Array<
       Record<string, unknown>
     >;
@@ -355,11 +367,10 @@ function handleEvent(
           ...(block.is_error === true ? { isError: true } : {}),
         });
       }
-      // Sniff for ggui_push's renderer URL to mount the iframe entry.
-      // Also handle ggui_update: the result carries no `url` but does
-      // carry `{sessionId, stackItemId, updated:true}` — we look up the
-      // matching iframe and refetch its meta so the live mount
-      // re-applies post-patch state via spec-compliant postMessage.
+      // Sniff for ggui_push's session/stackItem ids to mount the iframe
+      // entry. Also handle ggui_update: result carries {sessionId,
+      // stackItemId, updated:true} — refresh the cached meta via
+      // /api/sessions/:id/state.
       for (const text of textBlocks) {
         let parsed: Record<string, unknown> | null = null;
         try {
@@ -368,12 +379,19 @@ function handleEvent(
           /* not JSON */
         }
         if (!parsed) continue;
-        // ggui_push branch: new stack item entering the chat log.
-        if (typeof parsed.url === 'string') {
+        // ggui_push branch — new stack item entering the chat log.
+        // Spec-canonical: prefer the session+stackItem ids over the
+        // `url` field (R5 retired the public `/r/<shortCode>` URL).
+        if (
+          typeof parsed.sessionId === 'string' &&
+          typeof parsed.stackItemId === 'string' &&
+          parsed.updated !== true
+        ) {
+          const sessionId = parsed.sessionId;
+          const stackItemId = parsed.stackItemId;
           const item: StackItemRef = {
-            stackItemId: String(parsed.stackItemId ?? `unknown-${i}`),
-            sessionId: String(parsed.sessionId ?? ''),
-            url: parsed.url,
+            stackItemId,
+            sessionId,
             action: String(parsed.action ?? 'create'),
             ...(typeof parsed.contractHash === 'string'
               ? { contractHash: parsed.contractHash }
@@ -381,25 +399,25 @@ function handleEvent(
           };
           addStackItem(item);
           append({ id: `${baseId}.s${i}`, kind: 'stack-item', stackItem: item });
-          // Side-effect fetch of `/r/<shortCode>` (JSON branch) — the
-          // Anthropic SDK has already stripped `_meta` from the result,
-          // so we recover the slice envelope from the server-side JSON
-          // path. McpAppIframe's late-arrival path posts it to the
-          // iframe on meta-prop transition.
-          void refetchMeta(item.stackItemId, item.url);
+          // R5: recover the slice envelope via the wsToken-gated state
+          // endpoint. The Anthropic SDK has already stripped `_meta`.
+          // First call typically 401s (no wsToken yet) — that's expected;
+          // the iframe shows a loading placeholder until ggui_update or
+          // another push lands and a wsToken becomes available.
+          void refetchStateById(stackItemId, sessionId);
           continue;
         }
-        // ggui_update branch: existing stack item gets new props. The
-        // result envelope doesn't carry the URL (only {sessionId,
-        // stackItemId, updated}). Look up the cached URL via the
-        // stackItemsRef helper + refetch the meta so the post-patch
-        // propsJson reaches the still-mounted iframe via
-        // McpAppIframe's late-arrival postMessage path.
+        // ggui_update branch — existing stack item gets new props. The
+        // result envelope carries {sessionId, stackItemId, updated:true}.
+        // Re-fetch /state so AppRenderer sees a fresh `toolResult` /
+        // `_meta` prop and forwards it to the inner iframe via the
+        // spec-compliant `ui/notifications/tool-result` postMessage.
         if (
           parsed.updated === true &&
-          typeof parsed.stackItemId === 'string'
+          typeof parsed.stackItemId === 'string' &&
+          typeof parsed.sessionId === 'string'
         ) {
-          void refetchMetaById(parsed.stackItemId);
+          void refetchStateById(parsed.stackItemId, parsed.sessionId);
         }
       }
     }
@@ -437,26 +455,5 @@ function getOrCreateChatSessionId(): string {
     // call looks like a fresh chat to the server, which degrades
     // multi-turn but never breaks single-turn.
     return crypto.randomUUID();
-  }
-}
-
-/**
- * Pull the shortCode + render-signing query out of a stack-item URL.
- * The render path is `<base>/r/<shortCode>?sig=<hmac>&exp=<unix>`; we
- * match the path segment after `/r/` and preserve the search string
- * verbatim. `search` is `''` when the URL has no query (render-signing
- * disabled on the source server). Returns null on shape mismatch.
- */
-function parseRenderUrl(
-  url: string,
-): { readonly shortCode: string; readonly search: string } | null {
-  try {
-    const parsed = new URL(url, 'http://localhost');
-    const match = parsed.pathname.match(/\/r\/([^/?#]+)/);
-    const shortCode = match?.[1];
-    if (!shortCode) return null;
-    return { shortCode, search: parsed.search };
-  } catch {
-    return null;
   }
 }

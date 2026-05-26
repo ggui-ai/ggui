@@ -42,6 +42,9 @@ if (envPath) {
 }
 
 const PORT = Number(process.env.PORT ?? 6791);
+const SANDBOX_PROXY_PORT = process.env.SANDBOX_PROXY_PORT
+  ? Number(process.env.SANDBOX_PROXY_PORT)
+  : 7791;
 const MCP_URL = process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp';
 const TODO_MCP_URL = process.env.GGUI_TODO_MCP_URL;
 const MODEL = process.env.OPENAI_MODEL;
@@ -55,6 +58,7 @@ const systemPrompt =
 
 startServer({
   port: PORT,
+  sandboxProxyPort: SANDBOX_PROXY_PORT,
   mcpUrl: MCP_URL,
   ...(TODO_MCP_URL ? { todoMcpUrl: TODO_MCP_URL } : {}),
   ...(MODEL ? { model: MODEL } : {}),

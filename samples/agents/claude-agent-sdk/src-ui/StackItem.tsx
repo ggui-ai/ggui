@@ -1,105 +1,138 @@
 /* eslint-disable no-console */
 import { useCallback, useMemo } from 'react';
-import { McpAppIframe, type UiMessageEvent } from '@ggui-ai/react';
+import {
+  AppRenderer,
+  type RequestHandlerExtra,
+} from '@ggui-ai/react';
+import type {
+  CallToolRequest,
+  CallToolResult,
+} from '@modelcontextprotocol/sdk/types.js';
+import { metaToMcpAppMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { StackItemRef } from './types';
+import { buildSelfContainedHtml } from './html';
 
 interface StackItemProps {
   readonly item: StackItemRef;
+  /**
+   * Sandbox-proxy URL — second-origin host of `sandbox.html` served by
+   * `startSandboxProxyServer` (from `@ggui-ai/dev-stack`). Required:
+   * `<AppRenderer>` mandates a separate-origin sandbox per MCP Apps
+   * spec.
+   */
+  readonly sandboxUrl: string;
   /**
    * When set, the card stretches to fill its container (panel mode).
    * Otherwise the card uses a comfortable default height suitable for
    * inline-in-chat rendering.
    */
   readonly fillContainer?: boolean;
-  /**
-   * Forwarded from iframe-runtime's `ui/message` envelope (agent-routed-
-   * dispatch fallback). The sample agent runs one-shot `query()` per
-   * chat turn — no resume, no inter-turn long-poll — so the consume
-   * pipe is closed by the time the user clicks. This callback feeds
-   * the user's gesture back into the next chat turn as fresh user
-   * input.
-   */
-  readonly onUiMessage?: (event: UiMessageEvent) => void;
 }
 
 /**
- * Renders one ggui-pushed UI via the canonical {@link McpAppIframe}
- * host.
+ * Renders one ggui-pushed UI via the spec-canonical {@link AppRenderer}
+ * host (re-exported from `@mcp-ui/client` per spec-migration P2).
  *
- * Key host-side concerns:
+ * **How rendering bootstraps without an HTTP shortCode fetch (R5).**
+ * Earlier samples mounted `<McpAppIframe resource={{uri: '/r/<code>'}}>`,
+ * which fetched the HTML over HTTP via the bearer-by-obscurity
+ * shortCode URL. R5 removed that path. Now the host builds the iframe
+ * HTML CLIENT-SIDE from the {@link McpAppAiGguiMeta} slice pair we
+ * already have in hand (parsed off `_meta` on the tool_result, or
+ * recovered via the wsToken-gated `/api/sessions/:id/state` polling
+ * fallback when an MCP SDK stripped `_meta`). The HTML inlines
+ * `window.__GGUI_META__` and a `<script type="module" src=runtimeUrl>`
+ * — the iframe-runtime reads the global at boot and self-mounts.
  *
- *   - `allowSameOrigin` is set because we're a first-party host: the
- *     iframe loads our OWN ggui server at `http://localhost:6781/r/...`.
- *     Without same-origin, the iframe's bundle fetches and WebSocket
- *     handshakes fail with opaque-origin errors that surface to users
- *     as ERR_CONNECTION_REFUSED. Default-deny is correct for any
- *     third-party content — this opt-in is exactly the trust boundary
- *     described in `@ggui-ai/react`'s `McpAppIframeProps.allowSameOrigin`
- *     prop doc.
+ * **AppRenderer's two-iframe sandbox.** `sandboxUrl` MUST point at a
+ * different-origin host serving `sandbox.html`. `<AppRenderer>`
+ * navigates an outer iframe to that URL; the outer frame writes the
+ * `html` we pass into an inner iframe (origin-isolated). Spec-canonical
+ * postMessage carries `_meta` slices and tool calls bidirectionally.
  *
- *   - We DO NOT pass `containerDimensions` as a pixel-sized hint —
- *     when present, that becomes an inline `width` on the iframe
- *     element and locks it. The iframe always fills its parent via
- *     CSS width/height 100%; the renderer learns its actual size from
- *     `window.innerWidth/innerHeight` inside the iframe.
- *
- *   - `onToolCall` forwards renderer-side `tools/call` postMessages
- *     to the sample agent server's `/relay/tools-call`, which proxies
- *     them to the ggui MCP server over HTTP. The iframe holds no auth
- *     credential of its own; this host is the protocol-defined relay
- *     party per MCP Apps spec §401 (tools with
- *     `_meta.ui.visibility: ['app']`). The relay's response is
- *     surfaced back to the iframe via postMessage so the iframe-
- *     runtime can decide whether to fall through to `ui/message`
- *     (e.g. on `PIPE_NOT_FOUND`).
+ * **`onCallTool` and the relay.** AppRenderer forwards any inner-iframe
+ * `tools/call` to our handler. We POST to `/relay/tools-call` on the
+ * sample agent server, which proxies to the ggui MCP server over HTTP
+ * (the spec-defined relay role for `_meta.ui.visibility: ['app']`
+ * tools). Iframe holds no auth credential; the host owns auth.
  */
 export function StackItem({
   item,
+  sandboxUrl,
   fillContainer = false,
-  onUiMessage,
 }: StackItemProps) {
-  // ResourceContents shape — no `text` / `blob` → host mounts via
-  // `src=uri`. The iframe's HTML at `/r/<shortCode>` embeds the
-  // meta slice pair inline server-side, so the renderer self-
-  // subscribes to the live channel from there.
-  const resource = useMemo(() => ({ uri: item.url }), [item.url]);
+  // Reconstruct the iframe HTML from the slice pair. The slice carries
+  // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
+  // iframe-runtime reads everything off `window.__GGUI_META__` at
+  // boot. When meta hasn't landed yet, fall back to a "loading" placeholder
+  // that the next prop transition replaces.
+  const html = useMemo(() => {
+    if (!item.meta) {
+      return LOADING_HTML;
+    }
+    const envelope = metaToMcpAppMeta(item.meta);
+    return buildSelfContainedHtml(envelope);
+  }, [item.meta]);
 
-  // Late-arrival meta forwarding. The Anthropic SDK strips `_meta`
-  // from tool_result blocks (the API spec only carries text content);
-  // we recover the envelope via `/api/bootstrap/<shortCode>` in
-  // useChat.ts and pass it here. On the FIRST mount the iframe boots
-  // from the inline `__GGUI_META__` global. On every subsequent
-  // transition (typically a `ggui_update` refetch), McpAppIframe
-  // re-posts the `ai.ggui/*` `_meta` slices over postMessage so
-  // iframe-runtime re-applies the new propsJson without a WS
-  // round-trip — the spec-compliant live-update path.
-  const meta = item.meta;
+  // Build a CallToolResult from the slice pair so AppRenderer forwards
+  // it to the inner iframe via `ui/notifications/tool-result` — the
+  // post-mount path through which iframe-runtime re-applies state on
+  // every `ggui_update`. Without this, prop changes after the first
+  // mount never reach the iframe-runtime (it would only see the initial
+  // `__GGUI_META__` global, then nothing).
+  const toolResult = useMemo<CallToolResult | undefined>(() => {
+    if (!item.meta) return undefined;
+    const envelope = metaToMcpAppMeta(item.meta);
+    return {
+      content: [],
+      structuredContent: {},
+      _meta: envelope,
+    } as CallToolResult;
+  }, [item.meta]);
 
-  const onToolCall = useCallback(
-    async (name: string, args: Record<string, unknown>): Promise<unknown> => {
-      console.log('[StackItem] renderer tool_call', { name, args });
+  const sandbox = useMemo(() => ({ url: new URL(sandboxUrl) }), [sandboxUrl]);
+
+  // Tool relay — AppRenderer hands us inner-iframe `tools/call` invocations
+  // (`onCallTool`). We proxy through `/relay/tools-call` on the sample
+  // agent server. Same wire as the prior McpAppIframe `onToolCall`
+  // callback; only the contract shape changed (CallToolRequest.params
+  // vs. raw `(name, args)`).
+  const onCallTool = useCallback(
+    async (
+      params: CallToolRequest['params'],
+      _extra: RequestHandlerExtra,
+    ): Promise<CallToolResult> => {
+      console.log('[StackItem] renderer tool_call', params);
       try {
         const resp = await fetch('/relay/tools-call', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, arguments: args }),
+          body: JSON.stringify({
+            name: params.name,
+            arguments: params.arguments ?? {},
+          }),
         });
         if (!resp.ok) {
           console.warn('[StackItem] relay non-2xx', resp.status);
           return { isError: true, content: [] };
         }
         const jsonRpc = (await resp.json()) as {
-          readonly result?: unknown;
-          readonly error?: unknown;
+          readonly result?: CallToolResult;
+          readonly error?: { readonly message?: string };
         };
         if (jsonRpc.error !== undefined) {
           console.warn('[StackItem] relay error envelope', jsonRpc.error);
-          return jsonRpc.error;
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: jsonRpc.error.message ?? 'relay error',
+              },
+            ],
+          };
         }
-        // Return the JSON-RPC result. McpAppIframe wraps and posts
-        // it back to the iframe so iframe-runtime's postRpcToParent
-        // resolver can read it.
-        return jsonRpc.result;
+        return jsonRpc.result ?? { content: [] };
       } catch (err) {
         console.warn('[StackItem] relay transport error', err);
         return { isError: true, content: [] };
@@ -118,29 +151,33 @@ export function StackItem({
             {item.contractHash.slice(0, 10)}
           </span>
         ) : null}
-        <a
-          className="stack-item-link"
-          href={item.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          title="Open in new tab"
-          aria-label="Open in new tab"
-        >
-          ↗
-        </a>
       </div>
       <div
         className="stack-item-frame"
         style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
       >
-        <McpAppIframe
-          resource={resource}
-          onToolCall={onToolCall}
-          allowSameOrigin
-          onUiMessage={onUiMessage}
-          {...(meta !== undefined ? { meta } : {})}
+        <AppRenderer
+          toolName="ggui_push"
+          sandbox={sandbox}
+          html={html}
+          {...(toolResult !== undefined ? { toolResult } : {})}
+          onCallTool={onCallTool}
+          onError={(err) =>
+            console.warn('[StackItem] AppRenderer error', err)
+          }
         />
       </div>
     </div>
   );
 }
+
+/**
+ * Placeholder HTML rendered while the slice envelope is being
+ * recovered (the meta refetch is async post-tool_result). Shows a tiny
+ * loading marker so the iframe isn't fully blank; the next prop
+ * transition swaps in the real shell HTML built from the slice pair.
+ */
+const LOADING_HTML = `<!doctype html>
+<html><body>
+<div style="font:14px system-ui,sans-serif;color:#666;padding:24px">Loading UI…</div>
+</body></html>`;

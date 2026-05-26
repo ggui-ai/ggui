@@ -1,59 +1,36 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
-import type { UiMessageEvent } from '@ggui-ai/react';
+import { useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useChat } from './useChat';
 import { StackItem } from './StackItem';
 import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
+
+/**
+ * Sandbox-proxy URL injected by the server-rendered host page (see
+ * `src/server.ts`). The sample's `index.html` template gets the URL
+ * substituted into a global so the AppRenderer can mount on a
+ * different-origin iframe sandbox per MCP Apps spec. Falls back to
+ * `http://localhost:7790/sandbox.html` for dev usage when the global
+ * isn't injected.
+ */
+declare global {
+  // eslint-disable-next-line no-var
+  var GGUI_SANDBOX_PROXY_URL: string | undefined;
+}
+function resolveSandboxUrl(): string {
+  if (
+    typeof globalThis.GGUI_SANDBOX_PROXY_URL === 'string' &&
+    globalThis.GGUI_SANDBOX_PROXY_URL.length > 0
+  ) {
+    return globalThis.GGUI_SANDBOX_PROXY_URL;
+  }
+  return 'http://localhost:7790/sandbox.html';
+}
 
 export function Chat() {
   const { entries, stackItems, sending, send, abort } = useChat();
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
-
-  // Forward iframe-runtime's `ui/message` envelope as a fresh user turn.
-  // Iframe-runtime emits this on every agent-routed actionSpec dispatch
-  // alongside the server-side `ggui_runtime_submit_action` audit. Since the
-  // sample agent runs one-shot `query()` per turn (no resume, no inter-
-  // turn consume long-poll), this postMessage is the path that surfaces
-  // the user's gesture to the next turn.
-  const onUiMessage = useCallback(
-    (event: UiMessageEvent) => {
-      if (sending) return;
-      // Post-2026-05-14 drain-guarantee discriminator. Two distinct
-      // cases on `ui/message`:
-      //
-      //   - `event.userAction` IS set (`kind: 'queued'` | `'inline'`)
-      //     → the iframe-runtime stamped a structured envelope. Per
-      //     MCP Apps spec, `ui/message` is a PREPARED user prompt
-      //     the user must send — auto-firing would imply the gesture
-      //     went through when it actually requires manual confirm.
-      //     Populate the input and let the user press Enter; the
-      //     iframe-side toast says "press send in chat to forward."
-      //
-      //   - `event.userAction` absent → some other ui/message (a
-      //     non-drain-guarantee chat-shortcut, an SDK opting into
-      //     auto-forward, etc.). Preserve the verbatim send so this
-      //     doesn't regress non-userAction emitters.
-      //
-      // TODO (cross-SDK convention, not protocol): an SDK with
-      // first-class ggui awareness could inject the inline
-      // userAction's `{actionData, uiContext}` directly into its
-      // tool-result loop here — skipping the natural-language
-      // describe step entirely. Not part of the spec; hosts without
-      // ggui-awareness still get a regular ui/message and don't break.
-      if (event.userAction) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[ggui] ${event.userAction.kind} userAction — prompt prepared in input; press send to forward`,
-          event.userAction,
-        );
-        setPrompt(event.text);
-        return;
-      }
-      void send(event.text);
-    },
-    [sending, send],
-  );
+  const sandboxUrl = resolveSandboxUrl();
 
   // Auto-scroll the chat log on new entries.
   useEffect(() => {
@@ -117,7 +94,7 @@ export function Chat() {
               key={entry.id}
               entry={entry}
               renderStackInline={layout === 'inline'}
-              onUiMessage={onUiMessage}
+              sandboxUrl={sandboxUrl}
             />
           ))}
         </div>
@@ -173,7 +150,7 @@ export function Chat() {
        * chat (no panel at all). */}
       {layout === 'panel' ? (
         <main className="ui-pane">
-          <PanelView stackItems={stackItems} onUiMessage={onUiMessage} />
+          <PanelView stackItems={stackItems} sandboxUrl={sandboxUrl} />
         </main>
       ) : null}
     </div>
@@ -203,17 +180,17 @@ function EmptyState() {
 function ChatEntryView({
   entry,
   renderStackInline,
-  onUiMessage,
+  sandboxUrl,
 }: {
   entry: ChatEntry;
   renderStackInline: boolean;
-  onUiMessage: (event: UiMessageEvent) => void;
+  sandboxUrl: string;
 }) {
   if (entry.kind === 'stack-item') {
     if (renderStackInline) {
       return (
         <div className="msg stack-item-wrap">
-          <StackItem item={entry.stackItem} onUiMessage={onUiMessage} />
+          <StackItem item={entry.stackItem} sandboxUrl={sandboxUrl} />
         </div>
       );
     }
@@ -302,10 +279,10 @@ function prettyJson(value: unknown): string {
  */
 function PanelView({
   stackItems,
-  onUiMessage,
+  sandboxUrl,
 }: {
   stackItems: ReadonlyArray<StackItemRef>;
-  onUiMessage: (event: UiMessageEvent) => void;
+  sandboxUrl: string;
 }) {
   const top = stackItems[stackItems.length - 1];
   if (!top) {
@@ -320,7 +297,7 @@ function PanelView({
   }
   return (
     <div className="panel-frame">
-      <StackItem item={top} fillContainer onUiMessage={onUiMessage} />
+      <StackItem item={top} sandboxUrl={sandboxUrl} fillContainer />
     </div>
   );
 }
