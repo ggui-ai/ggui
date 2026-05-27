@@ -196,14 +196,14 @@ export function validateOutboundActionEnvelope(
 }
 
 /**
- * Validate a `props_update` payload against the target stack item's
+ * Validate a `props_update` payload against the target render's
  * `propsSpec` before applying.
  *
  * Server-side `assertPropsContract` runs on the ingress path into
  * `ggui_update`, so a well-behaved mutation handler never produces a
  * violating `props_update`. This client-side check catches
- * spec-versioning drift and acts as a defense-in-depth for stack
- * items whose spec the client cached from a prior push.
+ * spec-versioning drift and acts as a defense-in-depth for renders
+ * whose spec the client cached from a prior `ggui_render` call.
  */
 export function validateInboundPropsPayload(
   propsSpec: PropsSpec | undefined,
