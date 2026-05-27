@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useChat } from './useChat';
 import { StackItem } from './StackItem';
 import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';

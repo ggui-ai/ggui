@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   AppRenderer,
   buildAppRendererToolResult,
@@ -75,15 +75,33 @@ export function StackItem({
   // Reconstruct the iframe HTML from the slice pair. The slice carries
   // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
   // iframe-runtime reads everything off `window.__GGUI_META__` at
-  // boot. When meta hasn't landed yet, fall back to a "loading" placeholder
-  // that the next prop transition replaces.
-  const html = useMemo(() => {
-    if (!item.meta) {
-      return LOADING_HTML;
+  // boot. When meta hasn't landed yet, fall back to a "loading"
+  // placeholder that the next prop transition replaces.
+  //
+  // The shell builds ONCE per stack-item lifetime — pinned in a ref
+  // because subsequent `ggui_update` calls mutate `item.meta` (the
+  // props patch), and AppRenderer re-navigates the inner sandbox
+  // iframe whenever its `html` prop string changes — that wipes the
+  // running React tree. Live props updates MUST flow through
+  // `toolResult` (forwarded as `ui/notifications/tool-result`
+  // postMessage) or the WS `props_update` frame instead. We reset the
+  // ref when the stack-item id changes (genuinely new mount target).
+  const htmlRef = useRef<{ stackItemId: string; html: string } | null>(null);
+  if (htmlRef.current !== null && htmlRef.current.stackItemId !== item.stackItemId) {
+    htmlRef.current = null;
+  }
+  let html: string;
+  if (!item.meta) {
+    html = LOADING_HTML;
+  } else {
+    if (htmlRef.current === null) {
+      htmlRef.current = {
+        stackItemId: item.stackItemId,
+        html: buildSelfContainedHtml(toMcpAppEnvelope(item.meta)),
+      };
     }
-    const envelope = toMcpAppEnvelope(item.meta);
-    return buildSelfContainedHtml(envelope);
-  }, [item.meta]);
+    html = htmlRef.current.html;
+  }
 
   // Build a CallToolResult from the slice pair so AppRenderer forwards
   // it to the inner iframe via `ui/notifications/tool-result` — the
