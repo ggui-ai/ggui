@@ -211,9 +211,9 @@ export interface SessionStreamBuffer {
   currentSeq(renderId: string): Promise<number>;
 
   /**
-   * Drop all buffered state for a session. Invoked on `session.closed`
-   * or TTL eviction by the session-lifecycle layer. Idempotent —
-   * no-op when the session has no buffered state.
+   * Drop all buffered state for a render. Invoked on render `delete`
+   * or TTL eviction by the render-lifecycle layer. Idempotent —
+   * no-op when the render has no buffered state.
    */
   clear(renderId: string): Promise<void>;
 

@@ -214,58 +214,6 @@ describe('SqliteShortCodeIndex', () => {
     });
   });
 
-  describe('revokeByStackItemId', () => {
-    it('drops only the binding(s) tied to the stackItemId', async () => {
-      const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      await idx.put('aaaa1111', {
-        sessionId: 's1',
-        appId: 'app',
-        stackItemId: 'stk_a',
-      });
-      await idx.put('bbbb2222', {
-        sessionId: 's1',
-        appId: 'app',
-        stackItemId: 'stk_b',
-      });
-      expect(await idx.revokeByStackItemId('stk_a')).toBe(1);
-      expect(await idx.lookup('aaaa1111')).toBeNull();
-      expect(await idx.lookup('bbbb2222')).not.toBeNull();
-      expect(await idx.findBySessionId('s1')).toBe('bbbb2222');
-      idx.close();
-    });
-
-    it('returns 0 on unknown stackItemId or empty input', async () => {
-      const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      await idx.put('aaaa1111', {
-        sessionId: 's1',
-        appId: 'app',
-        stackItemId: 'stk_a',
-      });
-      expect(await idx.revokeByStackItemId('stk_ghost')).toBe(0);
-      expect(await idx.revokeByStackItemId('')).toBe(0);
-      expect(await idx.lookup('aaaa1111')).not.toBeNull();
-      idx.close();
-    });
-
-    it('skips bindings without a stackItemId (NULL column)', async () => {
-      // The partial index `WHERE stack_item_id IS NOT NULL` is the
-      // perf-side reason; correctness-side reason is that an empty
-      // string passed by a buggy caller MUST NOT match every
-      // NULL-row binding.
-      const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      await idx.put('aaaa1111', { sessionId: 's1', appId: 'app' });
-      await idx.put('bbbb2222', {
-        sessionId: 's1',
-        appId: 'app',
-        stackItemId: 'stk_b',
-      });
-      expect(await idx.revokeByStackItemId('stk_b')).toBe(1);
-      // The stackItemId-less binding is untouched.
-      expect(await idx.lookup('aaaa1111')).not.toBeNull();
-      idx.close();
-    });
-  });
-
   describe('persistence across reopen', () => {
     // The point of the sqlite impl. A fresh handle opened against the
     // same file resumes the prior state — closing and reopening must

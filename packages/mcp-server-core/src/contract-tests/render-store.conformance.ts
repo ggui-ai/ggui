@@ -196,16 +196,15 @@ export function runRenderStoreConformance(
     });
 
     describe('status (bug class: precedence)', () => {
-      // Bug class 2 — explicit status must win over expiry math.
-      // The OSS impls compute status from internal state (`closed`
-      // flag + expiresAt). Invariant: a freshly-created render that
-      // hasn't been closed and isn't past its expiresAt MUST NOT
-      // surface status='completed' or 'expired'.
-      it('fresh render does not surface status=completed or expired', async () => {
+      // OSS impls compute status from `expiresAt` only — there is no
+      // explicit terminal state. Invariant: a freshly-created render
+      // whose `expiresAt` is in the future MUST surface
+      // status='active' (or omit status, which the contract treats
+      // as 'active').
+      it('fresh render does not surface status=expired', async () => {
         await withStore(async (store) => {
           await store.create({ id: 'render-1', appId: 'app-1' });
           const got = await store.get('render-1');
-          expect(got?.status).not.toBe('completed');
           expect(got?.status).not.toBe('expired');
         });
       });
@@ -264,26 +263,5 @@ export function runRenderStoreConformance(
       });
     });
 
-    describe('session.closed lifecycle', () => {
-      // The `createGguiCloseHandler` factory writes `session.closed`
-      // via `appendEvent`. Both InMemory + Sqlite watch this event
-      // and flip an internal `closed` flag, which surfaces as
-      // status='completed' on the next get.
-      //
-      // Conformance invariant: after appendEvent(session.closed),
-      // status === 'completed' on next get.
-      it('surfaces status=completed after appendEvent(session.closed)', async () => {
-        await withStore(async (store) => {
-          await store.create({ id: 'render-1', appId: 'app-1' });
-          await store.appendEvent({
-            renderId: 'render-1',
-            type: 'session.closed',
-            data: {},
-          });
-          const got = await store.get('render-1');
-          expect(got?.status).toBe('completed');
-        });
-      });
-    });
   });
 }

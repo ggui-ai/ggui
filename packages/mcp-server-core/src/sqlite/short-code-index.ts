@@ -13,7 +13,7 @@
  *
  * Single table; primary key on the shortCode itself, with an index on
  * `session_id` so {@link findBySessionId} + {@link revokeBySessionId}
- * + {@link revokeByStackItemId} stay O(matches) instead of O(table).
+ * stay O(matches) instead of O(table).
  *
  * ```sql
  * CREATE TABLE short_codes (
@@ -41,12 +41,10 @@
  *     statement each. No transactions needed: every method is a
  *     single SQL op, and SQLite's serialised writer guarantees
  *     atomicity per-statement.
- *   - Lifetime: the reference never evicts. Long-running operators
- *     should `revokeBySessionId` on `ggui_close` (already wired
- *     upstream); orphan rows after a crashed process are inert and
- *     cleared by the next `revokeBySessionId` if the operator
- *     re-runs the same session, otherwise they sit until manually
- *     vacuumed.
+ *   - Lifetime: the reference never evicts. Renders decay implicitly
+ *     via TTL; orphan rows after a crashed process are inert and
+ *     cleared by the next `revokeBySessionId` if the operator runs
+ *     a teardown sweep, otherwise they sit until manually vacuumed.
  */
 import Database, {
   type Database as SqliteDatabase,
@@ -98,7 +96,6 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     selectLatestBySession: SqliteStatement<unknown[], ShortCodeRow>;
     deleteByCode: SqliteStatement<unknown[]>;
     deleteBySession: SqliteStatement<unknown[]>;
-    deleteByStackItem: SqliteStatement<unknown[]>;
   };
 
   constructor(opts: SqliteShortCodeIndexOptions = {}) {
@@ -138,9 +135,6 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
       ),
       deleteBySession: this.db.prepare<unknown[]>(
         `DELETE FROM short_codes WHERE session_id = ?`,
-      ),
-      deleteByStackItem: this.db.prepare<unknown[]>(
-        `DELETE FROM short_codes WHERE stack_item_id = ?`,
       ),
     };
   }
@@ -186,12 +180,6 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     const result = this.stmts.deleteBySession.run(sessionId);
     return result.changes;
   }
-
-  async revokeByStackItemId(stackItemId: string): Promise<number> {
-    if (!stackItemId) return 0;
-    const result = this.stmts.deleteByStackItem.run(stackItemId);
-    return result.changes;
-  }
 }
 
 function rowToBinding(row: ShortCodeRow): ShortCodeBinding {
@@ -219,7 +207,4 @@ CREATE TABLE IF NOT EXISTS short_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_short_codes_session
   ON short_codes(session_id);
-CREATE INDEX IF NOT EXISTS idx_short_codes_stack
-  ON short_codes(stack_item_id)
-  WHERE stack_item_id IS NOT NULL;
 `;

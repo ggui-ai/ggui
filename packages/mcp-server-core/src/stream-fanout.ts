@@ -124,10 +124,10 @@ export interface StreamFanout {
   subscribe(renderId: string): AsyncIterable<BufferedStreamEnvelope>;
 
   /**
-   * Terminate all in-flight subscribers for this session. Typically
-   * called when the session ends (`session.closed`) so subscribers
-   * don't leak across session lifecycles. Idempotent; calling `close`
-   * on a session with no subscribers is a no-op.
+   * Terminate all in-flight subscribers for this render. Typically
+   * called when a render is deleted or its TTL expires so subscribers
+   * don't leak. Idempotent; calling `close` on a render with no
+   * subscribers is a no-op.
    */
   close(renderId: string): Promise<void>;
 }

@@ -16,9 +16,9 @@
  *
  *   - `pending_event_pipes(stack_item_id PK, status, last_activity_at,
  *     expires_at)` — per-pipe lifecycle row. Created via
- *     {@link markCreated}; status flipped via {@link markStatus};
- *     removed via {@link markDeleted}. Read on every
- *     `consumeAndClear` so the result carries the current status.
+ *     {@link markCreated}; read on every `consumeAndClear` so the
+ *     result carries the current status. No explicit close — pipes
+ *     decay via TTL.
  *   - `pending_events(stack_item_id, seq, event_json, enqueued_at,
  *     PRIMARY KEY (stack_item_id, seq))` — FIFO buffer. `seq` is
  *     monotonic + gap-free per pipe; consumeAndClear drains then
@@ -100,8 +100,6 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     getPipe: SqliteStatement<unknown[], PipeRow>;
     insertPipe: SqliteStatement<unknown[]>;
     updateActivity: SqliteStatement<unknown[]>;
-    updateStatus: SqliteStatement<unknown[]>;
-    deletePipe: SqliteStatement<unknown[]>;
     deleteEventsForPipe: SqliteStatement<unknown[]>;
     selectEventsForPipe: SqliteStatement<unknown[], EventRow>;
     insertEvent: SqliteStatement<unknown[]>;
@@ -140,12 +138,6 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
         `UPDATE pending_event_pipes
          SET last_activity_at = ?, expires_at = ?
          WHERE stack_item_id = ?`,
-      ),
-      updateStatus: this.db.prepare<unknown[]>(
-        `UPDATE pending_event_pipes SET status = ? WHERE stack_item_id = ?`,
-      ),
-      deletePipe: this.db.prepare<unknown[]>(
-        `DELETE FROM pending_event_pipes WHERE stack_item_id = ?`,
       ),
       deleteEventsForPipe: this.db.prepare<unknown[]>(
         `DELETE FROM pending_events WHERE stack_item_id = ?`,
@@ -220,18 +212,6 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     const t = this.now();
     // INSERT OR IGNORE — idempotent on re-mark.
     this.stmts.insertPipe.run(renderId, 'active', t, t + ttlMs);
-  }
-
-  markStatus(renderId: string, status: RenderStatus): void {
-    this.stmts.updateStatus.run(status, renderId);
-  }
-
-  markDeleted(renderId: string): void {
-    const txn = this.db.transaction(() => {
-      this.stmts.deleteEventsForPipe.run(renderId);
-      this.stmts.deletePipe.run(renderId);
-    });
-    txn();
   }
 
   /** Inspector for tests: how many events are queued? */

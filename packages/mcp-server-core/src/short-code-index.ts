@@ -112,9 +112,9 @@ export interface ShortCodeIndex {
 
   /**
    * Bulk revoke — drop every binding tied to `sessionId`. Used by
-   * conversation-wide teardown paths: after every render in a host
-   * conversation is closed, no outstanding render URL bound to that
-   * host should still resolve.
+   * conversation-wide teardown paths (operator-initiated cleanup,
+   * tenant offboarding, test fixtures): a single call drops every URL
+   * that was ever minted against the supplied id.
    *
    * Semantics:
    *   - Both forward + reverse entries cleared.
@@ -122,18 +122,4 @@ export interface ShortCodeIndex {
    *   - Idempotent.
    */
   revokeBySessionId(sessionId: string): Promise<number>;
-
-  /**
-   * Granular revoke — drop bindings tied to a specific render.
-   * Used by `ggui_close` (and equivalent per-render teardown paths):
-   * when a single render is closed, the URL pointing at that specific
-   * render should stop resolving even though sibling renders in the
-   * same host conversation may still have valid URLs.
-   *
-   * The parameter is named `stackItemId` for historical reasons; it
-   * carries a `renderId`. Implementations that don't persist this
-   * field on the binding MUST start persisting it to honor this call.
-   * Returns the count of revoked bindings (0 when none matched).
-   */
-  revokeByStackItemId(stackItemId: string): Promise<number>;
 }

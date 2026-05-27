@@ -37,29 +37,6 @@ describe('SqlitePendingEventConsumer', () => {
       expect(result.events).toHaveLength(1);
     });
 
-    it('markStatus flips the observed status', async () => {
-      consumer.markCreated('stack-1');
-      consumer.markStatus('stack-1', 'completed');
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
-      expect(result.status).toBe('completed');
-    });
-
-    it('markDeleted causes subsequent consumeAndClear to throw PendingPipeNotFoundError', async () => {
-      consumer.markCreated('stack-1');
-      consumer.markDeleted('stack-1');
-      await expect(
-        consumer.consumeAndClear('stack-1', 60_000),
-      ).rejects.toBeInstanceOf(PendingPipeNotFoundError);
-    });
-
-    it('markDeleted cascades — pending events for the session are wiped', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'evt-1' });
-      expect(consumer.pendingCount('stack-1')).toBe(1);
-      consumer.markDeleted('stack-1');
-      consumer.markCreated('stack-1'); // re-create
-      expect(consumer.pendingCount('stack-1')).toBe(0);
-    });
   });
 
   describe('consumeAndClear', () => {

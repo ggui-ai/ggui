@@ -7,13 +7,10 @@
  *   - `get` missing → null; hit → full render.
  *   - `list` filters on appId / userId / status.
  *   - `appendEvent` assigns monotonic gap-free `seq` starting at 1.
- *   - `appendEvent` after `session.closed` is rejected.
  *   - `observe` snapshot-then-tail: replays historical events in order,
  *     then yields new events.
  *   - `observe(fromSeq)` resumes correctly — no replay of earlier seqs.
  *   - `observe(tail: false)` terminates after historical replay.
- *   - The terminal `session.closed` event is delivered, then the
- *     iterable ends.
  *   - `delete` wakes active observers cleanly.
  *
  * Consumers pass a factory that builds a fresh store and a matching
@@ -84,21 +81,6 @@ export function renderStoreContract(
       expect(byUser.every((s) => s.userId === 'u1')).toBe(true);
     });
 
-    it('list status=active excludes closed renders', async () => {
-      const store = await makeStore();
-      const live = await store.create({ appId: 'app-a' });
-      const done = await store.create({ appId: 'app-a' });
-      await store.appendEvent({
-        renderId: done.id,
-        type: 'session.closed',
-        data: {},
-      });
-      const active = await store.list({ appId: 'app-a', status: 'active' });
-      const completed = await store.list({ appId: 'app-a', status: 'completed' });
-      expect(active.map((s) => s.id)).toEqual([live.id]);
-      expect(completed.map((s) => s.id)).toEqual([done.id]);
-    });
-
     it('appendEvent assigns monotonic gap-free seq starting at 1', async () => {
       const store = await makeStore();
       const r = await store.create({ appId: 'app-a' });
@@ -120,19 +102,6 @@ export function renderStoreContract(
       expect([a, b, c]).toEqual([1, 2, 3]);
       const fetched = await store.get(r.id);
       expect(fetched?.eventSequence).toBe(3);
-    });
-
-    it('appendEvent rejects a render that has emitted session.closed', async () => {
-      const store = await makeStore();
-      const r = await store.create({ appId: 'app-a' });
-      await store.appendEvent({
-        renderId: r.id,
-        type: 'session.closed',
-        data: {},
-      });
-      await expect(
-        store.appendEvent({ renderId: r.id, type: 'ui.created', data: {} }),
-      ).rejects.toThrow();
     });
 
     it('appendEvent on a missing render rejects', async () => {
@@ -198,20 +167,13 @@ export function renderStoreContract(
       const second = await pending;
       if (!second.done) collected.push(second.value);
 
-      // Close and expect the terminal event + iterator end.
-      const thirdP = iter.next();
-      await store.appendEvent({
-        renderId: r.id,
-        type: 'session.closed',
-        data: {},
-      });
-      const third = await thirdP;
-      if (!third.done) collected.push(third.value);
-      const fourth = await iter.next();
+      // Dispose the iterator explicitly — there is no terminal event,
+      // so the consumer is responsible for ending the loop (the render
+      // would otherwise tail until TTL expiry / explicit `delete`).
+      if (iter.return) await iter.return(undefined);
 
-      expect(collected.map((e) => e.seq)).toEqual([1, 2, 3]);
-      expect(collected[2]?.type).toBe('session.closed');
-      expect(fourth.done).toBe(true);
+      expect(collected.map((e) => e.seq)).toEqual([1, 2]);
+      expect(collected[1]?.type).toBe('ui.updated');
     });
 
     it('observe terminates cleanly when the render is deleted mid-stream', async () => {

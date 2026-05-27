@@ -25,9 +25,7 @@ import type {
 interface RenderBucket {
   stored: StoredRender;
   events: RenderEvent[];
-  /** Terminal `session.closed` has been written — no further appends allowed. */
-  closed: boolean;
-  /** Tail subscribers waiting for the next event or terminal close. */
+  /** Tail subscribers waiting for the next event or for `delete`. */
   waiters: Array<(e: RenderEvent | null) => void>;
 }
 
@@ -107,14 +105,14 @@ export class InMemoryRenderStore implements RenderStore {
       expiresAt: t + this.defaultTtlMs,
       render: placeholder,
     };
-    this.buckets.set(id, { stored, events: [], closed: false, waiters: [] });
+    this.buckets.set(id, { stored, events: [], waiters: [] });
     return cloneStored(stored);
   }
 
   async get(id: string): Promise<StoredRender | null> {
     const bucket = this.buckets.get(id);
     if (!bucket) return null;
-    return cloneStored(withStatus(bucket.stored, bucket.closed, this.now()));
+    return cloneStored(withStatus(bucket.stored, this.now()));
   }
 
   async list(filter: RenderFilter): Promise<StoredRender[]> {
@@ -127,7 +125,7 @@ export class InMemoryRenderStore implements RenderStore {
       if (filter.createdAfter !== undefined && s.createdAt <= filter.createdAfter) continue;
       if (filter.createdBefore !== undefined && s.createdAt >= filter.createdBefore) continue;
       if (filter.status !== undefined) {
-        if (computeStatus(s, bucket.closed, now) !== filter.status) continue;
+        if (computeStatus(s, now) !== filter.status) continue;
       }
       if (
         filter.hostName !== undefined
@@ -180,11 +178,6 @@ export class InMemoryRenderStore implements RenderStore {
     const existing = this.buckets.get(incoming.id);
     const t = this.now();
     if (existing) {
-      if (existing.closed) {
-        throw new Error(
-          `InMemoryRenderStore.commit: render is closed: ${incoming.id}`,
-        );
-      }
       // Replace visible-bits surface; preserve lifecycle fields owned
       // by the store (createdAt, eventSequence, identity slice captured
       // at create time).
@@ -213,7 +206,6 @@ export class InMemoryRenderStore implements RenderStore {
     this.buckets.set(stored.id, {
       stored,
       events: [],
-      closed: false,
       waiters: [],
     });
     return cloneStored(stored);
@@ -224,11 +216,6 @@ export class InMemoryRenderStore implements RenderStore {
     if (!bucket) {
       throw new Error(
         `InMemoryRenderStore.appendEvent: render not found: ${input.renderId}`,
-      );
-    }
-    if (bucket.closed) {
-      throw new Error(
-        `InMemoryRenderStore.appendEvent: render is closed: ${input.renderId}`,
       );
     }
     const seq = bucket.stored.eventSequence + 1;
@@ -244,7 +231,6 @@ export class InMemoryRenderStore implements RenderStore {
       eventSequence: seq,
       lastActivityAt: event.timestamp,
     };
-    if (input.type === 'session.closed') bucket.closed = true;
     // Fan out to all waiters in FIFO order.
     for (const waiter of bucket.waiters.splice(0)) waiter(event);
     return seq;
@@ -300,10 +286,9 @@ export class InMemoryRenderStore implements RenderStore {
             const backlog = bucket.events.find((e) => e.seq >= nextSeq);
             if (backlog) {
               nextSeq = backlog.seq + 1;
-              if (backlog.type === 'session.closed') done = true;
               return { value: backlog, done: false };
             }
-            if (!tail || bucket.closed) {
+            if (!tail) {
               done = true;
               return { value: undefined, done: true };
             }
@@ -315,7 +300,6 @@ export class InMemoryRenderStore implements RenderStore {
               return { value: undefined, done: true };
             }
             nextSeq = event.seq + 1;
-            if (event.type === 'session.closed') done = true;
             return { value: event, done: false };
           },
           async return(): Promise<IteratorResult<RenderEvent>> {
@@ -338,16 +322,14 @@ function cloneStored(s: StoredRender): StoredRender {
   };
 }
 
-function withStatus(s: StoredRender, closed: boolean, now: number): StoredRender {
-  return { ...s, status: computeStatus(s, closed, now) };
+function withStatus(s: StoredRender, now: number): StoredRender {
+  return { ...s, status: computeStatus(s, now) };
 }
 
 function computeStatus(
   s: StoredRender,
-  closed: boolean,
   now: number,
-): 'active' | 'completed' | 'expired' {
-  if (closed) return 'completed';
+): 'active' | 'expired' {
   if (s.expiresAt <= now) return 'expired';
   return 'active';
 }

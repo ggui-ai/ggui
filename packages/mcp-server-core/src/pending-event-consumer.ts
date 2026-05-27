@@ -7,8 +7,7 @@
  * `markCreated(renderId)` at render time, written by
  * `append(renderId, event)` from `ggui_runtime_submit_action`
  * dispatch envelopes, drained by `consumeAndClear(renderId)` from
- * `ggui_consume`, and closed by `markDeleted(renderId)` on
- * `ggui_close`.
+ * `ggui_consume`.
  *
  * Per-render keying (rather than per-conversation) means two renders
  * in the same host conversation can each have unconsumed events
@@ -26,11 +25,10 @@
  *      → handler calls `append`. The runtime tags the envelope with
  *      `renderId` sourced from its `_meta.ggui.bootstrap`.
  *   3. `ggui_consume({renderId, timeout})` blocks; long-poll loop
- *      calls `consumeAndClear` until events arrive OR status flips
- *      to `'completed'` OR `timeout` elapses.
- *   4. `ggui_close` → `markDeleted` so subsequent ops
- *      throw `PendingPipeNotFoundError` (the long-poll loop sees
- *      that as terminal and returns).
+ *      calls `consumeAndClear` until events arrive OR `timeout`
+ *      elapses. Render TTL eventually reaps the pipe; subsequent
+ *      ops throw `PendingPipeNotFoundError`, which the handler
+ *      treats as the loop-terminating signal.
  *
  * Two implementations ship with `@ggui-ai/mcp-server-core`:
  *   - {@link InMemoryPendingEventConsumer} — OSS dev/test path.
@@ -58,8 +56,8 @@ import type { RenderStatus } from '@ggui-ai/protocol';
  * struct) stay free to do so.
  *
  * `status` carries the pipe's lifecycle phase. The handler's long-
- * poll loop terminates on `'completed'` (pipe closed via `markDeleted`
- * or `markStatus('completed')`).
+ * poll loop terminates on `'expired'` (TTL elapsed) — the pipe
+ * surfaces the same status the underlying render reports.
  */
 export interface PendingEventConsumeResult {
   readonly events: ReadonlyArray<Record<string, unknown>>;
@@ -132,20 +130,6 @@ export interface PendingEventConsumer {
    * BEFORE the agent's first `ggui_consume`) don't get lost.
    */
   markCreated?(renderId: string, ttlMs?: number): void;
-
-  /**
-   * Flip the pipe's observed status — typically to `'completed'` so
-   * the consume long-poll loop short-circuits. Optional for the same
-   * reason as `markCreated`.
-   */
-  markStatus?(renderId: string, status: RenderStatus): void;
-
-  /**
-   * Close + remove the pipe. Subsequent ops throw
-   * `PendingPipeNotFoundError`. Called by `ggui_close` to release pipe
-   * resources.
-   */
-  markDeleted?(renderId: string): void;
 }
 
 /**

@@ -15,10 +15,10 @@
  *     Throws `PendingPipeNotFoundError` if the pipe wasn't opened.
  *   - `consumeAndClear(renderId, ttlMs)` atomically drains the
  *     buffer and bumps the pipe's heartbeat.
- *   - `markStatus(renderId, 'completed')` flips the observed
- *     status so the long-poll loop short-circuits.
- *   - `markDeleted(renderId)` removes the pipe; subsequent ops
- *     throw. Called by `ggui_close`.
+ *
+ * No explicit close. Pipes decay implicitly via TTL — when a render's
+ * `expiresAt` elapses the pipe's status flips to `'expired'` and the
+ * agent's long-poll loop terminates on the next consume.
  */
 
 import type { RenderStatus } from '@ggui-ai/protocol';
@@ -84,22 +84,6 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
       lastActivityAt: now,
       expiresAt: now + ttlMs,
     });
-  }
-
-  /** Update the pipe's observed status — e.g. `'completed'` so
-   *  the next consume returns the terminal flag and ends the agent's
-   *  long-poll loop. */
-  markStatus(renderId: string, status: RenderStatus): void {
-    const entry = this.pipes.get(renderId);
-    if (!entry) return;
-    entry.status = status;
-  }
-
-  /** Remove the pipe — subsequent ops throw
-   *  `PendingPipeNotFoundError`. */
-  markDeleted(renderId: string): void {
-    this.pipes.delete(renderId);
-    this.mutexes.delete(renderId);
   }
 
   /** Inspector for tests: how many events are queued? */

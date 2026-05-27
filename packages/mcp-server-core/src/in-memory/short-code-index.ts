@@ -52,9 +52,7 @@ export class InMemoryShortCodeIndex implements ShortCodeIndex {
   async lookup(shortCode: string): Promise<ShortCodeBinding | null> {
     const entry = this.store.get(shortCode);
     if (!entry) return null;
-    // Defensive copy — callers may mutate. Includes stackItemId so
-    // `revokeByStackItemId` callers (and any future filter-by-item
-    // consumer) see the complete binding the writer recorded.
+    // Defensive copy — callers may mutate.
     return {
       sessionId: entry.sessionId,
       appId: entry.appId,
@@ -96,27 +94,6 @@ export class InMemoryShortCodeIndex implements ShortCodeIndex {
       count += 1;
     }
     this.sessionIdToShortCode.delete(sessionId);
-    return count;
-  }
-
-  async revokeByStackItemId(stackItemId: string): Promise<number> {
-    if (!stackItemId) return 0;
-    let count = 0;
-    const codesToRevoke: Array<{ code: string; sessionId: string }> = [];
-    for (const [code, binding] of this.store.entries()) {
-      if (binding.stackItemId === stackItemId) {
-        codesToRevoke.push({ code, sessionId: binding.sessionId });
-      }
-    }
-    for (const { code, sessionId } of codesToRevoke) {
-      this.store.delete(code);
-      // Only clear the reverse pointer if it still points at THIS
-      // revoked code — other codes for the same session stay valid.
-      if (this.sessionIdToShortCode.get(sessionId) === code) {
-        this.sessionIdToShortCode.delete(sessionId);
-      }
-      count += 1;
-    }
     return count;
   }
 

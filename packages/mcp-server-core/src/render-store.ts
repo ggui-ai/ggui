@@ -55,7 +55,7 @@ export interface StoredRender {
   readonly createdAt: number;
   readonly lastActivityAt: number;
   readonly expiresAt: number;
-  readonly status?: 'active' | 'completed' | 'expired';
+  readonly status?: 'active' | 'expired';
   /**
    * Visible-bits surface — the wire-shape `Render` payload (any
    * variant). When the store mints a placeholder via `create()` before
@@ -84,9 +84,10 @@ export interface RenderEvent {
  * Canonical event-type taxonomy. Implementations MUST emit events for the
  * core types; custom types may be added with a `x-` or `ext:` prefix.
  *
- * `session.closed` retains its wire string for inbound/outbound parity
- * with hosts that observe the event log via the live channel; the
- * semantics — render terminated, no further events — are unchanged.
+ * No terminal event. Renders decay implicitly via TTL — there is no
+ * `'session.closed'` / `'render.terminated'` literal because there is
+ * no `ggui_close` tool to write one. Observers detect end-of-life by
+ * `expiresAt` elapsing relative to wall-clock.
  */
 export type RenderEventType =
   | 'ui.created'
@@ -94,8 +95,7 @@ export type RenderEventType =
   | 'ui.committed'
   | 'tool.called'
   | 'tool.result'
-  | 'user.submitted'
-  | 'session.closed';
+  | 'user.submitted';
 
 /**
  * Options for {@link RenderStore.observe}.
@@ -177,7 +177,7 @@ export interface CreateRenderInput {
 export interface RenderFilter {
   appId?: string;
   userId?: string;
-  status?: 'active' | 'completed' | 'expired';
+  status?: 'active' | 'expired';
   createdAfter?: number;
   createdBefore?: number;
   limit?: number;
@@ -243,7 +243,10 @@ export interface AppendEventInput {
  *     `hostSession`) are preserved across the upsert. `lastActivityAt`
  *     bumps to `now`.
  *
- * Implementations MUST refuse to commit to a closed render.
+ * Implementations MAY refuse to commit to an expired render (past
+ * `expiresAt`); the OSS in-memory + sqlite stores currently accept
+ * the write either way and surface lifecycle exclusively via the
+ * `status` field on subsequent reads.
  */
 export interface CommitRenderInput {
   render: Render;
@@ -339,9 +342,11 @@ export interface RenderStore {
    * - **Stream shape.** Append-only typed events, NOT state-change diffs.
    *   Consumers reconstruct current state by folding events.
    *
-   * - **Close.** The iterable ends cleanly when the render is closed (the
-   *   terminal `session.closed` event is emitted first) or when the consumer
-   *   disposes. No indefinite hang on a closed render.
+   * - **End-of-life.** The iterable ends cleanly when the render is
+   *   deleted (`delete` wakes waiters with null) or when the consumer
+   *   disposes. There is no terminal event — renders decay implicitly
+   *   via TTL, and a consumer of an expired render simply stops
+   *   receiving new entries (the historical replay is still served).
    */
   observe(id: string, opts?: ObserveOptions): AsyncIterable<RenderEvent>;
 }

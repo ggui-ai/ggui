@@ -15,10 +15,15 @@
  *
  *   - `renders(id PK, app_id, user_id, payload JSON, event_sequence,
  *     created_at, last_activity_at, expires_at, end_user_identity JSON?,
- *     closed, theme_id, host_context JSON?, host_name, host_session_id)`
+ *     theme_id, host_context JSON?, host_name, host_session_id)`
  *   - `render_events(render_id, seq, type, data JSON, timestamp,
  *     PRIMARY KEY (render_id, seq))`
  *   - `idx_renders_app_id` + `idx_renders_user_id` + `idx_renders_host` for list filters.
+ *
+ * The `closed` column + `'session.closed'` event type were retired
+ * alongside the `ggui_close` tool — renders decay implicitly via
+ * `expires_at` (TTL), so there is no second termination signal to
+ * persist.
  *
  * Writes go through `BEGIN IMMEDIATE` transactions so concurrent
  * callers can't tear sequence state. SQLite's own WAL + serialized
@@ -107,7 +112,6 @@ interface RenderRow {
   last_activity_at: number;
   expires_at: number;
   end_user_identity: string | null;
-  closed: number;
   theme_id: string | null;
   host_context: string | null;
   host_name: string | null;
@@ -148,7 +152,6 @@ export class SqliteRenderStore implements RenderStore {
     deleteRender: SqliteStatement<unknown[]>;
     deleteRenderEvents: SqliteStatement<unknown[]>;
     insertEvent: SqliteStatement<unknown[]>;
-    bumpSequenceAndClose: SqliteStatement<unknown[]>;
     bumpSequence: SqliteStatement<unknown[]>;
     selectEventsFromSeq: SqliteStatement<unknown[], EventRow>;
     selectEventsSinceLimited: SqliteStatement<unknown[], EventRow>;
@@ -194,9 +197,6 @@ export class SqliteRenderStore implements RenderStore {
       ),
       insertEvent: this.db.prepare<unknown[]>(
         `INSERT INTO render_events (render_id, seq, type, data, timestamp) VALUES (?, ?, ?, ?, ?)`,
-      ),
-      bumpSequenceAndClose: this.db.prepare<unknown[]>(
-        `UPDATE renders SET event_sequence = ?, last_activity_at = ?, closed = 1 WHERE id = ?`,
       ),
       bumpSequence: this.db.prepare<unknown[]>(
         `UPDATE renders SET event_sequence = ?, last_activity_at = ? WHERE id = ?`,
@@ -269,7 +269,6 @@ export class SqliteRenderStore implements RenderStore {
       stored.lastActivityAt,
       stored.expiresAt,
       stored.endUserIdentity ? JSON.stringify(stored.endUserIdentity) : null,
-      0, // closed
       stored.themeId ?? null,
       stored.hostSession?.hostName ?? null,
       stored.hostSession?.hostSessionId ?? null,
@@ -336,11 +335,6 @@ export class SqliteRenderStore implements RenderStore {
       | undefined;
     const t = this.now();
     if (existing) {
-      if (existing.closed) {
-        throw new Error(
-          `SqliteRenderStore.commit: render is closed: ${incoming.id}`,
-        );
-      }
       // Replace visible-bits surface; preserve lifecycle (createdAt,
       // eventSequence, hostSession captured at create time).
       this.stmts.upsertRenderPayload.run(
@@ -375,7 +369,6 @@ export class SqliteRenderStore implements RenderStore {
       stored.lastActivityAt,
       stored.expiresAt,
       stored.endUserIdentity ? JSON.stringify(stored.endUserIdentity) : null,
-      0, // closed
       stored.themeId ?? null,
       stored.hostSession?.hostName ?? null,
       stored.hostSession?.hostSessionId ?? null,
@@ -396,11 +389,6 @@ export class SqliteRenderStore implements RenderStore {
           `SqliteRenderStore.appendEvent: render not found: ${input.renderId}`,
         );
       }
-      if (row.closed) {
-        throw new Error(
-          `SqliteRenderStore.appendEvent: render is closed: ${input.renderId}`,
-        );
-      }
       const seq = row.event_sequence + 1;
       const timestamp = this.now();
       this.stmts.insertEvent.run(
@@ -410,11 +398,7 @@ export class SqliteRenderStore implements RenderStore {
         JSON.stringify(input.data ?? null),
         timestamp,
       );
-      if (input.type === 'session.closed') {
-        this.stmts.bumpSequenceAndClose.run(seq, timestamp, input.renderId);
-      } else {
-        this.stmts.bumpSequence.run(seq, timestamp, input.renderId);
-      }
+      this.stmts.bumpSequence.run(seq, timestamp, input.renderId);
       const event: RenderEvent = {
         seq,
         type: input.type,
@@ -487,10 +471,9 @@ export class SqliteRenderStore implements RenderStore {
             if (backlog) {
               const event = rowToEvent(backlog);
               nextSeq = event.seq + 1;
-              if (event.type === 'session.closed') done = true;
               return { value: event, done: false };
             }
-            if (!tail || row.closed) {
+            if (!tail) {
               done = true;
               return { value: undefined, done: true };
             }
@@ -500,7 +483,6 @@ export class SqliteRenderStore implements RenderStore {
               return { value: undefined, done: true };
             }
             nextSeq = event.seq + 1;
-            if (event.type === 'session.closed') done = true;
             return { value: event, done: false };
           },
           async return(): Promise<IteratorResult<RenderEvent>> {
@@ -560,7 +542,6 @@ CREATE TABLE IF NOT EXISTS renders (
   last_activity_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
   end_user_identity TEXT,
-  closed INTEGER NOT NULL DEFAULT 0,
   theme_id TEXT,
   host_context TEXT,
   host_name TEXT,
@@ -588,9 +569,9 @@ const INSERT_RENDER_SQL = `
 INSERT INTO renders (
   id, app_id, user_id, payload,
   event_sequence, created_at, last_activity_at, expires_at,
-  end_user_identity, closed, theme_id,
+  end_user_identity, theme_id,
   host_name, host_session_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const UPSERT_RENDER_PAYLOAD_SQL = `
@@ -603,11 +584,9 @@ UPDATE renders SET payload = ?, last_activity_at = ? WHERE id = ?
 
 function rowToStored(row: RenderRow): StoredRender {
   const now = Date.now();
-  const status: 'active' | 'completed' | 'expired' = row.closed
-    ? 'completed'
-    : row.expires_at <= now
-      ? 'expired'
-      : 'active';
+  const status: 'active' | 'expired' = row.expires_at <= now
+    ? 'expired'
+    : 'active';
   const render = parseJson<Render>(row.payload, {
     type: 'component',
     id: row.id,
@@ -673,8 +652,7 @@ function parseJson<T>(raw: string, fallback: T): T {
 function computeRowStatus(
   row: RenderRow,
   now: number,
-): 'active' | 'completed' | 'expired' {
-  if (row.closed) return 'completed';
+): 'active' | 'expired' {
   if (row.expires_at <= now) return 'expired';
   return 'active';
 }
