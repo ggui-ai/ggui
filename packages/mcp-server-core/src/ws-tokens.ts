@@ -8,16 +8,16 @@
  * the same primitives.
  *
  *   - **WS token** — short-TTL signed envelope, minted by
- *     `ggui_push` (or equivalent), consumed at live-channel subscribe.
+ *     `ggui_render` (or equivalent), consumed at live-channel subscribe.
  *     The MCP Apps iframe receives it on the
- *     `_meta["ai.ggui/session"].token` slice. **Reusable within TTL**
+ *     `_meta["ai.ggui/render"].token` slice. **Reusable within TTL**
  *     (G14, 2026-05-23) so a transient WS drop can reconnect without a
  *     fresh handshake. After TTL expiry the client either refreshes
  *     the envelope via `ggui_runtime_refresh_ws_token` (allowed within
  *     `DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER * ttl` of the
  *     original `iat`) or re-handshakes.
  *
- *   - **Session token** — longer-TTL, reusable, minted by the session-
+ *   - **Session token** — longer-TTL, reusable, minted by the live-
  *     channel server on the FIRST successful ws-token-authed subscribe
  *     and returned in `AckPayload.sessionToken`. The iframe uses it for
  *     live-channel reconnects (over the standard bearer path) so the
@@ -48,7 +48,7 @@
  *
  * **Replay tracker** (`WsTokenReplayCache`) is still exported for
  * callers that need explicit single-use semantics (one-time-link share,
- * etc.). The default session-channel verify path does NOT use it post-
+ * etc.). The default live-channel verify path does NOT use it post-
  * G14 — that's the whole point of the refresh design.
  */
 
@@ -59,7 +59,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
  * a distinct verify surface — a ws token CAN'T verify as a session
  * token even with matching signature + payload.
  *
- *   - `'ws'`              — short-TTL, single-use, ggui_push → iframe.
+ *   - `'ws'`              — short-TTL, single-use, ggui_render → iframe.
  *   - `'session'`         — longer-TTL, reusable, reconnect credential.
  *   - `'console-session'` — longer-TTL, reusable, issued by the
  *     same-origin console cookie endpoint. Scoped narrowly: only
@@ -83,7 +83,7 @@ export interface WsTokenClaims {
   /**
    * Random token id. Reserved for callers that opt into single-use
    * semantics via {@link WsTokenReplayCache}; the default G14
-   * session-channel verify path no longer claims it (multi-use within
+   * live-channel verify path no longer claims it (multi-use within
    * TTL is the supported recovery posture).
    */
   readonly jti: string;
@@ -166,7 +166,7 @@ function mintToken(
  * Mint a short-TTL WS auth token.
  *
  * Intended for the live-channel auth flow: the token travels on the
- * `_meta["ai.ggui/session"].token` slice of a `ggui_push` tool result,
+ * `_meta["ai.ggui/render"].token` slice of a `ggui_render` tool result,
  * is consumed at iframe `subscribe`, and remains valid for `ttlSec`
  * (default 180s) to absorb transient WS drops without a fresh
  * handshake (G14, 2026-05-23). Post-TTL: the iframe MAY refresh via
@@ -190,7 +190,7 @@ export function mintWsToken(
 /**
  * Mint a longer-TTL reusable session token.
  *
- * Issued by the session-channel server on the FIRST successful
+ * Issued by the live-channel server on the FIRST successful
  * ws-token-authed subscribe and returned in `AckPayload.sessionToken`.
  * The iframe persists it (sessionStorage / equivalent) and uses it
  * on reconnects via the standard `Authorization: Bearer <...>` or
@@ -467,7 +467,7 @@ export function refreshWsToken(
 /**
  * Small in-memory used-jti tracker for callers that opt into single-
  * use ws-token enforcement (one-time share links, etc.). The
- * default session-channel verify path does NOT use this post-G14 —
+ * default live-channel verify path does NOT use this post-G14 —
  * the ws token is multi-use within TTL by design.
  *
  * Bounded — entries age out once past their `exp`. Sized for single-

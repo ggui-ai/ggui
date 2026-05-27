@@ -123,16 +123,16 @@ export interface ShortCodeIndex {
   revokeBySessionId(sessionId: string): Promise<number>;
 
   /**
-   * Granular revoke — drop bindings tied to a specific `stackItemId`.
-   * Used by `ggui_pop`: when an individual stack entry is popped,
-   * the URL pointing at that specific entry should stop resolving
-   * even though the parent session is still active and may have
-   * OTHER stack items with valid URLs.
+   * Granular revoke — drop bindings tied to a specific render.
+   * Used by `ggui_close` (and equivalent per-render teardown paths):
+   * when a single render is closed, the URL pointing at that specific
+   * render should stop resolving even though sibling renders in the
+   * same host conversation may still have valid URLs.
    *
-   * Implementations that don't persist `stackItemId` on the binding
-   * (the in-memory reference DID store it but didn't expose it pre-
-   * revoke) MUST start persisting it to honor this call. Returns
-   * the count of revoked bindings (0 when none matched).
+   * The parameter is named `stackItemId` for historical reasons; it
+   * carries a `renderId`. Implementations that don't persist this
+   * field on the binding MUST start persisting it to honor this call.
+   * Returns the count of revoked bindings (0 when none matched).
    */
   revokeByStackItemId(stackItemId: string): Promise<number>;
 }

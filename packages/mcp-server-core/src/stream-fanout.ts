@@ -9,12 +9,12 @@
  *
  * **Parties:**
  * - Producer: the server code path that emits live-channel frames
- *   (e.g., `ggui_push` result handlers, `ggui_update` handlers, reserved
- *   `_ggui:contract-error` emitter in `session-channel.ts`). The producer
+ *   (e.g., `ggui_render` result handlers, `ggui_update` handlers, reserved
+ *   `_ggui:contract-error` emitter in `render-channel.ts`). The producer
  *   calls {@link StreamFanout.publish} AFTER the envelope has been stamped
  *   with its buffer-assigned `seq` (see {@link BufferedStreamEnvelope}).
  * - Consumer: the subscriber-side glue that forwards frames to concrete
- *   transports. In OSS: `session-channel.ts` pumps the async iterator
+ *   transports. In OSS: `render-channel.ts` pumps the async iterator
  *   into each live WebSocket subscriber. In hosted: `bridge-gateway`
  *   pod pumps Redis pub/sub messages into API-Gateway WS connections.
  *
@@ -63,8 +63,8 @@
  *   StreamFanout is the LIVE channel; replay is the HISTORY channel.
  *   A typical emitter path: `buffer.record(delivery)` → get
  *   BufferedStreamEnvelope → `fanout.publish({renderId, envelope})`.
- * - {@link SessionStore} — durable session state. Orthogonal; fanout
- *   carries data to live subscribers, SessionStore persists it.
+ * - {@link RenderStore} — durable render state. Orthogonal; fanout
+ *   carries data to live subscribers, RenderStore persists it.
  *
  * ## OSS default + hosted binding
  *

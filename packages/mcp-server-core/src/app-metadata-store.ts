@@ -45,25 +45,23 @@ export interface App {
    */
   readonly gadgets: readonly GadgetDescriptor[];
   /**
-   * Default theme preset id applied to every new session of this app
+   * Default theme preset id applied to every new render of this app
    * when the agent doesn't pass an explicit `themeId` on
-   * `ggui_new_session`. Sourced from `ggui.json#theme.preset` for the
+   * `ggui_render`. Sourced from `ggui.json#theme.preset` for the
    * OSS CLI single-tenant case; hosted multi-tenant deployments set
    * per-app values on the App row.
    *
-   * Sits at layer 3 of the theme-resolution chain (see
-   * `StackItem.themeId` in `@ggui-ai/protocol` for the full ordering:
-   * stack-item explicit > session.themeId > App.defaultThemeId >
-   * server fallback). Absent ⇒ chain falls through to the server's
-   * built-in theme.
+   * Sits at layer 2 of the theme-resolution chain (see
+   * `Render.themeId` in `@ggui-ai/protocol` for the full ordering:
+   * Render.themeId > App.defaultThemeId > server fallback). Absent
+   * ⇒ chain falls through to the server's built-in theme.
    */
   readonly defaultThemeId?: string;
   /**
    * Operator-curated allowlist of theme preset ids this app exposes to
-   * agents. When set, `ggui_list_themes` and the optional catalog
-   * surfaced on `ggui_new_session({requestThemeList: true})` filter the
-   * global theme registry to just these ids. Absent ⇒ every registered
-   * theme is visible.
+   * agents. When set, `ggui_list_themes` filters the global theme
+   * registry to just these ids. Absent ⇒ every registered theme is
+   * visible.
    *
    * Use this to scope branding choices (a marketing app may want agents
    * to only see `slate` / `crimson` and never the playful `claudic`
@@ -79,20 +77,20 @@ export interface App {
    */
   readonly blueprintSearchConfig?: AppBlueprintSearchConfig;
   /**
-   * App-default display-mode hint stamped on every `ggui_push` from this
-   * app via `_meta.ui.displayMode`. Honored by hosts as a PRESENTATION
-   * preference — `'fullscreen'` says "render as a main view, replacing
-   * the previous iframe in the primary slot"; `'inline'` says "stack
-   * vertically in the chat log"; `'pip'` says "render as
-   * picture-in-picture overlay" (reserved).
+   * App-default display-mode hint stamped on every `ggui_render` from
+   * this app via `_meta.ui.displayMode`. Honored by hosts as a
+   * PRESENTATION preference — `'fullscreen'` says "render as a main
+   * view, replacing the previous iframe in the primary slot";
+   * `'inline'` says "stack vertically in the chat log"; `'pip'` says
+   * "render as picture-in-picture overlay" (reserved).
    *
-   * The wire mechanism is identical regardless of mode: every push
+   * The wire mechanism is identical regardless of mode: every render
    * stamps its own `_meta.ui.resourceUri` and every iframe goes through
    * the same runtime mount path. Display mode controls ONLY how the
-   * host arranges the iframes it mounts. Per-push agents can override
-   * via `ggui_push.input.displayMode`.
+   * host arranges the iframes it mounts. Per-render agents can override
+   * via `ggui_render.input.displayMode`.
    *
-   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * Absent ⇒ no per-render hint stamped (host falls back to its own
    * default, typically `'inline'`).
    */
   readonly defaultDisplayMode?: McpUiDisplayMode;

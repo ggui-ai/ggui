@@ -12,7 +12,7 @@
  *      deployments). A `FixedWindowRateLimiter` composes this store +
  *      a policy to make admission decisions.
  *   2. Standalone usage reads for billing / observability — "how
- *      many `ggui_push` calls did app X make this hour?" — without
+ *      many `ggui_render` calls did app X make this hour?" — without
  *      a rate-limiter in the picture at all.
  *
  * **Deliberately distinct from {@link RateLimiter}.** The rate limiter
@@ -71,7 +71,7 @@ export interface QuotaWindow {
 
 /** Common fields for read + increment operations. */
 export interface QuotaReadInput {
-  /** Opaque bucket key. Caller composes (e.g. `ggui_push:builder:app_x`). */
+  /** Opaque bucket key. Caller composes (e.g. `ggui_render:builder:app_x`). */
   readonly key: string;
   readonly window: QuotaWindow;
   /** Epoch ms. Defaults to `Date.now()`. */

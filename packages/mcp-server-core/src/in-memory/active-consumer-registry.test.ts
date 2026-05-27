@@ -5,8 +5,8 @@
  * Locks the reference-count semantics:
  *   - `enter` increments; `hasActive` becomes true.
  *   - `exit` decrements; entry is removed when count reaches zero.
- *   - Multiple concurrent consumers per stackItem are counted correctly.
- *   - Different stackItemIds don't bleed into each other.
+ *   - Multiple concurrent consumers per render are counted correctly.
+ *   - Different renderIds don't bleed into each other.
  *   - `exit` without prior `enter` is harmless (no negative counts).
  */
 
@@ -33,7 +33,7 @@ describe('InMemoryActiveConsumerRegistry', () => {
     expect(r.hasActive('stack-1')).toBe(false);
   });
 
-  it('counts concurrent consumers per stackItemId', () => {
+  it('counts concurrent consumers per renderId', () => {
     const r = new InMemoryActiveConsumerRegistry();
     r.enter('stack-1');
     r.enter('stack-1');
@@ -45,7 +45,7 @@ describe('InMemoryActiveConsumerRegistry', () => {
     expect(r.hasActive('stack-1')).toBe(false);
   });
 
-  it('keeps stackItemIds isolated', () => {
+  it('keeps renderIds isolated', () => {
     const r = new InMemoryActiveConsumerRegistry();
     r.enter('stack-A');
     r.enter('stack-B');

@@ -8,18 +8,18 @@
  *   - `append` ordering — multiple events appended in order surface
  *     in FIFO order on the next `consumeAndClear`.
  *   - `PendingPipeNotFoundError` shape — thrown on consume/append against
- *     an unseeded session; class instanceof OR `name` field check both
+ *     an unseeded render; class instanceof OR `name` field check both
  *     pass (cloud's adapter throws its own class).
  *   - status reporting — `markStatus('completed')` surfaces on the
  *     next consumeAndClear's status field.
  *
- * Same factory + cleanup pattern as `session-store.conformance.ts`.
+ * Same factory + cleanup pattern as `render-store.conformance.ts`.
  *
- * Seed semantics: PendingEventConsumer is a per-session buffer; every
- * test needs a session to be present in the consumer's bookkeeping
+ * Seed semantics: PendingEventConsumer is a per-render buffer; every
+ * test needs a render to be present in the consumer's bookkeeping
  * before consume/append can succeed. Real impls expose this via
- * `markCreated(sessionId, ttlMs?)` (in-memory + sqlite) or a parallel
- * DDB row write (cloud). The factory's `seed(sessionId)` callback
+ * `markCreated(renderId, ttlMs?)` (in-memory + sqlite) or a parallel
+ * DDB row write (cloud). The factory's `seed(renderId)` callback
  * wraps whichever path the impl exposes.
  */
 
@@ -30,11 +30,11 @@ import type { RenderStatus } from '@ggui-ai/protocol';
 export interface PendingEventConsumerConformanceFactory {
   readonly create: () => Promise<{
     readonly consumer: PendingEventConsumer;
-    /** Register `sessionId` so subsequent consume/append succeeds. */
-    readonly seed: (sessionId: string) => void | Promise<void>;
-    /** Flip the observed status of `sessionId` (used by close tests). */
+    /** Register `renderId` so subsequent consume/append succeeds. */
+    readonly seed: (renderId: string) => void | Promise<void>;
+    /** Flip the observed status of `renderId` (used by close tests). */
     readonly markStatus?: (
-      sessionId: string,
+      renderId: string,
       status: RenderStatus,
     ) => void | Promise<void>;
   }>;
@@ -50,7 +50,7 @@ export function runPendingEventConsumerConformance(
       consumer: PendingEventConsumer;
       seed: (id: string) => Promise<void> | void;
       markStatus?: (
-        sessionId: string,
+        renderId: string,
         status: RenderStatus,
       ) => Promise<void> | void;
     }) => Promise<T>,
@@ -67,7 +67,7 @@ export function runPendingEventConsumerConformance(
 
   describe(`${label} — conformance`, () => {
     describe('consumeAndClear', () => {
-      it('returns empty + active on a freshly-seeded session', async () => {
+      it('returns empty + active on a freshly-seeded render', async () => {
         await withConsumer(async ({ consumer, seed }) => {
           await seed('stack-1');
           const out = await consumer.consumeAndClear('stack-1', 1000);
@@ -78,7 +78,7 @@ export function runPendingEventConsumerConformance(
         });
       });
 
-      it('throws PendingPipeNotFoundError on an unseeded session', async () => {
+      it('throws PendingPipeNotFoundError on an unseeded render', async () => {
         await withConsumer(async ({ consumer }) => {
           try {
             await consumer.consumeAndClear('never-seeded', 1000);
@@ -124,7 +124,7 @@ export function runPendingEventConsumerConformance(
         });
       });
 
-      it('throws PendingPipeNotFoundError on append to unseeded session', async () => {
+      it('throws PendingPipeNotFoundError on append to unseeded render', async () => {
         await withConsumer(async ({ consumer }) => {
           try {
             await consumer.append('never-seeded', { kind: 'lost' });
@@ -136,15 +136,15 @@ export function runPendingEventConsumerConformance(
       });
     });
 
-    describe('per-session isolation', () => {
-      it("session A's events don't leak into session B's consume", async () => {
+    describe('per-render isolation', () => {
+      it("render A's events don't leak into render B's consume", async () => {
         await withConsumer(async ({ consumer, seed }) => {
-          await seed('sess-A');
-          await seed('sess-B');
-          await consumer.append('sess-A', { kind: 'A-only' });
-          const outB = await consumer.consumeAndClear('sess-B', 1000);
+          await seed('render-A');
+          await seed('render-B');
+          await consumer.append('render-A', { kind: 'A-only' });
+          const outB = await consumer.consumeAndClear('render-B', 1000);
           expect(outB.events).toEqual([]);
-          const outA = await consumer.consumeAndClear('sess-A', 1000);
+          const outA = await consumer.consumeAndClear('render-A', 1000);
           expect(outA.events.length).toBe(1);
           expect((outA.events[0] as { kind: string }).kind).toBe('A-only');
         });
@@ -156,7 +156,7 @@ export function runPendingEventConsumerConformance(
         await withConsumer(async ({ consumer, seed, markStatus }) => {
           if (!markStatus) {
             // Adapter doesn't expose a status seed (cloud's wraps the
-            // session row's sessionStatus column instead). Skip the
+            // render row's status column instead). Skip the
             // markStatus path; the close-handler-level test covers
             // observable wire shape end-to-end on its own surface.
             return;

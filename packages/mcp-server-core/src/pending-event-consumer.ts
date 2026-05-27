@@ -2,23 +2,23 @@
  * `PendingEventConsumer` — atomic fetch-and-clear contract for the
  * pending-events buffer that backs `ggui_consume`.
  *
- * **Keying is `renderId`-scoped** (Model C, 2026-05-12). Each
- * pushed UI surface (`ggui_push` mints a `renderId`) gets its own
- * pipe: opened by `markCreated(renderId)` at push time, written
- * by `append(renderId, event)` from `ggui_runtime_submit_action`
+ * **Keying is `renderId`-scoped.** Each rendered UI surface
+ * (`ggui_render` mints a `renderId`) gets its own pipe: opened by
+ * `markCreated(renderId)` at render time, written by
+ * `append(renderId, event)` from `ggui_runtime_submit_action`
  * dispatch envelopes, drained by `consumeAndClear(renderId)` from
  * `ggui_consume`, and closed by `markDeleted(renderId)` on
- * `ggui_pop` / `ggui_close`.
+ * `ggui_close`.
  *
- * Why renderId, not sessionId — two renders in the same
- * session can each have unconsumed events; sessionId-keyed pipes
- * would let one consumer's drain swallow the other's events. The
- * renderId surface matches MCP Apps' "one back-channel per
- * rendered widget" mental model and avoids cross-talk.
+ * Per-render keying (rather than per-conversation) means two renders
+ * in the same host conversation can each have unconsumed events
+ * without one consumer's drain swallowing the other's. The renderId
+ * surface matches MCP Apps' "one back-channel per rendered widget"
+ * mental model.
  *
  * **Lifecycle**:
  *
- *   1. `ggui_push` mints renderId → handler calls `markCreated`
+ *   1. `ggui_render` mints renderId → handler calls `markCreated`
  *      so events queued BEFORE the agent's first `ggui_consume`
  *      land in the pipe (the user can click before the agent
  *      starts polling).
@@ -28,7 +28,7 @@
  *   3. `ggui_consume({renderId, timeout})` blocks; long-poll loop
  *      calls `consumeAndClear` until events arrive OR status flips
  *      to `'completed'` OR `timeout` elapses.
- *   4. `ggui_pop` / `ggui_close` → `markDeleted` so subsequent ops
+ *   4. `ggui_close` → `markDeleted` so subsequent ops
  *      throw `PendingPipeNotFoundError` (the long-poll loop sees
  *      that as terminal and returns).
  *
@@ -38,10 +38,10 @@
  *
  * Cloud's `DynamoPendingEventConsumer` (in `cloud/ggui-protocol-pod`)
  * conforms to the same shape via DDB `UpdateItem` with
- * `RETURN_VALUES=ALL_OLD` for atomic per-stackItem fetch-and-clear.
+ * `RETURN_VALUES=ALL_OLD` for atomic per-render fetch-and-clear.
  *
  * The consumer is a pending-events surface, NOT the append-only
- * event log on `SessionStore.appendEvent`/`observe`. Those are two
+ * event log on `RenderStore.appendEvent`/`observe`. Those are two
  * different streams — the buffer here gets cleared on every consume
  * (queue semantics) while the event log is append-only retained.
  */
@@ -72,10 +72,10 @@ export interface PendingEventConsumeResult {
  * Implementations MUST:
  *   - Serialize `consumeAndClear` per `renderId` so concurrent
  *     consumers can't each see the same buffered events. Cloud
- *     achieves this via DDB UpdateItem; in-memory uses a per-stack
+ *     achieves this via DDB UpdateItem; in-memory uses a per-render
  *     mutex; sqlite uses a transaction.
  *   - Bump the pipe's activity / expiry on every successful consume
- *     by `ttlMs`. The handler passes the resolved session-TTL value.
+ *     by `ttlMs`. The handler passes the resolved render-TTL value.
  *   - Throw {@link PendingPipeNotFoundError} (or a structurally-
  *     equivalent class with `name === 'PendingPipeNotFoundError'`)
  *     when the pipe row is gone — distinguishes "no events buffered"
@@ -109,7 +109,7 @@ export interface PendingEventConsumer {
    * agent-bound events) to enqueue a row that the next
    * `consumeAndClear` will surface. Implementations MUST serialize
    * appends per-`renderId` so concurrent producers don't lose
-   * events; ordering within a single stackItem is FIFO.
+   * events; ordering within a single render is FIFO.
    *
    * @throws when the pipe row doesn't exist.
    */
@@ -127,7 +127,7 @@ export interface PendingEventConsumer {
    *
    * Idempotent — calling on an existing pipe is a no-op.
    *
-   * The `ggui_push` handler calls this at renderId mint time so
+   * The `ggui_render` handler calls this at renderId mint time so
    * gesture appends from `ggui_runtime_submit_action` (which can land
    * BEFORE the agent's first `ggui_consume`) don't get lost.
    */
@@ -142,8 +142,8 @@ export interface PendingEventConsumer {
 
   /**
    * Close + remove the pipe. Subsequent ops throw
-   * `PendingPipeNotFoundError`. Called by `ggui_pop` / `ggui_close`
-   * to release pipe resources.
+   * `PendingPipeNotFoundError`. Called by `ggui_close` to release pipe
+   * resources.
    */
   markDeleted?(renderId: string): void;
 }

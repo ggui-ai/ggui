@@ -1,7 +1,7 @@
 /**
  * ThreadStore — persistent + observable persistent-chat state.
  *
- * Companion to {@link SessionStore}. Session state is ephemeral;
+ * Companion to {@link RenderStore}. Render state is ephemeral;
  * thread state is durable. A self-hosted `@ggui-ai/mcp-server` binds
  * this against SQLite (the OSS reference impl); the hosted runtime
  * binds this against DDB via an AppSync-fronted adapter in `cloud/`.
@@ -83,8 +83,8 @@ export class ThreadActionInvalidStateError extends Error {
  * Options for {@link ThreadStore.observeMessages}.
  *
  * Ordering, snapshot+tail, and reconnect semantics mirror
- * {@link SessionStore.observe} so callers that already speak the
- * sessions pattern can reuse the same mental model.
+ * {@link RenderStore.observe} so callers that already speak the
+ * renders pattern can reuse the same mental model.
  */
 export interface ObserveMessagesOptions {
   /**

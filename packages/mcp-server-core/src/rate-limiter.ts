@@ -6,7 +6,7 @@
  *
  * **Intent (what rate limiting is for):** answer "can this request
  * proceed right now, under this bucket's policy?" at each high-signal
- * handler ingress. The canonical consumer today is `ggui_push` — the
+ * handler ingress. The canonical consumer today is `ggui_render` — the
  * single highest-cost tool on OSS — but the seam is general. Every
  * admission check composes a caller-chosen `key` with a `cost`; the
  * limiter returns an allow/deny decision plus `remaining` + a retry
@@ -42,7 +42,7 @@
  *
  * **Key conventions (caller-owned):** the interface does not mandate
  * key shape. In practice OSS wiring uses `<handler>:<identity-kind>:<appId>`
- * (e.g. `ggui_push:builder:local`) for per-app admission. Hosted
+ * (e.g. `ggui_render:builder:local`) for per-app admission. Hosted
  * deployments layer richer shapes as their identity model grows.
  *
  * **OSS reference adapters (this slice):**

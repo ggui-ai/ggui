@@ -69,9 +69,8 @@ export interface StoredRender {
  * Typed render event. Append-only. Every event carries a monotonic `seq`
  * that is gap-free within a single render, starting at 1.
  *
- * Type taxonomy is unchanged from the pre-Phase-B `SessionEvent` — events
- * are per-render here just as they were per-session before (each session
- * held exactly one stack item post-Phase-A).
+ * Type taxonomy is per-render — each event records a discrete state
+ * transition on the render's lifecycle.
  */
 export interface RenderEvent {
   seq: number;
@@ -85,9 +84,9 @@ export interface RenderEvent {
  * Canonical event-type taxonomy. Implementations MUST emit events for the
  * core types; custom types may be added with a `x-` or `ext:` prefix.
  *
- * `session.closed` retains its wire string for back-compat with the
- * SessionEvent taxonomy — at this point a render IS the session it
- * lives in, so the semantics are identical.
+ * `session.closed` retains its wire string for inbound/outbound parity
+ * with hosts that observe the event log via the live channel; the
+ * semantics — render terminated, no further events — are unchanged.
  */
 export type RenderEventType =
   | 'ui.created'
@@ -231,10 +230,9 @@ export interface AppendEventInput {
 
 /**
  * Input for {@link RenderStore.commit} — the full Render payload
- * mints/replaces in one call. Replaces the prior
- * `appendStackItem(sessionId, entry)` upsert path: a render IS the
- * top-level row, so committing the visible-bits surface is just an
- * upsert on the row itself.
+ * mints/replaces in one call. A render IS the top-level row, so
+ * committing the visible-bits surface is just an upsert on the row
+ * itself.
  *
  * Behavior:
  *
@@ -245,8 +243,7 @@ export interface AppendEventInput {
  *     `hostSession`) are preserved across the upsert. `lastActivityAt`
  *     bumps to `now`.
  *
- * Implementations MUST refuse to commit to a closed render (symmetric
- * with the prior `appendStackItem`'s closed-session reject).
+ * Implementations MUST refuse to commit to a closed render.
  */
 export interface CommitRenderInput {
   render: Render;

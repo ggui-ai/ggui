@@ -2,9 +2,9 @@
  * Negotiator — UI decision engine.
  *
  * Given the agent's signal (data / prompt / context / agentTools) and
- * current session state, produces a {@link NegotiatorDecision} with
- * optional RAG-backed blueprint match, alternatives, and timing
- * breakdown.
+ * the current render-history snapshot, produces a
+ * {@link NegotiatorDecision} with optional RAG-backed blueprint match,
+ * alternatives, and timing breakdown.
  *
  * The `NegotiatorDecision` shape is already public in `@ggui-ai/protocol`
  * (`create` / `update` / `compose` / `replace`). This seam lifts the
@@ -26,17 +26,19 @@ import type {
 } from '@ggui-ai/protocol';
 
 /**
- * Current state of a session — stack + conversation history.
- *
- * Mirrored from `core/negotiation/src/types.ts` but promoted here as
- * public surface so self-hosters can implement custom negotiators. Kept
- * narrow — the negotiator only needs stack items + conversation, not the
- * full DDB SessionRecord.
+ * Negotiator-facing snapshot of the current render(s) the agent has
+ * already produced for the current host conversation, plus the running
+ * transcript. Promoted here as a public surface so self-hosters can
+ * implement custom negotiators. Kept narrow — the negotiator only
+ * needs prior render outlines + conversation, not the full
+ * `StoredRender`.
  */
 export interface NegotiatorSessionState {
   /**
-   * Stack of UI pages currently loaded in the session. Ordered oldest to
-   * newest; last item is the current top of stack.
+   * Previously-committed renders for the same host conversation,
+   * ordered oldest to newest. Most calls supply at most one (the
+   * just-superseded render); multi-render contexts arise when the
+   * agent has rendered several siblings in a row.
    */
   stack: Array<{
     id: string;
@@ -82,8 +84,7 @@ export interface NegotiatorInput {
   /** Tenant + RAG scope keys. */
   scope: {
     appId: string;
-    sessionId: string;
-    stackItemId: string;
+    renderId: string;
   };
   /** 'shared' = global catalog; 'private' = per-app index. Default 'shared'. */
   poolMode?: 'shared' | 'private';

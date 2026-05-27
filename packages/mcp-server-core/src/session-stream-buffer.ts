@@ -8,7 +8,7 @@
  * doctrine, the live channel is the enforcement point for the typed live
  * contract; replay is one half of its durability story (the other
  * being idempotent inbound action delivery, which lives on
- * SessionStore's inbound-event log).
+ * RenderStore's inbound-event log).
  *
  * Intentionally narrow:
  *
@@ -28,8 +28,8 @@
  *     latest stored value if any envelope remains in the buffer after
  *     a record/replay cycle; there's no explicit "reset" path short
  *     of `clear(renderId)`.
- *   - NOT a replacement for SessionStore's inbound-event log.
- *     SessionStore tracks user actions + UI mutations for
+ *   - NOT a replacement for RenderStore's inbound-event log.
+ *     RenderStore tracks user actions + UI mutations for
  *     observation/audit. SessionStreamBuffer tracks outbound
  *     live-channel deliveries for the narrower purpose of reconnect
  *     replay. Different seq spaces, different retention policies,

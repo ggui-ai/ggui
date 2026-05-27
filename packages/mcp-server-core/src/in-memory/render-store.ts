@@ -79,7 +79,7 @@ export class InMemoryRenderStore implements RenderStore {
     // Placeholder ComponentRender — the visible-bits surface fills in
     // when `commit` runs at `ggui_render` time. The create path exists
     // so callers can mint a row + start streaming events before the
-    // first commit (mirrors the pre-Phase-B create→appendStackItem flow).
+    // first commit.
     const placeholder: Render = {
       type: 'component',
       id,

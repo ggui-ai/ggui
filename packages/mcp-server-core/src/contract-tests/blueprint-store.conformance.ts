@@ -32,7 +32,7 @@ import {
   type BlueprintStore,
 } from '../blueprint-store.js';
 
-/** Factory + optional cleanup. Mirrors `SessionStoreConformanceFactory`. */
+/** Factory + optional cleanup. Mirrors `RenderStoreConformanceFactory`. */
 export interface BlueprintStoreConformanceFactory {
   readonly create: () => Promise<BlueprintStore>;
   readonly cleanup?: (store: BlueprintStore) => Promise<void> | void;

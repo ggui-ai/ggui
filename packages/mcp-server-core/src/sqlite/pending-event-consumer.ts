@@ -65,7 +65,7 @@ export interface SqlitePendingEventConsumerOptions {
   filename?: string;
   /**
    * Optional pre-opened `better-sqlite3` Database instance. Lets
-   * hosts share one connection between SessionStore and consumer.
+   * hosts share one connection between RenderStore and consumer.
    * Mutually exclusive with `filename`.
    */
   db?: SqliteDatabase;

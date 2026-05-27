@@ -35,7 +35,7 @@ export function negotiatorContract(
     const baseInput: NegotiatorInput = {
       agentPrompt: 'Show current weather for Tokyo',
       sessionState: emptySession,
-      scope: { appId: 'app-a', sessionId: 's1', stackItemId: 'p1' },
+      scope: { appId: 'app-a', renderId: 'r1' },
     };
 
     it('returns a well-formed result for a minimal valid input', async () => {
@@ -63,7 +63,7 @@ export function negotiatorContract(
       const input: NegotiatorInput = {
         agentPrompt: 'Show weather',
         sessionState: { stack: [], conversationHistory: [] },
-        scope: { appId: 'app-a', sessionId: 's1', stackItemId: 'p1' },
+        scope: { appId: 'app-a', renderId: 'r1' },
         agentTools: ['weather.lookup'],
       };
       const snapshot = JSON.stringify(input);

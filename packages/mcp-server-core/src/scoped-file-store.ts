@@ -35,12 +35,12 @@
  * ## Protocol & Contract Bar
  *
  * **Parties:**
- * - Producer / writer: `DynamoSessionStore` offload (`stack[*].componentCode`,
+ * - Producer / writer: `DynamoRenderStore` offload (`render.componentCode`,
  *   `conversationHistory.jsonl`), agent code via `ctx.sessionStorage` /
  *   `ctx.userStorage` / `ctx.appStorage` / `ctx.crossAppStorage`,
  *   blueprint asset uploaders.
  * - Consumer / reader: `session-resource/handler.ts` rendering pipeline,
- *   agent code reading back its own writes, `SessionStore.observe`
+ *   agent code reading back its own writes, `RenderStore.observe`
  *   replay readers, future blueprint-asset CDN.
  *
  * **Obligations:**
@@ -72,7 +72,7 @@
  *   or any other scope.
  *
  * **Failure mode:**
- * - Backend errors throw. The producer's caller (e.g. `DynamoSessionStore`)
+ * - Backend errors throw. The producer's caller (e.g. `DynamoRenderStore`)
  *   decides whether to retry, fall back, or surface to the user.
  * - Per-object size cap is impl-specific; impls SHOULD document.
  *   Buffered `put` MUST tolerate at least 5 MB; larger payloads SHOULD
@@ -88,11 +88,13 @@
  *
  * ## Relationship to other seams
  *
- * - {@link SessionStore} (`session-store.ts`) — durable session metadata
- *   + event log. `DynamoSessionStore` offloads heavy
- *   `stack[*].componentCode` and `conversationHistory` blobs into
- *   `ScopedFileStoreRegistry.session(sessionId)` so the DDB row stays
- *   under the 400 KB limit.
+ * - {@link RenderStore} (`render-store.ts`) — durable per-render
+ *   metadata + event log. `DynamoRenderStore` offloads heavy
+ *   `render.componentCode` and `conversationHistory` blobs into
+ *   `ScopedFileStoreRegistry.session(renderId)` so the DDB row stays
+ *   under the 400 KB limit. (The scope-method retains the `session`
+ *   name because its key prefix `sessions/<id>/` is the on-disk
+ *   contract that hosted stores must continue to honor.)
  * - {@link KeyValueStore} (`kv-store.ts`) — TTL'd ephemeral kv.
  *   Orthogonal: kv is small / hot / tokenish; ScopedFileStore is for
  *   blobs (kilobytes to megabytes).

@@ -2,14 +2,14 @@
  * KeyValueStore — narrow TTL-aware kv seam.
  *
  * The single seam for ephemeral state that outlives a request but
- * isn't durable session data:
+ * isn't durable render data:
  *
  *   - Handshake state (10-minute TTL, single-use via get-and-delete)
  *   - Rate-limit counters (short TTL, atomic increment)
  *   - Idempotency tokens (deduplication windows)
  *   - "Last seen `seq` per consumer" resume points (can be volatile)
  *
- * Distinct from {@link SessionStore} — sessions are durable and event-
+ * Distinct from {@link RenderStore} — renders are durable and event-
  * streamed; kv entries are transient and keyed.
  *
  * Reference implementations:

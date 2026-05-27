@@ -2,7 +2,7 @@
  * UiGenerator — the harness contract.
  *
  * This is what the OSS `@ggui-ai/mcp-server` and the hosted runtime
- * both call to turn an agent's `ggui_push` request into renderable
+ * both call to turn an agent's `ggui_render` request into renderable
  * component code. The open-source `@ggui-ai/ui-gen` package implements
  * this interface. Self-hosters can swap in their own implementation if
  * they want.
@@ -94,7 +94,7 @@ export interface UiGenerateInput {
    * linter, Props-interface, default-export, pitfalls) still fire on
    * sourceCode alone when this is absent.
    *
-   * Callers (ggui_push handler, self-hosted integrations) populate
+   * Callers (ggui_render handler, self-hosted integrations) populate
    * from the blueprint/story envelope they already hold. Caller is
    * responsible for ensuring the contract matches what the LLM was
    * instructed to generate against — the generator does not re-derive.

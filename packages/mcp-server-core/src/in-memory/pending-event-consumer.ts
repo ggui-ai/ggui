@@ -2,13 +2,13 @@
  * In-memory `PendingEventConsumer` for OSS dev/test.
  *
  * Backed by a `Map<renderId, {events, status, lastActivityAt}>`
- * struct with per-stackItem mutex serialization on `consumeAndClear`
+ * struct with per-render mutex serialization on `consumeAndClear`
  * and `append` so concurrent callers can't race the buffer.
  *
- * Lifecycle (Model C, renderId-keyed):
+ * Lifecycle (renderId-keyed):
  *   - `markCreated(renderId)` opens a pipe so subsequent
- *     `append` / `consumeAndClear` work. Called by the `ggui_push`
- *     handler the moment a render is appended — so events queued
+ *     `append` / `consumeAndClear` work. Called by the `ggui_render`
+ *     handler the moment a render is committed — so events queued
  *     BEFORE the agent's first `ggui_consume` (e.g. the user clicks
  *     before the agent starts polling) still land in the pipe.
  *   - `append(renderId, event)` enqueues an action envelope.
@@ -18,7 +18,7 @@
  *   - `markStatus(renderId, 'completed')` flips the observed
  *     status so the long-poll loop short-circuits.
  *   - `markDeleted(renderId)` removes the pipe; subsequent ops
- *     throw. Called by `ggui_pop` / `ggui_close`.
+ *     throw. Called by `ggui_close`.
  */
 
 import type { RenderStatus } from '@ggui-ai/protocol';
