@@ -61,7 +61,7 @@ describe('parseServeFlags', () => {
 
   it('parses --ephemeral', () => {
     // Default-off — `ggui serve` without flags persists HMAC secrets +
-    // (in later slices) SessionStore / ShortCodeIndex / keysFile under
+    // (in later slices) RenderStore / ShortCodeIndex / keysFile under
     // `getPersistentDir(projectRoot)` so cached MCP Apps tokens survive
     // a restart. `--ephemeral` reverts to legacy behavior.
     expect(parseServeFlags(['--ephemeral']).ephemeral).toBe(true);

@@ -126,8 +126,8 @@ export interface ParsedServeFlags {
    *   1. Banner copy is "PUBLIC DEMO" with a "operator pays for the
    *      LLM" cost note, instead of the "DEV ALLOW-ALL" warning.
    *   2. A per-remote-IP `FixedWindowRateLimiter` is bound to the
-   *      `ggui_push` handler so a single visitor can't burn the
-   *      operator's budget. Default: 30 push calls per 10 minutes per IP.
+   *      `ggui_render` handler so a single visitor can't burn the
+   *      operator's budget. Default: 30 render calls per 10 minutes per IP.
    *   3. The pair-code beacon is suppressed (same as devAllowAll —
    *      pair codes are meaningless under any-bearer-auth).
    *
@@ -167,7 +167,7 @@ export interface ParsedServeFlags {
    *
    *   - `default`    — gentle "ggui first when UI fits, prose otherwise"
    *   - `aggressive` — render anything with structure (no-preset default)
-   *   - `always`     — every response renders via ggui_push
+   *   - `always`     — every response renders via ggui_render
    *   - `minimal`    — server identity only, no behavioral nudge
    *   - `off`        — omit the field entirely
    *
@@ -202,9 +202,9 @@ export interface ParsedServeFlags {
   /**
    * Disable the cross-restart persistence bundle. Without this flag,
    * `ggui serve` reads or mints the HMAC secrets (and, in later
-   * slices, SessionStore + ShortCodeIndex + VectorStore + paired
+   * slices, RenderStore + ShortCodeIndex + VectorStore + paired
    * bearers) under `getPersistentDir(projectRoot)` so a server
-   * restart doesn't invalidate cached `_meta["ai.ggui/session"].wsToken`
+   * restart doesn't invalidate cached `_meta["ai.ggui/render"].wsToken`
    * envelopes — claude.ai chat-history revisits keep working.
    *
    * With `--ephemeral`, every restart mints fresh HMAC secrets (the
@@ -572,10 +572,10 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
     );
   }
   if (input.noLlmKey) {
-    // First-run nudge — without an LLM key, ggui_push falls back to
-    // codeReady:false and the iframe never bootstraps. Surface the
-    // /settings URL alongside admin-token so the operator can paste a
-    // key without restarting (the file store is hot-read on every
+    // First-run nudge — without an LLM key, ggui_render falls back to
+    // the Connect-Claude card and the iframe never bootstraps. Surface
+    // the /settings URL alongside admin-token so the operator can paste
+    // a key without restarting (the file store is hot-read on every
     // generation; setting through /settings takes effect immediately).
     const settingsUrl = input.publicBaseUrl
       ? `${input.publicBaseUrl}/settings`
@@ -607,7 +607,7 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
     lines.push(
       `  ⚠ PUBLIC DEMO: every bearer authenticates as builder.`,
       `        End-user generations bill the operator's LLM key in`,
-      `        ~/.ggui/credentials.json. Per-IP rate limit on ggui_push`,
+      `        ~/.ggui/credentials.json. Per-IP rate limit on ggui_render`,
       `        bounds abuse. Drop --public-demo for strict auth.`,
     );
   } else {
@@ -625,7 +625,7 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
         `        (Authorization: Bearer their-paired-token), NOT the`,
         `        admin token. Per-user scope is auto-derived from the`,
         `        identity (userId / appId).`,
-        `        Note: ggui_push generation still resolves BYOK at the`,
+        `        Note: ggui_render generation still resolves BYOK at the`,
         `        operator scope (env + credentials-file 'global'). Per-`,
         `        user generation-time BYOK is a follow-up — for now,`,
         `        multi-tenant lets each user MANAGE their key plane`,
@@ -792,8 +792,9 @@ export interface RunServeOptions {
   /**
    * When true, the boot banner emits a "/settings to set your LLM key"
    * action line so first-run operators know how to recover from
-   * `ggui_push` returning codeReady:false. Set by `cli.ts` when the
-   * generation probe returned null (no env + no credentials-file).
+   * `ggui_render` falling back to the Connect-Claude card. Set by
+   * `cli.ts` when the generation probe returned null (no env + no
+   * credentials-file).
    */
   readonly noLlmKey?: boolean;
   /** Where to write the banner. */
@@ -986,8 +987,8 @@ grows.
 First-run bundle (all on by default):
   - Landing page at /          — operator opens a browser and sees
                                   server identity + pair-code card.
-  - Session viewer at /r/<code> — same-origin viewer for sessions
-                                  minted by ggui_push; same-origin
+  - Render viewer at /r/<code>  — same-origin viewer for renders
+                                  minted by ggui_render; same-origin
                                   HTTP-only cookie authenticates the
                                   live-channel /ws upgrade.
   - POST /pair + POST /admin/pair/init — pairing endpoint for MCP
@@ -1011,7 +1012,7 @@ Options:
                          expose to the open internet.
   --public-demo          Public-facing demo posture: same any-bearer auth
                          as --dev-allow-all, plus per-IP rate limit on
-                         ggui_push (30 generations / 10 min) and a
+                         ggui_render (30 generations / 10 min) and a
                          "PUBLIC DEMO — operator pays" banner. Mutually
                          exclusive with --dev-allow-all.
   --multi-tenant         Multi-tenant posture: switches the /settings LLM-
@@ -1023,7 +1024,7 @@ Options:
                          and --public-demo. (Generation-time BYOK still
                          resolves at the operator 'global' scope — a
                          follow-up will thread per-user BYOK through
-                         ggui_push.)
+                         ggui_render.)
   --public-base-url <u>  Override the public base URL used to compose
                          iframe-runtime + shortCode URLs. Set this to a
                          tunnel URL (https://<random>.trycloudflare.com)
@@ -1086,7 +1087,7 @@ Persistent storage (default-on; opt-out via --ephemeral):
       ├── ws-token-secret.hex       (HMAC, 0600)
       ├── render-signer-secret.hex  (HMAC, 0600)
       ├── short-codes.sqlite        (signed render-URL resolution)
-      ├── sessions.sqlite           (SessionStore — stack items + event history)
+      ├── renders.sqlite            (RenderStore — renders + event history)
       ├── vectors.sqlite            (RAG corpus)
       └── keys.json                 (paired bearers)
 
