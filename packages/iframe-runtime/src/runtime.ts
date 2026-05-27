@@ -887,7 +887,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // didn't emit a HostContext (parsed.hostContext === undefined).
   if (parsed.hostContext !== undefined) {
     seedHostContext({
-      sessionId: meta.renderId,
+      renderId: meta.renderId,
       send: (msg) => handle.handle.send(msg),
       initial: parsed.hostContext,
     });

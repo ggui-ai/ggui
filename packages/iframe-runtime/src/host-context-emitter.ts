@@ -9,7 +9,7 @@
  *      `ui/notifications/host-context-changed` postMessage from the host.
  *   2. Echo each fresh value as a `type: 'host_context_observed'`
  *      WebSocket envelope so the server can persist it on
- *      `SessionRecord.hostContext` for agent visibility.
+ *      `RenderRecord.hostContext` for agent visibility.
  *   3. Suppress no-op re-emissions (via deep-equality on the projection
  *      shape) — avoids server-side write traffic when a notification
  *      arrives but no projection-visible field actually changed (e.g.,
@@ -17,7 +17,7 @@
  *
  * Lifecycle:
  *
- *   - Initial seed: `seed(projection, sessionId)` called from
+ *   - Initial seed: `seed(projection, renderId)` called from
  *     `bootProduction` right after the WS transport is attached and we
  *     know the initial projection from `parseMetaFromUiInitialize.hostContext`.
  *   - Live updates: `attachListener()` installs a `window`-scoped
@@ -70,7 +70,7 @@ export type HostContextSendFn = (msg: {
 // =============================================================================
 
 interface EmitterState {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly send: HostContextSendFn;
   current: HostContextProjection;
   listener: ((ev: MessageEvent) => void) | null;
@@ -88,19 +88,19 @@ let state: EmitterState | null = null;
  * the same projection) suppresses the duplicate emission via the
  * equality check.
  *
- * Re-seeding with a DIFFERENT `sessionId` is undefined behavior; the
- * iframe-runtime is one-session-per-mount by construction. Tests
- * exercising multi-session flows MUST call `detach()` between seeds.
+ * Re-seeding with a DIFFERENT `renderId` is undefined behavior; the
+ * iframe-runtime is one-render-per-mount by construction. Tests
+ * exercising multi-render flows MUST call `detach()` between seeds.
  */
 export function seed(args: {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly send: HostContextSendFn;
   readonly initial: HostContextProjection;
 }): void {
   // First seed — record state + emit initial.
   if (state === null) {
     state = {
-      sessionId: args.sessionId,
+      renderId: args.renderId,
       send: args.send,
       current: args.initial,
       listener: null,
@@ -233,7 +233,7 @@ function emit(): void {
     state.send({
       type: 'host_context_observed',
       payload: {
-        sessionId: state.sessionId,
+        renderId: state.renderId,
         hostContext: state.current,
       },
     });
