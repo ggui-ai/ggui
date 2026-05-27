@@ -932,20 +932,20 @@ function validateSchemaStructure(
  * structured error response with violations + hint so the agent can
  * self-correct (fix data or propose a new contract via ggui_push).
  */
-function defaultHintFor(tool: 'ggui_push' | 'ggui_update' | 'ggui_emit' | 'ggui_event'): string {
+function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event'): string {
   if (tool === 'ggui_event') {
-    return 'The user-action payload did not match the session\'s actionSpec. Re-check the client-side action wiring, or have the agent push a new UI whose actionSpec covers this payload shape.';
+    return 'The user-action payload did not match the render\'s actionSpec. Re-check the client-side action wiring, or have the agent render a new UI whose actionSpec covers this payload shape.';
   }
-  return 'Fix your data to match the contract, or call ggui_push to create a new UI for this data shape.';
+  return 'Fix your data to match the contract, or call ggui_render to create a new UI for this data shape.';
 }
 
 export class ContractViolationError extends Error {
   readonly violations: ContractViolation[];
-  readonly tool: 'ggui_push' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
+  readonly tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
   readonly hint: string;
 
   constructor(opts: {
-    tool: 'ggui_push' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
+    tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
     violations: ContractViolation[];
     hint?: string;
   }) {
