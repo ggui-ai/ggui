@@ -566,9 +566,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // setAll / upsert runs — the filter is immutable per-instance, so
   // swap-then-reassign is the only way to lock the pin.
   let stackModel = new StackModel();
-  // Initial empty-placeholder render via the canonical helper.
-  // `refreshStackDom` is the public seam handlers use after fold.
-  refreshStackDom(refs, stackModel);
+  // Initial empty-placeholder render is skipped — `refreshStackDom`
+  // would write "(no stack items yet)" placeholder text into the
+  // `<ul data-ggui-stack>` mount target, which (a) flashes user-
+  // visible diagnostic text into every booting iframe and (b) gets
+  // wiped a moment later anyway when the triad's `containerFor`
+  // appends its React mount divs. Both placeholder-only consumers
+  // (boot.test.ts) and triad consumers fold the actual stack via
+  // `applyAckStack` after the ack lands; no early diagnostic write
+  // is required.
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
   notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
@@ -764,7 +770,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }): Promise<void> => {
     if (ackPayload.stack === undefined) return;
     stackModel.setAll(ackPayload.stack);
-    refreshStackDom(refs, stackModel);
+    // Placeholder DOM render only when triad is absent (boot.test.ts).
+    // Triad-mode iframes own the `<ul data-ggui-stack>` for React
+    // mounts via `containerFor`; calling `refreshStackDom` here would
+    // wipe React's mounts mid-flight.
+    if (triad === null) {
+      refreshStackDom(refs, stackModel);
+    }
     if (triad !== null) {
       await triad.stackRenderer.applyStack(stackModel.snapshot());
       const snapshot = stackModel.snapshot();
