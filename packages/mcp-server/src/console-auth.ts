@@ -56,7 +56,7 @@ export const CONSOLE_COOKIE_NAME = 'ggui_console_session';
 
 /**
  * Result of minting a cookie. Callers set the cookie on their response
- * (the cookie endpoint) and echo the bound `sessionId`/`appId` back in
+ * (the cookie endpoint) and echo the bound `renderId`/`appId` back in
  * the response body so the client SPA can bootstrap the viewer without
  * a follow-up round-trip.
  */
@@ -64,12 +64,12 @@ export interface DevtoolCookieMint {
   readonly cookieValue: string;
   readonly setCookieHeader: string;
   readonly expiresAt: number;
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
 }
 
 export interface MintDevtoolCookieInput {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
   /** HMAC secret. Shared with bootstrap + session tokens by design. */
   readonly secret: string;
@@ -93,7 +93,7 @@ export interface MintDevtoolCookieInput {
 }
 
 /**
- * Mint a cookie value bound to `{ sessionId, appId }` and the formatted
+ * Mint a cookie value bound to `{ renderId, appId }` and the formatted
  * `Set-Cookie` header to send on the response. Caller does
  * `res.setHeader('Set-Cookie', result.setCookieHeader)`.
  */
@@ -102,7 +102,7 @@ export function mintDevtoolCookie(
 ): DevtoolCookieMint {
   const ttlSec = input.ttlSec ?? DEFAULT_DEVTOOL_SESSION_TTL_SEC;
   const { token, claims } = mintDevtoolSessionToken(
-    { sessionId: input.sessionId, appId: input.appId, ttlSec },
+    { renderId: input.renderId, appId: input.appId, ttlSec },
     input.secret,
   );
   const attrs: string[] = [
@@ -117,7 +117,7 @@ export function mintDevtoolCookie(
     cookieValue: token,
     setCookieHeader: attrs.join('; '),
     expiresAt: claims.exp * 1000,
-    sessionId: input.sessionId,
+    renderId: input.renderId,
     appId: input.appId,
   };
 }
@@ -175,10 +175,10 @@ export function readDevtoolCookieFromHeaders(
 /**
  * Verified claims extracted from an console cookie. Scope is
  * deliberately narrow: just the binding the session-channel upgrade
- * needs to enforce `subscribe.sessionId === cookie.sessionId`.
+ * needs to enforce `subscribe.renderId === cookie.renderId`.
  */
 export interface DevtoolCookieClaims {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
 }
 
@@ -200,7 +200,7 @@ export function verifyDevtoolCookie(
   const result = verifyToken(cookieValue, secret, 'console-session');
   if (!result.ok) return null;
   return {
-    sessionId: result.claims.sessionId,
+    renderId: result.claims.renderId,
     appId: result.claims.appId,
   };
 }

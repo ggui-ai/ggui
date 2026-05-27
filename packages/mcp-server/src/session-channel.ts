@@ -660,7 +660,7 @@ export interface SessionChannelCookieAuth {
    * `null` on any failure (signature, expiry, wrong kind). Never
    * throws.
    */
-  verify(cookieValue: string): { sessionId: string; appId: string } | null;
+  verify(cookieValue: string): { renderId: string; appId: string } | null;
 }
 
 export interface SessionChannelServer {

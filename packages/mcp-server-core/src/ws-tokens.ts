@@ -70,8 +70,8 @@ export type TokenKind = 'ws' | 'session' | 'console-session';
 
 /** Claims carried in a ws, session, or console-session token. */
 export interface WsTokenClaims {
-  /** Session id the token is scoped to. */
-  readonly sessionId: string;
+  /** Render id the token is scoped to (Phase B: was `sessionId` pre-collapse). */
+  readonly renderId: string;
   /** App (tenant) id the token is scoped to. */
   readonly appId: string;
   /** Kind discriminator — distinguishes mint/verify surfaces. */
@@ -116,7 +116,7 @@ export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 export const DEFAULT_DEVTOOL_SESSION_TTL_SEC = 60 * 60 * 8;
 
 export interface MintTokenInput {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
   /** Token lifetime in seconds. Defaults per-kind. */
   readonly ttlSec?: number;
@@ -150,7 +150,7 @@ function mintToken(
   const now = Math.floor(Date.now() / 1000);
   const ttl = input.ttlSec ?? input.defaultTtlSec;
   const claims: WsTokenClaims = {
-    sessionId: input.sessionId,
+    renderId: input.renderId,
     appId: input.appId,
     kind: input.kind,
     iat: now,
@@ -284,7 +284,7 @@ export function verifyToken(
     const json = base64urlDecode(payloadB64).toString('utf8');
     const raw = JSON.parse(json) as Record<string, unknown>;
     if (
-      typeof raw.sessionId !== 'string' ||
+      typeof raw.renderId !== 'string' ||
       typeof raw.appId !== 'string' ||
       typeof raw.iat !== 'number' ||
       typeof raw.exp !== 'number' ||
@@ -296,7 +296,7 @@ export function verifyToken(
       return { ok: false, reason: 'malformed_claims' };
     }
     claims = {
-      sessionId: raw.sessionId,
+      renderId: raw.renderId,
       appId: raw.appId,
       kind: raw.kind,
       iat: raw.iat,
@@ -413,7 +413,7 @@ export function refreshWsToken(
         // verifyToken, so this should always succeed; explicit re-check
         // keeps the `claims!` non-null assertion below honest.
         if (
-          typeof raw.sessionId === 'string' &&
+          typeof raw.renderId === 'string' &&
           typeof raw.appId === 'string' &&
           typeof raw.iat === 'number' &&
           typeof raw.exp === 'number' &&
@@ -421,7 +421,7 @@ export function refreshWsToken(
           raw.kind === 'ws'
         ) {
           claims = {
-            sessionId: raw.sessionId,
+            renderId: raw.renderId,
             appId: raw.appId,
             kind: raw.kind,
             iat: raw.iat,
@@ -455,7 +455,7 @@ export function refreshWsToken(
   // window arbitrarily — see RefreshWsTokenOptions.refreshWindowSec).
   const { token: newToken, claims: newClaims } = mintWsToken(
     {
-      sessionId: claims.sessionId,
+      renderId: claims.renderId,
       appId: claims.appId,
       ttlSec,
     },

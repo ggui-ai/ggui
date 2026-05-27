@@ -27,21 +27,21 @@ import {
 const SECRET = 'test-secret-' + 'a'.repeat(48);
 
 describe('mintDevtoolCookie', () => {
-  it('produces a token that verifies back to the same sessionId/appId', () => {
-    const { cookieValue, sessionId, appId } = mintDevtoolCookie({
-      sessionId: 's1',
+  it('produces a token that verifies back to the same renderId/appId', () => {
+    const { cookieValue, renderId, appId } = mintDevtoolCookie({
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
     });
-    expect(sessionId).toBe('s1');
+    expect(renderId).toBe('s1');
     expect(appId).toBe('a1');
     const claims = verifyDevtoolCookie(cookieValue, SECRET);
-    expect(claims).toEqual({ sessionId: 's1', appId: 'a1' });
+    expect(claims).toEqual({ renderId: 's1', appId: 'a1' });
   });
 
   it('Set-Cookie header carries HttpOnly + SameSite=Strict by default', () => {
     const { setCookieHeader } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
     });
@@ -55,7 +55,7 @@ describe('mintDevtoolCookie', () => {
 
   it('Secure opt-in adds the Secure attribute', () => {
     const { setCookieHeader } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
       secure: true,
@@ -65,7 +65,7 @@ describe('mintDevtoolCookie', () => {
 
   it('ttlSec override sets Max-Age accordingly', () => {
     const { setCookieHeader } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
       ttlSec: 60,
@@ -75,7 +75,7 @@ describe('mintDevtoolCookie', () => {
 
   it('sameSite override honored', () => {
     const { setCookieHeader } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
       sameSite: 'Lax',
@@ -87,7 +87,7 @@ describe('mintDevtoolCookie', () => {
 describe('verifyDevtoolCookie — isolation', () => {
   it('rejects bootstrap tokens minted with the same secret', () => {
     const { token } = mintWsToken(
-      { sessionId: 's1', appId: 'a1' },
+      { renderId: 's1', appId: 'a1' },
       SECRET,
     );
     expect(verifyDevtoolCookie(token, SECRET)).toBeNull();
@@ -95,7 +95,7 @@ describe('verifyDevtoolCookie — isolation', () => {
 
   it('rejects session tokens minted with the same secret', () => {
     const { token } = mintSessionToken(
-      { sessionId: 's1', appId: 'a1' },
+      { renderId: 's1', appId: 'a1' },
       SECRET,
     );
     expect(verifyDevtoolCookie(token, SECRET)).toBeNull();
@@ -103,7 +103,7 @@ describe('verifyDevtoolCookie — isolation', () => {
 
   it('ws tokens do NOT verify when the cookie kind is requested', () => {
     const { cookieValue } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
     });
@@ -117,7 +117,7 @@ describe('verifyDevtoolCookie — isolation', () => {
 
   it('wrong secret rejects the cookie', () => {
     const { cookieValue } = mintDevtoolCookie({
-      sessionId: 's1',
+      renderId: 's1',
       appId: 'a1',
       secret: SECRET,
     });

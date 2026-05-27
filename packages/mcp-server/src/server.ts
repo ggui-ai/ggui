@@ -88,7 +88,7 @@ import {
   type ThemeWriter,
   type ThemeFileUploader,
 } from './console-theme-routes.js';
-import { GGUI_SESSION_SHELL_HTML } from './mcp-apps-outbound.js';
+import { GGUI_RENDER_SHELL_HTML } from './mcp-apps-outbound.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z, type ZodRawShape } from 'zod';
 import type {
@@ -110,7 +110,7 @@ import type {
   PendingEventConsumer,
   ProviderKeyStore,
   RateLimiter,
-  SessionStore,
+  RenderStore,
   SessionStreamBuffer,
   ShortCodeIndex,
   TelemetrySink,
@@ -135,17 +135,14 @@ import {
 import type {
   Blueprint,
   CanvasLifecyclePayload,
-  SessionStackEntry,
-  StackItem,
+  Render,
 } from '@ggui-ai/protocol';
 import { LIFECYCLE_CHANNEL } from '@ggui-ai/protocol';
 import {
-  GGUI_SESSION_RESOURCE_MIME,
-  GGUI_SESSION_RESOURCE_URI,
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  GGUI_RENDER_RESOURCE_MIME,
+  GGUI_RENDER_RESOURCE_URI,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   DiscoveredPrimitiveCatalog,
@@ -167,7 +164,7 @@ import {
   InMemoryActiveConsumerRegistry,
   InMemoryPendingEventConsumer,
   InMemoryQuotaStore,
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemorySessionStreamBuffer,
   InMemoryVectorStore,
   MockEmbeddingProvider,
@@ -244,12 +241,10 @@ import {
   clearGenerationCache,
   createGguiCloseHandler,
   createGguiConsumeHandler,
-  createGguiGetSessionHandler,
-  createGguiGetStackHandler,
-  createGguiListSessionsHandler,
+  createGguiGetRenderHandler,
+  createGguiListRendersHandler,
   createGguiEmitHandler,
   createGguiHandshakeHandler,
-  createGguiNewSessionHandler,
   createGguiPushHandler,
   createGguiUpdateHandler,
   createGguiSubmitActionHandler,
@@ -269,7 +264,7 @@ import {
   type ProvisionalPreviewEmitter,
   type ProvisionalPreviewConfig,
   type ProvisionalPreviewOutcome,
-  deriveStackItemMeta,
+  deriveRenderMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
 } from '@ggui-ai/mcp-server-handlers/session-mutations';
@@ -444,7 +439,7 @@ function collectAppCallableToolNames(
  *
  * `push` is opt-in via `deps.push` — it's only useful when the server
  * was booted with `mcpApps: true` (so `ui://ggui/session` is served)
- * and pairs a real SessionStore. Callers get the choice explicitly.
+ * and pairs a real RenderStore. Callers get the choice explicitly.
  */
 /**
  * Assemble the `opsBlueprint` dep bundle for `defaultHandlers`.
@@ -570,14 +565,14 @@ export function defaultHandlers(deps: {
   readonly handshake?: {
     readonly kvStore: KeyValueStore;
     /**
-     * Optional session store. When bound, `ggui_handshake` validates
-     * the wire `sessionId` against this store (existence + tenant
+     * Optional render store. When bound, `ggui_handshake` validates
+     * the wire render id against this store (existence + tenant
      * ownership) before negotiating. OSS sets this to the same store
-     * push uses so the handshake catches unknown / cross-tenant ids
-     * at the earliest boundary; cloud pods omit and validate at push
-     * time via their own DDB-backed path.
+     * the render-commit handler uses so the handshake catches unknown
+     * / cross-tenant ids at the earliest boundary; cloud pods omit and
+     * validate at render-commit time via their own DDB-backed path.
      */
-    readonly sessionStore?: SessionStore;
+    readonly renderStore?: RenderStore;
     /**
      * Optional negotiator binding. Absent = `ggui_handshake` stamps
      * `action: 'create'` + honest no-negotiator reason on the record
@@ -605,22 +600,22 @@ export function defaultHandlers(deps: {
       | undefined;
   };
   readonly push?: {
-    readonly sessionStore: SessionStore;
+    readonly renderStore: RenderStore;
     /**
-     * Optional bootstrap-credential minter. When present, `ggui_push`
-     * results carry the `ai.ggui/session` + `ai.ggui/stack-item` slice
-     * meta. When absent, they don't — non-MCP-Apps hosts read
-     * `{sessionId, stackItemId}` off structuredContent and resolve
-     * the session-resource themselves.
+     * Optional bootstrap-credential minter. When present, `ggui_render`
+     * (the renamed render-commit tool) results carry the
+     * `ai.ggui/render` slice meta. When absent, they don't —
+     * non-MCP-Apps hosts read `{renderId}` off structuredContent and
+     * resolve the render-resource themselves.
      */
     readonly mintBootstrap?: (
-      sessionId: string,
+      renderId: string,
       appId: string,
     ) => { wsUrl: string; token: string; expiresAt: string };
     /**
      * URL of the renderer bundle the thin-shell HTML should fetch
      * (C8 — plan §C8). Padded onto
-     * {@link McpAppAiGguiSessionMeta.runtimeUrl} at `resultMeta` time.
+     * {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time.
      * Same-origin default is `/_ggui/iframe-runtime.js`; hosted cloud
      * operators override to a CDN URL. Required when `mintBootstrap`
      * is set (the thin shell depends on it); otherwise ignored.
@@ -804,7 +799,7 @@ export function defaultHandlers(deps: {
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
-   * handler against the supplied SessionStore + optional live-channel
+   * handler against the supplied RenderStore + optional live-channel
    * props_update notifier. The handler reads sessionId / stackItemId
    * from wire input today, but a future in-process dispatcher can
    * populate them on the canonical context.
@@ -814,13 +809,13 @@ export function defaultHandlers(deps: {
    * static-blueprint demos, MCP-Apps-only deployments).
    */
   readonly update?: {
-    readonly sessionStore: SessionStore;
+    readonly renderStore: RenderStore;
     /**
      * Optional live-subscriber `props_update` notifier — typically a
      * thin closure over `SessionChannelServer.sendPropsUpdate`.
      * Forwarded as-is to `createGguiUpdateHandler`. Hosts without a
      * session channel leave this absent; the handler still persists
-     * via `sessionStore.appendStackItem` on every successful patch.
+     * via `renderStore.appendStackItem` on every successful patch.
      */
     readonly propsUpdateNotifier?: PropsUpdateNotifier;
     /**
@@ -833,16 +828,16 @@ export function defaultHandlers(deps: {
      * the same minter.
      */
     readonly mintBootstrap?: (
-      sessionId: string,
+      renderId: string,
       appId: string,
     ) => { wsUrl: string; token: string; expiresAt: string };
     /** Iframe-runtime bundle URL forwarded onto the
-     *  `ai.ggui/session.runtimeUrl` slice field.
+     *  `ai.ggui/render.runtimeUrl` slice field.
      *  Function form mirrors push deps — see {@link BuildMcpDeps.push}. */
     readonly runtimeUrl?: string | (() => string | undefined);
-    /** Theme preset id forwarded onto the `ai.ggui/session.themeId` slice field. */
+    /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
     readonly themeId?: string;
-    /** Theme color mode forwarded onto the `ai.ggui/session.themeMode` slice field. */
+    /** Theme color mode forwarded onto the `ai.ggui/render.themeMode` slice field. */
     readonly themeMode?: 'light' | 'dark';
     /** Live theme getter — overrides static themeId/themeMode per-update. */
     readonly themeProvider?: () => {
@@ -860,13 +855,13 @@ export function defaultHandlers(deps: {
    * default; pass `consume.pendingEventConsumer` to override (e.g.,
    * SQLite-backed for persistent dev or a Dynamo adapter on cloud).
    *
-   * `defaultSessionTtlSeconds` controls the activity-bump TTL the
+   * `defaultRenderTtlSeconds` controls the activity-bump TTL the
    * handler forwards to `consumeAndClear` on every read. Falls back
    * to 1 day when omitted.
    */
   readonly consume?: {
     readonly pendingEventConsumer?: PendingEventConsumer;
-    readonly defaultSessionTtlSeconds?: number;
+    readonly defaultRenderTtlSeconds?: number;
   };
   /**
    * Stream channel wiring for `ggui_emit`. When `push` is bound, the
@@ -1075,17 +1070,17 @@ export function defaultHandlers(deps: {
     // as app-visible (`_meta.ui.visibility: ['app']`) per MCP Apps
     // spec §401 so iframe-issued `tools/call` invocations land here
     // instead of being rejected. Dual-writes every dispatch to BOTH
-    // `pendingEventConsumer` (wakes `ggui_consume`) AND `sessionStore`
+    // `pendingEventConsumer` (wakes `ggui_consume`) AND `renderStore`
     // (audit ledger for SessionInspector + cross-process replay) —
     // restores the audit visibility the pre-spec-mig WS handler
-    // (`handleInboundAction`) used to provide. `sessionStore` is
-    // optional — passed through from `deps.push.sessionStore` when
+    // (`handleInboundAction`) used to provide. `renderStore` is
+    // optional — passed through from `deps.push.renderStore` when
     // bound; absent → ledger write is skipped, queue still fires.
     createGguiSubmitActionHandler({
       pendingEventConsumer,
       activeConsumerRegistry,
-      ...(deps.push?.sessionStore
-        ? { sessionStore: deps.push.sessionStore }
+      ...(deps.push?.renderStore
+        ? { renderStore: deps.push.renderStore }
         : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
@@ -1113,14 +1108,14 @@ export function defaultHandlers(deps: {
   // ggui_runtime_sync_context — runtime → server contextSpec snapshot mirror.
   // Same `_meta.ui.visibility: ['app']` channel as ggui_runtime_submit_action;
   // claude.ai (and any MCP Apps host) routes iframe-issued
-  // `tools/call` here. Wired only when a sessionStore is bound (push
+  // `tools/call` here. Wired only when a renderStore is bound (push
   // is on) — the handler's whole job is upserting the snapshot onto
   // the active StackItem, which requires the same store push writes
   // to. Without push, there's no stack to mutate.
   if (deps.push) {
     handlers.push(
       createGguiSyncContextHandler({
-        sessionStore: deps.push.sessionStore,
+        renderStore: deps.push.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
     // `ggui_runtime_refresh_bootstrap` — G14 (2026-05-23) signed-
@@ -1136,31 +1131,11 @@ export function defaultHandlers(deps: {
         }) as SharedHandler<ZodRawShape, ZodRawShape>,
       );
     }
-    // ggui_new_session — session lifetime entry point. Registered
-    // whenever a sessionStore is wired (via deps.push) because that's
-    // the canonical session-bearing dep. Server-mints, agent-threads
-    // (SEP-2567 alignment); pairs with the sessionId-required handshake
-    // handler below.
-    handlers.push(
-      createGguiNewSessionHandler({
-        sessionStore: deps.push.sessionStore,
-        // Threading appMetadataStore enables the per-app
-        // defaultThemeId fall-through inside new_session's resolution
-        // chain (agent input > App.defaultThemeId > undefined). Absent
-        // dep ⇒ chain stops at agent input + undefined. The CLI wires
-        // an `InMemoryAppMetadataStore` seeded from `ggui.json#theme.preset`
-        // through `CreateGguiServerOptions.appMetadataStore`.
-        ...(deps.appMetadataStore
-          ? { appMetadataStore: deps.appMetadataStore }
-          : {}),
-        // Theme catalog resolver — threaded so `requestThemeList: true`
-        // on new_session projects the same catalog the standalone
-        // `ggui_list_themes` tool returns. Absent ⇒ `availableThemes`
-        // is omitted from the output even when requested.
-        ...(deps.themes ? { themes: deps.themes } : {}),
-        ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
-    );
+    // Phase B (flatten-render-identity): the session lifetime entry
+    // point (`ggui_new_session`) was deleted. The render-commit handler
+    // (`ggui_render`, previously `ggui_push`) is the sole entry — it
+    // mints a render id on its own first call and the agent uses that
+    // id directly without a prior session-mint round-trip.
   }
   if (deps.uiRegistry) {
     // Register the render handler ONLY when a UiRegistry is wired.
@@ -1187,12 +1162,12 @@ export function defaultHandlers(deps: {
   const lifecycleChannelProvider = deps.stream?.channelProvider;
   const canvasLifecycleEmitter = lifecycleChannelProvider
     ? {
-        emit(sessionId: string, payload: CanvasLifecyclePayload): void {
+        emit(renderId: string, payload: CanvasLifecyclePayload): void {
           const channel = lifecycleChannelProvider();
           if (!channel) return;
           void channel
             .sendToSession({
-              sessionId,
+              renderId,
               channel: LIFECYCLE_CHANNEL,
               mode: 'append',
               payload,
@@ -1212,9 +1187,6 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiHandshakeHandler({
         kvStore: deps.handshake.kvStore,
-        ...(deps.handshake.sessionStore
-          ? { sessionStore: deps.handshake.sessionStore }
-          : {}),
         ...(deps.handshake.negotiator
           ? { negotiator: deps.handshake.negotiator }
           : {}),
@@ -1231,7 +1203,7 @@ export function defaultHandlers(deps: {
   if (deps.update) {
     handlers.push(
       createGguiUpdateHandler({
-        sessionStore: deps.update.sessionStore,
+        renderStore: deps.update.renderStore,
         ...(deps.update.propsUpdateNotifier
           ? { propsUpdateNotifier: deps.update.propsUpdateNotifier }
           : {}),
@@ -1263,7 +1235,7 @@ export function defaultHandlers(deps: {
     );
   }
   // ggui_consume registers whenever push is bound (it shares the
-  // SessionStore for stackItemId resolution + tenancy checks).
+  // RenderStore for stackItemId resolution + tenancy checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
@@ -1281,11 +1253,10 @@ export function defaultHandlers(deps: {
       if (!provider) return undefined;
       return {
         sendDrainAck(args: {
-          sessionId: string;
-          appId: string;
-          stackItemId: string;
-          eventId: string;
-          drainedAt: string;
+          readonly renderId: string;
+          readonly appId: string;
+          readonly eventId: string;
+          readonly drainedAt: string;
         }): void {
           provider()?.sendDrainAck(args);
         },
@@ -1305,10 +1276,10 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiConsumeHandler({
         pendingEventConsumer,
-        sessionStore: deps.push.sessionStore,
+        renderStore: deps.push.renderStore,
         activeConsumerRegistry,
-        ...(deps.consume?.defaultSessionTtlSeconds !== undefined
-          ? { defaultSessionTtlSeconds: deps.consume.defaultSessionTtlSeconds }
+        ...(deps.consume?.defaultRenderTtlSeconds !== undefined
+          ? { defaultRenderTtlSeconds: deps.consume.defaultRenderTtlSeconds }
           : {}),
         ...(drainAckNotifier ? { drainAckNotifier } : {}),
         logger: drainTelemetryLogger,
@@ -1325,36 +1296,32 @@ export function defaultHandlers(deps: {
     // `_meta.ggui.userAction.kind === 'queued'` immediately (carrying
     // a prepared `ggui_consume` nextStep). No timer, no rescue drain,
     // no race between two atomic-pop callers.
-    // ggui_get_session + ggui_get_stack are pure reads off the
-    // SessionStore. ggui_close writes the terminal session.closed
-    // event. All three register alongside push.
+    // ggui_get_render is a pure read off the RenderStore. ggui_close
+    // writes the terminal session.closed event. Both register
+    // alongside the render-commit handler. (ggui_get_stack was deleted
+    // — a render IS the addressable unit; there is no stack to read.)
     handlers.push(
-      createGguiGetSessionHandler({
-        sessionStore: deps.push.sessionStore,
+      createGguiGetRenderHandler({
+        renderStore: deps.push.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
-    handlers.push(
-      createGguiGetStackHandler({
-        sessionStore: deps.push.sessionStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
-    );
-    // ggui_list_sessions — host-scoped session enumeration for resume.
+    // ggui_list_renders — host-scoped render enumeration for resume.
     // Folds the ws-token mint into the same call so the host doesn't
-    // round-trip twice (list, then mint-per-session). Reuses the
+    // round-trip twice (list, then mint-per-render). Reuses the
     // already-wired `deps.push.mintBootstrap` seam so both code paths
     // share one HMAC secret and one TTL policy. Absent seam (rare —
     // every deployment that has push wired also has mintBootstrap)
     // ⇒ summaries omit wsToken and the caller must mint elsewhere.
     const pushMintBootstrap = deps.push.mintBootstrap;
     handlers.push(
-      createGguiListSessionsHandler({
-        sessionStore: deps.push.sessionStore,
+      createGguiListRendersHandler({
+        renderStore: deps.push.renderStore,
         ...(pushMintBootstrap !== undefined
           ? {
               mintWsToken: {
-                mint: ({ sessionId, appId }) => {
+                mint: ({ renderId, appId }) => {
                   const { token, expiresAt } = pushMintBootstrap(
-                    sessionId,
+                    renderId,
                     appId,
                   );
                   return { token, expiresAt };
@@ -1366,7 +1333,7 @@ export function defaultHandlers(deps: {
     );
     handlers.push(
       createGguiCloseHandler({
-        sessionStore: deps.push.sessionStore,
+        renderStore: deps.push.renderStore,
         pendingEventConsumer,
         ...(deps.push.shortCodeIndex
           ? { shortCodeIndex: deps.push.shortCodeIndex }
@@ -1387,7 +1354,7 @@ export function defaultHandlers(deps: {
     const channelProvider = deps.stream?.channelProvider;
     handlers.push(
       createGguiEmitHandler({
-        sessionStore: deps.push.sessionStore,
+        renderStore: deps.push.renderStore,
         async sendEnvelope(envelope) {
           const channel = channelProvider?.() ?? null;
           if (!channel) {
@@ -1397,7 +1364,7 @@ export function defaultHandlers(deps: {
             return {};
           }
           const { seq } = await channel.sendToSession({
-            sessionId: envelope.sessionId,
+            renderId: envelope.renderId,
             channel: envelope.channel,
             mode: envelope.mode,
             payload: envelope.payload,
@@ -1427,7 +1394,12 @@ export function defaultHandlers(deps: {
       collectAppCallableToolNames(handlers);
     handlers.push(
       createGguiPushHandler({
-        sessionStore: deps.push.sessionStore,
+        // The push.ts handler factory's `sessionStore` parameter is
+        // owned by a sibling B.2d agent that will rename it to
+        // `renderStore` in the same Phase B slice. Until that lands,
+        // we route our renamed `deps.push.renderStore` through the
+        // pre-rename arg name to keep dist-shape parity.
+        sessionStore: deps.push.renderStore,
         // Plugin slice Commit 3 — push reads App.gadgets to
         // gate `clientCapabilities.gadgets[*].hook` references via
         // `assertGadgetsRegistered`. Same instance the
@@ -2104,13 +2076,13 @@ export interface CreateGguiServerOptions {
   readonly bodyLimit?: string;
 
   /**
-   * Session store — backing plane for the live-channel session endpoint
-   * (and future OSS session-reading MCP tools). Defaults to
-   * `InMemorySessionStore`, which is fine for OSS zero-config / dev.
+   * Render store — backing plane for the live-channel render endpoint
+   * (and OSS render-reading MCP tools). Defaults to
+   * `InMemoryRenderStore`, which is fine for OSS zero-config / dev.
    * SQLite / Postgres / Redis adapters bind via the same interface
    * when they land.
    */
-  readonly sessionStore?: SessionStore;
+  readonly renderStore?: RenderStore;
 
   /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
@@ -2917,7 +2889,7 @@ export interface CreateGguiServerOptions {
    *     the rejection shape.
    *
    * Omitted entirely means "use the default in-memory store when
-   * `mcpApps` is on". That matches how `sessionStore` and
+   * `mcpApps` is on". That matches how `renderStore` and
    * `streamBuffer` default — no opt-in required for the OSS
    * first-run path.
    *
@@ -3408,17 +3380,17 @@ export function createGguiServer(
       runtimeUrl: runtimeBootstrapUrl,
     }) ?? runtimeBootstrapUrl;
 
-  // Session store is resolved here (not lazy-inside-sessionChannel)
-  // when mcpApps is on, because ggui_push needs it at handler-factory
-  // time, BEFORE the session-channel factory runs.
-  const sessionStore: SessionStore | undefined = opts.sessionStore
+  // Render store is resolved here (not lazy-inside-sessionChannel)
+  // when mcpApps is on, because the render-commit handler needs it at
+  // handler-factory time, BEFORE the session-channel factory runs.
+  const renderStore: RenderStore | undefined = opts.renderStore
     ?? (mcpAppsEnabled || opts.sessionChannel
-      ? new InMemorySessionStore()
+      ? new InMemoryRenderStore()
       : undefined);
 
   // Outbound stream replay buffer is hoisted here so the
   // `/ggui/console/timeline/*` mount can read its cursor alongside
-  // SessionStore events. Only constructed when the channel is
+  // RenderStore events. Only constructed when the channel is
   // enabled; otherwise there's nothing to buffer and the timeline
   // routes report `streamSeq: 0` honestly.
   const streamBuffer: SessionStreamBuffer | undefined = opts.sessionChannel
@@ -3439,7 +3411,7 @@ export function createGguiServer(
   // without per-callsite narrowing.
   let mintBootstrap:
     | ((
-        sessionId: string,
+        renderId: string,
         appId: string,
       ) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
@@ -3467,8 +3439,8 @@ export function createGguiServer(
     // without a fresh handshake. The replay cache class stays exported
     // from `@ggui-ai/mcp-server-core` for callers that need explicit
     // single-use semantics (one-time-link share, etc.).
-    const syncMinter = (sessionId: string, appId: string) => {
-      const { token, claims } = mintWsToken({ sessionId, appId }, secret);
+    const syncMinter = (renderId: string, appId: string) => {
+      const { token, claims } = mintWsToken({ renderId, appId }, secret);
       return {
         wsUrl,
         token,
@@ -3482,7 +3454,7 @@ export function createGguiServer(
         if (result.ok) {
           return {
             ok: true,
-            sessionId: result.claims.sessionId,
+            renderId: result.claims.renderId,
             appId: result.claims.appId,
           };
         }
@@ -3494,8 +3466,8 @@ export function createGguiServer(
         }
         return { ok: false, reason: 'invalid' };
       },
-      issueSessionToken: (sessionId, appId) => {
-        const { token } = mintSessionToken({ sessionId, appId }, secret);
+      issueSessionToken: (renderId, appId) => {
+        const { token } = mintSessionToken({ renderId, appId }, secret);
         return token;
       },
       refresh: (token) => {
@@ -3649,7 +3621,7 @@ export function createGguiServer(
   //     `generation`'s precondition above — silent-drop would hide
   //     the misconfig).
   //   - Omitted → default-on when mcpApps is enabled (matches
-  //     sessionStore / streamBuffer default behavior).
+  //     renderStore / streamBuffer default behavior).
   const handshakeExplicitlyDisabled = opts.handshake === false;
   const handshakeExplicit =
     typeof opts.handshake === 'object' && opts.handshake !== null
@@ -3768,7 +3740,7 @@ export function createGguiServer(
           return {};
         }
         await channelForHealth.sendToSession({
-          sessionId: envelope.sessionId,
+          renderId: envelope.renderId,
           channel: envelope.channel,
           mode: envelope.mode,
           payload: envelope.payload,
@@ -3817,14 +3789,14 @@ export function createGguiServer(
         ? {
             handshake: {
               kvStore: handshakeKvStore,
-              // sessionStore validation is OPT-IN at the handshake
+              // renderStore validation is OPT-IN at the handshake
               // layer. The OSS default trusts the wire sessionId and
               // surfaces validation downstream — push consumes the
               // record + create-if-missing semantics on
-              // `sessionStore.create({id})` keep stack-growth-per-chat
+              // `renderStore.create({id})` keep stack-growth-per-chat
               // working without a pre-existing session. Operators that
               // want strict pre-handshake validation pass an explicit
-              // `handshake.sessionStore` on `deps`.
+              // `handshake.renderStore` on `deps`.
               // Caller-supplied negotiator wins; absent, fall back
               // to the cache-backed default auto-composed from the
               // same `{embedding, vectors}` deps the generation
@@ -3864,10 +3836,10 @@ export function createGguiServer(
             },
           }
         : {}),
-      ...(mcpAppsEnabled && sessionStore
+      ...(mcpAppsEnabled && renderStore
         ? {
             push: {
-              sessionStore,
+              renderStore,
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC
@@ -3881,7 +3853,7 @@ export function createGguiServer(
               // Iframe-runtime bundle URL — padded onto the
               // `ai.ggui/session.runtimeUrl` slice field by the push
               // handler's resultMeta. C8 made this required on
-              // McpAppAiGguiSessionMeta; we always pass it so handlers
+              // McpAppAiGguiRenderMeta; we always pass it so handlers
               // don't fall back to their hardcoded default.
               // Function form: resolves per-request so a tunnel/proxy
               // operator (X-Forwarded-Host from a loopback peer) gets
@@ -4060,7 +4032,7 @@ export function createGguiServer(
           }
         : {}),
       // `ggui_update` handler. Registered alongside `push` because
-      // both want the SessionStore and
+      // both want the RenderStore and
       // benefit from live-channel fan-out. Same late-bind pattern as
       // `channelNotifier` / `provisionalPreviewDeps.sendEnvelope`:
       // the handler factory captures a closure, the closure forwards
@@ -4073,16 +4045,15 @@ export function createGguiServer(
       // The handler's own try/catch swallows notifier rejections,
       // but providing the closure unconditionally keeps the
       // typecheck simple — no per-config branching.
-      ...(sessionStore
+      ...(renderStore
         ? {
             update: {
-              sessionStore,
+              renderStore,
               propsUpdateNotifier: {
-                sendPropsUpdate: async (sessionId, stackItemId, props) => {
+                sendPropsUpdate: async (renderId: string, props: Record<string, unknown>) => {
                   if (!channelForHealth) return;
                   await channelForHealth.sendPropsUpdate(
-                    sessionId,
-                    stackItemId,
+                    renderId,
                     props,
                   );
                 },
@@ -4676,7 +4647,7 @@ export function createGguiServer(
         mcpAppsOutbound: mcpAppsEnabled,
         // Caller-provided `shellHtml` overrides the default;
         // `installMcpAppsOutbound` falls back to its baked
-        // `GGUI_SESSION_SHELL_HTML` constant when absent.
+        // `GGUI_RENDER_SHELL_HTML` constant when absent.
         ...(mcpAppsConfig.shellHtml !== undefined
           ? { shellHtml: mcpAppsConfig.shellHtml }
           : {}),
@@ -4695,10 +4666,10 @@ export function createGguiServer(
         // per-call `ui://ggui/session/<sessionId>` URI a host can
         // resolve here. Absent either, we register only the legacy
         // static `ui://ggui/session` URI (postMessage shell).
-        ...(mcpAppsEnabled && sessionStore
+        ...(mcpAppsEnabled && renderStore
           ? {
               selfContained: {
-                sessionStore,
+                renderStore,
                 runtimeUrl: runtimeBootstrapUrl,
                 // Forward operator-picked theme into the per-session
                 // self-contained shell. Without this, MCP-Apps hosts
@@ -4938,10 +4909,10 @@ export function createGguiServer(
   // visibility gate. Mounts only when a ConnectorRegistry is
   // configured; without it, the server has no way to resolve source
   // endpoints.
-  if (mcpAppsEnabled && opts.connectors && sessionStore) {
+  if (mcpAppsEnabled && opts.connectors && renderStore) {
     installMcpAppsInbound(app, {
       connectors: opts.connectors,
-      sessionStore,
+      renderStore,
       logger: logger.child({ component: 'mcp-apps-inbound' }),
     });
   }
@@ -5042,10 +5013,10 @@ export function createGguiServer(
   // ledger cursor (`session.lastSequence`).
   if (
     mcpAppsEnabled &&
-    sessionStore &&
+    renderStore &&
     sharedTokenSecret !== undefined
   ) {
-    const sessionStoreForState = sessionStore;
+    const renderStoreForState = renderStore;
     const stateSecret = sharedTokenSecret;
     const appMetadataStoreForState = opts.appMetadataStore;
     const stateThemeId =
@@ -5058,10 +5029,10 @@ export function createGguiServer(
       opts.theme === undefined || opts.theme.source === 'default'
         ? undefined
         : opts.theme.mode;
-    app.get('/api/sessions/:sessionId/state', async (req, res) => {
-      const sessionId = req.params['sessionId'];
-      if (typeof sessionId !== 'string' || sessionId.length === 0) {
-        res.status(400).type('text/plain').send('sessionId required');
+    app.get('/api/renders/:renderId/state', async (req, res) => {
+      const renderId = req.params['renderId'];
+      if (typeof renderId !== 'string' || renderId.length === 0) {
+        res.status(400).type('text/plain').send('renderId required');
         return;
       }
       const wsTokenRaw = req.query['wsToken'];
@@ -5089,80 +5060,61 @@ export function createGguiServer(
         res.status(401).type('text/plain').send('wsToken invalid');
         return;
       }
-      // Tenancy gate: the wsToken's claimed sessionId MUST match the
-      // URL's sessionId. A wsToken minted for session A MUST NOT read
-      // session B's state.
-      if (verify.claims.sessionId !== sessionId) {
+      // Tenancy gate: the wsToken's claimed renderId MUST match the
+      // URL's renderId. A wsToken minted for render A MUST NOT read
+      // render B's state.
+      if (verify.claims.renderId !== renderId) {
         res.status(401).type('text/plain').send('wsToken scope mismatch');
         return;
       }
-      let session;
+      let stored;
       try {
-        session = await sessionStoreForState.get(sessionId);
+        stored = await renderStoreForState.get(renderId);
       } catch (err) {
         logger.warn('state_read_failed', {
-          sessionId,
+          renderId,
           error: String(err),
         });
         res.status(500).type('text/plain').send('internal error');
         return;
       }
-      if (!session) {
-        // 404: session evicted / never existed. Polling clients fold
+      if (!stored) {
+        // 404: render evicted / never existed. Polling clients fold
         // this into "stop polling" — distinct from 410 which signals
         // "credential aged out, refresh".
-        res.status(404).type('text/plain').send('session not found');
+        res.status(404).type('text/plain').send('render not found');
         return;
       }
       // Tenancy gate (round 2): the wsToken's appId MUST match the
-      // session's appId. Closes the case where a session is created
+      // render's appId. Closes the case where a render is created
       // under a different appId than the token was minted for.
-      if (verify.claims.appId !== session.appId) {
+      if (verify.claims.appId !== stored.appId) {
         res.status(401).type('text/plain').send('wsToken scope mismatch');
         return;
       }
-      // Project the top renderable stack-item using the same selection
-      // logic the /r/ route uses — module-private over there, replicated
-      // here to keep the seam narrow.
-      let top:
-        | {
-            id: string;
-            kind?: string;
-            source: SessionStackEntry;
-          }
-        | null = null;
-      for (let i = session.stack.length - 1; i >= 0; i -= 1) {
-        const entry = session.stack[i];
-        if (!entry || entry.type === 'mcpApps') continue;
-        if (entry.type === 'system') {
-          if (typeof entry.kind === 'string' && entry.kind.length > 0) {
-            top = { id: entry.id, kind: entry.kind, source: entry };
-            break;
-          }
-          continue;
-        }
-        const code = entry.componentCode;
-        if (typeof code === 'string' && code.length > 0) {
-          top = { id: entry.id, source: entry };
-          break;
-        }
-      }
-      // Build session-slice meta. Mirror push.resultMeta's shape so
+      // Phase B: a render IS the addressable unit. Pick directly from
+      // the resolved Render (no stack walk).
+      const render = stored.render;
+      const isMcpApps = render.type === 'mcpApps';
+      const isSystem = !isMcpApps && render.type === 'system';
+      const renderKind =
+        isSystem && typeof (render as { kind?: string }).kind === 'string'
+          ? (render as { kind: string }).kind
+          : undefined;
+      // Build render-slice meta. Mirror render.resultMeta's shape so
       // the iframe-runtime parser admits identical envelopes regardless
       // of which surface served them. `lastSequence` is the load-bearing
       // R6 addition: polling clients use it to initialize the R7 /events
       // cursor (`?sinceSequence=N`) aligned with the WS stream.
-      const view = top ? deriveStackItemMeta(top.source) : undefined;
+      const view = !isMcpApps ? deriveRenderMeta(render) : undefined;
       let statePublicEnv:
         | Readonly<Record<string, string>>
         | undefined;
-      if (appMetadataStoreForState && top) {
+      if (appMetadataStoreForState && !isMcpApps) {
         try {
-          const appRecord = await appMetadataStoreForState.get(
-            session.appId,
-          );
+          const appRecord = await appMetadataStoreForState.get(stored.appId);
           statePublicEnv = derivePublicEnvProjection(
-            top.source,
+            render,
             appRecord?.publicEnv,
           );
         } catch {
@@ -5174,25 +5126,69 @@ export function createGguiServer(
       // `wsUrl` (the CSP-permitted WebSocket origin). Without this,
       // any caller of /state — including the restore-bootstrap path in
       // every host (claude.ai, ChatGPT, our sample-agent) — receives a
-      // session slice missing `wsUrl`. CSP `connect-src` then omits the
+      // render slice missing `wsUrl`. CSP `connect-src` then omits the
       // `ws://` scheme, the browser blocks the upgrade, and props_update
-      // never reaches the iframe. ggui_push already stamps this trio
-      // on its resultMeta; mirroring here closes the drift.
+      // never reaches the iframe. The render-commit handler already
+      // stamps this trio on its resultMeta; mirroring here closes the
+      // drift.
       const liveTrio = mintBootstrap
-        ? mintBootstrap(session.id, session.appId)
+        ? mintBootstrap(stored.id, stored.appId)
         : undefined;
       // Polling URL — the iframe-runtime's R6 polling-fallback path
-      // composes its fetch URL from `session.pollingUrl`. The /state
+      // composes its fetch URL from `render.pollingUrl`. The /state
       // endpoint IS that URL, so we stamp it here; without it the
       // iframe-runtime can't fall back when the WS upgrade fails.
       const requestHostForPolling = req.get('host') ?? '';
       const pollingBase = opts.publicBaseUrl
         ? opts.publicBaseUrl.replace(/\/$/, '')
         : `${req.protocol}://${requestHostForPolling}`;
-      const pollingUrl = `${pollingBase}/api/sessions/${encodeURIComponent(session.id)}/state`;
-      const sessionMeta: McpAppAiGguiSessionMeta = {
-        sessionId: session.id,
-        appId: session.appId,
+      const pollingUrl = `${pollingBase}/api/renders/${encodeURIComponent(stored.id)}/state`;
+      // Static-component delivery via codeUrl (the same content-addressable
+      // channel /r/ uses). Polling clients are render-capable and need
+      // the URL to mount/refresh the static-component variant.
+      let renderCodeUrl: string | undefined;
+      let renderCodeHash: string | undefined;
+      let renderContractHash: string | undefined;
+      let renderValidatorsUrl: string | undefined;
+      if (!isSystem && !isMcpApps && opts.codeStore) {
+        const code = (render as { componentCode?: string }).componentCode;
+        if (typeof code === 'string' && code.length > 0) {
+          try {
+            const hash = opts.codeStore.hashOf(code);
+            await opts.codeStore.put(hash, code);
+            renderCodeHash = hash;
+            const requestHost = req.get('host') ?? '';
+            const base = opts.publicBaseUrl
+              ? opts.publicBaseUrl.replace(/\/$/, '')
+              : `${req.protocol}://${requestHost}`;
+            renderCodeUrl = `${base}/code/${hash}.js`;
+          } catch {
+            // Silent — caller falls back to live-mode delivery.
+          }
+          try {
+            const bundle = await deriveContractBundle(render);
+            if (bundle) {
+              await opts.codeStore.put(
+                bundle.contractHash,
+                bundle.bundleSource,
+              );
+              renderContractHash = bundle.contractHash;
+              const requestHost = req.get('host') ?? '';
+              const base = opts.publicBaseUrl
+                ? opts.publicBaseUrl.replace(/\/$/, '')
+                : `${req.protocol}://${requestHost}`;
+              renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+            }
+          } catch {
+            // Silent — server-side gate remains authoritative.
+          }
+        }
+      }
+      // Phase B: single flat ai.ggui/render slice — render + visible-
+      // bits surface fields merged into one shape.
+      const renderMeta: McpAppAiGguiRenderMeta = {
+        renderId: stored.id,
+        appId: stored.appId,
         runtimeUrl: resolveRuntimeUrlForResultMeta(),
         ...(liveTrio !== undefined
           ? {
@@ -5219,91 +5215,34 @@ export function createGguiServer(
           : {}),
         // R6 — load-bearing ledger cursor. Always stamped on /state
         // reads so polling clients can position the R7 /events cursor.
-        lastSequence: session.eventSequence,
-      };
-      // Static-component delivery via codeUrl (the same content-addressable
-      // channel /r/ uses). Polling clients are render-capable and need
-      // the URL to mount/refresh the static-component variant.
-      let renderCodeUrl: string | undefined;
-      let renderCodeHash: string | undefined;
-      let renderContractHash: string | undefined;
-      let renderValidatorsUrl: string | undefined;
-      if (top && view?.kind === undefined && opts.codeStore) {
-        const codeEntry = top.source as unknown as {
-          readonly componentCode?: string;
-        };
-        const code = codeEntry.componentCode;
-        if (typeof code === 'string' && code.length > 0) {
-          try {
-            const hash = opts.codeStore.hashOf(code);
-            await opts.codeStore.put(hash, code);
-            renderCodeHash = hash;
-            const requestHost = req.get('host') ?? '';
-            const base = opts.publicBaseUrl
-              ? opts.publicBaseUrl.replace(/\/$/, '')
-              : `${req.protocol}://${requestHost}`;
-            renderCodeUrl = `${base}/code/${hash}.js`;
-          } catch {
-            // Silent — caller falls back to live-mode delivery.
-          }
-          try {
-            const bundle = await deriveContractBundle(top.source);
-            if (bundle) {
-              await opts.codeStore.put(
-                bundle.contractHash,
-                bundle.bundleSource,
-              );
-              renderContractHash = bundle.contractHash;
-              const requestHost = req.get('host') ?? '';
-              const base = opts.publicBaseUrl
-                ? opts.publicBaseUrl.replace(/\/$/, '')
-                : `${req.protocol}://${requestHost}`;
-              renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
-            }
-          } catch {
-            // Silent — server-side gate remains authoritative.
-          }
-        }
-      }
-      const stackItem: McpAppAiGguiStackItemMeta | undefined =
-        top !== null
+        lastSequence: stored.eventSequence,
+        // Visible-bits surface merged onto the single render slice.
+        ...(renderKind !== undefined ? { kind: renderKind } : {}),
+        ...(renderCodeUrl !== undefined
           ? {
-              stackItemId: top.id,
-              ...(view?.kind !== undefined ? { kind: view.kind } : {}),
-              ...(renderCodeUrl !== undefined
-                ? {
-                    codeUrl: renderCodeUrl,
-                    ...(renderCodeHash !== undefined
-                      ? { codeHash: renderCodeHash }
-                      : {}),
-                  }
-                : {}),
-              ...(view?.propsJson !== undefined
-                ? { propsJson: view.propsJson }
-                : {}),
-              ...(view?.actionNextSteps !== undefined
-                ? { actionNextSteps: view.actionNextSteps }
-                : {}),
-              ...(view?.contextSlots !== undefined
-                ? { contextSlots: view.contextSlots }
-                : {}),
-              ...(renderContractHash !== undefined &&
-              renderValidatorsUrl !== undefined
-                ? {
-                    contractHash: renderContractHash,
-                    validatorsUrl: renderValidatorsUrl,
-                  }
-                : {}),
+              codeUrl: renderCodeUrl,
+              ...(renderCodeHash !== undefined ? { codeHash: renderCodeHash } : {}),
             }
-          : undefined;
+          : {}),
+        ...(view?.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+        ...(view?.actionNextSteps !== undefined
+          ? { actionNextSteps: view.actionNextSteps }
+          : {}),
+        ...(view?.contextSlots !== undefined
+          ? { contextSlots: view.contextSlots }
+          : {}),
+        ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
+          ? {
+              contractHash: renderContractHash,
+              validatorsUrl: renderValidatorsUrl,
+            }
+          : {}),
+      };
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.status(200).json({
-        [MCP_APP_AI_GGUI_SESSION_META_KEY]: sessionMeta,
-        ...(stackItem !== undefined
-          ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: stackItem }
-          : {}),
+        [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
       });
     });
   }
@@ -5316,7 +5255,7 @@ export function createGguiServer(
   //
   // Unification: WS subscribe's `sinceSequence` cursor and this HTTP
   // endpoint read from the SAME ledger via the same `listEventsSince`
-  // SessionStore method. Different transports, same cursor model —
+  // RenderStore method. Different transports, same cursor model —
   // that's R7's payoff.
   //
   // Auth: wsToken-gated, identical posture to /state.
@@ -5332,15 +5271,15 @@ export function createGguiServer(
   //     or the session was reset). Clients re-mount from /state.
   if (
     mcpAppsEnabled &&
-    sessionStore &&
+    renderStore &&
     sharedTokenSecret !== undefined
   ) {
-    const sessionStoreForEvents = sessionStore;
+    const renderStoreForEvents = renderStore;
     const eventsSecret = sharedTokenSecret;
-    app.get('/api/sessions/:sessionId/events', async (req, res) => {
-      const sessionId = req.params['sessionId'];
-      if (typeof sessionId !== 'string' || sessionId.length === 0) {
-        res.status(400).type('text/plain').send('sessionId required');
+    app.get('/api/renders/:renderId/events', async (req, res) => {
+      const renderId = req.params['renderId'];
+      if (typeof renderId !== 'string' || renderId.length === 0) {
+        res.status(400).type('text/plain').send('renderId required');
         return;
       }
       const wsTokenRaw = req.query['wsToken'];
@@ -5358,7 +5297,7 @@ export function createGguiServer(
         res.status(401).type('text/plain').send('wsToken invalid');
         return;
       }
-      if (verify.claims.sessionId !== sessionId) {
+      if (verify.claims.renderId !== renderId) {
         res.status(401).type('text/plain').send('wsToken scope mismatch');
         return;
       }
@@ -5403,34 +5342,34 @@ export function createGguiServer(
       }
       let result;
       try {
-        result = await sessionStoreForEvents.listEventsSince(
-          sessionId,
+        result = await renderStoreForEvents.listEventsSince(
+          renderId,
           sinceSequence,
           limit,
         );
       } catch (err) {
         logger.warn('events_read_failed', {
-          sessionId,
+          renderId,
           error: String(err),
         });
         res.status(500).type('text/plain').send('internal error');
         return;
       }
       if (result === null) {
-        // 404 — session not found. Distinct from 410 (cursor stale on
-        // a live session) so polling clients can branch.
-        res.status(404).type('text/plain').send('session not found');
+        // 404 — render not found. Distinct from 410 (cursor stale on
+        // a live render) so polling clients can branch.
+        res.status(404).type('text/plain').send('render not found');
         return;
       }
       // Tenancy gate (round 2): the wsToken's appId MUST match the
-      // session's appId. We need the session record to check — fetch
-      // it. listEventsSince validated the session exists.
-      const session = await sessionStoreForEvents.get(sessionId);
-      if (!session) {
-        res.status(404).type('text/plain').send('session not found');
+      // render's appId. We need the render record to check — fetch
+      // it. listEventsSince validated the render exists.
+      const stored = await renderStoreForEvents.get(renderId);
+      if (!stored) {
+        res.status(404).type('text/plain').send('render not found');
         return;
       }
-      if (verify.claims.appId !== session.appId) {
+      if (verify.claims.appId !== stored.appId) {
         res.status(401).type('text/plain').send('wsToken scope mismatch');
         return;
       }
@@ -6002,14 +5941,14 @@ export function createGguiServer(
       //
       // Gates (all three required):
       //   - `opts.uiRegistry`     — blueprint resolution
-      //   - `sessionStore`        — session persistence
+      //   - `renderStore`        — session persistence
       //   - `opts.shortCodeIndex` — shortCode → session binding
       //
       // Partial gate (uiRegistry alone) → 503 with a remediation hint.
       // Same-origin console surface — no bearer auth; viewer inherits
       // the operator's machine trust model.
-      if (sessionStore && opts.shortCodeIndex) {
-        const sessionStoreForTry = sessionStore;
+      if (renderStore && opts.shortCodeIndex) {
+        const renderStoreForTry = renderStore;
         const shortCodeIndexForTry = opts.shortCodeIndex;
         app.post('/ggui/console/blueprint/:id/try', async (req, res) => {
           applyDevtoolSecurityHeaders(res);
@@ -6067,46 +6006,32 @@ export function createGguiServer(
 
             // Same default appId the CLI's pairing-authenticated /mcp
             // ingress resolves for single-tenant OSS. Keeps the
-            // session + its wiredActionRouter invocation scoped to
+            // render + its wiredActionRouter invocation scoped to
             // the same tenant.
             const appId = DEFAULT_BUILDER_APP_ID;
-            // Short session id — the operator never types this, but
-            // logs + /ggui/health's session enumeration surface it,
-            // so a readable prefix helps debugging.
-            const sessionId = `try-${randomUUID()}`;
-            // stackItemId is the StackItem's stable identity; the
-            // blueprint id makes a natural slug and a same-session
-            // retry would simply replace the entry.
-            const stackItemId = `blueprint-${blueprintId}`;
-            const createdAt = new Date().toISOString();
-
-            try {
-              await sessionStoreForTry.create({ id: sessionId, appId });
-            } catch (err) {
-              logger.warn('console_blueprint_try_session_create_failed', {
-                blueprintId,
-                sessionId,
-                error: String(err),
-              });
-              res.status(500).json({
-                error: 'session_create_failed',
-                message:
-                  err instanceof Error ? err.message : String(err),
-              });
-              return;
-            }
+            // Phase B: a render IS the addressable unit; the prior
+            // (sessionId, stackItemId) pair collapses to a single
+            // renderId. The blueprint id makes a natural slug; a
+            // same-blueprint retry replaces the row.
+            const renderId = `try-${blueprintId}-${randomUUID()}`;
+            const sessionId = renderId; // local name kept for downstream log fields
+            const createdAt = Date.now();
 
             const contract = entry.manifest.contract ?? {};
-            const stackItem: StackItem = {
-              id: stackItemId,
+            const render: Render = {
+              id: renderId,
+              appId,
               type: 'component',
               componentCode: code,
               contentType: bundle.contentType,
+              eventSequence: 0,
               createdAt,
+              lastActivityAt: createdAt,
+              expiresAt: createdAt + 24 * 60 * 60 * 1000,
               description: `Blueprint try-live: ${entry.manifest.name}`,
               // Data contract fields from the manifest. Each is
               // conditionally spread — absent on the manifest →
-              // absent on the StackItem (keeps shape honest + avoids
+              // absent on the Render (keeps shape honest + avoids
               // an empty-shape contract tripping structural
               // validators downstream).
               ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
@@ -6118,17 +6043,16 @@ export function createGguiServer(
                 : {}),
             };
 
-            // Schema compatibility check. Fires BEFORE
-            // the stack item commits — if the blueprint's
-            // pre-declared actionSpec / streamSpec references a
-            // tool whose schemas don't align, the operator gets a
-            // named `SCHEMA_MISMATCH_ERROR` response instead of a
-            // silent runtime `TOOL_THREW`. Mode sourced from
-            // `createGguiServer({schemaCompatCheck})`; defaults to
-            // `'reject'`. See `./schema-compat.ts`.
+            // Schema compatibility check. Fires BEFORE the render
+            // commits — if the blueprint's pre-declared actionSpec /
+            // streamSpec references a tool whose schemas don't align,
+            // the operator gets a named `SCHEMA_MISMATCH_ERROR`
+            // response instead of a silent runtime `TOOL_THREW`. Mode
+            // sourced from `createGguiServer({schemaCompatCheck})`;
+            // defaults to `'reject'`. See `./schema-compat.ts`.
             try {
               const report = checkStackItemSchemaCompat(
-                stackItem,
+                render,
                 handlers,
                 schemaCompatMode,
                 `console blueprint-try:${blueprintId}`,
@@ -6172,15 +6096,15 @@ export function createGguiServer(
             }
 
             try {
-              await sessionStoreForTry.appendStackItem(sessionId, stackItem);
+              await renderStoreForTry.commit({ render, appId });
             } catch (err) {
-              logger.warn('console_blueprint_try_append_failed', {
+              logger.warn('console_blueprint_try_commit_failed', {
                 blueprintId,
-                sessionId,
+                renderId,
                 error: String(err),
               });
               res.status(500).json({
-                error: 'append_failed',
+                error: 'commit_failed',
                 message:
                   err instanceof Error ? err.message : String(err),
               });
@@ -6202,11 +6126,11 @@ export function createGguiServer(
             // blueprint's empty state remains a valid degraded UX.
             if (channelForHealth) {
               try {
-                await channelForHealth.primeStreams(sessionId, stackItem);
+                await channelForHealth.primeStreams(renderId, render);
               } catch (err) {
                 logger.warn('console_blueprint_try_prime_failed', {
                   blueprintId,
-                  sessionId,
+                  renderId,
                   error: String(err),
                 });
               }
@@ -6733,12 +6657,12 @@ export function createGguiServer(
     mountConsolePayloadsRoutes(app, payloadTraceSink);
 
     // Timeline surfaces — `/devtools/timeline` reads the session
-    // list and per-session SessionStore.observe replay. REST
+    // list and per-session RenderStore.observe replay. REST
     // only — replay is a snapshot, not a live stream. Admin-gated by
-    // the loop above. The hoisted `sessionStore` + `streamBuffer` may
+    // the loop above. The hoisted `renderStore` + `streamBuffer` may
     // be undefined when neither `mcpApps` nor `sessionChannel` is on;
     // the route handlers tolerate that and return empty bodies.
-    mountConsoleTimelineRoutes(app, sessionStore, streamBuffer);
+    mountConsoleTimelineRoutes(app, renderStore, streamBuffer);
 
     // GET /ggui/console/sessions?limit=<n> — active-session list for
     // the console SPA's `/sessions` page. Operator-facing "what's
@@ -6756,7 +6680,7 @@ export function createGguiServer(
     // can opt in via query-param.
     //
     // Sources:
-    //   - `sessionStore.list({ status: 'active', limit })` — single
+    //   - `renderStore.list({ status: 'active', limit })` — single
     //     page, limit default 25, clamped to [1, 100].
     //   - `shortCodeIndex.findBySessionId(session.id)` — best-effort
     //     enrichment; absent shortCode is a valid row (displays
@@ -6766,7 +6690,7 @@ export function createGguiServer(
     // intent "show me what I was just looking at."
     //
     // Zero-config shape: `{ sessions: [], total: 0 }` when no
-    // sessionStore is wired (e.g. pure-MCP dev boot with neither
+    // renderStore is wired (e.g. pure-MCP dev boot with neither
     // sessionChannel nor mcpApps enabled).
     app.get('/ggui/console/sessions', async (req, res) => {
       applyDevtoolSecurityHeaders(res);
@@ -6789,13 +6713,13 @@ export function createGguiServer(
         }
       }
 
-      if (!sessionStore) {
+      if (!renderStore) {
         res.json({ sessions: [], total: 0 });
         return;
       }
 
       try {
-        const sessions = await sessionStore.list({
+        const sessions = await renderStore.list({
           status: 'active',
           limit,
         });
@@ -6820,7 +6744,11 @@ export function createGguiServer(
             sessionId: session.id,
             ...(shortCode ? { shortCode } : {}),
             appId: session.appId,
-            stackSize: session.stack.length,
+            // Phase B: a render IS the addressable row; no stack
+            // vessel exists. Pin `stackSize` to 1 so existing console
+            // tabular summary shape stays wire-stable while the field
+            // semantics retire over the next slice.
+            stackSize: 1,
             lastActivityAt: session.lastActivityAt,
             createdAt: session.createdAt,
             status: 'active',
@@ -7073,15 +7001,15 @@ export function createGguiServer(
       } as const;
 
       // Storage block.
-      //   - `sessionStore`: 'memory' when the server fell back to the
+      //   - `renderStore`: 'memory' when the server fell back to the
       //     in-memory default, 'custom' when the operator passed one.
       //   - `vectorStore`: same rule for vectors.
       // Keeps the label taxonomy narrow — two states the operator can
       // act on (swap to SQLite, swap to Postgres). Implementation-name
-      // leakage (e.g., "InMemorySessionStore") would couple the wire
+      // leakage (e.g., "InMemoryRenderStore") would couple the wire
       // to class names that are not part of the public contract.
       const storage = {
-        sessionStore: (opts.sessionStore ? 'custom' : 'memory') as
+        renderStore: (opts.renderStore ? 'custom' : 'memory') as
           | 'memory'
           | 'custom',
         vectorStore: (opts.vectors ? 'custom' : 'memory') as
@@ -7262,7 +7190,12 @@ export function createGguiServer(
               opts.console.sessionCookie !== null &&
               opts.console.sessionCookie.secure === true;
             const mint = mintDevtoolCookie({
-              sessionId: result.sessionId,
+              // push handler dist still emits the pre-rename `sessionId`
+              // field on its output — sibling B.2d agent renames push.ts
+              // to surface `renderId` in the same Phase B slice; until
+              // then we route the same string through the new field
+              // name on the cookie mint input.
+              renderId: result.sessionId,
               appId: DEFAULT_BUILDER_APP_ID,
               secret,
               ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
@@ -7373,7 +7306,12 @@ export function createGguiServer(
             return;
           }
           const mint = mintDevtoolCookie({
-            sessionId: binding.sessionId,
+            // shortCodeIndex.lookup still returns the pre-rename
+            // `sessionId` field — the index is keyed by render-id-as-
+            // string post Phase B but the field name is unchanged on
+            // the binding row. Route the value through the new
+            // `renderId` cookie input field.
+            renderId: binding.sessionId,
             appId: binding.appId,
             secret,
             ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
@@ -7381,7 +7319,7 @@ export function createGguiServer(
           });
           res.setHeader('Set-Cookie', mint.setCookieHeader);
           res.json({
-            sessionId: mint.sessionId,
+            renderId: mint.renderId,
             appId: mint.appId,
             expiresAt: mint.expiresAt,
           });
@@ -7393,7 +7331,7 @@ export function createGguiServer(
       //
       //   1. GET /ggui/console/session-resource?session=<sessionId>
       //      → returns a `ResourceContents` blob whose `text` IS the
-      //      production thin-shell HTML (`GGUI_SESSION_SHELL_HTML`,
+      //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
       //      byte-identical to what Claude Desktop fetches via MCP
       //      `resources/read ui://ggui/session`). The shell does NOT
       //      carry an inlined bootstrap — same as production.
@@ -7433,7 +7371,7 @@ export function createGguiServer(
 
       /**
        * Shared auth + scope gate for the two console session routes.
-       * Returns the verified `(sessionId, appId)` pair on success or
+       * Returns the verified `(renderId, appId)` pair on success or
        * `null` after writing an HTTP error response on failure.
        *
        * Internal — closure-scoped to the route block; not exported.
@@ -7442,7 +7380,7 @@ export function createGguiServer(
         req: Request,
         res: Response,
         explicitSessionId?: string,
-      ): Promise<{ sessionId: string; appId: string } | null> => {
+      ): Promise<{ renderId: string; appId: string } | null> => {
         const sessionIdRaw =
           explicitSessionId !== undefined
             ? explicitSessionId
@@ -7471,10 +7409,10 @@ export function createGguiServer(
           });
           return null;
         }
-        if (claims.sessionId !== sessionIdRaw) {
+        if (claims.renderId !== sessionIdRaw) {
           res.status(403).json({
             error: 'cookie_session_mismatch',
-            message: `Console cookie is bound to session '${claims.sessionId}' but request targets '${sessionIdRaw}'`,
+            message: `Console cookie is bound to session '${claims.renderId}' but request targets '${sessionIdRaw}'`,
           });
           return null;
         }
@@ -7482,14 +7420,14 @@ export function createGguiServer(
         // route we honestly answer
         // 404 instead of leaking an HTML blob for a session the server
         // doesn't know about.
-        let session: Awaited<ReturnType<SessionStore['get']>> = null;
-        if (sessionStore) {
+        let session: Awaited<ReturnType<RenderStore['get']>> = null;
+        if (renderStore) {
           try {
-            session = await sessionStore.get(claims.sessionId);
+            session = await renderStore.get(claims.renderId);
           } catch (err) {
             cookieLogger.error('session_resource_store_failed', {
               error: String(err),
-              sessionId: claims.sessionId,
+              sessionId: claims.renderId,
             });
             res.status(500).json({ error: 'internal_error' });
             return null;
@@ -7498,7 +7436,7 @@ export function createGguiServer(
         if (!session) {
           res.status(404).json({
             error: 'session_not_found',
-            message: `Session '${claims.sessionId}' is not on this server`,
+            message: `Session '${claims.renderId}' is not on this server`,
           });
           return null;
         }
@@ -7509,7 +7447,7 @@ export function createGguiServer(
           });
           return null;
         }
-        return { sessionId: claims.sessionId, appId: claims.appId };
+        return { renderId: claims.renderId, appId: claims.appId };
       };
 
       // GET /ggui/console/session-resource?session=<sessionId>
@@ -7527,9 +7465,9 @@ export function createGguiServer(
           res.status(200).json({
             contents: [
               {
-                uri: GGUI_SESSION_RESOURCE_URI,
-                mimeType: GGUI_SESSION_RESOURCE_MIME,
-                text: GGUI_SESSION_SHELL_HTML,
+                uri: GGUI_RENDER_RESOURCE_URI,
+                mimeType: GGUI_RENDER_RESOURCE_MIME,
+                text: GGUI_RENDER_SHELL_HTML,
               },
             ],
           });
@@ -7562,7 +7500,7 @@ export function createGguiServer(
             });
             return;
           }
-          const minted = mintBootstrap(verified.sessionId, verified.appId);
+          const minted = mintBootstrap(verified.renderId, verified.appId);
           // Console/srcdoc absolute-URL fix: `<McpAppIframe>`
           // mounts the resource via `srcdoc`, so the iframe's URL
           // is `about:srcdoc` and any relative URL would resolve
@@ -7607,148 +7545,130 @@ export function createGguiServer(
           // validators. Best-effort: a missing bundle degrades to no
           // client-side validation; server-side `assertActionContract`
           // remains authoritative.
-          let sessionContractHash: string | undefined;
-          let sessionValidatorsUrl: string | undefined;
-          if (sessionStore && opts.codeStore) {
+          let renderContractHash: string | undefined;
+          let renderValidatorsUrl: string | undefined;
+          if (renderStore && opts.codeStore) {
             try {
-              const session = await sessionStore.get(verified.sessionId);
-              const stack = session?.stack ?? [];
-              for (let i = stack.length - 1; i >= 0; i -= 1) {
-                const entry = stack[i];
-                if (
-                  entry === undefined ||
-                  entry.type === 'mcpApps' ||
-                  entry.type === 'system'
-                ) {
-                  continue;
-                }
-                if (
-                  typeof entry.componentCode === 'string' &&
-                  entry.componentCode.length > 0
-                ) {
-                  const bundle = await deriveContractBundle(entry);
-                  if (bundle) {
-                    await opts.codeStore.put(
-                      bundle.contractHash,
-                      bundle.bundleSource,
-                    );
-                    sessionContractHash = bundle.contractHash;
-                    const baseForValidators = opts.publicBaseUrl
-                      ? opts.publicBaseUrl.replace(/\/$/, '')
-                      : `${req.protocol}://${requestHost}`;
-                    sessionValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
-                  }
-                  break;
+              const stored = await renderStore.get(verified.renderId);
+              if (
+                stored !== null
+                && stored.render.type !== 'mcpApps'
+                && stored.render.type !== 'system'
+                && typeof stored.render.componentCode === 'string'
+                && stored.render.componentCode.length > 0
+              ) {
+                const bundle = await deriveContractBundle(stored.render);
+                if (bundle) {
+                  await opts.codeStore.put(
+                    bundle.contractHash,
+                    bundle.bundleSource,
+                  );
+                  renderContractHash = bundle.contractHash;
+                  const baseForValidators = opts.publicBaseUrl
+                    ? opts.publicBaseUrl.replace(/\/$/, '')
+                    : `${req.protocol}://${requestHost}`;
+                  renderValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
                 }
               }
             } catch (err) {
-              cookieLogger.warn('session_meta_validators_failed', {
+              cookieLogger.warn('render_meta_validators_failed', {
                 error: String(err),
-                sessionId: verified.sessionId,
+                renderId: verified.renderId,
               });
             }
           }
-          // Slice-envelope response — same shape as the wire `_meta`
-          // and the inline `__GGUI_META__` global the
-          // `/r/<shortCode>` shell carries. SessionViewer parses with
-          // `parseMcpAppAiGguiMeta` to lift it into the typed
-          // `{session, stackItem}` pair `<McpAppIframe>` consumes.
-          const session: McpAppAiGguiSessionMeta = {
-            sessionId: verified.sessionId,
+          // Slice-envelope response (Phase B: single ai.ggui/render
+          // slice) — same shape as the wire `_meta` and the inline
+          // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
+          // RenderViewer parses with `parseMcpAppAiGguiRenderMeta`.
+          const renderMeta: McpAppAiGguiRenderMeta = {
+            renderId: verified.renderId,
             appId: verified.appId,
             runtimeUrl: absoluteRendererUrl,
             wsUrl: resolvedWsUrl,
             wsToken: minted.token,
             expiresAt: minted.expiresAt,
-          };
-          const stackItem: McpAppAiGguiStackItemMeta | undefined =
-            sessionContractHash !== undefined &&
-            sessionValidatorsUrl !== undefined
+            ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
               ? {
-                  contractHash: sessionContractHash,
-                  validatorsUrl: sessionValidatorsUrl,
+                  contractHash: renderContractHash,
+                  validatorsUrl: renderValidatorsUrl,
                 }
-              : undefined;
-          res.status(200).json({
-            [MCP_APP_AI_GGUI_SESSION_META_KEY]: session,
-            ...(stackItem !== undefined
-              ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: stackItem }
               : {}),
+          };
+          res.status(200).json({
+            [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
           });
         },
       );
 
-      // GET /ggui/console/session-stack?session=<sessionId>
-      // → `{stack, currentStackIndex, eventSequence}` JSON.
+      // GET /ggui/console/render?render=<renderId>
+      // → `{render, eventSequence}` JSON.
       //
-      // Console-only observation surface for `<SessionViewer>` to mount
-      // `<SessionInspector>` per stack entry. The iframe owns
-      // the live WS subscription + the bootstrap token (single-use), so
-      // the OUTER console DOM has no live source for stack data —
-      // without this endpoint the inspector can't render contract /
-      // test-action panels per entry.
+      // Console-only observation surface for `<RenderViewer>` to mount
+      // `<RenderInspector>`. The iframe owns the live WS subscription
+      // + the bootstrap token (single-use), so the OUTER console DOM
+      // has no live source for render data — without this endpoint
+      // the inspector can't render contract / test-action panels.
       //
       // Named parties:
-      //   - console SPA (`SessionViewer`) — holds the same-origin
+      //   - console SPA (`RenderViewer`) — holds the same-origin
       //     cookie minted by `POST /ggui/console/session-cookie`.
       //   - mcp-server (this handler) — gates auth + scope, reads the
-      //     authoritative stack from `sessionStore`.
+      //     authoritative render from `renderStore`.
       //
-      // Auth + scope: identical to session-resource / session-bootstrap
-      // (cookie-auth + sessionId match + appId match).
+      // Auth + scope: identical to render-resource / render-bootstrap
+      // (cookie-auth + renderId match + appId match).
       //
       // Failure modes:
-      //   - 401 missing/invalid cookie · 403 cross-session/app · 404
-      //     unknown session · 500 store failure (all delegated to
+      //   - 401 missing/invalid cookie · 403 cross-render/app · 404
+      //     unknown render · 500 store failure (all delegated to
       //     `gateDevtoolSessionRequest`).
-      //   - 503 if `sessionStore` is not wired (zero-config server).
+      //   - 503 if `renderStore` is not wired (zero-config server).
       //
-      // Shape note: the response carries the raw `SessionStackEntry[]`
-      // (StackItem | McpAppsStackItem) — console narrows on each
-      // entry's `type` discriminator before passing into
-      // `<SessionInspector>` (which only accepts the StackItem variant
-      // since the inspector reads actionSpec / streamSpec / propsSpec
-      // — fields McpAppsStackItem doesn't carry).
+      // Shape note: Phase B collapsed the prior session-stack array to
+      // a single `Render` row. The response now returns the resolved
+      // `Render` directly; console narrows on `render.type` before
+      // passing into `<RenderInspector>` (which only accepts the
+      // ComponentRender variant since the inspector reads actionSpec /
+      // streamSpec / propsSpec — fields McpAppsRender doesn't carry).
       app.get(
-        '/ggui/console/session-stack',
+        '/ggui/console/render',
         async (req: Request, res: Response) => {
           applyDevtoolSecurityHeaders(res);
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           const verified = await gateDevtoolSessionRequest(req, res);
           if (!verified) return;
-          if (!sessionStore) {
+          if (!renderStore) {
             res.status(503).json({
-              error: 'session_store_unavailable',
+              error: 'render_store_unavailable',
               message:
-                'Session-stack requires sessionChannel: true on the server so the session store is wired. Enable `sessionChannel` on createGguiServer() and retry.',
+                'Render observation requires sessionChannel: true on the server so the render store is wired. Enable `sessionChannel` on createGguiServer() and retry.',
             });
             return;
           }
-          let session: Awaited<ReturnType<SessionStore['get']>> = null;
+          let stored: Awaited<ReturnType<RenderStore['get']>> = null;
           try {
-            session = await sessionStore.get(verified.sessionId);
+            stored = await renderStore.get(verified.renderId);
           } catch (err) {
-            cookieLogger.error('session_stack_store_failed', {
+            cookieLogger.error('render_store_failed', {
               error: String(err),
-              sessionId: verified.sessionId,
+              renderId: verified.renderId,
             });
             res.status(500).json({ error: 'internal_error' });
             return;
           }
-          if (!session) {
-            // Race: gate verified existence above but the session
+          if (!stored) {
+            // Race: gate verified existence above but the render
             // could expire between calls. Honest 404.
             res.status(404).json({
-              error: 'session_not_found',
-              message: `Session '${verified.sessionId}' is not on this server`,
+              error: 'render_not_found',
+              message: `Render '${verified.renderId}' is not on this server`,
             });
             return;
           }
-          const stack: SessionStackEntry[] = session.stack;
           res.status(200).json({
-            stack,
-            currentStackIndex: session.currentStackIndex,
-            eventSequence: session.eventSequence,
+            render: stored.render,
+            eventSequence: stored.eventSequence,
           });
         },
       );
@@ -8803,7 +8723,7 @@ export function createGguiServer(
   );
   const channel: SessionChannelServer | null = opts.sessionChannel
     ? createSessionChannelServer({
-        sessionStore: sessionStore ?? new InMemorySessionStore(),
+        renderStore: renderStore ?? new InMemoryRenderStore(),
         auth,
         logger: logger.child({ component: 'session-channel' }),
         path:
