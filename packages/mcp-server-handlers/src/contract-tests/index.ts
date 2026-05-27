@@ -2,21 +2,19 @@
  * Cross-implementation contract test suites for
  * `@ggui-ai/mcp-server-handlers` factories.
  *
- * Portable test batteries that any conforming push-handler / handshake-
- * handler / etc. deployment plugs into to prove wire-shape +
- * recoverability invariants. Subpath import:
+ * Portable test batteries that any conforming handler deployment
+ * plugs into to prove wire-shape + recoverability invariants.
  *
- *   ```ts
- *   import { runPushHandlerContract } from
- *     '@ggui-ai/mcp-server-handlers/contract-tests';
- *   ```
- *
- * The in-memory invocation lives in `./push-handler.contract.test.ts`
- * and runs in the standard test surface. Cloud and other
- * adapter-backed deployments invoke the same suite from their own
- * test files against their adapter-backed deps.
+ * **Post-Phase-B (flatten-render-identity) status.** The legacy
+ * `runPushHandlerContract` battery exercised `createGguiPushHandler`
+ * (vessel+stack identity model) — that handler is deleted; the
+ * replacement `createGguiRenderHandler` (flat render identity)
+ * does not yet have a portable contract suite. Per-deps unit tests in
+ * `../session-mutations/*.test.ts` cover the behavioural invariants
+ * while the render-handler contract battery is being authored. Cloud
+ * pod adapters that previously consumed `runPushHandlerContract`
+ * (`cloud/ggui-protocol-pod/deploy/src/tools/push-handler.contract.test.ts`)
+ * need to be re-wired against the upcoming `runRenderHandlerContract`
+ * once it lands.
  */
-export {
-  runPushHandlerContract,
-  type PushHandlerContractFactory,
-} from './push-handler.contract.js';
+export {};

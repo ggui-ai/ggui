@@ -63,6 +63,9 @@ describe('createGguiGetRenderHandler', () => {
         { renderId },
         { appId: 'app-1', requestId: 'r1' },
       );
+if (out.type === 'mcpApps') {
+        throw new Error('expected ComponentRender, got McpAppsRender');
+      }
       expect(out.id).toBe(renderId);
       expect(out.appId).toBe('app-1');
       expect(typeof out.eventSequence).toBe('number');
@@ -78,7 +81,10 @@ describe('createGguiGetRenderHandler', () => {
         { renderId },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect((out as ComponentRender).themeId).toBe('indigo');
+      if (out.type === 'mcpApps') {
+        throw new Error('expected ComponentRender, got McpAppsRender');
+      }
+      expect(out.themeId).toBe('indigo');
     });
   });
 
@@ -135,8 +141,11 @@ describe('createGguiGetRenderHandler', () => {
         { renderId },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect((out as ComponentRender).lastActivityAt).toBe(9_999_999);
-      expect((out as ComponentRender).expiresAt).toBe(10_000_000);
+      if (out.type === 'mcpApps') {
+        throw new Error('expected ComponentRender, got McpAppsRender');
+      }
+      expect(out.lastActivityAt).toBe(9_999_999);
+      expect(out.expiresAt).toBe(10_000_000);
     });
 
     it('swallows heartbeat failures (best-effort)', async () => {

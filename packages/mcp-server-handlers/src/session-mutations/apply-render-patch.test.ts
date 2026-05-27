@@ -76,15 +76,18 @@ describe('applyRenderPatch', () => {
   });
 
   it('accepts a minimal-shape render (hosted DDB-row case)', () => {
-    const render = { id: 'r1', extra: 'field' };
+    const render: RenderTarget & { extra: string } = {
+      id: 'r1',
+      extra: 'field',
+    };
     const { updatedRender } = applyRenderPatch({
       render,
       mode: 'merge' as const,
       patch: { city: 'Tokyo' },
     });
     expect(updatedRender.id).toBe('r1');
-    // extra field flows through
-    expect((updatedRender as { extra?: string }).extra).toBe('field');
+    // extra field flows through (preserved via generic T)
+    expect(updatedRender.extra).toBe('field');
     expect(updatedRender.props).toEqual({ city: 'Tokyo' });
   });
 
