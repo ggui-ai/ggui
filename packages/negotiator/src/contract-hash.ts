@@ -60,7 +60,7 @@ function canonicalize(value: unknown): string {
  *
  * `intent` is passed separately because `DataContract` itself does
  * not carry an `intent` field — the outer pipeline owns intent
- * (`story.intent` on `ggui_push`, the operator prompt for harness
+ * (`story.intent` on `ggui_render`, the operator prompt for harness
  * benchmarks). Threading intent into the hash keeps cache identity
  * stable across negotiations: different intents produce different
  * generated code (labels, copy, layout) even when the wire surface is
@@ -73,7 +73,7 @@ function canonicalize(value: unknown): string {
  *
  * @param contract - The data contract from negotiation (unused today)
  * @param intent - The outer pipeline's intent (story.intent on
- *   ggui_push). Empty/falsy values are dropped from the hash input.
+ *   ggui_render). Empty/falsy values are dropped from the hash input.
  * @returns Contract hash prefixed with `ch_` (e.g., `ch_a3f8b2c1e9d04567`)
  */
 export function hashContract(

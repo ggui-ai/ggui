@@ -1,12 +1,12 @@
 /**
  * Suggestion engine — detects structured data patterns in free-form
- * agent text and proposes a ggui_push call that would show them
+ * agent text and proposes a ggui_render call that would show them
  * interactively.
  *
  * Pure regex heuristics — zero I/O, zero LLM. The agent can call this
  * opportunistically on streamed output to decide whether to surface a
  * UI suggestion. Callers must pass a deduplication set to avoid
- * re-suggesting the same UI repeatedly in a live session.
+ * re-suggesting the same UI repeatedly within a render scope.
  */
 
 import { computeIntentId } from './intent.js';
@@ -14,10 +14,10 @@ import { computeIntentId } from './intent.js';
 /** Suggestion event sent to the agent. */
 export interface NegotiatorSuggestion {
   type: 'negotiator:suggest';
-  trigger: 'stream-data-detected' | 'session-context' | 'user-pattern';
+  trigger: 'stream-data-detected' | 'conversation-context' | 'user-pattern';
   message: string;
   suggestedAction: {
-    tool: 'ggui_push';
+    tool: 'ggui_render';
     input: { data?: Record<string, unknown>; prompt?: string };
   };
   confidence: number;
@@ -65,8 +65,8 @@ export function buildSuggestion(
   return {
     type: 'negotiator:suggest',
     trigger: 'stream-data-detected',
-    message: `I noticed structured data in your response (${best.pattern}). Consider calling ggui_push for an interactive ${best.uiType} instead.`,
-    suggestedAction: { tool: 'ggui_push', input: { prompt: best.uiType } },
+    message: `I noticed structured data in your response (${best.pattern}). Consider calling ggui_render for an interactive ${best.uiType} instead.`,
+    suggestedAction: { tool: 'ggui_render', input: { prompt: best.uiType } },
     confidence: best.confidence,
     intentId,
   };

@@ -27,7 +27,7 @@
  *
  * `hashContract` takes `(contract, intent)` because `DataContract`
  * does not carry an `intent` field — the outer pipeline owns intent
- * (`story.intent` on `ggui_push`, the operator prompt for harness
+ * (`story.intent` on `ggui_render`, the operator prompt for harness
  * benchmarks).
  */
 
