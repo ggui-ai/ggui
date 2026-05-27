@@ -53,7 +53,7 @@ import type { GguiContextRegistry } from './globals.js';
 
 /**
  * Wire-shape entry for a single contextSpec slot, mirrored from
- * {@link import('@ggui-ai/protocol/integrations/mcp-apps').McpAppAiGguiStackItemMeta.contextSlots}.
+ * {@link import('@ggui-ai/protocol/integrations/mcp-apps').McpAppAiGguiRenderMeta.contextSlots}.
  */
 export interface ContextSlotInfo {
   readonly name: string;
@@ -199,7 +199,7 @@ export interface ContextPostIdentity {
  *      — the existing path; agent's LLM reads these via
  *      `read_widget_context` for in-turn awareness.
  *   2. `tools/call` for `ggui_runtime_sync_context` — the server mirror.
- *      Server stores the snapshot on the active StackItem; chat-
+ *      Server stores the snapshot on the active Render; chat-
  *      history rehydrate seeds `contextSlots[i].default` with the
  *      snapshotted values, restoring the user's last-known state.
  *

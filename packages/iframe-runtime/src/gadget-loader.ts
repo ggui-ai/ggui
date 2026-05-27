@@ -40,7 +40,7 @@ import type { GadgetPackageRegistry, ModuleNamespace } from './globals.js';
 
 /**
  * Minimal shape consumed by the loader — mirrors the protocol's
- * `McpAppAiGguiSessionMeta.gadgets[*]` entry but typed locally so the loader
+ * `McpAppAiGguiRenderMeta.gadgets[*]` entry but typed locally so the loader
  * is testable without dragging the protocol package into unit setups.
  */
 export interface GadgetRegistration {

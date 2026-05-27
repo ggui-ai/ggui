@@ -1,10 +1,10 @@
 /**
  * System-card registry.
  *
- * Central mapping from `SystemStackItem.kind` (a stable wire string)
+ * Central mapping from `SystemRender.kind` (a stable wire string)
  * to a real React component bundled inside the iframe-runtime. The
  * runtime's self-contained boot path looks up the kind here when it
- * sees a stack item with `type: 'system'`. Unknown kinds fall through
+ * sees a render with `type: 'system'`. Unknown kinds fall through
  * to {@link UnknownSystemCard} so an old runtime + new server still
  * surfaces something visible (vs. a blank iframe).
  *

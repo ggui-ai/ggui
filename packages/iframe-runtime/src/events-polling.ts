@@ -2,19 +2,19 @@
  * Registry-level events-polling composition for the iframe-runtime (R7).
  *
  * The R7 cursor-replay model — paired transport of the
- * `/api/sessions/:id/events?sinceSequence=N&limit=100` HTTP endpoint
+ * `/api/renders/:renderId/events?sinceSequence=N&limit=100` HTTP endpoint
  * + the WS subscribe `sinceSequence` cursor. Both transports replay
  * from the same SessionEvent ledger; the polling client uses HTTP, the
  * live client uses WS, and they SHARE the cursor model. Switching
  * transports does not lose events.
  *
  * Semantics (vs. R6 snapshot-polling):
- *   - **URL** — `/api/sessions/<sessionId>/events?wsToken=<token>` with
+ *   - **URL** — `/api/renders/<renderId>/events?wsToken=<token>` with
  *     `sinceSequence` and `limit` added per tick.
  *   - **Interval** — fixed 2000ms (mirrors R6's default).
  *   - **parseSnapshot** — reads the `EventsResponse` envelope, dispatches
  *     each event by `event.type` to the registered ChannelHandler (e.g.
- *     `push` → push handler; `props_update` → props_update handler),
+ *     `render` → render handler; `props_update` → props_update handler),
  *     and advances the cursor to `lastSequence`.
  *   - **REPLAY_HORIZON_PASSED** — when the server returns 410 the
  *     parser can't fold; the consumer must re-mount from a fresh
@@ -32,9 +32,9 @@
  * R7's principled fix: the same /events endpoint that powers polling
  * ALSO serves the cold-mount path. An iframe booting without inline
  * meta calls `/events?sinceSequence=0&limit=1` to fetch the first
- * push event from the ledger; the wsToken comes from the iframe's
+ * render event from the ledger; the wsToken comes from the iframe's
  * URL query string (the server stamps it on the resource URI when
- * minting the push tool result, preserved across the Anthropic SDK
+ * minting the render tool result, preserved across the Anthropic SDK
  * strip). One unified cursor model handles cold-mount, polling
  * fallback, and live updates.
  */
@@ -51,15 +51,15 @@ export interface BuildEventsPollingOptions {
   /**
    * Base URL the polling tick reads from. The composer appends
    * `&sinceSequence=<cursor>&limit=<limit>` per tick. Typically the
-   * `/api/sessions/<sessionId>/events?wsToken=<token>` URL the iframe
-   * derived from the session slice. Must already include a `?` or `&`
+   * `/api/renders/<renderId>/events?wsToken=<token>` URL the iframe
+   * derived from the render slice. Must already include a `?` or `&`
    * separator-ready terminator; we add the cursor params with
    * `&` if the URL contains `?`, else `?`.
    */
   readonly baseUrl: string;
   /**
    * Optional cursor seed — initial value of `sinceSequence` on the
-   * first tick. Typically threaded from `session.lastSequence` so the
+   * first tick. Typically threaded from `render.lastSequence` so the
    * cold-mount-after-WS-fail path picks up where the snapshot left
    * off. Defaults to `0` (replay everything still retained).
    */
@@ -117,7 +117,7 @@ function isSessionEvent(value: unknown): value is SessionEvent {
 
 /**
  * Build a {@link RegistryPollingOptions} descriptor that reads
- * `/api/sessions/:id/events?sinceSequence=N&limit=M` and dispatches
+ * `/api/renders/:renderId/events?sinceSequence=N&limit=M` and dispatches
  * each `SessionEvent` by `event.type` to the registry's matching
  * channel handler. Cursor advances per-tick to the server's
  * `lastSequence`.
@@ -197,7 +197,7 @@ export function buildEventsPolling(
       // Group events by type. The registry-level polling transport
       // calls one handler per type; if multiple events share a type
       // we'd lose deliveries. Today's wire frame types
-      // (push/props_update) are typically distinct per tick at the
+      // (render/props_update) are typically distinct per tick at the
       // expected 2s cadence, but the protocol allows multiple of the
       // same type. Honest workaround: dispatch the LAST event of each
       // type and rely on the consumer's idempotency. Future R8: extend

@@ -25,7 +25,7 @@
  *     loading fallback until A2UI's `root` fragment arrives; then
  *     the adjacency tree paints.
  *   - `suspend()` hides the surface (used when the authoritative
- *     render takes over — the stack-item dispatcher in Commit 4
+ *     render takes over — the render dispatcher in Commit 4
  *     toggles this on ReactComponentRenderer mount).
  *   - `resume()` re-shows. Envelopes keep accumulating in state
  *     while suspended, matching host-SDK behavior.

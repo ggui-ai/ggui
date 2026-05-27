@@ -1,8 +1,8 @@
 /**
- * Vanilla-TS port of
- * `@ggui-ai/react::components/McpAppsStackItemRenderer.tsx`. Used
- * when a ggui render's `type === 'mcpApps'` — the renderer
- * mounts a nested iframe that embeds a foreign MCP App.
+ * Vanilla-TS port of `@ggui-ai/react::components/GguiRender.tsx`'s
+ * MCP-Apps branch. Used when a ggui render's `type === 'mcpApps'`
+ * — the renderer mounts a nested iframe that embeds a foreign
+ * MCP App.
  *
  * The iframe plays the MCP Apps HOST role for the embedded content:
  *
@@ -194,8 +194,7 @@ export function mountMcpAppIframe(
 
   async function handleHostBridgeRequest(ev: MessageEvent): Promise<void> {
     // Adapter-boundary guard: only our own iframe's contentWindow is
-    // allowed. This matches the ref-guard in
-    // McpAppsStackItemRenderer.tsx.
+    // allowed. This matches the ref-guard in `GguiRender.tsx`.
     if (iframe.contentWindow === null || ev.source !== iframe.contentWindow) return;
     const req = ev.data as JsonRpcRequest;
     if (req === null || typeof req !== 'object') return;

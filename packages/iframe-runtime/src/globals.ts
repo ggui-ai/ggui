@@ -35,10 +35,10 @@
  * means the registry MUST be populated BEFORE any `loadModule()` call
  * evaluates generated code. The boot orchestration in
  * `runtime.ts::bootSequence` enforces this by calling
- * `installGlobalRegistry()` BEFORE the subscribe ack's first stack
- * item renders. Race-free: Node/browser event loop is single-threaded
- * and no other code runs between `installGlobalRegistry()` and the
- * first stack-item render invocation.
+ * `installGlobalRegistry()` BEFORE the subscribe ack's render mounts.
+ * Race-free: Node/browser event loop is single-threaded and no other
+ * code runs between `installGlobalRegistry()` and the first render
+ * invocation.
  */
 import type { Context } from 'react';
 

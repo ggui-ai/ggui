@@ -11,7 +11,7 @@
  * map keyed by item id) was retired along with `StackModel`.
  *
  * The dispatch tree mirrors `@ggui-ai/react::DynamicComponent` +
- * `McpAppsStackItemRenderer`:
+ * `GguiRender`'s MCP-Apps branch:
  *
  *   - `type === 'mcpApps'` → `mountMcpAppIframe` (vanilla iframe
  *     host; the recursive foreign-MCP-App path).
