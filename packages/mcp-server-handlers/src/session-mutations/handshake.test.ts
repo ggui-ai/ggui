@@ -1,6 +1,12 @@
 /**
  * `ggui_handshake` handler tests — MVB-5 three-step handshake.
  *
+ * Post-Phase-B (flatten-render-identity): handshake input no longer
+ * carries `sessionId` — the paired `ggui_render` mints the render
+ * server-side. Host conversation grouping (sibling renders within one
+ * host chat) lives on the `_meta["ai.ggui/host-session"]` envelope,
+ * not on the handshake input.
+ *
  * Tests cover:
  *   - declaration shape (outputSchema fields match the new spec)
  *   - no-negotiator default produces `origin: 'agent'`
@@ -23,14 +29,11 @@ import {
   type HandshakeRecord,
 } from './handshake';
 
-const SESS_TEST_ID = 'sess-test';
-
 const MINIMAL_DRAFT = {
   contract: {} as DataContract,
 };
 
 const minimalInput = (overrides: Record<string, unknown> = {}) => ({
-  sessionId: SESS_TEST_ID,
   intent: 'show weather',
   blueprintDraft: MINIMAL_DRAFT,
   ...overrides,
@@ -44,7 +47,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(handler.name).toBe('ggui_handshake');
     });
 
-    it('declares the lean handshakeOutputSchema shape — {handshakeId, action, suggestion, nextStep?, client?}', () => {
+    it('declares the lean handshakeOutputSchema shape — {handshakeId, action, suggestion, nextStep?}', () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
       const outKeys = Object.keys(handler.outputSchema).sort();
@@ -53,12 +56,8 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       // handshake follows). These survive on the internal TS shape /
       // HandshakeRecord for telemetry + post-classify tracing — zod
       // strips them before structuredContent serialization.
-      //
-      // added `client.hostContext` so the agent
-      // can read iframe-observed McpUiHostContext on each turn.
       expect(outKeys).toEqual([
         'action',
-        'client',
         'handshakeId',
         'nextStep',
         'suggestion',
@@ -67,7 +66,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
   });
 
   describe('no-negotiator default — origin: agent', () => {
-    it('stamps an agent-origin suggestion with the agent\'s draft verbatim', async () => {
+    it("stamps an agent-origin suggestion with the agent's draft verbatim", async () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
       const out = await handler.handler(
@@ -324,6 +323,38 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       );
       expect(out.alternatives).toEqual([alternative]);
     });
+
+    it('propagates a target.renderId routing hint from the negotiator', async () => {
+      // Phase-B: routing hint collapsed from {sessionId, stackItemId}
+      // to a single {renderId?}. The negotiator MAY suggest reusing
+      // an existing render (cache / update path).
+      const kvStore = new InMemoryKeyValueStore();
+      const suggestion: HandshakeSuggestion = {
+        origin: 'cache',
+        rationale: 'reuse existing render',
+        blueprintMeta: {
+          blueprintId: 'bp_existing',
+          contractHash: 'hash_x',
+          generator: 'ui-gen-default-haiku-4-5',
+          variance: {},
+        },
+      };
+      const negotiator: HandshakeNegotiator = {
+        decide: () => ({
+          action: 'update',
+          reason: 'update existing render in place',
+          suggestion,
+          effectiveContract: {} as DataContract,
+          target: { renderId: 'render-existing-123' },
+        }),
+      };
+      const handler = createGguiHandshakeHandler({ kvStore, negotiator });
+      const out = await handler.handler(
+        minimalInput(),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      expect(out.target.renderId).toBe('render-existing-123');
+    });
   });
 
   describe('input validation', () => {
@@ -332,9 +363,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       const handler = createGguiHandshakeHandler({ kvStore });
       await expect(
         handler.handler(
-          { sessionId: SESS_TEST_ID, intent: 'hi' } as unknown as Parameters<
-            typeof handler.handler
-          >[0],
+          { intent: 'hi' },
           { appId: 'app-1', requestId: 'r' },
         ),
       ).rejects.toThrow();
@@ -351,17 +380,17 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       ).rejects.toThrow();
     });
 
-    it('rejects a missing sessionId with SessionRequiredError', async () => {
+    it('accepts an input WITHOUT sessionId (Phase B — sessionId removed from handshake input)', async () => {
+      // Phase B: the handshake no longer carries a sessionId. The
+      // paired ggui_render mints the render server-side; host
+      // conversation grouping lives on `_meta["ai.ggui/host-session"]`.
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
-      await expect(
-        handler.handler(
-          { intent: 'hi', blueprintDraft: MINIMAL_DRAFT } as unknown as Parameters<
-            typeof handler.handler
-          >[0],
-          { appId: 'app-1', requestId: 'r' },
-        ),
-      ).rejects.toThrow(/sessionId/);
+      const out = await handler.handler(
+        { intent: 'hi', blueprintDraft: MINIMAL_DRAFT },
+        { appId: 'app-1', requestId: 'r' },
+      );
+      expect(out.handshakeId).toBeTruthy();
     });
   });
 
@@ -430,7 +459,10 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(events[0]!.name).toBe('handshake.decided');
       const attrs = events[0]!.attributes;
       expect(attrs['appId']).toBe('app-1');
-      expect(attrs['sessionId']).toBe(SESS_TEST_ID);
+      // Phase B: telemetry no longer carries sessionId (the handshake
+      // input no longer accepts one; the paired ggui_render mints the
+      // render later).
+      expect(attrs['sessionId']).toBeUndefined();
       expect(attrs['handshakeId']).toBe(out.handshakeId);
       expect(attrs['action']).toBe('create');
       expect(attrs['origin']).toBe('agent');
