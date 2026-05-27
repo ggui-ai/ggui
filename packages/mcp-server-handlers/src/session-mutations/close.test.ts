@@ -1,27 +1,54 @@
 /**
- * Tests for `createGguiCloseHandler` — Phase 2.4 lift.
+ * Tests for `createGguiCloseHandler`.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from `{sessionId}`
+ * to `{renderId}` — every render IS the addressable scope.
+ * `SessionStore` → `RenderStore`. `SessionNotFoundError` →
+ * `RenderNotFoundError`. The observer notifier renamed from
+ * `notifySessionClosed` to `notifyRenderClosed`.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ComponentRender } from '@ggui-ai/protocol';
 import {
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiCloseHandler,
   type CloseObserverNotifier,
 } from './close.js';
-import { SessionNotFoundError } from './errors.js';
+import { RenderNotFoundError } from './errors.js';
+
+const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
+
+async function seedRender(
+  store: InMemoryRenderStore,
+  renderId: string,
+  appId: string,
+): Promise<void> {
+  const render: ComponentRender = {
+    id: renderId,
+    appId,
+    type: 'component',
+    componentCode: '',
+    eventSequence: 0,
+    createdAt: NOW_MS,
+    lastActivityAt: NOW_MS,
+    expiresAt: NOW_MS + 60_000,
+  };
+  await store.commit({ render, appId });
+}
 
 describe('createGguiCloseHandler', () => {
-  let sessionStore: InMemorySessionStore;
+  let renderStore: InMemoryRenderStore;
 
   beforeEach(() => {
-    sessionStore = new InMemorySessionStore();
+    renderStore = new InMemoryRenderStore();
   });
 
   describe('declaration metadata', () => {
     it('exposes ggui_close name + agent audience', () => {
-      const handler = createGguiCloseHandler({ sessionStore });
+      const handler = createGguiCloseHandler({ renderStore });
       expect(handler.name).toBe('ggui_close');
       expect(handler.audience).toEqual(['agent']);
     });
@@ -29,37 +56,37 @@ describe('createGguiCloseHandler', () => {
 
   describe('happy path', () => {
     it('appends session.closed event + returns success:true', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      const handler = createGguiCloseHandler({ sessionStore });
+      await seedRender(renderStore, 'render-1', 'app-1');
+      const handler = createGguiCloseHandler({ renderStore });
       const out = await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.success).toBe(true);
       // Verify the close stuck — listing for active should NOT include it.
-      const active = await sessionStore.list({
+      const active = await renderStore.list({
         appId: 'app-1',
         status: 'active',
       });
-      expect(active.find((s) => s.id === 'sess-1')).toBeUndefined();
+      expect(active.find((r) => r.id === 'render-1')).toBeUndefined();
       // ... but listing for completed should.
-      const completed = await sessionStore.list({
+      const completed = await renderStore.list({
         appId: 'app-1',
         status: 'completed',
       });
-      expect(completed.find((s) => s.id === 'sess-1')).toBeDefined();
+      expect(completed.find((r) => r.id === 'render-1')).toBeDefined();
     });
 
-    it('idempotent — closing an already-closed session returns success:true', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      const handler = createGguiCloseHandler({ sessionStore });
+    it('idempotent — closing an already-closed render returns success:true', async () => {
+      await seedRender(renderStore, 'render-1', 'app-1');
+      const handler = createGguiCloseHandler({ renderStore });
       await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
-      // Second close on the same session — must NOT throw.
+      // Second close on the same render — must NOT throw.
       const out = await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r2' },
       );
       expect(out.success).toBe(true);
@@ -67,163 +94,166 @@ describe('createGguiCloseHandler', () => {
   });
 
   describe('tenancy + missing', () => {
-    it('cross-tenant session throws SessionNotFoundError', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      const handler = createGguiCloseHandler({ sessionStore });
+    it('cross-tenant render throws RenderNotFoundError', async () => {
+      await seedRender(renderStore, 'render-1', 'app-1');
+      const handler = createGguiCloseHandler({ renderStore });
       await expect(
         handler.handler(
-          { sessionId: 'sess-1' },
+          { renderId: 'render-1' },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
     });
 
-    it('unknown session throws SessionNotFoundError', async () => {
-      const handler = createGguiCloseHandler({ sessionStore });
+    it('unknown render throws RenderNotFoundError', async () => {
+      const handler = createGguiCloseHandler({ renderStore });
       await expect(
         handler.handler(
-          { sessionId: 'never' },
+          { renderId: 'never' },
           { appId: 'app-1', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
     });
   });
 
   describe('markCompleted seam', () => {
-    it('when set, used in place of appendEvent — receives sessionId', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+    it('when set, used in place of appendEvent — receives renderId', async () => {
+      await seedRender(renderStore, 'render-1', 'app-1');
       const calls: string[] = [];
       const handler = createGguiCloseHandler({
-        sessionStore,
-        markCompleted: async (sid) => {
-          calls.push(sid);
+        renderStore,
+        markCompleted: async (rid) => {
+          calls.push(rid);
           return true;
         },
       });
       const out = await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.success).toBe(true);
-      expect(calls).toEqual(['sess-1']);
+      expect(calls).toEqual(['render-1']);
     });
 
     it('surfaces success=false when markCompleted returns false', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      await seedRender(renderStore, 'render-1', 'app-1');
       const handler = createGguiCloseHandler({
-        sessionStore,
+        renderStore,
         markCompleted: () => false,
       });
       const out = await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.success).toBe(false);
     });
 
     it('does NOT fire appendEvent when markCompleted is set', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      await seedRender(renderStore, 'render-1', 'app-1');
       const handler = createGguiCloseHandler({
-        sessionStore,
+        renderStore,
         markCompleted: () => true,
       });
       await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
-      // Session should NOT be marked completed via the OSS event log
+      // Render should NOT be marked completed via the OSS event log
       // when markCompleted is wired — the OSS event log only sees
       // entries from the appendEvent path.
-      const active = await sessionStore.list({
+      const active = await renderStore.list({
         appId: 'app-1',
         status: 'active',
       });
-      expect(active.find((s) => s.id === 'sess-1')).toBeDefined();
+      expect(active.find((r) => r.id === 'render-1')).toBeDefined();
     });
   });
 
   describe('observer notifier seam', () => {
-    it('fires after a successful close with appId + sessionId', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      const calls: Parameters<CloseObserverNotifier['notifySessionClosed']>[0][] = [];
+    it('fires after a successful close with appId + renderId', async () => {
+      await seedRender(renderStore, 'render-1', 'app-1');
+      const calls: Parameters<CloseObserverNotifier['notifyRenderClosed']>[0][] = [];
       const observer: CloseObserverNotifier = {
-        notifySessionClosed: (args) => {
+        notifyRenderClosed: (args) => {
           calls.push(args);
         },
       };
       const handler = createGguiCloseHandler({
-        sessionStore,
+        renderStore,
         observerNotifier: observer,
       });
       await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(calls).toHaveLength(1);
-      expect(calls[0]).toEqual({ appId: 'app-1', sessionId: 'sess-1' });
+      expect(calls[0]).toEqual({ appId: 'app-1', renderId: 'render-1' });
     });
 
     it('observer throw is swallowed — close still succeeds', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      await seedRender(renderStore, 'render-1', 'app-1');
       const handler = createGguiCloseHandler({
-        sessionStore,
+        renderStore,
         observerNotifier: {
-          notifySessionClosed: () => {
+          notifyRenderClosed: () => {
             throw new Error('observer exploded');
           },
         },
       });
       const out = await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.success).toBe(true);
     });
 
     it('observer does NOT fire when tenancy gate rejects', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      await seedRender(renderStore, 'render-1', 'app-1');
       const calls: number[] = [];
       const handler = createGguiCloseHandler({
-        sessionStore,
+        renderStore,
         observerNotifier: {
-          notifySessionClosed: () => {
+          notifyRenderClosed: () => {
             calls.push(1);
           },
         },
       });
       await expect(
         handler.handler(
-          { sessionId: 'sess-1' },
+          { renderId: 'render-1' },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
       expect(calls).toHaveLength(0);
     });
   });
 
   describe('shortCode revocation (capability-URL hardening)', () => {
-    it('revokes every /r/<code> URL bound to the closing session', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+    // Note: ShortCodeIndex's public API still uses the `sessionId` field
+    // name on its binding shape. Phase B threads the `renderId` value
+    // through `revokeBySessionId(renderId)` at the call site — the
+    // index treats the string opaquely, so renderId-as-lookup-key works
+    // without an index migration.
+    it('revokes every /r/<code> URL bound to the closing render', async () => {
+      await seedRender(renderStore, 'render-1', 'app-1');
       const shortCodeIndex = new InMemoryShortCodeIndex();
       await shortCodeIndex.put('code-a', {
-        sessionId: 'sess-1',
+        sessionId: 'render-1',
         appId: 'app-1',
-        stackItemId: 'stk_a',
       });
       await shortCodeIndex.put('code-b', {
-        sessionId: 'sess-1',
+        sessionId: 'render-1',
         appId: 'app-1',
-        stackItemId: 'stk_b',
       });
-      // Unrelated session's code stays.
+      // Unrelated render's code stays.
       await shortCodeIndex.put('code-x', {
-        sessionId: 'sess-other',
+        sessionId: 'render-other',
         appId: 'app-1',
       });
 
-      const handler = createGguiCloseHandler({ sessionStore, shortCodeIndex });
+      const handler = createGguiCloseHandler({ renderStore, shortCodeIndex });
       await handler.handler(
-        { sessionId: 'sess-1' },
+        { renderId: 'render-1' },
         { appId: 'app-1', requestId: 'r1' },
       );
 
@@ -233,19 +263,19 @@ describe('createGguiCloseHandler', () => {
     });
 
     it('revocation does not fire when tenancy gate rejects', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      await seedRender(renderStore, 'render-1', 'app-1');
       const shortCodeIndex = new InMemoryShortCodeIndex();
       await shortCodeIndex.put('code-a', {
-        sessionId: 'sess-1',
+        sessionId: 'render-1',
         appId: 'app-1',
       });
-      const handler = createGguiCloseHandler({ sessionStore, shortCodeIndex });
+      const handler = createGguiCloseHandler({ renderStore, shortCodeIndex });
       await expect(
         handler.handler(
-          { sessionId: 'sess-1' },
+          { renderId: 'render-1' },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
       // Wrong tenant must not be able to revoke another tenant's URLs.
       expect(await shortCodeIndex.lookup('code-a')).not.toBeNull();
     });
