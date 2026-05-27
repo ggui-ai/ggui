@@ -201,7 +201,7 @@ export function buildMcpServer(
         // Thread per-request `_meta` onto the canonical context. The MCP
         // SDK already parses `params._meta` for us and exposes it on
         // `RequestHandlerExtra._meta`; handlers that read host-channel
-        // slices (e.g. `ai.ggui/host-session` on `ggui_new_session`)
+        // slices (e.g. `ai.ggui/host-session` on `ggui_handshake`)
         // pick it up via `ctx.requestMeta` without touching the SDK
         // surface themselves.
         const baseCtx = getContext();

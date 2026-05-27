@@ -166,10 +166,10 @@ describe('GET /ggui/console/session-resource', () => {
     expect(body.contents).toHaveLength(1);
     const [content] = body.contents;
     // Reading-B shape: the resource URI is the production constant
-    // (`ui://ggui/session`), mime is the production constant, and the
+    // (`ui://ggui/render`), mime is the production constant, and the
     // text body is the production thin-shell — same shell Claude
     // Desktop fetches via MCP `resources/read`.
-    expect(content.uri).toBe('ui://ggui/session');
+    expect(content.uri).toBe('ui://ggui/render');
     expect(content.mimeType).toBe('text/html;profile=mcp-app');
     expect(typeof content.text).toBe('string');
     expect(content.text).toContain('<!doctype html>');
@@ -223,17 +223,21 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
     );
     expect(res.status).toBe(200);
     const envelope = (await res.json()) as Record<string, unknown>;
-    const session = envelope['ai.ggui/session'] as
+    // Phase B collapsed the previous `ai.ggui/session` + `ai.ggui/stack-item`
+    // pair to a single flat `ai.ggui/render` slice. Fields the consoles
+    // previously read from `envelope['ai.ggui/session'].*` now live
+    // directly on `envelope['ai.ggui/render'].*`.
+    const renderSlice = envelope['ai.ggui/render'] as
       | Record<string, unknown>
       | undefined;
-    expect(session).toBeDefined();
-    expect(session?.['renderId']).toBe(fx.renderId);
-    expect(session?.['appId']).toBe(fx.appId);
-    expect(typeof session?.['wsUrl']).toBe('string');
-    expect((session?.['wsUrl'] as string).length).toBeGreaterThan(0);
-    expect(typeof session?.['wsToken']).toBe('string');
-    expect((session?.['wsToken'] as string).length).toBeGreaterThan(10);
-    expect(typeof session?.['expiresAt']).toBe('string');
+    expect(renderSlice).toBeDefined();
+    expect(renderSlice?.['renderId']).toBe(fx.renderId);
+    expect(renderSlice?.['appId']).toBe(fx.appId);
+    expect(typeof renderSlice?.['wsUrl']).toBe('string');
+    expect((renderSlice?.['wsUrl'] as string).length).toBeGreaterThan(0);
+    expect(typeof renderSlice?.['wsToken']).toBe('string');
+    expect((renderSlice?.['wsToken'] as string).length).toBeGreaterThan(10);
+    expect(typeof renderSlice?.['expiresAt']).toBe('string');
     // `<McpAppIframe>` mounts the resource via `srcdoc`; the iframe's
     // URL is `about:srcdoc` and same-origin paths would resolve against
     // that opaque origin. The route absolutises the same-origin
@@ -242,11 +246,11 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
     // Operators who configured a CDN-absolute `renderer.url` pass
     // through unchanged. Pin both the absolutised default + the suffix
     // so a regression of either invariant fails loudly.
-    expect(session?.['runtimeUrl']).toMatch(
+    expect(renderSlice?.['runtimeUrl']).toMatch(
       /^https?:\/\/.+\/_ggui\/iframe-runtime\.js$/,
     );
     expect(
-      (session?.['runtimeUrl'] as string).endsWith(
+      (renderSlice?.['runtimeUrl'] as string).endsWith(
         '/_ggui/iframe-runtime.js',
       ),
     ).toBe(true);

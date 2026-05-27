@@ -438,7 +438,7 @@ function collectAppCallableToolNames(
  * named means the default set stays discoverable + testable in one place.
  *
  * `push` is opt-in via `deps.push` — it's only useful when the server
- * was booted with `mcpApps: true` (so `ui://ggui/session` is served)
+ * was booted with `mcpApps: true` (so `ui://ggui/render` is served)
  * and pairs a real RenderStore. Callers get the choice explicitly.
  */
 /**
@@ -555,12 +555,12 @@ export function defaultHandlers(deps: {
   readonly uiRegistry?: UiRegistry;
   /**
    * Handshake-state KV store. When bound, `ggui_handshake` is
-   * registered and the paired `ggui_push({handshakeId})` consume
+   * registered and the paired `ggui_render({handshakeId})` consume
    * path is enabled. Both handlers share the same instance so the
    * write + read sit on one source of truth.
    *
    * Absent = handshake handler is NOT registered AND
-   * `ggui_push({handshakeId})` falls back to a rejection shape.
+   * `ggui_render({handshakeId})` falls back to a rejection shape.
    */
   readonly handshake?: {
     readonly kvStore: KeyValueStore;
@@ -630,7 +630,7 @@ export function defaultHandlers(deps: {
     readonly runtimeUrl?: string | (() => string | undefined);
     /**
      * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
-     * the `ai.ggui/session.themeId` slice field in the `ggui_push`
+     * the `ai.ggui/render.themeId` slice field in the `ggui_render`
      * resultMeta so MCP Apps hosts (claude.ai, Claude Desktop)
      * propagate the operator's theme into the iframe.
      */
@@ -657,16 +657,16 @@ export function defaultHandlers(deps: {
      */
     readonly connectors?: ConnectorRegistry;
     /**
-     * Optional admission-control limiter. When present, `ggui_push`
+     * Optional admission-control limiter. When present, `ggui_render`
      * gates every call through `rateLimiter.check({key:
-     * 'ggui_push:<appId>', cost:1})` before doing any work; denial
+     * 'ggui_render:<appId>', cost:1})` before doing any work; denial
      * surfaces as a `RateLimitedError`. Omitted = unlimited (the
      * `NoopRateLimiter` server default).
      */
     readonly rateLimiter?: RateLimiter;
     /**
      * Optional shortCode → session binding index. When present,
-     * `ggui_push` records every minted `shortCode` so console's
+     * `ggui_render` records every minted `shortCode` so console's
      * `/s/<shortCode>` viewer (via the session-cookie endpoint) can
      * resolve it back to the right session. Absent = hosted cloud
      * flow (DynamoDB side-table owns lookups), or console not
@@ -674,7 +674,7 @@ export function defaultHandlers(deps: {
      */
     readonly shortCodeIndex?: ShortCodeIndex;
     /**
-     * Optional provisional-preview wiring. When present, `ggui_push`
+     * Optional provisional-preview wiring. When present, `ggui_render`
      * kicks off the configured emitter on every qualifying push (the
      * `evaluateProvisionalPreviewGate` predicate filters MCP Apps
      * pushes + storyless calls automatically). Absent = no preview
@@ -688,7 +688,7 @@ export function defaultHandlers(deps: {
     readonly provisionalPreview?: ProvisionalPreviewDeps;
 
     /**
-     * Optional generation wiring. When present, `ggui_push` invokes
+     * Optional generation wiring. When present, `ggui_render` invokes
      * the supplied {@link UiGenerator} on every story-path call and
      * appends the generated `StackItem` to the session before
      * returning `codeReady: true`. Absent = push stays in
@@ -702,26 +702,26 @@ export function defaultHandlers(deps: {
     readonly generation?: GenerationDeps;
 
     /**
-     * Optional live-subscriber stack-push notifier.
-     * When present, every successful `appendStackItem` inside `ggui_push`
-     * fan-outs a `{type:'push', payload:{stackItem}}` live-channel frame to
-     * every live subscriber on the affected session. Forwarded as-is
+     * Optional live-subscriber render-commit notifier.
+     * When present, every successful `renderStore.commit` inside `ggui_render`
+     * fan-outs a `{type:'render', payload:{render}}` live-channel frame to
+     * every live subscriber on the affected render. Forwarded as-is
      * to `createGguiRenderHandler`.
      *
-     * Hosts without a session channel (programmatic embedding, Lambda
+     * Hosts without a render channel (programmatic embedding, Lambda
      * one-shot) leave this absent — there are no live subscribers to
-     * notify, and the push handler's own no-op-on-absent posture
+     * notify, and the render handler's own no-op-on-absent posture
      * keeps the path intact.
      */
     readonly channelNotifier?: ChannelNotifier;
 
     /**
      * Optional F4 schema compat check hook. When present,
-     * `ggui_push` invokes it immediately
-     * before every `appendStackItem` — if the pending StackItem's
+     * `ggui_render` invokes it immediately
+     * before every `renderStore.commit` — if the pending Render's
      * `actionSpec` / `streamSpec` references a tool whose schemas
      * disagree, the hook throws `SchemaCompatError` and the handler
-     * converts the rejection into an error stack-item + `codeReady:
+     * converts the rejection into an error render + `codeReady:
      * false`. Forwarded as-is to `createGguiRenderHandler`.
      *
      * `createGguiServer` binds this closure against the composed
@@ -738,12 +738,12 @@ export function defaultHandlers(deps: {
 
     /**
      * Optional content-addressable code store. When present together
-     * with {@link codeBaseUrl}, `ggui_push` writes generated
+     * with {@link codeBaseUrl}, `ggui_render` writes generated
      * componentCode to the store and surfaces `codeUrl` + `codeHash`
      * on the response — the sole static-component delivery channel
      * post-T3-1 (2026-05-13).
      *
-     * Absent: `ggui_push.resultMeta` omits `codeUrl`. The iframe boots
+     * Absent: `ggui_render.resultMeta` omits `codeUrl`. The iframe boots
      * via live-mode (wsUrl+token) and receives the stack item via the
      * live-channel WS subscribe. `/r/<shortCode>` (HTML default; JSON branch on `Accept: application/json`)
      * routes ALSO mint `codeUrl` when `codeStore` is set — they derive
@@ -814,17 +814,17 @@ export function defaultHandlers(deps: {
      * Optional live-subscriber `props_update` notifier — typically a
      * thin closure over `RenderChannelServer.sendPropsUpdate`.
      * Forwarded as-is to `createGguiUpdateHandler`. Hosts without a
-     * session channel leave this absent; the handler still persists
-     * via `renderStore.appendStackItem` on every successful patch.
+     * render channel leave this absent; the handler still persists
+     * via `renderStore.commit` on every successful patch.
      */
     readonly propsUpdateNotifier?: PropsUpdateNotifier;
     /**
      * Bootstrap-credential minter (live trio). When wired, the
-     * `ggui_update` resultMeta emits the `ai.ggui/session` +
-     * `ai.ggui/stack-item` slice pair so MCP Apps hosts that re-post
+     * `ggui_update` resultMeta emits the `ai.ggui/render` slice
+     * so MCP Apps hosts that re-post
      * `ui/notifications/tool-result` via postMessage can re-apply
      * patched props on the live mount without re-subscribing. Mirrors
-     * the same field on `push` deps; composing hosts wire both from
+     * the same field on `render` deps; composing hosts wire both from
      * the same minter.
      */
     readonly mintBootstrap?: (
@@ -891,9 +891,10 @@ export function defaultHandlers(deps: {
   readonly logger?: Logger;
   /**
    * Operational-signal sink. Threaded into handlers that emit named
-   * events (`ggui_new_session` emits `session.created` /
-   * `session.create_failed`). Absent = NoopTelemetrySink semantic.
-   * Lossy + non-throwing per the {@link TelemetrySink} contract.
+   * events (`ggui_render` emits `ui.created` / `ui.committed`;
+   * `ggui_handshake` emits `handshake.minted`). Absent =
+   * NoopTelemetrySink semantic. Lossy + non-throwing per the
+   * {@link TelemetrySink} contract.
    */
   readonly telemetry?: TelemetrySink;
   /**
@@ -911,7 +912,7 @@ export function defaultHandlers(deps: {
   readonly appMetadataStore?: AppMetadataStore;
   /**
    * Global theme-catalog resolver consumed by `ggui_list_themes` AND by
-   * `ggui_new_session`'s opt-in `requestThemeList` projection. Returns
+   * `ggui_render`'s opt-in `requestThemeList` projection. Returns
    * the full registry every call (kept as a function so additions to
    * the catalog at runtime — e.g. operator-defined themes in a future
    * slice — surface without a server restart). When BOTH this and
@@ -1436,11 +1437,12 @@ export function defaultHandlers(deps: {
         ...(deps.push.generation
           ? { generation: deps.push.generation }
           : {}),
-        // Live-subscriber stack-push notifier. Forwarded as-is
-        // when present so the push handler can fan out
-        // `appendStackItem` deltas to already-subscribed live-channel
-        // clients. Hosts without a session channel pass nothing; the
-        // handler's own `safelyNotifyStackPush` no-ops on absent.
+        // Live-subscriber render-commit notifier. Forwarded as-is
+        // when present so the render handler can fan out
+        // `renderStore.commit` deltas to already-subscribed
+        // live-channel clients. Hosts without a render channel pass
+        // nothing; the handler's own no-op-on-absent posture keeps
+        // the path intact.
         ...(deps.push.channelNotifier
           ? { channelNotifier: deps.push.channelNotifier }
           : {}),
@@ -1462,7 +1464,7 @@ export function defaultHandlers(deps: {
             }
           : {}),
         // Share the handshake KV store between the two handlers so
-        // the write (ggui_handshake) + read (ggui_push) sit on one
+        // the write (ggui_handshake) + read (ggui_render) sit on one
         // source of truth. The caller can also pass a different
         // handshakeStore to push if they split minting + consuming
         // across processes, but the defaults wire them to the same
@@ -1702,7 +1704,7 @@ export interface CreateGguiServerOptions {
   /**
    * Per-app metadata source. When bound, threaded into
    * `defaultHandlers` so `ggui_list_gadgets`,
-   * `ggui_list_themes`, `ggui_new_session({themeId?})`, and the
+   * `ggui_list_themes`, `ggui_render({themeId?})`, and the
    * handshake's `app.gadgets` lookup all read from the same
    * store. The CLI binds an `InMemoryAppMetadataStore` seeded from
    * `ggui.json#theme.preset` (so every appId picks up the operator's
@@ -1718,7 +1720,7 @@ export interface CreateGguiServerOptions {
   /**
    * Global theme-catalog resolver. When bound alongside
    * `appMetadataStore`, registers `ggui_list_themes` and projects the
-   * same catalog into `ggui_new_session({requestThemeList: true})`
+   * same catalog into `ggui_render({requestThemeList: true})`
    * outputs. Read each call so additions to the registry at runtime
    * (operator-defined themes in a future slice) surface without a
    * restart.
@@ -1858,9 +1860,9 @@ export interface CreateGguiServerOptions {
   readonly themeFileUploader?: ThemeFileUploader;
 
   /**
-   * Live-theme getter. When set, the `ggui_push` handler reads this
+   * Live-theme getter. When set, the `ggui_render` handler reads this
    * on every result-meta computation and embeds the returned `id` /
-   * `mode` into the `ai.ggui/session` slice meta. Pair with
+   * `mode` into the `ai.ggui/render` slice meta. Pair with
    * {@link onThemeConfigChange} so a console save updates the
    * shared state cell the closure reads from. The cell pattern
    * closes the parallel-state-stores bug where the push handler
@@ -2241,7 +2243,7 @@ export interface CreateGguiServerOptions {
    *      endpoint (blueprint registration — fires when a manifest
    *      blueprint's pre-declared `actionSpec` / `streamSpec`
    *      references a tool mounted on this server).
-   *   2. The `ggui_push` generation path (push-time — defensive
+   *   2. The `ggui_render` generation path (render-time — defensive
    *      wiring for when the generator starts emitting
    *      actionSpec / streamSpec on its `UIGenerationResponse`;
    *      current generators emit only componentCode, but the
@@ -2291,8 +2293,8 @@ export interface CreateGguiServerOptions {
   /**
    * Enable the MCP Apps outbound delivery path on this server.
    *
-   *   - `false` / omitted (default): `ggui_push` is NOT registered;
-   *     `ui://ggui/session` is NOT served; `io.modelcontextprotocol/ui`
+   *   - `false` / omitted (default): `ggui_render` is NOT registered;
+   *     `ui://ggui/render` is NOT served; `io.modelcontextprotocol/ui`
    *     is NOT advertised. Server looks identical to the pre-MCP-Apps
    *     surface.
    *   - `true`: enable with sensible defaults. Requires
@@ -2302,13 +2304,13 @@ export interface CreateGguiServerOptions {
    *
    * When enabled, FOUR things happen on every fresh per-request
    * `McpServer`:
-   *   1. `ggui_push` tool is registered, carrying `_meta.ui.resourceUri:
-   *      "ui://ggui/session"` and `_meta.ui.visibility: ["model"]` on
+   *   1. `ggui_render` tool is registered, carrying `_meta.ui.resourceUri:
+   *      "ui://ggui/render"` and `_meta.ui.visibility: ["model"]` on
    *      its declaration.
-   *   2. `ui://ggui/session` is served via `resources/read`.
+   *   2. `ui://ggui/render` is served via `resources/read`.
    *   3. `io.modelcontextprotocol/ui` is advertised in the server's
    *      `initialize` capabilities (under `experimental`).
-   *   4. Each `ggui_push` result carries the `ai.ggui/session` slice
+   *   4. Each `ggui_render` result carries the `ai.ggui/render` slice
    *      with wsUrl + short-TTL token + expiresAt. The session-channel
    *      server accepts that token on `subscribe` and issues a
    *      longer-TTL `sessionToken` in the ack for iframe reconnects.
@@ -2329,10 +2331,10 @@ export interface CreateGguiServerOptions {
   /**
    * Iframe-runtime bundle mount (C8 — plan §C8).
    *
-   * The thin-shell HTML served from `ui://ggui/session` dynamic-
+   * The thin-shell HTML served from `ui://ggui/render` dynamic-
    * script-loads the renderer bundle from this URL. The server needs
    * to either (a) serve the bundle itself (default), or (b) publish
-   * the operator-owned URL on the `ai.ggui/session.runtimeUrl` slice
+   * the operator-owned URL on the `ai.ggui/render.runtimeUrl` slice
    * field so the shell knows where to look.
    *
    *   - `true` / omitted (default when `mcpApps` is on): serve the
@@ -2543,7 +2545,7 @@ export interface CreateGguiServerOptions {
 
   /**
    * Admission-control limiter applied at the highest-cost handler
-   * ingress — today just `ggui_push`. Defaults to
+   * ingress — today just `ggui_render`. Defaults to
    * {@link NoopRateLimiter} (always allows). Per-handler wiring maps
    * denials from a `RateLimitedError` to HTTP 429 + `Retry-After` /
    * `X-RateLimit-*` headers at the transport boundary.
@@ -2802,7 +2804,7 @@ export interface CreateGguiServerOptions {
    * when `console.sessionCookie` is enabled (the cookie endpoint
    * looks up the posted shortCode to find the session to bind).
    *
-   * Pair this with a `push` handler so the agent's `ggui_push` writes
+   * Pair this with a `push` handler so the agent's `ggui_render` writes
    * the shortCode into the same index that console later reads.
    * See `defaultHandlers` for the wiring seam.
    */
@@ -2812,12 +2814,12 @@ export interface CreateGguiServerOptions {
    * Content-addressable code blob storage. When wired, this server
    * mounts `GET /code/<hash>.js` for the iframe runtime to fetch
    * compiled componentCode by content hash. The push handler writes
-   * to the store before emitting `codeUrl` on the `ai.ggui/stack-item`
+   * to the store before emitting `codeUrl` on the `ai.ggui/render`
    * slice.
    *
    * Defaults: when omitted the route is NOT mounted; the push
    * handler falls back to inline base64 `componentCode` on the
-   * `ai.ggui/stack-item` slice (legacy delivery channel).
+   * `ai.ggui/render` slice (legacy delivery channel).
    *
    * OSS dev wires `FileSystemCodeStore` (rooted at `~/.ggui/code-cache/`)
    * via `ggui-cli/buildMcpServerBackend`. Tests wire
@@ -2829,7 +2831,7 @@ export interface CreateGguiServerOptions {
   readonly codeStore?: CodeStore;
 
   /**
-   * Provisional A2UI preview wiring for `ggui_push`. When the config
+   * Provisional A2UI preview wiring for `ggui_render`. When the config
    * flag is on, every qualifying component push kicks off the
    * supplied emitter; frames land on the reserved `_ggui:preview`
    * channel of the push's session.
@@ -2867,7 +2869,7 @@ export interface CreateGguiServerOptions {
   /**
    * Handshake preflight wiring. When `mcpApps` is enabled, the
    * server defaults to an `InMemoryKeyValueStore` + no negotiator:
-   * `ggui_handshake` is registered, `ggui_push({handshakeId})` is
+   * `ggui_handshake` is registered, `ggui_render({handshakeId})` is
    * consumable, and handshake records persist for 10 minutes before
    * single-use consumption.
    *
@@ -2880,7 +2882,7 @@ export interface CreateGguiServerOptions {
    *     in a hosted closed runtime) so handshake records carry a
    *     decision the paired push echoes as `structuredContent.decision`.
    *   - `false` — explicitly disable: `ggui_handshake` is NOT
-   *     registered and `ggui_push({handshakeId})` falls back to
+   *     registered and `ggui_render({handshakeId})` falls back to
    *     the rejection shape.
    *
    * Omitted entirely means "use the default in-memory store when
@@ -2889,7 +2891,7 @@ export interface CreateGguiServerOptions {
    * first-run path.
    *
    * Requires `mcpApps` to be enabled — handshake is paired with
-   * `ggui_push`, which is only registered under MCP Apps. Throws
+   * `ggui_render`, which is only registered under MCP Apps. Throws
    * at construction when handshake is explicitly enabled without
    * MCP Apps.
    */
@@ -2909,14 +2911,14 @@ export interface CreateGguiServerOptions {
       };
 
   /**
-   * Generation wiring for the `ggui_push` story path. When present,
+   * Generation wiring for the `ggui_render` story path. When present,
    * every component push invokes the bound `UiGenerator` and
    * appends the result as a real `StackItem` on the session.
-   * Absent = placeholder mode: `ggui_push` on the story path
+   * Absent = placeholder mode: `ggui_render` on the story path
    * returns `codeReady: false` without writing componentCode.
    *
    * Requires `mcpApps` to be enabled — generation attaches to
-   * `ggui_push`, which is only registered when MCP Apps is on.
+   * `ggui_render`, which is only registered when MCP Apps is on.
    * Throws at construction otherwise so a misconfigured server
    * doesn't silently drop the generator binding.
    *
@@ -3294,16 +3296,16 @@ export function createGguiServer(
   // decision (hit/miss with reason + top-k candidate scores) and
   // exposes it to the console SPA at `/devtools/cache`. Same shape as
   // the LLM trace sink. Module-level
-  // registration so the matcher embedded inside ggui_push and the
+  // registration so the matcher embedded inside ggui_render and the
   // cache-backed handshake negotiator both fan out to the same buffer
   // without per-handler threading.
   const cacheTraceSink = new BoundedCacheTraceSink();
   setCacheTraceSink(cacheTraceSink);
 
-  // Payload trace sink — captures every `ggui_push` / `ggui_update`
+  // Payload trace sink — captures every `ggui_render` / `ggui_update`
   // payload that lands on the handlers and exposes it to the console
   // SPA at `/devtools/payloads`. Bounded ring buffer (default 100
-  // events; tighter than llm-trace because each `ggui_push` may carry
+  // events; tighter than llm-trace because each `ggui_render` may carry
   // full componentCode + base64 blobs). Module-level registration via
   // setPayloadTraceSink because the push + update factories are
   // constructed once per server boot and threading a sink for a
@@ -3316,8 +3318,8 @@ export function createGguiServer(
   // MCP Apps outbound wiring gate.
   //
   // When enabled, the server advertises the `io.modelcontextprotocol/ui`
-  // capability, serves the `ui://ggui/session` resource, and registers
-  // `ggui_push` in the default handler set with declaration-level
+  // capability, serves the `ui://ggui/render` resource, and registers
+  // `ggui_render` in the default handler set with declaration-level
   // `_meta.ui.*`. Requires `sessionChannel` so the iframe has a
   // live-channel endpoint to connect to; without it the path is pointless.
   const mcpAppsEnabled = opts.mcpApps !== undefined && opts.mcpApps !== false;
@@ -3338,7 +3340,7 @@ export function createGguiServer(
   //   runtimeConfig:  narrowed object form or `{}`.
   //   runtimePath:    HTTP route under which the bundle is mounted.
   //   runtimeBootstrapUrl: the URL that lands on the
-  //                   `ai.ggui/session.runtimeUrl` slice field. Usually
+  //                   `ai.ggui/render.runtimeUrl` slice field. Usually
   //                   equal to `runtimePath`; overridden when a
   //                   CDN fronts the bundle.
   //
@@ -3490,7 +3492,7 @@ export function createGguiServer(
   // Express `app` block below) so the provisional-preview
   // `sendEnvelope` closure can late-bind to it. Assignment happens
   // during the session-channel factory run further down. Safe because
-  // `ggui_push` can only fire after `listen()` binds HTTP, which is
+  // `ggui_render` can only fire after `listen()` binds HTTP, which is
   // strictly after that factory runs.
   let channelForHealth: RenderChannelServer | null = null;
 
@@ -3499,19 +3501,19 @@ export function createGguiServer(
   // that point.
   //
   // Preconditions:
-  //   - flag `enabled: true` requires `mcpApps` (ggui_push attached)
+  //   - flag `enabled: true` requires `mcpApps` (ggui_render attached)
   //     + `sessionChannel` (envelope transport). We already threw on
   //     `mcpApps` without `sessionChannel` above, so this check only
   //     needs to guard the mcpApps side.
   //   - flag `enabled: false` / absent: no deps constructed.
   // Generation wiring precondition. Same rule as provisional preview
-  // — the generator only matters for `ggui_push`, which is only
+  // — the generator only matters for `ggui_render`, which is only
   // registered when MCP Apps is enabled. Silent drop would hide the
   // misconfiguration; throw so the operator sees it at composition
   // time rather than chasing a "why doesn't my BYOK fire?" ghost.
   if (opts.generation && !mcpAppsEnabled) {
     throw new Error(
-      'createGguiServer: `generation` requires `mcpApps` (ggui_push must be registered for the generator to attach). Enable MCP Apps or leave generation unset.',
+      'createGguiServer: `generation` requires `mcpApps` (ggui_render must be registered for the generator to attach). Enable MCP Apps or leave generation unset.',
     );
   }
   // Auto-wire the generation cache from the server's already-composed
@@ -3610,7 +3612,7 @@ export function createGguiServer(
   // Handshake preflight wiring. Resolved here so `defaultHandlers`
   // below sees a single concrete shape.
   //   - Explicit `handshake: false` → never register the handshake
-  //     handler; ggui_push reverts to the rejection path.
+  //     handler; ggui_render reverts to the rejection path.
   //   - Explicit `handshake: { ... }` → caller-controlled store +
   //     negotiator. Throws if mcpApps is off (symmetric with
   //     `generation`'s precondition above — silent-drop would hide
@@ -3624,7 +3626,7 @@ export function createGguiServer(
       : undefined;
   if (handshakeExplicit && !mcpAppsEnabled) {
     throw new Error(
-      'createGguiServer: `handshake` requires `mcpApps` (ggui_push must be registered for the paired consume path to attach). Enable MCP Apps or leave handshake unset.',
+      'createGguiServer: `handshake` requires `mcpApps` (ggui_render must be registered for the paired consume path to attach). Enable MCP Apps or leave handshake unset.',
     );
   }
   const handshakeEnabled =
@@ -3643,7 +3645,7 @@ export function createGguiServer(
   //      the deterministic cache-hit lookup path; load-bearing for
   //      operators who already wired the cache and rely on its
   //      reuse-vs-create signal. Decision LLM is NOT invoked on the
-  //      handshake — the paired `ggui_push` runs the full LLM-driven
+  //      handshake — the paired `ggui_render` runs the full LLM-driven
   //      generation when cache misses.
   //   3. LLM-backed (when `generation.resolveLlm` is wired but no
   //      cache) — calls the decision LLM with no RAG candidates;
@@ -3712,7 +3714,7 @@ export function createGguiServer(
   if (opts.provisionalPreview?.enabled) {
     if (!mcpAppsEnabled) {
       throw new Error(
-        'createGguiServer: `provisionalPreview.enabled` requires `mcpApps` (ggui_push must be registered for preview to attach). Enable MCP Apps or leave preview disabled.',
+        'createGguiServer: `provisionalPreview.enabled` requires `mcpApps` (ggui_render must be registered for preview to attach). Enable MCP Apps or leave preview disabled.',
       );
     }
     const previewRegistry = createInMemoryProvisionalPreviewRegistry();
@@ -3725,7 +3727,7 @@ export function createGguiServer(
       },
       emitter: opts.provisionalPreview.emitter,
       // Late-binds to the RenderChannelServer created further down.
-      // `ggui_push` can only fire after `listen()` binds the HTTP
+      // `ggui_render` can only fire after `listen()` binds the HTTP
       // server, by which point `channelForHealth` is assigned.
       sendEnvelope: async (envelope) => {
         if (!channelForHealth) {
@@ -3846,7 +3848,7 @@ export function createGguiServer(
                 ? { bootstrapRefresh: { refresh: channelBootstrap.refresh } }
                 : {}),
               // Iframe-runtime bundle URL — padded onto the
-              // `ai.ggui/session.runtimeUrl` slice field by the push
+              // `ai.ggui/render.runtimeUrl` slice field by the push
               // handler's resultMeta. C8 made this required on
               // McpAppAiGguiRenderMeta; we always pass it so handlers
               // don't fall back to their hardcoded default.
@@ -3856,7 +3858,7 @@ export function createGguiServer(
               // breaks under srcdoc iframes (claude.ai).
               runtimeUrl: resolveRuntimeUrlForResultMeta,
               // Forward operator-picked theme onto every
-              // `ai.ggui/session.themeId` slice field so MCP Apps hosts
+              // `ai.ggui/render.themeId` slice field so MCP Apps hosts
               // (claude.ai, Claude Desktop) that mount via the
               // postMessage tool-result path propagate the theme into
               // the iframe. Same resolution as the `/r/...` route.
@@ -3897,7 +3899,7 @@ export function createGguiServer(
               ...(provisionalPreviewDeps
                 ? { provisionalPreview: provisionalPreviewDeps }
                 : {}),
-              // Wire the UI generator into `ggui_push`. When bound,
+              // Wire the UI generator into `ggui_render`. When bound,
               // every story-path push awaits
               // `uiGenerator.generate(...)`, appends the generated
               // StackItem, and returns `codeReady:true`. Absent =
@@ -4000,7 +4002,7 @@ export function createGguiServer(
                   shape,
                   handlers,
                   schemaCompatMode,
-                  'ggui_push',
+                  'ggui_render',
                 );
                 // `warn` mode: helper returned the report without
                 // throwing. Surface on the structured logger so the
@@ -4011,7 +4013,7 @@ export function createGguiServer(
                 // `compatible: true` empty report.)
                 if (!report.compatible) {
                   logger.warn('schema_compat_warn', {
-                    site: 'ggui_push',
+                    site: 'ggui_render',
                     findingCount: report.findings.length,
                     findings: report.findings.map((f) => ({
                       kind: f.kind,
@@ -4079,14 +4081,14 @@ export function createGguiServer(
           }
         : {}),
       // Thread the composed TelemetrySink so emit-bearing handlers
-      // (today: ggui_new_session) can record `session.created` /
-      // `session.create_failed` events. Skipping the spread when the
+      // (today: ggui_render + ggui_handshake) can record their
+      // lifecycle events. Skipping the spread when the
       // operator didn't pass `opts.telemetry` keeps the Noop default
       // out of the handler dep — handlers can branch on `?` absence.
       ...(opts.telemetry ? { telemetry } : {}),
       // Per-app metadata store. Threaded through so the in-process
       // singleton is shared across `ggui_list_gadgets`,
-      // `ggui_list_themes`, `ggui_new_session` (for theme default
+      // `ggui_list_themes`, `ggui_render` (for theme default
       // resolution), and the handshake (for `app.gadgets`
       // lookup). Absent ⇒ `defaultHandlers` falls back to per-handler
       // ephemeral InMemoryAppMetadataStore instances (the pre-Phase-3
@@ -4647,7 +4649,7 @@ export function createGguiServer(
           ? { shellHtml: mcpAppsConfig.shellHtml }
           : {}),
         // Forward the operator-supplied public origin so the static
-        // `ui://ggui/session` resource declares `_meta.ui.csp` for
+        // `ui://ggui/render` resource declares `_meta.ui.csp` for
         // spec-compliant hosts (Claude Desktop / claude.ai Connector /
         // Claude Code). Without this the host's restrictive default
         // (`connect-src 'none'`) blocks the iframe from fetching the
@@ -4657,10 +4659,10 @@ export function createGguiServer(
           : {}),
         // Per-session self-contained shell registration. Only wired
         // when MCP Apps is on AND the session store is resolved —
-        // both preconditions for `ggui_push.resultMeta` stamping a
-        // per-call `ui://ggui/session/<sessionId>` URI a host can
+        // both preconditions for `ggui_render.resultMeta` stamping a
+        // per-call `ui://ggui/render/<sessionId>` URI a host can
         // resolve here. Absent either, we register only the legacy
-        // static `ui://ggui/session` URI (postMessage shell).
+        // static `ui://ggui/render` URI (postMessage shell).
         ...(mcpAppsEnabled && renderStore
           ? {
               selfContained: {
@@ -4718,7 +4720,7 @@ export function createGguiServer(
                   : {}),
                 // Stamp `_meta.ui.csp.{connectDomains,resourceDomains}`
                 // on every per-call resource response. Symmetric with
-                // the declaration on the static `ui://ggui/session`
+                // the declaration on the static `ui://ggui/render`
                 // resource. Without it, claude.ai's cross-origin iframe
                 // CSP applies the host default (`connect-src 'none'`)
                 // and the `<script type="module" src=runtimeUrl>` tag
@@ -4916,7 +4918,7 @@ export function createGguiServer(
   //
   // Serves the `@ggui-ai/iframe-runtime` iframe runtime bundle from
   // `runtimePath` (default `/_ggui/iframe-runtime.js`). The thin-shell
-  // HTML served from `ui://ggui/session` dynamic-script-loads this
+  // HTML served from `ui://ggui/render` dynamic-script-loads this
   // URL on boot — the rendering runtime is OUT of the shell and IN
   // this separately-served file (C8 pivot, shrinking the shell from
   // ~175 LOC inline JS to ~30 LOC wrapper).
@@ -4960,7 +4962,7 @@ export function createGguiServer(
         // to anyone who fetched the page, so `*` is the right shape;
         // there's no auth state on the renderer route to protect via a
         // narrower origin allowlist. This pairs with the production
-        // `/ui://ggui/session` shell HTML setting `s.type='module'`
+        // `/ui://ggui/render` shell HTML setting `s.type='module'`
         // (`mcp-apps-outbound.ts::GGUI_SESSION_SHELL_SCRIPT_BODY`).
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.sendFile(runtimeBundleFile);
@@ -4985,8 +4987,8 @@ export function createGguiServer(
   // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
   //
   // Auth'd snapshot read of the current session state, returning the
-  // same slice envelope as the wire `_meta` (`{"ai.ggui/session":
-  // {...}, "ai.ggui/stack-item": {...}}`). Polling clients call this
+  // same slice envelope as the wire `_meta` (`{"ai.ggui/render":
+  // {...}, "ai.ggui/render": {...}}`). Polling clients call this
   // on a fixed interval (registry-level polling — see R6 library
   // refactor) to pick up changes when WS is blocked at the host's CSP
   // layer.
@@ -6646,7 +6648,7 @@ export function createGguiServer(
     mountConsoleCacheRoutes(app, cacheTraceSink);
 
     // Payload trace surfaces — `/devtools/payloads` reads recent
-    // `ggui_push` / `ggui_update` payloads on mount and subscribes
+    // `ggui_render` / `ggui_update` payloads on mount and subscribes
     // to live events via SSE. Both routes admin-gated by the loop
     // above; this mount only installs the handlers.
     mountConsolePayloadsRoutes(app, payloadTraceSink);
@@ -6931,9 +6933,9 @@ export function createGguiServer(
       //     Best-effort on read (same contract as `/ggui/console/registry`).
       //   - `primitiveCount`: sum across `primitiveCatalogs`.
       //   - `agentWired`: whether the session-channel + mcpApps path is
-      //     live (the server can accept `ggui_push` + live-channel joins).
+      //     live (the server can accept `ggui_render` + live-channel joins).
       //   - `generationWired`: whether `opts.generation` was bound —
-      //     the `ggui_push` LLM path is active. Absent = push returns
+      //     the `ggui_render` LLM path is active. Absent = push returns
       //     `codeReady: false` honest placeholders.
       //
       // Provider/model specifics (`generation: { provider, model }`
@@ -7030,7 +7032,7 @@ export function createGguiServer(
 
     // POST /ggui/console/chat/message — OSS dev chat round-trip.
     //
-    // Routes the message through `ggui_push` whenever the server was
+    // Routes the message through `ggui_render` whenever the server was
     // composed with a real generator — turning the chat surface into
     // the cohesive agent experience: every user message becomes a push
     // against a thread-scoped session; the push handler owns
@@ -7071,7 +7073,7 @@ export function createGguiServer(
     // generation/`) without a copy change.
     const pushHandlerForChat =
       generationWithCache !== undefined
-        ? handlers.find((h) => h.name === 'ggui_push')
+        ? handlers.find((h) => h.name === 'ggui_render')
         : undefined;
     const handshakeHandlerForChat =
       pushHandlerForChat !== undefined
@@ -7116,7 +7118,7 @@ export function createGguiServer(
         createdAt: now,
       };
 
-      // Attempt real generation through `ggui_push` when wired.
+      // Attempt real generation through `ggui_render` when wired.
       // `pushHandlerForChat` is undefined when mcpApps was disabled or
       // the operator built a custom handler set without push. The
       // handler itself returns `codeReady:false` when generation deps
@@ -7328,7 +7330,7 @@ export function createGguiServer(
       //      → returns a `ResourceContents` blob whose `text` IS the
       //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
       //      byte-identical to what Claude Desktop fetches via MCP
-      //      `resources/read ui://ggui/session`). The shell does NOT
+      //      `resources/read ui://ggui/render`). The shell does NOT
       //      carry an inlined bootstrap — same as production.
       //
       //   2. GET /ggui/console/session-bootstrap?session=<sessionId>
@@ -7349,8 +7351,8 @@ export function createGguiServer(
       //   - <McpAppIframe> host (bootstrap forwarder) — receives the
       //     bootstrap JSON via prop and threads it through `ui/initialize`.
       //   - renderer bundle (inside the iframe) — runs the same boot
-      //     code path as production; reads the `ai.ggui/session` +
-      //     `ai.ggui/stack-item` slice meta pair.
+      //     code path as production; reads the `ai.ggui/render` +
+      //     `ai.ggui/render` slice meta pair.
       //
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
@@ -7470,7 +7472,7 @@ export function createGguiServer(
       );
 
       // GET /ggui/console/sessions/:sessionId/meta
-      // → slice-envelope JSON (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`,
+      // → slice-envelope JSON (`{ "ai.ggui/render": {...}, "ai.ggui/render": {...} }`,
       //   the same shape as the wire `_meta`). Required when the
       //   console is hosting the renderer behind `<McpAppIframe>` and
       //   needs to feed the iframe a meta-pair. `mcpApps: true` is

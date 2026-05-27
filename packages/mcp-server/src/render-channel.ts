@@ -719,32 +719,32 @@ export interface RenderChannelServer {
    */
   sendToSession(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
   /**
-   * Fan a `{type:'push', payload:{stackItem, matchType?}}` wire frame
+   * Fan a `{type:'render', payload:{render, matchType?}}` wire frame
    * to every subscriber currently bound to `renderId`. Use this to
-   * notify already-subscribed clients about a stack mutation that
-   * happened AFTER they subscribed — the initial `ack.stack` snapshot
+   * notify already-subscribed clients about a render-commit that
+   * happened AFTER they subscribed — the initial `ack.render` snapshot
    * covers state at subscribe time only, so without an explicit notify
-   * a second-turn `appendStackItem` is invisible to the live client.
+   * a second-turn `commit` is invisible to the live client.
    *
    * The `B1` regression context (2026-04-22 QA pass): the chat surface
-   * in `/chat` reuses one session across turns. The first turn's push
-   * subscribed AFTER `appendStackItem` ran, so the ack carried the
-   * entry. The second turn's push appended on the live session — the
+   * in `/chat` reuses one render across turns. The first turn's render
+   * subscribed AFTER `commit` ran, so the ack carried the
+   * entry. The second turn's commit landed on the live render — the
    * subscriber never heard about the new entry, the inline UI slot
-   * stayed in "Waiting for session channel replay…" indefinitely.
-   * `notifyStackPush` closes that gap. Best-effort: per-subscriber
+   * stayed in "Waiting for render channel replay…" indefinitely.
+   * `notifyRenderPush` closes that gap. Best-effort: per-subscriber
    * send failures are swallowed (same posture as `sendToSession`).
    *
    * NOT durable. Frames are not stamped through the replay buffer —
-   * fresh subscribers still get the current stack via `ack.stack` on
-   * subscribe. A new tab opening mid-session reads the latest stack
+   * fresh subscribers still get the current render via `ack.render` on
+   * subscribe. A new tab opening mid-render reads the latest render
    * from the snapshot; live tabs read the delta from this notify.
    *
    * Subscribers received via `register()` are tracked in
    * `subscribersBySession`; this helper iterates the bound set and
    * skips closed sockets via the `send()` helper's existing guard.
    * Callers ARE responsible for ordering — call after the underlying
-   * `renderStore.appendStackItem` resolves so the snapshot a
+   * `renderStore.commit` resolves so the snapshot a
    * concurrent fresh subscriber observes still includes the entry.
    */
   notifyRenderPush(
@@ -787,7 +787,7 @@ export interface RenderChannelServer {
    * mutates server-side state can replace renderer props in-place
    * without going through a refresh-stream tool.
    *
-   * Validation posture (mirrors `notifyStackPush`'s "best-effort orphan
+   * Validation posture (mirrors `notifyRenderPush`'s "best-effort orphan
    * no-op"):
    *   1. Look up the session via `renderStore.get`. Absent → log
    *      `session_channel_props_update_orphan` and return — the wire
@@ -803,7 +803,7 @@ export interface RenderChannelServer {
    * NOT routed through StreamFanout — `type: 'props_update'` is a
    * distinct WebSocket message type, not a stream envelope. Stream
    * envelopes flow on `data` frames and have a `seq` cursor; props
-   * updates are ephemeral and follow `notifyStackPush`'s pattern
+   * updates are ephemeral and follow `notifyRenderPush`'s pattern
    * (live-only, no replay-buffer stamping). A new subscriber that
    * connects mid-session reads current `props` from the stack
    * snapshot delivered in `ack.stack`.
@@ -832,7 +832,7 @@ export interface RenderChannelServer {
    * Implements the `DrainAckNotifier` contract from
    * `@ggui-ai/mcp-server-handlers`.
    *
-   * Same posture as `notifyStackPush` / `sendPropsUpdate` — live-only,
+   * Same posture as `notifyRenderPush` / `sendPropsUpdate` — live-only,
    * no replay-buffer stamping. Subscribers that connect AFTER the
    * drain see the next consume's snapshot rather than the missed
    * frame; the iframe's claim timer + atomic-pop primitive backstop
@@ -859,7 +859,7 @@ export interface RenderChannelServer {
    *
    * No-op when no local subscriber is bound to `renderId`. Closed
    * sockets are skipped silently by the underlying `send()` helper —
-   * same posture as `sendPropsUpdate` / `notifyStackPush`. Per-
+   * same posture as `sendPropsUpdate` / `notifyRenderPush`. Per-
    * subscriber send failures are logged but never propagated.
    */
   externalBroadcast(renderId: string, frame: WebSocketMessage): void;

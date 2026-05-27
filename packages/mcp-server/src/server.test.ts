@@ -1583,14 +1583,14 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
     await fx.server.close();
   });
 
-  it('registers ggui_handshake alongside ggui_push when mcpApps is enabled', async () => {
+  it('registers ggui_handshake alongside ggui_render when mcpApps is enabled', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toContain('ggui_handshake');
-      expect(names).toContain('ggui_push');
+      expect(names).toContain('ggui_render');
     } finally {
       await client.close();
     }
@@ -1599,37 +1599,38 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   // Phase 2.3 wire — ggui_consume registers automatically when push
   // is bound (default in-memory PendingEventConsumer). Closes the FF
   // nextStep → consume hint chain end-to-end on `ggui serve`. Without
-  // this registration, every push response emitted nextStep:ggui_consume
+  // this registration, every render response emitted nextStep:ggui_consume
   // pointing at a non-existent tool.
-  it('registers ggui_consume alongside ggui_push (default in-memory consumer)', async () => {
+  it('registers ggui_consume alongside ggui_render (default in-memory consumer)', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toContain('ggui_consume');
-      expect(names).toContain('ggui_push');
+      expect(names).toContain('ggui_render');
     } finally {
       await client.close();
     }
   });
 
-  // Phase 2.4 session-lifecycle suite — all five tools (get-session,
-  // get-stack, close, pop, stream) register alongside push when the
-  // operator wires a sessionStore. Closes the OSS surface gap: agents
-  // can now call the full lifecycle (new_session → handshake → push →
-  // consume → get-session / get-stack / close / pop / stream) on
-  // `ggui serve` without hosting cloud.
-  it('registers the full Phase 2.4 session-lifecycle suite alongside ggui_push', async () => {
+  // Post-Phase-B render-lifecycle suite — the previously-five-tool
+  // session-lifecycle pack (get-session, get-stack, close, pop, stream)
+  // collapsed to the render-shape equivalents: a render IS the addressable
+  // row, so `ggui_get_session` + `ggui_get_stack` + `ggui_pop` all fold
+  // into the single `ggui_get_render` + `ggui_list_renders` pair. Closes
+  // the OSS surface gap: agents can now call the full lifecycle
+  // (handshake → render → consume → get_render / list_renders / close /
+  // emit) on `ggui serve` without hosting cloud.
+  it('registers the full render-lifecycle suite alongside ggui_render', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
     try {
       const { tools } = await client.listTools();
       const names = new Set(tools.map((t) => t.name));
-      expect(names).toContain('ggui_get_session');
-      expect(names).toContain('ggui_get_stack');
+      expect(names).toContain('ggui_get_render');
+      expect(names).toContain('ggui_list_renders');
       expect(names).toContain('ggui_close');
-      expect(names).toContain('ggui_pop');
       expect(names).toContain('ggui_emit');
     } finally {
       await client.close();
@@ -1637,7 +1638,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   });
 
   it('does NOT register ggui_handshake when mcpApps is off', async () => {
-    // mcpApps disabled means no ggui_push AND no ggui_handshake —
+    // mcpApps disabled means no ggui_render AND no ggui_handshake —
     // preflight without a paired call target is pointless.
     const server = createGguiServer({ logger: silentLogger });
     const httpServer = await server.listen(0, '127.0.0.1');
@@ -1649,29 +1650,22 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
       expect(names).not.toContain('ggui_handshake');
-      expect(names).not.toContain('ggui_push');
+      expect(names).not.toContain('ggui_render');
     } finally {
       await client.close();
     }
   });
 
-  it('ggui_handshake → ggui_push({handshakeId}) round-trip succeeds over MCP', async () => {
+  it('ggui_handshake → ggui_render({handshakeId}) round-trip succeeds over MCP', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
     try {
       // 1. Handshake: stamps a record in the default in-memory KV.
-      // Post-CC: handshake REQUIRES sessionId — mint one first.
-      const newSessionResult = await client.callTool({
-        name: 'ggui_new_session',
-        arguments: {},
-      });
-      const sessionId = (newSessionResult.structuredContent as {
-        sessionId: string;
-      }).sessionId;
+      // Post-Phase-B: handshake does NOT require a renderId — the
+      // paired `ggui_render` call mints the renderId itself.
       const hsResult = await client.callTool({
         name: 'ggui_handshake',
         arguments: {
-          sessionId,
           intent: 'weather card for Tokyo',
           blueprintDraft: { contract: {} },
         },
@@ -1684,47 +1678,39 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       expect(hsContent.handshakeId).toBeTruthy();
       expect(hsContent.action).toBe('create');
 
-      // 2. Paired push consumes the record via decision:accept — the
+      // 2. Paired render consumes the record via decision:accept — the
       //    handshake's stored suggestion contract is the effective
-      //    contract. Post-R5 (fix-A 2026-05-26): structuredContent is
-      //    {stackItemId, nextStep?, action} — no sessionId echo, no
-      //    `url` (the `/r/<shortCode>` route was deleted; hosts mount
-      //    via `_meta.ui.resourceUri` or resolve `{sessionId,
-      //    stackItemId}` via their own session-resource endpoint).
-      const pushResult = await client.callTool({
-        name: 'ggui_push',
+      //    contract. Post-Phase-B: structuredContent is
+      //    {renderId, nextStep?, action} — `sessionId` + `stackItemId`
+      //    collapse to `renderId`, no `url` (the `/r/<shortCode>` route
+      //    was deleted; hosts mount via `_meta.ui.resourceUri` or
+      //    resolve `{renderId}` via their own render-resource endpoint).
+      const renderResult = await client.callTool({
+        name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
           decision: { kind: 'accept' },
         },
       });
-      expect(pushResult.isError).toBeFalsy();
-      const pushContent = pushResult.structuredContent as Record<
+      expect(renderResult.isError).toBeFalsy();
+      const renderContent = renderResult.structuredContent as Record<
         string,
         unknown
       >;
-      expect(pushContent.stackItemId).toBeTruthy();
-      expect(Object.keys(pushContent)).not.toContain('url');
+      expect(renderContent.renderId).toBeTruthy();
+      expect(Object.keys(renderContent)).not.toContain('url');
     } finally {
       await client.close();
     }
   });
 
-  it('second ggui_push with the same handshakeId surfaces a handshake-not-found error', async () => {
+  it('second ggui_render with the same handshakeId surfaces a handshake-not-found error', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
     try {
-      const newSessionResult = await client.callTool({
-        name: 'ggui_new_session',
-        arguments: {},
-      });
-      const sessionId = (newSessionResult.structuredContent as {
-        sessionId: string;
-      }).sessionId;
       const hsResult = await client.callTool({
         name: 'ggui_handshake',
         arguments: {
-          sessionId,
           intent: 'once-only',
           blueprintDraft: { contract: {} },
         },
@@ -1732,7 +1718,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       const hsContent = hsResult.structuredContent as { handshakeId: string };
       // First consume succeeds.
       const first = await client.callTool({
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
           decision: { kind: 'accept' },
@@ -1743,7 +1729,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       // (handler throws map to tool-result-level errors, not
       // JSON-RPC failures).
       const second = await client.callTool({
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
           decision: { kind: 'accept' },
@@ -1766,10 +1752,10 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
       expect(names).not.toContain('ggui_handshake');
-      // And push falls back to the rejection path when called with
-      // handshakeId — proves the handshakeStore wasn't wired into push.
+      // And render falls back to the rejection path when called with
+      // handshakeId — proves the handshakeStore wasn't wired into render.
       const result = await client.callTool({
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: {
           handshakeId: 'never-minted',
           decision: { kind: 'accept' },

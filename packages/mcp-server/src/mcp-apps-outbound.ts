@@ -61,20 +61,20 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
- * Thin-shell body served from `ui://ggui/session` (C8 pivot).
+ * Thin-shell body served from `ui://ggui/render` (C8 pivot).
  *
  * **Architectural role.** The shell is a ~30 LOC bootstrap wrapper -
  * it runs a minimal `ui/initialize` preflight to read the
- * `ai.ggui/session.runtimeUrl` slice field, then dynamic-script-loads
+ * `ai.ggui/render.runtimeUrl` slice field, then dynamic-script-loads
  * the `@ggui-ai/iframe-runtime` bundle from that URL. Every rendering
- * concern - WS open, subscribe, stack render, component code eval,
+ * concern - WS open, subscribe, render mount, component code eval,
  * adapter install - belongs to the renderer bundle (shipped C7a-d),
  * not here.
  *
  * **Why bootstrap-driven URL.** `srcdoc` iframes have `about:srcdoc`
  * as their URL, so relative paths can't resolve to the MCP server's
  * HTTP listener. The server-controlled `runtimeUrl` lands on the
- * `ai.ggui/session.runtimeUrl` slice field and the shell picks it up
+ * `ai.ggui/render.runtimeUrl` slice field and the shell picks it up
  * from the first `ui/initialize` response - origin-agnostic, works
  * under OSS same-origin AND hosted-cloud CDN deployments.
  *
@@ -94,7 +94,7 @@ import {
  * `postMessage({type:'ggui:bootstrap-failed', reason, message}, '*')`:
  *
  *   - `BOOTSTRAP_META_MISSING` - `ui/initialize` returned without a
- *     valid `ai.ggui/session` slice OR without a `runtimeUrl` field on
+ *     valid `ai.ggui/render` slice OR without a `runtimeUrl` field on
  *     it.
  *   - `BUNDLE_FETCH_FAILED` - `<script src>` errored (network failure,
  *     404, CSP reject with an observable `error` event).
@@ -331,11 +331,11 @@ postRpc('ui/initialize',{
   var b=readMetaFromInitResult(result);
   if(b){mountFromMeta(b);return;}
   // Protocol-violation surface: host signalled an attempt
-  // (toolOutput._meta carries ai.ggui/session) but it's malformed.
+  // (toolOutput._meta carries ai.ggui/render) but it's malformed.
   // Fail fast so hosts pinning a typed error envelope don't sit on
   // the Path-A waiting overlay forever.
   if(hasAiGguiMetaPlaceholder(result)){
-    var msg='ui/initialize result missing valid ai.ggui/session.runtimeUrl';
+    var msg='ui/initialize result missing valid ai.ggui/render.runtimeUrl';
     setOverlay(msg);
     postBootstrapFailed('BOOTSTRAP_META_MISSING',msg);
     return;
@@ -572,9 +572,9 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // =============================================================================
 // Self-contained shell — third-party MCP Apps host support.
 //
-// **Why this exists.** The legacy `GGUI_SESSION_SHELL_HTML` (above) is a
+// **Why this exists.** The legacy `GGUI_RENDER_SHELL_HTML` (above) is a
 // thin postMessage wrapper that depends on the host echoing the
-// `ai.ggui/session.runtimeUrl` slice field back through
+// `ai.ggui/render.runtimeUrl` slice field back through
 // `ui/initialize`. That contract is first-party-only — Studio /
 // Portal / console implement the echo. Production MCP Apps hosts
 // (Claude Desktop, claude.ai web) implement the canonical MCP Apps
@@ -583,14 +583,14 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // round-trip never resolves, the shell hangs at `mounting`, the
 // iframe stays blank.
 //
-// **The fix.** Per-session HTML inlines the compiled componentCode +
-// session ids as a `window.__GGUI_META__` global BEFORE the
+// **The fix.** Per-render HTML inlines the compiled componentCode +
+// render id as a `window.__GGUI_META__` global BEFORE the
 // runtime bundle's `<script type="module">` runs. The runtime reads
 // the global synchronously, mounts the React component, and never
-// speaks postMessage / opens a WebSocket. The `ui://ggui/session/{
-// sessionId}` resource template (registered below) is what binds a
-// per-call `_meta.ui.resourceUri` (stamped by `ggui_push.resultMeta`)
-// to the right session's stack contents.
+// speaks postMessage / opens a WebSocket. The `ui://ggui/render/{
+// renderId}` resource template (registered below) is what binds a
+// per-call `_meta.ui.resourceUri` (stamped by `ggui_render.resultMeta`)
+// to the right render row.
 //
 // **Why base64 the componentCode.** Compiled component source contains
 // every character that breaks raw embedding inside a `<script>` body
@@ -600,11 +600,11 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // network/bootstrap savings of skipping postMessage + WS.
 //
 // **Where the legacy postMessage shell still lives.** The static
-// `ui://ggui/session` URI registered by `registerGguiSessionResource`
+// `ui://ggui/render` URI registered by `registerGguiRenderResource`
 // stays — first-party hosts still use it. Both registrations co-exist
 // on the same MCP server: hosts that fetch the static URI get the
-// postMessage shell; hosts that fetch the per-session URI get the
-// self-contained shell. `ggui_push` decides which `resourceUri` to
+// postMessage shell; hosts that fetch the per-render URI get the
+// self-contained shell. `ggui_render` decides which `resourceUri` to
 // stamp on a per-call basis.
 // =============================================================================
 
@@ -1020,12 +1020,12 @@ export interface GguiRenderResourceTemplateOptions {
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
    * rehydrate fallback for the two-segment URI shape
-   * (`ui://ggui/session/{sessionId}/{blueprintKey}`): if the session is
+   * (`ui://ggui/render/{renderId}/{blueprintKey}`): if the render is
    * gone but the blueprint registry still holds the entry, return the
    * static initial render (default props + default context) instead of
    * the dead "Generating UI…" loading shell. Single-tenant OSS sees
    * meaningful improvement; multi-tenant deployments leave both options
-   * undefined to keep the loading-shell behavior on session miss.
+   * undefined to keep the loading-shell behavior on render miss.
    */
   readonly vectorStore?: VectorStore;
   /**
@@ -1043,7 +1043,7 @@ export interface GguiRenderResourceTemplateOptions {
    * `_meta.ui.csp.{connectDomains,resourceDomains}` so claude.ai's
    * cross-origin iframe CSP allows the runtime bundle, codeUrl
    * fetches, and the live-channel WebSocket. Symmetric with the
-   * declaration on the static `ui://ggui/session` resource. Absent ⇒
+   * declaration on the static `ui://ggui/render` resource. Absent ⇒
    * `_meta.ui.csp` omitted and the host's default CSP applies
    * (`connect-src 'none'` in claude.ai — runtime bundle fails to
    * load with a generic "script error").
@@ -1051,16 +1051,6 @@ export interface GguiRenderResourceTemplateOptions {
   readonly publicBaseUrl?: string;
 }
 
-/**
- * Pick the topmost component stack item with non-empty `componentCode`.
- * Iterates from the top down so the most-recently-pushed real UI
- * wins — matches the renderer's mount semantics.
- *
- * MCP Apps stack items (`type: 'mcpApps'`) are skipped: they're
- * iframe locators with no `componentCode` to inline. A session whose
- * stack contains only MCP Apps items returns `null` here; the caller
- * routes through the loading shell.
- */
 /**
  * Renderable picked from a {@link Render} — discriminates between
  * compiled-component renders (carry `componentCode`) and
