@@ -44,8 +44,8 @@ describe('useAgentHistory', () => {
         messages: [
           assistantMsg('a1', [
             { type: 'text', text: 'first' },
-            { type: 'tool_use', id: 'toolu', name: 'ggui_push', input: {} },
-            { type: 'tool_result', tool_use_id: 'toolu', content: { sessionId: 's', stackItemId: 'p' } },
+            { type: 'tool_use', id: 'toolu', name: 'ggui_render', input: {} },
+            { type: 'tool_result', tool_use_id: 'toolu', content: { renderId: 'p' } },
             { type: 'text', text: 'second' },
           ]),
         ],

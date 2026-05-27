@@ -23,8 +23,8 @@ function assistantMessage(
   return { id, role: 'assistant', content, isStreaming };
 }
 
-function sessionMoment(key: string, url: string, itemId: string): UiMoment {
-  return { key, itemId, source: { kind: 'session-resource', url } };
+function renderMoment(key: string, url: string, renderId: string): UiMoment {
+  return { key, renderId, source: { kind: 'render-resource', url } };
 }
 
 describe('buildRows', () => {
@@ -75,14 +75,14 @@ describe('buildRows', () => {
   });
 
   it('attaches UiMoments to their paired tool_result by tool_use_id', () => {
-    const moment = sessionMoment('toolu_abc', 'https://x.test/ggui/session-resource/item/s/p', 'p');
+    const moment = renderMoment('toolu_abc', 'https://x.test/api/renders/p/resource', 'p');
     const messages = [
       assistantMessage('m1', [
         { type: 'text', text: 'here you go:' },
         {
           type: 'tool_result',
           tool_use_id: 'toolu_abc',
-          content: { sessionId: 's', stackItemId: 'p' },
+          content: { renderId: 'p' },
         },
       ]),
     ];
@@ -118,7 +118,7 @@ describe('buildRows', () => {
         {
           type: 'tool_use',
           id: 'toolu_push',
-          name: 'ggui_push',
+          name: 'ggui_render',
           input: {},
         },
         { type: 'text', text: 'done.' },
@@ -132,15 +132,15 @@ describe('buildRows', () => {
   });
 
   it('interleaves text + ui-moment + text in content-block order', () => {
-    const moment = sessionMoment('toolu_push', 'https://x.test/item/s/p', 'p');
+    const moment = renderMoment('toolu_push', 'https://x.test/api/renders/p/resource', 'p');
     const messages = [
       assistantMessage('m1', [
         { type: 'text', text: 'pre' },
-        { type: 'tool_use', id: 'toolu_push', name: 'ggui_push', input: {} },
+        { type: 'tool_use', id: 'toolu_push', name: 'ggui_render', input: {} },
         {
           type: 'tool_result',
           tool_use_id: 'toolu_push',
-          content: { sessionId: 's', stackItemId: 'p' },
+          content: { renderId: 'p' },
         },
         { type: 'text', text: 'post' },
       ]),
@@ -152,7 +152,7 @@ describe('buildRows', () => {
   });
 
   it('preserves message order across a full user/assistant/user/assistant exchange', () => {
-    const moment = sessionMoment('toolu_1', 'https://x.test/item/s/p1', 'p1');
+    const moment = renderMoment('toolu_1', 'https://x.test/api/renders/p1/resource', 'p1');
     const messages = [
       userMessage('u1', 'show me tasks'),
       assistantMessage('a1', [
@@ -160,7 +160,7 @@ describe('buildRows', () => {
         {
           type: 'tool_result',
           tool_use_id: 'toolu_1',
-          content: { sessionId: 's', stackItemId: 'p1' },
+          content: { renderId: 'p1' },
         },
       ]),
       userMessage('u2', 'thanks'),

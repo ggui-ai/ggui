@@ -65,7 +65,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -87,7 +87,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -111,7 +111,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -137,7 +137,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -160,7 +160,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -184,7 +184,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -206,7 +206,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -239,7 +239,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -266,7 +266,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -295,7 +295,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -316,7 +316,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -341,7 +341,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -365,9 +365,9 @@ describe('WebSocketManager', () => {
     ]);
   });
 
-  it('opts into the handshake on deferred subscribeToSession too', async () => {
-    // start-invoke flow connects with appId only; sessionId arrives
-    // later via `subscribeToSession`. Both paths must stamp
+  it('opts into the handshake on deferred subscribeToRender too', async () => {
+    // start-invoke flow connects with appId only; renderId arrives
+    // later via `subscribeToRender`. Both paths must stamp
     // `supportedVersions` so the server sees the declaration
     // regardless of connection mode.
     const onMessage = vi.fn();
@@ -383,20 +383,20 @@ describe('WebSocketManager', () => {
     manager.connect();
     await vi.advanceTimersByTimeAsync(1);
 
-    manager.subscribeToSession('sess_deferred');
+    manager.subscribeToRender('render_deferred');
 
     // @ts-expect-error - accessing private property for test
     const ws = manager.ws as MockWebSocket;
     const subscribeFrame = ws.sentMessages.find((raw) =>
-      raw.includes('sess_deferred'),
+      raw.includes('render_deferred'),
     );
     expect(subscribeFrame).toBeDefined();
     const parsed = JSON.parse(subscribeFrame!) as {
       type: string;
-      payload: { sessionId: string; supportedVersions: string[] };
+      payload: { renderId: string; supportedVersions: string[] };
     };
     expect(parsed.type).toBe('subscribe');
-    expect(parsed.payload.sessionId).toBe('sess_deferred');
+    expect(parsed.payload.renderId).toBe('render_deferred');
     expect(parsed.payload.supportedVersions).toEqual([
       ...CLIENT_SUPPORTED_VERSIONS,
     ]);

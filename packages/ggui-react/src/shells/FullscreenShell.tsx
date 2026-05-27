@@ -14,7 +14,7 @@
  *   5. Chat overlay reads user + assistant text blocks off messages.
  *
  * This shell is built entirely on the invoke-SSE stream. It does not
- * use the older `<BaseShell>` / `<StackItemRenderer>` WebSocket-event
+ * use the older `<BaseShell>` / `<RenderRenderer>` WebSocket-event
  * machinery: chat-overlay messages and skeleton progress derive purely
  * from `useInvoke`. The skeleton's progress curve is a pure fallback
  * animation — there is no real generation telemetry on the invoke-SSE

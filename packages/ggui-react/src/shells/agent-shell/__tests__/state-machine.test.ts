@@ -20,8 +20,8 @@ function assistantMsg(
   return { id, role: 'assistant', content, isStreaming };
 }
 
-function moment(key: string, url: string, itemId: string): UiMoment {
-  return { key, itemId, source: { kind: 'session-resource', url } };
+function moment(key: string, url: string, renderId: string): UiMoment {
+  return { key, renderId, source: { kind: 'render-resource', url } };
 }
 
 describe('deriveAgentState', () => {
@@ -59,7 +59,7 @@ describe('deriveAgentState', () => {
     const out = deriveAgentState({
       messages: [
         userMsg('u1', 'show me'),
-        assistantMsg('a1', [{ type: 'tool_use', id: 'toolu', name: 'ggui_push', input: {} }], true),
+        assistantMsg('a1', [{ type: 'tool_use', id: 'toolu', name: 'ggui_render', input: {} }], true),
       ],
       isStreaming: true,
       uiMoments: [],
@@ -86,11 +86,11 @@ describe('deriveAgentState', () => {
       messages: [
         userMsg('u1', 'show me'),
         assistantMsg('a1', [
-          { type: 'tool_use', id: 'toolu_1', name: 'ggui_push', input: {} },
+          { type: 'tool_use', id: 'toolu_1', name: 'ggui_render', input: {} },
           {
             type: 'tool_result',
             tool_use_id: 'toolu_1',
-            content: { sessionId: 's', stackItemId: 'p' },
+            content: { renderId: 'p' },
           },
         ]),
       ],
@@ -106,8 +106,8 @@ describe('deriveAgentState', () => {
       messages: [
         assistantMsg('a1', [
           { type: 'text', text: 'first' },
-          { type: 'tool_use', id: 'toolu', name: 'ggui_push', input: {} },
-          { type: 'tool_result', tool_use_id: 'toolu', content: { sessionId: 's', stackItemId: 'p' } },
+          { type: 'tool_use', id: 'toolu', name: 'ggui_render', input: {} },
+          { type: 'tool_result', tool_use_id: 'toolu', content: { renderId: 'p' } },
           { type: 'text', text: 'second' },
         ]),
       ],
@@ -137,7 +137,7 @@ describe('deriveAgentState', () => {
       messages: [
         assistantMsg('a1', [{ type: 'text', text: 'older' }]),
         userMsg('u2', 'follow-up'),
-        assistantMsg('a2', [{ type: 'tool_use', id: 't', name: 'ggui_push', input: {} }], true),
+        assistantMsg('a2', [{ type: 'tool_use', id: 't', name: 'ggui_render', input: {} }], true),
       ],
       isStreaming: true,
       uiMoments: [],
