@@ -93,13 +93,13 @@ export {
   type StreamReplayInput,
 } from './stream-replay-ops.js';
 export {
-  createGguiPushHandler,
+  createGguiRenderHandler,
   type ChannelNotifier,
   type GenerationCredentials,
   type GenerationDeps,
-  type GguiPushHandlerDeps,
-  type PushPostSuccessArgs,
-} from './push.js';
+  type GguiRenderHandlerDeps,
+  type RenderPostSuccessArgs,
+} from './render.js';
 export {
   NO_CREDENTIALS_SYSTEM_CARD_KIND,
   buildNoCredentialsRender,

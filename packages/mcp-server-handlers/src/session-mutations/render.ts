@@ -1,44 +1,48 @@
 /**
- * `ggui_push` — OSS handler for outbound UI delivery.
+ * `ggui_render` — OSS handler for outbound UI delivery.
  *
- * Handshake-first only. The wire input is `{handshakeId, contract? |
- * contractHash?, props?}`; the generator input (intent, context,
- * schema, adapters, forceCreate) is read from the handshake record
- * the agent already wrote in the prior `ggui_handshake` round-trip.
+ * Handshake-first only. The wire input is `{handshakeId, decision,
+ * props?, themeId?, infra?}`; the generator input (intent, context,
+ * schema, adapters, forceCreate) is read from the handshake record the
+ * agent already wrote in the prior `ggui_handshake` round-trip.
  *
  * The handler stamps declaration-level `_meta.ui.resourceUri` +
  * `_meta.ui.visibility` so MCP Apps hosts know to fetch
- * `ui://ggui/session` on a tool call, and (when `mintWsToken` is
- * wired) emits per-result `_meta["ai.ggui/session"]` +
- * `_meta["ai.ggui/stack-item"]` slice meta carrying the WebSocket
- * bootstrap credentials the iframe shell needs.
+ * `ui://ggui/render` on a tool call, and (when `mintWsToken` is wired)
+ * emits per-result `_meta["ai.ggui/render"]` slice meta carrying the
+ * WebSocket bootstrap credentials the iframe shell needs.
  *
  * **What it does:**
  *
- *   1. Validates input (handshakeId required at schema; zod surfaces an actionable rejection if absent).
+ *   1. Validates input (handshakeId required at schema; zod surfaces an
+ *      actionable rejection if absent).
  *   2. Consumes the handshake record (`getAndDelete`) — single-use.
  *   3. Resolves the effective contract (cheap-confirm via
  *      `contractHash` OR override via `contract`).
  *   4. Validates routing targets on the contract's `actionSpec`.
- *   5. Resolves or creates the session from `record.target.sessionId`.
+ *   5. Resolves or mints the render row from
+ *      `handshakeRecord.target.renderId`.
  *   6. Runs the blueprint matcher when cache is wired (cache-hit
  *      short-circuits generation).
  *   7. Otherwise runs the bound `UiGenerator` and registers the
  *      produced blueprint into the cache.
- *   8. Returns a spec-conformant `pushOutputSchema`-shaped result and
- *      emits the `ai.ggui/*` slice meta pair via `resultMeta`.
+ *   8. Returns a spec-conformant `renderOutputSchema`-shaped result and
+ *      emits the single `ai.ggui/render` slice meta via `resultMeta`.
  *
- * **Placeholder stack-item invariant.** When the handler is built
- * with `provisionalPreview` deps, an empty-componentCode placeholder
- * StackItem is appended to the session stack BEFORE generation runs.
- * The placeholder gives the iframe-runtime's `stack-item-renderer` a
- * surface to mount the `mountProvisional` branch off — without it,
- * A2UI preview frames on `_ggui:preview` paint into the void (the
- * SessionViewer mounts provisional only PER-STACK-ITEM). When
- * generation later settles, the SAME `stackItemId` is reused —
- * `appendStackItem` upserts by id, so the placeholder is replaced
- * in-place by the authoritative componentCode (success) or an error
- * stack-item (failure).
+ * **Placeholder render invariant.** When the handler is built with
+ * `provisionalPreview` deps, an empty-componentCode placeholder
+ * ComponentRender is committed to the render store BEFORE generation
+ * runs. The placeholder gives the iframe-runtime a surface to mount the
+ * `mountProvisional` branch off — without it, A2UI preview frames on
+ * `_ggui:preview` paint into the void. When generation later settles,
+ * the SAME `renderId` is reused — `renderStore.commit` upserts by id,
+ * so the placeholder is replaced in-place by the authoritative
+ * componentCode (success) or an error render (failure).
+ *
+ * Post-Phase-B (flatten-render-identity): the prior
+ * `{sessionId, stackItemId}` pair collapsed to a single `renderId`. The
+ * outbound `_meta` collapsed from two slices
+ * (`ai.ggui/session` + `ai.ggui/stack-item`) to one (`ai.ggui/render`).
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -48,15 +52,14 @@ import {
   type GadgetDescriptor,
   type DataContract,
   type JsonObject,
-  type SessionStackEntry,
-  type StackItem,
+  type Render,
+  type ComponentRender,
+  type SystemRender,
 } from '@ggui-ai/protocol';
 import {
-  GGUI_PUSH_UI_META,
+  GGUI_RENDER_UI_META,
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AppMetadataStore,
@@ -66,8 +69,9 @@ import type {
   PendingEventConsumer,
   ProviderKeyRef,
   RateLimiter,
-  SessionStore,
+  RenderStore,
   ShortCodeIndex,
+  StoredRender,
   UiGenerateInput,
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
@@ -120,15 +124,15 @@ import {
 } from './cache-trace-sink.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 import {
-  deriveStackItemMeta,
+  deriveRenderMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
-  type StackItemMetaView,
+  type RenderMetaView,
 } from './slice-meta-derivation.js';
 
 /**
- * Generation-time deps for the `ggui_push` handler. Absent = the
- * handler stays in placeholder mode (no componentCode written, push
+ * Generation-time deps for the `ggui_render` handler. Absent = the
+ * handler stays in placeholder mode (no componentCode written, render
  * returns `codeReady: false` on the story path).
  *
  * Design choices for this seam:
@@ -139,9 +143,9 @@ import {
  *     harness workflow. This keeps the handler narrow and the
  *     generator surface swappable.
  *   - `resolveLlm` is the seam the handler uses to get a
- *     `{selection, providerKey}` for THIS push. Returns `null` when
+ *     `{selection, providerKey}` for THIS render. Returns `null` when
  *     no credentials are available — the handler funnels that case
- *     into the normal failure path (error stack item +
+ *     into the normal failure path (error render +
  *     `codeReady: false`). The CLI's `byok-resolver` + default
  *     model table produces this closure; hosted deployments supply
  *     their own. BYOK resolution stays OUT of this package on
@@ -168,7 +172,7 @@ export interface GenerationDeps {
    *  `@ggui-ai/ui-gen#createUiGenerator`. */
   readonly uiGenerator: UiGenerator;
   /**
-   * Per-push credential lookup. Receives the handler context so
+   * Per-render credential lookup. Receives the handler context so
    * multi-tenant hosts can route per-`appId`; OSS single-user
    * resolves from env + `~/.ggui/credentials.json` and ignores the
    * argument. Must return `null` (not throw) when no credentials
@@ -186,21 +190,21 @@ export interface GenerationDeps {
   readonly blueprints: BlueprintProvider;
   /**
    * Optional RAG retrieval + cache deps. Absent = generation always
-   * runs (no cache lookup, every push hits the LLM).
+   * runs (no cache lookup, every render hits the LLM).
    *
    * When present, the handler runs a `lookupGenerationCache` on the
    * story path BEFORE invoking the generator:
    *
-   *   - Hit (score ≥ threshold) → synthesize a `StackItem` from the
-   *     cached componentCode, skip `uiGenerator.generate`, and emit
-   *     `cache.hit:true` on the push output.
+   *   - Hit (score ≥ threshold) → synthesize a `ComponentRender` from
+   *     the cached componentCode, skip `uiGenerator.generate`, and emit
+   *     `cache.hit:true` on the render output.
    *   - Miss → run the existing generator path unchanged; on success,
    *     `recordGenerationCache` upserts the new componentCode into
-   *     the scope so the next same-intent push hits.
+   *     the scope so the next same-intent render hits.
    *
    * Scope: `ctx.appId`. Key: `sha256(trimmed intent)[0..16]`. Metadata
    * carries `componentCode` directly — a hit doesn't need a secondary
-   * blob lookup to rehydrate a `StackItem`.
+   * blob lookup to rehydrate a `ComponentRender`.
    *
    * The shape is intentionally optional-at-generation-level rather
    * than a top-level handler dep so the "generation off" default
@@ -211,7 +215,7 @@ export interface GenerationDeps {
 
   /**
    * Per-call LLM resolver for Tier 2 rerank in the blueprint matcher.
-   * When wired alongside `cache`, push routes through
+   * When wired alongside `cache`, render routes through
    * `matchBlueprint` and uses the registry-based three-tier flow:
    * Tier 1 contract-key exact, Tier 2 RAG + LLM rerank, Tier 3 cold
    * gen + register. When absent, the matcher skips Tier 2 and falls
@@ -224,7 +228,7 @@ export interface GenerationDeps {
 
   /**
    * Optional marketplace-install bridge. When wired
-   * alongside `cache`, the push handler threads it into
+   * alongside `cache`, the render handler threads it into
    * `matchBlueprint` deps so installed blueprints lazily compile
    * + populate the same vector store. The bridge is idempotent per
    * scope; the first matchBlueprint call pays the compile, every
@@ -240,43 +244,41 @@ export interface GenerationDeps {
   /**
    * No-credentials fallback hook. Fires only when {@link resolveLlm}
    * returns `null` (no env/file/user-scope key resolved for this
-   * push). Successful resolution always wins — the hook never sees
+   * render). Successful resolution always wins — the hook never sees
    * a key.
    *
-   * When the hook returns a `StackItem`, the handler appends THAT
-   * item to the session stack instead of the generic
-   * `{reason:'no-credentials'}` error envelope, sets
-   * `componentCode` on the bootstrap meta from it, and reports
-   * `codeReady: true`. When it returns `null` (or the hook is
-   * absent), the handler falls back to the existing
-   * `commitErrorStackItem` path so historical no-BYOK behavior is
+   * When the hook returns a `Render`, the handler commits THAT row to
+   * the render store instead of the generic `{reason:'no-credentials'}`
+   * error envelope, sets `componentCode` on the bootstrap meta from it,
+   * and reports `codeReady: true`. When it returns `null` (or the hook
+   * is absent), the handler falls back to the existing
+   * `commitErrorRender` path so historical no-BYOK behavior is
    * preserved for callers that don't opt in.
    *
-   * Authored stack-item invariant: the returned item's `id` MUST
-   * equal the in-flight `stackItemId` — `appendStackItem` upserts by id,
-   * so reusing the page id replaces the provisional preview
-   * placeholder in-place. Helpers in
-   * `./no-credentials-card.ts` build the canonical Connect-Claude
-   * card shape; embedders compose their own when they need a
-   * different "set up your key" surface.
+   * Authored render invariant: the returned render's `id` MUST equal
+   * the in-flight `renderId` — `renderStore.commit` upserts by id, so
+   * reusing the id replaces the provisional preview placeholder
+   * in-place. Helpers in `./no-credentials-card.ts` build the
+   * canonical Connect-Claude card shape; embedders compose their own
+   * when they need a different "set up your key" surface.
    *
-   * Why a hook (not a static stack item dep): the URL the card
-   * points at (`/settings`) depends on the operator's resolved
-   * public-base-url, which the handler doesn't know. The CLI
-   * composes the URL once at boot and threads it into the closure.
+   * Why a hook (not a static render dep): the URL the card points at
+   * (`/settings`) depends on the operator's resolved public-base-url,
+   * which the handler doesn't know. The CLI composes the URL once at
+   * boot and threads it into the closure.
    */
   readonly onNoCredentials?: (
     ctx: HandlerContext,
     story: {
       readonly intent: string;
-      readonly stackItemId: string;
+      readonly renderId: string;
       readonly nowIso: string;
     },
-  ) => SessionStackEntry | null | Promise<SessionStackEntry | null>;
+  ) => Render | null | Promise<Render | null>;
 }
 
 /**
- * One credential resolution for a single `ggui_push` call. Shape
+ * One credential resolution for a single `ggui_render` call. Shape
  * matches the `UiGenerator.generate` input — the handler passes
  * these fields through unchanged.
  */
@@ -286,17 +288,19 @@ export interface GenerationCredentials {
 }
 
 /**
- * Argument bundle handed to {@link GguiPushHandlerDeps.postSuccessHook}.
+ * Argument bundle handed to {@link GguiRenderHandlerDeps.postSuccessHook}.
  *
- * Carries the resolved push state at success-time so cloud-side
+ * Carries the resolved render state at success-time so cloud-side
  * fire-and-forget side-effects (RAG indexing, render-cache placeholder
  * write) have everything they need without re-deriving from raw input.
+ *
+ * Post-Phase-B (flatten-render-identity): the pre-rename `sessionId` +
+ * `stackItemId` pair collapsed to a single `renderId`.
  */
-export interface PushPostSuccessArgs {
+export interface RenderPostSuccessArgs {
   readonly ctx: HandlerContext;
-  readonly sessionId: string;
-  readonly stackItemId: string;
-  /** Resolved DataContract used for this push (echoed contract or override). */
+  readonly renderId: string;
+  /** Resolved DataContract used for this render (echoed contract or override). */
   readonly contract: DataContract;
   /** RFC 8785 canonical key of {@link contract}. */
   readonly contractHash: string;
@@ -309,18 +313,18 @@ export interface PushPostSuccessArgs {
   readonly intent: string;
   /** Decision action classification — same value as on the response. */
   readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
-  /** Whether the stack item committed real componentCode. */
+  /** Whether the render committed real componentCode. */
   readonly codeReady: boolean;
 }
 
 /**
- * Deps for the OSS `ggui_push` handler.
+ * Deps for the OSS `ggui_render` handler.
  */
-export interface GguiPushHandlerDeps {
-  /** Session-backing store. Used to create / reuse sessions on push. */
-  readonly sessionStore: SessionStore;
+export interface GguiRenderHandlerDeps {
+  /** Render-backing store. Used to mint / replace renders on render. */
+  readonly renderStore: RenderStore;
   /**
-   * Per-app metadata resolver — when bound, push reads
+   * Per-app metadata resolver — when bound, render reads
    * `app.gadgets` and runs `assertGadgetsRegistered`
    * before any state mutation. Every `(package, export name)` the
    * contract declares MUST resolve in the catalog; misses surface as
@@ -336,36 +340,34 @@ export interface GguiPushHandlerDeps {
   readonly appMetadataStore?: AppMetadataStore;
   /**
    * Optional pending-events pipe. When wired, the handler calls
-   * `markCreated(stackItemId)` the moment the stackItemId is minted
-   * (Model C: pipes are stackItem-keyed, opened at push time so
-   * events from `ggui_runtime_submit_action` land in the pipe even
-   * BEFORE the agent's first `ggui_consume` arrives — covers the
-   * "user clicks before agent polls" race). Idempotent — same
-   * instance must be shared with `createGguiSubmitActionHandler` +
+   * `markCreated(renderId)` the moment the renderId is minted (Model
+   * C: pipes are render-keyed, opened at render time so events from
+   * `ggui_runtime_submit_action` land in the pipe even BEFORE the
+   * agent's first `ggui_consume` arrives — covers the "user clicks
+   * before agent polls" race). Idempotent — same instance must be
+   * shared with `createGguiSubmitActionHandler` +
    * `createGguiConsumeHandler` for the pipe to actually thread.
    */
   readonly pendingEventConsumer?: PendingEventConsumer;
   /**
    * Bootstrap-credential minter for the MCP Apps outbound path. When
    * present, the handler's `resultMeta` emits the live-auth trio on
-   * the `ai.ggui/session` slice. When ABSENT, no `_meta` is emitted —
-   * non-MCP-Apps hosts read `{sessionId, stackItemId}` straight off
-   * `structuredContent` and resolve the session-resource themselves.
+   * the `ai.ggui/render` slice. When ABSENT, no auth fields are
+   * emitted — non-MCP-Apps hosts read `{renderId}` straight off
+   * `structuredContent` and resolve the render-resource themselves.
    *
-   * Returns the live-auth fields on the session slice —
-   * `{wsUrl, token, expiresAt}`. The handler adds `sessionId` + `appId`
-   * from the push context itself, plus `runtimeUrl` from the separate
-   * `runtimeUrl` dep (server-level config, not minter-scoped).
+   * Returns the live-auth fields — `{wsUrl, token, expiresAt}`. The
+   * handler adds `renderId` + `appId` from the render context itself,
+   * plus `runtimeUrl` from the separate `runtimeUrl` dep
+   * (server-level config, not minter-scoped).
+   *
+   * A minter that's wired AT ALL is by construction the live-mode
+   * minter, so the return shape pins them required so consumers don't
+   * have to narrow. Set this to `undefined` (omit the key) for
+   * self-contained / system-card-only deployments.
    */
-  // Live-mode credential minter. Returns the WS subscribe target +
-  // the short-TTL WS auth token + its expiry. These fields are
-  // session-slice optional (only live mode populates them); a minter
-  // that's wired AT ALL is by construction the live-mode minter, so
-  // the return shape pins them required so consumers don't have to
-  // narrow. Set this to `undefined` (omit the key) for self-contained
-  // / system-card-only deployments.
   readonly mintWsToken?: (
-    sessionId: string,
+    renderId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
@@ -380,18 +382,18 @@ export interface GguiPushHandlerDeps {
   readonly defaultGenerator?: string;
   /**
    * URL of the renderer bundle the thin shell should fetch. Padded
-   * onto {@link McpAppAiGguiSessionMeta.runtimeUrl} at `resultMeta` time
-   * alongside `sessionId` / `appId`. Separate dep (not a field on
-   * `mintWsToken`'s return) because the URL is a server-config
-   * value (same for every session), not a per-mint credential.
+   * onto {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time
+   * alongside `renderId` / `appId`. Separate dep (not a field on
+   * `mintWsToken`'s return) because the URL is a server-config value
+   * (same for every render), not a per-mint credential.
    *
-   * Required when `mintWsToken` is set — the thin-shell HTML's
-   * boot path depends on it. Omitted + `mintWsToken` set is a
-   * configuration bug; we fall back to `/_ggui/iframe-runtime.js` (the
-   * same-origin OSS default) with a warning on first use. Callers
-   * composing the deps bundle inside `@ggui-ai/mcp-server` always
-   * supply this; it's optional here to preserve backward-compatible
-   * test construction where the bootstrap branch isn't exercised.
+   * Required when `mintWsToken` is set — the thin-shell HTML's boot
+   * path depends on it. Omitted + `mintWsToken` set is a configuration
+   * bug; we fall back to `/_ggui/iframe-runtime.js` (the same-origin
+   * OSS default) with a warning on first use. Callers composing the
+   * deps bundle inside `@ggui-ai/mcp-server` always supply this; it's
+   * optional here to preserve backward-compatible test construction
+   * where the bootstrap branch isn't exercised.
    *
    * Function form (request-aware): when the OSS server is fronted by
    * a tunnel or reverse proxy, a static configured URL can't know
@@ -403,11 +405,11 @@ export interface GguiPushHandlerDeps {
   readonly runtimeUrl?: string | (() => string | undefined);
   /**
    * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
-   * the `ai.ggui/session.themeId` slice field so MCP Apps hosts
+   * the `ai.ggui/render.themeId` slice field so MCP Apps hosts
    * (claude.ai web, Claude Desktop) that mount via
    * `ui/notifications/tool-result` postMessage propagate the operator's
    * theme into the iframe's `extractBootstrapFromToolResult` path.
-   * Without this, hosts that don't fetch the per-session resource via
+   * Without this, hosts that don't fetch the per-render resource via
    * `resources/read` silently fall back to the iframe-runtime's baked
    * default theme (`ggui`), even when `ggui.json#theme: 'indigo'` is set.
    */
@@ -415,20 +417,20 @@ export interface GguiPushHandlerDeps {
   /** Theme color mode resolved from `ggui.json#theme.mode`. */
   readonly themeMode?: 'light' | 'dark';
   /**
-   * Live theme getter — resolved per-push instead of per-boot.
-   * When set, supersedes the static `themeId` / `themeMode` deps
-   * for every result-meta computation, so a console save (which
-   * mutates the underlying state cell) reaches the next push
-   * without a server restart.
+   * Live theme getter — resolved per-render instead of per-boot. When
+   * set, supersedes the static `themeId` / `themeMode` deps for every
+   * result-meta computation, so a console save (which mutates the
+   * underlying state cell) reaches the next render without a server
+   * restart.
    *
    * Returns `undefined` when no theme is set (the default-theme
    * path); returns `{ id, mode? }` when a preset is selected. The
    * caller (CLI) constructs a closure that reads from a shared
    * mutable ref the console-theme route also writes to on POST.
    *
-   * Static `themeId` / `themeMode` survive as the no-getter
-   * fallback for embedding hosts that compose `createGguiServer`
-   * directly without dynamic theming — e.g. test fixtures.
+   * Static `themeId` / `themeMode` survive as the no-getter fallback
+   * for embedding hosts that compose `createGguiServer` directly
+   * without dynamic theming — e.g. test fixtures.
    */
   readonly themeProvider?: () => {
     readonly id?: string;
@@ -452,7 +454,7 @@ export interface GguiPushHandlerDeps {
    * `GguiHandshakeHandlerDeps.serverCapabilities` so the iframe-runtime
    * can route per-channel transport (WS-subscribe vs iframe-poll)
    * without re-querying the handshake. Closure form so dev-mode
-   * reconfig flows in per-push without a restart.
+   * reconfig flows in per-render without a restart.
    *
    * Returns the allowlist of `source.tool` names the server can
    * `channel_subscribe`-fan-out. Absent / returns undefined ⇒ field
@@ -470,27 +472,22 @@ export interface GguiPushHandlerDeps {
 
   /**
    * Provisional preview orchestration seam. When present AND the
-   * per-push gate passes, the handler fires a background preview
+   * per-render gate passes, the handler fires a background preview
    * task that emits A2UI-shaped payloads on the reserved
    * `_ggui:preview` channel. Absence of this dep is the "preview
    * not wired" signal — see {@link ProvisionalPreviewDeps}.
-   *
-   * The actual runner + fire-and-forget dispatch land in a follow-up
-   * commit; this dep is seated so downstream callers (hosted pod,
-   * OSS dev mode) can wire their own emitter + flag without further
-   * churn to this handler.
    */
   readonly provisionalPreview?: ProvisionalPreviewDeps;
 
   /**
-   * Admission-control seam. When present, every `ggui_push` call is
+   * Admission-control seam. When present, every `ggui_render` call is
    * gated through `rateLimiter.check({key, cost: 1})` BEFORE the
    * handler's state-changing work begins. Denials throw
    * `RateLimitedError`; the transport layer projects the carried
    * {@link import('@ggui-ai/mcp-server-core').RateLimitDecision} to
    * HTTP 429 + `Retry-After` / `X-RateLimit-*` headers.
    *
-   * Key composition: `ggui_push:<appId>`. The handler does NOT
+   * Key composition: `ggui_render:<appId>`. The handler does NOT
    * widen the key shape on its own — per-identity-kind or per-user
    * isolation is a policy decision the caller makes by supplying a
    * different `RateLimiter` binding (e.g. a wrapping adapter that
@@ -506,17 +503,29 @@ export interface GguiPushHandlerDeps {
   readonly rateLimiter?: RateLimiter;
 
   /**
-   * ShortCode → session lookup. When present, every successful push
-   * records the minted `shortCode → { sessionId, appId }` binding so
-   * downstream same-origin consumers (console `/s/<shortCode>`
-   * viewer) can resolve it back. Writes are best-effort: if the index
-   * `put` rejects, the push tool result is NOT failed — the agent
-   * already holds the URL and the operator-visible surface gracefully
-   * 404s on lookup.
+   * ShortCode → render lookup. When present, every successful render
+   * records the minted `shortCode → { sessionId, appId, stackItemId }`
+   * binding so downstream same-origin consumers (console
+   * `/s/<shortCode>` viewer) can resolve it back. Writes are
+   * best-effort: if the index `put` rejects, the render tool result is
+   * NOT failed — the agent already holds the URL and the
+   * operator-visible surface gracefully 404s on lookup.
+   *
+   * **Field-name note (B.2c).** {@link ShortCodeBinding}'s wire
+   * field names (`sessionId`, `stackItemId`) were NOT renamed when the
+   * protocol collapsed session+stackItem → render. Post-Phase-B every
+   * render IS the addressable row, so `sessionId === renderId ===
+   * stackItemId` for ggui-side bindings; the handler writes the
+   * `renderId` into BOTH legacy field slots so downstream
+   * (`revokeBySessionId` / `revokeByStackItemId`) keep functioning.
+   * Renaming the index surface requires updating mcp-server +
+   * persistent-short-code-index + cloud DDB binding writers, which
+   * sit outside this slice's scope; documented here so a future slice
+   * can finish the rename in one pass.
    *
    * Absence of this dep is the "hosted cloud has its own
-   * shortCode→session table, OSS isn't using console" signal —
-   * `ggui_push` still works end-to-end; same-origin viewer lookups
+   * shortCode→render table, OSS isn't using console" signal —
+   * `ggui_render` still works end-to-end; same-origin viewer lookups
    * just aren't available.
    */
   readonly shortCodeIndex?: ShortCodeIndex;
@@ -531,64 +540,64 @@ export interface GguiPushHandlerDeps {
    * Keyed by `ggui-handshake:<appId>:<handshakeId>` — same shape the
    * handshake handler writes, so one `KeyValueStore` instance is the
    * source of truth across both tools. Single-use by contract: a
-   * second `ggui_push` with the same handshakeId surfaces
+   * second `ggui_render` with the same handshakeId surfaces
    * `HandshakeNotFoundError`. `createGguiHandshakeHandler` is the peer
    * writer; both handlers take the same `KeyValueStore` instance.
    */
   readonly handshakeStore?: KeyValueStore;
 
   /**
-   * Generation wiring. When present AND the push is a story path
+   * Generation wiring. When present AND the render is a story path
    * (not MCP Apps), the handler:
    *
    *   1. Resolves BYOK credentials via `resolveLlm`.
    *   2. Kicks off provisional preview fire-and-forget (same seam
    *      as before — preview runs concurrently with generation).
    *   3. `await`s `uiGenerator.generate(...)`.
-   *   4. On success: appends a real `StackItem` with `componentCode`
-   *      + `sourceCode` and returns `codeReady: true`.
-   *   5. On failure: appends an error-only `StackItem` and returns
-   *      `codeReady: false`. Preview teardown fires with reason
+   *   4. On success: commits a real `ComponentRender` with
+   *      `componentCode` + `sourceCode` and returns `codeReady: true`.
+   *   5. On failure: commits an error-only `ComponentRender` and
+   *      returns `codeReady: false`. Preview teardown fires with reason
    *      `'generation-failed'`.
    *
-   * Absent = the current "placeholder" behavior: no stack item
-   * appended on the story path, `codeReady: false` on every story
-   * push. This keeps the handler honest on OSS hosts that haven't
-   * configured BYOK yet — session + shortCode + preview work; real
-   * code generation is opt-in through this dep.
+   * Absent = the current "placeholder" behavior: no real
+   * componentCode on the story path, `codeReady: false` on every story
+   * render. This keeps the handler honest on OSS hosts that haven't
+   * configured BYOK yet — render + shortCode + preview work; real code
+   * generation is opt-in through this dep.
    */
   readonly generation?: GenerationDeps;
 
   /**
    * Schema-compat check hook. When present, fires at three boundaries
-   * — push validation (against `story.contract`), cache-hit commit
+   * — render validation (against `story.contract`), cache-hit commit
    * (against the matched blueprint's contract), and gen success
    * (against the generator's response contract). Purpose: if any
    * `actionSpec[name]` tool ref / `streamSpec[channel].tool`
    * ref is incompatible with its tool's registered `inputSchema` /
-   * return schema, the handler rejects the push BEFORE the stack write
-   * — the agent sees an honest structured failure instead of a stack
-   * item that will silently surface as a perpetual loading state.
+   * return schema, the handler rejects the render BEFORE the commit
+   * — the agent sees an honest structured failure instead of a render
+   * that will silently surface as a perpetual loading state.
    *
    * Recovery posture: schema-compat errors are AGENT-FIXABLE — the agent
    * authored a contract whose declared schema doesn't fit the named
    * tool. The check throws `SchemaCompatError` (`schema_mismatch_error`)
-   * at the EARLIEST boundary, the error propagates to the push response,
+   * at the EARLIEST boundary, the error propagates to the render response,
    * and the handshake record is preserved so the agent can retry on
    * the same handshakeId after fixing the contract. This is symmetric
    * with `CrossReferenceError` (`cross_reference_unresolved`) — both
    * are author-recoverable failures rooted in the contract.
    *
    * Type: accepts any shape with optional `actionSpec` / `streamSpec`
-   * fields. `DataContract` (push-validation phase) and
-   * `SessionStackEntry` with `type: 'component'` (cache-hit + gen
-   * success phases) both fit structurally.
+   * fields. `DataContract` (render-validation phase) and
+   * `ComponentRender` (cache-hit + gen success phases) both fit
+   * structurally.
    *
    * Absent = no check (the zero-config / no-mounts / tests-with-no-
    * registry case). Servers MAY bind the check helper
-   * `@ggui-ai/mcp-server/checkStackItemSchemaCompat` here.
+   * `@ggui-ai/mcp-server/checkRenderSchemaCompat` here.
    */
-  readonly checkStackItemContracts?: (
+  readonly checkRenderContracts?: (
     shape: {
       readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
       readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
@@ -597,43 +606,36 @@ export interface GguiPushHandlerDeps {
 
   /**
    * Optional live-subscriber notifier. When present, every successful
-   * `appendStackItem` (cold-generation success, cache-hit reuse, MCP
-   * Apps push, error stack append) fan-outs a `{type:'push',
-   * payload:{stackItem, matchType?}}` wire frame to every live
-   * subscriber on the affected session.
+   * commit (cold-generation success, cache-hit reuse, MCP Apps render,
+   * error render) fan-outs a render-commit wire frame to every live
+   * subscriber on the affected render.
    *
    * Why optional: the seam exists for transports that hold a live
-   * subscription model (live-channel `/ws`). Hosts without a session
+   * subscription model (live-channel `/ws`). Hosts without a render
    * channel (programmatic embedding, Lambda one-shot invocation) leave
    * it absent — no notify needed because there's no live subscriber.
    *
-   * Why a separate seam from `provisionalPreview.sendEnvelope`: stack
-   * mutations are NOT stream-channel envelopes. They don't carry a
+   * Why a separate seam from `provisionalPreview.sendEnvelope`: render
+   * commits are NOT stream-channel envelopes. They don't carry a
    * channel name, don't fold under streamSpec validation, and are not
    * subject to the per-channel replay policy. Routing them through
-   * `sendToSession` would force a fake stream-channel for state that
-   * isn't a stream — keep the wire shape honest by giving stack
-   * pushes their own delivery method.
+   * `sendToRender` would force a fake stream-channel for state that
+   * isn't a stream — keep the wire shape honest by giving render
+   * commits their own delivery method.
    *
    * Failure model: per-subscriber send failures are swallowed by the
    * channel server; this seam returns `void`. A notify failure cannot
-   * make a push fail — the `appendStackItem` already happened, which
-   * is the source of truth.
-   *
-   * Without this notifier, cache-hit + cold-generation second-turn
-   * pushes on an already-subscribed session land in the store but not
-   * in the live `GguiSession` stack, so the inline UI slot stays in
-   * "Waiting for session channel replay…" forever.
+   * make a render fail — the `renderStore.commit` already happened,
+   * which is the source of truth.
    */
   readonly channelNotifier?: ChannelNotifier;
 
   /**
-   * Canvas-mode lifecycle emitter. Fires
-   * `push_started` on the `_ggui:lifecycle` channel right after
-   * stackItemId is minted so the canvas animator transitions from
-   * `ready`/`handshake` to `constructing` immediately — without
-   * waiting for the final `push` envelope (which arrives after
-   * generation completes).
+   * Canvas-mode lifecycle emitter. Fires `push_started` on the
+   * `_ggui:lifecycle` channel right after renderId is minted so the
+   * canvas animator transitions from `ready`/`handshake` to
+   * `constructing` immediately — without waiting for the final commit
+   * envelope (which arrives after generation completes).
    *
    * Absent ⇒ no emission. Non-canvas deployments pay zero cost.
    */
@@ -642,11 +644,11 @@ export interface GguiPushHandlerDeps {
   /**
    * Content-addressable code-blob store.
    *
-   * When present AND a story-path push results in non-empty
-   * `componentCode` on the appended stack item, the handler
+   * When present AND a story-path render results in non-empty
+   * `componentCode` on the committed render, the handler
    * computes `sha256(code)`, writes (hash, code) to the store, and
-   * surfaces `codeUrl` + `codeHash` on the push response
-   * (`structuredContent` + the `ai.ggui/stack-item` slice). The iframe
+   * surfaces `codeUrl` + `codeHash` on the render response
+   * (`structuredContent` + the `ai.ggui/render` slice). The iframe
    * runtime fetches the URL to load the compiled ES module.
    *
    * Pairs with {@link codeBaseUrl} below — both must be present for
@@ -654,7 +656,7 @@ export interface GguiPushHandlerDeps {
    * but emits no URL.
    *
    * Absent = the bootstrap emits no codeUrl. The iframe mounts via
-   * live mode (wsUrl+token) and receives the stack item — including
+   * live mode (wsUrl+token) and receives the render — including
    * componentCode — over the live-channel WS subscribe. Deployments
    * that disable both codeStore AND live-mode cannot deliver a
    * static-component renderable surface; pure agent-driven flows
@@ -677,9 +679,9 @@ export interface GguiPushHandlerDeps {
   /**
    * Pre-validation gate. Fires at the very TOP of the handler, BEFORE
    * any input parsing or state-changing work. Throws to reject the
-   * push — the thrown error class propagates unchanged through
+   * render — the thrown error class propagates unchanged through
    * JSON-RPC, so the gate owns the wire envelope (e.g. cloud's
-   * `PushBillingError` mapping to HTTP 402).
+   * `RenderBillingError` mapping to HTTP 402).
    *
    * Receives raw input (untyped) so the gate can inspect cloud-only
    * fields (e.g. `infra.model` for provider derivation) before zod
@@ -687,7 +689,7 @@ export interface GguiPushHandlerDeps {
    * shape afterward; the gate doesn't replace input validation.
    *
    * Cloud wiring: BYOK + credit pre-check (insufficient_credit /
-   * unsupported_provider). OSS leaves absent — no per-push billing.
+   * unsupported_provider). OSS leaves absent — no per-render billing.
    */
   readonly preValidationGate?: (
     ctx: HandlerContext,
@@ -695,23 +697,23 @@ export interface GguiPushHandlerDeps {
   ) => Promise<void> | void;
 
   /**
-   * Post-success hook. Fires AFTER all stack item commits for this
-   * push and AFTER the response object is assembled, but BEFORE the
-   * handler returns. Receives a {@link PushPostSuccessArgs} bundle
-   * with the resolved sessionId, stackItemId, contract, contractHash,
-   * story echo, action classification, and codeReady — everything
-   * cloud needs for fire-and-forget side-effects.
+   * Post-success hook. Fires AFTER the render commit for this call
+   * and AFTER the response object is assembled, but BEFORE the handler
+   * returns. Receives a {@link RenderPostSuccessArgs} bundle with the
+   * resolved renderId, contract, contractHash, story echo, action
+   * classification, and codeReady — everything cloud needs for
+   * fire-and-forget side-effects.
    *
    * Contract: the hook is awaited. If it throws, the handler
    * propagates — cloud's hook impl is responsible for swallowing its
    * own internal failures (RAG index write, render-cache placeholder
-   * write) so a side-effect failure can never make a push fail.
+   * write) so a side-effect failure can never make a render fail.
    *
    * Cloud wiring: writes the `GguiRenderCache` placeholder + emits a
-   * RAG embedding for next-push pool match. OSS leaves absent.
+   * RAG embedding for next-render pool match. OSS leaves absent.
    */
   readonly postSuccessHook?: (
-    args: PushPostSuccessArgs,
+    args: RenderPostSuccessArgs,
   ) => Promise<void> | void;
 
   /**
@@ -744,40 +746,38 @@ export interface GguiPushHandlerDeps {
   ) => Promise<import('@ggui-ai/mcp-server-core').UiGenerateResult>;
 
   /**
-   * ID factory for fresh sessions. The handler mints a sessionId
-   * upstream of `sessionStore.create` so the just-minted id flows
+   * ID factory for fresh renders. The handler mints a renderId
+   * upstream of `renderStore.commit` so the just-minted id flows
    * onto the response BEFORE any persistence side-effect runs.
    *
    * OSS default: `randomUUID()` (no prefix). Hosted impls that need
-   * a typed prefix (e.g. `sess_<uuid>`) supply this dep so the prefix
+   * a typed prefix (e.g. `rend_<uuid>`) supply this dep so the prefix
    * convention propagates without forking the factory's id-minting
-   * site. Called ONLY on the create path — `target.sessionId`
+   * site. Called ONLY on the create path — `target.renderId`
    * resolution + reuse skip this entirely.
    */
-  readonly sessionIdFactory?: () => string;
-
-  /**
-   * ID factory for the per-push stack item. Mirrors
-   * {@link sessionIdFactory}; OSS default is `randomUUID()`. Hosted
-   * impls prefix as needed (e.g. `card_<uuid>`).
-   */
-  readonly stackItemIdFactory?: () => string;
+  readonly renderIdFactory?: () => string;
 }
 
 /**
- * Live-subscriber notifier for stack pushes. The mcp-server's
- * `SessionChannelServer.notifyStackPush` implements this contract;
+ * Live-subscriber notifier for render commits. The mcp-server's
+ * `RenderChannelServer.notifyRenderCommit` implements this contract;
  * the handler depends on the narrowed shape so the handlers package
- * doesn't take a peer dep on the full session-channel surface.
+ * doesn't take a peer dep on the full render-channel surface.
  *
- * `matchType` is reserved for future cache/blueprint-match diagnostics
- * the client surfaces (see `GguiSession`'s `push` handler — it folds
+ * `matchType` is reserved for cache/blueprint-match diagnostics the
+ * client surfaces (see `GguiRender`'s commit handler — it folds
  * `matchType` into a synthetic progress event). OSS today omits it.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from the prior
+ * `notifyStackPush(sessionId, stackItem, matchType?)` to
+ * `notifyRenderCommit(renderId, render, matchType?)` — the render IS
+ * the addressable row.
  */
 export interface ChannelNotifier {
-  notifyStackPush(
-    sessionId: string,
-    stackItem: import('@ggui-ai/protocol').SessionStackEntry,
+  notifyRenderCommit(
+    renderId: string,
+    render: Render,
     matchType?: string,
   ): void;
 }
@@ -786,9 +786,9 @@ export interface ChannelNotifier {
  * Input raw-shape.
  *
  * Single shape: `{ handshakeId, decision, props? }`.
- * `handshakeId` is REQUIRED — every push consumes a prior
+ * `handshakeId` is REQUIRED — every render consumes a prior
  * `ggui_handshake` record. The handshake captures the intent +
- * blueprintDraft and produces the suggestion the push acts on.
+ * blueprintDraft and produces the suggestion the render acts on.
  *
  * Decision branching:
  *   - `{kind: 'accept'}` — use the handshake's
@@ -800,9 +800,9 @@ const inputSchema = {
   handshakeId: z
     .string({
       message:
-        'ggui_push: handshakeId is REQUIRED. Call ggui_handshake({sessionId, intent, blueprintDraft}) first to negotiate, then push with {handshakeId, decision: {kind: \'accept\'}} (accept the suggestion) or {handshakeId, decision: {kind: \'override\', blueprintDraft: {...}}} (mint fresh against a new draft). Direct-push without a handshakeId is not supported.',
+        "ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate, then render with {handshakeId, decision: {kind: 'accept'}} (accept the suggestion) or {handshakeId, decision: {kind: 'override', blueprintDraft: {...}}} (mint fresh against a new draft). Direct-render without a handshakeId is not supported.",
     })
-    .min(1, 'ggui_push: handshakeId must be a non-empty string.'),
+    .min(1, 'ggui_render: handshakeId must be a non-empty string.'),
   /**
    * Runtime prop values for THIS render. Validated against the
    * effective contract's `propsSpec`. Validation failures throw
@@ -811,19 +811,19 @@ const inputSchema = {
    */
   props: z.record(z.string(), z.unknown()).optional(),
   /**
-   * Per-push theme override. When set, lands on the committed
-   * stack item and takes priority over `Session.themeId` /
-   * `App.defaultThemeId` at bootstrap-projection time. Use sparingly
-   * — most pushes should inherit the session theme. Set this when a
-   * single render needs a distinct look (urgent banner, hero
-   * marketing card) without retheming the rest of the chat.
+   * Per-render theme override. When set, lands on the committed
+   * render and takes priority over `App.defaultThemeId` at
+   * bootstrap-projection time. Use sparingly — most renders should
+   * inherit the app default. Set this when a single render needs a
+   * distinct look (urgent banner, hero marketing card) without
+   * retheming the rest of the chat.
    */
   themeId: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Per-stack-item theme override. Wins over Session.themeId for THIS render. Omit to inherit the session theme.",
+      'Per-render theme override. Wins over App.defaultThemeId for THIS render. Omit to inherit the app theme.',
     ),
   /**
    * Typed `infra` envelope (added 2026-05-24). Today carries one
@@ -844,13 +844,13 @@ const inputSchema = {
         .min(1)
         .optional()
         .describe(
-          "Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.",
+          'Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.',
         ),
     })
     .strict()
     .optional(),
   /**
-   * Push decision discriminator.
+   * Render decision discriminator.
    *
    *   - `{kind: 'accept'}` — use the handshake's
    *     `suggestion.blueprintMeta` verbatim. Reuses the provisional
@@ -868,13 +868,6 @@ const inputSchema = {
         kind: z.literal('override'),
         blueprintDraft: z
           .object({
-            // Symmetric with handshake's tightening — `dataContractSchema`
-            // enforces the per-entry wrappers (PropEntry / ActionEntry
-            // / StreamChannelEntry / ContextEntry) so a malformed
-            // override draft surfaces a precise zod path
-            // (`...contract.propsSpec.properties.todos.schema:
-            // Required`) instead of the opaque
-            // ContractSchemaMetaError at layer-B meta-validation.
             contract: dataContractSchema,
             variance: z
               .object({
@@ -885,12 +878,6 @@ const inputSchema = {
               })
               .strict()
               .optional(),
-            // Identifier string naming a server-registered generator
-            // (e.g. "anthropic-claude-haiku-4-5"). NOT a place for
-            // component source code — symmetric with the handshake
-            // validation so the override path can't smuggle JSX
-            // through here when the same misuse hits push instead
-            // of handshake.
             generator: z
               .string()
               .max(120)
@@ -910,40 +897,19 @@ const inputSchema = {
  * Output raw-shape — minimum LLM-actionable surface (2026-05-13).
  *
  * Pre-launch, no back-compat. Three fields, all load-bearing:
- *   - `stackItemId` — agent's handle for follow-up tool calls
+ *   - `renderId` — agent's handle for follow-up tool calls
  *     (ggui_consume, ggui_update).
  *   - `nextStep` — terse recovery hint (tool + args). Emitted only
- *     when the contract has actionSpec; pure-display pushes omit.
+ *     when the contract has actionSpec; pure-display renders omit.
  *   - `action` — negotiator's decision (`create | reuse | update |
  *     replace | compose`). May inform the agent's follow-up prompt.
- *
- * Retired this slice (all redundant or unused):
- *   - `sessionId` / `handshakeId` — agent passed these IN; echoes.
- *   - `shortCode` — redundant with the now-deleted `url` tail.
- *   - `url` — post-R5 the `/r/` shortCode route was deleted; every
- *     host either mounts via `_meta.ui.resourceUri` or resolves
- *     `{sessionId, stackItemId}` via `session-resource/item/...`.
- *     Leaving the dead URL on the wire had models hallucinating
- *     links that resolve nowhere.
- *   - `codeReady` — server-side state; LLM doesn't branch on it.
- *   - `decision` — every field was duplicate (action), input echo
- *     (contract), post-hoc prose (reasoning), or internal cache
- *     key (blueprintId).
- *   - `contractHash` — internal cache key for SDKs that consume
- *     handshake records directly.
- *   - `cache` / `codeUrl` / `codeHash` — operational telemetry;
- *     belongs in `_meta`, not LLM-visible structuredContent.
- *   - `contract` (top-level) — duplicate of decision.contract.
- *   - `interaction` — legacy, never derived.
- *   - `nextStep.description` / `nextStep.example` — duplicate of
- *     the canonical tool description + redundant with `args`.
  */
 const outputSchema = {
-  stackItemId: z.string(),
+  renderId: z.string(),
   nextStep: z
     .object({
       tool: z.literal('ggui_consume'),
-      args: z.object({ stackItemId: z.string() }),
+      args: z.object({ renderId: z.string() }),
     })
     .optional(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'compose']),
@@ -953,27 +919,19 @@ const outputSchema = {
  * Internal handler-output type — carries the FULL field set that
  * downstream seams need (resultMeta, postSuccessHook, cloud
  * persistence, test assertions). The LLM-visible serialization is
- * the smaller `outputSchema` subset (`{stackItemId, nextStep?,
- * action}`); zod's `.parse()` strips the extras before they land on
+ * the smaller `outputSchema` subset (`{renderId, nextStep?, action}`);
+ * zod's `.parse()` strips the extras before they land on
  * `structuredContent`.
- *
- * In the future, when no consumer needs the extras anymore, this
- * type can collapse into the lean shape. Today the cloud pod's
- * `resultMeta` reads sessionId / contractHash, tests pin
- * codeReady / handshakeId / shortCode for behavior assertions
- * (NOT contract assertions on the LLM-visible surface), and the
- * postSuccessHook indexes by contractHash.
  */
-type PushOutput = {
+type RenderOutput = {
   // LLM-visible surface (matches outputSchema):
-  stackItemId: string;
+  renderId: string;
   nextStep?: {
     readonly tool: 'ggui_consume';
-    readonly args: { readonly stackItemId: string };
+    readonly args: { readonly renderId: string };
   };
   action: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
   // Internal seams (stripped from JSON-RPC envelope by outputSchema):
-  sessionId: string;
   shortCode: string;
   codeReady: boolean;
   handshakeId?: string;
@@ -983,11 +941,11 @@ type PushOutput = {
 };
 
 /**
- * Cache-hit contract surfaced on `ggui_push` `structuredContent`. See
+ * Cache-hit contract surfaced on `ggui_render` `structuredContent`. See
  * `outputSchema.cache` docstring and `./generation-cache.ts` for the
  * retrieval + record primitives.
  */
-export interface PushCacheMarker {
+export interface RenderCacheMarker {
   readonly hit: boolean;
   readonly similarity?: number;
   readonly cachedBlueprintId?: string;
@@ -1018,17 +976,17 @@ function generateShortCode(): string {
 }
 
 /**
- * Build the OSS `ggui_push` handler wired against the given deps.
+ * Build the OSS `ggui_render` handler wired against the given deps.
  *
  * The handler's tool declaration carries `_meta.ui.resourceUri` +
  * `_meta.ui.visibility: ['model']` per the §2.4.1 entry-point lock.
  */
-export function createGguiPushHandler(
-  deps: GguiPushHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, PushOutput> {
+export function createGguiRenderHandler(
+  deps: GguiRenderHandlerDeps,
+): SharedHandler<typeof inputSchema, typeof outputSchema, RenderOutput> {
   return {
-    name: 'ggui_push',
-    title: 'Push',
+    name: 'ggui_render',
+    title: 'Render',
     audience: ['agent'],
     description:
       // Description is structured as 6 short blocks instead of one
@@ -1036,26 +994,20 @@ export function createGguiPushHandler(
       // prerequisite is what produces correct first calls.
       [
         // 1. Call shape — the literal JSON the agent must emit.
-        'CALL SHAPE: ggui_push({handshakeId, decision, props?}). handshakeId comes from a prior ggui_handshake (REQUIRED). decision is one of {kind:\'accept\'} (use the handshake suggestion verbatim, reuses provisional blueprintId) OR {kind:\'override\', blueprintDraft:{contract, variance?, generator?}} (mint a fresh blueprintId against your NEW draft). props is REQUIRED when the effective contract declares propsSpec; values are validated against propsSpec at push time.',
+        "CALL SHAPE: ggui_render({handshakeId, decision, props?}). handshakeId comes from a prior ggui_handshake (REQUIRED). decision is one of {kind:'accept'} (use the handshake suggestion verbatim, reuses provisional blueprintId) OR {kind:'override', blueprintDraft:{contract, variance?, generator?}} (mint a fresh blueprintId against your NEW draft). props is REQUIRED when the effective contract declares propsSpec; values are validated against propsSpec at render time.",
         // 2. Prerequisite — handshake first, always.
-        'PREREQUISITE: call ggui_handshake({sessionId, intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — push consumes it. Direct push without a handshakeId fails with handshake_not_found.',
+        'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — render consumes it. Direct render without a handshakeId fails with handshake_not_found.',
         // 2b. Next step — driven by the response, not blanket-applied.
-        'NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({stackItemId}) and you must long-poll for the user\'s gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event\'s own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → push.',
+        "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({renderId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
         // 3. Recovery shape — what happens on validation failure.
         "RECOVERABLE FAILURES: cross_reference_unresolved / contract_schema_invalid / schema_mismatch_error / contract_violation (props) / missing_props all preserve the handshake — fix your input and retry on the SAME handshakeId. cross_reference_unresolved fires when an `actionSpec[name].nextStep` or `streamSpec[channel].source.tool` names a tool that's not declared in `agentCapabilities.tools` — every referenced tool MUST appear in agentCapabilities.tools (catalog discoverability; same-MCP and cross-MCP both go here). contract_schema_invalid fires when an inner JSON Schema is malformed (e.g. `propsSpec.properties.X.schema` missing `type`). schema_mismatch_error fires when an actionSpec entry's `schema` is not a subset of the named tool's registered inputSchema, OR a streamSpec channel's `schema` doesn't accept the tool's return shape — adjust the action/channel schema to match the tool, or omit `nextStep` if the agent will compose the call from a different toolset entirely. Only handshake_not_found forces a re-handshake.",
-        // 4. Mutation rule — never re-push.
-        'MUTATION: ggui_update mutates props on a delivered UI. NEVER re-push to mutate — re-pushing destroys scroll position, focus, and uncommitted input.',
+        // 4. Mutation rule — never re-render.
+        'MUTATION: ggui_update mutates props on a delivered UI. NEVER re-render to mutate — re-rendering destroys scroll position, focus, and uncommitted input.',
         // 5. Wire surface — DataContract overview.
         "WIRE SURFACE (DataContract). PLACEMENT RULE for the two inbound specs: actionSpec carries DISCRETE EVENTS that drive the agent's next turn (submit, send, confirm, cancel, choose). contextSpec carries STATE the agent observes (draft text, slider value, current selection, in-progress list items). The single test: does this thing need the agent's next-turn reasoning? Yes → actionSpec. No → contextSpec. There is no third category — no `terminal` flag, no `consumeSpec`, no `interaction` mode. Specs (every entry is a WRAPPER that contains a JSON Schema in `schema:` — the JSON Schema does NOT sit flat at the entry level):  • propsSpec.properties[name].{schema, required?, default?} — initial render values, validated against propsSpec.  • actionSpec[name].{label, schema?, nextStep?, confirm?, icon?} — clicks. `nextStep` is an OPTIONAL string naming the agent's intended next tool call (e.g. nextStep:'todo_toggle'); the named tool MUST also be declared in `agentCapabilities.tools`. Omit nextStep for actions the agent composes freely from any toolset.  • contextSpec[slot].{schema, default?} — observable client state (counters, toggles, slider values). Use slot setter; NOT useAction.  • streamSpec[channel].{schema, mode?, replay?, source?} — live updates from agent to UI (outbound).  • agentCapabilities.tools[name].{description?, inputSchema?, outputSchema?} — declarative catalog of every MCP tool the contract references from actionSpec.nextStep or streamSpec.source.tool.",
         // 6. Hosting hint — what the result looks like.
-        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/session and streams on the live channel; other hosts resolve `{sessionId, stackItemId}` from structuredContent and render via their own session-resource fetch.',
+        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/render and streams on the live channel; other hosts resolve `{renderId}` from structuredContent and render via their own render-resource fetch.',
       ].join(' '),
-    // No `allowedFor` — same toolset on every pod kind. The user-pod
-    // posture (universal MCP for end-users) and the app-pod
-    // (agent-builder) posture both expose push. Sessions are scoped by
-    // the resolved identity (`ctx.appId` populated by the auth
-    // adapter); end-user calls are billed against credits / BYOK in
-    // the adapter+billing layer, not gated at registration.
     inputSchema,
     outputSchema,
     _meta: {
@@ -1063,27 +1015,26 @@ export function createGguiPushHandler(
       // `_meta.ui.visibility` per the MCP Apps spec. Exactly one ggui
       // tool carries these; expanding this set without revisiting the
       // design lock is a boundary violation.
-      ui: GGUI_PUSH_UI_META,
+      ui: GGUI_RENDER_UI_META,
       // Legacy flat key per `@modelcontextprotocol/ext-apps/server`
       // `registerAppTool` normalization: hosts that read the legacy
       // shape need the URI at `_meta["ui/resourceUri"]` too. Always
       // stamped alongside `_meta.ui.resourceUri` for backward compat.
-      'ui/resourceUri': GGUI_PUSH_UI_META.resourceUri,
+      'ui/resourceUri': GGUI_RENDER_UI_META.resourceUri,
     },
-    async handler(input, ctx: HandlerContext): Promise<PushOutput> {
-      // Push is handshake-first. The wire input is just
-      // {handshakeId, contract? | contractHash?, props?}; the
-      // generator input (intent, context, schema, adapters,
-      // forceCreate) flows from the handshake record the agent
-      // already wrote in the prior `ggui_handshake` round-trip.
-      // Schema-required handshakeId carries an educational
-      // `required_error` so a missing-handshakeId zod parse error
-      // includes actionable recovery text inside the JSON-RPC -32602
-      // envelope.
+    async handler(input, ctx: HandlerContext): Promise<RenderOutput> {
+      // Render is handshake-first. The wire input is just
+      // {handshakeId, decision, props?}; the generator input (intent,
+      // context, schema, adapters, forceCreate) flows from the
+      // handshake record the agent already wrote in the prior
+      // `ggui_handshake` round-trip. Schema-required handshakeId
+      // carries an educational `required_error` so a missing-handshakeId
+      // zod parse error includes actionable recovery text inside the
+      // JSON-RPC -32602 envelope.
 
       // Pre-validation gate fires BEFORE input parsing so a cloud
       // deployment's billing checks (insufficient_credit /
-      // unsupported_provider) can reject the push without spending
+      // unsupported_provider) can reject the render without spending
       // validation work. Errors propagate unchanged — the gate owns
       // the JSON-RPC envelope.
       if (deps.preValidationGate) {
@@ -1094,7 +1045,7 @@ export function createGguiPushHandler(
 
       if (!deps.handshakeStore) {
         throw new Error(
-          "ggui_push: requires the handler to be built with a `handshakeStore:` KeyValueStore dep — the same instance `createGguiHandshakeHandler` wrote to.",
+          'ggui_render: requires the handler to be built with a `handshakeStore:` KeyValueStore dep — the same instance `createGguiHandshakeHandler` wrote to.',
         );
       }
       // Peek-first, consume-on-success. Recoverable validation errors
@@ -1121,7 +1072,7 @@ export function createGguiPushHandler(
       //   - `kind: 'accept'`   — use the handshake's stored
       //     effectiveContract verbatim. Reuses the provisional
       //     blueprintId from `suggestion.blueprintMeta` (durable
-      //     post-push).
+      //     post-render).
       //   - `kind: 'override'` — agent supplies a fresh
       //     blueprintDraft; mint a new blueprintId and gen against
       //     that draft. The provisional id from the handshake is
@@ -1143,10 +1094,7 @@ export function createGguiPushHandler(
         acceptanceClassification = 'accept';
       } else {
         // Override path — gen against the agent's NEW draft contract +
-        // its declared variance. Variance arrives as
-        // `Record<string, unknown>` from the zod parse; coerce into
-        // the canonical `BlueprintVariance` shape at the parse
-        // boundary (json-safe by zod construction).
+        // its declared variance.
         effectiveContract = decision.blueprintDraft.contract as DataContract;
         effectiveVariance = normalizeOverrideVariance(
           decision.blueprintDraft.variance,
@@ -1160,7 +1108,7 @@ export function createGguiPushHandler(
         );
       }
 
-      // Telemetry: classification observable on every push so the
+      // Telemetry: classification observable on every render so the
       // cache trace shows accept-vs-override patterns.
       emitCacheTraceEvent({
         id: newCacheTraceId(),
@@ -1180,17 +1128,7 @@ export function createGguiPushHandler(
             : `push-classify: agent overrode handshake suggestion with a fresh draft`,
       });
 
-      // Effective story for the rest of the handler. `variance` is
-      // optional — absent on legacy paths that don't declare it. When
-      // present, cold-gen surfaces its fields (persona, aesthetic,
-      // context, seedPrompt) as a styling directive in the prompt.
-      //
-      // `story.contract` stays wire-shape on persistence (no
-      // enrichment overlay). The resolved descriptor list lives
-      // on a parallel `resolvedGadgetDescriptors` sidecar threaded
-      // into `appGadgets` for the generator + persisted on the
-      // StackItem as `gadgetDescriptors`. Downstream consumers
-      // (boilerplate, CSP, code-gen prompt) read the sidecar.
+      // Effective story for the rest of the handler.
       const story: {
         readonly intent: string;
         readonly contract: DataContract;
@@ -1204,43 +1142,32 @@ export function createGguiPushHandler(
       };
 
       // Resolved gadget catalog, lifted to handler scope. When
-      // `appMetadataStore` is bound, the
-      // registry-membership block below captures the catalog (App
-      // record's `gadgets`, or `STDLIB_GADGETS` on
-      // fallback). On cold-gen, this is threaded into the generator's
-      // `UiGenerateInput.appGadgets` so the code-gen system prompt's
-      // `clientCapabilities — registered catalog` section renders the
-      // SAME catalog the synth + decision LLMs see. Stays `undefined`
-      // when `appMetadataStore` is unset — the system prompt falls
-      // through to its STDLIB default.
+      // `appMetadataStore` is bound, the registry-membership block
+      // below captures the catalog (App record's `gadgets`, or
+      // `STDLIB_GADGETS` on fallback). On cold-gen, this is threaded
+      // into the generator's `UiGenerateInput.appGadgets` so the
+      // code-gen system prompt's `clientCapabilities — registered
+      // catalog` section renders the SAME catalog the synth + decision
+      // LLMs see. Stays `undefined` when `appMetadataStore` is unset —
+      // the system prompt falls through to its STDLIB default.
       let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
 
       // Admission check. Fires BEFORE state changes — a rate-limited
       // caller should get 429 without the server doing any real work.
       if (deps.rateLimiter) {
         const decision = await deps.rateLimiter.check({
-          key: `ggui_push:${ctx.appId}`,
+          key: `ggui_render:${ctx.appId}`,
           cost: 1,
         });
         if (!decision.allowed) {
-          throw new RateLimitedError(`ggui_push:${ctx.appId}`, decision);
+          throw new RateLimitedError(`ggui_render:${ctx.appId}`, decision);
         }
       }
 
-      // Layer-B meta-validation: every inner JSON Schema the agent
-      // authored (propsSpec/actionSpec/streamSpec/contextSpec entry
-      // schemas + agentCapabilities.tools[*].inputSchema /
-      // outputSchema) MUST be a well-formed JSON Schema under Ajv
-      // strict mode. Catches malformed-shape bugs at the author seam
-      // rather than letting them surface as opaque "Validate failed"
-      // errors on the first data flow. Same fail-fast posture as the
-      // cross-ref + name-invariant checks below — author-recoverable.
       // Retired-field gate. The contract schema is `.passthrough()`
       // so unknown fields slip through silently; this hard-rejects
-      // the known-retired names (`libraries`, `dispatch`,
-      // `wiredTools`, `clientTools`, `broadcast`, `capabilities`)
-      // BEFORE the structural validators run so the agent sees a
-      // precise migration message.
+      // the known-retired names BEFORE the structural validators run
+      // so the agent sees a precise migration message.
       assertContractNoRetiredFields(story.contract);
 
       // Duplicate-gadget-hook gate. Two bindings with the same
@@ -1253,50 +1180,25 @@ export function createGguiPushHandler(
 
       // Cross-reference invariants — every `actionSpec[*].nextStep` and
       // `streamSpec[*].source.tool` MUST resolve to a key in the
-      // contract's own `agentCapabilities.tools` catalog. Author-visible
-      // error surface: dangling hints that name tools the author forgot to
-      // declare in the catalog. Throws `CrossReferenceError` with
-      // every dangling reference listed in one pass.
+      // contract's own `agentCapabilities.tools` catalog.
       assertCrossReferences(story.contract);
 
       // Gadget registry gate + enrichment. First: every
       // `(package, export name)` the contract references on
-      // `clientCapabilities.gadgets` MUST resolve in `App.gadgets` by
-      // the `(name, package)` identity — a miss throws a precise
-      // reject: `GadgetNotRegisteredError` /
-      // `GadgetPackageMismatchError`. Second: the referenced package
-      // descriptors are snapshotted onto
-      // `SessionStackEntry.gadgetDescriptors` so the persisted
-      // StackItem carries full teaching text + bundleUrl + styleUrl +
+      // `clientCapabilities.gadgets` MUST resolve in `App.gadgets`.
+      // Second: the referenced package descriptors are snapshotted
+      // onto `ComponentRender.gadgetDescriptors` so the persisted
+      // render carries full teaching text + bundleUrl + styleUrl +
       // connect[]. No-op when `appMetadataStore` is unset.
       if (deps.appMetadataStore) {
         const appRecord = await deps.appMetadataStore.get(ctx.appId);
-        // Symmetric with the handshake handler and list-gadgets:
-        // when the appMetadataStore is bound but the App record either
-        // doesn't exist or doesn't carry gadgets, fall back to
-        // the STDLIB_GADGETS seed. Without this fallback the
-        // gate would skip on every default-configured server (no app
-        // pre-registered, get() returns null) and a hallucinated
-        // hook would commit alongside legitimate STDLIB hooks.
         const appGadgets = appRecord?.gadgets ?? STDLIB_GADGETS;
         assertGadgetsRegistered(story.contract, appGadgets);
-        // Also verify every declared wrapper's `requires`
-        // is satisfied by `App.publicEnv`. Runs alongside (not
-        // inside) the registry-membership check: the registry gate
-        // verifies the hook NAME is registered; this gate verifies
-        // the hook's required env keys are configured. Both fire
-        // before contract enrichment + state mutation.
         assertPublicEnvSatisfied(
           story.contract,
           appGadgets,
           appRecord?.publicEnv,
         );
-        // Instead of enriching the contract in-place, capture the
-        // descriptor subset referenced by the wire's
-        // `(hook, package, version)` tuples. The wire stays the wire;
-        // resolution metadata lands on the StackItem's
-        // `gadgetDescriptors` sidecar (see persistence below) +
-        // threads into the generator via `appGadgets`.
         resolvedAppLibraries = filterDescriptorsToContract(
           story.contract,
           appGadgets,
@@ -1305,51 +1207,20 @@ export function createGguiPushHandler(
 
       // Name-invariant rules: no name collisions across actionSpec /
       // streamSpec / contextSpec keys (boilerplate-identifier collision)
-      // and no `_ggui:` reserved-prefix keys on actionSpec / contextSpec
-      // (streamSpec reserved-prefix rejection is in
-      // `validateContractStructure`). Same posture as the cross-ref
-      // check above — both surface author-recoverable failures before
-      // any state mutation.
+      // and no `_ggui:` reserved-prefix keys on actionSpec / contextSpec.
       assertNameInvariants(story.contract);
 
-      // Protocol-level schema-compat invariant: validates
-      // actionSpec[*].schema ⊆ agentCapabilities.tools[nextStep].inputSchema
-      // and streamSpec[*].schema ⊇ agentCapabilities.tools[source.tool].outputSchema
-      // against the contract's OWN catalog. Author-visible bug:
-      // "your action.schema doesn't fit the inputSchema you declared
-      // on the tool entry." Different scope from the server-level
-      // schema-compat check (`deps.checkStackItemContracts` below),
-      // which compares against the runtime tool registry's zod
-      // schemas.
+      // Protocol-level schema-compat invariant against the contract's
+      // OWN catalog.
       assertSchemaCompat(story.contract);
 
-      // Schema-compat validation against the AUTHORED contract.
-      // Every `actionSpec[name].dispatch.tool`
-      // (when `kind === 'tool'`) must declare a `schema` that's a
-      // subset of the named tool's registered `inputSchema`; every
-      // `streamSpec[channel].tool` must declare a `schema` that's a
-      // superset of the tool's return schema. Mismatches throw
-      // `SchemaCompatError` (`schema_mismatch_error`); the handshake
-      // record is preserved so the agent can retry on the same
-      // handshakeId after fixing the contract. This is the SAME class
-      // of failure as `CrossReferenceError` (author-recoverable
-      // contract error) and follows the same posture — surface to
-      // the agent at push-time, not buried in a silent error stack
-      // item committed during gen.
-      //
-      // Defensive backstops at gen and cache-hit commit phases (see
-      // `runGenerationIntoSession` + `commitCachedStackItem`) cover
-      // contracts that differ from `story.contract` (synth-emit,
-      // matched-blueprint reuse).
-      if (deps.checkStackItemContracts && story.contract) {
-        // Forward `agentCapabilities` alongside the spec fields so the
-        // server-side schema-compat check can recognize cross-MCP
-        // tools (declared by the agent in the contract's own catalog
-        // but not registered in this server's tool registry). Pre-fix
-        // this dropped the catalog, so cross-MCP nextStep always
-        // tripped the `tool-not-found` finding even when the agent
-        // had properly declared the tool.
-        deps.checkStackItemContracts({
+      // Schema-compat validation against the AUTHORED contract via the
+      // server's registered tool registry. Defensive backstops at gen
+      // and cache-hit commit phases (see `runGenerationIntoRender` +
+      // `commitCachedRender`) cover contracts that differ from
+      // `story.contract` (synth-emit, matched-blueprint reuse).
+      if (deps.checkRenderContracts && story.contract) {
+        deps.checkRenderContracts({
           ...(story.contract.actionSpec
             ? { actionSpec: story.contract.actionSpec }
             : {}),
@@ -1363,13 +1234,6 @@ export function createGguiPushHandler(
       }
 
       // Props validation against the agreed contract's propsSpec.
-      // Strict policy: if the contract declares `propsSpec`, every
-      // push MUST pass props that satisfy it (including required
-      // fields). If the contract has NO propsSpec but props are
-      // supplied anyway, that's a contract drift — reject with a
-      // hint to refine the contract. Both throw a recoverable
-      // ContractViolationError so the agent can fix-and-retry on the
-      // same handshakeId without re-handshaking.
       const runtimeProps = parsed.props;
       if (effectiveContract.propsSpec) {
         const propsToValidate = (runtimeProps ?? {}) as Record<string, unknown>;
@@ -1379,7 +1243,7 @@ export function createGguiPushHandler(
         );
         if (!propsValidation.valid) {
           throw new ContractViolationError({
-            tool: 'ggui_push',
+            tool: 'ggui_render',
             violations: propsValidation.violations,
             hint: 'Fix the props to satisfy the agreed propsSpec, or send a refined `contract` to override the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
           });
@@ -1389,7 +1253,7 @@ export function createGguiPushHandler(
         Object.keys(runtimeProps).length > 0
       ) {
         throw new ContractViolationError({
-          tool: 'ggui_push',
+          tool: 'ggui_render',
           violations: [
             {
               field: 'props',
@@ -1404,13 +1268,7 @@ export function createGguiPushHandler(
       }
 
       // Atomically consume the handshake record now that input
-      // validation has succeeded. Up to this point the record was
-      // peeked, not consumed — so the recoverable errors above
-      // (routing-target / schema-compat / props-validation) left it
-      // alive for retry. A null return here means a concurrent push
-      // won the race or the record expired during validation; both
-      // surface as `HandshakeNotFoundError`, which is the right
-      // degraded signal — the agent can re-handshake to recover.
+      // validation has succeeded.
       const consumed = await consumeHandshakeRecord(
         deps.handshakeStore,
         ctx.appId,
@@ -1420,64 +1278,62 @@ export function createGguiPushHandler(
         throw new HandshakeNotFoundError(parsed.handshakeId);
       }
 
-      // Resolve or create the session. SessionStore.create is idempotent
-      // when given a deterministic id (see InMemorySessionStore).
-      const requestedId = handshakeRecord.target.sessionId;
-      let sessionId: string;
-      let action: PushOutput['action'];
+      // Resolve or mint the render id. The handshake negotiator MAY
+      // suggest reusing an existing render via `target.renderId` (the
+      // cache / update path); absent ⇒ mint a fresh id. Reuse only
+      // counts when the existing render belongs to the same appId —
+      // cross-tenant id collisions fall back to mint.
+      const requestedId = handshakeRecord.target.renderId;
+      let renderId: string;
+      let action: RenderOutput['action'];
 
       if (requestedId) {
-        const existing = await deps.sessionStore.get(requestedId);
-        if (existing) {
-          sessionId = existing.id;
+        const existing = await deps.renderStore.get(requestedId);
+        if (existing && existing.appId === ctx.appId) {
+          renderId = existing.id;
           action = 'reuse';
         } else {
-          const created = await deps.sessionStore.create({
-            id: requestedId,
-            appId: ctx.appId,
-          });
-          sessionId = created.id;
+          renderId = requestedId;
           action = 'create';
         }
       } else {
-        const created = await deps.sessionStore.create({
-          id: deps.sessionIdFactory ? deps.sessionIdFactory() : randomUUID(),
-          appId: ctx.appId,
-        });
-        sessionId = created.id;
+        renderId = deps.renderIdFactory
+          ? deps.renderIdFactory()
+          : randomUUID();
         action = 'create';
       }
 
       // Devtools payload trace. No-op when no sink is registered.
+      // `sessionId` is the legacy field name on the payload-trace-sink
+      // shape; post-Phase-B it carries the renderId (every render IS
+      // the addressable row). Renaming the sink field is a sibling
+      // slice — owned by the mcp-server agent who also touches
+      // console-payloads.ts.
       emitPayloadTraceEvent({
-        direction: 'inbound-push',
-        sessionId,
+        direction: 'outbound-update',
+        sessionId: renderId,
         appId: ctx.appId,
-        tool: 'ggui_push',
+        tool: 'ggui_render',
         payload: { handshakeId: parsed.handshakeId, story },
       });
 
-      const stackItemId: string = deps.stackItemIdFactory
-        ? deps.stackItemIdFactory()
-        : randomUUID();
-
-      // Emit push_started so the canvas animator transitions to its
+      // Emit render_started so the canvas animator transitions to its
       // `constructing` state immediately, without waiting for cold-
       // gen to settle. Fire-and-forget.
-      deps.canvasLifecycle?.emit(sessionId, {
-        kind: 'push_started',
-        stackItemId,
+      deps.canvasLifecycle?.emit(renderId, {
+        kind: 'render_started',
+        renderId,
         intent: story.intent,
       });
 
-      // Open the stackItem-keyed pending-events pipe (Model C). This
+      // Open the renderId-keyed pending-events pipe (Model C). This
       // MUST happen before any iframe-side dispatch could fire — the
       // user can click before the agent's first `ggui_consume`, and
       // `ggui_runtime_submit_action` needs an open pipe to append to.
-      // Idempotent: re-mark on the same stackItemId is a no-op.
+      // Idempotent: re-mark on the same renderId is a no-op.
       if (deps.pendingEventConsumer) {
         try {
-          deps.pendingEventConsumer.markCreated?.(stackItemId);
+          deps.pendingEventConsumer.markCreated?.(renderId);
         } catch {
           // Pipe open failures are non-fatal — `ui/message` fallback
           // on the host still routes gestures on the next chat turn.
@@ -1486,23 +1342,19 @@ export function createGguiPushHandler(
 
       const shortCode = generateShortCode();
 
-      // Record shortCode → session binding for same-origin console
-      // viewer lookups. Best-effort: an index write rejection does NOT
-      // fail the push (the agent already holds the URL). Awaited here
-      // to keep the single-process in-memory store consistent — the
-      // cost is sub-millisecond in practice. Swap for a durable index
-      // later if ordering matters across replicas.
+      // Record shortCode → render binding for same-origin console
+      // viewer lookups. The ShortCodeBinding wire shape still names
+      // its fields `sessionId` + `stackItemId`; post-Phase-B every
+      // render IS the addressable row so the renderId fills BOTH
+      // positions. Renaming the binding surface is a separate slice
+      // (see ShortCodeIndex docstring + the field-name note on the
+      // `shortCodeIndex` dep above).
       if (deps.shortCodeIndex) {
         try {
           await deps.shortCodeIndex.put(shortCode, {
-            sessionId,
+            sessionId: renderId,
             appId: ctx.appId,
-            // Pass the just-minted stack item id so hosted impls
-            // recording the rich row don't need a follow-up session
-            // read (the placeholder stack item is written after the
-            // put call below, so `sessionStore.get` wouldn't observe
-            // it yet). OSS in-memory ignores; cloud DDB consumes.
-            stackItemId,
+            stackItemId: renderId,
           });
         } catch {
           // Silent: the index is a convenience layer. If it rejects
@@ -1517,146 +1369,152 @@ export function createGguiPushHandler(
       //
       // Preview runs CONCURRENTLY with generation below: it is
       // kicked off here (fire-and-forget), then the generation
-      // `await` blocks the push RPC. Viewer sees preview frames
+      // `await` blocks the render RPC. Viewer sees preview frames
       // stream over `_ggui:preview` while the generator call is in
       // flight; on success/failure we tear down preview via
-      // `finalizeProvisionalPreview` and the authoritative stack
-      // item is the final state.
+      // `finalizeProvisionalPreview` and the authoritative render is
+      // the final state.
+      // Provisional-preview's surface still uses `sessionId` +
+      // `stackItemId` as field names; post-Phase-B both positions
+      // carry the same `renderId` (every render IS the addressable
+      // row). Renaming the provisional-preview surface is sibling-
+      // owned (the file's pre-existing `HandleStreamEnvelope`
+      // mismatches at 440/576 show that rename is already in flight
+      // there).
       const previewGate = evaluateProvisionalPreviewGate(
         deps.provisionalPreview,
         {
           story,
           isMcpAppsPush: false,
         },
-        { appId: ctx.appId, sessionId },
+        { appId: ctx.appId, sessionId: renderId },
       );
       if (previewGate.kind === 'skip') {
         deps.provisionalPreview?.onOutcome?.({
           status: 'skipped',
           reason: previewGate.reason,
-          sessionId,
+          sessionId: renderId,
           appId: ctx.appId,
         });
       } else if (deps.provisionalPreview) {
         const handle = kickoffProvisionalPreview(deps.provisionalPreview, {
-          sessionId,
-          stackItemId,
+          sessionId: renderId,
+          stackItemId: renderId,
           appId: ctx.appId,
           story,
         });
         // Register into the optional handoff registry so a later
-        // handler (generation success below, apply-stack-item-patch
-        // setting componentCode, session teardown, shutdown) can
-        // cancel by `stackItemId`. Absent registry → the preamble still
+        // handler (generation success below, apply-render-patch
+        // setting componentCode, render teardown, shutdown) can
+        // cancel by `renderId`. Absent registry → the preamble still
         // runs; it just has no external cancellation site.
-        deps.provisionalPreview.registry?.register(stackItemId, handle);
+        deps.provisionalPreview.registry?.register(renderId, handle);
 
-        // Placeholder stack-item — drives the provisional preview
-        // path. The iframe-runtime mounts `mountProvisional`
-        // PER-STACK-ITEM (see
-        // `packages/iframe-runtime/src/stack-item-renderer.ts::detectKind`
-        // — empty `componentCode` routes to the provisional branch).
-        // Without an item on the stack, `_ggui:preview` frames the
+        // Placeholder render — drives the provisional preview path.
+        // The iframe-runtime mounts `mountProvisional` per render
+        // (empty `componentCode` routes to the provisional branch).
+        // Without an item committed, `_ggui:preview` frames the
         // emitter just kicked off would paint into the void.
         //
         // Lifecycle: this placeholder lives until generation settles.
-        // `appendStackItem` is upsert-by-id (see SessionStore JSDoc),
-        // so when the cold-generation success / cache-hit / generation-
-        // failed paths below call `appendStackItem(sessionId, item)`
-        // with the SAME `stackItemId`, the placeholder is replaced
-        // in-place — no double-append, no stale entry. When generation
-        // is NOT wired (no provider key), the placeholder stays for
-        // the session's lifetime; that's the honest "we have no code
-        // yet but the preview surface is mounted" state.
+        // `renderStore.commit` upserts by `render.id`, so when the
+        // cold-generation success / cache-hit / generation-failed
+        // paths below call `commit` with the SAME `renderId`, the
+        // placeholder is replaced in-place — no double-commit, no
+        // stale entry. When generation is NOT wired (no provider
+        // key), the placeholder stays for the render's lifetime;
+        // that's the honest "we have no code yet but the preview
+        // surface is mounted" state.
         //
         // We bypass the schema-compat hook here because the
         // placeholder declares no contract; the hook fires when
-        // generation later commits the real item. Live-subscriber
-        // notify DOES fire so a viewer that connects mid-push sees
+        // generation later commits the real render. Live-subscriber
+        // notify DOES fire so a viewer that connects mid-render sees
         // the placeholder show up — without the notify the renderer
-        // wouldn't know to mount a per-item surface for it.
-        const placeholder: StackItem = {
-          id: stackItemId,
+        // wouldn't know to mount a surface for it.
+        const nowEpochMs = Date.now();
+        const placeholder: ComponentRender = {
+          id: renderId,
+          appId: ctx.appId,
           type: 'component',
           componentCode: '',
           prompt: story.intent,
           contentType: 'application/javascript+react',
-          createdAt: new Date().toISOString(),
+          createdAt: nowEpochMs,
+          lastActivityAt: nowEpochMs,
+          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          eventSequence: 0,
         };
         try {
-          await deps.sessionStore.appendStackItem(sessionId, placeholder);
+          await deps.renderStore.commit({
+            render: placeholder,
+            appId: ctx.appId,
+          });
         } catch {
-          // Defensive — a placeholder-append failure is not fatal to
-          // the push. The session + shortCode are already minted; the
-          // worst case is the live renderer paints nothing for this
-          // session, which is the same "preview never wired" degraded
-          // state callers without `provisionalPreview` already see.
+          // Defensive — a placeholder-commit failure is not fatal to
+          // the render. The renderId + shortCode are already minted;
+          // the worst case is the live renderer paints nothing for
+          // this render, which is the same "preview never wired"
+          // degraded state callers without `provisionalPreview`
+          // already see.
         }
-        safelyNotifyStackPush(deps.channelNotifier, sessionId, placeholder);
+        safelyNotifyRenderCommit(deps.channelNotifier, renderId, placeholder);
       }
 
       // Generation + cache gate. Absent generation deps = placeholder
-      // mode: story pushes return `codeReady: false`. The placeholder
-      // stack-item appended just above (when provisionalPreview was
-      // wired) keeps the live-renderer's per-item provisional surface
-      // mounted; generation-off doesn't paint anything onto it but
-      // also doesn't leave the renderer with no anchor. When
-      // generation IS wired:
+      // mode: story renders return `codeReady: false`. The placeholder
+      // render committed just above (when provisionalPreview was wired)
+      // keeps the live-renderer's provisional surface mounted;
+      // generation-off doesn't paint anything onto it but also doesn't
+      // leave the renderer with no anchor. When generation IS wired:
       //
       //   - If `generation.cache` is also wired, attempt a retrieval
-      //     first. A hit synthesizes a StackItem from the cached
+      //     first. A hit synthesizes a Render from the cached
       //     componentCode (skip LLM entirely) and surfaces
-      //     `cache.hit:true` on the push output.
+      //     `cache.hit:true` on the render output.
       //   - On a miss (or cache absent), run the generator as before.
       //     On success, when cache is wired, record the produced
       //     componentCode into the scope so the next same-intent
-      //     push hits.
-      //
-      // Both branches converge on emitting the `cache` marker when
-      // cache deps are present, giving the agent a visible signal of
-      // cache behavior per the contract lock.
+      //     render hits.
       let generatedCodeReady = false;
-      // Note: cacheMarker was used for the structuredContent.cache
-      // field; that field was retired in the 2026-05-13 lean-schema
-      // slice. The variable is preserved (assigned but unread) as
-      // a seam for future telemetry surfaces; eslint-prefix it _
-      // so we don't fail the no-unused-vars check.
-      let _cacheMarker: PushCacheMarker | undefined;
+      // Telemetry seam for future cache-hit surfacing.
+      let _cacheMarker: RenderCacheMarker | undefined;
 
       // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
-      // the MCP Apps protocol probe diagnostic system card — a 4-button
-      // tester for `ui/message`, `ui/update-model-context`,
-      // `ui/open-link`, `ui/request-display-mode`. Bypasses generation
-      // entirely (no LLM credentials needed) so the probe is
-      // exercisable on a fresh server. The card lives in
-      // `packages/iframe-runtime/src/system-cards/ProtocolProbeCard.tsx`
-      // and is mapped via `SYSTEM_CARD_REGISTRY['mcp-apps-probe']`.
+      // the MCP Apps protocol probe diagnostic system card.
       const PROBE_INTENT_PREFIX = '[ggui:probe]';
       if (story.intent.startsWith(PROBE_INTENT_PREFIX)) {
-        const probeItem: SessionStackEntry = {
-          id: stackItemId,
+        const nowEpochMs = Date.now();
+        const probeRender: SystemRender = {
+          id: renderId,
+          appId: ctx.appId,
           type: 'system',
           kind: 'mcp-apps-probe',
-          createdAt: new Date().toISOString(),
+          createdAt: nowEpochMs,
+          lastActivityAt: nowEpochMs,
+          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          eventSequence: 0,
           props: { intent: story.intent },
         };
         try {
-          await deps.sessionStore.appendStackItem(sessionId, probeItem);
-          safelyNotifyStackPush(deps.channelNotifier, sessionId, probeItem);
+          await deps.renderStore.commit({
+            render: probeRender,
+            appId: ctx.appId,
+          });
+          safelyNotifyRenderCommit(deps.channelNotifier, renderId, probeRender);
           generatedCodeReady = true;
         } catch {
-          // Append failure leaves codeReady=false; downstream synth
+          // Commit failure leaves codeReady=false; downstream synth
           // emits an empty bootstrap which the runtime renders as the
           // generic system-card fallback.
         }
-        await safelyFinalizePreview(deps.provisionalPreview, stackItemId, 'probe');
+        await safelyFinalizePreview(deps.provisionalPreview, renderId, 'probe');
       } else if (deps.generation) {
         const intent = story.intent;
         const forceCreate = storedInput.forceCreate === true;
 
-        // Blueprint matcher when cache is wired. The exact-key
-        // strategy (canonical-key equality) and the semantic strategy
-        // (RAG + LLM judge) short-circuit generation entirely; a
+        // Blueprint matcher when cache is wired. Exact-key and
+        // semantic strategies short-circuit generation entirely; a
         // `no-match*` outcome falls through to cold-gen and registers
         // the produced blueprint. Bypass the matcher entirely when
         // `forceCreate` is set — agent has explicitly opted out after
@@ -1696,28 +1554,20 @@ export function createGguiPushHandler(
               contractKey: matchResult.blueprint.contractKey,
               componentCode: matchResult.blueprint.componentCode,
               cosine: matchResult.cosine,
-              // Carry the matched blueprint's full DataContract so the
-              // cache-hit commit path projects the four-spec wire
-              // surface (contextSpec / actionSpec / streamSpec /
-              // props) onto the new StackItem. Without this, runtime
-              // crashes at `useGguiContext("...")` because the iframe
-              // never receives bootstrap.contextSlots — the cached
-              // componentCode references context slots that nobody
-              // told the runtime to register.
               contract: matchResult.blueprint.contract,
             };
           }
         }
 
         if (blueprintHit) {
-          generatedCodeReady = await commitCachedStackItem(
-            deps.sessionStore,
+          generatedCodeReady = await commitCachedRender(
+            deps.renderStore,
             deps.provisionalPreview,
             deps.channelNotifier,
-            deps.checkStackItemContracts,
+            deps.checkRenderContracts,
             {
-              sessionId,
-              stackItemId,
+              renderId,
+              appId: ctx.appId,
               story,
               cacheHit: {
                 cachedBlueprintId: blueprintHit.id,
@@ -1726,13 +1576,11 @@ export function createGguiPushHandler(
                 cachedIntent: intent,
                 cachedAt: new Date().toISOString(),
                 // Project the matched blueprint's contract onto the
-                // cache hit so commitCachedStackItem lands the four
-                // wire-surface specs on the new StackItem. Symmetric
-                // with runGenerationIntoSession's StackItem build:
-                // both paths emit the same shape, and bootstrap-meta
-                // derivation reads from one place. DataContract.props
-                // maps to StackItem.propsSpec by convention; the
-                // other three names align directly.
+                // cache hit so commitCachedRender lands the four wire-
+                // surface specs on the new render. Symmetric with
+                // runGenerationIntoRender's render build: both paths
+                // emit the same shape, and bootstrap-meta derivation
+                // reads from one place.
                 ...(blueprintHit.contract.actionSpec
                   ? { actionSpec: blueprintHit.contract.actionSpec }
                   : {}),
@@ -1745,11 +1593,10 @@ export function createGguiPushHandler(
                 ...(blueprintHit.contract.contextSpec
                   ? { contextSpec: blueprintHit.contract.contextSpec }
                   : {}),
-                // Project clientCapabilities through the
-                // blueprint-hit path so the cached commit emits
-                // Permissions-Policy directives whenever the matched
-                // blueprint's contract declared them. Symmetric with
-                // cold-gen + cache-hit.
+                // Project clientCapabilities through the blueprint-hit
+                // path so the cached commit emits Permissions-Policy
+                // directives whenever the matched blueprint's contract
+                // declared them.
                 ...(blueprintHit.contract.clientCapabilities
                   ? {
                       clientCapabilities:
@@ -1775,27 +1622,26 @@ export function createGguiPushHandler(
         } else {
           // The `.d.ts` fetch is deferred to HERE — the cold-gen
           // branch — not done eagerly after the registry gate. On a
-          // blueprint cache hit the fetched types
-          // would be discarded (cache-hit commits don't typecheck or
-          // build a prompt), and a network transient in the fetch
-          // would wrongly fail a push that had a valid cache hit. Only
-          // cold generation consumes `gadgetTypes`, so only cold
-          // generation pays the fetch.
+          // blueprint cache hit the fetched types would be discarded
+          // (cache-hit commits don't typecheck or build a prompt),
+          // and a network transient in the fetch would wrongly fail a
+          // render that had a valid cache hit. Only cold generation
+          // consumes `gadgetTypes`, so only cold generation pays the
+          // fetch.
           const resolvedGadgetTypes =
             resolvedAppLibraries !== undefined
               ? await fetchGadgetTypes(resolvedAppLibraries)
               : undefined;
-          const outcome = await runGenerationIntoSession(
+          const outcome = await runGenerationIntoRender(
             deps.generation,
-            deps.sessionStore,
+            deps.renderStore,
             deps.provisionalPreview,
             deps.channelNotifier,
-            deps.checkStackItemContracts,
+            deps.checkRenderContracts,
             deps.generator,
             {
               ctx,
-              sessionId,
-              stackItemId,
+              renderId,
               story,
               ...(runtimeProps !== undefined
                 ? { runtimeProps: runtimeProps as JsonObject }
@@ -1846,37 +1692,34 @@ export function createGguiPushHandler(
       }
 
       // Content-addressable code delivery. When `codeStore`
-      // + `codeBaseUrl` are wired AND the just-appended stack item has
+      // + `codeBaseUrl` are wired AND the just-committed render has
       // non-empty `componentCode`, write (hash, code) to the store and
       // surface `codeUrl` + `codeHash` on the response.
       //
-      // The lookup re-reads the session because the stack item was
-      // appended several branches above (cache-hit, fresh generation,
-      // MCP Apps inbound) — re-reading is simpler than threading a
-      // reference through every branch and matches resultMeta's own
-      // pattern. Failures are silent: on a put error or a missing
-      // top-of-stack we fall through with no codeUrl. Without codeUrl,
-      // the iframe falls back to live-mode (wsUrl+token) — the stack
-      // item is delivered via the live-channel WS subscribe.
+      // The lookup re-reads the render because the commit happened
+      // several branches above (cache-hit, fresh generation, MCP Apps
+      // inbound) — re-reading is simpler than threading a reference
+      // through every branch and matches resultMeta's own pattern.
+      // Failures are silent: on a put error or a missing render we
+      // fall through with no codeUrl. Without codeUrl, the iframe
+      // falls back to live-mode (wsUrl+token) — the render is
+      // delivered via the live-channel WS subscribe.
       let codeUrl: string | undefined;
       let codeHash: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
         try {
-          const session = await deps.sessionStore.get(sessionId);
-          const top = session?.stack[session.currentStackIndex];
+          const stored = await deps.renderStore.get(renderId);
+          const rendered = stored?.render;
           if (
-            top
-            && top.type !== 'mcpApps'
-            && top.type !== 'system'
-            && typeof top.componentCode === 'string'
-            && top.componentCode.length > 0
+            rendered
+            && rendered.type !== 'mcpApps'
+            && rendered.type !== 'system'
+            && typeof rendered.componentCode === 'string'
+            && rendered.componentCode.length > 0
           ) {
-            const hash = deps.codeStore.hashOf(top.componentCode);
-            await deps.codeStore.put(hash, top.componentCode);
+            const hash = deps.codeStore.hashOf(rendered.componentCode);
+            await deps.codeStore.put(hash, rendered.componentCode);
             codeHash = hash;
-            // Trim trailing slash so the join is `<base>/code/<hash>.js`
-            // regardless of whether the caller passed `https://x/` or
-            // `https://x` for codeBaseUrl.
             const base = deps.codeBaseUrl.replace(/\/$/, '');
             codeUrl = `${base}/code/${hash}.js`;
           }
@@ -1885,40 +1728,40 @@ export function createGguiPushHandler(
         }
       }
 
-      // Per-push theme overlay. The commit paths above
+      // Per-render theme overlay. The commit paths above
       // (cold-gen / cache-hit / probe / placeholder) construct the
-      // stack item from their own templates; none of them know about
-      // the agent's `parsed.themeId` input. Rather than thread
-      // themeId through every constructor, we read the just-committed
-      // top item once + re-upsert with `themeId` set when the agent
-      // requested a per-push override. `appendStackItem` is
-      // upsert-by-id so this collapses to a single row update; the
-      // bootstrap-projection block in `resultMeta` then reads the
-      // overlaid value via the same lookup path that drives
-      // `deriveStackItemMeta`.
+      // render from their own templates; none of them know about the
+      // agent's `parsed.themeId` input. Rather than thread themeId
+      // through every constructor, we read the just-committed render
+      // once + re-commit with `themeId` set when the agent requested a
+      // per-render override. `renderStore.commit` is upsert-by-id so
+      // this collapses to a single row update; the bootstrap-projection
+      // block in `resultMeta` then reads the overlaid value via the
+      // same lookup path that drives `deriveRenderMeta`.
       //
-      // Failure here downgrades to "no per-push theme override" (the
-      // session.themeId / app default / process default still apply
-      // via the layered resolution chain). Better than failing the
-      // whole push for a cosmetic overlay. Catch is non-empty —
-      // surfacing via console.warn rather than `deps.logger` because
-      // this handler doesn't have one bound today; the
-      // `ggui_push.theme_overlay_failed` code is greppable so
-      // operators can correlate without a stable observability seam.
+      // Failure here downgrades to "no per-render theme override" (the
+      // app default / process default still apply via the layered
+      // resolution chain). Better than failing the whole render for a
+      // cosmetic overlay.
       if (parsed.themeId !== undefined) {
         try {
-          const session = await deps.sessionStore.get(sessionId);
-          const top = session?.stack[session.currentStackIndex];
-          if (top && top.id === stackItemId && top.type !== 'mcpApps' && top.type !== 'system') {
-            await deps.sessionStore.appendStackItem(sessionId, {
-              ...top,
-              themeId: parsed.themeId,
+          const stored = await deps.renderStore.get(renderId);
+          const top = stored?.render;
+          if (
+            top &&
+            top.type !== 'mcpApps' &&
+            top.type !== 'system'
+          ) {
+            const overlaid: ComponentRender = { ...top, themeId: parsed.themeId };
+            await deps.renderStore.commit({
+              render: overlaid,
+              appId: ctx.appId,
             });
           }
         } catch (err) {
-          // eslint-disable-next-line no-console -- one-shot warn, no logger dep on push handler today
+          // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
           console.warn(
-            '[ggui_push.theme_overlay_failed]',
+            '[ggui_render.theme_overlay_failed]',
             err instanceof Error ? err.message : String(err),
           );
         }
@@ -1934,31 +1777,28 @@ export function createGguiPushHandler(
 
       // Conditional `nextStep` — emit a consume-recovery hint ONLY when
       // the resolved contract has a non-empty `actionSpec`. Pure-display
-      // pushes (props only) get no `nextStep` because there's nothing
-      // for the agent to consume. Closes the recovery-hint chain
-      // started by `new_session.nextStep` (→ handshake) and
-      // `handshake.nextStep` (→ push).
+      // renders (props only) get no `nextStep` because there's nothing
+      // for the agent to consume.
       const hasActions =
         effectiveContract.actionSpec !== undefined &&
         Object.keys(effectiveContract.actionSpec).length > 0;
       const nextStep = hasActions
         ? {
             tool: 'ggui_consume' as const,
-            args: { stackItemId },
+            args: { renderId },
           }
         : undefined;
 
-      // Push response architecture (2026-05-13):
-      //   - `outputSchema` defines the LLM-visible subset (4 fields).
+      // Render response architecture (2026-05-13):
+      //   - `outputSchema` defines the LLM-visible subset (3 fields).
       //   - This `result` carries the FULL set — extras are stripped
       //     by zod's `.parse()` (z.object default behavior) before
       //     the JSON-RPC `structuredContent` is built.
       //   - Internal seams (resultMeta, postSuccessHook, tests) read
       //     from this rich in-memory object.
-      const result: PushOutput = {
-        stackItemId,
+      const result: RenderOutput = {
+        renderId,
         action,
-        sessionId,
         shortCode,
         codeReady: generatedCodeReady,
         handshakeId: handshakeRecord.handshakeId,
@@ -1967,16 +1807,11 @@ export function createGguiPushHandler(
         ...(nextStep ? { nextStep } : {}),
       };
 
-      // Post-success hook for fire-and-forget side-effects (RAG
-      // indexing, render-cache placeholder write).
-      // Awaited — the hook impl is responsible for swallowing internal
-      // failures so a side-effect rejection can never fail a push that
-      // already committed its stack item.
+      // Post-success hook for fire-and-forget side-effects.
       if (deps.postSuccessHook) {
         await deps.postSuccessHook({
           ctx,
-          sessionId,
-          stackItemId,
+          renderId,
           contract: effectiveContract,
           contractHash: resolvedContractHash,
           intent: story.intent,
@@ -1990,80 +1825,59 @@ export function createGguiPushHandler(
     resultMeta: async (output, _input, ctx) => {
       // Resource URI is the rehydrate handle — chat hosts persist this
       // and re-fetch on history reload. Include the blueprint's
-      // canonical key alongside the sessionId so the resource handler
-      // can run session + blueprint lookups in parallel (no data
+      // canonical key alongside the renderId so the resource handler
+      // can run render + blueprint lookups in parallel (no data
       // dependency between them) AND fall back to a registry-only
-      // render when the session has been evicted but the blueprint is
-      // still cached. Legacy single-segment URIs
-      // (`ui://ggui/session/<sessionId>`) emitted before this slice
-      // continue to work via the fallback handler registration in
-      // `registerGguiSessionResourceTemplate`.
+      // render when the live render has been evicted but the blueprint
+      // is still cached.
       const blueprintSegment = output.contractHash
         ? `/${output.contractHash}`
         : '';
-      const perCallResourceUri = `${GGUI_PUSH_UI_META.resourceUri}/${output.sessionId}${blueprintSegment}`;
+      const perCallResourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${output.renderId}${blueprintSegment}`;
       // `_meta.ui.displayMode` is the spec-native presentation hint
       // (MCP-Apps SEP-1865). When the app declares a default, stamp it
-      // on every push so hosts can arrange this iframe accordingly
-      // (`'fullscreen'` → primary slot, `'inline'` → chat-log stack,
-      // `'pip'` → overlay). Absent ⇒ host falls back to its own default.
-      // Resolved alongside the publicEnv projection from
-      // `appMetadataStore.get()` below — one lookup feeds both.
+      // on every render so hosts can arrange this iframe accordingly.
       let perCallDisplayMode:
         | import('@ggui-ai/protocol').McpUiDisplayMode
         | undefined;
 
-      // Look up the just-appended stack item to embed renderable wire
-      // shape on the `ai.ggui/stack-item` slice meta. Hosts whose iframe
+      // Look up the just-committed render to embed renderable wire
+      // shape on the `ai.ggui/render` slice meta. Hosts whose iframe
       // sandbox CSP blocks `connect-src` to our origin (claude.ai's
-      // `claudemcpcontent.com` wrapper) cannot fetch the per-session
+      // `claudemcpcontent.com` wrapper) cannot fetch the per-render
       // resource — but they DO forward the full `_meta` over postMessage,
-      // so the inline-mount path needs the renderable in the meta itself.
+      // so the inline-mount path needs the renderable in the meta
+      // itself.
       //
-      // Stack-item-derived fields (componentCode | kind, propsJson,
+      // Render-derived fields (componentCode | kind, propsJson,
       // actionNextSteps, contextSlots) come from the
-      // {@link deriveStackItemMeta} projection — same single
-      // source of truth the public-render `/r/<shortCode>` route
-      // composes its inline shell from. Encoding `componentCode` to
-      // base64 happens here at the meta-emission boundary; the View
-      // itself stays raw so transports own their wire encoding.
-      let view: StackItemMetaView = {};
+      // {@link deriveRenderMeta} projection — same single source of
+      // truth the public-render `/r/<shortCode>` route composes its
+      // inline shell from.
+      let view: RenderMetaView = {};
       // Public env projection requires App.publicEnv, which lives on
-      // the App record (not the stack item). Re-read here in
-      // resultMeta rather than threading via closure: the
-      // appMetadataStore lookup is O(1) (an in-memory map or a
-      // single-key datastore read) and the symmetric re-read pattern
-      // is simpler than refactoring
-      // the handler/resultMeta state contract. Stays undefined when
-      // appMetadataStore is unbound (registry seam not wired).
+      // the App record (not the render). Re-read here in resultMeta
+      // rather than threading via closure.
       let bootstrapPublicEnv:
         | Readonly<Record<string, string>>
         | undefined;
-      // Per-render theme resolution sources, populated from the same
-      // session+stackItem lookup that drives the projection. Chain
-      // ordering happens below alongside `liveTheme` / `deps.themeId`.
-      let stackItemThemeId: string | undefined;
-      let sessionThemeId: string | undefined;
-      // `lastSequence` — monotonic SessionEvent ledger cursor stamped on
-      // every emit (R6). Polling clients use it to initialize the /events
+      // Per-render theme override sourced from the just-committed
+      // render itself.
+      let renderThemeId: string | undefined;
+      // `lastSequence` — monotonic event-ledger cursor stamped on every
+      // emit (R6). Polling clients use it to initialize the /events
       // cursor (R7) aligned with the WS stream.
       let lastSequence: number | undefined;
       try {
-        const session = await deps.sessionStore?.get(output.sessionId);
-        const top = session?.stack[session.currentStackIndex];
-        if (session) {
-          sessionThemeId = session.themeId;
-          lastSequence = session.eventSequence;
+        const stored = await deps.renderStore.get(output.renderId);
+        const top = stored?.render;
+        if (stored) {
+          lastSequence = stored.eventSequence;
         }
         if (top) {
-          view = deriveStackItemMeta(top);
+          view = deriveRenderMeta(top);
           // Project the App's publicEnv down to the union of declared
-          // wrappers' `requires`. The push gate has already verified
-          // every required key is satisfied, so this projection's
-          // only filter is dropping App.publicEnv keys no wrapper
-          // asked for (minimum-disclosure). Also reads
-          // `app.defaultDisplayMode` for the per-push `ui.displayMode`
-          // hint stamped below — one lookup covers both.
+          // wrappers' `requires`.
           if (deps.appMetadataStore) {
             const appRecord = await deps.appMetadataStore.get(ctx.appId);
             bootstrapPublicEnv = derivePublicEnvProjection(
@@ -2074,12 +1888,12 @@ export function createGguiPushHandler(
               perCallDisplayMode = appRecord.defaultDisplayMode;
             }
           }
-          // Per-stack-item theme override — only on the `component`
-          // variant. McpAppsStackItem / SystemStackItem don't carry
+          // Per-render theme override — only on the `component`
+          // variant. McpAppsRender / SystemRender don't carry
           // user-facing themes (they render via host-supplied or
           // built-in renderers).
           if (top.type !== 'mcpApps' && top.type !== 'system') {
-            stackItemThemeId = top.themeId;
+            renderThemeId = top.themeId;
           }
         }
       } catch {
@@ -2093,16 +1907,15 @@ export function createGguiPushHandler(
 
       // `mintWsToken` owns wsUrl + wsToken + expiresAt when wired. The
       // minter's own return shape names the credential `token` (legacy);
-      // we rename to `wsToken` here so the session slice matches the
+      // we rename to `wsToken` here so the render slice matches the
       // wire field name. When absent we still emit a minimal
-      // `ai.ggui/session` slice carrying sessionId + appId + runtimeUrl
-      // + the renderable variant on the `ai.ggui/stack-item` slice so
-      // postMessage-mount paths work without a WS-token minter.
+      // `ai.ggui/render` slice carrying renderId + appId + runtimeUrl
+      // so postMessage-mount paths work without a WS-token minter.
       const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.sessionId, ctx.appId)
+        ? deps.mintWsToken(output.renderId, ctx.appId)
         : undefined;
-      const partial: Partial<
-        Pick<McpAppAiGguiSessionMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+      const authFields: Partial<
+        Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
       > = mintedTrio
         ? {
             wsUrl: mintedTrio.wsUrl,
@@ -2111,76 +1924,50 @@ export function createGguiPushHandler(
           }
         : {};
       // Surface the content-addressable code URL + hash on the
-      // `ai.ggui/stack-item` slice. The output object already carries
+      // `ai.ggui/render` slice. The output object already carries
       // these (the handler body wrote to codeStore + composed the URL
       // before returning), so we just forward — no second lookup, no
-      // second store write. `codeUrl` is the sole static-component
-      // delivery channel post-2026-05-13; the inline base64
-      // `componentCode` channel retired in T3-1.
+      // second store write.
       const outputWithCode = output as typeof output & {
         codeUrl?: string;
         codeHash?: string;
       };
-      // Layered theme resolution at slice-meta-projection time. Order
-      // is operator-debug-wins: `liveTheme` exists ONLY when an
+      // Layered theme resolution at slice-meta-projection time.
+      // Order is operator-debug-wins: `liveTheme` exists ONLY when an
       // operator just picked a theme via the dev console picker, so
-      // it's their "show me what THIS looks like" intent — that has
-      // to beat agent-stored state, otherwise the picker is silently
-      // outranked the moment any session has a theme and the picker
-      // stops doing anything visible.
-      //   1. liveTheme?.id    — process-shared live cell from the
-      //      console-theme POST. Survives across new_session calls in
-      //      the same process; resets on restart unless persisted to
-      //      ggui.json. Top priority because it's a runtime debug
-      //      surface; ThemeMode resolution below already does this.
-      //   2. stackItemThemeId — per-push override the agent set on
-      //      `ggui_push.themeId` (rare; mostly omitted).
-      //   3. sessionThemeId   — chat-scoped default the agent set on
-      //      `ggui_new_session.themeId` (or inherited from
-      //      App.defaultThemeId via the new_session handler's resolution).
-      //   4. deps.themeId     — static boot-time fallback for embedders
-      //      that don't wire a themeProvider.
-      // First non-undefined wins.
+      // it's their "show me what THIS looks like" intent — that has to
+      // beat agent-stored state.
+      //
+      //   1. liveTheme?.id   — process-shared live cell from the
+      //      console-theme POST.
+      //   2. renderThemeId   — per-render override the agent set on
+      //      `ggui_render.themeId` (rare; mostly omitted).
+      //   3. deps.themeId    — static boot-time fallback.
       const liveTheme = deps.themeProvider?.();
       const resolvedThemeId =
-        liveTheme?.id
-        ?? stackItemThemeId
-        ?? sessionThemeId
-        ?? deps.themeId;
+        liveTheme?.id ?? renderThemeId ?? deps.themeId;
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
       // Surface the names of same-server app-visible tools so the
       // iframe-runtime can choose Pattern α (direct tools/call) over
-      // Pattern β (3-message bridge) per wired action. Spread only
-      // when non-empty so bootstrap envelopes without a provider
-      // wired stay byte-identical.
+      // Pattern β (3-message bridge) per wired action.
       const appCallableTools = deps.appCallableTools?.() ?? [];
       // Mirror `serverCapabilities.streamWebSocketLocalTools` onto
-      // the bootstrap. Spread only when the resolver returns
-      // SOMETHING — undefined means "no WS-subscribe support", which
-      // is distinct from "supported but empty allowlist" (`[]`). The
-      // latter still surfaces so the iframe-runtime can branch
-      // "transport-aware client knows server is configured" vs
-      // "fall through to iframe poll for everything".
+      // the bootstrap.
       const streamWebSocketLocalTools = deps.streamWebSocketLocalTools?.();
 
-      // Content-addressable contract bundle. When the stack item
+      // Content-addressable contract bundle. When the committed render
       // declares a runtime-validated schema AND the server has a
       // CodeStore wired, compile + write the bundle + emit the URL.
       // The iframe-runtime fetches the URL and dynamic-imports to
       // resolve validators (Cache-Control:immutable means repeat
-      // pushes with the same contract hit the browser cache without
-      // a round-trip). Absent → no client-side validators shipped;
-      // server-side `assertActionContract` remains authoritative.
-      //
-      // Symmetric pattern with the `/code/<hash>.js` componentCode
-      // route above — same store, same idempotent put, same charset
-      // gate, different URL prefix.
+      // renders with the same contract hit the browser cache without
+      // a round-trip).
       let contractHash: string | undefined;
       let validatorsUrl: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
         try {
-          const session = await deps.sessionStore.get(output.sessionId);
-          const top = session?.stack[session.currentStackIndex];
+          const stored = await deps.renderStore.get(output.renderId);
+          const top = stored?.render;
           if (top) {
             const bundle = await deriveContractBundle(top);
             if (bundle) {
@@ -2196,35 +1983,30 @@ export function createGguiPushHandler(
         }
       }
 
-      // Build the two slices directly (#109 / R3). Session-slice
-      // carries identity + live-auth + capability advertisements
-      // (cached per session by hosts); stack-item slice carries the
-      // active item's render state + contract pointer + component-mode
-      // discriminator (replaced per push). `partial` is the
-      // `mintWsToken` output (wsUrl + token + expiresAt) — all
-      // session-slice fields.
-      const session: McpAppAiGguiSessionMeta = {
-        sessionId: output.sessionId,
+      // Build the single `ai.ggui/render` slice (#109 / R3 / B.2c).
+      // Carries identity + live-auth + capability advertisements +
+      // current render state + contract pointer + component-mode
+      // discriminator — everything an iframe needs to mount.
+      const render: McpAppAiGguiRenderMeta = {
+        renderId: output.renderId,
         appId: ctx.appId,
         runtimeUrl,
-        ...partial,
+        ...authFields,
         ...(appCallableTools.length > 0 ? { appCallableTools } : {}),
         ...(streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools }
           : {}),
-        // Operator-registered wrappers ride the session slice to the
-        // iframe so the runtime can dynamic-import each before the
-        // first stack item renders. Projected by
-        // `deriveStackItemMeta` from the (enriched) stack-
-        // item contract; only emitted when wrappers are actually
-        // declared so pure-STDLIB apps stay byte-identical.
+        // Operator-registered wrappers ride the render slice so the
+        // runtime can dynamic-import each before mounting. Projected
+        // by `deriveRenderMeta` from the (enriched) render contract;
+        // only emitted when wrappers are actually declared so
+        // pure-STDLIB apps stay byte-identical.
         ...(view.gadgets !== undefined && view.gadgets.length > 0
           ? { gadgets: view.gadgets }
           : {}),
         // Minimum-disclosure subset of App.publicEnv (union of
         // declared wrappers' `requires`). Filtered above by
-        // `derivePublicEnvProjection`; only emitted when non-empty
-        // so apps without wrapper-required env stay byte-identical.
+        // `derivePublicEnvProjection`.
         ...(bootstrapPublicEnv !== undefined &&
         Object.keys(bootstrapPublicEnv).length > 0
           ? { publicEnv: bootstrapPublicEnv }
@@ -2235,51 +2017,30 @@ export function createGguiPushHandler(
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
-        ...(lastSequence !== undefined ? { lastSequence } : {}),
-      };
-      // stackItemId is load-bearing: the iframe-runtime threads it
-      // into `dispatchWiredAction.stackItemId` on every useAction
-      // call. When absent, submit_action returns PIPE_NOT_FOUND
-      // (post 2026-05-13 fail-loud fix) and the iframe falls through
-      // to `ui/message` — the gesture reaches the chat surface but
-      // the agent's open ggui_consume long-poll never drains the
-      // event. Every other slice-meta transport already projects this
-      // field via `deriveStackItemMeta`; push.resultMeta was
-      // the last drift point.
-      const stackItem: McpAppAiGguiStackItemMeta = {
-        ...(output.stackItemId !== undefined
-          ? { stackItemId: output.stackItemId }
+        ...(view.permissionsPolicy !== undefined
+          ? { permissionsPolicy: [...view.permissionsPolicy] }
           : {}),
+        ...(lastSequence !== undefined ? { lastSequence } : {}),
+        ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
         ...(view.actionNextSteps !== undefined
           ? { actionNextSteps: view.actionNextSteps }
           : {}),
         ...(view.contextSlots !== undefined
           ? { contextSlots: [...view.contextSlots] }
           : {}),
-        // Content-addressable contract validators (see content-bundle
-        // compute above). Both fields present together or absent
-        // together — iframe-runtime treats absence as "no validators".
+        // Content-addressable contract validators. Both fields present
+        // together or absent together — iframe-runtime treats absence
+        // as "no validators".
         ...(contractHash !== undefined && validatorsUrl !== undefined
           ? { contractHash, validatorsUrl }
           : {}),
         ...(view.kind ? { kind: view.kind } : {}),
-        ...(view.propsJson ? { propsJson: view.propsJson } : {}),
         ...(outputWithCode.codeUrl
           ? { codeUrl: outputWithCode.codeUrl }
           : {}),
         ...(outputWithCode.codeHash
           ? { codeHash: outputWithCode.codeHash }
           : {}),
-      };
-      // Emit the two per-window `_meta` keys (#109). Hosts that
-      // forward `_meta` to views may cache the `session` slice for the
-      // session's lifetime; render-only deltas can emit just
-      // `stack-item`. The contract pointer is content-addressable —
-      // same hash on repeat pushes ⇒ browser HTTP cache returns the
-      // validators without a round-trip.
-      const ggui: McpAppAiGguiMeta = {
-        session,
-        ...(Object.keys(stackItem).length > 0 ? { stackItem } : {}),
       };
       const uiMeta: Record<string, unknown> = {
         resourceUri: perCallResourceUri,
@@ -2288,7 +2049,7 @@ export function createGguiPushHandler(
           : {}),
       };
       const meta: Record<string, unknown> = {
-        ...toMcpAppEnvelope(ggui),
+        ...toMcpAppEnvelope(render),
         ui: uiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,
@@ -2299,42 +2060,43 @@ export function createGguiPushHandler(
 }
 
 /**
- * Invoke the bound {@link UiGenerator} for a story-path push and
- * append the resulting {@link StackItem} to the session. Returns
- * `true` when real componentCode landed on the stack;
- * `false` when no credentials were resolved, the generator
- * rejected, or the generator returned an error result.
+ * Default TTL applied to renders the handler mints inline. The
+ * authoritative TTL lives on the store impls (InMemory: 1h, Sqlite:
+ * 24h, DDB: tenant policy); this constant only fills the
+ * `Render.expiresAt` field of the wire shape (which the store may
+ * overwrite at commit time anyway). 1 hour matches the InMemoryStore
+ * default — anything longer would surprise tests that pin TTL
+ * semantics; anything shorter would close active renders mid-session.
+ */
+const DEFAULT_RENDER_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Invoke the bound {@link UiGenerator} for a story-path render and
+ * commit the resulting {@link ComponentRender}. Returns `true` when
+ * real componentCode landed; `false` when no credentials were
+ * resolved, the generator rejected, or the generator returned an
+ * error result.
  *
  * Side-effects:
  *
- *   - Success: `sessionStore.appendStackItem(sessionId, item)` with
- *     the generator's componentCode + sourceCode + stackItemId as the
- *     stack-item id. Preview (if registered) is cancelled with
- *     reason `'handoff'` — the authoritative stack item supersedes
- *     the provisional frames.
- *   - Failure: `sessionStore.appendStackItem(sessionId, errorItem)`
- *     with `componentCode: ''` and a populated `error` field so the
- *     agent can read the failure reason via the session channel.
- *     Preview (if registered) is cancelled with reason
- *     `'generation-failed'`.
- *   - `await`s throughout — the push RPC blocks until generation
- *     settles. This is intentional: a synchronous `codeReady:true`
- *     is the honest user-visible signal for "ggui_push returned and
- *     the component is ready". Clients that want progress read the
+ *   - Success: `renderStore.commit({render})` with the generator's
+ *     componentCode + sourceCode and `renderId` as the render id.
+ *     Preview (if registered) is cancelled with reason `'handoff'`.
+ *   - Failure: `renderStore.commit({render: errorRender})` with
+ *     `componentCode: ''` and a populated `error` field so the agent
+ *     can read the failure reason via the render channel. Preview (if
+ *     registered) is cancelled with reason `'generation-failed'`.
+ *   - `await`s throughout — the render RPC blocks until generation
+ *     settles. This is intentional: a synchronous `codeReady:true` is
+ *     the honest user-visible signal for "ggui_render returned and the
+ *     component is ready". Clients that want progress read the
  *     provisional preview channel.
  *
- * Never throws. Every failure path funnels through an error stack
- * item + preview teardown so the caller doesn't have to install a
- * rejection handler. Secondary failures (stack append rejecting,
- * preview cancel throwing) are swallowed — keeping the session
- * channel + transport intact matters more than re-raising.
- */
-/**
- * Result shape for {@link runGenerationIntoSession}. `componentCode`
- * is populated only on the happy path — the push handler uses it to
- * write the cache entry when `generation.cache` is wired. Failure
- * paths carry `ok:false` and no componentCode; the caller treats
- * that as "skip the cache record" without a second error shape.
+ * Never throws. Every failure path funnels through an error render
+ * + preview teardown so the caller doesn't have to install a
+ * rejection handler. Secondary failures (commit rejecting, preview
+ * cancel throwing) are swallowed — keeping the render channel +
+ * transport intact matters more than re-raising.
  */
 interface GenerationRunOutcome {
   readonly ok: boolean;
@@ -2342,41 +2104,25 @@ interface GenerationRunOutcome {
   readonly createdAt: string;
 }
 
-async function runGenerationIntoSession(
+async function runGenerationIntoRender(
   generation: GenerationDeps,
-  sessionStore: SessionStore,
+  renderStore: RenderStore,
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
-  checkStackItemContracts:
+  checkRenderContracts:
     | ((shape: {
         readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
         readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
       }) => void)
     | undefined,
-  generatorOverride: GguiPushHandlerDeps['generator'] | undefined,
+  generatorOverride: GguiRenderHandlerDeps['generator'] | undefined,
   args: {
     readonly ctx: HandlerContext;
-    readonly sessionId: string;
-    readonly stackItemId: string;
+    readonly renderId: string;
     readonly story: {
       readonly intent: string;
       readonly context?: unknown;
-      // Agent-authored contract forwarded from the parsed input.
-      // Typed `DataContract` end-to-end via `dataContractSchema` —
-      // no cast, no splice. `intent` is not a contract field;
-      // internal consumers (prompt rendering, contract hash,
-      // negotiator decision, cache scope) read the outer
-      // `story.intent` instead.
       readonly contract?: DataContract;
-      /**
-       * Variance signals forwarded from the agent's BlueprintDraft
-       * (`persona`, `aesthetic`, `context`, `seedPrompt`). Threaded
-       * through to the generator's prompt builder so cold-gen produces
-       * a component aligned with the requested persona/aesthetic.
-       * Absent → generator runs the default styling pass. Cache-hit
-       * commits never reach this seam — variance there flows via the
-       * stored Blueprint's own `variance` field.
-       */
       readonly variance?: BlueprintVariance;
     };
     /** Runtime prop values for THIS render. Validated against
@@ -2384,98 +2130,62 @@ async function runGenerationIntoSession(
      *  before this function runs. */
     readonly runtimeProps?: JsonObject;
     /**
-     * Operator-registered gadget catalog resolved by the
-     * push handler from the bound `AppMetadataStore` (plugin slice
-     * 1.2.1 follow-up). Threaded into `UiGenerateInput.appGadgets`
-     * so the code-gen system prompt's `clientCapabilities —
-     * registered catalog` section renders the operator's plugins
-     * (Leaflet, Mapbox, …) instead of falling back to STDLIB.
-     * Undefined when `appMetadataStore` is unset on `deps`.
+     * Operator-registered gadget catalog resolved by the render
+     * handler from the bound `AppMetadataStore`.
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
     /**
      * `package → .d.ts content` for the contract's non-stdlib
-     * gadgets, parallel-fetched by the push handler.
-     * Threaded into `UiGenerateInput.gadgetTypes` so the code-gen
-     * sandbox loads each wrapper's real declaration into its VFS.
+     * gadgets, parallel-fetched by the render handler.
      */
     readonly gadgetTypes?: Readonly<Record<string, string>>;
     /**
      * MP.5 (2026-05-24) — typed `infra.model` override from the
-     * agent's wire input. Threaded onto `generateInputBase.infra`
-     * so the generator override (cloud pod) can pick the model up
-     * without re-parsing raw input. OSS path ignores it
-     * (`resolveLlm` already chose the model).
+     * agent's wire input.
      */
     readonly infra?: { readonly model?: string };
   },
 ): Promise<GenerationRunOutcome> {
-  const { ctx, sessionId, stackItemId, story } = args;
+  const { ctx, renderId, story } = args;
   const nowIso = new Date().toISOString();
+  const nowEpochMs = Date.now();
 
   // Credential-free input shape — both the override path and the
   // OSS path build their generator input on top of this.
   const generateInputBase: Omit<UiGenerateInput, 'llm' | 'providerKey'> = {
     request: {
-      sessionId,
+      renderId,
       prompt: story.intent,
       ...(isJsonObject(story.context) ? { context: story.context } : {}),
     },
     blueprints: generation.blueprints,
-    // Agent-authored contract ride from `story.contract` (parsed
-    // input on direct path, forwarded from
-    // HandshakeStoredInput.contract on the handshake-paired path)
-    // into the generator. Typed `DataContract` end-to-end via
-    // `dataContractSchema`. `story.intent` is the canonical
-    // intent for the generator's prompt. create-ui-generator echoes
-    // the contract back on `result.response.contract`, which the
-    // StackItem persistence block projects onto the committed item
-    // — so slice-meta-derivation's deriveContextSlots /
-    // deriveWiredActionTools pick them up on /r/<id> + on the
-    // `ai.ggui/stack-item` slice meta.
     ...(story.contract !== undefined
       ? { contract: story.contract }
       : {}),
-    // Variance signals (persona / aesthetic / context / seedPrompt)
-    // ride into the generator's prompt builder so cold-gen aligns
-    // the produced component with the agent's declared variant. The
-    // generator decides whether to surface a "Variance" block — empty
-    // BlueprintVariance objects are no-ops.
     ...(story.variance !== undefined ? { variance: story.variance } : {}),
-    // Gadget catalog flows to the code-gen system prompt via
-    // dispatch's `appGadgets`
-    // capture. Same catalog the push-time gate validated against;
-    // keeps the three triad surfaces (synth, decision, code-gen) in
-    // sync about which plugins exist.
     ...(args.appGadgets !== undefined
       ? { appGadgets: args.appGadgets }
       : {}),
-    // Gadget `.d.ts` content for the sandbox VFS overlay.
     ...(args.gadgetTypes !== undefined
       ? { gadgetTypes: args.gadgetTypes }
       : {}),
-    // MP.5 (2026-05-24) — typed infra envelope. Today carries one
-    // field (`model`); cloud's generator override pulls
-    // `infra.model` into `RunGenerationArgs.model` for the pool
-    // route dispatcher. OSS path ignores it.
     ...(args.infra !== undefined ? { infra: args.infra } : {}),
   };
 
   let result: Awaited<ReturnType<UiGenerator['generate']>>;
 
   if (generatorOverride) {
-    // Cloud seam: a cloud deployment's server-side generator
-    // resolves its own credentials (bring-your-own-key or pool key)
-    // inside the runner — skip `resolveLlm` entirely and call the
-    // override with the credential-free input shape.
+    // Cloud seam: a cloud deployment's server-side generator resolves
+    // its own credentials inside the runner.
     try {
       result = await generatorOverride(generateInputBase, ctx);
     } catch (err) {
-      return commitErrorStackItem(sessionStore, previewDeps, channelNotifier, {
-        sessionId,
-        stackItemId,
+      return commitErrorRender(renderStore, previewDeps, channelNotifier, {
+        renderId,
+        appId: ctx.appId,
         story,
         nowIso,
+        nowEpochMs,
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2485,20 +2195,16 @@ async function runGenerationIntoSession(
     }
   } else {
     // OSS path: resolve credentials then call generation.uiGenerator.
-    // A `null` result is the "no BYOK" case — we treat it structurally
-    // the same as a provider-side `no-credentials` failure so the
-    // agent sees one consistent shape. `resolveLlm` never throws per
-    // its contract; defensive catch to preserve that if an
-    // implementation slips.
     let creds: GenerationCredentials | null;
     try {
       creds = await generation.resolveLlm(ctx);
     } catch (err) {
-      return commitErrorStackItem(sessionStore, previewDeps, channelNotifier, {
-        sessionId,
-        stackItemId,
+      return commitErrorRender(renderStore, previewDeps, channelNotifier, {
+        renderId,
+        appId: ctx.appId,
         story,
         nowIso,
+        nowEpochMs,
         message:
           err instanceof Error
             ? `credential resolution failed: ${err.message}`
@@ -2507,55 +2213,44 @@ async function runGenerationIntoSession(
       });
     }
     if (!creds) {
-      // Operator-supplied no-credentials fallback (typically a
-      // Connect-Claude card pointing at `/settings`). Only fires when
-      // the generator dep was bound with `onNoCredentials` AND the
-      // hook returns a non-null stack item; everything else (no
-      // hook, hook throws, hook returns null) falls through to the
-      // legacy error envelope so historical behavior is preserved
-      // for callers that don't opt in.
+      // Operator-supplied no-credentials fallback.
       if (generation.onNoCredentials) {
-        let fallbackItem: SessionStackEntry | null = null;
+        let fallback: Render | null = null;
         try {
-          fallbackItem = await generation.onNoCredentials(ctx, {
+          fallback = await generation.onNoCredentials(ctx, {
             intent: story.intent,
-            stackItemId,
+            renderId,
             nowIso,
           });
         } catch {
-          // Hook bug shouldn't break the push — fall through to the
-          // canonical error path below.
-          fallbackItem = null;
+          fallback = null;
         }
-        if (fallbackItem) {
-          return commitNoCredentialsCardItem(
-            sessionStore,
+        if (fallback) {
+          return commitNoCredentialsCardRender(
+            renderStore,
             previewDeps,
             channelNotifier,
             {
-              sessionId,
-              stackItemId,
+              renderId,
+              appId: ctx.appId,
               nowIso,
-              stackItem: fallbackItem,
+              render: fallback,
             },
           );
         }
       }
-      return commitErrorStackItem(sessionStore, previewDeps, channelNotifier, {
-        sessionId,
-        stackItemId,
+      return commitErrorRender(renderStore, previewDeps, channelNotifier, {
+        renderId,
+        appId: ctx.appId,
         story,
         nowIso,
+        nowEpochMs,
         message:
           'no credentials available for the configured generation provider (expected env var or ~/.ggui/credentials.json entry)',
         reason: 'no-credentials',
       });
     }
 
-    // Run the generator. `UiGenerator.generate` never throws per its
-    // contract — failures funnel through the discriminated result —
-    // but we still catch defensively so a buggy implementation can't
-    // crash the server.
     try {
       result = await generation.uiGenerator.generate({
         ...generateInputBase,
@@ -2563,11 +2258,12 @@ async function runGenerationIntoSession(
         providerKey: creds.providerKey,
       });
     } catch (err) {
-      return commitErrorStackItem(sessionStore, previewDeps, channelNotifier, {
-        sessionId,
-        stackItemId,
+      return commitErrorRender(renderStore, previewDeps, channelNotifier, {
+        renderId,
+        appId: ctx.appId,
         story,
         nowIso,
+        nowEpochMs,
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2578,36 +2274,30 @@ async function runGenerationIntoSession(
   }
 
   if (!result.ok) {
-    return commitErrorStackItem(sessionStore, previewDeps, channelNotifier, {
-      sessionId,
-      stackItemId,
+    return commitErrorRender(renderStore, previewDeps, channelNotifier, {
+      renderId,
+      appId: ctx.appId,
       story,
       nowIso,
+      nowEpochMs,
       message: result.error.message,
       reason: 'generation-failed',
     });
   }
 
-  // Happy path — append the authoritative stack item. `StackItem`
-  // carries `componentCode` plus optional contract fields
-  // (`actionSpec`, `streamSpec`, `propsSpec`) when the generator
-  // resolved them. Contracts flow through from the generator's
-  // `UIGenerationResponse.contract` envelope — either the caller's
-  // authored contract passed through as-is, or a minimal one
-  // synthesized from the generated code's wire call sites. Closes
-  // the failure mode where LLM-emitted wire calls land without a
-  // declared actionSpec/streamSpec surface.
-  //
-  // Warnings surface as the item's `description` so renderers can
-  // display them without shape changes.
+  // Happy path — commit the authoritative ComponentRender.
   const responseContracts = result.response.contract;
-  const item: StackItem = {
-    id: stackItemId,
+  const componentRender: ComponentRender = {
+    id: renderId,
+    appId: ctx.appId,
     type: 'component',
     componentCode: result.response.componentCode,
     prompt: story.intent,
     contentType: 'application/javascript+react',
-    createdAt: nowIso,
+    createdAt: nowEpochMs,
+    lastActivityAt: nowEpochMs,
+    expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    eventSequence: 0,
     ...(result.response.warnings && result.response.warnings.length > 0
       ? { description: result.response.warnings[0] }
       : {}),
@@ -2623,91 +2313,47 @@ async function runGenerationIntoSession(
     ...(responseContracts?.propsSpec
       ? { propsSpec: responseContracts.propsSpec }
       : {}),
-    // Project `contextSpec` onto the committed StackItem so the
-    // bootstrap-meta derivation block in `resultMeta` can read
-    // `top.contextSpec` and emit `bootstrap.contextSlots`. Without
-    // this, the LLM-authored contextSpec slots silently fail to
-    // reach the iframe runtime.
     ...(responseContracts?.contextSpec
       ? { contextSpec: responseContracts.contextSpec }
       : {}),
-    // Project `agentCapabilities` onto the committed StackItem so the
-    // schema-compat defensive backstop (`checkStackItemContracts`
-    // below) can recognize cross-MCP tools — tools the agent
-    // declared in the
-    // contract catalog but doesn't expect to live on this server.
-    // Without this projection the post-gen schema-compat check trips
-    // on any nextStep targeting an external MCP server, even though
-    // the agent properly declared the tool.
     ...(responseContracts?.agentCapabilities
       ? { agentCapabilities: responseContracts.agentCapabilities }
       : {}),
-    // Project `clientCapabilities` onto the committed StackItem so
-    // `derivePermissionsPolicy` can union the declared
-    // `entry.permission` values into a Permissions-Policy directive
-    // set. The public-render `/r/<shortCode>` route reads this
-    // projection to set the iframe's HTTP-level `Permissions-Policy`
-    // header before the content loads; the bootstrap inline carries
-    // `permissionsPolicy` for in-renderer inspection. Without this
-    // projection the renderer has no signal about which
-    // browser-capability gates the contract requests.
     ...(responseContracts?.clientCapabilities
       ? { clientCapabilities: responseContracts.clientCapabilities }
       : {}),
-    // Descriptor sidecar. The wire's
-    // `(hook, package, version)` tuples resolved against
-    // `App.gadgets` at push-validation time; persisted here so
-    // `derivePermissionsPolicy` + `deriveBundleOrigins` +
-    // `deriveGadgetRegistrations` + `derivePublicEnvProjection` read
-    // descriptor metadata without re-resolving against the registry.
     ...(args.appGadgets !== undefined && args.appGadgets.length > 0
       ? { gadgetDescriptors: args.appGadgets }
       : {}),
   };
-  // Schema-compat check (DEFENSIVE backstop). Authored contracts are
-  // validated at push-validation phase BEFORE gen runs (see push
-  // handler body); this site catches drift between `story.contract`
-  // and the generator's `result.response.contract`. Synth paths
-  // today never emit an `actionSpec[*].nextStep` tool ref, so the
-  // check is a no-op on the synthesis path. When the generator
-  // preserves authored tool refs verbatim the early check already
-  // rejected; this site is structural insurance against future
-  // synth paths that emit tool refs.
-  //
-  // Thrown SchemaCompatError propagates up to the push handler →
-  // structured error response → agent retries on same handshakeId.
-  // Without this check the site would silently commit an error stack
-  // item (surfacing as "stuck on Generating UI..."). Preview cleanup
-  // runs in the catch arm so a thrown error doesn't leak a running
-  // preview into the next push.
-  if (checkStackItemContracts) {
+  // Schema-compat check (DEFENSIVE backstop).
+  if (checkRenderContracts) {
     try {
-      checkStackItemContracts(item);
+      checkRenderContracts(componentRender);
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,
-        stackItemId,
+        renderId,
         'schema-mismatch',
       );
       throw err;
     }
   }
   try {
-    await sessionStore.appendStackItem(sessionId, item);
+    await renderStore.commit({
+      render: componentRender,
+      appId: ctx.appId,
+    });
   } catch {
-    // If the stack append fails, we still clean up preview — the
-    // session is in a degraded state but the channel shouldn't
-    // leak a running preview.
-    await safelyFinalizePreview(previewDeps, stackItemId, 'stack-append-failed');
+    await safelyFinalizePreview(previewDeps, renderId, 'commit-failed');
     return { ok: false, createdAt: nowIso };
   }
-  // Live-subscriber notify. Cold-generation success — the entry
-  // reuses an existing stackItemId, so already-subscribed clients should
-  // see the new componentCode flip the matching `data-ggui-code-
-  // ready` slot from `false` to `true`. No `matchType` — this is a
-  // generated entry, not a cache hit.
-  safelyNotifyStackPush(channelNotifier, sessionId, item);
-  await safelyFinalizePreview(previewDeps, stackItemId, 'handoff');
+  // Live-subscriber notify. Cold-generation success — the entry reuses
+  // an existing renderId, so already-subscribed clients should see the
+  // new componentCode flip the matching `data-ggui-code-ready` slot
+  // from `false` to `true`.
+  safelyNotifyRenderCommit(channelNotifier, renderId, componentRender);
+  await safelyFinalizePreview(previewDeps, renderId, 'handoff');
   return {
     ok: true,
     componentCode: result.response.componentCode,
@@ -2716,127 +2362,131 @@ async function runGenerationIntoSession(
 }
 
 /**
- * Append a hand-authored "no-credentials" card stack item, fan out
- * the stack-push notify, and tear down provisional preview with the
+ * Commit a hand-authored "no-credentials" card render, fan out the
+ * render-commit notify, and tear down provisional preview with the
  * canonical `'no-credentials'` reason. Returns `ok: true` so the
- * push handler reports `codeReady: true` and emits the card's
- * `kind` on the `ai.ggui/stack-item.kind` slice field — the iframe
- * renderer mounts the registered system card. (T3-1 retired the
- * inline `componentCode` channel; system cards use the `kind`
- * discriminator.)
+ * render handler reports `codeReady: true` and emits the card's
+ * `kind` on the `ai.ggui/render.kind` slice field — the iframe
+ * renderer mounts the registered system card.
  *
- * Pageid contract: the caller's `stackItem.id` MUST equal `stackItemId`
- * (the in-flight stack-item id) so `appendStackItem` replaces the
+ * Render-id contract: the caller's `render.id` MUST equal `renderId`
+ * (the in-flight render id) so `renderStore.commit` replaces the
  * provisional placeholder in place. This helper rebinds it
  * defensively to keep the contract local — a hook that returns a
- * StackItem with a different id still lands at the active page.
+ * Render with a different id still lands at the active row.
  */
-async function commitNoCredentialsCardItem(
-  sessionStore: SessionStore,
+async function commitNoCredentialsCardRender(
+  renderStore: RenderStore,
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
   args: {
-    readonly sessionId: string;
-    readonly stackItemId: string;
+    readonly renderId: string;
+    readonly appId: string;
     readonly nowIso: string;
-    readonly stackItem: SessionStackEntry;
+    readonly render: Render;
   },
 ): Promise<GenerationRunOutcome> {
-  const item = { ...args.stackItem, id: args.stackItemId } as SessionStackEntry;
-  let appended = false;
+  const render: Render = { ...args.render, id: args.renderId } as Render;
+  let committed = false;
   try {
-    await sessionStore.appendStackItem(args.sessionId, item);
-    appended = true;
+    await renderStore.commit({
+      render,
+      appId: args.appId,
+    });
+    committed = true;
   } catch {
-    // Stack append rejected — preview teardown is the only honest
-    // recovery; the session is otherwise unchanged.
+    // Commit rejected — preview teardown is the only honest recovery;
+    // the render store is otherwise unchanged.
   }
-  if (appended) {
-    safelyNotifyStackPush(channelNotifier, args.sessionId, item);
+  if (committed) {
+    safelyNotifyRenderCommit(channelNotifier, args.renderId, render);
   }
-  await safelyFinalizePreview(previewDeps, args.stackItemId, 'no-credentials');
+  await safelyFinalizePreview(previewDeps, args.renderId, 'no-credentials');
   // System cards have no `componentCode` — surface an empty string so
   // the outcome shape stays uniform; downstream observers don't read
   // it for the fallback path.
   const code =
-    item.type !== 'mcpApps' && item.type !== 'system'
-      ? item.componentCode
+    render.type !== 'mcpApps' && render.type !== 'system'
+      ? render.componentCode
       : '';
-  return appended
+  return committed
     ? { ok: true, componentCode: code, createdAt: args.nowIso }
     : { ok: false, createdAt: args.nowIso };
 }
 
 /**
- * Source-type field on `StackItem` is too narrow for an "error, no
- * code" payload, so we synthesize a `componentCode: ''` record with
+ * Source-type field on `ComponentRender` is too narrow for an "error,
+ * no code" payload, so we synthesize a `componentCode: ''` record with
  * the `error` slot populated. Renderers already handle
  * `componentCode === ''` by showing a fallback UI; the extra `error`
  * field carries the operator-facing reason.
  */
-async function commitErrorStackItem(
-  sessionStore: SessionStore,
+async function commitErrorRender(
+  renderStore: RenderStore,
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
   args: {
-    readonly sessionId: string;
-    readonly stackItemId: string;
+    readonly renderId: string;
+    readonly appId: string;
     readonly story: { readonly intent: string };
     readonly nowIso: string;
+    readonly nowEpochMs: number;
     readonly message: string;
     readonly reason: string;
   },
 ): Promise<GenerationRunOutcome> {
-  const errorItem: StackItem = {
-    id: args.stackItemId,
+  const errorRender: ComponentRender = {
+    id: args.renderId,
+    appId: args.appId,
     type: 'component',
     componentCode: '',
     prompt: args.story.intent,
     error: args.message,
     contentType: 'application/javascript+react',
-    createdAt: args.nowIso,
+    createdAt: args.nowEpochMs,
+    lastActivityAt: args.nowEpochMs,
+    expiresAt: args.nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    eventSequence: 0,
   };
-  let appended = false;
+  let committed = false;
   try {
-    await sessionStore.appendStackItem(args.sessionId, errorItem);
-    appended = true;
+    await renderStore.commit({
+      render: errorRender,
+      appId: args.appId,
+    });
+    committed = true;
   } catch {
-    // Secondary failure — session store rejected the error record.
-    // Nothing meaningful to do; preserve session channel integrity
-    // by still finalizing preview below.
+    // Secondary failure — render store rejected the error record.
+    // Nothing meaningful to do; preserve render channel integrity by
+    // still finalizing preview below.
   }
-  if (appended) {
-    // Even error-only stack entries fan out — the console viewer
-    // renders an error panel for them, so a live subscriber needs the
-    // delta to flip out of the "Waiting for session channel replay…"
-    // state. (B1: stack mutations on already-subscribed sessions
-    // were previously invisible to the live client.)
-    safelyNotifyStackPush(channelNotifier, args.sessionId, errorItem);
+  if (committed) {
+    safelyNotifyRenderCommit(channelNotifier, args.renderId, errorRender);
   }
-  await safelyFinalizePreview(previewDeps, args.stackItemId, args.reason);
+  await safelyFinalizePreview(previewDeps, args.renderId, args.reason);
   return { ok: false, createdAt: args.nowIso };
 }
 
 /**
- * Best-effort fire of {@link ChannelNotifier.notifyStackPush}. Wrapped
- * so a notifier impl that throws can't fail an already-committed
- * append. Returns `void` because the notify is observably-fire-and-
- * forget — the source of truth for the entry is the SessionStore,
- * which already accepted the write before we got here.
+ * Best-effort fire of {@link ChannelNotifier.notifyRenderCommit}.
+ * Wrapped so a notifier impl that throws can't fail an already-
+ * committed render. Returns `void` because the notify is observably-
+ * fire-and-forget — the source of truth for the render is the
+ * RenderStore, which already accepted the write before we got here.
  *
- * Absent notifier → no-op. That's the "host without a live session
+ * Absent notifier → no-op. That's the "host without a live render
  * channel (programmatic embedding, hosted Lambda one-shot)" case;
  * those hosts read state via subscribe-time snapshot, not deltas.
  */
-function safelyNotifyStackPush(
+function safelyNotifyRenderCommit(
   notifier: ChannelNotifier | undefined,
-  sessionId: string,
-  stackItem: import('@ggui-ai/protocol').SessionStackEntry,
+  renderId: string,
+  render: Render,
   matchType?: string,
 ): void {
   if (!notifier) return;
   try {
-    notifier.notifyStackPush(sessionId, stackItem, matchType);
+    notifier.notifyRenderCommit(renderId, render, matchType);
   } catch {
     // Swallow — same posture as `safelyFinalizePreview`. A notify
     // failure is observability, not correctness.
@@ -2848,18 +2498,18 @@ function safelyNotifyStackPush(
  * null-check the deps or catch. Absent deps → no-op. Absent
  * registry → no-op (the preview path doesn't have an external
  * cancellation site). Any rejection from `registry.cancel` is
- * swallowed — preview teardown is best-effort during a push
+ * swallowed — preview teardown is best-effort during a render
  * settlement.
  */
 async function safelyFinalizePreview(
   previewDeps: ProvisionalPreviewDeps | undefined,
-  stackItemId: string,
+  renderId: string,
   reason: string,
 ): Promise<void> {
   const registry = previewDeps?.registry;
   if (!registry) return;
   try {
-    await finalizeProvisionalPreview(registry, stackItemId, reason);
+    await finalizeProvisionalPreview(registry, renderId, reason);
   } catch {
     // Swallow. The runner's own terminal outcome already fired; a
     // second-order cancel rejection isn't worth propagating.
@@ -2867,40 +2517,39 @@ async function safelyFinalizePreview(
 }
 
 /**
- * Narrow-only passthrough guards so we can forward
- * `story.context` + `story.schema` into `UIGenerationRequest`
- * without losing type safety. The zod schema on `story` is
- * `.passthrough()` so both fields arrive as `unknown`; we accept
- * the minimum structural shape the generator contract requires.
+ * Narrow-only passthrough guard so we can forward `story.context`
+ * into `UIGenerationRequest` without losing type safety. The zod
+ * schema on `story` is `.passthrough()` so the field arrives as
+ * `unknown`; we accept the minimum structural shape the generator
+ * contract requires.
  */
 function isJsonObject(v: unknown): v is JsonObject {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /**
- * Append a cache-hit {@link StackItem} to the session. Mirrors the
- * happy-path branch of {@link runGenerationIntoSession}, minus the
- * generator call + the cache-record write (the entry is already in
- * the store — that's why we hit). Returns `true` when the append
- * succeeded and `false` on a session-store rejection (treated the
- * same as a generation append failure: no crash, preview torn
- * down, push returns `codeReady: false` so the agent observes the
- * degraded state through the channel instead of a synthetic "ready"
- * signal).
+ * Commit a cache-hit {@link ComponentRender}. Mirrors the happy-path
+ * branch of {@link runGenerationIntoRender}, minus the generator call
+ * + the cache-record write (the entry is already in the store —
+ * that's why we hit). Returns `true` when the commit succeeded and
+ * `false` on a render-store rejection (treated the same as a
+ * generation commit failure: no crash, preview torn down, render
+ * returns `codeReady: false` so the agent observes the degraded
+ * state through the channel instead of a synthetic "ready" signal).
  */
-async function commitCachedStackItem(
-  sessionStore: SessionStore,
+async function commitCachedRender(
+  renderStore: RenderStore,
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
-  checkStackItemContracts:
+  checkRenderContracts:
     | ((shape: {
         readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
         readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
       }) => void)
     | undefined,
   args: {
-    readonly sessionId: string;
-    readonly stackItemId: string;
+    readonly renderId: string;
+    readonly appId: string;
     readonly story: { readonly intent: string };
     readonly cacheHit: GenerationCacheHit;
     /** Runtime prop values for THIS render. Validated against the
@@ -2910,36 +2559,28 @@ async function commitCachedStackItem(
     /**
      * Resolved descriptor subset (filtered from `App.gadgets` to
      * those referenced by the contract's wire-side
-     * `(hook, package, version)` tuples). Persisted on the StackItem
-     * as `gadgetDescriptors` so the bootstrap-meta derivation reads
+     * `(hook, package, version)` tuples). Persisted on the render as
+     * `gadgetDescriptors` so the bootstrap-meta derivation reads
      * descriptor metadata without re-resolving.
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
   },
 ): Promise<boolean> {
-  const nowIso = new Date().toISOString();
-  // `intent` lifecycle drop point — authoring-side `DataContract.intent`
-  // (required on the file-format side) folds into `StackItem.prompt` at
-  // the wire boundary. There is NO `StackItem.intent` field; consumers
-  // that want the originating intent read `prompt`. The field rename is
-  // the drop signal. See the `DataContract.intent` docstring in
-  // `@ggui-ai/protocol` for the full lifecycle contract.
+  const nowEpochMs = Date.now();
   // Cached path — project optional contract fields onto the
-  // StackItem so the bootstrap-meta derivation in `resultMeta` reads
-  // them off the active stack item. {@link GenerationCacheHit}
-  // carries optional contract fields so when the cache store evolves
-  // to persist them, the projection surface stays correct without
-  // re-touching this site.
-  // Symmetric with the cold-generation path in
-  // `runGenerationIntoSession` so contract flow uniformly across
-  // both commit paths.
-  const item: StackItem = {
-    id: args.stackItemId,
+  // ComponentRender so the bootstrap-meta derivation in `resultMeta`
+  // reads them off the active render.
+  const componentRender: ComponentRender = {
+    id: args.renderId,
+    appId: args.appId,
     type: 'component',
     componentCode: args.cacheHit.componentCode,
     prompt: args.story.intent,
     contentType: 'application/javascript+react',
-    createdAt: nowIso,
+    createdAt: nowEpochMs,
+    lastActivityAt: nowEpochMs,
+    expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    eventSequence: 0,
     ...(args.runtimeProps !== undefined
       ? { props: args.runtimeProps }
       : {}),
@@ -2955,69 +2596,54 @@ async function commitCachedStackItem(
     ...(args.cacheHit.contextSpec
       ? { contextSpec: args.cacheHit.contextSpec }
       : {}),
-    // Symmetric with the cold-gen path — project the contract's
-    // `agentCapabilities` so the schema-compat backstop recognizes
-    // cross-MCP tools the contract declared.
     ...(args.cacheHit.agentCapabilities
       ? { agentCapabilities: args.cacheHit.agentCapabilities }
       : {}),
-    // Symmetric with the cold-gen path so Permissions-Policy
-    // derivation reads the same field whether the commit came from a
-    // cache hit or fresh generation.
     ...(args.cacheHit.clientCapabilities
       ? { clientCapabilities: args.cacheHit.clientCapabilities }
       : {}),
-    // Descriptor sidecar, symmetric with cold-gen.
     ...(args.appGadgets !== undefined && args.appGadgets.length > 0
       ? { gadgetDescriptors: args.appGadgets }
       : {}),
   };
-  // Schema-compat check (DEFENSIVE backstop). Authored
-  // contracts are validated at push-validation phase BEFORE this
-  // handler runs; this site catches drift between `story.contract`
-  // and the matched-blueprint's persisted contract — most relevantly
-  // when the matched blueprint was registered against a different
-  // operator's tool registry that's missing on this server.
-  //
-  // Thrown SchemaCompatError propagates up to the push handler →
-  // structured error response → agent retries (typically by
-  // overriding the contract on the same handshakeId). Without this
-  // check the site would silently return false and commit nothing,
-  // surfacing as the "stuck on Generating UI..." trap. Preview
-  // cleanup runs in the catch arm so a thrown error doesn't leak a
-  // running preview into the next push.
-  if (checkStackItemContracts) {
+  if (checkRenderContracts) {
     try {
-      checkStackItemContracts(item);
+      checkRenderContracts(componentRender);
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,
-        args.stackItemId,
+        args.renderId,
         'schema-mismatch',
       );
       throw err;
     }
   }
   try {
-    await sessionStore.appendStackItem(args.sessionId, item);
+    await renderStore.commit({
+      render: componentRender,
+      appId: args.appId,
+    });
   } catch {
-    await safelyFinalizePreview(previewDeps, args.stackItemId, 'stack-append-failed');
+    await safelyFinalizePreview(previewDeps, args.renderId, 'commit-failed');
     return false;
   }
-  // Fan out to live subscribers — the load-bearing case for B1. The
-  // matchType marker `cached` lets the client surface "Reused from
-  // cache" UX without a separate roundtrip.
-  safelyNotifyStackPush(channelNotifier, args.sessionId, item, 'cached');
-  await safelyFinalizePreview(previewDeps, args.stackItemId, 'handoff');
+  // Fan out to live subscribers — the load-bearing case for B1.
+  safelyNotifyRenderCommit(
+    channelNotifier,
+    args.renderId,
+    componentRender,
+    'cached',
+  );
+  await safelyFinalizePreview(previewDeps, args.renderId, 'handoff');
   return true;
 }
 
 /**
  * Wrap {@link registerBlueprint} so a write-side rejection (sqlite
  * disk-full, vector-dim mismatch on a misconfigured index, etc.)
- * can't fail an otherwise-successful push. The generator has already
- * produced valid componentCode and the stack item has been appended;
- * the registry write is a performance optimization, not a
+ * can't fail an otherwise-successful render. The generator has
+ * already produced valid componentCode and the render has been
+ * committed; the registry write is a performance optimization, not a
  * correctness dependency.
  */
 async function safelyRegisterBlueprint(
@@ -3030,19 +2656,11 @@ async function safelyRegisterBlueprint(
   try {
     await registerBlueprint(deps, scope, input);
   } catch (err) {
-    // Best-effort registration — the live push already produced valid
-    // code + the stack item; only the future cache-hit optimization is
-    // lost. Caught here, not rethrown.
+    // Best-effort registration — the live render already produced
+    // valid code + the row was committed; only the future cache-hit
+    // optimization is lost.
     //
-    // Structured JSON for CloudWatch MetricFilter pickup. A bare
-    // freeform `console.warn` text message bled for 6 days before G1
-    // surfaced the cloud S3 Vectors `nonFilterableMetadataKeys` bug
-    // (2026-05-26) — every cache write was failing in production and
-    // no alarm fired. The `msg: 'cache_write_failed'` shape lets
-    // operators wire a metric filter on `{ $.msg = "cache_write_failed" }`
-    // against the pod log group and page on persistent breakage
-    // without grepping freeform text. Mirrors the structured-warn
-    // pattern from `backend/amplify/functions/status-llm-probe`.
+    // Structured JSON for CloudWatch MetricFilter pickup.
     // eslint-disable-next-line no-console
     console.warn(
       JSON.stringify({
@@ -3085,10 +2703,6 @@ function normalizeOverrideVariance(
     typeof variance.context === 'object' &&
     !Array.isArray(variance.context)
   ) {
-    // The parsed context object is JSON-safe by construction (zod
-    // accepted it through `z.unknown()` from a JSON wire); the
-    // canonical `JsonObject` type just spells the same shape with a
-    // tighter index signature.
     const ctx: { [k: string]: import('@ggui-ai/protocol').JsonValue } = {};
     for (const [k, v] of Object.entries(variance.context)) {
       ctx[k] = v as import('@ggui-ai/protocol').JsonValue;
