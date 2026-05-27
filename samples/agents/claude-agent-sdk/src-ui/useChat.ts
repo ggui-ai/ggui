@@ -300,20 +300,14 @@ export function useChat(): UseChatResult {
     abortControllerRef.current?.abort();
   }, []);
 
-  // Start a fresh conversation: mint a new chatSessionId, write it to
-  // both localStorage (so a future visit to `/` resumes here) AND the
-  // URL (so the user can copy-paste the link), then hard-reload so the
-  // React tree and every iframe boot fresh from scratch. Doing this
-  // in-place via setState would leak stale stack-item iframes + the
-  // restored chat history; a navigation is the cleanest reset.
+  // Start a fresh conversation: mint a new chatSessionId, stamp it
+  // into the URL, then hard-reload so the React tree and every iframe
+  // boot fresh from scratch. Doing this in-place via setState would
+  // leak stale stack-item iframes + the restored chat history; a
+  // navigation is the cleanest reset. URL is authoritative — no
+  // localStorage write needed.
   const newSession = useCallback(() => {
     const fresh = crypto.randomUUID();
-    try {
-      window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, fresh);
-    } catch {
-      // localStorage blocked — URL is still authoritative; the next
-      // mount reads it from the search param.
-    }
     window.location.href = `/?${URL_SESSION_PARAM}=${encodeURIComponent(fresh)}`;
   }, []);
 
@@ -564,57 +558,34 @@ function handleEvent(
 }
 
 /**
- * Stable per-conversation chat-session id, resolved in this order:
+ * Stable per-conversation chat-session id. Resolution:
  *
- *   1. URL `?session=<id>` query param. Source of truth — every link
- *      to "this conversation" carries the id, so opening the URL in
- *      a new tab / window restores the same conversation, the same
- *      way claude.ai's `/c/<id>` URLs work.
- *   2. `localStorage` last-viewed id (CHAT_SESSION_STORAGE_KEY). Falls
- *      back here when the root URL is visited with no `?session=`;
- *      we redirect the URL to `?session=<last>` so step (1) holds
- *      for every subsequent action.
- *   3. Mint fresh UUID + write to URL + localStorage.
+ *   1. URL `?session=<id>` query param — authoritative. Every link to
+ *      "this conversation" carries the id, so opening the URL in any
+ *      tab/window restores that specific conversation, the same way
+ *      claude.ai's `/c/<id>` URLs work.
+ *   2. Mint fresh UUID and stamp it into the URL.
  *
- * Migrated from `sessionStorage` to `localStorage` so a closed-and-
- * reopened tab still resumes the user's most-recent conversation
- * (sessionStorage clears on tab close).
+ * Visiting `/` (no query param) ALWAYS starts a fresh conversation —
+ * no localStorage-based "resume last chat" fallback. That fallback
+ * surprised debugging (every visit auto-loaded the last session,
+ * hiding fresh-start bugs); the explicit "+ New" button replaces the
+ * affordance more visibly, and copy/pasted URLs give intentional
+ * resume.
  *
- * SSR-safe: returns a throwaway id when neither storage nor URL API
+ * SSR-safe: returns a throwaway id when neither URL API nor crypto
  * is available; the resulting chat is single-turn isolated.
  */
-const CHAT_SESSION_STORAGE_KEY = 'ggui-chat-session-id';
 const URL_SESSION_PARAM = 'session';
 
 function getOrCreateChatSessionId(): string {
   try {
     const url = new URL(window.location.href);
     const fromUrl = url.searchParams.get(URL_SESSION_PARAM);
-    if (fromUrl && fromUrl.length > 0) {
-      // URL is authoritative — keep localStorage in sync as
-      // "most-recently-viewed" so a future visit to `/` resumes here.
-      try {
-        window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, fromUrl);
-      } catch {
-        // localStorage blocked — URL-only mode still works.
-      }
-      return fromUrl;
-    }
-    let lastViewed: string | null = null;
-    try {
-      lastViewed = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
-    } catch {
-      // localStorage blocked — fall through to fresh mint.
-    }
-    const resolved =
-      lastViewed && lastViewed.length > 0 ? lastViewed : crypto.randomUUID();
+    if (fromUrl && fromUrl.length > 0) return fromUrl;
+    const resolved = crypto.randomUUID();
     url.searchParams.set(URL_SESSION_PARAM, resolved);
     window.history.replaceState({}, '', url.toString());
-    try {
-      window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, resolved);
-    } catch {
-      // ignore
-    }
     return resolved;
   } catch {
     return crypto.randomUUID();
