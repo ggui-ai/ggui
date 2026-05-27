@@ -38,8 +38,7 @@ export interface SelfRepairBoundaryProps {
   children: ReactNode;
   /** App ID */
   appId: string;
-  /** Render identity — single flat id post-Phase-B (replaces the legacy
-   *  `sessionId` + `stackItemId` pair). */
+  /** Render identity — single flat id per the current render shape. */
   renderId: string;
   /** Original source code (if available) */
   sourceCode?: string;

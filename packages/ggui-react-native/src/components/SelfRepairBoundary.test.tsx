@@ -29,9 +29,8 @@ describe('SelfRepairBoundary', () => {
   };
 
   const defaultProps = {
-    sessionId: 'sess_123',
     appId: 'app_456',
-    stackItemId: 'stack_789',
+    renderId: 'render_789',
     config: defaultConfig,
     onReportError: vi.fn(async () => {}),
   };
@@ -69,7 +68,7 @@ describe('SelfRepairBoundary', () => {
     expect(onReportError).toHaveBeenCalled();
     const report = onReportError.mock.calls[0][0];
     expect(report.error.message).toBe('Test render error');
-    expect(report.sessionId).toBe('sess_123');
+    expect(report.renderId).toBe('render_789');
   });
 
   it('shows repairing UI when showRepairUI is true', () => {
