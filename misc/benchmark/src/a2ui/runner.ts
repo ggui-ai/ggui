@@ -14,9 +14,9 @@
  *      every absence path.
  *
  * What we DO NOT do:
- *   - No push-handler invocation — the emitter + orchestrator path
- *     is what this bench is for; going through `ggui_push` would
- *     add noise from unrelated checkpoints. SLO covers the push
+ *   - No render-handler invocation — the emitter + orchestrator path
+ *     is what this bench is for; going through `ggui_render` would
+ *     add noise from unrelated checkpoints. SLO covers the render
  *     end-to-end.
  *   - No LLM. The deterministic emitter is the only producer wired
  *     today. When a Haiku-backed producer lands, drop it in behind
@@ -178,7 +178,7 @@ export async function runA2uiCase(
   const emitter: ProvisionalPreviewEmitter = {
     run: (ctx: ProvisionalPreviewContext) =>
       deterministic.run({
-        stackItemId: ctx.stackItemId,
+        renderId: ctx.renderId,
         story: ctx.story,
         emit: ctx.emit as (payload: unknown) => Promise<unknown>,
         signal: ctx.signal,
@@ -194,8 +194,7 @@ export async function runA2uiCase(
   };
 
   const ctx: ProvisionalPreviewRunContext = {
-    sessionId: `bench-a2ui-${randomUUID()}`,
-    stackItemId: `page-${randomUUID()}`,
+    renderId: `bench-a2ui-${randomUUID()}`,
     appId: `app-a2ui-${kase.id}`,
     story: { intent: kase.intent },
   };

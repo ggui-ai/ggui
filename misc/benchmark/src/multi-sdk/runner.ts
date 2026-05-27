@@ -469,7 +469,7 @@ export class BenchmarkRunner {
             // Thread the bench commit's registered wrapper catalog
             // so plugin-aware commits (Leaflet, Mapbox, …) see the
             // same `clientCapabilities — registered catalog` table
-            // the production push handler would feed the code-gen
+            // the production render handler would feed the code-gen
             // LLM. Absent → dispatch + skeleton fall through to
             // STDLIB seed (non-plugin commits stay byte-identical at
             // the prompt level).

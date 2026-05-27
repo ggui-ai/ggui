@@ -40,7 +40,7 @@ The four benches measure four different things:
 
 | bench                   | dimension                                        |
 | ----------------------- | ------------------------------------------------ |
-| `slo`                   | user-facing `ggui_push` latency checkpoints      |
+| `slo`                   | user-facing `ggui_render` latency checkpoints    |
 | `multi-sdk`             | ui-gen code quality (floor-split: OSS vs hosted) |
 | `a2ui`                  | provisional-preview emission latency + validity  |
 | `blueprint-negotiation` | pre-generation decision correctness              |

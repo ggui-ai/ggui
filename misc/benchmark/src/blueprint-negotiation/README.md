@@ -11,7 +11,7 @@ Pairs with the three existing benches:
 
 - `../multi-sdk/` — ui-gen (final component code)
 - `../a2ui/` — provisional preview path
-- `../slo/` — end-to-end `ggui_push` checkpoints
+- `../slo/` — end-to-end `ggui_render` checkpoints
 
 **This is not a negotiator quality bench.** It's a labeled-corpus
 regression harness. If an outcome is wrong, the report tells you

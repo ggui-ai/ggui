@@ -1,14 +1,14 @@
 /**
- * SLO v0 schema for `ggui_push`.
+ * SLO v0 schema for `ggui_render`.
  *
- * SLO-first discipline: measure the user-facing push path end-to-end,
+ * SLO-first discipline: measure the user-facing render path end-to-end,
  * let later per-dimension benches (A2UI, blueprint negotiation, ui-gen
  * floors) earn their existence by explaining movement in this report.
  *
  * v0 scope (deliberately narrow — see ./README.md for rationale):
  *
  *   - 4 active checkpoints + 1 reserved placeholder
- *   - null preview timestamps are first-class signal ("push completed
+ *   - null preview timestamps are first-class signal ("render completed
  *     without ever rendering a preview frame"), not defensive nones
  *   - min/median/max aggregation only — corpus is too small for p95
  *
@@ -17,14 +17,14 @@
  */
 
 /**
- * The four clock stamps recorded per push. `startedAt` is the only
+ * The four clock stamps recorded per render. `startedAt` is the only
  * checkpoint guaranteed non-null; every downstream stamp may be
  * absent depending on the branch + v0 OSS-Slice-A limits documented
  * alongside the fields.
  */
 export interface SloCheckpoints {
   /**
-   * Monotonic clock reading at push-handler entry. Anchor for every
+   * Monotonic clock reading at render-handler entry. Anchor for every
    * derived metric. Always present.
    */
   readonly startedAt: number;
@@ -33,10 +33,10 @@ export interface SloCheckpoints {
    * accepted by the transport (sourced from the
    * `ProvisionalPreviewOutcome`'s `first-frame` event).
    *
-   * `null` means: the push completed without ever emitting a preview
+   * `null` means: the render completed without ever emitting a preview
    * frame. This is a load-bearing signal — typical causes are
    *   - no emitter wired (`oss_miss` branch)
-   *   - gate skipped (MCP Apps push or disabled feature flag)
+   *   - gate skipped (MCP Apps render or disabled feature flag)
    *   - emitter errored / cancelled before first `emit()` returned
    * Callers MUST NOT coalesce this to `finalCompiledAt`; the
    * null-vs-number distinction is the whole point.
@@ -53,11 +53,11 @@ export interface SloCheckpoints {
    */
   readonly previewFinalizedAt: number | null;
   /**
-   * Clock reading when the push handler's final compile step
+   * Clock reading when the render handler's final compile step
    * settled.
    *
-   * **Honesty flag:** the open-source build defers stack-item
-   * compilation for the component-push path. For story-path pushes
+   * **Honesty flag:** the open-source build defers per-render
+   * compilation for the component-render path. For story-path renders
    * the handler returns synchronously with `codeReady: false` and no
    * actual compile ran. We record the handler-return clock anyway —
    * it's the current user-observable "final" moment — and gate
@@ -79,9 +79,9 @@ export interface SloCheckpoints {
 /**
  * Branch identifier. Matches the user's three-branch brief.
  *
- * **Caveat:** the open-source push handler does not branch on
- * blueprint hit/miss — stack-item generation is not wired into the
- * push path in the open-source build. The SLO harness simulates the
+ * **Caveat:** the open-source render handler does not branch on
+ * blueprint hit/miss — per-render generation is not wired into the
+ * render path in the open-source build. The SLO harness simulates the
  * branches via emitter shape + wiring flags so the measurement
  * infrastructure is ready when the real branch logic lands. See
  * `./README.md` and `./corpus.ts`.
@@ -153,7 +153,7 @@ export interface SloDerivedMetrics {
 }
 
 /**
- * One row of the SLO report — one push invocation, one case, one
+ * One row of the SLO report — one render invocation, one case, one
  * run-index.
  */
 export interface SloRunResult {

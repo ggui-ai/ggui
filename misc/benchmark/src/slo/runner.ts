@@ -1,5 +1,5 @@
 /**
- * SLO v0 runner — invokes `ggui_push` once for a given corpus case,
+ * SLO v0 runner — invokes `ggui_render` once for a given corpus case,
  * spies on the provisional-preview outcome stream, and materializes
  * an {@link SloRunResult} with all four active checkpoints + the
  * reserved `finalDomVisibleAt` null placeholder.
@@ -29,7 +29,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   createGguiHandshakeHandler,
-  createGguiPushHandler,
+  createGguiRenderHandler,
   type HandleStreamEnvelope,
   type ProvisionalPreviewContext,
   type ProvisionalPreviewDeps,
@@ -38,7 +38,7 @@ import {
 } from '@ggui-ai/mcp-server-handlers';
 import {
   InMemoryKeyValueStore,
-  InMemorySessionStore,
+  InMemoryRenderStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 
 import type { SloCase, SloEmitterPlan } from './corpus.js';
@@ -109,7 +109,7 @@ export async function runSloCase(
   };
 
   // Wire provisional-preview deps iff the case has an emitter plan.
-  // Null `emitterPlan` → no preview deps → push handler sees
+  // Null `emitterPlan` → no preview deps → render handler sees
   // `provisionalPreview: undefined` and gate skips with 'disabled'.
   // That's the 'oss_miss' case.
   const previewDeps: ProvisionalPreviewDeps | undefined =
@@ -117,11 +117,11 @@ export async function runSloCase(
       ? undefined
       : buildPreviewDeps(kase.emitterPlan, { now, sleep, onOutcome });
 
-  const sessionStore = new InMemorySessionStore();
+  const renderStore = new InMemoryRenderStore();
   const kvStore = new InMemoryKeyValueStore();
   const handshakeHandler = createGguiHandshakeHandler({ kvStore });
-  const handler = createGguiPushHandler({
-    sessionStore,
+  const handler = createGguiRenderHandler({
+    renderStore,
     handshakeStore: kvStore,
     provisionalPreview: previewDeps,
   });
@@ -134,7 +134,6 @@ export async function runSloCase(
   try {
     const hs = await handshakeHandler.handler(
       {
-        sessionId: 'sess-bench',
         intent: kase.intent,
         blueprintDraft: { contract: {} },
       },

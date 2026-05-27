@@ -1,11 +1,11 @@
-# `ggui_push` SLO — v0 seed harness
+# `ggui_render` SLO — v0 seed harness
 
-Thin, authoritative end-to-end benchmark for the user-facing push path.
+Thin, authoritative end-to-end benchmark for the user-facing render path.
 SLO-first: measure the protocol surface users actually feel, let
 per-dimension benches (A2UI, blueprint negotiation, ui-gen floors)
 earn their existence by explaining movement here.
 
-**This is not the full push bench.** It's the skeleton the dimension
+**This is not the full render bench.** It's the skeleton the dimension
 benches will compose into. Do not widen it speculatively.
 
 ---
@@ -26,10 +26,10 @@ See `corpus.ts` for the exact configured behavior.
 
 | field                | active in v0?           | source                                                         |
 | -------------------- | ----------------------- | -------------------------------------------------------------- |
-| `startedAt`          | yes                     | push-handler entry (always present)                            |
+| `startedAt`          | yes                     | render-handler entry (always present)                          |
 | `firstPreviewAt`     | yes                     | `ProvisionalPreviewOutcome.first-frame.firstFrameAt`           |
 | `previewFinalizedAt` | yes                     | terminal outcome `finishedAt` (completed / failed / cancelled) |
-| `finalCompiledAt`    | yes (see honesty below) | push-handler return clock                                      |
+| `finalCompiledAt`    | yes (see honesty below) | render-handler return clock                                    |
 | `finalDomVisibleAt`  | no — reserved           | planned for v0.5 (renderer harness)                            |
 
 ---
@@ -39,9 +39,9 @@ See `corpus.ts` for the exact configured behavior.
 **Preview absence is signal, not an error case.** At least two real
 paths produce no preview frame:
 
-1. OSS-only runtimes with no `provisionalPreview` deps wired → push
+1. OSS-only runtimes with no `provisionalPreview` deps wired → render
    completes successfully, no emitter ever ran.
-2. Gate-skipped pushes (MCP Apps path, disabled feature flag) →
+2. Gate-skipped renders (MCP Apps path, disabled feature flag) →
    `onOutcome.skipped` fires and no frames are emitted.
 
 If the harness coalesced null preview stamps to `finalCompiledAt`,
@@ -96,13 +96,13 @@ These apply to every v0 report; each is also embedded in `notes` on
 the JSON so single files are self-describing.
 
 - `finalCompiledAt` is the **handler-return clock**, not a
-  post-compile clock. OSS Slice A defers stack-item compilation
-  (`push.ts` §24–40). Runs carry `tags.finalCompiledReliable: false`.
+  post-compile clock. OSS Slice A defers per-render compilation
+  (`render.ts` §24–40). Runs carry `tags.finalCompiledReliable: false`.
   When compile wiring lands in Slice B+, the flag flips and the
   stamp starts reflecting a real compile moment. **Do not treat fast
   `finalCompiledAt` as a win in v0.**
 - `blueprint_hit` / `generation_miss` are **emitter-simulated**. The
-  push handler doesn't yet read a blueprint-finder result on the
+  render handler doesn't yet read a blueprint-finder result on the
   component path. The SLO measurement infrastructure is in place so
   when real branch wiring lands the corpus evolves without touching
   the schema.

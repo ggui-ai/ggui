@@ -1,10 +1,10 @@
 /**
- * Runner tests — drive all three branches through the real push
+ * Runner tests — drive all three branches through the real render
  * handler + real provisional-preview orchestrator and verify the
  * checkpoint schema distinguishes them correctly.
  *
- * These tests ARE integration-ish (they boot an InMemorySessionStore
- * + createGguiPushHandler end-to-end) but don't touch network or
+ * These tests ARE integration-ish (they boot an InMemoryRenderStore
+ * + createGguiRenderHandler end-to-end) but don't touch network or
  * LLM. Clock + sleep are injected to keep timing deterministic.
  */
 

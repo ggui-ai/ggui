@@ -20,8 +20,8 @@ import type {
 
 /** Honesty notes copied onto every v0 report — see README. */
 const V0_NOTES: readonly string[] = [
-  'finalCompiledAt reflects handler-return time (OSS Slice A defers stack-item compilation). See tags.finalCompiledReliable.',
-  'blueprint_hit / generation_miss are emitter-simulated in v0 — the push handler does not yet branch on blueprint-finder results.',
+  'finalCompiledAt reflects handler-return time (OSS Slice A defers per-render compilation). See tags.finalCompiledReliable.',
+  'blueprint_hit / generation_miss are emitter-simulated in v0 — the render handler does not yet branch on blueprint-finder results.',
   'finalDomVisibleAt is reserved (always null in v0). A renderer-driven v0.5 populates it.',
   'Stats are min/median/max per branch path; p50/p95 are deliberately NOT reported at this corpus size.',
 ];

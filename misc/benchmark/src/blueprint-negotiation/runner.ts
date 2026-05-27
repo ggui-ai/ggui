@@ -82,7 +82,7 @@ export async function runNegotiationCase(
         agent: { prompt: kase.prompt },
         config: {
           appId,
-          sessionId: `sess-${kase.id}`,
+          renderId: `render-${kase.id}`,
           includeSharedPool: false,
         },
       },

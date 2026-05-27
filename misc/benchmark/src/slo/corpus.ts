@@ -9,9 +9,9 @@
  *   - the push input shape (intent wording)
  *
  * **Why simulated plans, not real blueprint/generator wiring?**
- * The open-source `ggui_push` handler doesn't branch on
- * blueprint-finder results — in the open-source build, stack-item
- * generation is not wired into the push path. Instead of blocking
+ * The open-source `ggui_render` handler doesn't branch on
+ * blueprint-finder results — in the open-source build, per-render
+ * generation is not wired into the render path. Instead of blocking
  * the SLO harness on that, it drives the branches by configuring
  * what the emitter does. When real branch wiring exists, the
  * emitter-plan fields give way to actual blueprint/generator deps —

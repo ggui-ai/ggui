@@ -135,7 +135,7 @@ Before the OSS split, the bench stack was a single LLM-scoring
 matrix (`multi-sdk`). Post-split, the stack is four orthogonal
 layers, each answering a different question:
 
-- `slo` — does `ggui_push` hit its user-facing latency checkpoints?
+- `slo` — does `ggui_render` hit its user-facing latency checkpoints?
 - `multi-sdk` — does ui-gen produce quality output? (floor-split: OSS vs hosted)
 - `a2ui` — does the provisional-preview path emit valid frames quickly?
 - `blueprint-negotiation` — does the pre-generation decision layer pick the right blueprint?
