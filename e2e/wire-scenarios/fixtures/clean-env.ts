@@ -16,8 +16,8 @@
  *      remote MCP registry, which auto-injects every MCP the operator
  *      has authorized in claude.ai (Figma, Gmail, the claude.ai-hosted
  *      `ggui_*`, …) into the spawned agent's tool catalog. The result:
- *      `mcp__claude_ai_GGUI__ggui_new_session` shows up alongside our
- *      local `mcp__ggui__ggui_new_session`, polluting tool-tape
+ *      `mcp__claude_ai_GGUI__ggui_handshake` shows up alongside our
+ *      local `mcp__ggui__ggui_handshake`, polluting tool-tape
  *      assertions AND letting the LLM accidentally call the wrong
  *      version of a ggui tool.
  *

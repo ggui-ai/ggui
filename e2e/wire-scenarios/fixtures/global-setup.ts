@@ -286,7 +286,7 @@ export async function setup(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`[e2e/scenarios] code cache (clean): ${CACHE_DIR}`);
 
-  // Per-run-clean persistent dir (SQLite SessionStore + VectorStore).
+  // Per-run-clean persistent dir (SQLite RenderStore + VectorStore).
   // Set BEFORE spawning ggui-default so the CLI's persistent-storage
   // defaults land here instead of `<sample>/.ggui/persistent` —
   // wiping that path between runs gives scenario 17's cold-handshake
