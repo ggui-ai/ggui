@@ -103,14 +103,14 @@ export interface McpAppIframeProps {
    * WebViews.
    *
    * **When set:** the host's `ui/initialize` response gains a
-   * `toolOutput._meta` envelope carrying the
-   * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` slices
-   * (whichever are present on the supplied {@link McpAppAiGguiRenderMeta}),
-   * alongside the existing `theme` / `containerDimensions` / `locale`
-   * adapter-boundary fields. The renderer's `parseBootstrap()`
+   * `toolOutput._meta` envelope carrying the single
+   * `_meta["ai.ggui/render"]` slice from the supplied
+   * {@link McpAppAiGguiRenderMeta}, alongside the existing `theme` /
+   * `containerDimensions` / `locale` adapter-boundary fields. The
+   * renderer's `parseBootstrap()`
    * (`packages/renderer/src/bootstrap.ts`) reads exactly that path
    * and uses it to fetch the renderer bundle, open the WebSocket,
-   * and bootstrap the session.
+   * and bootstrap the render.
    *
    * **When absent (default):** behavior is unchanged — the host
    * responds with `{theme, containerDimensions, locale}` only and
@@ -119,12 +119,12 @@ export interface McpAppIframeProps {
    * a contract violation under the adapter-boundary rule.
    *
    * **Rule of thumb:** set this exactly when the WebView was spawned by
-   * following ggui's own resource URI (`ui://ggui/session` or
-   * `ui://ggui/session/<sessionId>` etc.) and the host is responsible
+   * following ggui's own resource URI (`ui://ggui/render` or
+   * `ui://ggui/render/<renderId>` etc.) and the host is responsible
    * for wiring the meta forward — e.g. the console's
    * `<McpAppIframe>` mount feeds it the meta fetched from
-   * `GET /ggui/console/session-resource`. Do NOT set this for any
-   * WebView loading content authored outside ggui's session-resource
+   * `GET /ggui/console/render-resource`. Do NOT set this for any
+   * WebView loading content authored outside ggui's render-resource
    * surface.
    *
    * **Recursive case.** The renderer itself hosts third-party MCP App

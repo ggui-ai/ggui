@@ -27,7 +27,7 @@ import {
   type ReactTestRenderer,
 } from 'react-test-renderer';
 import type { ResourceContents } from '@modelcontextprotocol/sdk/types.js';
-import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
   classifyRendererEnvelope,
@@ -37,15 +37,13 @@ import {
 } from './dispatch';
 import type { McpAppIframeRef } from './types';
 
-const SAMPLE_META: McpAppAiGguiMeta = {
-  session: {
-    wsUrl: 'wss://test.example/ws',
-    token: 'sample-bootstrap-token',
-    expiresAt: '2099-12-31T23:59:59.999Z',
-    sessionId: 'sess-test',
-    appId: 'app-test',
-    runtimeUrl: '/_ggui/iframe-runtime.js',
-  },
+const SAMPLE_META: McpAppAiGguiRenderMeta = {
+  renderId: 'render-test',
+  appId: 'app-test',
+  runtimeUrl: '/_ggui/iframe-runtime.js',
+  wsUrl: 'wss://test.example/ws',
+  wsToken: 'sample-bootstrap-token',
+  expiresAt: '2099-12-31T23:59:59.999Z',
 };
 
 // -----------------------------------------------------------------------------
@@ -116,7 +114,7 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     ]);
     expect(res?.result).not.toHaveProperty('toolOutput');
     expect(res?.result).not.toHaveProperty('_meta');
-    for (const forbidden of ['stack', 'sessionId', 'appId', 'actionSpec', 'streamSpec']) {
+    for (const forbidden of ['stack', 'renderId', 'appId', 'actionSpec', 'streamSpec']) {
       expect(res?.result).not.toHaveProperty(forbidden);
     }
   });
@@ -132,9 +130,9 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     // Narrow-exception invariant: ONLY `_meta` under toolOutput.
     expect(Object.keys(toolOutput).sort()).toEqual(['_meta']);
     const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
-    // ONLY the `ai.ggui/session` slice present (no stackItem in SAMPLE_META).
-    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/session']);
-    expect(metaEnv['ai.ggui/session']).toBe(SAMPLE_META.session);
+    // ONLY the `ai.ggui/render` slice (single render-identity slice).
+    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/render']);
+    expect(metaEnv['ai.ggui/render']).toBe(SAMPLE_META);
     // Adapter-boundary fields still present alongside the forwarded
     // ai.ggui meta.
     expect(result['theme']).toEqual({ '--color-primary': '#ff0000' });
@@ -154,14 +152,12 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     const result = res?.result as Record<string, unknown>;
     const toolOutput = result['toolOutput'] as Record<string, unknown>;
     const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
-    const session = metaEnv['ai.ggui/session'] as NonNullable<
-      McpAppAiGguiMeta['session']
-    >;
-    expect(session.wsUrl).toBe(SAMPLE_META.session?.wsUrl);
-    expect(session.token).toBe(SAMPLE_META.session?.token);
-    expect(session.sessionId).toBe(SAMPLE_META.session?.sessionId);
-    expect(session.appId).toBe(SAMPLE_META.session?.appId);
-    expect(session.runtimeUrl).toBe(SAMPLE_META.session?.runtimeUrl);
+    const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
+    expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
+    expect(render.wsToken).toBe(SAMPLE_META.wsToken);
+    expect(render.renderId).toBe(SAMPLE_META.renderId);
+    expect(render.appId).toBe(SAMPLE_META.appId);
+    expect(render.runtimeUrl).toBe(SAMPLE_META.runtimeUrl);
   });
 
   it('ui/open-link rejects non-http(s) schemes with unsupported-scheme', async () => {

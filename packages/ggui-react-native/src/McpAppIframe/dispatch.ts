@@ -66,12 +66,11 @@ export interface HostBridgeContext {
    *
    * When present, `dispatchHostBridgeRequest`'s `ui/initialize`
    * branch adds `toolOutput._meta` (carrying the
-   * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
-   * slices that are present on the supplied {@link McpAppAiGguiRenderMeta})
-   * to the response alongside the existing `theme` /
-   * `containerDimensions` / `locale` adapter-boundary fields. The
-   * renderer's `parseBootstrap` (`packages/iframe-runtime/src/
-   * bootstrap.ts`) reads this exact shape.
+   * `_meta["ai.ggui/render"]` slice from the supplied
+   * {@link McpAppAiGguiRenderMeta}) to the response alongside the
+   * existing `theme` / `containerDimensions` / `locale`
+   * adapter-boundary fields. The renderer's `parseBootstrap`
+   * (`packages/iframe-runtime/src/bootstrap.ts`) reads this exact shape.
    *
    * When absent (default), the response is `{theme,
    * containerDimensions, locale}` only — no `toolOutput`, no `_meta`.
@@ -81,10 +80,11 @@ export interface HostBridgeContext {
    * exists to prevent.
    *
    * Carrier shape mirrors the wire — the same
-   * {@link McpAppAiGguiRenderMeta} the server stamps onto the `ggui_push`
-   * tool result's `_meta["ai.ggui/*"]` slices ends up here verbatim.
-   * No transformation, no per-namespace whitelisting; the host's
-   * contract is "thread the forwarded meta through" and that's it.
+   * {@link McpAppAiGguiRenderMeta} the server stamps onto the
+   * `ggui_render` tool result's `_meta["ai.ggui/render"]` slice ends
+   * up here verbatim. No transformation, no per-namespace
+   * whitelisting; the host's contract is "thread the forwarded meta
+   * through" and that's it.
    */
   readonly meta?: McpAppAiGguiRenderMeta;
 }
@@ -150,11 +150,10 @@ export async function dispatchHostBridgeRequest(
       // first-party ggui renderer iframe (see `McpAppIframeProps.
       // meta` JSDoc), augment the result with
       // `toolOutput._meta = toMcpAppEnvelope(ctx.meta)` (the wire
-      // envelope carrying whichever of the `ai.ggui/session` and
-      // `ai.ggui/stack-item` slices are present). The renderer's
-      // `parseBootstrap` reads exactly that path. The adapter-
-      // boundary rule still applies to every other key — only the
-      // `ai.ggui/*` slices are forwarded, scoped by the ggui
+      // envelope carrying the single `ai.ggui/render` slice). The
+      // renderer's `parseBootstrap` reads exactly that path. The
+      // adapter-boundary rule still applies to every other key —
+      // only the `ai.ggui/*` slice is forwarded, scoped by the ggui
       // namespace.
       const result: Record<string, unknown> = {
         theme: ctx.theme,
