@@ -1,4 +1,3 @@
-import type { EventSubscription } from './events';
 import type {
   DataContract,
   JsonObject,
@@ -83,11 +82,10 @@ export function computeStyleFingerprint(input: StyleFingerprintInput): string {
  * Generic `TContext` defaults to {@link JsonObject} for generator context hints.
  */
 export interface UIGenerationRequest<TContext = JsonObject> {
-  sessionId: string;
+  renderId: string;
   prompt: string;
   context?: TContext;
   schema?: JsonSchema;
-  subscription?: EventSubscription;
 }
 
 /**
@@ -100,7 +98,7 @@ export interface UIGenerationRequest<TContext = JsonObject> {
  * field.
  */
 export interface UIGenerationResponse {
-  stackItemId: string;
+  renderId: string;
   componentCode: string;
   sourceCode?: string;
   warnings?: string[];

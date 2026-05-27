@@ -13,9 +13,8 @@
  *   1. Type-level `@ts-expect-error` locks — fail at `tsc` if the
  *      forbidden import path resolves or a forbidden field appears.
  *   2. Runtime locks — scan the core module sources for forbidden
- *      identifiers (`McpApps*`, `McpAppAiGguiMeta`,
- *      `McpAppAiGguiSessionMeta`, `McpAppAiGguiStackItemMeta`,
- *      `MCP_APPS_*`, `GGUI_SESSION_*`, `'mcpApps'` discriminator).
+ *      identifiers (`McpApps*`, `McpAppAiGguiRenderMeta`,
+ *      `MCP_APPS_*`, `GGUI_RENDER_*`, `'mcpApps'` discriminator).
  *      These run against the compiled-sources string so structural
  *      drift in a PR is caught by CI regardless of the type-level
  *      angle.
@@ -34,10 +33,8 @@ import { describe, expect, it } from 'vitest';
 // Sanity: the MCP Apps subpath exists and is the canonical home for
 // these types. If this import breaks, the whole slice is miswired.
 import type {
-  McpAppsStackItem,
-  McpAppAiGguiMeta,
-  McpAppAiGguiSessionMeta,
-  McpAppAiGguiStackItemMeta,
+  McpAppsRender,
+  McpAppAiGguiRenderMeta,
   McpAppsSource,
   McpAppsCsp,
   McpAppsPermissions,
@@ -46,18 +43,18 @@ import type {
 } from './mcp-apps';
 import {
   MCP_APPS_UI_CAPABILITY,
-  GGUI_SESSION_RESOURCE_URI,
-  GGUI_SESSION_RESOURCE_MIME,
-  GGUI_PUSH_UI_META,
-  parseMcpAppAiGguiMeta,
+  GGUI_RENDER_RESOURCE_URI,
+  GGUI_RENDER_RESOURCE_MIME,
+  GGUI_RENDER_UI_META,
+  parseMcpAppAiGguiRenderMeta,
   toMcpAppEnvelope,
 } from './mcp-apps';
 
 // Compile-time existence locks. Imports above prove these names live at
 // the canonical MCP-Apps integrations subpath; if any breaks at compile
 // time, the boundary surface has drifted away from its locked location.
-type _ExistenceTypeLocks = [McpAppAiGguiMeta, McpAppAiGguiStackItemMeta];
-const _existenceValueLocks = [parseMcpAppAiGguiMeta, toMcpAppEnvelope] as const;
+type _ExistenceTypeLocks = [McpAppAiGguiRenderMeta];
+const _existenceValueLocks = [parseMcpAppAiGguiRenderMeta, toMcpAppEnvelope] as const;
 void _existenceValueLocks;
 
 // Also import the core protocol types — the boundary-lock tests below
@@ -75,75 +72,75 @@ import type { StreamSpec, ActionSpec, PropsSpec } from '../types/data-contract';
 // =============================================================================
 
 describe('MCP Apps root-barrel isolation (type-level)', () => {
-  it('does NOT re-export McpAppsStackItem at the root', async () => {
+  it('does NOT re-export McpAppsRender at the root', async () => {
     const root = await import('../index');
     // Values: constants must not appear on the root barrel.
     expect((root as Record<string, unknown>).MCP_APPS_UI_CAPABILITY).toBeUndefined();
-    expect((root as Record<string, unknown>).GGUI_SESSION_RESOURCE_URI).toBeUndefined();
-    expect((root as Record<string, unknown>).GGUI_PUSH_UI_META).toBeUndefined();
-    expect((root as Record<string, unknown>).isMcpAppsStackItem).toBeUndefined();
-    expect((root as Record<string, unknown>).validateMcpAppsStackItem).toBeUndefined();
+    expect((root as Record<string, unknown>).GGUI_RENDER_RESOURCE_URI).toBeUndefined();
+    expect((root as Record<string, unknown>).GGUI_RENDER_UI_META).toBeUndefined();
+    expect((root as Record<string, unknown>).isMcpAppsRender).toBeUndefined();
+    expect((root as Record<string, unknown>).validateMcpAppsRender).toBeUndefined();
   });
 });
 
 describe('ActionEnvelope boundary lock (type-level)', () => {
   // ActionEnvelope is a live-channel user-action envelope. It MUST NOT
-  // carry MCP-Apps-specific fields — those belong on McpAppsStackItem
+  // carry MCP-Apps-specific fields — those belong on McpAppsRender
   // (at the integrations subpath), not on the wire envelope.
   //
   // TypeScript's excess-property checking fires on OBJECT LITERAL
   // assignments, so the locks use a literal annotated with the type.
   it('does NOT carry MCP-Apps-specific source / csp / permissions fields', () => {
     const env: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
       payload: { action: 'x' },
       // @ts-expect-error — `source` is not an ActionEnvelope field.
       source: { connectorId: 'x', toolName: 't', resourceUri: 'ui://x/t' } satisfies McpAppsSource,
     };
-    expect(env.sessionId).toBe('s');
+    expect(env.renderId).toBe('r');
   });
 
   it('does NOT allow csp / permissions / containerDimensions / resourceUri / bootstrap fields', () => {
     const env1: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
       // @ts-expect-error — csp is not an ActionEnvelope field.
       csp: {} satisfies McpAppsCsp,
     };
     const env2: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
       // @ts-expect-error — permissions is not an ActionEnvelope field.
       permissions: {} satisfies McpAppsPermissions,
     };
     const env3: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
       // @ts-expect-error — containerDimensions is not an ActionEnvelope field.
       containerDimensions: {} satisfies McpAppsContainerDimensions,
     };
     const env4: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
       // @ts-expect-error — resourceUri is not an ActionEnvelope field.
       resourceUri: 'ui://x',
     };
     const env5: ActionEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       type: 'data:submit',
-      // @ts-expect-error — session slice meta is not an ActionEnvelope field.
+      // @ts-expect-error — render slice meta is not an ActionEnvelope field.
       bootstrap: {
-        sessionId: 's',
+        renderId: 'r',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'w',
-        token: 't',
+        wsToken: 't',
         expiresAt: 'e',
-      } satisfies McpAppAiGguiSessionMeta,
+      } satisfies McpAppAiGguiRenderMeta,
     };
-    expect([env1, env2, env3, env4, env5].map((e) => e.sessionId)).toEqual(
-      Array(5).fill('s'),
+    expect([env1, env2, env3, env4, env5].map((e) => e.renderId)).toEqual(
+      Array(5).fill('r'),
     );
   });
 });
@@ -153,7 +150,7 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
   // have their own contract via the host postMessage bridge.
   it('does NOT carry MCP-Apps-specific source / csp / resourceUri / bootstrap fields', () => {
     const env1: StreamEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
@@ -161,7 +158,7 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
       source: { connectorId: 'c', toolName: 't', resourceUri: 'ui://c/t' } satisfies McpAppsSource,
     };
     const env2: StreamEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
@@ -169,23 +166,23 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
       csp: {} satisfies McpAppsCsp,
     };
     const env3: StreamEnvelope = {
-      sessionId: 's',
+      renderId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
       // @ts-expect-error — no resourceUri on stream wire.
       resourceUri: 'ui://x',
     };
-    expect([env1, env2, env3].map((e) => e.sessionId)).toEqual(['s', 's', 's']);
+    expect([env1, env2, env3].map((e) => e.renderId)).toEqual(['r', 'r', 'r']);
   });
 });
 
 describe('StreamSpec / ActionSpec / PropsSpec boundary lock (type-level)', () => {
-  // Per-stack-item contract specs are about the COMPONENT variant's
+  // Per-render contract specs are about the COMPONENT variant's
   // wire contract. They must not grow MCP-Apps-specific fields; the
   // MCP Apps variant has its own locator-oriented shape via
-  // McpAppsStackItem (no spec fields, by design — those are typed as
-  // `?: never` on McpAppsStackItem).
+  // McpAppsRender (no spec fields, by design — those are typed as
+  // `?: never` on McpAppsRender).
   it('StreamSpec does not carry MCP-Apps fields at per-entry level', () => {
     const s1: StreamSpec = {
       c: {
@@ -242,27 +239,26 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
   // deliberately framed as GENERAL transport-bootstrap credentials
   // (opaque strings), NOT as MCP-Apps-typed fields. This lock ensures
   // a future change doesn't accidentally narrow them to
-  // `McpAppAiGguiSessionMeta`-shaped objects (or any other slice-meta
-  // pair like {@link McpAppAiGguiMeta}).
-  it('SubscribePayload.bootstrap is a string, not a session-slice object', () => {
+  // `McpAppAiGguiRenderMeta`-shaped objects.
+  it('SubscribePayload.bootstrap is a string, not a render-slice object', () => {
     const s: SubscribePayload = {
-      sessionId: 'x',
+      renderId: 'x',
       appId: 'a',
       bootstrap: 'opaque-token',
     };
     expect(typeof s.bootstrap).toBe('string');
     const s2: SubscribePayload = {
-      sessionId: 'x',
+      renderId: 'x',
       appId: 'a',
       // @ts-expect-error — bootstrap is `string | undefined`, not an object.
       bootstrap: {
-        sessionId: 's',
+        renderId: 'r',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'w',
-        token: 't',
+        wsToken: 't',
         expiresAt: 'e',
-      } satisfies McpAppAiGguiSessionMeta,
+      } satisfies McpAppAiGguiRenderMeta,
     };
     expect(s2).toBeDefined();
   });
@@ -271,20 +267,19 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
     const a: AckPayload = {
       sequence: 1,
       timestamp: 0,
-      stack: [],
       sessionToken: 'opaque',
     };
     expect(typeof a.sessionToken).toBe('string');
   });
 });
 
-describe('McpAppAiGguiMeta / PushResultMeta visibility to external tools', () => {
-  it('McpAppsStackItem structurally forbids component-variant fields', () => {
-    // These fields are `?: never` on McpAppsStackItem — tests encode
+describe('McpAppAiGguiRenderMeta / McpAppsRender visibility to external tools', () => {
+  it('McpAppsRender structurally forbids component-variant fields', () => {
+    // These fields are `?: never` on McpAppsRender — tests encode
     // that restriction at the type level. `?: never` makes the field
     // type `never | undefined`, so assigning any non-undefined value
     // to it is a type error.
-    const item1: McpAppsStackItem = {
+    const item1: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
@@ -292,7 +287,7 @@ describe('McpAppAiGguiMeta / PushResultMeta visibility to external tools', () =>
       // @ts-expect-error — componentCode is `?: never` on mcpApps variant.
       componentCode: '/* code */',
     };
-    const item2: McpAppsStackItem = {
+    const item2: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
@@ -300,7 +295,7 @@ describe('McpAppAiGguiMeta / PushResultMeta visibility to external tools', () =>
       // @ts-expect-error — props is `?: never` on mcpApps variant.
       props: {},
     };
-    const item3: McpAppsStackItem = {
+    const item3: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
@@ -308,7 +303,7 @@ describe('McpAppAiGguiMeta / PushResultMeta visibility to external tools', () =>
       // @ts-expect-error — streamSpec is `?: never` on mcpApps variant.
       streamSpec: { channels: {} },
     };
-    const item4: McpAppsStackItem = {
+    const item4: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
@@ -316,7 +311,7 @@ describe('McpAppAiGguiMeta / PushResultMeta visibility to external tools', () =>
       // @ts-expect-error — actionSpec is `?: never` on mcpApps variant.
       actionSpec: { actions: {} },
     };
-    const item5: McpAppsStackItem = {
+    const item5: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
@@ -353,27 +348,24 @@ function readSource(rel: string): string {
 
 /** Tokens that must NEVER appear in core (non-integrations) modules. */
 const FORBIDDEN_TOKENS = [
-  'McpApps', // McpAppsStackItem / McpAppsSource / etc.
-  'McpAppAiGguiMeta',
-  'McpAppAiGguiSessionMeta',
-  'McpAppAiGguiStackItemMeta',
+  'McpApps', // McpAppsRender / McpAppsSource / etc.
+  'McpAppAiGguiRenderMeta',
   'MCP_APPS_UI_CAPABILITY',
-  'GGUI_SESSION_RESOURCE_URI',
-  'GGUI_SESSION_RESOURCE_MIME',
-  'GGUI_PUSH_UI_META',
-  'MCP_APP_AI_GGUI_SESSION_META_KEY',
-  'MCP_APP_AI_GGUI_STACK_ITEM_META_KEY',
-  'isMcpAppsStackItem',
-  'validateMcpAppsStackItem',
-  'parseMcpAppAiGguiMeta',
+  'GGUI_RENDER_RESOURCE_URI',
+  'GGUI_RENDER_RESOURCE_MIME',
+  'GGUI_RENDER_UI_META',
+  'MCP_APP_AI_GGUI_RENDER_META_KEY',
+  'isMcpAppsRender',
+  'validateMcpAppsRender',
+  'parseMcpAppAiGguiRenderMeta',
   'toMcpAppEnvelope',
 ];
 
 // `types/session.ts` is the ONE core module that legitimately imports
-// `McpAppsStackItem` — it owns the `SessionStackEntry` discriminated
-// union. That import is the locked design concession (see the
-// dedicated describe block below). Every OTHER core module must stay
-// free of MCP Apps references.
+// `McpAppsRender` — it owns the `Render` discriminated union. That
+// import is the locked design concession (see the dedicated describe
+// block below). Every OTHER core module must stay free of MCP Apps
+// references.
 const CORE_MODULES = [
   'types/live-channel.ts',
   'types/events.ts',
@@ -416,29 +408,26 @@ describe('MCP Apps identifiers do NOT leak into core protocol modules', () => {
   });
 });
 
-describe('SessionStackEntry discriminator is the ONE place mcpApps enters core', () => {
+describe('Render discriminator is the ONE place mcpApps enters core', () => {
   // The ONE concession core protocol made for MCP Apps is
-  // `SessionStackEntry = StackItem | McpAppsStackItem` — a
+  // `Render = ComponentRender | SystemRender | McpAppsRender` — a
   // discriminated union at the session.ts boundary. This test locks
   // that concession so accidental deletion or broadening gets caught.
-  it('session.ts imports exactly the narrow McpAppsStackItem type (and no other MCP Apps surface)', () => {
+  it('session.ts imports exactly the narrow McpAppsRender type (and no other MCP Apps surface)', () => {
     const src = readSource('types/session.ts');
     // Must import the type — that's the locked concession.
     expect(src).toMatch(
-      /import\s+type\s+\{\s*McpAppsStackItem\s*\}\s+from\s+['"]\.\.?\/integrations\/mcp-apps['"]/,
+      /import\s+type\s+\{\s*McpAppsRender\s*\}\s+from\s+['"]\.\.?\/integrations\/mcp-apps['"]/,
     );
     // But must NOT pull in any other MCP Apps symbol — those belong
     // at the integrations subpath, not in core session typing.
     const BANNED_IN_SESSION = [
-      'McpAppAiGguiMeta',
-      'McpAppAiGguiSessionMeta',
-      'McpAppAiGguiStackItemMeta',
+      'McpAppAiGguiRenderMeta',
       'MCP_APPS_UI_CAPABILITY',
-      'GGUI_SESSION_RESOURCE_URI',
-      'GGUI_SESSION_RESOURCE_MIME',
-      'GGUI_PUSH_UI_META',
-      'MCP_APP_AI_GGUI_SESSION_META_KEY',
-      'MCP_APP_AI_GGUI_STACK_ITEM_META_KEY',
+      'GGUI_RENDER_RESOURCE_URI',
+      'GGUI_RENDER_RESOURCE_MIME',
+      'GGUI_RENDER_UI_META',
+      'MCP_APP_AI_GGUI_RENDER_META_KEY',
       'McpAppsSource',
       'McpAppsCsp',
       'McpAppsPermissions',
@@ -447,18 +436,16 @@ describe('SessionStackEntry discriminator is the ONE place mcpApps enters core',
     for (const tok of BANNED_IN_SESSION) {
       expect(
         src.includes(tok),
-        `session.ts must not reference "${tok}" — only McpAppsStackItem is the locked crossover`,
+        `session.ts must not reference "${tok}" — only McpAppsRender is the locked crossover`,
       ).toBe(false);
     }
   });
 
-  it('session.ts defines the SessionStackEntry two-variant union', () => {
+  it('session.ts defines the Render two-variant union', () => {
     const src = readSource('types/session.ts');
-    expect(src).toMatch(/SessionStackEntry/);
-    // The union must be present — either as `| McpAppsStackItem` or
-    // equivalent. The precise formatting isn't load-bearing, but
-    // "McpAppsStackItem" MUST appear in the file that defines it.
-    expect(src).toMatch(/McpAppsStackItem/);
+    expect(src).toMatch(/Render/);
+    // The union must reference McpAppsRender as a member.
+    expect(src).toMatch(/McpAppsRender/);
   });
 });
 
@@ -471,16 +458,16 @@ describe('MCP Apps integration constants are stable spec-canonical values', () =
     expect(MCP_APPS_UI_CAPABILITY).toBe('io.modelcontextprotocol/ui');
   });
 
-  it('GGUI_SESSION_RESOURCE_URI is "ui://ggui/session"', () => {
-    expect(GGUI_SESSION_RESOURCE_URI).toBe('ui://ggui/session');
+  it('GGUI_RENDER_RESOURCE_URI is "ui://ggui/render"', () => {
+    expect(GGUI_RENDER_RESOURCE_URI).toBe('ui://ggui/render');
   });
 
-  it('GGUI_SESSION_RESOURCE_MIME is "text/html;profile=mcp-app"', () => {
-    expect(GGUI_SESSION_RESOURCE_MIME).toBe('text/html;profile=mcp-app');
+  it('GGUI_RENDER_RESOURCE_MIME is "text/html;profile=mcp-app"', () => {
+    expect(GGUI_RENDER_RESOURCE_MIME).toBe('text/html;profile=mcp-app');
   });
 
-  it('GGUI_PUSH_UI_META locks visibility = ["model"] (entry-point rule)', () => {
-    expect(GGUI_PUSH_UI_META.resourceUri).toBe(GGUI_SESSION_RESOURCE_URI);
-    expect(GGUI_PUSH_UI_META.visibility).toEqual(['model']);
+  it('GGUI_RENDER_UI_META locks visibility = ["model"] (entry-point rule)', () => {
+    expect(GGUI_RENDER_UI_META.resourceUri).toBe(GGUI_RENDER_RESOURCE_URI);
+    expect(GGUI_RENDER_UI_META.visibility).toEqual(['model']);
   });
 });

@@ -1,37 +1,29 @@
 import type { z } from 'zod';
-import type { Action, SessionView } from './session';
-import type { DataContract, JsonObject, JsonSchema, JsonValue, StreamSpec } from './data-contract';
+import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
+import type { Render, RenderStatus } from './session';
 import type {
   handshakeInputSchema,
   handshakeOutputSchema,
-  newSessionInputSchema,
-  newSessionOutputSchema,
   pushInputSchema,
   pushOutputSchema,
   updateInputSchema,
   updateOutputSchema,
 } from '../schemas/mcp';
+
+export type { RenderStatus } from './session';
 // Zod schemas in ../schemas/mcp.ts are the runtime validation source of truth.
 // These TypeScript types are the compile-time API surface with precise domain types
 // (DataContract, InterfaceContext, etc.) that Zod can't express.
 // Both define the same fields — kept in sync by convention.
 
-// Re-export Action from session.ts (canonical location per spec Section 2.4)
-export type { Action };
-
 /** Target screen size category for responsive layout */
 export type Screen = 'mobile' | 'tablet' | 'desktop' | 'universal';
-
-/**
- * Session status for MCP consume responses
- */
-export type SessionStatus = 'active' | 'completed' | 'expired';
 
 /**
  * Pending action stored server-side for agent consumption.
  *
  * `envelope` is the canonical {@link ConsumeEventEntry} row. `sequence`
- * is the session-scoped monotonic assigned at ingestion; it sits on the
+ * is the render-scoped monotonic assigned at ingestion; it sits on the
  * row wrapper so consumers can detect gaps without parsing the payload.
  *
  * **Storage note**: the envelope is stored as either a JSON object
@@ -49,9 +41,9 @@ export interface PendingEvent {
    */
   envelope: ConsumeEventEntry | string;
   /**
-   * Session-scoped monotonic sequence assigned at ingestion. Mirrors
-   * `Session.eventSequence` at the moment this row was appended so
-   * consumers can detect gaps without reading session state.
+   * Render-scoped monotonic sequence assigned at ingestion. Mirrors
+   * `Render.eventSequence` at the moment this row was appended so
+   * consumers can detect gaps without reading render state.
    */
   sequence: number;
   /** ISO datetime when the row was appended. */
@@ -60,12 +52,10 @@ export interface PendingEvent {
 
 /**
  * Input for ggui_consume tool — long-poll for buffered events on a
- * specific stack item.
+ * specific render.
  *
- * Keyed by `stackItemId`, not `sessionId`. The server resolves the
- * owning session via its `stackItemId` secondary index and tenancy-
- * checks via `ctx.appId`. The agent gets `stackItemId` from
- * `pushOutput.stackItemId`.
+ * Keyed by `renderId`. The agent gets `renderId` from
+ * `renderOutput.renderId`.
  *
  * Default semantic: long-poll, return on first event or server-default
  * timeout. Agent loops by re-calling. There is no `until` parameter —
@@ -79,11 +69,10 @@ export interface PendingEvent {
  */
 export interface GguiConsumeInput {
   /**
-   * Stack item to consume events from. Globally unique (UUID); the
-   * server resolves the owning session via its secondary index.
-   * Cross-tenant access surfaces uniformly as `stack_item_not_found`.
+   * Render to consume events from. Globally unique (UUID).
+   * Cross-tenant access surfaces uniformly as `render_not_found`.
    */
-  stackItemId: string;
+  renderId: string;
   /**
    * Timeout in seconds for long-poll. Server-side wall-clock cap.
    * - 0: immediate return (no waiting)
@@ -97,14 +86,14 @@ export interface GguiConsumeInput {
 
 /**
  * Input for `ggui_emit` — emit a new delivery on a declared channel of the
- * active (or explicitly pinned) stack item's `streamSpec`.
+ * render's `streamSpec`.
  *
  * Canonical, post-rewrite shape. The agent describes what new data
  * exists; the server describes how the channel behaves.
  *
  * Fields the agent MUST NOT supply:
  *   - `mode` — derived from `streamSpec[channel].mode` (default `'append'`).
- *   - `seq` — server-assigned via `SessionStreamBuffer`.
+ *   - `seq` — server-assigned via `RenderStreamBuffer`.
  *   - `timestamp` — server clock.
  *   - `connectionId` / transport details — fan-out plumbing.
  *
@@ -112,11 +101,11 @@ export interface GguiConsumeInput {
  * guarded by `types.test.ts`.
  */
 export interface GguiEmitInput<TPayload = JsonValue> {
-  /** Session to stream to. Server enforces app-ownership. */
-  sessionId: string;
+  /** Render to stream to. Server enforces app-ownership. */
+  renderId: string;
 
   /**
-   * Channel name. MUST be declared on the resolved stack item's
+   * Channel name. MUST be declared on the resolved render's
    * `streamSpec`. Undeclared channels are rejected at call time.
    */
   channel: string;
@@ -137,13 +126,6 @@ export interface GguiEmitInput<TPayload = JsonValue> {
    * sending `complete: true`, but the server won't reject them.
    */
   complete?: boolean;
-
-  /**
-   * Pin this delivery to a specific stack item. Mirrors the live-channel
-   * `ActionEnvelope.stackItemId` doctrine — explicit when the agent
-   * cares, implicit `session.currentStackIndex` default otherwise.
-   */
-  stackItemId?: string;
 }
 
 /**
@@ -159,9 +141,9 @@ export interface GguiEmitOutput {
   accepted: boolean;
 
   /**
-   * Session-scoped monotonic outbound sequence assigned to this
+   * Render-scoped monotonic outbound sequence assigned to this
    * delivery. Omitted on implementations without a
-   * `SessionStreamBuffer` (hosted cloud today); required on OSS
+   * `RenderStreamBuffer` (hosted cloud today); required on OSS
    * `@ggui-ai/mcp-server`.
    */
   seq?: number;
@@ -170,67 +152,24 @@ export interface GguiEmitOutput {
 
 
 /**
- * Input for ggui_get_session tool - retrieves session state
+ * Input for ggui_get_render tool - retrieves render state
  */
-export interface GguiGetSessionInput {
-  /** Session ID to get state for */
-  sessionId: string;
+export interface GguiGetRenderInput {
+  /** Render ID to get state for */
+  renderId: string;
 }
 
 /**
- * Input for ggui_close tool - terminates session
+ * Output from ggui_get_render tool — full render snapshot.
+ */
+export type GguiGetRenderOutput = Render;
+
+/**
+ * Input for ggui_close tool - terminates render
  */
 export interface GguiCloseInput {
-  /** Session ID to close */
-  sessionId: string;
-}
-
-/**
- * Input for ggui_get_stack tool - lightweight stack navigation metadata
- */
-export interface GguiGetStackInput {
-  /** Session ID to get stack info for */
-  sessionId: string;
-}
-
-/**
- * Lightweight summary of a stack item (no componentCode)
- */
-export interface StackItemSummary {
-  /** Stack item ID */
-  id: string;
-  /** Natural language prompt that generated this item */
-  prompt?: string;
-  /** Human-readable description */
-  description?: string;
-  /** Whether this item has a generation error */
-  hasError: boolean;
-  /** Stream contract — describes what data the component accepts in real-time via ggui_emit */
-  streamSpec?: StreamSpec;
-  /** Declarative actions wired into this item */
-  actions?: Action[];
-  /** ISO datetime when this item was created */
-  createdAt: string;
-}
-
-/**
- * Output from ggui_get_stack tool
- */
-export interface GguiGetStackOutput {
-  /** Session ID */
-  sessionId: string;
-  /** Number of items in the stack */
-  stackSize: number;
-  /** Currently active stack index */
-  currentIndex: number;
-  /** Lightweight item summaries (no component code) */
-  items: StackItemSummary[];
-  /** Whether back navigation is possible */
-  canGoBack: boolean;
-  /** Whether forward navigation is possible */
-  canGoForward: boolean;
-  /** Session status */
-  status: SessionStatus;
+  /** Render ID to close */
+  renderId: string;
 }
 
 // =============================================================================
@@ -239,7 +178,7 @@ export interface GguiGetStackOutput {
 
 /** Negotiator's decision on what UI to show. */
 export interface NegotiatorDecision {
-  /** What to do with the UI stack. */
+  /** What to do with the render. */
   action: 'create' | 'update' | 'compose' | 'replace';
   /** Why — visible to the agent. */
   reasoning: string;
@@ -247,8 +186,8 @@ export interface NegotiatorDecision {
   blueprintId?: string;
   /** The agreed data contract. */
   contract: DataContract;
-  /** For update/compose/replace — which page to target. */
-  targetStackItemId?: string;
+  /** For update/compose/replace — which render to target. */
+  targetRenderId?: string;
   /** UI adaptations based on user context. */
   adaptations?: {
     fontSize?: 'compact' | 'default' | 'large';
@@ -274,7 +213,7 @@ export interface NegotiatorAlternative {
 /**
  * Per-event entry returned by `ggui_consume`. The shape written by
  * `ggui_runtime_submit_action`'s `kind:'dispatch'` handler onto the
- * stackItem-keyed pending-events pipe and surfaced verbatim on drain.
+ * render-keyed pending-events pipe and surfaced verbatim on drain.
  *
  * `actionData` is WHAT the user did; `uiContext` is the snapshot of the
  * contract's `contextSpec` slot values at the moment they did it.
@@ -284,15 +223,15 @@ export interface NegotiatorAlternative {
  * have mutated by the time consume returns.
  *
  * Distinct from the inbound live-channel `ActionEnvelope` (which has
- * `{sessionId, type, payload?, stackIndex?, ...}` and lives on the
- * WebSocket inbound seam) — consume reads from a separate stackItem-
- * scoped pipe whose entries originate at `submit_action`.
+ * `{renderId, type, payload?, ...}` and lives on the WebSocket inbound
+ * seam) — consume reads from a separate render-scoped pipe whose entries
+ * originate at `submit_action`.
  */
 export interface ConsumeEventEntry {
   /** Stable discriminator — always the literal `'action'`. */
   readonly type: 'action';
-  /** Stack item the gesture targeted. */
-  readonly stackItemId: string;
+  /** Render the gesture targeted. */
+  readonly renderId: string;
   /** Which `actionSpec[*]` entry the iframe dispatched against. */
   readonly intent: string;
   /**
@@ -327,14 +266,14 @@ export interface ConsumeEventEntry {
 export interface GguiConsumeOutput {
   /** Buffered consume-entries (cleared after return). */
   events: ConsumeEventEntry[];
-  /** Session status - 'completed' means no more events will arrive */
-  status: SessionStatus;
+  /** Render status - 'completed' means no more events will arrive */
+  status: RenderStatus;
   /**
    * Client-side observations echoed back to the agent. Same shape
-   * `ggui_handshake` exposes. Lets the agent pick up mid-session
+   * `ggui_handshake` exposes. Lets the agent pick up mid-render
    * changes (window resize, fullscreen toggle, etc.) without waiting
    * for the next handshake. Absent ⇒ no client observations yet.
-   * 
+   *
    */
   client?: {
     readonly hostContext?: import('./host-context.js').HostContextProjection;
@@ -342,16 +281,10 @@ export interface GguiConsumeOutput {
 }
 
 /**
- * Output from ggui_get_session tool.
- * Extends SessionView (spec Section 6.1) — same fields, same structure.
- */
-export type GguiGetSessionOutput = SessionView;
-
-/**
  * Output from ggui_close tool
  */
 export interface GguiCloseOutput {
-  /** Whether the session was successfully closed */
+  /** Whether the render was successfully closed */
   success: boolean;
 }
 
@@ -498,7 +431,7 @@ export interface GguiDiscoverOutput {
     enabledAdapters: string[];
     /** Component capabilities granted to this app */
     grantedCapabilities: string[];
-    /** Default shell type for new sessions */
+    /** Default shell type for new renders */
     defaultShellType: string;
     /** Authentication mode for end users */
     authMode: string;
@@ -520,8 +453,8 @@ export interface GguiRequestCredentialInput {
   serviceId: string;
   /** Why the agent needs this credential (shown to user) */
   reason?: string;
-  /** Existing session to push consent UI into */
-  sessionId?: string;
+  /** Existing render to push consent UI into */
+  renderId?: string;
 }
 
 /**
@@ -619,13 +552,9 @@ export interface McpCapabilities extends JsonObject {
 // Lifecycle tool input/output types
 // =============================================================================
 //
-// Types for the canonical `ggui_new_session` / `ggui_handshake` /
-// `ggui_push` / `ggui_update` lifecycle tools. Derived from the Zod
-// schemas in `schemas/mcp.ts` via `z.infer` — schemas are the runtime
-// validation source of truth.
-
-export type GguiNewSessionInput = z.infer<typeof newSessionInputSchema>;
-export type GguiNewSessionOutput = z.infer<typeof newSessionOutputSchema>;
+// Types for the canonical `ggui_handshake` / `ggui_render` / `ggui_update`
+// lifecycle tools. Derived from the Zod schemas in `schemas/mcp.ts` via
+// `z.infer` — schemas are the runtime validation source of truth.
 
 export type GguiHandshakeInput = z.infer<typeof handshakeInputSchema>;
 export type GguiHandshakeOutput = z.infer<typeof handshakeOutputSchema>;
@@ -665,8 +594,8 @@ export interface ServerCapabilities {
   readonly streamWebSocketLocalTools?: readonly string[];
 }
 
-export type GguiPushInput = z.infer<typeof pushInputSchema>;
-export type GguiPushOutput = z.infer<typeof pushOutputSchema>;
+export type GguiRenderInput = z.infer<typeof pushInputSchema>;
+export type GguiRenderOutput = z.infer<typeof pushOutputSchema>;
 
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
@@ -686,7 +615,7 @@ export const MCP_ERROR_CODES = {
   INTERNAL_ERROR: -32603,
   // Protocol-specific error codes
   UNAUTHORIZED: -32001,
-  SESSION_NOT_FOUND: -32002,
+  RENDER_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
   PRODUCTION_FAILED: -32004,
   CAPABILITY_DENIED: -32005,
@@ -699,7 +628,7 @@ export const MCP_ERROR_CODES = {
 export const PLATFORM_ERROR_CODES = {
   GENERATION_QUOTA_EXCEEDED: -32010,
   APP_LIMIT_EXCEEDED: -32011,
-  CONCURRENT_SESSION_LIMIT: -32012,
+  CONCURRENT_RENDER_LIMIT: -32012,
   RATE_LIMIT_EXCEEDED: -32013,
   CONTRACT_VIOLATION: -32020,
 } as const;

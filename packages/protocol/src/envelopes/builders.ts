@@ -56,11 +56,9 @@ import { PROTOCOL_SCHEMA_VERSION } from '../version.js';
 
 /** Input type for {@link makeActionEnvelope}. */
 export interface MakeActionEnvelopeInput<TPayload = JsonValue> {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly type: EventType;
   readonly payload?: TPayload;
-  readonly stackIndex?: number;
-  readonly stackItemId?: string;
   readonly clientSeq?: number;
   /**
    * `schemaVersion` override. See the module docstring for the three
@@ -73,7 +71,7 @@ export interface MakeActionEnvelopeInput<TPayload = JsonValue> {
 
 /** Input type for {@link makeStreamEnvelope}. */
 export interface MakeStreamEnvelopeInput {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -137,12 +135,10 @@ export function makeActionEnvelope<TPayload = JsonValue>(
   parts: MakeActionEnvelopeInput<TPayload>,
 ): ActionEnvelope<TPayload> {
   const envelope: ActionEnvelope<TPayload> = {
-    sessionId: parts.sessionId,
+    renderId: parts.renderId,
     type: parts.type,
   };
   if (parts.payload !== undefined) envelope.payload = parts.payload;
-  if (parts.stackIndex !== undefined) envelope.stackIndex = parts.stackIndex;
-  if (parts.stackItemId !== undefined) envelope.stackItemId = parts.stackItemId;
   if (parts.clientSeq !== undefined) envelope.clientSeq = parts.clientSeq;
   const stamp = resolveSchemaVersion(parts);
   if (stamp !== undefined) envelope.schemaVersion = stamp;
@@ -161,7 +157,7 @@ export function makeStreamEnvelope(
   parts: MakeStreamEnvelopeInput,
 ): StreamEnvelope {
   const envelope: StreamEnvelope = {
-    sessionId: parts.sessionId,
+    renderId: parts.renderId,
     channel: parts.channel,
     mode: parts.mode,
     payload: parts.payload,

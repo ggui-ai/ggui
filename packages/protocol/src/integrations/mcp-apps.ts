@@ -10,9 +10,8 @@
  * import {
  *   MCP_APPS_UI_CAPABILITY,
  *   GGUI_RENDER_RESOURCE_URI,
- *   parseMcpAppAiGguiMeta,
- *   type McpAppAiGguiSessionMeta,
- *   type McpAppAiGguiStackItemMeta,
+ *   parseMcpAppAiGguiRenderMeta,
+ *   type McpAppAiGguiRenderMeta,
  * } from '@ggui-ai/protocol/integrations/mcp-apps';
  * ```
  *
@@ -44,14 +43,14 @@ export const MCP_APPS_UI_CAPABILITY = 'io.modelcontextprotocol/ui' as const;
 
 /**
  * The single MCP Apps resource URI ggui exposes for outbound delivery.
- * `ggui_push` is the sole tool declaration that carries this in its
+ * `ggui_render` is the sole tool declaration that carries this in its
  * `_meta.ui.resourceUri`. No other ggui tool gets a resource URI —
- * `ggui_push` is the single outbound entry point.
+ * `ggui_render` is the single outbound entry point.
  */
 export const GGUI_RENDER_RESOURCE_URI = 'ui://ggui/render' as const;
 
 /**
- * MIME type for the `ui://ggui/session` resource. Per MCP Apps spec, UI
+ * MIME type for the `ui://ggui/render` resource. Per MCP Apps spec, UI
  * resources carry the `text/html` base type with a `profile=mcp-app`
  * parameter so hosts that don't support MCP Apps don't accidentally
  * render them as plain HTML.
@@ -64,7 +63,7 @@ export const GGUI_RENDER_RESOURCE_MIME = 'text/html;profile=mcp-app' as const;
  * resource-serving code, and tests all agree on one spelling.
  */
 export const GGUI_RENDER_UI_META = {
-  /** Resource URI hosts fetch via `resources/read` on a `ggui_push` tool call. */
+  /** Resource URI hosts fetch via `resources/read` on a `ggui_render` tool call. */
   resourceUri: GGUI_RENDER_RESOURCE_URI,
   /** Only `"model"` — outer agent can call, iframe views cannot. */
   visibility: ['model'] as const,
@@ -79,18 +78,14 @@ export const GGUI_RENDER_UI_META = {
 export type McpAppsToolVisibility = 'model' | 'app';
 
 /**
- * #109 — `McpAppAiGguiMountView` (and its `GguiBootstrapMeta` predecessor)
- * was deleted in R3. The wire is now decomposed into two slices on
- * `_meta`:
+ * Phase B render-identity collapse — the previously two-slice wire
+ * (`ai.ggui/session` + `ai.ggui/stack-item`) is merged into ONE slice
+ * (`ai.ggui/render`). Consumers parse with {@link parseMcpAppAiGguiRenderMeta}
+ * and read fields directly off the {@link McpAppAiGguiRenderMeta} struct.
  *
- *   - `ai.ggui/session`    → {@link McpAppAiGguiSessionMeta}
- *   - `ai.ggui/stack-item` → {@link McpAppAiGguiStackItemMeta}
- *
- * Consumers parse with {@link parseMcpAppAiGguiMeta} and read the
- * slices directly off the {@link McpAppAiGguiMeta} pair
- * (e.g. `meta.session.sessionId`, `meta.stackItem?.propsJson`). There
- * is no longer a flat "mount view" aggregate — that was a workaround
- * that preserved the pre-decomposition mental model.
+ * Why the merge: every "session" wrapped exactly one stack item post-
+ * Phase-A, so the two slices were always activated in lock-step. The
+ * pair-holder added ceremony with no signal. Flat is the honest shape.
  */
 
 /**
@@ -144,77 +139,57 @@ export function deriveContextName(slotKey: string): string {
 }
 
 // =============================================================================
-// #109 — per-stability-window `_meta` keys. Two slices that map 1:1 to
-// the actual update cadence:
+// Single `_meta` key carrying everything a render needs — identity, boot
+// wiring, live-channel auth, capability advertisements, render state,
+// contract pointer, and component-mode discriminator.
 //
-//   - `ai.ggui/session`    — mount-time + session-scoped: identity,
-//                            boot wiring, live-channel auth, capability
-//                            advertisements. Host caches per session.
-//   - `ai.ggui/stack-item` — what's being rendered NOW: the active
-//                            stack item's id, props, action hints,
-//                            contract pointer, component discriminator.
-//                            Replaced per push that activates a new
-//                            stack item.
+// Phase B replaced the pair (`ai.ggui/session` + `ai.ggui/stack-item`)
+// with this single key. The pair existed because pre-Phase-A multiple
+// stack items could share session-scoped state; post-Phase-A every
+// render is its own thing, so the two slices were always emitted
+// together.
 //
-// Wire shape (both keys optional; presence is signal):
+// Wire shape:
 //
 // ```jsonc
 // "_meta": {
-//   "ai.ggui/session":    { sessionId, appId, runtimeUrl, wsUrl, token, ... },
-//   "ai.ggui/stack-item": { stackItemId, propsJson, contractHash, validatorsUrl, ... }
+//   "ai.ggui/render": {
+//     renderId, appId, runtimeUrl,
+//     wsUrl?, wsToken?, expiresAt?,
+//     pollingUrl?,
+//     themeId?, themeMode?,
+//     gadgets?, publicEnv?, streamWebSocketLocalTools?,
+//     appCallableTools?, permissionsPolicy?,
+//     lastSequence?,
+//     propsJson?, actionNextSteps?, contextSlots?,
+//     contractHash?, validatorsUrl?,
+//     codeUrl?, codeHash?, kind?
+//   }
 // }
 // ```
 //
-// Hosts that don't recognize either key MUST treat them as opaque
-// and forward verbatim — same posture as the spec-defined `_meta`
-// extension surface.
+// Hosts that don't recognize the key MUST treat it as opaque and forward
+// verbatim — same posture as the spec-defined `_meta` extension surface.
 //
 // Consumers:
-//   - {@link parseMcpAppAiGguiMeta}(_meta) → {ok, meta: {session?, stackItem?}}
-//     parses the wire into a typed pair. No required-fields gate at
-//     the parser; missing slices come through as undefined. The
-//     "is session required" gate lives in the consumer (iframe-runtime
-//     mounts iff session is present; future per-session cache will let
-//     render-only deltas without a session slice mount via cached state).
-//   - {@link toMcpAppEnvelope}(meta) → `_meta` envelope. Emitter
-//     helper that builds the wire shape from server-built slices.
+//   - {@link parseMcpAppAiGguiRenderMeta}(_meta) → {ok, meta?: <slice>}
+//     structural validation only. Missing key returns {ok:true, meta: undefined}.
+//   - {@link toMcpAppEnvelope}(slice) → `_meta` envelope. Emitter helper
+//     that builds the wire shape from a server-built slice.
 // =============================================================================
 
 /**
- * `_meta` key carrying mount-time identity + boot wiring + live-channel
- * auth. Stable across the session lifetime (token, wsUrl, runtimeUrl,
- * gadgets, theme, ...). Hosts MAY cache this slice keyed by sessionId
- * and forward subsequent pushes without re-validating.
+ * `_meta` key carrying the full render slice. Single source of truth
+ * post-Phase-B: identity, boot wiring, live-channel auth, capability
+ * advertisements, current render state, contract pointer, and component-
+ * mode discriminator.
  *
  * @public
  */
-export const MCP_APP_AI_GGUI_SESSION_META_KEY = 'ai.ggui/session' as const;
+export const MCP_APP_AI_GGUI_RENDER_META_KEY = 'ai.ggui/render' as const;
 
 /**
- * `_meta` key carrying the active stack item — what's being rendered
- * NOW. Replaced per push that activates a different stack item; absent
- * on pushes that only refresh session-level state (auth rotation, theme
- * change). Includes the rendered item's id, props, action hints,
- * content-addressable contract pointer, and component-mode
- * discriminator (codeUrl / codeHash / kind).
- *
- * @public
- */
-export const MCP_APP_AI_GGUI_STACK_ITEM_META_KEY = 'ai.ggui/stack-item' as const;
-
-/**
- * Session slice — mount-time identity, boot wiring, live-channel auth,
- * and host-cacheable capability advertisements.
- *
- * Required when present (first emission per session): `sessionId`,
- * `appId`, `runtimeUrl`. Live-channel auth (`wsUrl` + `token`) is
- * paired — both present or both absent; `expiresAt` informational.
- * Other fields are optional capabilities + config.
- *
- * @public
- */
-/**
- * Single entry in the {@link McpAppAiGguiSessionMeta.gadgets} catalog.
+ * Single entry in the {@link McpAppAiGguiRenderMeta.gadgets} catalog.
  * One per registered gadget package — the iframe-runtime
  * dynamic-imports each at boot and stores the loaded namespace under
  * `globalThis.__ggui__.gadgets[package]`.
@@ -239,7 +214,7 @@ export interface McpAppGadgetRef {
 }
 
 /**
- * Single entry in {@link McpAppAiGguiStackItemMeta.contextSlots}.
+ * Single entry in {@link McpAppAiGguiRenderMeta.contextSlots}.
  * One per `contextSpec` slot — the iframe-runtime synthesizes one
  * `React.createContext(default)` per entry at boot.
  *
@@ -261,31 +236,55 @@ export interface McpAppContextSlot {
   readonly debounceMs?: number;
 }
 
-export interface McpAppAiGguiSessionMeta {
-  // Identity
-  readonly sessionId: string;
+/**
+ * The full render slice — flat post-Phase-B. Identity + boot wiring +
+ * live-channel auth + capability advertisements + render state +
+ * contract pointer + component-mode discriminator.
+ *
+ * **Identity.** `renderId` is the value an iframe's bootstrap meta and
+ * every wire reference (props_update, consume, update) keys by. The
+ * value is the same one stack items carried as `stackItemId` pre-Phase-B;
+ * the rename reflects the conceptual collapse (no enclosing vessel).
+ *
+ * **Live-channel auth.** `wsUrl` + `wsToken` are paired — both present
+ * or both absent; `expiresAt` is informational. `wsToken` is the opaque
+ * WS auth credential the iframe threads on the WebSocket upgrade as
+ * `?wsToken=<encoded>` and inside `SubscribePayload.wsToken`.
+ *
+ * **Polling-fallback URL.** When WS is blocked at the host CSP layer
+ * the iframe polls `pollingUrl` (server-stamped post-Phase-B as
+ * `/api/renders/<renderId>/events?wsToken=<token>`). The iframe-runtime
+ * composes per-tick `&sinceSequence=<cursor>&limit=<N>` against this
+ * base; companion to `lastSequence` which seeds the initial cursor.
+ *
+ * **Mode discriminator.** At least one of `{ codeUrl, kind, wsUrl-with-token }`
+ * MUST be present for the iframe to mount. `kind` and `codeUrl` are
+ * mutually exclusive (kind = system-card mode; codeUrl = static-component
+ * mode; live-channel = absent both).
+ *
+ * @public
+ */
+export interface McpAppAiGguiRenderMeta {
+  // Identity (was sessionId on the session slice; now renderId; value =
+  // old stackItemId).
+  readonly renderId: string;
   readonly appId: string;
   readonly runtimeUrl: string;
 
-  // Live-channel auth (paired) — `wsToken` is the opaque WS auth
-  // credential the iframe threads on the WebSocket upgrade as
-  // `?wsToken=<encoded>` and inside `SubscribePayload.wsToken`.
+  // Live-channel auth (paired)
   readonly wsUrl?: string;
   readonly wsToken?: string;
   readonly expiresAt?: string;
 
-  // Polling-fallback URL when WS blocked at the host CSP layer.
-  // R7: points to `/api/sessions/<sessionId>/events?wsToken=<token>`
-  // (cursor-replay endpoint). The iframe-runtime composes per-tick
-  // `&sinceSequence=<cursor>&limit=<N>` against this base. Companion
-  // to `session.lastSequence` which seeds the initial cursor.
+  // Polling fallback (server-stamped URL post-rename:
+  // `/api/renders/<renderId>/events`)
   readonly pollingUrl?: string;
 
-  // Theme (resolved at mount; rarely changes mid-session)
+  // Theme
   readonly themeId?: string;
   readonly themeMode?: 'light' | 'dark';
 
-  // Capability accumulators (union across all stack items in the session)
+  // Capability accumulators
   readonly gadgets?: ReadonlyArray<McpAppGadgetRef>;
   readonly publicEnv?: Readonly<Record<string, string>>;
   readonly streamWebSocketLocalTools?: readonly string[];
@@ -293,36 +292,15 @@ export interface McpAppAiGguiSessionMeta {
   readonly permissionsPolicy?: readonly string[];
 
   /**
-   * Monotonic sequence number of the most-recent SessionEvent applied
-   * to this session. Stamped on every emission (push, update,
-   * `GET /api/sessions/:id/state` read, MCP `resources/read` of
-   * `ui://ggui/session/<id>`). Consumers use it to initialize polling
-   * cursors aligned with the SessionEvent ledger — see the R7
-   * `/api/sessions/:id/events?sinceSequence=N` endpoint that reads
+   * Monotonic sequence number of the most-recent event applied to
+   * this render's event ledger. Stamped on every emission (render,
+   * update, `GET /api/renders/:id/state` read, MCP `resources/read`
+   * of `ui://ggui/render/<id>`). Consumers use it to initialize
+   * polling cursors aligned with the event ledger — see the
+   * `/api/renders/:id/events?sinceSequence=N` endpoint that reads
    * from a cursor.
-   *
-   * Absent on legacy sessions or in pre-ledger code paths (back-compat
-   * during R6 rollout). Post-R7 it MUST be present.
    */
   readonly lastSequence?: number;
-}
-
-/**
- * Stack-item slice — what's being rendered RIGHT NOW. Activated per
- * push; combines what were formerly three separate slices (render +
- * contract + component) because they all describe a single stack item
- * and always activate together.
- *
- * Mode discriminator (cross-cutting validation in
- * consumer-side mount check): at least one of
- * `{ codeUrl, kind, session.wsUrl-with-token }` MUST be present for
- * the iframe to mount. `kind` and `codeUrl` are mutually exclusive.
- *
- * @public
- */
-export interface McpAppAiGguiStackItemMeta {
-  // Identity of the active stack item
-  readonly stackItemId?: string;
 
   // Render state — what the iframe re-renders on update
   readonly propsJson?: string;
@@ -346,226 +324,176 @@ export interface McpAppAiGguiStackItemMeta {
 }
 
 /**
- * Parsed ai.ggui meta — the structured pair {@link parseMcpAppAiGguiMeta}
- * returns. Both keys are optional; an absent slice means "the host
- * cache (or earlier mount) already has it." First-mount pushes
- * typically carry both; render-only deltas carry just `stackItem`.
- *
- * "Meta" reads as "the ai.ggui parts of the host's `_meta` wire field"
- * — the typed pair you get after partitioning `_meta` by the two
- * canonical keys ({@link MCP_APP_AI_GGUI_SESSION_META_KEY} +
- * {@link MCP_APP_AI_GGUI_STACK_ITEM_META_KEY}).
+ * Discriminated result of {@link parseMcpAppAiGguiRenderMeta}. The parser
+ * does structural slice-shape validation only — `MALFORMED_RENDER`
+ * surfaces a structurally-invalid slice (wrong type, missing required
+ * identity, paired fields half-present, mutually-exclusive fields both
+ * present). Missing key entirely is NOT a failure; the "is the slice
+ * required for THIS consumer" gate lives in consumer-side mount check.
  *
  * @public
  */
-export interface McpAppAiGguiMeta {
-  readonly session?: McpAppAiGguiSessionMeta;
-  readonly stackItem?: McpAppAiGguiStackItemMeta;
-}
+export type ParseMcpAppAiGguiRenderMetaResult =
+  | { readonly ok: true; readonly meta?: McpAppAiGguiRenderMeta }
+  | { readonly ok: false; readonly reason: 'MALFORMED_RENDER' };
 
 /**
- * Discriminated result of {@link parseMcpAppAiGguiMeta}. The combiner
- * does structural slice-shape validation only — `MALFORMED_*` reasons
- * surface structurally-invalid slice contents (wrong type, paired
- * fields half-present). Missing slices are NOT failures here; the
- * "is session present" gate lives in consumer-side mount check.
+ * Read the `ai.ggui/render` slice off a parsed JSON-RPC `_meta` object.
+ *
+ * Structural validation only. Missing key returns `{ok: true, meta: undefined}`
+ * — not a failure. Required-fields gate (renderId / appId / runtimeUrl)
+ * fires only when the key is present. Field-level optional-field
+ * defensive parsing (e.g. context-slot schema narrowing, expiresAt date
+ * parse) lives downstream in the iframe-runtime's `validateMeta`.
  *
  * @public
  */
-export type CombineMcpAppAiGguiMetaResult =
-  | { readonly ok: true; readonly meta: McpAppAiGguiMeta }
-  | { readonly ok: false; readonly reason: 'MALFORMED_SESSION' | 'MALFORMED_STACK_ITEM' };
-
-/**
- * Read the two per-window `_meta` keys off a parsed JSON-RPC `_meta`
- * object and partition them into a {@link McpAppAiGguiMeta} struct.
- *
- * The combiner does STRUCTURAL slice-shape validation only. Missing
- * slices come through as `undefined` (not failures) — first-mount
- * pushes typically carry both `session` + `stackItem`; render-only
- * delta pushes carry just `stackItem`; auth-only refresh pushes carry
- * just `session`. The "is the session required for THIS consumer"
- * gate lives in consumer-side mount check.
- *
- * Field-level optional-field defensive parsing (e.g. context-slot
- * schema narrowing, expiresAt date parse) lives downstream in the
- * iframe-runtime's `validateMeta`.
- *
- * @public
- */
-export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaResult {
+export function parseMcpAppAiGguiRenderMeta(
+  meta: unknown,
+): ParseMcpAppAiGguiRenderMetaResult {
   if (meta === null || typeof meta !== 'object') {
-    return { ok: true, meta: {} };
+    return { ok: true };
   }
   const m = meta as Record<string, unknown>;
+  const raw = m[MCP_APP_AI_GGUI_RENDER_META_KEY];
+  if (raw === undefined) {
+    return { ok: true };
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  const s = raw as Record<string, unknown>;
 
-  // Session slice — identity, boot wiring, live-channel auth.
-  let session: McpAppAiGguiSessionMeta | undefined;
-  const sessionRaw = m[MCP_APP_AI_GGUI_SESSION_META_KEY];
-  if (sessionRaw !== undefined) {
-    if (sessionRaw === null || typeof sessionRaw !== 'object' || Array.isArray(sessionRaw)) {
-      return { ok: false, reason: 'MALFORMED_SESSION' };
-    }
-    const s = sessionRaw as Record<string, unknown>;
-    if (
-      typeof s.sessionId !== 'string' ||
-      s.sessionId.length === 0 ||
-      typeof s.appId !== 'string' ||
-      s.appId.length === 0 ||
-      typeof s.runtimeUrl !== 'string' ||
-      s.runtimeUrl.length === 0
-    ) {
-      return { ok: false, reason: 'MALFORMED_SESSION' };
-    }
-    // Auth pairing — both wsUrl + wsToken present or both absent.
-    const aw = s.wsUrl;
-    const at = s.wsToken;
-    const ae = s.expiresAt;
-    const hasW = typeof aw === 'string' && aw.length > 0;
-    const hasT = typeof at === 'string' && at.length > 0;
-    if (hasW !== hasT) return { ok: false, reason: 'MALFORMED_SESSION' };
-    if (ae !== undefined && typeof ae !== 'string') {
-      return { ok: false, reason: 'MALFORMED_SESSION' };
-    }
-    // `lastSequence` MUST be a non-negative finite integer when present
-    // — it's a monotonic ledger cursor. NaN / negative / float / string
-    // are protocol violations.
-    const ls = s.lastSequence;
-    if (
-      ls !== undefined &&
-      (typeof ls !== 'number' || !Number.isInteger(ls) || ls < 0)
-    ) {
-      return { ok: false, reason: 'MALFORMED_SESSION' };
-    }
-    session = {
-      sessionId: s.sessionId,
-      appId: s.appId,
-      runtimeUrl: s.runtimeUrl,
-      ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
-      ...(ae !== undefined ? { expiresAt: ae as string } : {}),
-      ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
-      ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
-      ...(s.themeMode !== undefined
-        ? { themeMode: s.themeMode as 'light' | 'dark' }
-        : {}),
-      ...(s.gadgets !== undefined
-        ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
-        : {}),
-      ...(s.publicEnv !== undefined
-        ? { publicEnv: s.publicEnv as Readonly<Record<string, string>> }
-        : {}),
-      ...(s.streamWebSocketLocalTools !== undefined
-        ? {
-            streamWebSocketLocalTools:
-              s.streamWebSocketLocalTools as readonly string[],
-          }
-        : {}),
-      ...(s.appCallableTools !== undefined
-        ? { appCallableTools: s.appCallableTools as readonly string[] }
-        : {}),
-      ...(s.permissionsPolicy !== undefined
-        ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
-        : {}),
-      ...(ls !== undefined ? { lastSequence: ls as number } : {}),
-    };
+  // Identity — required when slice is present.
+  if (
+    typeof s.renderId !== 'string' ||
+    s.renderId.length === 0 ||
+    typeof s.appId !== 'string' ||
+    s.appId.length === 0 ||
+    typeof s.runtimeUrl !== 'string' ||
+    s.runtimeUrl.length === 0
+  ) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
   }
 
-  // Stack-item slice — render state + contract pointer + component mode.
-  let stackItem: McpAppAiGguiStackItemMeta | undefined;
-  const stackItemRaw = m[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY];
-  if (stackItemRaw !== undefined) {
-    if (stackItemRaw === null || typeof stackItemRaw !== 'object' || Array.isArray(stackItemRaw)) {
-      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
-    }
-    const si = stackItemRaw as Record<string, unknown>;
-
-    // Component-mode discriminator: codeUrl + kind mutually exclusive.
-    const cu = si.codeUrl;
-    const ck = si.kind;
-    const ch = si.codeHash;
-    if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
-    }
-    if (ck !== undefined && (typeof ck !== 'string' || ck.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
-    }
-    if (ch !== undefined && (typeof ch !== 'string' || ch.length === 0)) {
-      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
-    }
-    if (typeof cu === 'string' && cu.length > 0 && typeof ck === 'string' && ck.length > 0) {
-      return { ok: false, reason: 'MALFORMED_STACK_ITEM' };
-    }
-
-    // Contract pair — both present or both absent (or both effectively
-    // absent via empty/wrong type → drop both, degrade to no validators).
-    const cHash = si.contractHash;
-    const vUrl = si.validatorsUrl;
-    const validContractPair =
-      typeof cHash === 'string' &&
-      cHash.length > 0 &&
-      typeof vUrl === 'string' &&
-      vUrl.length > 0;
-
-    stackItem = {
-      ...(si.stackItemId !== undefined
-        ? { stackItemId: si.stackItemId as string }
-        : {}),
-      ...(si.propsJson !== undefined
-        ? { propsJson: si.propsJson as string }
-        : {}),
-      ...(si.actionNextSteps !== undefined
-        ? {
-            actionNextSteps: si.actionNextSteps as Readonly<
-              Record<string, string>
-            >,
-          }
-        : {}),
-      ...(si.contextSlots !== undefined
-        ? {
-            contextSlots:
-              si.contextSlots as ReadonlyArray<McpAppContextSlot>,
-          }
-        : {}),
-      ...(validContractPair
-        ? {
-            contractHash: cHash as string,
-            validatorsUrl: vUrl as string,
-          }
-        : {}),
-      ...(typeof cu === 'string' && cu.length > 0 ? { codeUrl: cu } : {}),
-      ...(typeof ch === 'string' && ch.length > 0 ? { codeHash: ch } : {}),
-      ...(typeof ck === 'string' && ck.length > 0 ? { kind: ck } : {}),
-    };
+  // Auth pairing — both wsUrl + wsToken present or both absent.
+  const aw = s.wsUrl;
+  const at = s.wsToken;
+  const ae = s.expiresAt;
+  const hasW = typeof aw === 'string' && aw.length > 0;
+  const hasT = typeof at === 'string' && at.length > 0;
+  if (hasW !== hasT) return { ok: false, reason: 'MALFORMED_RENDER' };
+  if (ae !== undefined && typeof ae !== 'string') {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
   }
 
-  return {
-    ok: true,
-    meta: {
-      ...(session !== undefined ? { session } : {}),
-      ...(stackItem !== undefined ? { stackItem } : {}),
-    },
+  // `lastSequence` MUST be a non-negative finite integer when present
+  // — it's a monotonic ledger cursor. NaN / negative / float / string
+  // are protocol violations.
+  const ls = s.lastSequence;
+  if (
+    ls !== undefined &&
+    (typeof ls !== 'number' || !Number.isInteger(ls) || ls < 0)
+  ) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+
+  // Component-mode discriminator: codeUrl + kind mutually exclusive.
+  const cu = s.codeUrl;
+  const ck = s.kind;
+  const ch = s.codeHash;
+  if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  if (ck !== undefined && (typeof ck !== 'string' || ck.length === 0)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  if (ch !== undefined && (typeof ch !== 'string' || ch.length === 0)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  if (typeof cu === 'string' && cu.length > 0 && typeof ck === 'string' && ck.length > 0) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+
+  // Contract pair — both present or both absent (or both effectively
+  // absent via empty/wrong type → drop both, degrade to no validators).
+  const cHash = s.contractHash;
+  const vUrl = s.validatorsUrl;
+  const validContractPair =
+    typeof cHash === 'string' &&
+    cHash.length > 0 &&
+    typeof vUrl === 'string' &&
+    vUrl.length > 0;
+
+  const slice: McpAppAiGguiRenderMeta = {
+    renderId: s.renderId,
+    appId: s.appId,
+    runtimeUrl: s.runtimeUrl,
+    ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
+    ...(ae !== undefined ? { expiresAt: ae as string } : {}),
+    ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
+    ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
+    ...(s.themeMode !== undefined
+      ? { themeMode: s.themeMode as 'light' | 'dark' }
+      : {}),
+    ...(s.gadgets !== undefined
+      ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
+      : {}),
+    ...(s.publicEnv !== undefined
+      ? { publicEnv: s.publicEnv as Readonly<Record<string, string>> }
+      : {}),
+    ...(s.streamWebSocketLocalTools !== undefined
+      ? {
+          streamWebSocketLocalTools:
+            s.streamWebSocketLocalTools as readonly string[],
+        }
+      : {}),
+    ...(s.appCallableTools !== undefined
+      ? { appCallableTools: s.appCallableTools as readonly string[] }
+      : {}),
+    ...(s.permissionsPolicy !== undefined
+      ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
+      : {}),
+    ...(ls !== undefined ? { lastSequence: ls as number } : {}),
+    ...(s.propsJson !== undefined ? { propsJson: s.propsJson as string } : {}),
+    ...(s.actionNextSteps !== undefined
+      ? {
+          actionNextSteps: s.actionNextSteps as Readonly<
+            Record<string, string>
+          >,
+        }
+      : {}),
+    ...(s.contextSlots !== undefined
+      ? {
+          contextSlots:
+            s.contextSlots as ReadonlyArray<McpAppContextSlot>,
+        }
+      : {}),
+    ...(validContractPair
+      ? {
+          contractHash: cHash as string,
+          validatorsUrl: vUrl as string,
+        }
+      : {}),
+    ...(typeof cu === 'string' && cu.length > 0 ? { codeUrl: cu } : {}),
+    ...(typeof ch === 'string' && ch.length > 0 ? { codeHash: ch } : {}),
+    ...(typeof ck === 'string' && ck.length > 0 ? { kind: ck } : {}),
   };
+
+  return { ok: true, meta: slice };
 }
 
-
-
 /**
- * Emitter convenience — wrap a server-built {@link McpAppAiGguiMeta}
- * struct as the wire `_meta` envelope under the canonical key
- * constants. Drops empty slices.
+ * Emitter convenience — wrap a server-built {@link McpAppAiGguiRenderMeta}
+ * slice as the wire `_meta` envelope under the canonical key constant.
  *
  * @public
  */
 export function toMcpAppEnvelope(
-  meta: McpAppAiGguiMeta,
+  render: McpAppAiGguiRenderMeta,
 ): Record<string, unknown> {
   return {
-    ...(meta.session
-      ? { [MCP_APP_AI_GGUI_SESSION_META_KEY]: meta.session }
-      : {}),
-    ...(meta.stackItem
-      ? { [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: meta.stackItem }
-      : {}),
+    [MCP_APP_AI_GGUI_RENDER_META_KEY]: render,
   };
 }
 
@@ -575,35 +503,35 @@ export function toMcpAppEnvelope(
 //
 // Set BY the MCP host (claude.ai, ChatGPT, sample-agent), READ BY the ggui
 // server when the agent inside the host invokes a `ggui_*` tool. Distinct
-// from the outbound session/stack-item slices above (server → host on tool
-// results) — different direction, different parser, different lifecycle.
+// from the outbound render slice above (server → host on tool results) —
+// different direction, different parser, different lifecycle.
 // =============================================================================
 
 /**
- * `_meta` key carrying host-supplied session-grouping metadata on every
- * inbound `tools/call` request. Captured ONCE on the first call that
- * materializes a ggui session row (today: `ggui_new_session`) and
- * persisted on the session as opt-in identity for later rehydration.
+ * `_meta` key carrying host-supplied conversation-grouping metadata on
+ * every inbound `tools/call` request. Captured ONCE on the first call
+ * that materializes a ggui render row and persisted as opt-in identity
+ * for later rehydration.
  *
- * Hosts that don't set this key produce one-shot sessions — they work
- * fine for a single chat turn but cannot be re-listed or restored
- * after the host closes the conversation surface. Opt-in is the whole
- * design: hosts that want resume thread their conversation id here;
- * hosts that don't get the simple write-only path.
+ * Hosts that don't set this key produce one-shot renders — they work
+ * fine for a single chat turn but cannot be re-listed or restored after
+ * the host closes the conversation surface. Opt-in is the whole design:
+ * hosts that want resume thread their conversation id here; hosts that
+ * don't get the simple write-only path.
  *
  * @public
  */
 export const MCP_APP_AI_GGUI_HOST_SESSION_META_KEY = 'ai.ggui/host-session' as const;
 
 /**
- * Host-supplied session-grouping slice. Sent on the request `_meta` of
- * the first `ggui_*` tool call that creates a ggui session (today:
- * `ggui_new_session`; subsequent calls naming the same session ignore
- * the field — set-at-creation, immutable).
+ * Host-supplied conversation-grouping slice. Sent on the request `_meta`
+ * of the first `ggui_*` tool call that creates a ggui render; subsequent
+ * calls naming the same render ignore the field — set-at-creation,
+ * immutable.
  *
  * Opaque grouping key, NOT a credential. Auth still comes from the
  * caller's identity (API key, OAuth bearer, cookie). `hostSessionId`
- * scopes which sessions the authenticated caller can rehydrate; it
+ * scopes which renders the authenticated caller can rehydrate; it
  * does NOT itself authorize access.
  *
  * Both fields are required when the slice is present. A slice with a
@@ -632,7 +560,7 @@ export interface McpAppAiGguiHostSessionMeta {
  * Three outcomes:
  *   - `ok: true, hostSession: <slice>` — slice present + well-formed.
  *   - `ok: true, hostSession: undefined` — slice absent (host opted out
- *     of rehydration). Caller proceeds without it; the session it
+ *     of rehydration). Caller proceeds without it; the render it
  *     creates is one-shot.
  *   - `ok: false` — slice present but structurally invalid. Caller's
  *     choice whether to reject the request or proceed as "absent".
@@ -686,33 +614,35 @@ export function parseMcpAppAiGguiHostSessionMeta(
 }
 
 /**
- * Wire shape of one row in `ggui_list_sessions` output. Mirrors the
- * handler's Zod-described `sessions[*]`. Surfaced at the protocol
- * level so non-handler consumers (sample-agent's `/chat/restore`
- * server, future host SDK helpers) can import a single typed shape
- * instead of redeclaring it — preventing drift if the handler ever
- * grows fields.
+ * Wire shape of one row in `ggui_list_renders` output. Mirrors the
+ * handler's Zod-described `renders[*]`. Surfaced at the protocol level
+ * so non-handler consumers (sample-agent's `/chat/restore` server, future
+ * host SDK helpers) can import a single typed shape instead of
+ * redeclaring it — preventing drift if the handler ever grows fields.
  *
  * `wsToken` + `wsTokenExpiresAt` are populated when the deployment
  * wired a `mintWsToken` seam on the handler — otherwise the lean
  * summary path returns them absent.
  *
+ * Post-Phase-B: `sessionId` → `renderId`; the old `stackItemCount` is
+ * dropped (every render is exactly one item — Phase B collapsed the
+ * vessel).
+ *
  * @public
  */
-export interface SessionSummaryWire {
-  readonly sessionId: string;
+export interface RenderSummaryWire {
+  readonly renderId: string;
   readonly hostName?: string;
   readonly hostSessionId?: string;
   readonly createdAt: string;
   readonly lastActivityAt: string;
   readonly status: string;
-  readonly stackItemCount: number;
   readonly wsToken?: string;
   readonly wsTokenExpiresAt?: string;
 }
 
 // =============================================================================
-// Inbound — third-party MCP Apps hosted inside a ggui session.
+// Inbound — third-party MCP Apps hosted inside a ggui render.
 // =============================================================================
 
 /**
@@ -750,7 +680,7 @@ export interface McpAppsContainerDimensions {
 /**
  * Locator for the source of an embedded MCP App.
  *
- * Persists STABLE identity (not a raw URL) so session state survives
+ * Persists STABLE identity (not a raw URL) so render state survives
  * source-server endpoint changes. The runtime `ConnectorRegistry`
  * resolves `connectorId` to the actual endpoint at render time.
  */
@@ -766,26 +696,25 @@ export interface McpAppsSource {
 }
 
 /**
- * Stack-item variant: an embedded third-party MCP App iframe.
+ * Render variant: an embedded third-party MCP App iframe.
  *
  * **Locator-oriented, not content-oriented.** Persisted state carries
  * `source` (connector identity) + declared CSP/permissions/dimensions
- * metadata; resource BYTES are not stored in session state by default.
+ * metadata; resource BYTES are not stored in render state by default.
  * The `@ggui-ai/mcp-server` resource-proxy route fetches the bytes
  * on-demand via `resources/read` against the source server.
  *
- * **Union safety.** Fields that exist on the {@link StackItem}
- * (generated / native component) variant are declared here as
- * `?: never` so consumers that access them via optional chaining on
- * `SessionStackEntry` still typecheck cleanly. Those fields semantically
- * DO NOT exist on McpAppsRender — the `?: never` typing encodes the
- * "structurally absent" guarantee.
+ * **Union safety.** Fields that exist on the {@link ComponentRender}
+ * variant are declared here as `?: never` so consumers that access them
+ * via optional chaining on `Render` still typecheck cleanly. Those
+ * fields semantically DO NOT exist on McpAppsRender — the `?: never`
+ * typing encodes the "structurally absent" guarantee.
  */
 export interface McpAppsRender {
   /** Discriminator — required on this variant. */
   readonly type: 'mcpApps';
 
-  // Shared stack-item base.
+  // Shared base.
   readonly id: string;
   readonly createdAt: string;
   readonly prompt?: string;
@@ -800,9 +729,9 @@ export interface McpAppsRender {
 
   /**
    * Optional integrity pin — sha256 of the resource bytes computed at
-   * push time. The resource-proxy route verifies the re-fetched
-   * content against this hash; a mismatch breaks the stack item
-   * LOUDLY rather than silently serving mutated content.
+   * render time. The resource-proxy route verifies the re-fetched
+   * content against this hash; a mismatch breaks the render LOUDLY
+   * rather than silently serving mutated content.
    */
   readonly resourceHash?: string;
 
@@ -814,11 +743,11 @@ export interface McpAppsRender {
    */
   readonly resourceContent?: string;
 
-  // ComponentStackItem-specific fields — ALWAYS absent on this variant.
-  // Typed as `?: never` so `SessionStackEntry` readers that optional-
-  // chain these fields (`item.componentCode?.trim()`) still typecheck.
-  // If you find yourself wanting to populate one of these, reconsider
-  // the design — they belong to the OTHER variant.
+  // ComponentRender-specific fields — ALWAYS absent on this variant.
+  // Typed as `?: never` so `Render` readers that optional-chain these
+  // fields (`item.componentCode?.trim()`) still typecheck. If you find
+  // yourself wanting to populate one of these, reconsider the design —
+  // they belong to the OTHER variant.
   readonly componentCode?: never;
   readonly props?: never;
   readonly contentType?: never;
@@ -836,8 +765,8 @@ export interface McpAppsRender {
 }
 
 /**
- * Type guard: narrows a `SessionStackEntry` (or unknown) to
- * {@link McpAppsRender}. Uses the discriminator.
+ * Type guard: narrows a `Render` (or unknown) to {@link McpAppsRender}.
+ * Uses the discriminator.
  */
 export function isMcpAppsRender(entry: unknown): entry is McpAppsRender {
   return (
@@ -925,7 +854,7 @@ export function validateMcpAppsRender(
  *   A host that observes only `mounting` and never a follow-up state
  *   has a renderer that crashed before posting code-ready/error.
  * - `code-ready` — happy-path terminal state. Bundle evaluated, React
- *   tree mounted, WS connected, first stack ack folded. Equivalent of
+ *   tree mounted, WS connected, first render ack folded. Equivalent of
  *   the in-iframe `data-ggui-status="connected"`.
  * - `error` — terminal failure. Pairs with the existing
  *   `ggui:bootstrap-failed` postMessage envelope which carries the
@@ -951,9 +880,9 @@ export type McpAppLifecycleState =
  *
  * Fields:
  *   - `state` — required. The lifecycle state being entered.
- *   - `stackItemId` — optional. When present, the lifecycle pertains
- *     to a specific stack item (per-card iframes via single-item
- *     mode). Absent → whole-renderer lifecycle.
+ *   - `renderId` — optional. When present, the lifecycle pertains to a
+ *     specific render (per-card iframes via single-item mode).
+ *     Absent → whole-renderer lifecycle.
  *   - `error` — optional, only meaningful when `state === 'error'`.
  *     Mirrors the `ggui:bootstrap-failed` postMessage envelope's
  *     `reason` + `message` so a single `ggui:lifecycle` listener can
@@ -972,7 +901,7 @@ export type McpAppLifecycleState =
  */
 export interface McpAppLifecycleEvent {
   readonly state: McpAppLifecycleState;
-  readonly stackItemId?: string;
+  readonly renderId?: string;
   readonly error?: {
     readonly code: string;
     readonly message: string;
@@ -1064,7 +993,7 @@ export const MCP_APP_LIFECYCLE_STATES: readonly McpAppLifecycleState[] = [
  *   - Outer envelope is an object with `type === 'ggui:lifecycle'`.
  *   - `event` is an object with `state` matching {@link
  *     MCP_APP_LIFECYCLE_STATES}.
- *   - If `stackItemId` is present, it is a non-empty string.
+ *   - If `renderId` is present, it is a non-empty string.
  *   - If `error` is present, it is an object with string `code` +
  *     `message`.
  *
@@ -1079,15 +1008,15 @@ export function isMcpAppLifecycleMessage(
   if (m.event === null || typeof m.event !== 'object') return false;
   const e = m.event as {
     state?: unknown;
-    stackItemId?: unknown;
+    renderId?: unknown;
     error?: unknown;
   };
   if (typeof e.state !== 'string') return false;
   if (!MCP_APP_LIFECYCLE_STATES.includes(e.state as McpAppLifecycleState)) {
     return false;
   }
-  if (e.stackItemId !== undefined) {
-    if (typeof e.stackItemId !== 'string' || e.stackItemId.length === 0) {
+  if (e.renderId !== undefined) {
+    if (typeof e.renderId !== 'string' || e.renderId.length === 0) {
       return false;
     }
   }
@@ -1100,11 +1029,6 @@ export function isMcpAppLifecycleMessage(
   }
   return true;
 }
-
-// `hasPushBootstrapMeta` removed in #109 — its role (validate a
-// `_meta["ai.ggui/bootstrap"]` envelope) is gone with the aggregated
-// key. Use {@link parseMcpAppAiGguiMeta} for structural validation
-// of the new five-key `_meta` shape.
 
 // =============================================================================
 // Gesture envelope (ggui_runtime_submit_action input contract)
@@ -1209,12 +1133,12 @@ export type SubmitActionEnvelope =
  * Per-kind semantics:
  *
  *   - `kind === 'dispatch'`: server appends a consume-entry onto the
- *     stackItem-keyed pending-events pipe (`{type:'action', stackItemId,
+ *     render-keyed pending-events pipe (`{type:'action', renderId,
  *     intent, actionData, uiContext, actionId, firedAt}`) so the agent's
  *     `ggui_consume` long-poll unblocks in the same chat turn. When the
- *     pipe is closed/missing (popped/closed/never opened), the handler
- *     returns `{ok:false, code:'PIPE_NOT_FOUND'}` and the iframe-runtime
- *     falls through to a `ui/message` envelope carrying
+ *     pipe is closed/missing (closed/never opened), the handler returns
+ *     `{ok:false, code:'PIPE_NOT_FOUND'}` and the iframe-runtime falls
+ *     through to a `ui/message` envelope carrying
  *     `_meta.ggui.userAction` (see {@link GguiUserActionMeta}) so the
  *     gesture still reaches the agent on its next turn.
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit — the
@@ -1223,7 +1147,7 @@ export type SubmitActionEnvelope =
  *     the gesture for the SessionInspector feed.
  *
  * Required fields:
- *   - `sessionId` / `appId`: bootstrap-issued; server cross-checks.
+ *   - `renderId` / `appId`: bootstrap-issued; server cross-checks.
  *   - `actionId`: 8-hex correlation hash (FNV-1a of intent + data + firedAt
  *     for `dispatch`, kind + payload + firedAt for the host-control kinds).
  *     Lets the host LLM cross-verify a `[ggui:pending-action]` context entry
@@ -1236,17 +1160,7 @@ export type SubmitActionEnvelope =
  * shape — see {@link SubmitActionEnvelope}.
  */
 export type GguiSubmitActionInput = SubmitActionEnvelope & {
-  readonly sessionId: string;
-  /**
-   * Active stack item id. Optional because the iframe-runtime boots
-   * into a stack-item context only when the host minted one via
-   * `ggui_push` — boot scenarios like system-cards or pre-push
-   * provisional previews don't carry one. Required when
-   * `kind === 'dispatch'` (the kind that needs to land in the
-   * stackItem-keyed pending-event pipe); the server-side handler
-   * rejects dispatch envelopes missing this field.
-   */
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
   readonly actionId: string;
   readonly firedAt: string;
@@ -1281,16 +1195,10 @@ export function isGguiSubmitActionInput(
   if (value === null || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   if (typeof v.kind !== 'string' || v.kind.length === 0) return false;
-  if (typeof v.sessionId !== 'string' || v.sessionId.length === 0) return false;
+  if (typeof v.renderId !== 'string' || v.renderId.length === 0) return false;
   if (typeof v.appId !== 'string' || v.appId.length === 0) return false;
   if (typeof v.actionId !== 'string' || v.actionId.length === 0) return false;
   if (typeof v.firedAt !== 'string' || v.firedAt.length === 0) return false;
-  if (
-    v.stackItemId !== undefined &&
-    (typeof v.stackItemId !== 'string' || v.stackItemId.length === 0)
-  ) {
-    return false;
-  }
   if (v.payload === null || typeof v.payload !== 'object') return false;
   // Per-kind payload narrowing for the closed primary set. Unknown
   // kinds pass through with whatever payload-object the caller supplied
@@ -1328,14 +1236,14 @@ export function isGguiSubmitActionInput(
  * Discriminated by `kind`:
  *
  *   - **`'queued'`** — pipe HAS the event; agent should call
- *     `ggui_consume({stackItemId})` to drain. The prepared call lives
- *     in `nextStep` as `{tool: 'ggui_consume', args: {stackItemId}}`
+ *     `ggui_consume({renderId})` to drain. The prepared call lives
+ *     in `nextStep` as `{tool: 'ggui_consume', args: {renderId}}`
  *     so the SDK can dispatch verbatim without arg-construction.
  *
- *   - **`'inline'`** — pipe is GONE (popped / session closed / never
- *     opened). Action data is carried inline in `payload`. The agent
- *     MUST act on this directly; calling `ggui_consume` for this
- *     `stackItemId` would return empty.
+ *   - **`'inline'`** — pipe is GONE (closed / never opened). Action
+ *     data is carried inline in `payload`. The agent MUST act on this
+ *     directly; calling `ggui_consume` for this `renderId` would return
+ *     empty.
  *
  * The accompanying `ui/message` text mirrors the structure in human-
  * readable form so agnostic LLMs without `_meta` awareness still get
@@ -1366,8 +1274,8 @@ export interface QueuedUserActionMeta {
    * consumers don't need to parse natural language.
    */
   readonly description: string;
-  /** Stack item the gesture targeted. */
-  readonly stackItemId: string;
+  /** Render the gesture targeted. */
+  readonly renderId: string;
   /** 8-hex FNV-1a correlation id of the gesture. */
   readonly actionId: string;
   /** ISO 8601 UTC timestamp of the gesture (iframe local clock). */
@@ -1376,19 +1284,19 @@ export interface QueuedUserActionMeta {
   readonly intent: string;
   /**
    * Prepared tool call the agent SHOULD dispatch verbatim. Embeds the
-   * `stackItemId` so the SDK doesn't have to thread it manually —
-   * reduces "wrong/missing args" failure modes.
+   * `renderId` so the SDK doesn't have to thread it manually — reduces
+   * "wrong/missing args" failure modes.
    */
   readonly nextStep: {
     readonly tool: 'ggui_consume';
-    readonly args: { readonly stackItemId: string };
+    readonly args: { readonly renderId: string };
   };
 }
 
 /**
  * `_meta.ggui.userAction` variant — pipe is gone; action + ui context
  * delivered inline. Agent acts on `payload` directly; MUST NOT call
- * `ggui_consume` for `stackItemId` (no pipe to drain).
+ * `ggui_consume` for `renderId` (no pipe to drain).
  *
  * `nextStep` is optional — when the original `actionSpec[intent]` declared
  * a `nextStep` (the bound agent tool), it's surfaced here as a string
@@ -1404,8 +1312,8 @@ export interface InlineUserActionMeta {
    * Human-readable one-liner summary for logs / SDK debug surfaces.
    */
   readonly description: string;
-  /** Stack item the gesture targeted. */
-  readonly stackItemId: string;
+  /** Render the gesture targeted. */
+  readonly renderId: string;
   /** 8-hex FNV-1a correlation id of the gesture. */
   readonly actionId: string;
   /** ISO 8601 UTC timestamp of the gesture (iframe local clock). */
@@ -1458,7 +1366,7 @@ export function isGguiUserActionMeta(
   if (typeof m.description !== 'string' || m.description.length === 0) {
     return false;
   }
-  if (typeof m.stackItemId !== 'string' || m.stackItemId.length === 0) {
+  if (typeof m.renderId !== 'string' || m.renderId.length === 0) {
     return false;
   }
   if (typeof m.actionId !== 'string' || m.actionId.length === 0) {
@@ -1475,8 +1383,8 @@ export function isGguiUserActionMeta(
     if (ns.args === null || typeof ns.args !== 'object') return false;
     const args = ns.args as Record<string, unknown>;
     if (
-      typeof args.stackItemId !== 'string' ||
-      args.stackItemId.length === 0
+      typeof args.renderId !== 'string' ||
+      args.renderId.length === 0
     ) {
       return false;
     }

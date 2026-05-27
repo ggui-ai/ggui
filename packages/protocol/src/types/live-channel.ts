@@ -1,10 +1,10 @@
 /**
  * Live-channel contract payload types.
  *
- * The live channel is the live session plane between core-mcp and the
- * user. The types in this file describe WHAT that plane talks about —
- * the payload shapes for each exchange, independent of how they're
- * framed on the wire.
+ * The live channel is the live plane between core-mcp and the user.
+ * The types in this file describe WHAT that plane talks about — the
+ * payload shapes for each exchange, independent of how they're framed
+ * on the wire.
  *
  * The transport envelope (discriminated union + discriminator enum +
  * connection-status enum) lives behind the
@@ -15,12 +15,9 @@
  * The corresponding inbound user-action envelope ({@link ActionEnvelope})
  * lives in `types/events.ts` alongside the event-type enum.
  */
-import type { InterfaceContext } from './interface-context';
-import type { SessionStackEntry } from './session';
+import type { Render } from './session';
 import type {
-  DataContract,
   JsonObject,
-  JsonSchema,
   JsonValue,
   StreamChannelMode,
 } from './data-contract';
@@ -29,14 +26,14 @@ import type {
  * Payload for subscribe message
  */
 export interface SubscribePayload {
-  sessionId: string;
+  renderId: string;
   appId: string;
   /** Role of the subscriber: 'user' (Portal) or 'agent' (MCP bridge) */
   role?: 'user' | 'agent';
   /**
    * Resume cursor for live-channel outbound stream replay. When present,
    * the server replays buffered envelopes with `seq > fromSeq` per the
-   * active stack item's per-channel replay policy
+   * render's per-channel replay policy
    * (`streamSpec[name].replay`) BEFORE transitioning to the
    * live tail.
    *
@@ -50,7 +47,7 @@ export interface SubscribePayload {
    *     the last envelope the client observed.
    *
    * Honored only by implementations that expose
-   * `SessionStreamBuffer`-backed replay. Hosted cloud does NOT
+   * `RenderStreamBuffer`-backed replay. Hosted cloud does NOT
    * yet honor `fromSeq` — the field is silently ignored there. OSS
    * `@ggui-ai/mcp-server` honors it fully.
    */
@@ -58,22 +55,21 @@ export interface SubscribePayload {
   /**
    * Opaque WS auth credential for initial subscribe — the live-channel
    * counterpart to a bearer token. Symmetric with {@link
-   * SubscribePayload.sessionId}/`appId`/`wsUrl` — names what it auths.
+   * SubscribePayload.renderId}/`appId`/`wsUrl` — names what it auths.
    *
    * **Auth-credential string only.** Identity/render fields ride on
-   * the `ai.ggui/session` + `ai.ggui/stack-item` slice meta delivered
-   * through the MCP Apps `_meta` path; this field is purely the WS
-   * subscribe credential.
+   * the `ai.ggui/render` slice meta delivered through the MCP Apps
+   * `_meta` path; this field is purely the WS subscribe credential.
    *
    * General transport-credential slot — the type system does NOT
    * couple this field to any integration. Today the only consumer
    * minting these is the MCP Apps outbound delivery path
-   * (`ui://ggui/session`), but any future credential-mint mechanism
+   * (`ui://ggui/render`), but any future credential-mint mechanism
    * (signed-URL share, short-code auto-login, etc.) reuses the same
    * field with the same semantics:
    *
    *   - Opaque to the client — validated server-side against the
-   *     subscribe's `sessionId` + `appId`.
+   *     subscribe's `renderId` + `appId`.
    *   - Short TTL (seconds-to-minutes); stale tokens are rejected
    *     (refresh via `ggui_runtime_refresh_ws_token` within the
    *     refresh window, otherwise re-handshake).
@@ -90,7 +86,7 @@ export interface SubscribePayload {
    */
   wsToken?: string;
   /**
-   * SessionEvent ledger cursor for R7 wire-frame replay (push,
+   * Event-ledger cursor for R7 wire-frame replay (render,
    * props_update, update, …). When present, the server replays events
    * with `sequence > sinceSequence` to the subscriber as ordinary
    * outbound frames BEFORE the subscription enters live-stream mode.
@@ -101,8 +97,7 @@ export interface SubscribePayload {
    *   - `0` → replay every event the server still retains (subject to
    *     the bounded ring buffer's horizon).
    *   - `N` → replay events with `sequence > N`. Use the `lastSequence`
-   *     the client tracked from prior events / `/state` reads /
-   *     `SessionEvent.sequence` ack-fields.
+   *     the client tracked from prior events / `/state` reads.
    *   - `N` below the server's replay horizon → server emits an
    *     `error` frame with `code: 'REPLAY_HORIZON_PASSED'` carrying
    *     `details: {currentSequence: <server's high-water mark>}`. Client
@@ -111,8 +106,8 @@ export interface SubscribePayload {
    *
    * **Distinct from `fromSeq`.** `fromSeq` is for per-stream-channel
    * `StreamEnvelope` replay (declared `streamSpec[name].replay`
-   * policy); `sinceSequence` is for the session-level SessionEvent
-   * ledger (push/update/props_update/etc.). Both cursors travel on the
+   * policy); `sinceSequence` is for the render-level event ledger
+   * (render/update/props_update/etc.). Both cursors travel on the
    * same subscribe frame and the server honors them independently —
    * `sinceSequence` events replay first, then per-channel `fromSeq`
    * envelopes, then the live tail.
@@ -142,26 +137,35 @@ export interface SubscribePayload {
    * windows.
    */
   supportedVersions?: string[];
+  /**
+   * Optional bootstrap credential for transports that mint a one-time
+   * opaque token at handshake (e.g. MCP Apps `_meta`-delivered short-
+   * lived bootstrap). Generic string slot, not coupled to any specific
+   * integration — see the module-level docstring on
+   * `@ggui-ai/protocol/integrations/mcp-apps` for the canonical use case.
+   */
+  bootstrap?: string;
 }
 
 /**
- * Payload for ack message (subscribe response includes current stack)
+ * Payload for ack message (subscribe response includes current render)
  */
 export interface AckPayload {
   sequence: number;
   timestamp: number;
-  /** Current session stack (returned on subscribe) */
-  stack?: SessionStackEntry[];
+  /** Current render snapshot (returned on subscribe). Single item,
+   *  not an array — Phase B collapsed the vessel. */
+  render?: Render;
   /**
    * Current outbound-stream cursor snapshot at the moment the ack is
-   * sent. Distinct from `sequence` (which counts INBOUND session
-   * events like `user.submitted`). Clients use `streamSeq` to:
+   * sent. Distinct from `sequence` (which counts INBOUND events like
+   * `user.submitted`). Clients use `streamSeq` to:
    *   - know the point beyond which the live tail begins;
    *   - seed their `lastSeenSeq` if they didn't pass `fromSeq` on
    *     subscribe.
    *
-   * Absent on implementations without a `SessionStreamBuffer`.
-   * 0 means the session has recorded no outbound envelopes yet.
+   * Absent on implementations without a `RenderStreamBuffer`.
+   * 0 means the render has recorded no outbound envelopes yet.
    */
   streamSeq?: number;
   /**
@@ -181,13 +185,13 @@ export interface AckPayload {
    * General transport-credential slot — the type system does NOT
    * couple this field to any integration (same positioning as
    * {@link SubscribePayload.wsToken}). Servers that accepted a WS
-   * token on `subscribe` SHOULD mint a longer-lived session-scoped
+   * token on `subscribe` SHOULD mint a longer-lived render-scoped
    * token and return it here so the client can reconnect without
    * re-minting from the original credential source.
    *
    * Semantics:
    *   - Longer TTL than the ws token (minutes-to-hours).
-   *   - Bound to the same `sessionId` + `appId`.
+   *   - Bound to the same `renderId` + `appId`.
    *   - Passed on reconnect via the standard bearer path
    *     (`Authorization: Bearer <sessionToken>` or `?token=`), NOT in
    *     `SubscribePayload.wsToken` (which is short-TTL and credential-scoped).
@@ -206,7 +210,7 @@ export interface AckPayload {
    * AND not in the client's `CLIENT_SUPPORTED_VERSIONS`, the client
    * surfaces `UPGRADE_REQUIRED` (see {@link UPGRADE_REQUIRED}) via
    * its error channel. Absent `serverVersion` is legacy-pass-through
-   * — the client treats the session as version-agnostic, preserving
+   * — the client treats the render as version-agnostic, preserving
    * pre-handshake behavior for servers that haven't wired the field.
    *
    * Symmetric with {@link SubscribePayload.supportedVersions}.
@@ -215,12 +219,12 @@ export interface AckPayload {
 }
 
 /**
- * Payload for push message (Server -> Client: agent push event with generated/cached UI).
- * Carries a {@link SessionStackEntry} — either a generated component
- * item (default) or an embedded MCP Apps iframe variant.
+ * Payload for render message (Server → Client: agent push event with
+ * generated/cached UI). Carries a {@link Render} — either a
+ * component variant or an embedded MCP Apps iframe variant.
  */
-export interface PushPayload {
-  stackItem: SessionStackEntry;
+export interface RenderPayload {
+  render: Render;
   matchType?: string;
 }
 
@@ -246,8 +250,8 @@ export interface PushPayload {
  * addition driven by a concrete client-UX need.
  */
 export interface StreamEnvelope {
-  /** Session this delivery belongs to. */
-  sessionId: string;
+  /** Render this delivery belongs to. */
+  renderId: string;
   /** Channel name (keys into `spec.channels`). */
   channel: string;
   /**
@@ -270,15 +274,15 @@ export interface StreamEnvelope {
    */
   complete?: boolean;
   /**
-   * Session-scoped monotonic outbound sequence. Server-assigned;
+   * Render-scoped monotonic outbound sequence. Server-assigned;
    * clients MUST NOT populate it on producer-side inputs. Gap-free
-   * within a single session, starting at 1. Used by the client to:
+   * within a single render, starting at 1. Used by the client to:
    *   - track `lastSeenSeq` for reconnect (pass it back as
    *     `SubscribePayload.fromSeq`);
    *   - dedupe deliveries (at-least-once semantics).
    *
    * OPTIONAL because hosted cloud does not yet stamp `seq`;
-   * implementations backed by `SessionStreamBuffer`
+   * implementations backed by `RenderStreamBuffer`
    * (OSS `@ggui-ai/mcp-server`) always populate it. When absent,
    * clients treat deliveries as single-shot with no replay possible.
    * This becomes required once the hosted runtime supports replay.
@@ -300,7 +304,7 @@ export interface StreamEnvelope {
  * Delivers streaming text chunks from the agent in real-time.
  */
 export interface StreamPayload {
-  sessionId: string;
+  renderId: string;
   /** Text chunk from agent. Empty string on final (done=true) message. */
   chunk: string;
   /** Whether this is the final chunk in the stream. */
@@ -335,19 +339,17 @@ export interface ErrorPayload {
  * to begin polling the channel's `streamSpec[ch].source.tool` on the
  * iframe's behalf and fan results out as `channel_payload` frames.
  *
- * Idempotent on reconnect: replaying the same `{sessionId, channelName,
+ * Idempotent on reconnect: replaying the same `{renderId, channelName,
  * pollIntervalMs?, args?}` triple after a WS disconnect re-binds the
  * existing subscription rather than minting a duplicate. The server is
  * authoritative on `pollIntervalMs` — clients propose, server caps to
  * its policy floor.
  */
 export interface ChannelSubscribePayload {
-  /** Active session id from the iframe's bootstrap. */
-  sessionId: string;
+  /** Active render id from the iframe's bootstrap. */
+  renderId: string;
   /** Active app id from the iframe's bootstrap. */
   appId: string;
-  /** Stack item the channel belongs to (so the server can resolve `streamSpec[channelName]`). */
-  stackItemId: string;
   /** Channel name as keyed in `streamSpec`. The source.tool comes from the contract. */
   channelName: string;
   /**
@@ -366,15 +368,14 @@ export interface ChannelSubscribePayload {
 
 /**
  * Payload for `channel_unsubscribe` (Client → Server). Idempotent: the
- * server tolerates an unsubscribe for an unknown `{sessionId,
+ * server tolerates an unsubscribe for an unknown `{renderId,
  * channelName}` pair (treats as a no-op + ack). Closing the WebSocket
  * implicitly unsubscribes all channels on that subscriber — this
- * message is for fine-grained mid-session cancellation.
+ * message is for fine-grained mid-render cancellation.
  */
 export interface ChannelUnsubscribePayload {
-  sessionId: string;
+  renderId: string;
   appId: string;
-  stackItemId: string;
   channelName: string;
 }
 
@@ -389,9 +390,8 @@ export interface ChannelUnsubscribePayload {
  * semantics as iframe-polled payloads.
  */
 export interface ChannelPayloadFrame {
-  sessionId: string;
+  renderId: string;
   appId: string;
-  stackItemId: string;
   channelName: string;
   /** Server-monotonic sequence for this channel — gap-detection on the client. */
   seq: number;
@@ -420,17 +420,17 @@ export interface ChannelPayloadFrame {
  *
  *   - `CHANNEL_UNKNOWN`         — channelName not present in streamSpec.
  *   - `CHANNEL_NOT_LOCAL`       — `source.tool` not in `streamWebSocketLocalTools`; iframe must poll directly.
- *   - `STACK_ITEM_NOT_FOUND`    — `stackItemId` not on the session.
- *   - `SUBSCRIBE_UNAUTHORIZED`  — WS auth token expired or session-mismatch.
+ *   - `RENDER_NOT_FOUND`        — `renderId` not on the server.
+ *   - `SUBSCRIBE_UNAUTHORIZED`  — WS auth token expired or render-mismatch.
  *   - `POLL_FAILED`             — source.tool invocation threw. `details` carries the error.
  */
 export interface ChannelErrorPayload {
-  sessionId: string;
+  renderId: string;
   channelName: string;
   code:
     | 'CHANNEL_UNKNOWN'
     | 'CHANNEL_NOT_LOCAL'
-    | 'STACK_ITEM_NOT_FOUND'
+    | 'RENDER_NOT_FOUND'
     | 'SUBSCRIBE_UNAUTHORIZED'
     | 'POLL_FAILED'
     | (string & {});
@@ -439,24 +439,10 @@ export interface ChannelErrorPayload {
 }
 
 /**
- * Payload for pop message (Client → Server: remove top card from stack)
- */
-export interface PopPayload {
-  sessionId: string;
-}
-
-/**
- * Payload for close message (Client → Server: close session)
+ * Payload for close message (Client → Server: close render)
  */
 export interface ClosePayload {
-  sessionId: string;
-}
-
-/**
- * Payload for get_stack message (Client → Server: get stack info)
- */
-export interface GetStackPayload {
-  sessionId: string;
+  renderId: string;
 }
 
 /**
@@ -469,61 +455,6 @@ export interface GetStackPayload {
 export type GenerationStrategy = 'strict' | 'balanced' | 'creative';
 
 /**
- * Payload for the legacy `generate` WS message — the pre-handshake-first
- * direct-generation entry point. The canonical mint path is the
- * `ggui_new_session` → `ggui_handshake` → `ggui_push` tool chain; this
- * payload survives only because `@ggui-ai/ggui-react` /
- * `@ggui-ai/ggui-react-native` SDKs still expose a `useGenerate()` hook
- * that POSTs through the WS surface for one-shot UI generation.
- *
- * Several flat fields here (`adapters`, `actions`) are legacy shapes
- * superseded by `DataContract.agentCapabilities` + `DataContract.actionSpec`;
- * they remain on the type for SDK back-compat but new code MUST author
- * via the handshake-first chain.
- *
- * Generic `TProps` defaults to {@link JsonObject} for the data payload.
- * Generic `TContext` defaults to {@link JsonObject} for generator context hints.
- *
- * @deprecated Use `ggui_handshake` + `ggui_push` (the canonical mint
- * path). This payload is retained only for the legacy `useGenerate()`
- * SDK hook surface.
- */
-export interface GeneratePayload<TProps = JsonObject, TContext = JsonObject> {
-  sessionId: string;
-  prompt: string;
-  /** Human-readable description (for non-LLM producers) */
-  description?: string;
-  /** Context hints for the generator */
-  context?: TContext;
-  /** JSON Schema for form validation */
-  schema?: JsonSchema;
-  /**
-   * @deprecated Legacy flat shape. Declare via
-   * `DataContract.actionSpec` instead.
-   */
-  actions?: Array<{ id: string; label: string; description?: string; icon?: string; variant?: string; confirm?: boolean | string; disabled?: boolean }>;
-  /** Device/viewport context for responsive UI generation */
-  interfaceContext?: InterfaceContext;
-  /** Generation strategy (default: 'balanced') */
-  strategy?: GenerationStrategy;
-  /** Predefined blueprint name to use (for strict/balanced strategy) */
-  blueprintName?: string;
-  /** Props data to pass to the blueprint */
-  data?: TProps;
-  /** Data contract from negotiation (agreed props/actions shape) */
-  contract?: DataContract;
-  /** UX/presentation instructions for the generator */
-  instructions?: string;
-  /** Specific model override for generation */
-  model?: string;
-  /**
-   * Existing stack-item id for repair — reuses the broken component's
-   * slot instead of creating a new one.
-   */
-  stackItemId?: string;
-}
-
-/**
  * Progress step during UI generation
  */
 export type ProgressStep = 'queued' | 'primitives' | 'writing' | 'compiling';
@@ -532,8 +463,7 @@ export type ProgressStep = 'queued' | 'primitives' | 'writing' | 'compiling';
  * Payload for progress message (Server → Client)
  */
 export interface ProgressPayload {
-  sessionId: string;
-  stackItemId: string;
+  renderId: string;
   step: ProgressStep;
   message: string;
 }
@@ -550,8 +480,8 @@ export interface AgentMsgPayload {
   type: AgentMsgType;
   /** Message text from the agent */
   message: string;
-  /** Session ID */
-  sessionId: string;
+  /** Render ID */
+  renderId: string;
 }
 
 /**
@@ -559,8 +489,8 @@ export interface AgentMsgPayload {
  * Replaces props on an existing rendered component without re-generation.
  */
 export interface PropsUpdatePayload {
-  /** Stack-item id of the rendered component being updated. */
-  stackItemId: string;
+  /** Render id of the rendered component being updated. */
+  renderId: string;
   /** New props — full replacement */
   props: JsonObject;
 }
@@ -570,8 +500,7 @@ export interface PropsUpdatePayload {
  * Note: shortCode is returned; client constructs full URL using renderUrl from amplify_outputs
  */
 export interface UrlPayload {
-  sessionId: string;
-  stackItemId: string;
+  renderId: string;
   shortCode: string;
 }
 
@@ -602,50 +531,21 @@ export interface SystemPayload {
   status?: string;
   /** App ID requesting access (used with auth_required for app-scoped grants) */
   appId?: string;
-  /** Session ID for WebSocket context (used with auth_required) */
-  sessionId?: string;
+  /** Render ID for WebSocket context (used with auth_required) */
+  renderId?: string;
 }
 
 /**
  * Payload for internal:progress message (generator → handler)
  */
 export interface InternalProgressPayload {
-  sessionId: string;
-  stackItemId: string;
+  renderId: string;
   step: ProgressStep;
 }
 
 /**
- * Extended AckPayload for legacy `generate` requests. The handshake-first
- * mint path (`ggui_new_session` → `ggui_handshake` → `ggui_push`) does
- * NOT use this ack — it returns its own structured-content envelope.
- *
- * Note: shortCode is returned; client constructs full URL using renderUrl
- * from amplify_outputs.
- *
- * @deprecated Same lifecycle as {@link GeneratePayload}.
- */
-export interface GenerateAckPayload extends AckPayload {
-  shortCode: string;
-  stackItemId: string;
-  /**
-   * @deprecated No live producer or consumer. Retained on the type for
-   * one minor before structural removal.
-   */
-  sentViaWebsocket: boolean;
-}
-
-/**
- * Payload for session message (Server → Client)
- * Sent when an agent creates a session in response to a start invoke.
- */
-export interface SessionPayload {
-  sessionId: string;
-}
-
-/**
  * Payload for `drain_ack` (Server → Client). Sent by `ggui_consume` after
- * it pops an `ActionEnvelope` off a stack item's pending-events pipe, so
+ * it pops an `ActionEnvelope` off a render's pending-events pipe, so
  * the iframe-runtime knows the agent received the gesture and can
  * dismiss the per-action toast.
  *
@@ -662,12 +562,10 @@ export interface SessionPayload {
  * @public
  */
 export interface DrainAckPayload {
-  /** Active session id from the bootstrap that emitted the action. */
-  sessionId: string;
   /** Active app id from the bootstrap that emitted the action. */
   appId: string;
-  /** Stack item the drained event was queued on. */
-  stackItemId: string;
+  /** Render the drained event was queued on. */
+  renderId: string;
   /**
    * Server-assigned `ActionEnvelope.id` of the specific event that
    * was drained. The iframe-runtime keys its toast resolution on this

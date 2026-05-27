@@ -7,11 +7,7 @@ export type EventType =
   // Data events
   | 'data:submit'
   | 'data:change'
-  // Lifecycle events
-  | 'lifecycle:session_start'
-  | 'lifecycle:session_end'
-  | 'lifecycle:stack_push'
-  | 'lifecycle:stack_pop'
+  // Lifecycle events (render-level)
   | 'lifecycle:focus'
   | 'lifecycle:blur'
   // Interaction events
@@ -28,7 +24,7 @@ export type EventType =
  * Actions ALWAYS drive turns — every action emits an event the agent
  * reacts to on its next turn through `ggui_consume`. There is no
  * synchronous server-side dispatch in agent-mediated deployments. The
- * optional `tool` hint mirrors the active stack item's
+ * optional `tool` hint mirrors the active render's
  * `actionSpec[action].nextStep` so consumers (the WS-direct
  * `wiredActionRouter` for agent-less `ggui serve` deployments, and
  * telemetry on agent-mediated deployments) see which tool the agent
@@ -42,7 +38,7 @@ export interface ActionEventValue<TData = unknown> {
   /** Action payload (e.g., form data). */
   data: TData;
   /**
-   * MCP tool name mirrored from the active stack item's
+   * MCP tool name mirrored from the active render's
    * `actionSpec[action].nextStep` (when the author declared one).
    * Absent when the action has no `nextStep` — the agent decides the
    * next tool freely from broader context.
@@ -70,16 +66,16 @@ export interface ActionEventValue<TData = unknown> {
  * diagnostic fields real consumers populate today.
  *
  * Fields that are NOT on this envelope, and why:
- *   - `appId` — the server resolves it from the session; client-claimed
+ *   - `appId` — the server resolves it from the render; client-claimed
  *     values are ignored for enforcement.
  *   - `user` / `userId` / `deviceInfo` / `interfaceContext` — diagnostic
- *     session metadata captured at subscribe time, not per-delivery.
+ *     metadata captured at subscribe time, not per-delivery.
  *   - `componentId` / `contractHash` — diagnostic; no enforcement
  *     consumer.
  *   - `timestamp` — the server uses its own clock for ordering + log
  *     emission; client-supplied timestamps aren't authoritative.
  *   - `correlationId` — the doctrine names this for agent-push ↔ user
- *     action pairing; `stackItemId` covers the narrow case today.
+ *     action pairing; `renderId` covers the narrow case today.
  *
  * Required fields map to existing enforcement concerns; optional fields
  * are doctrine-aligned forward-compat additions that cost nothing on the
@@ -87,46 +83,30 @@ export interface ActionEventValue<TData = unknown> {
  */
 export interface ActionEnvelope<TPayload = JsonValue> {
   /**
-   * Session identity. Server enforces subscriber-session binding —
-   * envelopes whose sessionId doesn't match the ws subscriber's bound
-   * session are rejected (SESSION_MISMATCH).
+   * Render identity. Server enforces subscriber-render binding —
+   * envelopes whose renderId doesn't match the ws subscriber's bound
+   * render are rejected (RENDER_MISMATCH).
    */
-  sessionId: string;
+  renderId: string;
   /**
-   * Action / event type. Gated by the active stack item's
-   * `subscription.events` allowlist (falling back to
-   * `DEFAULT_SUBSCRIPTION`).
+   * Action / event type. Gated by the active render's
+   * `actionSpec` declarations.
    */
   type: EventType;
   /**
    * Payload for the action. For `type: 'data:submit'` this carries the
    * {@link ActionEventValue} shape (`{action, data?, tool?}`) where
-   * `data` is validated against the stack item's
+   * `data` is validated against the render's
    * `actionSpec[action].schema`. For non-data:submit types the payload
    * is free-form — no schema enforcement.
    */
   payload?: TPayload;
   /**
-   * Stack item the action originated from. Authoritative for contract
-   * lookup when present. Server falls back to
-   * `session.currentStackIndex` when absent — that fallback lets
-   * agents that have popped forward between emit and ingress still
-   * process legitimate in-flight actions.
-   */
-  stackIndex?: number;
-  /**
-   * Stable stack-item identifier. Forward-compat with the
-   * three-channel-topology doctrine's `correlationId` semantics — when
-   * `stackItemId` is present and matches a stack item's `id`, server MAY
-   * prefer stackItemId-based contract lookup over positional stackIndex.
-   */
-  stackItemId?: string;
-  /**
    * Client-monotonic sequence number for at-least-once dedup. Declared
    * shape; no server enforcement today (no inbound dedup infrastructure
    * yet). Clients SHOULD populate when their transport can replay
    * (e.g., reconnect-with-backfill); server SHOULD dedup by
-   * `(sessionId, clientSeq)` when dedup lands.
+   * `(renderId, clientSeq)` when dedup lands.
    */
   clientSeq?: number;
   /**
@@ -139,36 +119,6 @@ export interface ActionEnvelope<TPayload = JsonValue> {
    */
   schemaVersion?: string;
 }
-
-/**
- * Event subscription configuration.
- *
- * @deprecated Pre-actionSpec event-filtering model. Today's flow:
- * every action emits a `data:submit` event the agent receives via
- * `ggui_consume`; non-`data:submit` event types are vestigial. Kept
- * only for older WS clients that still send `subscribe` with these
- * filters — new code MUST NOT consult this type.
- */
-export interface EventSubscription {
-  /** Global event types to subscribe to */
-  events: EventType[];
-  /** Per-component overrides for event filtering and streaming */
-  components?: Record<string, {
-    /** Whether to stream real-time change events for this component */
-    stream?: boolean;
-    /** Component-specific event types (overrides global list) */
-    events?: EventType[];
-  }>;
-}
-
-/**
- * Default subscription when agent doesn't specify.
- *
- * @deprecated See {@link EventSubscription}.
- */
-export const DEFAULT_SUBSCRIPTION: EventSubscription = {
-  events: ['data:submit', 'lifecycle:session_end'],
-};
 
 // ── System Events (MCP Credential Proxy) ──
 

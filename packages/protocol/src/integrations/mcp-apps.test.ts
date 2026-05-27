@@ -8,31 +8,28 @@
 import { describe, expect, it } from 'vitest';
 import {
   MCP_APPS_UI_CAPABILITY,
-  GGUI_SESSION_RESOURCE_URI,
-  GGUI_SESSION_RESOURCE_MIME,
-  GGUI_PUSH_UI_META,
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
+  GGUI_RENDER_RESOURCE_URI,
+  GGUI_RENDER_RESOURCE_MIME,
+  GGUI_RENDER_UI_META,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
   MCP_APP_AI_GGUI_HOST_SESSION_META_KEY,
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
-  parseMcpAppAiGguiMeta,
+  parseMcpAppAiGguiRenderMeta,
   parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
   deriveContextName,
   isGguiUserActionMeta,
-  isMcpAppsStackItem,
+  isMcpAppsRender,
   isMcpAppLifecycleMessage,
   isGguiSubmitActionInput,
-  validateMcpAppsStackItem,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  validateMcpAppsRender,
+  type McpAppAiGguiRenderMeta,
   type McpAppAiGguiHostSessionMeta,
   type McpAppLifecycleEvent,
   type McpAppLifecycleMessage,
   type McpAppLifecycleState,
-  type McpAppsStackItem,
+  type McpAppsRender,
   type McpAppsToolVisibility,
   type SubmitActionKind,
   type GguiSubmitActionInput,
@@ -43,22 +40,22 @@ describe('MCP Apps outbound constants', () => {
     expect(MCP_APPS_UI_CAPABILITY).toBe('io.modelcontextprotocol/ui');
   });
 
-  it('uses the locked session resource URI', () => {
-    expect(GGUI_SESSION_RESOURCE_URI).toBe('ui://ggui/session');
+  it('uses the locked render resource URI', () => {
+    expect(GGUI_RENDER_RESOURCE_URI).toBe('ui://ggui/render');
   });
 
   it('serves the resource with spec-canonical profile MIME', () => {
-    expect(GGUI_SESSION_RESOURCE_MIME).toBe('text/html;profile=mcp-app');
+    expect(GGUI_RENDER_RESOURCE_MIME).toBe('text/html;profile=mcp-app');
   });
 
-  it('stamps GGUI_PUSH_UI_META with model-only visibility and the session resource URI', () => {
-    expect(GGUI_PUSH_UI_META.resourceUri).toBe(GGUI_SESSION_RESOURCE_URI);
-    expect(GGUI_PUSH_UI_META.visibility).toEqual(['model']);
-    // §2.4.1 entry-point lock — ggui_push tool is ONLY model-callable.
+  it('stamps GGUI_RENDER_UI_META with model-only visibility and the render resource URI', () => {
+    expect(GGUI_RENDER_UI_META.resourceUri).toBe(GGUI_RENDER_RESOURCE_URI);
+    expect(GGUI_RENDER_UI_META.visibility).toEqual(['model']);
+    // §2.4.1 entry-point lock — ggui_render tool is ONLY model-callable.
     // Any widening (e.g. adding 'app') would change the visibility
     // surface and MUST revisit the design lock.
     const visibility: readonly McpAppsToolVisibility[] =
-      GGUI_PUSH_UI_META.visibility;
+      GGUI_RENDER_UI_META.visibility;
     expect(visibility).not.toContain('app');
   });
 });
@@ -82,41 +79,29 @@ describe('deriveContextName helper', () => {
   });
 });
 
-describe('McpAppAiGguiMeta structural lock', () => {
-  // Post-#109 / R3: the wire is the typed pair `{ session?, stackItem? }`.
-  // No flat aggregate. Session-slice carries the boot identity + live-
-  // auth + capability advertisements; stack-item slice carries
-  // per-push render state. The two are independent stability windows
-  // (cached differently by hosts).
-  it('separates session-scoped identity from per-push render state', () => {
-    const session: McpAppAiGguiSessionMeta = {
-      sessionId: 's',
+describe('McpAppAiGguiRenderMeta structural lock', () => {
+  // Post-Phase-B: the wire is one flat slice carrying identity, boot
+  // wiring, live-channel auth, capability advertisements, render state,
+  // contract pointer, and component-mode discriminator. The pre-Phase-B
+  // pair (session + stack-item) collapsed because every render is its
+  // own thing — the two slices were always activated together.
+  it('carries identity + boot wiring + render state on a single flat shape', () => {
+    const meta: McpAppAiGguiRenderMeta = {
+      renderId: 'r-1',
       appId: 'a',
       runtimeUrl: '/_ggui/iframe-runtime.js',
       wsUrl: 'w',
-      token: 't',
+      wsToken: 't',
       expiresAt: 'e',
-    };
-    const stackItem: McpAppAiGguiStackItemMeta = {
-      stackItemId: 'si-1',
       propsJson: '{}',
       codeUrl: 'blob:...',
       codeHash: 'sha256:abc',
     };
-    const meta: McpAppAiGguiMeta = { session, stackItem };
-    expect(Object.keys(meta).sort()).toEqual(['session', 'stackItem']);
-    expect(meta.session?.sessionId).toBe('s');
-    expect(meta.stackItem?.stackItemId).toBe('si-1');
+    expect(meta.renderId).toBe('r-1');
+    expect(meta.appId).toBe('a');
+    expect(meta.codeUrl).toBe('blob:...');
+    expect(meta.propsJson).toBe('{}');
   });
-
-  // The `bootstrap.adapters` optional field was retired 2026-05-13. The
-  // adapter registry pattern moved to `@ggui-ai/gadgets` hooks
-  // (EE+, 2026-05-11); the bootstrap-meta surface stayed dormant on the
-  // producer side for two release cycles, then dropped. Host apps that
-  // wire their own `AdapterRegistry` slots (via declaration merging on
-  // `@ggui-ai/react` / `@ggui-ai/react-native`) still use `useAdapter()`
-  // via their own Provider — they never read the field off
-  // bootstrap-meta.
 });
 
 describe('non-leak lock: outbound meta types live on the integrations subpath', () => {
@@ -126,11 +111,11 @@ describe('non-leak lock: outbound meta types live on the integrations subpath', 
 });
 
 // =============================================================================
-// Slice B — inbound McpAppsStackItem shape
+// Slice B — inbound McpAppsRender shape
 // =============================================================================
 
-describe('isMcpAppsStackItem type guard', () => {
-  const validItem: McpAppsStackItem = {
+describe('isMcpAppsRender type guard', () => {
+  const validItem: McpAppsRender = {
     type: 'mcpApps',
     id: 'item-1',
     createdAt: new Date().toISOString(),
@@ -140,21 +125,21 @@ describe('isMcpAppsStackItem type guard', () => {
       resourceUri: 'ui://stripe/checkout',
     },
   };
-  it('accepts well-shaped McpAppsStackItem', () => {
-    expect(isMcpAppsStackItem(validItem)).toBe(true);
+  it('accepts well-shaped McpAppsRender', () => {
+    expect(isMcpAppsRender(validItem)).toBe(true);
   });
-  it('rejects component stack items', () => {
-    expect(isMcpAppsStackItem({ id: 'c', componentCode: '' })).toBe(false);
+  it('rejects component renders', () => {
+    expect(isMcpAppsRender({ id: 'c', componentCode: '' })).toBe(false);
   });
   it('rejects null / primitives / non-mcpApps type', () => {
-    expect(isMcpAppsStackItem(null)).toBe(false);
-    expect(isMcpAppsStackItem('string')).toBe(false);
-    expect(isMcpAppsStackItem({ type: 'component' })).toBe(false);
+    expect(isMcpAppsRender(null)).toBe(false);
+    expect(isMcpAppsRender('string')).toBe(false);
+    expect(isMcpAppsRender({ type: 'component' })).toBe(false);
   });
 });
 
-describe('validateMcpAppsStackItem', () => {
-  const base: McpAppsStackItem = {
+describe('validateMcpAppsRender', () => {
+  const base: McpAppsRender = {
     type: 'mcpApps',
     id: 'item-1',
     createdAt: new Date().toISOString(),
@@ -165,41 +150,41 @@ describe('validateMcpAppsStackItem', () => {
     },
   };
   it('accepts a well-shaped item', () => {
-    expect(validateMcpAppsStackItem(base)).not.toBeNull();
+    expect(validateMcpAppsRender(base)).not.toBeNull();
   });
   it('rejects missing / empty id', () => {
-    expect(validateMcpAppsStackItem({ ...base, id: '' })).toBeNull();
+    expect(validateMcpAppsRender({ ...base, id: '' })).toBeNull();
   });
   it('rejects missing source', () => {
-    expect(validateMcpAppsStackItem({ ...base, source: undefined })).toBeNull();
+    expect(validateMcpAppsRender({ ...base, source: undefined })).toBeNull();
   });
   it('rejects empty connectorId', () => {
     expect(
-      validateMcpAppsStackItem({ ...base, source: { ...base.source, connectorId: '' } }),
+      validateMcpAppsRender({ ...base, source: { ...base.source, connectorId: '' } }),
     ).toBeNull();
   });
   it('rejects resourceUri that is not a ui:// URI', () => {
     expect(
-      validateMcpAppsStackItem({
+      validateMcpAppsRender({
         ...base,
         source: { ...base.source, resourceUri: 'https://example.com' },
       }),
     ).toBeNull();
   });
   it('rejects wrong-type discriminator', () => {
-    expect(validateMcpAppsStackItem({ ...base, type: 'component' })).toBeNull();
+    expect(validateMcpAppsRender({ ...base, type: 'component' })).toBeNull();
   });
 });
 
-describe('McpAppsStackItem structural lock — ?:never on component fields', () => {
+describe('McpAppsRender structural lock — ?:never on component fields', () => {
   it('typechecks when read via optional chain on the union', () => {
-    const item: McpAppsStackItem = {
+    const item: McpAppsRender = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
       source: { connectorId: 'c', toolName: 't', resourceUri: 'ui://c/t' },
     };
-    // These fields are `?: never` on McpAppsStackItem. Optional-chain
+    // These fields are `?: never` on McpAppsRender. Optional-chain
     // reads should resolve to `undefined` at runtime.
     expect(item.componentCode).toBeUndefined();
     expect(item.actionSpec).toBeUndefined();
@@ -240,10 +225,10 @@ describe('isMcpAppLifecycleMessage type guard', () => {
     expect(isMcpAppLifecycleMessage(msg)).toBe(true);
   });
 
-  it('accepts a code-ready envelope with stackItemId', () => {
+  it('accepts a code-ready envelope with renderId', () => {
     const msg: McpAppLifecycleMessage = {
       type: 'ggui:lifecycle',
-      event: { state: 'code-ready', stackItemId: 'item_a' },
+      event: { state: 'code-ready', renderId: 'item_a' },
     };
     expect(isMcpAppLifecycleMessage(msg)).toBe(true);
   });
@@ -278,8 +263,8 @@ describe('isMcpAppLifecycleMessage type guard', () => {
     ['null event', { type: 'ggui:lifecycle', event: null }],
     ['missing state', { type: 'ggui:lifecycle', event: {} }],
     ['unknown state', { type: 'ggui:lifecycle', event: { state: 'spinning' } }],
-    ['empty stackItemId', { type: 'ggui:lifecycle', event: { state: 'mounting', stackItemId: '' } }],
-    ['non-string stackItemId', { type: 'ggui:lifecycle', event: { state: 'mounting', stackItemId: 7 } }],
+    ['empty renderId', { type: 'ggui:lifecycle', event: { state: 'mounting', renderId: '' } }],
+    ['non-string renderId', { type: 'ggui:lifecycle', event: { state: 'mounting', renderId: 7 } }],
     ['null error object', { type: 'ggui:lifecycle', event: { state: 'error', error: null } }],
     ['error missing code', { type: 'ggui:lifecycle', event: { state: 'error', error: { message: 'x' } } }],
     ['error missing message', { type: 'ggui:lifecycle', event: { state: 'error', error: { code: 'X' } } }],
@@ -289,17 +274,17 @@ describe('isMcpAppLifecycleMessage type guard', () => {
 });
 
 describe('McpAppLifecycleEvent shape lock', () => {
-  // Producers MUST not add fields beyond `state`, `stackItemId`,
+  // Producers MUST not add fields beyond `state`, `renderId`,
   // `error`. Adding a key to this list is a protocol change — the
   // failing test forces a doc revision.
-  it('a fully-populated event carries exactly state + stackItemId + error', () => {
+  it('a fully-populated event carries exactly state + renderId + error', () => {
     const event: McpAppLifecycleEvent = {
       state: 'error',
-      stackItemId: 'item_a',
+      renderId: 'item_a',
       error: { code: 'WS_HANDSHAKE_FAILED', message: 'boom' },
     };
     const keys = Object.keys(event).sort();
-    expect(keys).toEqual(['error', 'stackItemId', 'state']);
+    expect(keys).toEqual(['error', 'renderId', 'state']);
   });
 });
 
@@ -323,7 +308,7 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
 
   describe('isGguiSubmitActionInput type guard', () => {
     const baseFields = {
-      sessionId: 'sess_1',
+      renderId: 'r_1',
       appId: 'app_1',
       actionId: 'a3f2b1d4',
       firedAt: '2026-05-07T10:00:00.000Z',
@@ -388,7 +373,7 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
       ['non-object', 'string'],
       ['empty object', {}],
       ['missing kind', { ...baseFields, payload: {} }],
-      ['missing sessionId', { kind: 'dispatch', appId: 'a', actionId: 'i', firedAt: 't', payload: { intent: 's', actionData: null, uiContext: {} } }],
+      ['missing renderId', { kind: 'dispatch', appId: 'a', actionId: 'i', firedAt: 't', payload: { intent: 's', actionData: null, uiContext: {} } }],
       ['missing actionId', { ...baseFields, kind: 'dispatch', payload: { intent: 's', actionData: null, uiContext: {} }, actionId: '' }],
       [
         'dispatch with empty intent',
@@ -424,7 +409,7 @@ describe('isGguiUserActionMeta type guard', () => {
   const baseTimestamps = {
     actionId: '8f3a2b1c',
     submittedAt: '2026-05-14T00:00:00.000Z',
-    stackItemId: 'stack_1',
+    renderId: 'r_1',
     intent: 'toggle',
   };
 
@@ -433,11 +418,11 @@ describe('isGguiUserActionMeta type guard', () => {
       expect(
         isGguiUserActionMeta({
           kind: 'queued',
-          description: 'User fired toggle on stack_1',
+          description: 'User fired toggle on r_1',
           ...baseTimestamps,
           nextStep: {
             tool: 'ggui_consume',
-            args: { stackItemId: 'stack_1' },
+            args: { renderId: 'r_1' },
           },
         }),
       ).toBe(true);
@@ -449,7 +434,7 @@ describe('isGguiUserActionMeta type guard', () => {
         {
           kind: 'queued',
           ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: { stackItemId: 's' } },
+          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
         },
       ],
       [
@@ -459,8 +444,8 @@ describe('isGguiUserActionMeta type guard', () => {
           description: 'd',
           actionId: 'a',
           submittedAt: 's',
-          stackItemId: 'i',
-          nextStep: { tool: 'ggui_consume', args: { stackItemId: 's' } },
+          renderId: 'i',
+          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
         },
       ],
       [
@@ -469,11 +454,11 @@ describe('isGguiUserActionMeta type guard', () => {
           kind: 'queued',
           description: 'd',
           ...baseTimestamps,
-          nextStep: { tool: 'something_else', args: { stackItemId: 's' } },
+          nextStep: { tool: 'something_else', args: { renderId: 'r' } },
         },
       ],
       [
-        'nextStep.args missing stackItemId',
+        'nextStep.args missing renderId',
         {
           kind: 'queued',
           description: 'd',
@@ -495,7 +480,7 @@ describe('isGguiUserActionMeta type guard', () => {
       expect(
         isGguiUserActionMeta({
           kind: 'inline',
-          description: 'User fired toggle on stack_1 with {id:2}',
+          description: 'User fired toggle on r_1 with {id:2}',
           ...baseTimestamps,
           payload: {
             actionData: { id: 2 },
@@ -510,7 +495,7 @@ describe('isGguiUserActionMeta type guard', () => {
       expect(
         isGguiUserActionMeta({
           kind: 'inline',
-          description: 'User fired toggle on stack_1 with {id:2}',
+          description: 'User fired toggle on r_1 with {id:2}',
           ...baseTimestamps,
           payload: {
             actionData: { id: 2 },
@@ -589,14 +574,14 @@ describe('isGguiUserActionMeta type guard', () => {
           kind: 'whatever',
           description: 'd',
           ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: { stackItemId: 's' } },
+          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
         },
       ],
       [
         'legacy pipe_not_found shape (reason-based, no kind)',
         {
           reason: 'pipe_not_found',
-          stackItemId: 'stack_1',
+          renderId: 'r_1',
           submittedAt: '2026-05-14T00:00:00.000Z',
         },
       ],
@@ -607,61 +592,57 @@ describe('isGguiUserActionMeta type guard', () => {
 });
 
 // =============================================================================
-// #109 — two-slice decomposition: session (mount-time + auth + capabilities)
-// and stack-item (per-push render + contract + component).
+// Phase B render-identity collapse — single `ai.ggui/render` slice carries
+// everything (identity, boot wiring, live-channel auth, capability
+// advertisements, render state, contract pointer, component-mode
+// discriminator).
 // =============================================================================
 
-describe('parseMcpAppAiGguiMeta', () => {
-  const minimalSession: McpAppAiGguiSessionMeta = {
-    sessionId: 'sess-1',
+describe('parseMcpAppAiGguiRenderMeta', () => {
+  const minimalRender: McpAppAiGguiRenderMeta = {
+    renderId: 'r-1',
     appId: 'app-1',
     runtimeUrl: '/_ggui/iframe-runtime.js',
   };
 
-  it('returns ok with empty meta when no recognized keys are present', () => {
-    // No required-slice gate at the combiner — missing slices come
-    // through as undefined. The downstream `validateMeta` step
-    // enforces session presence per consumer.
-    const a = parseMcpAppAiGguiMeta({});
+  it('returns ok with no meta when no recognized key is present', () => {
+    // Absent key is NOT a failure — the downstream `validateMeta` step
+    // enforces presence per consumer.
+    const a = parseMcpAppAiGguiRenderMeta({});
     expect(a.ok).toBe(true);
-    if (a.ok) expect(a.meta).toEqual({});
-    const b = parseMcpAppAiGguiMeta(null);
+    if (a.ok) expect(a.meta).toBeUndefined();
+    const b = parseMcpAppAiGguiRenderMeta(null);
     expect(b.ok).toBe(true);
-    if (b.ok) expect(b.meta).toEqual({});
+    if (b.ok) expect(b.meta).toBeUndefined();
   });
 
-  it('returns MALFORMED_SESSION when session is present but identity is missing', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: { sessionId: '', appId: 'a', runtimeUrl: '/r' },
+  it('returns MALFORMED_RENDER when slice is present but identity is missing', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { renderId: '', appId: 'a', runtimeUrl: '/r' },
     });
-    expect(result.ok ? null : result.reason).toBe('MALFORMED_SESSION');
+    expect(result.ok ? null : result.reason).toBe('MALFORMED_RENDER');
   });
 
-  it('combines a session-only slice', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
+  it('parses a minimal render slice', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: minimalRender,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session).toEqual(minimalSession);
-      expect(result.meta.stackItem).toBeUndefined();
+      expect(result.meta).toEqual(minimalRender);
     }
   });
 
-  it('combines both slices into the meta struct', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: {
-        ...minimalSession,
+  it('parses a fully-populated render slice with auth + render state + contract pointer', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
         wsUrl: 'ws://x',
         wsToken: 't',
         expiresAt: '9999-12-31T23:59:59.999Z',
         themeId: 'indigo',
         themeMode: 'dark',
-        displayMode: 'fullscreen',
         appCallableTools: ['ggui_runtime_submit_action'],
-      },
-      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
-        stackItemId: 'st-1',
         propsJson: '{}',
         contractHash: 'sha256:abc',
         validatorsUrl: '/contract/sha256:abc.js',
@@ -670,60 +651,55 @@ describe('parseMcpAppAiGguiMeta', () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session?.sessionId).toBe('sess-1');
-      expect(result.meta.session?.wsUrl).toBe('ws://x');
-      expect(result.meta.session?.wsToken).toBe('t');
-      expect(result.meta.session?.displayMode).toBe('fullscreen');
-      expect(result.meta.stackItem?.stackItemId).toBe('st-1');
-      expect(result.meta.stackItem?.contractHash).toBe('sha256:abc');
-      expect(result.meta.stackItem?.kind).toBe('loading');
+      expect(result.meta?.renderId).toBe('r-1');
+      expect(result.meta?.wsUrl).toBe('ws://x');
+      expect(result.meta?.wsToken).toBe('t');
+      expect(result.meta?.contractHash).toBe('sha256:abc');
+      expect(result.meta?.kind).toBe('loading');
     }
   });
 
-  it('rejects half-live auth (wsUrl without wsToken) on the session slice', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: { ...minimalSession, wsUrl: 'ws://x' },
+  it('rejects half-live auth (wsUrl without wsToken)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, wsUrl: 'ws://x' },
     });
-    expect(result.ok ? null : result.reason).toBe('MALFORMED_SESSION');
+    expect(result.ok ? null : result.reason).toBe('MALFORMED_RENDER');
   });
 
-  it('rejects stack-item slice with both kind and codeUrl', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
+  it('rejects slice with both kind and codeUrl (mutually exclusive)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
         kind: 'loading',
         codeUrl: '/code/sha256:abc.js',
       },
     });
-    expect(result.ok ? null : result.reason).toBe('MALFORMED_STACK_ITEM');
+    expect(result.ok ? null : result.reason).toBe('MALFORMED_RENDER');
   });
 
   it('drops a malformed contract pair silently (degrades to no validators)', () => {
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_SESSION_META_KEY]: minimalSession,
-      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: { contractHash: 'h' /* no validatorsUrl */ },
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.meta.stackItem?.contractHash).toBeUndefined();
-      expect(result.meta.stackItem?.validatorsUrl).toBeUndefined();
-    }
-  });
-
-  it('renders-only deltas: combiner accepts stack-item without session', () => {
-    // Future render-only update path — session lives in host cache,
-    // wire carries just the stack-item slice with the new props.
-    const result = parseMcpAppAiGguiMeta({
-      [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
-        stackItemId: 'st-2',
-        propsJson: '{"count":5}',
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
+        contractHash: 'h' /* no validatorsUrl */,
       },
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session).toBeUndefined();
-      expect(result.meta.stackItem?.propsJson).toBe('{"count":5}');
+      expect(result.meta?.contractHash).toBeUndefined();
+      expect(result.meta?.validatorsUrl).toBeUndefined();
     }
+  });
+
+  it('rejects lastSequence that is non-integer / negative', () => {
+    const a = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, lastSequence: -1 },
+    });
+    expect(a.ok ? null : a.reason).toBe('MALFORMED_RENDER');
+    const b = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, lastSequence: 1.5 },
+    });
+    expect(b.ok ? null : b.reason).toBe('MALFORMED_RENDER');
   });
 });
 
@@ -800,57 +776,37 @@ describe('parseMcpAppAiGguiHostSessionMeta', () => {
 });
 
 describe('toMcpAppEnvelope', () => {
-  it('emits an empty envelope for empty meta', () => {
-    expect(toMcpAppEnvelope({})).toEqual({});
-  });
-
-  it('emits only the session key when stack-item is absent', () => {
+  it('emits the single render key', () => {
     const out = toMcpAppEnvelope({
-      session: { sessionId: 's', appId: 'a', runtimeUrl: '/r' },
+      renderId: 'r', appId: 'a', runtimeUrl: '/r',
     });
-    expect(out[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
-    expect(out[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeUndefined();
-  });
-
-  it('emits both keys when both slices are present', () => {
-    const out = toMcpAppEnvelope({
-      session: { sessionId: 's', appId: 'a', runtimeUrl: '/r' },
-      stackItem: { stackItemId: 'st-1' },
-    });
-    expect(out[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
-    expect(out[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeDefined();
+    expect(out[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeDefined();
+    expect(Object.keys(out)).toEqual([MCP_APP_AI_GGUI_RENDER_META_KEY]);
   });
 });
 
-describe('combine ⇔ emit round-trip', () => {
-  it('preserves the typed meta pair across emit → combine', () => {
-    const meta: McpAppAiGguiMeta = {
-      session: {
-        sessionId: 'sess-1',
-        appId: 'app-1',
-        runtimeUrl: '/_ggui/iframe-runtime.js',
-        pollingUrl: '/api/sessions/sess-1/state',
-        themeId: 'indigo',
-        themeMode: 'dark',
-        displayMode: 'fullscreen',
-        wsUrl: 'ws://localhost:8080/ws',
-        wsToken: 'btk.sig',
-        expiresAt: '9999-12-31T23:59:59.999Z',
-        appCallableTools: ['ggui_runtime_submit_action'],
-      },
-      stackItem: {
-        stackItemId: 'st-1',
-        propsJson: '{"x":1}',
-        actionNextSteps: { archive: 'gmail_archive' },
-        kind: 'loading',
-        contractHash: 'sha256:abc',
-        validatorsUrl: '/contract/sha256:abc.js',
-      },
+describe('emit ⇔ parse round-trip', () => {
+  it('preserves the typed render slice across emit → parse', () => {
+    const meta: McpAppAiGguiRenderMeta = {
+      renderId: 'r-1',
+      appId: 'app-1',
+      runtimeUrl: '/_ggui/iframe-runtime.js',
+      pollingUrl: '/api/renders/r-1/events',
+      themeId: 'indigo',
+      themeMode: 'dark',
+      wsUrl: 'ws://localhost:8080/ws',
+      wsToken: 'btk.sig',
+      expiresAt: '9999-12-31T23:59:59.999Z',
+      appCallableTools: ['ggui_runtime_submit_action'],
+      propsJson: '{"x":1}',
+      actionNextSteps: { archive: 'gmail_archive' },
+      kind: 'loading',
+      contractHash: 'sha256:abc',
+      validatorsUrl: '/contract/sha256:abc.js',
     };
     const wire = toMcpAppEnvelope(meta);
-    expect(wire[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
-    expect(wire[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeDefined();
-    const parsed = parseMcpAppAiGguiMeta(wire);
+    expect(wire[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeDefined();
+    const parsed = parseMcpAppAiGguiRenderMeta(wire);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.meta).toEqual(meta);

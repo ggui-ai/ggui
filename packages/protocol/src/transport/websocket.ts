@@ -1,12 +1,11 @@
 /**
  * WebSocket transport envelope — the wire-framing layer for the live channel.
  *
- * The live channel is the live session plane between core-mcp and the
- * user. This file defines HOW that plane is framed on a WebSocket:
- * the dispatch discriminator
- * (`WebSocketMessageType`), the discriminated union envelope
- * (`WebSocketMessage`), and the client-side connection-lifecycle enum
- * (`ConnectionStatus`).
+ * The live channel is the live plane between core-mcp and the user.
+ * This file defines HOW that plane is framed on a WebSocket: the
+ * dispatch discriminator (`WebSocketMessageType`), the discriminated
+ * union envelope (`WebSocketMessage`), and the client-side connection-
+ * lifecycle enum (`ConnectionStatus`).
  *
  * The CONTRACT payload shapes (what each variant carries —
  * `SubscribePayload`, `AckPayload`, `StreamEnvelope`, etc.) live in
@@ -25,16 +24,12 @@ import type { ActionEnvelope } from '../types/events';
 import type { JsonObject } from '../types/data-contract';
 import type {
   SubscribePayload,
-  GeneratePayload,
-  PopPayload,
   ClosePayload,
-  GetStackPayload,
   AckPayload,
   ErrorPayload,
-  PushPayload,
+  RenderPayload,
   StreamEnvelope,
   StreamPayload,
-  SessionPayload,
   ProgressPayload,
   AgentMsgPayload,
   PropsUpdatePayload,
@@ -56,20 +51,16 @@ import type { SessionEvent } from '../types/session-event';
  */
 export type WebSocketMessageType =
   | 'action' // Client → Server: ActionEnvelope (canonical inbound)
-  | 'subscribe' // Client → Server: Subscribe to session
-  | 'generate' // Client → Server: Request UI generation
-  | 'pop' // Client → Server: Pop top card from stack
-  | 'close' // Client → Server: Close session
-  | 'get_stack' // Client → Server: Get stack info
+  | 'subscribe' // Client → Server: Subscribe to render
+  | 'close' // Client → Server: Close render
   | 'feedback' // Client → Server: UI feedback (love/dislike/other)
   | 'ping' // Client → Server: Heartbeat ping
   | 'pong' // Server → Client: Heartbeat pong response
   | 'ack' // Server → Client: Event acknowledged
   | 'error' // Server → Client: Error response
-  | 'push' // Server → Client: Agent push event
+  | 'render' // Server → Client: Agent render event
   | 'data' // Server → Client: Agent data push (no regeneration)
   | 'stream' // Server → Client: Agent streaming text chunk
-  | 'session' // Server → Client: Session created by agent (start flow)
   | 'progress' // Server → Client: Generation progress
   | 'agent-msg' // Server → Client: Agent message (thinking or chat)
   | 'props_update' // Server → Client: Props replaced on existing component
@@ -85,10 +76,8 @@ export type WebSocketMessageType =
   | 'drain_ack' // Server → Client: ggui_consume popped an ActionEnvelope; iframe cancels its claim timer
   // ─── Canvas-mode host-context capture ───
   | 'host_context_observed' // Client → Server: iframe echoes McpUiHostContext from ui/initialize + on host-context-changed
-  // ─── Canvas-mode user navigation ───
-  | 'canvas_navigated' // Client → Server: user back-navigated; server updates activeStackItemId + may abort cold-gen for the popped item
   // ─── R7 SessionEvent ledger replay ───
-  | 'session_event'; // Server → Client: one SessionEvent from the per-session ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
+  | 'session_event'; // Server → Client: one SessionEvent from the per-render ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
 
 /** Fields shared by all WebSocket message variants. */
 interface WsMessageBase {
@@ -112,8 +101,8 @@ interface WsMessageBase {
  *       msg.payload.message; // ErrorPayload — auto-narrowed
  *       msg.payload.details; // JsonValue | undefined
  *       break;
- *     case 'push':
- *       msg.payload.stackItem; // PushPayload — auto-narrowed
+ *     case 'render':
+ *       msg.payload.render; // RenderPayload — auto-narrowed
  *       break;
  *     case 'data':
  *       msg.payload.payload; // StreamEnvelope.payload
@@ -125,19 +114,15 @@ interface WsMessageBase {
 export type WebSocketMessage =
   | (WsMessageBase & { type: 'action'; payload: ActionEnvelope })
   | (WsMessageBase & { type: 'subscribe'; payload: SubscribePayload })
-  | (WsMessageBase & { type: 'generate'; payload: GeneratePayload })
-  | (WsMessageBase & { type: 'pop'; payload: PopPayload })
   | (WsMessageBase & { type: 'close'; payload: ClosePayload })
-  | (WsMessageBase & { type: 'get_stack'; payload: GetStackPayload })
   | (WsMessageBase & { type: 'feedback'; payload: JsonObject })
   | (WsMessageBase & { type: 'ping'; payload: JsonObject })
   | (WsMessageBase & { type: 'pong'; payload: JsonObject })
   | (WsMessageBase & { type: 'ack'; payload: AckPayload })
   | (WsMessageBase & { type: 'error'; payload: ErrorPayload })
-  | (WsMessageBase & { type: 'push'; payload: PushPayload })
+  | (WsMessageBase & { type: 'render'; payload: RenderPayload })
   | (WsMessageBase & { type: 'data'; payload: StreamEnvelope })
   | (WsMessageBase & { type: 'stream'; payload: StreamPayload })
-  | (WsMessageBase & { type: 'session'; payload: SessionPayload })
   | (WsMessageBase & { type: 'progress'; payload: ProgressPayload })
   | (WsMessageBase & { type: 'agent-msg'; payload: AgentMsgPayload })
   | (WsMessageBase & { type: 'props_update'; payload: PropsUpdatePayload })
@@ -154,46 +139,16 @@ export type WebSocketMessage =
   // Canvas-mode host-context capture (Client → Server only).
   // The iframe-runtime extracts a `HostContextProjection` from the MCP
   // Apps `ui/initialize` response and echoes it here so the server can
-  // persist it on `SessionRecord.hostContext` for agent visibility.
+  // persist it on `RenderRecord.hostContext` for agent visibility.
   | (WsMessageBase & { type: 'host_context_observed'; payload: HostContextObservedPayload })
-  // Canvas-mode user navigation (Client → Server only).
-  // The iframe-runtime fires this when the user back-navigates in the
-  // canvas (popping a stack item from the local NavStackModel). The
-  // server updates `session.activeStackItemId` to the new top and MAY
-  // abort in-flight cold-gen for the previous active item.
-  | (WsMessageBase & { type: 'canvas_navigated'; payload: CanvasNavigatedPayload })
   // R7 — SessionEvent ledger replay frame (Server → Client only).
   // Emitted before the live tail when SubscribePayload.sinceSequence
   // is set; one frame per ledger entry with `sequence > sinceSequence`.
   // The payload IS the full SessionEvent (sequence + emittedAt + type +
   // payload). Consumers dispatch by `payload.type` to fold the wire-
-  // frame-equivalent handler (push → push handler, props_update →
+  // frame-equivalent handler (render → render handler, props_update →
   // props_update handler, etc.) — the unification R7 lands.
   | (WsMessageBase & { type: 'session_event'; payload: SessionEvent });
-
-/**
- * Payload for the canvas-mode `canvas_navigated` message. Emitted by
- * the iframe-runtime's CanvasShell when the user back-navigates — the
- * server uses `activeItemId` to update `session.activeStackItemId`
- * (for `ggui_consume`'s active-pipe resolution) and
- * `previousActiveItemId` to optionally abort the cold-gen
- * `AbortSignal` keyed on that stack item.
- */
-export interface CanvasNavigatedPayload {
-  /** Tenancy guard — server compares against subscriber binding. */
-  readonly sessionId: string;
-  /**
-   * Stack-item id the canvas had as active immediately BEFORE the
-   * navigation. Null when navigating from the empty state (no prior
-   * active item).
-   */
-  readonly previousActiveItemId: string | null;
-  /**
-   * Stack-item id the canvas has as active immediately AFTER the
-   * navigation. Null when the user popped to an empty navStack.
-   */
-  readonly activeItemId: string | null;
-}
 
 /**
  * WebSocket connection status. Client-side transport enum describing
