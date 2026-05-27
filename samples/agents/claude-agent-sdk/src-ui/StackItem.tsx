@@ -28,6 +28,15 @@ interface StackItemProps {
    * inline-in-chat rendering.
    */
   readonly fillContainer?: boolean;
+  /**
+   * Handler for `ui/message` notifications from the iframe per MCP Apps
+   * spec (SEP-1865). Fired when the guest UI calls `App.sendMessage({
+   * role:'user', content:[{type:'text', text:'...'}] })`. The host
+   * extracts the text and feeds it back into the chat as a fresh user
+   * turn (re-invokes the `/chat` SSE round-trip). Absent ⇒ no-op;
+   * messages from the iframe are silently dropped.
+   */
+  readonly onUiMessage?: (text: string) => void;
 }
 
 /**
@@ -61,6 +70,7 @@ export function StackItem({
   item,
   sandboxUrl,
   fillContainer = false,
+  onUiMessage,
 }: StackItemProps) {
   // Reconstruct the iframe HTML from the slice pair. The slice carries
   // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
@@ -162,6 +172,32 @@ export function StackItem({
     [],
   );
 
+  // MCP-Apps `ui/message` (SEP-1865) — the iframe component dispatches
+  // `App.sendMessage({role:'user', content:[{type:'text', text:'...'}]})`
+  // when its user wants to send something into the host chat. We extract
+  // text content blocks (the spec allows images too, but the sample
+  // ignores them for v1) and re-invoke the chat via the supplied
+  // callback. Returning `{}` signals success per the spec; throwing or
+  // returning `{isError:true}` would tell the iframe its message was
+  // rejected.
+  const onMessage = useCallback(
+    async (
+      params: { role: 'user'; content: ReadonlyArray<{ type: string; text?: string }> },
+    ): Promise<Record<string, unknown>> => {
+      const text = params.content
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
+        .map((c) => c.text ?? '')
+        .join('\n')
+        .trim();
+      if (text.length === 0 || onUiMessage === undefined) {
+        return { isError: true };
+      }
+      onUiMessage(text);
+      return {};
+    },
+    [onUiMessage],
+  );
+
   return (
     <div className="stack-item">
       <div className="stack-item-chrome">
@@ -183,6 +219,7 @@ export function StackItem({
           html={html}
           {...(toolResult !== undefined ? { toolResult } : {})}
           onCallTool={onCallTool}
+          onMessage={onMessage}
           onError={(err) =>
             console.warn('[StackItem] AppRenderer error', err)
           }
@@ -212,7 +249,14 @@ function safeUrlOrigin(url: string | undefined): string {
   }
 }
 
+/**
+ * Quiet placeholder shown for the ~tens of ms between mount and the
+ * first slice envelope landing on `item.meta`. Renders no visible text
+ * (no "Loading UI…" jank, no stray flash of `_meta`-absent fallback
+ * shell text) — the surrounding `.stack-item` card chrome already
+ * conveys "something is here". Background matches `--bg-2` from the
+ * chat shell so the iframe blends seamlessly until real content lands.
+ */
 const LOADING_HTML = `<!doctype html>
-<html><body>
-<div style="font:14px system-ui,sans-serif;color:#666;padding:24px">Loading UI…</div>
-</body></html>`;
+<html><head><meta name="color-scheme" content="dark"></head>
+<body style="margin:0;background:#1a1a22"></body></html>`;
