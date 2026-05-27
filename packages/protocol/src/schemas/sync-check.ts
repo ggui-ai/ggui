@@ -51,7 +51,7 @@ function check(name: string, schema: { shape: Record<string, unknown> }, tsKeys:
   }
 }
 
-// handshakeInputSchema / pushInputSchema are flat top-level shapes — z.infer
+// handshakeInputSchema / renderInputSchema are flat top-level shapes — z.infer
 // derives the TS type directly so they stay in sync structurally without a
 // keylist double-bookkeeping. Sub-schemas (blueprintDraft) are checked here.
 console.log('\nSchema Sync Check\n');

@@ -4,8 +4,8 @@ import type { Render, RenderStatus } from './session';
 import type {
   handshakeInputSchema,
   handshakeOutputSchema,
-  pushInputSchema,
-  pushOutputSchema,
+  renderInputSchema,
+  renderOutputSchema,
   updateInputSchema,
   updateOutputSchema,
 } from '../schemas/mcp';
@@ -594,8 +594,8 @@ export interface ServerCapabilities {
   readonly streamWebSocketLocalTools?: readonly string[];
 }
 
-export type GguiRenderInput = z.infer<typeof pushInputSchema>;
-export type GguiRenderOutput = z.infer<typeof pushOutputSchema>;
+export type GguiRenderInput = z.infer<typeof renderInputSchema>;
+export type GguiRenderOutput = z.infer<typeof renderOutputSchema>;
 
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;

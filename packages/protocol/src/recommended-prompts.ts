@@ -7,7 +7,7 @@
  *   - The server's `InitializeResult.instructions` field (set via
  *     `@ggui-ai/mcp-server`'s `MCP_INSTRUCTIONS_PRESETS`).
  *
- * Those two carry the wire flow (new_session → handshake → push →
+ * Those two carry the wire flow (handshake → render →
  * consume → react), the contract-authoring rules, recovery shapes,
  * and the mutation rule. **Agent builders should NOT replicate any
  * of that in their system prompt.** The protocol is designed to be

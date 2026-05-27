@@ -1,6 +1,13 @@
 /**
- * Zod round-trip tests for the canonical handshake / push / update
- * tool quartet.
+ * Zod round-trip tests for the canonical handshake / render / update
+ * tool triad.
+ *
+ * Post-Phase-B (render-identity collapse) — Session vessel deleted;
+ * `renderId` is the single identity referenced across the wire. The
+ * handshake input carries NO `sessionId` (handshake mints the render
+ * server-side); `ggui_new_session` is gone (folded into handshake);
+ * `ggui_push` renamed to `ggui_render`; render output keys by
+ * `renderId` (was `stackItemId`); update input keys by `renderId`.
  *
  * MVB-5 (2026-05-12) — three-step handshake protocol. Pre-MVB-5
  * shapes (flat `contract?` + `hint?` on handshake input, `match` +
@@ -12,27 +19,24 @@ import { describe, it, expect } from 'vitest';
 import {
   handshakeInputSchema,
   handshakeOutputSchema,
-  pushInputSchema,
-  pushOutputSchema,
+  renderInputSchema,
+  renderOutputSchema,
   updateInputSchema,
   updateOutputSchema,
 } from './mcp';
 
 describe('ggui_handshake — MVB-5 three-step handshake', () => {
-  it('accepts a minimal input — sessionId + intent + blueprintDraft (contract only)', () => {
+  it('accepts a minimal input — intent + blueprintDraft (contract only)', () => {
     const parsed = handshakeInputSchema.parse({
-      sessionId: 'sess_1',
       intent: 'show weather',
       blueprintDraft: { contract: {} },
     });
-    expect(parsed.sessionId).toBe('sess_1');
     expect(parsed.intent).toBe('show weather');
     expect(parsed.blueprintDraft.contract).toBeDefined();
   });
 
   it('accepts a fully-populated draft (contract + variance + generator)', () => {
     const parsed = handshakeInputSchema.parse({
-      sessionId: 'sess_1',
       intent: 'show inbox',
       blueprintDraft: {
         contract: { propsSpec: { properties: {} } },
@@ -54,7 +58,6 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
   it('rejects an input with an empty intent', () => {
     expect(() =>
       handshakeInputSchema.parse({
-        sessionId: 'sess_1',
         intent: '',
         blueprintDraft: { contract: {} },
       }),
@@ -64,8 +67,19 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
   it('rejects an input missing blueprintDraft', () => {
     expect(() =>
       handshakeInputSchema.parse({
-        sessionId: 'sess_1',
         intent: 'show weather',
+      }),
+    ).toThrow();
+  });
+
+  it('rejects an input carrying a retired `sessionId` field', () => {
+    // Post-Phase-B the handshake input is .strict() — `sessionId` is
+    // not part of the shape and surfaces as an unknown-key reject.
+    expect(() =>
+      handshakeInputSchema.parse({
+        sessionId: 'sess_legacy',
+        intent: 'show weather',
+        blueprintDraft: { contract: {} },
       }),
     ).toThrow();
   });
@@ -176,11 +190,32 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
       }),
     ).toThrow();
   });
+
+  it('rejects the retired `compose` action value', () => {
+    // Post-Phase-B `'compose'` is not a legal action — there is no
+    // stack of N to compose against.
+    expect(() =>
+      handshakeOutputSchema.parse({
+        handshakeId: 'hs_1',
+        action: 'compose',
+        suggestion: {
+          origin: 'agent',
+          rationale: 'x',
+          blueprintMeta: {
+            blueprintId: 'bp_1',
+            contractHash: 'h',
+            generator: 'ui-gen-default-haiku-4-5',
+            variance: {},
+          },
+        },
+      }),
+    ).toThrow();
+  });
 });
 
-describe('ggui_push — MVB-5 decision discriminator', () => {
+describe('ggui_render — MVB-5 decision discriminator', () => {
   it('accepts decision: accept', () => {
-    const parsed = pushInputSchema.parse({
+    const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
       decision: { kind: 'accept' },
     });
@@ -189,7 +224,7 @@ describe('ggui_push — MVB-5 decision discriminator', () => {
   });
 
   it('accepts decision: override with a fresh blueprintDraft', () => {
-    const parsed = pushInputSchema.parse({
+    const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
       decision: {
         kind: 'override',
@@ -203,7 +238,7 @@ describe('ggui_push — MVB-5 decision discriminator', () => {
   });
 
   it('accepts props alongside the decision', () => {
-    const parsed = pushInputSchema.parse({
+    const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
       decision: { kind: 'accept' },
       props: { city: 'Berlin' },
@@ -213,49 +248,58 @@ describe('ggui_push — MVB-5 decision discriminator', () => {
 
   it('rejects a shape missing handshakeId', () => {
     expect(() =>
-      pushInputSchema.parse({ decision: { kind: 'accept' } }),
+      renderInputSchema.parse({ decision: { kind: 'accept' } }),
     ).toThrow();
   });
 
   it('rejects a shape missing decision', () => {
-    expect(() => pushInputSchema.parse({ handshakeId: 'hs_abc' })).toThrow();
+    expect(() => renderInputSchema.parse({ handshakeId: 'hs_abc' })).toThrow();
   });
 
   it('rejects an override decision missing blueprintDraft', () => {
     expect(() =>
-      pushInputSchema.parse({
+      renderInputSchema.parse({
         handshakeId: 'hs_abc',
         decision: { kind: 'override' },
       }),
     ).toThrow();
   });
 
-  it('round-trips a push output', () => {
+  it('round-trips a render output', () => {
     const out = {
-      stackItemId: 'item_1',
+      renderId: 'render_1',
       action: 'create' as const,
     };
-    expect(pushOutputSchema.parse(out)).toEqual(out);
+    expect(renderOutputSchema.parse(out)).toEqual(out);
   });
 
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
-    const parsed = pushOutputSchema.parse({
-      stackItemId: 'item_1',
+    const parsed = renderOutputSchema.parse({
+      renderId: 'render_1',
       action: 'create',
       // Dead field — post-R5 the `/r/<shortCode>` route was deleted.
       // Defensive: a sender that hasn't migrated yet must not poison
       // the wire output with a hallucination-bait URL.
       url: 'https://stale-render.example.com/abc12345',
     } as unknown as Record<string, unknown>);
-    expect(parsed).toEqual({ stackItemId: 'item_1', action: 'create' });
+    expect(parsed).toEqual({ renderId: 'render_1', action: 'create' });
     expect(Object.keys(parsed)).not.toContain('url');
+  });
+
+  it('rejects the retired `compose` action value on output', () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        renderId: 'render_1',
+        action: 'compose',
+      }),
+    ).toThrow();
   });
 });
 
 describe('ggui_update', () => {
   it('accepts kind:"replace" with full props', () => {
     const parsed = updateInputSchema.parse({
-      stackItemId: 'item_1',
+      renderId: 'render_1',
       kind: 'replace',
       props: { temp: 24, condition: 'cloudy' },
     });
@@ -267,7 +311,7 @@ describe('ggui_update', () => {
 
   it('accepts kind:"merge" with a delta patch', () => {
     const parsed = updateInputSchema.parse({
-      stackItemId: 'item_1',
+      renderId: 'render_1',
       kind: 'merge',
       patch: { temp: 25 },
     });
@@ -279,7 +323,7 @@ describe('ggui_update', () => {
 
   it('accepts kind:"merge" with null values (RFC 7396 delete semantic)', () => {
     const parsed = updateInputSchema.parse({
-      stackItemId: 'item_1',
+      renderId: 'render_1',
       kind: 'merge',
       patch: { alert: null },
     });
@@ -292,7 +336,7 @@ describe('ggui_update', () => {
   it('rejects kind:"replace" without props', () => {
     expect(() =>
       updateInputSchema.parse({
-        stackItemId: 'item_1',
+        renderId: 'render_1',
         kind: 'replace',
       }),
     ).toThrow();
@@ -301,7 +345,7 @@ describe('ggui_update', () => {
   it('rejects kind:"merge" without patch', () => {
     expect(() =>
       updateInputSchema.parse({
-        stackItemId: 'item_1',
+        renderId: 'render_1',
         kind: 'merge',
       }),
     ).toThrow();
@@ -310,7 +354,7 @@ describe('ggui_update', () => {
   it('rejects missing kind', () => {
     expect(() =>
       updateInputSchema.parse({
-        stackItemId: 'item_1',
+        renderId: 'render_1',
         props: { temp: 24 },
       }),
     ).toThrow();
@@ -319,14 +363,14 @@ describe('ggui_update', () => {
   it('rejects unknown kind', () => {
     expect(() =>
       updateInputSchema.parse({
-        stackItemId: 'item_1',
+        renderId: 'render_1',
         kind: 'patch',
         patch: { temp: 24 },
       }),
     ).toThrow();
   });
 
-  it('rejects missing stackItemId on either kind', () => {
+  it('rejects missing renderId on either kind', () => {
     expect(() =>
       updateInputSchema.parse({ kind: 'replace', props: { temp: 24 } }),
     ).toThrow();
@@ -336,7 +380,7 @@ describe('ggui_update', () => {
   });
 
   it('round-trips an update output', () => {
-    const out = { stackItemId: 'item_1', updated: true };
+    const out = { renderId: 'render_1', updated: true };
     expect(updateOutputSchema.parse(out)).toEqual(out);
   });
 });

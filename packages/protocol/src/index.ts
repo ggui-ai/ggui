@@ -7,8 +7,8 @@ export * from './types/session';
 export * from './types/session-event';
 export * from './types/thread';
 // Live-channel contract payload types — SubscribePayload / AckPayload /
-// StreamEnvelope / GeneratePayload / etc. The WHAT each live-channel
-// message carries, independent of how the wire frames it.
+// StreamEnvelope / etc. The WHAT each live-channel message carries,
+// independent of how the wire frames it.
 export * from './types/live-channel';
 // WebSocket transport envelope (WebSocketMessage / WebSocketMessageType
 // / ConnectionStatus) is NOT re-exported at root. Transport implementors
@@ -83,7 +83,6 @@ export * from './schemas/ops-blueprint';
 export * from './types/contract-inference';
 export * from './types/gadget';
 export * from './types/app-config';
-export * from './navigation/index';
 export * from './iframe-bridge';
 export * from './envelope-adapters';
 export * from './envelopes/builders';

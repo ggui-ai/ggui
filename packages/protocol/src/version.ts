@@ -1497,8 +1497,71 @@
  * `package` / `version` on a wire ref now fail at parse — the loud
  * failure is the design intent (a caller bug, not a forward-compat
  * hedge).
+ *
+ * --------------------------------------------------------------------
+ * Phase B — flatten-render-identity. Session vessel deleted; renderId
+ * is the single identity referenced across the wire (BREAKING,
+ * pre-launch):
+ *
+ *   b1. **`Session` deleted.** The vessel-wrapping-a-stack-of-one model
+ *      is gone. `SessionStackEntry` (the actual rendered thing) was
+ *      promoted to a flat `Render` union (`ComponentRender | SystemRender
+ *      | McpAppsRender`) and `SessionView` was retired. Conversation
+ *      grouping (sibling renders within one host chat) flows via the
+ *      unchanged `_meta["ai.ggui/host-session"]` channel captured ONCE
+ *      at render creation, NOT by lifting fields onto every Render.
+ *
+ *   b2. **`sessionId` + `stackItemId` → `renderId`.** One identifier on
+ *      the wire (the two values were already the same once each render
+ *      was its own thing). Renames cover `SubscribePayload`, `AckPayload`,
+ *      `StreamEnvelope`, `ActionEnvelope`, `GguiConsumeInput`,
+ *      `GguiCloseInput`, `GguiEmitInput`, `PropsUpdatePayload`,
+ *      `DrainAckPayload`, lifecycle events, `submit-action` envelope,
+ *      user-action meta. `AckPayload.stack[]` → `AckPayload.render`
+ *      (single item — vessel is gone).
+ *
+ *   b3. **Tools collapsed: `ggui_new_session` deleted; `ggui_push`
+ *      renamed to `ggui_render`.** The three-tool flow is `ggui_handshake`
+ *      → `ggui_render` → `ggui_update` / `ggui_consume`. The handshake
+ *      mints the render server-side; `ggui_new_session` is gone (its
+ *      sessionId minting folded into the handshake-internal renderId
+ *      mint). TS aliases `GguiPushInput/Output` → `GguiRenderInput/Output`;
+ *      Zod schemas `pushInputSchema` / `pushOutputSchema` → `renderInputSchema`
+ *      / `renderOutputSchema`. `handshakeInputSchema.sessionId` REMOVED
+ *      (handshake input no longer carries a session handle); `nextStep.tool`
+ *      literal `'ggui_push'` → `'ggui_render'`; output `stackItemId` field
+ *      → `renderId`. The `'compose'` action enum value dropped (was
+ *      multi-item-stack push semantics, retired with the stack).
+ *
+ *   b4. **Slice envelope collapsed.** `_meta["ai.ggui/session"]` +
+ *      `_meta["ai.ggui/stack-item"]` (the two-key pair) → one
+ *      `_meta["ai.ggui/render"]` key carrying identity + boot wiring +
+ *      live-channel auth + capability advertisements + render state +
+ *      contract pointer + component-mode discriminator. Single-slice
+ *      parser `parseMcpAppAiGguiRenderMeta`; emitter
+ *      `toMcpAppEnvelope` emits one key.
+ *
+ *   b5. **Resource URI renamed.** `ui://ggui/session` → `ui://ggui/render`;
+ *      `GGUI_SESSION_RESOURCE_URI` → `GGUI_RENDER_RESOURCE_URI`;
+ *      `GGUI_SESSION_UI_META` → `GGUI_RENDER_UI_META`. Error codes
+ *      renamed too: `SESSION_NOT_FOUND` → `RENDER_NOT_FOUND`;
+ *      `STACK_ITEM_NOT_FOUND` → `RENDER_NOT_FOUND`;
+ *      `CONCURRENT_SESSION_LIMIT` → `CONCURRENT_RENDER_LIMIT`.
+ *
+ *   b6. **Retired wire-side payloads deleted (no shims).** `PushPayload`,
+ *      `PopPayload`, `GetStackPayload`, `SessionPayload`,
+ *      `CanvasNavigatedPayload`, `GeneratePayload`, `GenerateAckPayload`,
+ *      `GguiNewSessionInput/Output`, `GguiGetStackInput/Output`,
+ *      `StackItemSummary`, `EventSubscription`, `DEFAULT_SUBSCRIPTION`,
+ *      `Action` re-export, lifecycle-event literals
+ *      `lifecycle:stack_push`, `stack_pop`, `session_start`,
+ *      `session_end`. `SessionSummaryWire` → `RenderSummaryWire`
+ *      (always-1 `stackItemCount` field deleted). Stack-navigation
+ *      reducer (`stackNavigationReducer`, `initialNavigationState`,
+ *      `StackNavigationState`, `StackNavigationAction`) deleted — no
+ *      stack of N to navigate.
  */
-export const PROTOCOL_VERSION = 'draft-2026-05-24';
+export const PROTOCOL_VERSION = 'draft-2026-05-27';
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

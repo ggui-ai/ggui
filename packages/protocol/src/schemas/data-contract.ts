@@ -5,7 +5,7 @@
  * ## Why this file exists
  *
  * Output-side seams that type-narrow contract on the wire —
- * `pushOutputSchema.contract` and the various `decision` echoes — use
+ * `renderOutputSchema.contract` and the various `decision` echoes — use
  * `z.custom<DataContract>()` because they trust the shape (it
  * originates from internal pod state).
  *
@@ -710,7 +710,7 @@ export const appPublicEnvSchema = z
  * `passthrough()` lets unknown fields ride through without rejection
  * — forward-compatible with future protocol additions, and matches
  * the protocol's general "input-shape lax / validator-shape strict"
- * posture (`handshakeInputSchema`, `pushInputSchema`, etc. all
+ * posture (`handshakeInputSchema`, `renderInputSchema`, etc. all
  * `passthrough` for the same reason).
  */
 export const dataContractSchema: z.ZodType<DataContract> = z
