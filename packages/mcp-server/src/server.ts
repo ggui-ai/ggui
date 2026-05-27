@@ -3993,9 +3993,9 @@ export function createGguiServer(
               checkStackItemContracts: (shape) => {
                 // Shape carries the optional actionSpec / streamSpec
                 // pair from either the authored DataContract (push
-                // validation) or a SessionStackEntry (gen / cache-hit
-                // backstops). Both fit structurally; the helper
-                // handles missing fields as a compatible no-op.
+                // validation) or a Render (gen / cache-hit backstops).
+                // Both fit structurally; the helper handles missing
+                // fields as a compatible no-op.
                 const report = checkStackItemSchemaCompat(
                   shape,
                   handlers,
