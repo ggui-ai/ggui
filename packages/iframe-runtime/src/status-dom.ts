@@ -2,23 +2,21 @@
  * In-iframe runtime status surface.
  *
  * Used to inject a visible `<div data-ggui-status>` banner ("Initializing
- * renderer…", "Connected (1 item)", etc.) into the iframe body alongside
- * the user-rendered React tree. End users saw it as a stray label above
+ * renderer…", "Connected", etc.) into the iframe body alongside the
+ * user-rendered React tree. End users saw it as a stray label above
  * their UI — production-unfriendly. As of the displayMode-divergence
  * close-out we route status transitions to `console.log` and inject ONLY
  * the React mount-target div (no banner, no list-item placeholder text).
  *
- * The exported names (`setStatus`, `setConnectedStatus`,
- * `refreshStackDom`, `StatusRefs`) are preserved so the channel handlers
- * + runtime keep their import shape; `setStatus` / `setConnectedStatus`
- * are now `console.log` shims, and `refreshStackDom` is a no-op for the
- * renderer-wired (production) path. The placeholder render path —
- * exercised by `boot.test.ts` without a renderer hook — still writes
- * its `<li data-ggui-stack-item>` rows into the mount-target div for
- * the spec assertions that count items on the stack.
+ * Post-stack-removal (2026-05-27): the iframe holds exactly one mounted
+ * item for its lifetime. The `setConnectedStatus` helper no longer takes
+ * a stack-model arg — there's nothing to count — and the placeholder
+ * `<li data-ggui-stack-item>` render path is gone.
+ *
+ * The exported names (`setStatus`, `setConnectedStatus`, `StatusRefs`)
+ * are preserved so the channel handlers + runtime keep their import
+ * shape.
  */
-import type { StackModel } from './stack.js';
-import { renderStackInto } from './stack.js';
 
 /**
  * Closed union of values the iframe's status surface carries. Kept on
@@ -55,7 +53,7 @@ export type StatusKind =
  * still pass `refs.status` through; it is NEVER appended to the
  * document, so production iframes carry no diagnostic banner. `stack`
  * is the React mount target — appended to `document.body` so renderer
- * wiring + the placeholder render path both have a container.
+ * wiring has a container.
  */
 export interface StatusRefs {
   readonly status: HTMLElement;
@@ -69,6 +67,10 @@ export interface StatusRefs {
  * The companion `status` element is created detached and never
  * appended — consumers that still pass it through `StatusRefs` see no
  * visible effect.
+ *
+ * The `<ul>` element name is preserved (legacy from the stack-of-N
+ * placeholder render path) but only ever holds a single React mount
+ * subtree post-stack-removal.
  */
 export function ensureStatusDom(doc: Document): StatusRefs {
   const existingStack = doc.querySelector<HTMLElement>('[data-ggui-stack]');
@@ -106,26 +108,11 @@ export function setStatus(
 }
 
 /**
- * Log the "connected (N items)" transition. Calculates the count from
- * the live stack model so consumers (devtools, e2e specs intercepting
- * `console.log`) get the up-to-date stack size on every fold.
+ * Log the "connected" transition. Post-stack-removal the iframe always
+ * holds exactly one item; the message stays bare ("Connected.") since
+ * there's no count to surface. Consumers (devtools, e2e specs
+ * intercepting `console.log`) get a stable string on every push.
  */
-export function setConnectedStatus(refs: StatusRefs, model: StackModel): void {
-  const size = model.size();
-  setStatus(
-    refs,
-    `Connected (${size} item${size === 1 ? '' : 's'}).`,
-    'connected',
-  );
-}
-
-/**
- * Render the stack model's items into the mount-target as
- * `<li data-ggui-stack-item>` rows. Only invoked on the placeholder
- * path (no renderer wired) — the renderer-wired production path uses
- * `<div data-ggui-stack-item-root>` containers via `containerFor` and
- * never goes through here.
- */
-export function refreshStackDom(refs: StatusRefs, model: StackModel): void {
-  renderStackInto(refs.stack, model);
+export function setConnectedStatus(refs: StatusRefs): void {
+  setStatus(refs, 'Connected.', 'connected');
 }

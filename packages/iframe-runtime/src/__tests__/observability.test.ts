@@ -46,7 +46,6 @@ import {
   createDataHandler,
   createSystemHandler,
 } from '../channels/index.js';
-import { StackModel } from '../stack.js';
 import { mergeReservedValidators } from '../validation.js';
 import { StreamBus } from '../wire-config.js';
 import type { ActionSpec, SessionStackEntry } from '@ggui-ai/protocol';
@@ -348,12 +347,11 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
 describe('data handler — contract-error-emitted emission', () => {
   it('emits contract-error-emitted when a _ggui:contract-error envelope arrives', () => {
     const observed: ObservabilityEvent[] = [];
-    const stackModel = new StackModel();
-    // Empty stack — the validator won't enforce because there's no
-    // active streamSpec. Behaviour matches a session with no
-    // streamSpec'd top item.
+    // No mounted item — the validator won't enforce because there's
+    // no active streamSpec. Behaviour matches a session whose item
+    // hasn't declared a streamSpec entry for the inbound channel.
     const handler = createDataHandler({
-      stackModel,
+      getCurrentItem: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),
@@ -387,9 +385,8 @@ describe('data handler — contract-error-emitted emission', () => {
 
   it('skips emission on data envelopes for non-reserved channels', () => {
     const observed: ObservabilityEvent[] = [];
-    const stackModel = new StackModel();
     const handler = createDataHandler({
-      stackModel,
+      getCurrentItem: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),

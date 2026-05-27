@@ -1,19 +1,24 @@
 /**
- * `props_update` channel handler — factored out of `runtime.ts` into
- * the `@ggui-ai/live-channel` layer.
+ * `props_update` channel handler — patches the currently-mounted
+ * stack entry's props in place via the renderer's `applyItem`
+ * callback.
  *
- * Receives a `{stackItemId, props}` payload from the live channel, validates
- * the new props against the stack item's cached `propsSpec`, patches
- * the in-model entry, and re-applies the renderer so React picks up
- * the change.
+ * Post-stack-removal (2026-05-27): each iframe holds exactly one
+ * mounted item. The handler reads the current item via
+ * `getCurrentItem()`, validates the inbound props against its cached
+ * `propsSpec`, and re-applies the patched entry through `applyItem`
+ * — the same callback the push handler uses, so the React update
+ * surface is unified.
  *
  * Skips when:
  *   - `stackItemId` is empty or not a string.
  *   - `props` is null / not an object (defensive — server can't emit
  *     this shape, but the dispatcher routes the frame on type alone).
- *   - No matching stack item exists (server raced ahead of our pop).
- *   - The matched item is `mcpApps` / `system` (no `propsSpec`; server
- *     should never emit `props_update` for these).
+ *   - No item is currently mounted (`getCurrentItem` returns null).
+ *   - The current item's id doesn't match `payload.stackItemId` —
+ *     the server may have raced ahead of an in-flight item swap.
+ *   - The current item is `mcpApps` / `system` (no `propsSpec`;
+ *     server should never emit `props_update` for these).
  *   - The new props fail validation against the cached spec.
  *
  * R6 (2026-05-26) retired the per-handler polling descriptor. Polling
@@ -30,13 +35,21 @@ import type {
   SessionStackEntry,
 } from '@ggui-ai/protocol';
 
-import type { StackRenderer } from '../stack-item-renderer.js';
-import type { StackModel } from '../stack.js';
 import { validateInboundPropsPayload } from '../validation.js';
 
 export interface PropsUpdateHandlerDeps {
-  readonly stackModel: StackModel;
-  readonly getStackRenderer: () => StackRenderer;
+  /**
+   * Read the currently-mounted stack entry. Returns `null` when no
+   * item has been mounted yet (the first push hasn't landed) or after
+   * teardown. The handler short-circuits on `null` — `props_update`
+   * before the first push has no React tree to patch.
+   */
+  readonly getCurrentItem: () => SessionStackEntry | null;
+  /**
+   * Re-apply the patched entry to the single mount slot. Shared with
+   * the push handler so React updates flow through one path.
+   */
+  readonly applyItem: (item: SessionStackEntry) => Promise<void>;
 }
 
 export function createPropsUpdateHandler(
@@ -49,24 +62,15 @@ export function createPropsUpdateHandler(
       if (typeof stackItemId !== 'string' || stackItemId.length === 0) return;
       if (props === null || typeof props !== 'object') return;
 
-      const target = deps.stackModel
-        .snapshot()
-        .find((item) => item.id === stackItemId);
-      if (target === undefined) return;
-      if (target.type === 'mcpApps' || target.type === 'system') return;
+      const current = deps.getCurrentItem();
+      if (current === null) return;
+      if (current.id !== stackItemId) return;
+      if (current.type === 'mcpApps' || current.type === 'system') return;
 
-      const result = validateInboundPropsPayload(target.propsSpec, props);
+      const result = validateInboundPropsPayload(current.propsSpec, props);
       if (!result.valid) return;
 
-      const nextSnapshot: SessionStackEntry[] = deps.stackModel
-        .snapshot()
-        .map((item) => {
-          if (item.id !== stackItemId) return item;
-          if (item.type === 'mcpApps' || item.type === 'system') return item;
-          return { ...item, props };
-        });
-      deps.stackModel.setAll(nextSnapshot);
-      await deps.getStackRenderer().applyStack(deps.stackModel.snapshot());
+      await deps.applyItem({ ...current, props });
     },
   };
 }

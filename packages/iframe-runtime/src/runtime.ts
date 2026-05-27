@@ -39,7 +39,6 @@ import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
 } from './meta-parse.js';
-import { StackModel } from './stack.js';
 import type {
   McpAppAiGguiMetaParseFailureReason,
   McpAppAiGguiMetaParseResult,
@@ -77,7 +76,6 @@ import {
 import { buildEventsPolling } from './events-polling.js';
 import {
   ensureStatusDom,
-  refreshStackDom,
   setStatus,
   setConnectedStatus,
   type StatusRefs,
@@ -89,8 +87,9 @@ import {
 } from './validation.js';
 import { loadCompiledValidatorsFromUrl } from './compiled-validators.js';
 import {
-  StackRenderer,
-  type StackRenderContext,
+  renderStackItem,
+  type StackItemHandle,
+  type StackItemRendererOptions,
 } from './stack-item-renderer.js';
 import type { WireConfig } from '@ggui-ai/wire';
 import {
@@ -386,8 +385,8 @@ export interface BootSequenceOptions {
   /**
    * Optional renderer hook. When present, the boot sequence:
    * (1) calls `renderer.setup()` after bootstrap parse;
-   * (2) replaces the placeholder `renderStackInto` path with the
-   * real `StackRenderer` on ack + subsequent pushes; (3) routes
+   * (2) mounts the single stack entry into the renderer's slot on
+   * first ack + re-applies on every subsequent push; (3) routes
    * inbound `data` / `props_update` / `feedback` frames through the
    * supplied wire config + StreamBus.
    *
@@ -446,13 +445,14 @@ export interface BootSequenceOptions {
 export interface RendererHooks {
   /**
    * Called after bootstrap parse succeeds. Return value threads the
-   * root `WireConfig` + `StackRenderer` back into the runtime so the
-   * server-message handler can route frames through them.
+   * root `WireConfig` + the single-item mount surface back into the
+   * runtime so the channel handlers can route frames through them.
    *
-   * `renderInto` — a DOM element the stack renderer owns. The
-   * placeholder `<ul data-ggui-stack>` is NOT reused; the renderer
-   * mounts React roots per stack item into dedicated
-   * containers (see `containerFor` below).
+   * `renderInto` — a DOM element the renderer owns. Post-stack-removal
+   * (2026-05-27) the iframe-runtime mounts exactly one React tree
+   * directly into `renderInto`; the earlier per-stack-item
+   * `<div data-ggui-stack-item-root>` containers were retired along
+   * with `StackRenderer`.
    *
    * `onObserve` — optional observability emitter threaded down to
    * the root wire config so `wired-tool-invoked` events fire on
@@ -463,7 +463,6 @@ export interface RendererHooks {
    */
   setup(params: {
     readonly meta: ValidatedMcpAppAiGguiMeta;
-    readonly stackModel: StackModel;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
@@ -485,7 +484,23 @@ export interface RendererHooks {
 export interface RendererHandle {
   readonly rootWireConfig: WireConfig;
   readonly streamBus: StreamBus;
-  readonly stackRenderer: StackRenderer;
+  /**
+   * Apply (mount-or-update) a stack entry to the single render slot.
+   * First call mounts the React tree into `renderInto`; subsequent
+   * calls re-apply through {@link StackItemHandle.update} (same kind ⇒
+   * in-place; kind transition ⇒ tear-down + remount).
+   *
+   * Shared by the `push` and `props_update` channel handlers so React
+   * updates flow through one path.
+   */
+  applyItem(item: SessionStackEntry): Promise<void>;
+  /**
+   * Read the currently-mounted stack entry. `null` until the first
+   * push lands. Read by the `props_update` + `data` channel handlers
+   * to validate inbound payloads against the active item's
+   * `propsSpec` / `streamSpec`.
+   */
+  getCurrentItem(): SessionStackEntry | null;
   readonly validatorCtx: RendererValidatorContext;
   /**
    * Send surface for outbound frames. Wired by `setup()` to the WS
@@ -495,11 +510,10 @@ export interface RendererHandle {
   readonly manager: { send: (msg: WebSocketMessage) => void };
   /**
    * Per-channel transport router. When the bootstrap carries
-   * `streamWebSocketLocalTools` and the active
-   * stack item declares `streamSpec[ch].source.tool`, the router
-   * decides per-channel between WS subscribe + iframe-polling
-   * fallback. Updated on every push via the stackRenderer's
-   * `applyStack` hook.
+   * `streamWebSocketLocalTools` and the active stack item declares
+   * `streamSpec[ch].source.tool`, the router decides per-channel
+   * between WS subscribe + iframe-polling fallback. Updated on every
+   * push via the push handler.
    *
    * Always present — the router gracefully no-ops when no channel
    * declares `source.tool` (legacy data-frame path is unaffected).
@@ -524,7 +538,14 @@ export interface RendererHandle {
 
 export interface BootSequenceResult {
   readonly ok: boolean;
-  readonly stack: StackModel;
+  /**
+   * The stack entry that ended up mounted in this iframe, or `null` if
+   * the boot path bailed before the first ack landed. Post-stack-
+   * removal (2026-05-27) every iframe holds at most one item; this
+   * replaces the earlier `StackModel` return that wrapped a multi-item
+   * model.
+   */
+  readonly mountedItem: SessionStackEntry | null;
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
@@ -559,22 +580,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   };
 
   const refs = ensureStatusDom(doc);
-  // Construct the model empty + unfiltered so the initial "empty
-  // placeholder" render + any early-return-on-failure path uses a
-  // consistent instance. If the bootstrap parse below succeeds AND
-  // pins a `stackItemId`, we swap to a filtered model before any
-  // setAll / upsert runs — the filter is immutable per-instance, so
-  // swap-then-reassign is the only way to lock the pin.
-  let stackModel = new StackModel();
-  // Initial empty-placeholder render is skipped — `refreshStackDom`
-  // would write "(no stack items yet)" placeholder text into the
-  // `<ul data-ggui-stack>` mount target, which (a) flashes user-
-  // visible diagnostic text into every booting iframe and (b) gets
-  // wiped a moment later anyway when the renderer's `containerFor`
-  // appends its React mount divs. Both placeholder-only consumers
-  // (boot.test.ts) and renderer consumers fold the actual stack via
-  // `applyAckStack` after the ack lands; no early diagnostic write
-  // is required.
+  // The mounted item is established after the first ack lands —
+  // populated by `applyAck` below + read back by every channel handler
+  // that needs `propsSpec` / `streamSpec`. Tracked as a closure-scoped
+  // ref so the failure-path returns can carry the same value through
+  // `BootSequenceResult`.
+  let mountedItem: SessionStackEntry | null = null;
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
   notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
@@ -607,7 +618,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const message = initResp.error?.message ?? 'ui/initialize returned no result';
     setStatus(refs, `ui/initialize failed: ${message}`, 'error');
     emitBootFailure('UI_INITIALIZE_FAILED', message);
-    return { ok: false, stack: stackModel };
+    return { ok: false, mountedItem };
   }
 
   // Slice-meta resolution — spec-canonical primary, in-house Reading-B
@@ -687,7 +698,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
     emitBootFailure(parsed.reason, message);
-    return { ok: false, stack: stackModel };
+    return { ok: false, mountedItem };
   }
 
   // Destructure the parsed slices once — `session` is guaranteed
@@ -705,27 +716,26 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     await loadCompiledValidatorsFromUrl(stackItem?.validatorsUrl),
   );
 
-  // Single-item mode. When a per-item resource route served this
-  // resource, the bootstrap carries `stackItemId` and the renderer
-  // binds to just that stack entry. Absent (whole-session resource)
-  // → multi-item render path. The swap happens BEFORE any setAll /
-  // upsert so filter semantics apply to the first-frame stack the
-  // ack delivers.
-  if (stackItem?.stackItemId !== undefined) {
-    stackModel = new StackModel({ filterToItemId: stackItem.stackItemId });
-  }
+  // Pin — this iframe binds to exactly one stack-item id for its
+  // lifetime (post-stack-removal each iframe = one mounted item, per
+  // [[kill-displaymode-divergence]]). When the bootstrap carries a
+  // `stackItemId` we pin to it; the push handler drops any push
+  // addressed elsewhere. Bootstraps without `stackItemId` (session-
+  // only resources, rare post-displayMode) accept the first push as
+  // the pin.
+  const pinnedItemId: string | undefined = stackItem?.stackItemId;
 
   // Renderer wiring — when supplied, the handler routes frames through
-  // StackRenderer + WireConfig + StreamBus. When absent, the placeholder
-  // path runs (boot.test.ts relies on the latter to keep its import
-  // graph tiny). The renderer's channelRegistry is the dispatch surface
-  // for every WS frame; `connectFn` registers handshake handlers on
-  // top of the existing registry then binds the transport.
+  // the single-item mount surface + WireConfig + StreamBus. When
+  // absent, the placeholder path runs (boot.test.ts relies on the
+  // latter to keep its import graph tiny). The renderer's
+  // channelRegistry is the dispatch surface for every WS frame;
+  // `connectFn` registers handshake handlers on top of the existing
+  // registry then binds the transport.
   const renderer =
     rendererHooks !== undefined
       ? rendererHooks.setup({
           meta: parsed.meta,
-          stackModel,
           renderInto: refs.stack,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -737,23 +747,23 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Boot-without-renderer path: we still need a ChannelRegistry to
   // receive frames, because the registry is the only dispatch
   // surface. Build a minimal one with just the `push` placeholder
-  // handler so non-renderer consumers (boot.test.ts) see the
-  // `data-ggui-stack-item` upserts.
+  // handler so non-renderer consumers (boot.test.ts) can observe
+  // bootstrap-orchestration outcomes without paying React import
+  // cost. The handler logs status but does not mount React.
   const placeholderRegistry =
     renderer === null
       ? createPlaceholderRegistry({
           session,
-          stackModel,
           statusRefs: refs,
+          ...(pinnedItemId !== undefined ? { pinnedItemId } : {}),
         })
       : null;
   const activeRegistry = renderer?.channelRegistry ?? placeholderRegistry!;
 
   /**
-   * Apply an ack's stack snapshot to the runtime — populates the model,
-   * refreshes status DOM, and (when renderer is wired) re-renders the
-   * stack + re-activates the top item's channel-transport entry. Used
-   * by:
+   * Apply an ack's stack snapshot to the runtime — picks the entry
+   * matching `pinnedItemId` (or the first entry when there's no pin)
+   * and mounts it through the renderer. Used by:
    *
    *   - The initial bootSequence path (first ack after subscribe).
    *   - The WS reconnect-with-rebootstrap path (every subsequent ack
@@ -761,35 +771,32 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
    *     subscribe). A push or update that landed during the dropout
    *     window flows back through here.
    *
-   * Idempotent on identical inputs — `stackModel.setAll` is a snapshot
-   * replace; `applyStack` + `applyStackItem` are server-side idempotent
+   * Idempotent on identical inputs — `applyItem` patches in place
+   * via {@link StackItemHandle.update} when called with the same item
+   * id; `channelTransport.applyStackItem` is server-side idempotent
    * on the (stackItemId, channelName) tuple.
    */
-  const applyAckStack = async (ackPayload: {
+  const applyAck = async (ackPayload: {
     readonly stack?: readonly SessionStackEntry[];
   }): Promise<void> => {
     if (ackPayload.stack === undefined) return;
-    stackModel.setAll(ackPayload.stack);
-    // Placeholder DOM render only when renderer is absent (boot.test.ts).
-    // Renderer-mode iframes own the `<ul data-ggui-stack>` for React
-    // mounts via `containerFor`; calling `refreshStackDom` here would
-    // wipe React's mounts mid-flight.
-    if (renderer === null) {
-      refreshStackDom(refs, stackModel);
+    const target =
+      pinnedItemId !== undefined
+        ? ackPayload.stack.find((item) => item.id === pinnedItemId)
+        : ackPayload.stack[0];
+    if (target === undefined) {
+      // Server's snapshot doesn't include our pinned item — likely the
+      // server pruned it (session ended, gc'd). Nothing to mount.
+      return;
     }
+    mountedItem = target;
     if (renderer !== null) {
-      await renderer.stackRenderer.applyStack(stackModel.snapshot());
-      const snapshot = stackModel.snapshot();
-      const top = snapshot[snapshot.length - 1];
-      if (
-        top !== undefined &&
-        top.type !== 'mcpApps' &&
-        top.type !== 'system'
-      ) {
+      await renderer.applyItem(target);
+      if (target.type !== 'mcpApps' && target.type !== 'system') {
         renderer.channelTransport.applyStackItem({
-          stackItemId: top.id,
-          ...(top.streamSpec !== undefined
-            ? { streamSpec: top.streamSpec }
+          stackItemId: target.id,
+          ...(target.streamSpec !== undefined
+            ? { streamSpec: target.streamSpec }
             : {}),
         });
       }
@@ -804,9 +811,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       onStatusChange: (status) => {
         setStatus(
           refs,
-          status === 'connected'
-            ? `Connected (${stackModel.size()} item${stackModel.size() === 1 ? '' : 's'}).`
-            : `Connection ${status}…`,
+          status === 'connected' ? 'Connected.' : `Connection ${status}…`,
           status,
         );
         // Propagate WS status to the per-channel transport router so
@@ -831,7 +836,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       // `stack` snapshot. A push or update that landed during a WS
       // dropout window restores here without an agent re-prompt.
       onResubscribeAck: (ack) => {
-        void applyAckStack(ack);
+        void applyAck(ack);
       },
       // R7 — registry-level events-polling fallback. Composed once at
       // bind time from `session.pollingUrl` (server-stamped wsToken-
@@ -862,12 +867,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       // here carries the coarse-grained reason for hosts that only
       // pattern-match `kind: 'bootstrap'`.
       emitBootFailure('UPGRADE_REQUIRED', message);
-      return { ok: false, stack: stackModel };
+      return { ok: false, mountedItem };
     }
     const message = err instanceof Error ? err.message : String(err);
     setStatus(refs, `WS handshake failed: ${message}`, 'error');
     emitBootFailure('WS_HANDSHAKE_FAILED', message);
-    return { ok: false, stack: stackModel };
+    return { ok: false, mountedItem };
   }
 
   // Attach the live transport handle to the renderer — flushes any
@@ -893,15 +898,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     attachHostContextListener();
   }
 
-  // First ack — populate the stack from the snapshot the server
-  // returned. Under renderer mode, also hand the initial stack to the
-  // renderer so its mounts match the model on first frame.
-  //
-  // Reuses the same `applyAckStack` helper the reconnect-rebootstrap
-  // path uses — so a server-restart-driven full snapshot replay and
-  // the first-boot snapshot apply flow through one implementation.
-  await applyAckStack(handle.ack);
-  setConnectedStatus(refs, stackModel);
+  // First ack — pick the matching/first stack entry from the snapshot
+  // the server returned and (under renderer mode) mount it. Reuses the
+  // same `applyAck` helper the reconnect-rebootstrap path uses — so a
+  // server-restart-driven full snapshot replay and the first-boot
+  // snapshot apply flow through one implementation.
+  await applyAck(handle.ack);
+  setConnectedStatus(refs);
   // Lifecycle `code-ready` — terminal happy state. The bundle has
   // evaluated, the WS handshake completed, the first ack folded into
   // the stack. Hosts pinning selectors on `code-ready` (E2E specs,
@@ -917,21 +920,23 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     }),
   );
 
-  return { ok: true, stack: stackModel };
+  return { ok: true, mountedItem };
 }
 
 /**
  * Build a minimal `ChannelRegistry` for boot paths without renderer
  * wiring (boot.test.ts + the C7a placeholder-only spec). The registry
- * carries just the `push` handler (which folds frames into the
- * placeholder DOM) — every other frame type silently drops. Production
- * boots through `bootProduction` which supplies a fully-populated
- * renderer with the rich handler set.
+ * carries just the `push` handler — which logs status but does not
+ * mount React — so consumers can observe bootstrap-orchestration
+ * outcomes without paying React import cost. Every other frame type
+ * silently drops. Production boots through `bootProduction` which
+ * supplies a fully-populated renderer with the rich handler set.
  */
 function createPlaceholderRegistry(params: {
   readonly session: McpAppAiGguiSessionMeta;
-  readonly stackModel: StackModel;
   readonly statusRefs: StatusRefs;
+  /** Pin — push payloads with a different stackItemId drop with a warning. */
+  readonly pinnedItemId?: string;
 }): ChannelRegistry {
   const registry = new ChannelRegistry({
     subscribeFrameBuilder: () => ({
@@ -947,8 +952,10 @@ function createPlaceholderRegistry(params: {
   });
   registry.register(
     createPushHandler({
-      stackModel: params.stackModel,
       statusRefs: params.statusRefs,
+      ...(params.pinnedItemId !== undefined
+        ? { pinnedItemId: params.pinnedItemId }
+        : {}),
     }),
   );
   return registry;
@@ -1541,7 +1548,7 @@ function extractConsumerPresent(
  * Direct DOM (not React-managed) because:
  *  - Works during boot before React mounts.
  *  - Doesn't interfere with the component tree the generator owns.
- *  - Survives Hot/StackModel transitions.
+ *  - Survives React mount transitions inside the iframe.
  *
  * Single global toast (per iframe). Auto-dismisses after 2.5s on
  * `success` / `fallback` outcomes; the `pending` state holds
@@ -3076,9 +3083,9 @@ if (shouldAutostart() && typeof window !== 'undefined') {
 //   4. installGlobalRegistry (with real React+ReactDOM+design+wire
 //      module handles).
 //   5. Build StreamBus + root WireConfig.
-//   6. Create StackRenderer with a containerFor factory that spins
-//      per-item `<div data-ggui-stack-item-root="<id>">` children
-//      inside the DOM placeholder.
+//   6. Wire `applyItem(item)` closure — first call mounts the React
+//      tree into the renderer's slot; later calls re-apply via the
+//      `StackItemHandle.update` lifecycle.
 //   7. Populate the channel registry; bootSequence calls connectFn
 //      (default `connectViaRegistry`) which binds the WS transport.
 //      Frames arrive directly through the registered handlers.
@@ -3137,10 +3144,10 @@ async function bootProduction(opts: {
     import('./gadget-loader.js'),
   ]);
 
-  // Renderer wiring hook — constructs buses + stack renderer + wire
-  // config on demand inside bootSequence.
+  // Renderer wiring hook — constructs buses + single-item mount surface
+  // + wire config on demand inside bootSequence.
   const renderer: RendererHooks = {
-    setup: ({ meta, stackModel, renderInto, statusRefs, onObserve }) => {
+    setup: ({ meta, renderInto, statusRefs, onObserve }) => {
       // Destructure once — session is guaranteed present on the
       // ok:true arm; stackItem may be absent (session-only).
       const { session, stackItem } = meta;
@@ -3276,11 +3283,21 @@ async function bootProduction(opts: {
       // downstream consumer — so the WS action path silently drops
       // clicks. `routeDispatch` is the same helper `bootSelfContained`
       // uses; threading it here aligns LIVE-mode with self-contained.
+      // Single mounted item — populated by `applyItem` on the first
+      // push. The wire config + data channel handler read it through
+      // `currentItem`-returning thunks so they always see the latest
+      // snapshot without holding stale refs.
+      let currentItem: SessionStackEntry | null = null;
+      let itemHandle: StackItemHandle | null = null;
+
       const dispatchToolName = resolveDispatchToolName();
       const { config: rootConfig, buildScopedConfig } = buildRootWireConfig({
         sessionId: session.sessionId,
         appId: session.appId,
-        getStack: () => stackModel.snapshot(),
+        // Post-stack-removal the wire config gets a single-item view —
+        // `buildRootWireConfig.getStack` is preserved as a snapshot
+        // function but always returns at most one entry.
+        getStack: () => (currentItem !== null ? [currentItem] : []),
         manager,
         streamBus,
         ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3317,65 +3334,81 @@ async function bootProduction(opts: {
         },
       });
 
-      // containerFor: mint a `<div data-ggui-stack-item-root="<id>">`
-      // child inside `renderInto` for each stack item id. Reuse on
-      // re-apply.
-      const containersById = new Map<string, HTMLElement>();
-      const containerFor = (id: string): HTMLElement => {
-        const existing = containersById.get(id);
-        if (existing !== undefined) return existing;
-        const el = renderInto.ownerDocument.createElement('div');
-        el.setAttribute('data-ggui-stack-item-root', id);
-        renderInto.appendChild(el);
-        containersById.set(id, el);
-        return el;
+      // Build the wrap factory used by every per-mount React tree:
+      // `<ContextStateHost slots={resolvedSlots}>` so contextSpec
+      // values flow through `ui/update-model-context` exactly like the
+      // self-contained path. mcpApps + system items skip the wrap
+      // (their renderers don't run user component code that reads
+      // contexts). When `resolvedSlots` is empty ContextStateHost
+      // short-circuits to a Fragment, so the wrap is free for items
+      // with no contextSpec.
+      const buildOuterWrapper = (
+        item: SessionStackEntry,
+      ): ((mountedTree: ReactNode) => ReactNode) | undefined => {
+        if (item.type === 'mcpApps' || item.type === 'system') return undefined;
+        return (mountedTree) =>
+          reactMod.createElement(ContextStateHost, {
+            slots: resolvedSlots,
+            children: mountedTree,
+          });
       };
 
-      const stackCtx: StackRenderContext = {
-        containerFor,
-        getScopedWireConfig: (item) => {
-          // item.type === 'mcpApps' stack items get NO wire config —
-          // their iframe host has its own contract (adapter-boundary
-          // rule). Component items scope via `buildScopedConfig`
-          // (see `packages/wire/src/context.ts`). `contractHash` is
-          // intentionally absent — it lives on the event envelope,
-          // not on the stack item shape.
-          if (item.type === 'mcpApps' || item.type === 'system') return null;
-          return buildScopedConfig({
-            stackItemId: item.id,
-            ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
-          });
-        },
-        // Wrap every per-item React mount in
-        // `<ContextStateHost slots={resolvedSlots}>` so contextSpec
-        // values flow through `ui/update-model-context` exactly like
-        // the self-contained path. mcpApps + system items skip the
-        // wrap (their renderers don't run user component code that
-        // reads contexts). When `resolvedSlots` is empty
-        // ContextStateHost short-circuits to a Fragment, so the wrap
-        // is free for items with no contextSpec.
-        getOuterWrapper: (item) => {
-          if (item.type === 'mcpApps' || item.type === 'system') return undefined;
-          return (mountedTree) =>
-            reactMod.createElement(ContextStateHost, {
-              slots: resolvedSlots,
-              children: mountedTree,
-            });
-        },
-        streamBus,
-        sessionId: session.sessionId,
-        // Forward bootstrap-stamped theme onto the renderer so per-stack-item
-        // mounts inject the configured theme's CSS vars (indigo, claudic, etc).
-        // Without this, react-renderer.ts falls back to `getScopedCssTokens`
-        // (no preset) and every iframe renders with the default ggui theme
-        // — even when `_meta["ai.ggui/session"].themeId` is `'indigo'`.
-        // The sibling `bootSelfContained` path already threads these onto
-        // its `mountOpts`; this seeds the same fields onto the renderer
-        // hooks path so both boot routes produce the same theming.
-        ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-        ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
+      // Build the scoped wire config for a given item. mcpApps stack
+      // items get NO wire config — their iframe host has its own
+      // contract (adapter-boundary rule). Component items scope via
+      // `buildScopedConfig` (see `packages/wire/src/context.ts`).
+      // `contractHash` is intentionally absent — it lives on the event
+      // envelope, not on the stack item shape.
+      const buildScopedWireFor = (item: SessionStackEntry): WireConfig | null => {
+        if (item.type === 'mcpApps' || item.type === 'system') return null;
+        return buildScopedConfig({
+          stackItemId: item.id,
+          ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
+        });
       };
-      const stackRenderer = new StackRenderer(stackCtx);
+
+      // Build the renderer options for a given item. Theme is forwarded
+      // from the bootstrap so per-mount React trees inject the
+      // configured theme's CSS vars (indigo, claudic, etc). Without
+      // this, react-renderer.ts falls back to `getScopedCssTokens`
+      // (no preset) and the iframe renders with the default ggui theme
+      // even when `_meta["ai.ggui/session"].themeId` is `'indigo'`.
+      // Sibling `bootSelfContained` path threads the same fields onto
+      // its `mountOpts` for parity.
+      const buildOpts = (item: SessionStackEntry): StackItemRendererOptions => {
+        const wrapOuter = buildOuterWrapper(item);
+        return {
+          stackItem: item,
+          scopedWireConfig: buildScopedWireFor(item),
+          streamBus,
+          sessionId: session.sessionId,
+          ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
+          ...(session.themeMode !== undefined
+            ? { themeMode: session.themeMode }
+            : {}),
+          ...(wrapOuter !== undefined ? { wrapOuter } : {}),
+        };
+      };
+
+      /**
+       * Mount-or-update the single render slot. First call mounts the
+       * React tree into `renderInto`; subsequent calls re-apply via
+       * `itemHandle.update` (same kind ⇒ in-place props update; kind
+       * transition ⇒ tear-down + remount via `StackItemHandle`'s own
+       * lifecycle).
+       *
+       * Shared by the push and props_update channel handlers; closes
+       * over `currentItem` + `itemHandle` so the channel layer just
+       * calls `applyItem(item)` without owning lifecycle state.
+       */
+      const applyItem = async (item: SessionStackEntry): Promise<void> => {
+        currentItem = item;
+        if (itemHandle === null) {
+          itemHandle = await renderStackItem(renderInto, buildOpts(item));
+          return;
+        }
+        await itemHandle.update(buildOpts(item));
+      };
 
       // Validator context — A2UI default for `_ggui:preview`; no
       // bootstrap-supplied overrides today (the
@@ -3465,15 +3498,17 @@ async function bootProduction(opts: {
       });
       channelRegistry.register(
         createPushHandler({
-          stackModel,
           statusRefs,
-          getStackRenderer: () => stackRenderer,
+          ...(stackItem?.stackItemId !== undefined
+            ? { pinnedItemId: stackItem.stackItemId }
+            : {}),
+          applyItem,
           getChannelTransport: () => channelTransport,
         }),
       );
       channelRegistry.register(
         createDataHandler({
-          stackModel,
+          getCurrentItem: () => currentItem,
           streamBus,
           validatorCtx,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3481,8 +3516,8 @@ async function bootProduction(opts: {
       );
       channelRegistry.register(
         createPropsUpdateHandler({
-          stackModel,
-          getStackRenderer: () => stackRenderer,
+          getCurrentItem: () => currentItem,
+          applyItem,
         }),
       );
       channelRegistry.register(
@@ -3508,7 +3543,8 @@ async function bootProduction(opts: {
       return {
         rootWireConfig: rootConfig,
         streamBus,
-        stackRenderer,
+        applyItem,
+        getCurrentItem: () => currentItem,
         validatorCtx,
         manager,
         channelTransport,
@@ -3523,9 +3559,13 @@ async function bootProduction(opts: {
       }
     },
     teardown: (handle) => {
-      handle.stackRenderer.unmountAll();
-      // Tear down per-channel polling timers + clear subscription
-      // registry. No-op when no channel was ever activated.
+      // The React mount lifecycle is owned by the per-setup `itemHandle`
+      // closure; it stays null until the first push lands. Today
+      // bootSequence's failure paths fire before any push (handshake
+      // errors arrive before the first ack), so unmounting the React
+      // tree from here is unnecessary. The only thing the teardown
+      // hook still owns is the per-channel polling timer + transport
+      // subscription registry — no-op when no channel was activated.
       handle.channelTransport.dispose();
     },
   };

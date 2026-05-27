@@ -1,6 +1,14 @@
 /**
- * Stack-item dispatcher — routes each SessionStackEntry to the
+ * Stack-item dispatcher — routes a single SessionStackEntry to the
  * appropriate renderer based on its discriminator.
+ *
+ * Post-stack-removal (2026-05-27): the iframe-runtime mounts EXACTLY
+ * ONE stack entry per session, in a single container. This module
+ * exposes one entry point — {@link renderStackItem} — that returns a
+ * {@link StackItemHandle} the runtime uses to apply subsequent
+ * patches (props_update) or unmount on teardown. The earlier
+ * `StackRenderer` / `StackRenderContext` orchestrator (a stack-of-N
+ * map keyed by item id) was retired along with `StackModel`.
  *
  * The dispatch tree mirrors `@ggui-ai/react::DynamicComponent` +
  * `McpAppsStackItemRenderer`:
@@ -10,18 +18,15 @@
  *   - `componentCode` empty OR absent → `mountProvisional` (A2UI
  *     preview fed by the `_ggui:preview` reserved channel).
  *   - otherwise → `mountReactRoot` with a per-item `WireConfig`
- *     built via the renderer's `buildScopedConfig(item)` closure.
- *     The mounted component is wrapped in
+ *     built by the caller. The mounted component is wrapped in
  *     `<GguiWireProvider config={scopedConfig}>` through the
  *     `renderWrapper` seam.
  *
  * Per-item lifecycle:
  *
- *   Each stack entry owns a SINGLE `StackItemHandle` for its visible
- *   lifetime. When the entry gets replaced in-place (push matched by
- *   id), the dispatcher transitions the existing handle rather than
- *   unmount + remount — props-only changes skip the React eval; kind
- *   changes unmount the current and mount the replacement.
+ *   The handle's `update()` either transitions in-place (props-only,
+ *   same kind) or tears down + remounts (kind changed — provisional
+ *   → react when componentCode lands).
  *
  * StreamBus integration:
  *
@@ -55,9 +60,11 @@ import type { StreamBus } from './wire-config.js';
 export interface StackItemRendererOptions {
   /** The stack item to render. */
   readonly stackItem: SessionStackEntry;
-  /** Wire config for this item — pre-scoped via the renderer's
+  /** Wire config for this item — caller pre-scopes via the runtime's
    *  `buildScopedConfig(item)` (see
-   *  `wire-config.ts::RootWireConfigBundle`). */
+   *  `wire-config.ts::RootWireConfigBundle`). `null` ⇒ the component
+   *  mounts without a wire provider (standalone — matches today's
+   *  DynamicComponent fallback when no GguiSession parent is present). */
   readonly scopedWireConfig: WireConfig | null;
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this item. */
@@ -302,95 +309,4 @@ export async function renderStackItem(
     },
     unmount: teardown,
   };
-}
-
-// =============================================================================
-// Stack-level dispatcher
-// =============================================================================
-
-export interface StackRenderContext {
-  readonly containerFor: (stackItemId: string) => HTMLElement;
-  readonly getScopedWireConfig: (item: SessionStackEntry) => WireConfig | null;
-  readonly streamBus: StreamBus;
-  readonly sessionId: string;
-  readonly mcpAppsServerBaseUrl?: string;
-  readonly themeId?: string;
-  /** Theme color mode — see {@link StackItemRendererOptions.themeMode}. */
-  readonly themeMode?: 'light' | 'dark';
-  readonly onError?: (err: Error) => void;
-  readonly onRequestRepair?: (err: Error) => void;
-  /**
-   * Optional outer wrapper for each stack-item React mount — see
-   * {@link StackItemRendererOptions.wrapOuter}. `bootProduction` uses
-   * this to inject `<ContextStateHost>` around every per-item React
-   * root, mirroring the wrap `bootSelfContained` performs at its
-   * single React root. Returning the input unchanged is equivalent
-   * to passing `undefined`.
-   */
-  readonly getOuterWrapper?: (
-    item: SessionStackEntry,
-  ) => ((mountedTree: ReactNode) => ReactNode) | undefined;
-}
-
-/**
- * Minimal stack-level orchestrator — keyed by stackItem.id, mounts
- * new items, updates existing ones, unmounts removed ones.
- *
- * The production renderer tree uses this; tests can drive the
- * individual `renderStackItem` entry point directly.
- */
-export class StackRenderer {
-  private handles = new Map<string, StackItemHandle>();
-
-  constructor(private readonly ctx: StackRenderContext) {}
-
-  async applyStack(stack: readonly SessionStackEntry[]): Promise<void> {
-    const nextIds = new Set(stack.map((s) => s.id));
-
-    // Unmount removed items.
-    for (const [id, handle] of this.handles) {
-      if (!nextIds.has(id)) {
-        handle.unmount();
-        this.handles.delete(id);
-      }
-    }
-
-    // Mount or update each item in stack order.
-    for (const item of stack) {
-      const container = this.ctx.containerFor(item.id);
-      const scopedWireConfig = this.ctx.getScopedWireConfig(item);
-      const wrapOuter = this.ctx.getOuterWrapper?.(item);
-      const opts: StackItemRendererOptions = {
-        stackItem: item,
-        scopedWireConfig,
-        streamBus: this.ctx.streamBus,
-        sessionId: this.ctx.sessionId,
-        ...(this.ctx.mcpAppsServerBaseUrl !== undefined
-          ? { mcpAppsServerBaseUrl: this.ctx.mcpAppsServerBaseUrl }
-          : {}),
-        ...(this.ctx.themeId !== undefined ? { themeId: this.ctx.themeId } : {}),
-        ...(this.ctx.themeMode !== undefined ? { themeMode: this.ctx.themeMode } : {}),
-        ...(this.ctx.onError !== undefined ? { onError: this.ctx.onError } : {}),
-        ...(this.ctx.onRequestRepair !== undefined
-          ? { onRequestRepair: this.ctx.onRequestRepair }
-          : {}),
-        ...(wrapOuter !== undefined ? { wrapOuter } : {}),
-      };
-
-      const existing = this.handles.get(item.id);
-      if (existing === undefined) {
-        const handle = await renderStackItem(container, opts);
-        this.handles.set(item.id, handle);
-      } else {
-        await existing.update(opts);
-      }
-    }
-  }
-
-  unmountAll(): void {
-    for (const handle of this.handles.values()) {
-      handle.unmount();
-    }
-    this.handles.clear();
-  }
 }

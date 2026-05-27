@@ -1,53 +1,54 @@
 /**
  * `push` channel handler — folds an inbound `push` frame into the
- * stack model, re-renders the placeholder DOM, refreshes the status
- * line, then (when renderer wiring is present) applies the new stack
- * through the React renderer + activates the channel-transport router
- * against the new top of stack.
+ * single-item render slot and (when transport wiring is present)
+ * activates the per-channel transport router against the newly-
+ * mounted item.
  *
- * The placeholder side-effects (stack model upsert + DOM render +
- * status update) are unconditional — they're load-bearing for the
- * C7a-era specs that boot WITHOUT renderer wiring (boot.test.ts in
- * particular). Renderer-only consumers (production runtime) pass the
- * `getStackRenderer` + `getChannelTransport` thunks; tests that
- * exercise the placeholder path only leave them off.
+ * Post-stack-removal (2026-05-27): each iframe holds exactly one
+ * mounted item for its lifetime. The push handler routes the inbound
+ * `stackItem` to a caller-supplied `applyItem` callback that either
+ * mounts (first push) or re-applies (subsequent push to the same id).
+ * Pushes addressed to a different `stackItemId` are out-of-spec and
+ * drop with a console warning — the host spawns a fresh iframe per
+ * unique stack-item id.
  *
- * Pre-B3b: the placeholder fold lived in a separate
- * `handleServerMessage` call in `runtime.ts`, fired before renderer
- * dispatch. B3b absorbed both into this single handler so the
- * registry-owned WS transport is the sole dispatch site.
+ * Placeholder mode (boot.test.ts and the C7a placeholder-only spec)
+ * omits `applyItem` + `getChannelTransport`. The handler still fires
+ * for those callers — status log keeps firing — but no React mount
+ * happens. The boot-without-renderer path remains testable.
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import type { PushPayload } from '@ggui-ai/protocol';
+import type { PushPayload, SessionStackEntry } from '@ggui-ai/protocol';
 
 import type { ChannelTransportRouter } from '../channel-transport.js';
-import type { StackRenderer } from '../stack-item-renderer.js';
-import type { StackModel } from '../stack.js';
-import {
-  refreshStackDom,
-  setConnectedStatus,
-  type StatusRefs,
-} from '../status-dom.js';
+import { setConnectedStatus, type StatusRefs } from '../status-dom.js';
 
 export interface PushHandlerDeps {
-  readonly stackModel: StackModel;
   /**
-   * Status DOM refs the placeholder fold updates. Required — even
-   * renderer-mode consumers want the status text to reflect the live
-   * count for operator-visible boot debugging.
+   * Status DOM refs the connected-status log updates. Required —
+   * even renderer-mode consumers want a `[ggui:connected]` console
+   * log on every push for operator-visible boot debugging.
    */
   readonly statusRefs: StatusRefs;
   /**
-   * Renderer-mode hook — returns the React stack renderer. Absent in
-   * placeholder-only mode (tests, and callers that don't mount the
-   * React stack).
+   * Pin — when set, push payloads with a different `stackItemId`
+   * are dropped with a console warning. Set by the renderer hook to
+   * the stack-item id the iframe was bootstrapped against (every
+   * post-displayMode iframe is pinned to a single item).
    */
-  readonly getStackRenderer?: () => StackRenderer;
+  readonly pinnedItemId?: string;
   /**
-   * Renderer-mode hook — returns the per-channel transport router so the
-   * push handler can activate / tear down `source.tool` channels on
-   * the new top of stack. Absent in placeholder-only mode.
+   * Apply the inbound item to the single mount slot. Absent in
+   * placeholder mode (no React mount). When present, the handler
+   * `await`s the apply before activating the per-channel transport
+   * so the router targets the item React already mounted.
+   */
+  readonly applyItem?: (item: SessionStackEntry) => Promise<void>;
+  /**
+   * Renderer-mode hook — returns the per-channel transport router so
+   * the push handler can activate `source.tool` channel subscriptions
+   * against the newly-mounted item. Absent in placeholder-only mode.
    */
   readonly getChannelTransport?: () => ChannelTransportRouter;
 }
@@ -58,46 +59,35 @@ export function createPushHandler(
   return {
     type: 'push',
     onMessage: async (payload) => {
-      // 1. Stack model upsert + status log — unconditional. Renderer and
-      //    placeholder consumers both fold the new stackItem into the
-      //    model + bump the `[ggui:connected] Connected (N item)`
-      //    console log.
-      deps.stackModel.upsert(payload.stackItem);
-      setConnectedStatus(deps.statusRefs, deps.stackModel);
+      const item = payload.stackItem;
 
-      // 2. Renderer-mode work — only fires when the production runtime
-      //    supplied the renderer + transport thunks.
-      const stackRenderer = deps.getStackRenderer?.();
-      const channelTransport = deps.getChannelTransport?.();
-
-      // 3. Placeholder DOM render — `<li data-ggui-stack-item>` rows
-      //    that boot.test.ts (no-renderer path) asserts against. Renderer-
-      //    mode iframes own the `<ul data-ggui-stack>` for React
-      //    mounts via `containerFor`; calling `refreshStackDom` there
-      //    would wipe React's mounts. Skip when a renderer is wired.
-      if (stackRenderer === undefined) {
-        refreshStackDom(deps.statusRefs, deps.stackModel);
+      if (deps.pinnedItemId !== undefined && item.id !== deps.pinnedItemId) {
+        // Out-of-spec: each iframe is pinned to exactly one stack-item
+        // id post-displayMode-divergence; the host spawns a fresh
+        // iframe per push. A push for some other id means the host
+        // wired the wrong session or the server is broadcasting
+        // cross-item frames.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[ggui:push] ignoring push for ${item.id} — iframe pinned to ${deps.pinnedItemId}`,
+        );
         return;
       }
 
-      const snapshot = deps.stackModel.snapshot();
-      await stackRenderer.applyStack(snapshot);
-
-      if (channelTransport === undefined) return;
-
-      const top = snapshot[snapshot.length - 1];
-      if (
-        top !== undefined &&
-        top.type !== 'mcpApps' &&
-        top.type !== 'system'
-      ) {
-        channelTransport.applyStackItem({
-          stackItemId: top.id,
-          ...(top.streamSpec !== undefined
-            ? { streamSpec: top.streamSpec }
-            : {}),
-        });
+      if (deps.applyItem !== undefined) {
+        await deps.applyItem(item);
       }
+      setConnectedStatus(deps.statusRefs);
+
+      const channelTransport = deps.getChannelTransport?.();
+      if (channelTransport === undefined) return;
+      if (item.type === 'mcpApps' || item.type === 'system') return;
+      channelTransport.applyStackItem({
+        stackItemId: item.id,
+        ...(item.streamSpec !== undefined
+          ? { streamSpec: item.streamSpec }
+          : {}),
+      });
     },
   };
 }

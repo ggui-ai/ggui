@@ -11,9 +11,10 @@
  * in `runtime.ts` as part of the B3b cleanup — the handler is now the
  * sole dispatch surface for `data` frames.
  *
- * Factored out of `handleRendererMessage` as part of the B3a handler
- * extraction; expanded in B3b to absorb the observability-axis
- * emission previously fired in parallel from `bootSequence`.
+ * Post-stack-removal (2026-05-27): the active item is read through
+ * the caller-supplied `getCurrentItem` thunk instead of via a
+ * `StackModel.snapshot()` walk — the iframe holds exactly one mounted
+ * item, so the lookup is direct.
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
@@ -27,7 +28,6 @@ import type {
   ObservabilityEmitter,
   ObservabilityEvent,
 } from '../observability.js';
-import type { StackModel } from '../stack.js';
 import {
   validateInboundStreamPayload,
   type RendererValidatorContext,
@@ -35,7 +35,12 @@ import {
 import type { StreamBus } from '../wire-config.js';
 
 export interface DataHandlerDeps {
-  readonly stackModel: StackModel;
+  /**
+   * Read the currently-mounted stack entry. Returns `null` when no
+   * item has been mounted yet — data frames received pre-mount have
+   * no streamSpec to validate against and silently drop.
+   */
+  readonly getCurrentItem: () => SessionStackEntry | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
   /**
@@ -75,14 +80,11 @@ export function createDataHandler(
         emitContractErrorFromDataFrame(envelope, deps.onObserve);
       }
 
-      // Active stack item carries the streamSpec — mirrors
-      // `GguiSession.handleServerMessage`. Top of stack only.
-      const snapshot = deps.stackModel.snapshot();
-      const activeItem = snapshot[snapshot.length - 1] as
-        | SessionStackEntry
-        | undefined;
+      // Active item carries the streamSpec — mirrors
+      // `GguiSession.handleServerMessage`.
+      const activeItem = deps.getCurrentItem();
       const streamSpec =
-        activeItem !== undefined &&
+        activeItem !== null &&
         activeItem.type !== 'mcpApps' &&
         activeItem.type !== 'system'
           ? activeItem.streamSpec
