@@ -1,5 +1,5 @@
 /**
- * StackItemRenderer (RN) — provisional-branch tests.
+ * RenderRenderer (RN) — provisional-branch tests.
  *
  * Mirrors the web test. Empty `componentCode` AND no `descriptor` →
  * routes through `ProvisionalRenderer` with the caller's fallback
@@ -11,7 +11,7 @@ import React from 'react';
 import { create, act, type ReactTestRenderer } from 'react-test-renderer';
 import { PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { StackItemRenderer } from './DynamicComponent';
+import { RenderRenderer } from './DynamicComponent';
 import {
   __resetPreviewBridgeForTests,
   emitPreviewBridge,
@@ -19,7 +19,7 @@ import {
 
 function sendPreview(payload: unknown): void {
   const envelope: StreamEnvelope = {
-    sessionId: 'sess-1',
+    renderId: 'render-1',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],
@@ -58,7 +58,7 @@ function hasTestId(tree: ReactTestRenderer, id: string): boolean {
   }
 }
 
-describe('StackItemRenderer (RN) — provisional branching', () => {
+describe('RenderRenderer (RN) — provisional branching', () => {
   beforeEach(() => {
     __resetPreviewBridgeForTests();
   });
@@ -67,8 +67,8 @@ describe('StackItemRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(StackItemRenderer, {
-          stackItem: { id: 'pending', componentCode: '' },
+        React.createElement(RenderRenderer, {
+          render: { componentCode: '' },
           fallback: React.createElement(
             'View',
             { testID: 'caller-loading' },
@@ -84,8 +84,8 @@ describe('StackItemRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(StackItemRenderer, {
-          stackItem: { id: 'pending', componentCode: '' },
+        React.createElement(RenderRenderer, {
+          render: { componentCode: '' },
         }),
       );
     });
@@ -111,8 +111,8 @@ describe('StackItemRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(StackItemRenderer, {
-          stackItem: {
+        React.createElement(RenderRenderer, {
+          render: {
             componentCode: '',
             descriptor: { type: 'TestUnknown' },
           },
