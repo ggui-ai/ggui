@@ -21,8 +21,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseBootstrap } from '../meta-parse.js';
 import {
@@ -48,19 +47,18 @@ function buildBootstrapEnvelope(
     bundleSri?: string;
   }>,
 ) {
-  const session: McpAppAiGguiSessionMeta = {
+  const meta: McpAppAiGguiRenderMeta = {
     wsUrl: 'wss://server.example/ws',
     wsToken: 'tok_abc',
-    sessionId: 'sess_001',
+    renderId: 'render_001',
     appId: 'app_001',
     runtimeUrl: '/_ggui/iframe-runtime.js',
     ...(gadgets !== undefined ? { gadgets } : {}),
   };
-  const meta: McpAppAiGguiMeta = { session };
   return {
     toolOutput: {
       _meta: toMcpAppEnvelope(meta),
-      structuredContent: { sessionId: 'sess_001' },
+      structuredContent: { renderId: 'render_001' },
     },
   };
 }
@@ -86,13 +84,13 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const parsed = parseBootstrap(buildBootstrapEnvelope());
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unexpected');
-    expect(parsed.meta.session.gadgets).toBeUndefined();
+    expect(parsed.meta.gadgets).toBeUndefined();
 
     // (2) Compose registry with empty package list — STDLIB only.
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.meta.session.gadgets ?? [],
+      parsed.meta.gadgets ?? [],
     );
 
     // (3) Install on globalThis.
@@ -131,7 +129,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     );
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unexpected');
-    expect(parsed.meta.session.gadgets).toEqual([
+    expect(parsed.meta.gadgets).toEqual([
       {
         package: '@ggui-samples/gadget-leaflet',
       },
@@ -154,7 +152,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.meta.session.gadgets ?? [],
+      parsed.meta.gadgets ?? [],
       { importer: fakeImporter, logger: { warn: vi.fn() } },
     );
 
@@ -210,7 +208,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.meta.session.gadgets ?? [],
+      parsed.meta.gadgets ?? [],
       { importer: failingImporter, logger: { warn: vi.fn() } },
     );
 
@@ -254,7 +252,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
     const stdlib = makeFakeStdlib();
     const registry = await loadGadgetRegistry(
       stdlib,
-      parsed.meta.session.gadgets ?? [],
+      parsed.meta.gadgets ?? [],
       { importer: evilImporter, logger: { warn: vi.fn() } },
     );
 

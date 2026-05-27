@@ -12,16 +12,14 @@ describe('createDrainAckHandler', () => {
     const dispatch = vi.fn();
     const handler = createDrainAckHandler({ dispatch });
     handler.onMessage({
-      sessionId: 's',
+      renderId: 's',
       appId: 'a',
-      stackItemId: 'x',
       eventId: 'evt-1',
       drainedAt: '2026-01-01T00:00:00.000Z',
     });
     expect(dispatch).toHaveBeenCalledWith({
-      sessionId: 's',
+      renderId: 's',
       appId: 'a',
-      stackItemId: 'x',
       eventId: 'evt-1',
       drainedAt: '2026-01-01T00:00:00.000Z',
     });

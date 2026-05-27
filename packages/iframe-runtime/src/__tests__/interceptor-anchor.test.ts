@@ -25,7 +25,7 @@ let originalPostMessage: typeof window.parent.postMessage;
 
 const baseArgs = {
   dispatchToolName: 'ggui_runtime_submit_action',
-  sessionId: 'sess_1',
+  renderId: 'render_1',
   appId: 'app_1',
 } as const;
 

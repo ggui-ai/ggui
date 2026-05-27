@@ -45,7 +45,7 @@ describe('mountReactRoot — empty componentCode', () => {
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
       mount = await mountReactRoot(container, {
-        stackItem: { id: 'x', componentCode: '' },
+        render: { id: 'x', componentCode: '' },
       });
     });
 
@@ -62,7 +62,7 @@ describe('mountReactRoot — empty componentCode', () => {
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
       mount = await mountReactRoot(container, {
-        stackItem: { id: 'x', componentCode: '' },
+        render: { id: 'x', componentCode: '' },
       });
     });
     expect(container.children.length).toBeGreaterThan(0);
@@ -82,7 +82,7 @@ describe('mountReactRoot — eval error', () => {
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
       mount = await mountReactRoot(container, {
-        stackItem: { id: 'x', componentCode: brokenCode },
+        render: { id: 'x', componentCode: brokenCode },
         onError,
       });
     });
@@ -107,20 +107,20 @@ describe('mountReactRoot — update with new props (no re-eval)', () => {
     let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
     await flush(async () => {
       mount = await mountReactRoot(container, {
-        stackItem: { id: 'x', componentCode: '' }, // empty → currentCode null
+        render: { id: 'x', componentCode: '' }, // empty → currentCode null
       });
     });
     const onError = vi.fn();
 
     await flush(async () => {
       await mount!.update({
-        stackItem: { id: 'x', componentCode: '', props: { foo: 'bar' } },
+        render: { id: 'x', componentCode: '', props: { foo: 'bar' } },
         onError,
       });
     });
     await flush(async () => {
       await mount!.update({
-        stackItem: { id: 'x', componentCode: '', props: { foo: 'baz' } },
+        render: { id: 'x', componentCode: '', props: { foo: 'baz' } },
         onError,
       });
     });

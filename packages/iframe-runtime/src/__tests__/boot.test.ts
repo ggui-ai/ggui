@@ -1,11 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { SessionStackEntry } from '@ggui-ai/protocol';
-import type {
-  McpAppAiGguiMeta,
-  McpAppAiGguiSessionMeta,
-  McpAppAiGguiStackItemMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { Render } from '@ggui-ai/protocol';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
 
@@ -24,30 +20,28 @@ import type { ConnectFn } from '../registry-subscribe.js';
  *   - Calls `ui/initialize` exactly once.
  *   - Parses the bootstrap from the response and feeds the parsed
  *     value into `connectFn`.
- *   - On a successful ack, `result.mountedItem` reflects the picked
- *     entry — either the `pinnedItemId`-matching entry (single-item
- *     resource) or the first entry (no pin).
+ *   - On a successful ack, `result.mountedRender` reflects the render
+ *     when the ack snapshot's `render.id` matches `pinnedRenderId`
+ *     (post-render-identity-collapse the renderId IS the pin; no
+ *     "first entry" fallback — the slice always carries a renderId).
  *   - Negative paths (UI_INITIALIZE_FAILED, MISSING_META_GGUI_BOOTSTRAP,
  *     UPGRADE_REQUIRED, WS_HANDSHAKE_FAILED) each surface a
  *     `ggui:bootstrap-failed` envelope to the recorder.
  *
- * Post-stack-removal (2026-05-27, Phase A): the placeholder mode no
- * longer injects `<li data-ggui-stack-item>` rows. Push-handler
- * behavior in placeholder mode is silent (status-log only); per-frame
- * channel handler behavior is covered by channel-specific unit tests
- * with a renderer mock.
+ * Post-render-identity-collapse (2026-05-27, Phase B): the iframe
+ * mounts EXACTLY ONE render keyed by `meta.renderId`. The placeholder
+ * mode is silent (status-log only); per-frame channel handler behavior
+ * lives in channel-specific unit tests with a renderer mock.
  */
 
-const VALID_SESSION: McpAppAiGguiSessionMeta = {
+const VALID_META: McpAppAiGguiRenderMeta = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc',
-  sessionId: 'sess_001',
+  renderId: 'render_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
-
-const VALID_META: McpAppAiGguiMeta = { session: VALID_SESSION };
 
 function buildHappyInitResponse(): { result: unknown } {
   return {
@@ -60,12 +54,16 @@ function buildHappyInitResponse(): { result: unknown } {
   };
 }
 
-function makeStackItem(id: string, description: string): SessionStackEntry {
+function makeRender(id: string, description: string): Render {
   return {
     id,
+    appId: 'app_001',
     componentCode: '/* unused at C7a */',
     description,
-    createdAt: new Date().toISOString(),
+    eventSequence: 0,
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
   };
 }
 
@@ -75,7 +73,7 @@ function makeStackItem(id: string, description: string): SessionStackEntry {
  * through the registered handlers post-bind. Returns the connectFn +
  * the emitter + a reference to the captured registry.
  */
-function buildMockConnect(stack: SessionStackEntry[] | undefined): {
+function buildMockConnect(render: Render | undefined): {
   connectFn: ConnectFn;
   emitFrame: (type: string, payload: unknown) => void;
 } {
@@ -93,7 +91,7 @@ function buildMockConnect(stack: SessionStackEntry[] | undefined): {
       ack: {
         sequence: 1,
         timestamp: Date.now(),
-        ...(stack !== undefined ? { stack } : {}),
+        ...(render !== undefined ? { render } : {}),
         serverVersion: undefined,
       },
     };
@@ -109,15 +107,15 @@ function buildMockConnect(stack: SessionStackEntry[] | undefined): {
 }
 
 describe('bootSequence — happy path', () => {
-  it('boots from valid bootstrap and picks the first ack entry as mountedItem', async () => {
+  it('boots from valid bootstrap and mounts the ack render when its id matches pinnedRenderId', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
-    const initial = makeStackItem('item_a', 'first item');
+    // The bootstrap's renderId pins the mount slot; the ack's render
+    // MUST carry that same id to land. Single-render-per-iframe.
+    const initial = makeRender('render_001', 'first render');
 
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
-    // No pin (bootstrap omits stackItem) → applyAck picks the first
-    // entry from the ack snapshot.
-    const { connectFn, emitFrame } = buildMockConnect([initial]);
+    const { connectFn, emitFrame } = buildMockConnect(initial);
 
     const notifyParent = vi.fn();
 
@@ -136,17 +134,17 @@ describe('bootSequence — happy path', () => {
       expect.objectContaining({ type: 'ggui:renderer-ready' }),
     );
 
-    // First ack entry promoted to mountedItem on the result.
-    expect(result.mountedItem?.id).toBe('item_a');
+    // Ack's render promoted to mountedRender on the result.
+    expect(result.mountedRender?.id).toBe('render_001');
 
-    // Push-frame behavior in placeholder mode is silent (status-log
+    // Render-frame behavior in placeholder mode is silent (status-log
     // only — no React mount, no DOM mutation). The emitFrame helper
-    // still confirms the push handler is registered and accepts the
+    // still confirms the render handler is registered and accepts the
     // frame without throwing; the mount-once semantics under renderer
     // mode are covered by channel-handler unit tests with a renderer
     // mock.
-    const pushed = makeStackItem('item_b', 'second item');
-    emitFrame('push', { stackItem: pushed, matchType: 'exact' });
+    const subsequent = makeRender('render_001', 'second push');
+    emitFrame('render', { render: subsequent, matchType: 'exact' });
 
     // No failure message was sent.
     const failures = notifyParent.mock.calls
@@ -197,13 +195,11 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
 
     // The spec-canonical async tier — returns meta as if delivered by
     // a `ui/notifications/tool-result` postMessage.
-    const awaitPostMessageMeta = vi.fn().mockResolvedValue({
-      session: VALID_SESSION,
-    });
+    const awaitPostMessageMeta = vi.fn().mockResolvedValue(VALID_META);
 
-    const { connectFn, emitFrame } = buildMockConnect([
-      makeStackItem('item_a', 'spec-canonical'),
-    ]);
+    const { connectFn, emitFrame } = buildMockConnect(
+      makeRender('render_001', 'spec-canonical'),
+    );
     const notifyParent = vi.fn();
 
     const result = await bootSequence({
@@ -219,14 +215,14 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
     expect(notifyParent).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'ggui:renderer-ready' }),
     );
-    expect(result.mountedItem?.id).toBe('item_a');
+    expect(result.mountedRender?.id).toBe('render_001');
 
-    // Smoke that the push handler is registered after a postMessage-
+    // Smoke that the render handler is registered after a postMessage-
     // tier boot — placeholder mode accepts the frame without throwing
     // (no DOM mutation to observe; renderer-mode coverage lives in
     // channel handler unit tests).
-    emitFrame('push', {
-      stackItem: makeStackItem('item_b', 'after spec-canonical boot'),
+    emitFrame('render', {
+      render: makeRender('render_001', 'after spec-canonical boot'),
       matchType: 'exact',
     });
   });
@@ -242,19 +238,17 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
 
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
 
-    // Hostile postMessage meta — different sessionId. If the resolver
+    // Hostile postMessage meta — different renderId. If the resolver
     // mistakenly preferred this over the synchronous Reading-B, the
-    // bound session.sessionId on the wire config would be 'sess_999'
-    // instead of VALID_SESSION's 'sess_001'.
-    const hostileSession: McpAppAiGguiSessionMeta = {
-      ...VALID_SESSION,
-      sessionId: 'sess_999',
+    // bound wire config would pin to 'render_999' instead of
+    // VALID_META's 'render_001'.
+    const hostileMeta: McpAppAiGguiRenderMeta = {
+      ...VALID_META,
+      renderId: 'render_999',
     };
-    const awaitPostMessageMeta = vi.fn().mockResolvedValue({
-      session: hostileSession,
-    });
+    const awaitPostMessageMeta = vi.fn().mockResolvedValue(hostileMeta);
 
-    const { connectFn } = buildMockConnect([makeStackItem('item_a', 'b')]);
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'b'));
 
     const result = await bootSequence({
       doc: dom,
@@ -264,7 +258,7 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
       awaitPostMessageMeta,
     });
     expect(result.ok).toBe(true);
-    // Reading-B's session won — the postMessage promise was started
+    // Reading-B's meta won — the postMessage promise was started
     // (listener race safety) but its value was discarded.
     expect(awaitPostMessageMeta).toHaveBeenCalledTimes(1);
   });
@@ -286,7 +280,7 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
     });
     const awaitPostMessageMeta = vi.fn(); // must NOT be called
 
-    const { connectFn } = buildMockConnect([makeStackItem('item_z', 'pre-resolved')]);
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'pre-resolved'));
 
     const result = await bootSequence({
       doc: dom,
@@ -294,7 +288,7 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
       connectFn,
       notifyParent: vi.fn(),
       awaitPostMessageMeta,
-      preResolvedMeta: { session: VALID_SESSION },
+      preResolvedMeta: VALID_META,
     });
 
     expect(result.ok).toBe(true);
@@ -302,34 +296,17 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
   });
 });
 
-describe('bootSequence — single-item mode (post-stack-removal)', () => {
-  it('picks the bootstrap.stackItemId-matching entry from the ack as mountedItem', async () => {
+describe('bootSequence — single-render mode (post-render-identity-collapse)', () => {
+  it('leaves mountedRender null when the ack render id does not match the pin', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
-    const pinnedItem = makeStackItem('item_pinned', 'the pinned one');
-    const otherItem = makeStackItem('item_other', 'sibling');
+    // The ack carries a render with a different id — the renderer
+    // ignores the mismatch (pinned to meta.renderId = 'render_001').
+    const otherRender = makeRender('render_other', 'unrelated');
 
-    const pinnedStackItem: McpAppAiGguiStackItemMeta = {
-      stackItemId: 'item_pinned',
-    };
-    const pinnedMeta: McpAppAiGguiMeta = {
-      session: VALID_SESSION,
-      stackItem: pinnedStackItem,
-    };
+    const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
 
-    const callUiInitialize = vi.fn().mockResolvedValue({
-      result: {
-        toolOutput: {
-          _meta: toMcpAppEnvelope(pinnedMeta),
-          structuredContent: {},
-        },
-      },
-    });
-
-    // Ack carries both items — the server subscribe is session-scoped
-    // and may deliver multiple entries even when the bootstrap pinned
-    // one. `applyAck` selects the entry whose id matches `pinnedItemId`.
-    const { connectFn } = buildMockConnect([pinnedItem, otherItem]);
+    const { connectFn } = buildMockConnect(otherRender);
 
     const result = await bootSequence({
       doc: dom,
@@ -337,45 +314,11 @@ describe('bootSequence — single-item mode (post-stack-removal)', () => {
       connectFn,
       notifyParent: vi.fn(),
     });
+    // Boot still succeeds — the mismatch isn't a failure (server may
+    // have pruned the pinned render). `mountedRender` stays null until
+    // a subsequent render-frame for the pinned id lands.
     expect(result.ok).toBe(true);
-
-    // `applyAck` picked the pinned item out of the multi-entry ack.
-    expect(result.mountedItem?.id).toBe('item_pinned');
-  });
-
-  it('leaves mountedItem null when the pinned id is absent from the ack', async () => {
-    const dom = document.implementation.createHTMLDocument('renderer-test');
-
-    const ackOnlyItem = makeStackItem('item_only', 'unrelated');
-
-    const pinnedMeta: McpAppAiGguiMeta = {
-      session: VALID_SESSION,
-      stackItem: { stackItemId: 'item_missing' },
-    };
-
-    const callUiInitialize = vi.fn().mockResolvedValue({
-      result: {
-        toolOutput: {
-          _meta: toMcpAppEnvelope(pinnedMeta),
-          structuredContent: {},
-        },
-      },
-    });
-
-    const { connectFn } = buildMockConnect([ackOnlyItem]);
-
-    const result = await bootSequence({
-      doc: dom,
-      callUiInitialize,
-      connectFn,
-      notifyParent: vi.fn(),
-    });
-    // Boot still succeeds — the pin missing from the snapshot is not
-    // a failure (server may have pruned the item or the snapshot is
-    // pre-push). mountedItem stays null until a subsequent push for
-    // the pinned id lands.
-    expect(result.ok).toBe(true);
-    expect(result.mountedItem).toBeNull();
+    expect(result.mountedRender).toBeNull();
   });
 });
 
@@ -484,4 +427,3 @@ describe('bootSequence — failure paths', () => {
     );
   });
 });
-

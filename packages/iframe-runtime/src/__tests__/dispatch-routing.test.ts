@@ -106,7 +106,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        sessionId: 'sess_1',
+        renderId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },
         appCallableTools: ['gmail_archive', 'ggui_runtime_submit_action'],
@@ -130,7 +130,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          sessionId: 'sess_1',
+          renderId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           // gmail_archive is NOT app-visible on this server connection.
@@ -160,7 +160,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
               actionData: { id: 'msg_1' },
               uiContext: {},
             },
-            sessionId: 'sess_1',
+            renderId: 'render_1',
             appId: 'app_1',
           },
         },
@@ -172,7 +172,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          sessionId: 'sess_1',
+          renderId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -205,7 +205,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          sessionId: 'sess_1',
+          renderId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -243,7 +243,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          sessionId: 'sess_1',
+          renderId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -275,7 +275,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        sessionId: 'sess_1',
+        renderId: 'render_1',
         appId: 'app_1',
         // actionNextSteps deliberately undefined.
         appCallableTools: ['gmail_archive'],
@@ -293,7 +293,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        sessionId: 'sess_1',
+        renderId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { send: 'gmail_send' },
         appCallableTools: ['gmail_send'],
@@ -311,7 +311,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        sessionId: 'sess_1',
+        renderId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },
       },

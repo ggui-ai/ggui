@@ -4,6 +4,11 @@
  * 2026-05-13) and stays compatible with system cards + the existing
  * Path B (`_meta` postMessage) extraction.
  *
+ * Post-Phase-B (2026-05-27): the wire merged the two-slice envelope
+ * into a single `ai.ggui/render` slice. Fixtures construct
+ * `McpAppAiGguiRenderMeta` directly and the parser surfaces it on
+ * `result` (flat — no `session` / `stackItem` nesting).
+ *
  * These cover the parser narrowing only — the actual fetch + mount
  * path is exercised end-to-end against a real iframe in higher-tier
  * specs.
@@ -11,9 +16,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   extractMetaFromToolResult,
@@ -27,61 +30,35 @@ const SAMPLE_CODE_URL = 'https://app.example.com/code/abc123.js';
 // the per-test focus).
 const SAMPLE_RUNTIME_URL = '/_ggui/iframe-runtime.js';
 
-const SESSION_FIELDS = new Set<string>([
-  'sessionId', 'appId', 'runtimeUrl', 'wsUrl', 'token', 'expiresAt',
-  'pollingUrl', 'themeId', 'themeMode', 'gadgets',
-  'publicEnv', 'streamWebSocketLocalTools', 'appCallableTools',
-  'permissionsPolicy',
-]);
-
-function flatToMeta(flat: unknown): McpAppAiGguiMeta {
-  if (flat === null || typeof flat !== 'object' || Array.isArray(flat)) {
-    return { session: flat as unknown as McpAppAiGguiSessionMeta };
-  }
-  const sessionRaw: Record<string, unknown> = {};
-  const stackItemRaw: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(flat as Record<string, unknown>)) {
-    if (SESSION_FIELDS.has(k)) sessionRaw[k] = v;
-    else stackItemRaw[k] = v;
-  }
-  return {
-    session: sessionRaw as unknown as McpAppAiGguiSessionMeta,
-    ...(Object.keys(stackItemRaw).length > 0
-      ? { stackItem: stackItemRaw as unknown as McpAppAiGguiStackItemMeta }
-      : {}),
-  };
-}
-
-function buildToolResultParams(bootstrap: unknown): unknown {
-  return { _meta: toMcpAppEnvelope(flatToMeta(bootstrap)) };
+function buildToolResultParams(meta: McpAppAiGguiRenderMeta): unknown {
+  return { _meta: toMcpAppEnvelope(meta) };
 }
 
 /**
- * Set the post-#109 global shape — a slice envelope keyed by
- * `ai.ggui/session` + `ai.ggui/stack-item`. Identical wire shape to
- * `_meta` so the runtime's `parseMetaFromGlobal` can reuse the
- * shared combiner.
+ * Set the global to a slice envelope keyed by `ai.ggui/render`. The
+ * runtime's `parseMetaFromGlobal` reuses the shared combiner so this
+ * matches the wire `_meta` shape verbatim.
  */
-function setGlobalFromFlat(flat: unknown): void {
+function setGlobal(meta: McpAppAiGguiRenderMeta): void {
   (globalThis as unknown as { __GGUI_META__?: unknown })
-    .__GGUI_META__ = toMcpAppEnvelope(flatToMeta(flat));
+    .__GGUI_META__ = toMcpAppEnvelope(meta);
 }
 
 describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
   it('accepts a bootstrap with codeUrl alone (Slice 3 preferred path)', () => {
     const result = extractMetaFromToolResult(
       buildToolResultParams({
-        sessionId: 's1',
+        renderId: 'render_001',
         appId: 'a1',
         runtimeUrl: SAMPLE_RUNTIME_URL,
         codeUrl: SAMPLE_CODE_URL,
       }),
     );
     expect(result).not.toBeNull();
-    if (result === null || result.stackItem?.kind !== undefined) {
+    if (result === null || result.kind !== undefined) {
       throw new Error('expected component variant');
     }
-    expect(result.stackItem?.codeUrl).toBe(SAMPLE_CODE_URL);
+    expect(result.codeUrl).toBe(SAMPLE_CODE_URL);
   });
 
   // The inline `componentCode` channel was retired 2026-05-13 (T3-1).
@@ -89,9 +66,15 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
   // ignores any stray `componentCode` field and never surfaces it.
 
   it('returns null when codeUrl is not present', () => {
+    // Missing mode discriminator (no codeUrl, no kind, no wsUrl+token)
+    // → MALFORMED_BOOTSTRAP from validateMeta; extractor returns null.
     expect(
       extractMetaFromToolResult(
-        buildToolResultParams({ sessionId: 's1', appId: 'a1' }),
+        buildToolResultParams({
+          renderId: 'render_001',
+          appId: 'a1',
+          runtimeUrl: SAMPLE_RUNTIME_URL,
+        }),
       ),
     ).toBeNull();
   });
@@ -100,7 +83,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          sessionId: 's1',
+          renderId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
           codeUrl: '',
@@ -113,10 +96,12 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          sessionId: 's1',
+          renderId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
-          codeUrl: 42,
+          // TS-allowed in the fixture; runtime parser rejects per
+          // structural validation.
+          codeUrl: 42 as unknown as string,
         }),
       ),
     ).toBeNull();
@@ -129,7 +114,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          sessionId: 's1',
+          renderId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
           kind: 'connect-claude',
@@ -142,17 +127,17 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
   it('still accepts a clean system-card bootstrap (kind only, no code)', () => {
     const result = extractMetaFromToolResult(
       buildToolResultParams({
-        sessionId: 's1',
+        renderId: 'render_001',
         appId: 'a1',
         runtimeUrl: SAMPLE_RUNTIME_URL,
         kind: 'connect-claude',
       }),
     );
     expect(result).not.toBeNull();
-    if (result === null || result.stackItem?.kind === undefined) {
+    if (result === null || result.kind === undefined) {
       throw new Error('expected system variant');
     }
-    expect(result.stackItem.kind).toBe('connect-claude');
+    expect(result.kind).toBe('connect-claude');
   });
 });
 
@@ -168,23 +153,23 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
   });
 
   it('reads codeUrl from window.__GGUI_META__', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
     });
     const bs = readSelfContainedMeta();
     expect(bs).not.toBeNull();
-    if (bs === null || bs.stackItem?.kind !== undefined) {
+    if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
     }
-    expect(bs.stackItem?.codeUrl).toBe(SAMPLE_CODE_URL);
+    expect(bs.codeUrl).toBe(SAMPLE_CODE_URL);
   });
 
-  it('returns null when codeUrl is absent', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+  it('returns null when codeUrl is absent (no mode discriminator)', () => {
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
     });
@@ -192,8 +177,8 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
   });
 
   it('passes themeMode through when set to "dark"', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -202,16 +187,16 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
     });
     const bs = readSelfContainedMeta();
     expect(bs).not.toBeNull();
-    if (bs === null || bs.stackItem?.kind !== undefined) {
+    if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
     }
-    expect(bs.session.themeId).toBe('claudic');
-    expect(bs.session.themeMode).toBe('dark');
+    expect(bs.themeId).toBe('claudic');
+    expect(bs.themeMode).toBe('dark');
   });
 
   it('passes themeMode through for system-card variant', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       kind: 'no-credentials',
@@ -220,41 +205,42 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
     });
     const bs = readSelfContainedMeta();
     expect(bs).not.toBeNull();
-    if (bs === null || bs.stackItem?.kind === undefined) {
+    if (bs === null || bs.kind === undefined) {
       throw new Error('expected system variant');
     }
-    expect(bs.session.themeMode).toBe('dark');
+    expect(bs.themeMode).toBe('dark');
   });
 
   it('drops malformed themeMode silently (falls back to undefined)', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
-      themeMode: 'twilight', // not in the closed 'light' | 'dark' set
+      // not in the closed 'light' | 'dark' set
+      themeMode: 'twilight' as unknown as 'light' | 'dark',
     });
     const bs = readSelfContainedMeta();
     expect(bs).not.toBeNull();
-    if (bs === null || bs.stackItem?.kind !== undefined) {
+    if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
     }
-    expect(bs.session.themeMode).toBeUndefined();
+    expect(bs.themeMode).toBeUndefined();
   });
 
   it('omits themeMode when absent from bootstrap', () => {
-    setGlobalFromFlat({
-      sessionId: 's1',
+    setGlobal({
+      renderId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
     });
     const bs = readSelfContainedMeta();
     expect(bs).not.toBeNull();
-    if (bs === null || bs.stackItem?.kind !== undefined) {
+    if (bs === null || bs.kind !== undefined) {
       throw new Error('expected component variant');
     }
-    expect(bs.session.themeMode).toBeUndefined();
+    expect(bs.themeMode).toBeUndefined();
   });
 });
 
@@ -263,15 +249,11 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 describe('SelfContainedMcpAppAiGguiMeta typing', () => {
   it('allows constructing a component variant with codeUrl', () => {
     const bs: SelfContainedMcpAppAiGguiMeta = {
-      session: {
-        sessionId: 's1',
-        appId: 'a1',
-        runtimeUrl: SAMPLE_RUNTIME_URL,
-      },
-      stackItem: {
-        codeUrl: SAMPLE_CODE_URL,
-      },
+      renderId: 'render_001',
+      appId: 'a1',
+      runtimeUrl: SAMPLE_RUNTIME_URL,
+      codeUrl: SAMPLE_CODE_URL,
     };
-    expect(bs.stackItem?.codeUrl).toBe(SAMPLE_CODE_URL);
+    expect(bs.codeUrl).toBe(SAMPLE_CODE_URL);
   });
 });

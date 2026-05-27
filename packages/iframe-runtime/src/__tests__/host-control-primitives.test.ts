@@ -26,7 +26,7 @@ import {
 
 const baseArgs = {
   toolName: 'ggui_runtime_submit_action',
-  sessionId: 'sess_1',
+  renderId: 'render_1',
   appId: 'app_1',
 };
 
@@ -72,7 +72,7 @@ describe('emitAudit', () => {
         arguments: {
           kind: 'openLink',
           payload: { url: 'https://example.com' },
-          sessionId: 'sess_1',
+          renderId: 'render_1',
           appId: 'app_1',
           actionId: 'a3f2b1d4',
           firedAt: '2026-05-07T10:00:00.000Z',

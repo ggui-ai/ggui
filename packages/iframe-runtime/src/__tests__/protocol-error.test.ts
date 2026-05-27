@@ -33,8 +33,8 @@ import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { SessionStackEntry } from '@ggui-ai/protocol';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { Render } from '@ggui-ai/protocol';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   ClientContractViolationError,
@@ -166,14 +166,18 @@ describe('protocol-error constructors', () => {
 // (1) buildRootWireConfig — client-contract violations → onProtocolError
 // =============================================================================
 
-function makeStackItem(id: string, overrides: Partial<SessionStackEntry> = {}): SessionStackEntry {
+function makeRender(id: string, overrides: Partial<Render> = {}): Render {
   return {
     id,
+    appId: 'app_x',
     componentCode: '/* unused */',
-    description: `item ${id}`,
-    createdAt: new Date().toISOString(),
+    description: `render ${id}`,
+    eventSequence: 0,
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
     ...overrides,
-  } as SessionStackEntry;
+  } as Render;
 }
 
 function makeFakeManager(): { send: ReturnType<typeof vi.fn> } {
@@ -193,12 +197,12 @@ describe('buildRootWireConfig — onProtocolError', () => {
         },
       },
     };
-    const stack: SessionStackEntry[] = [makeStackItem('top', { actionSpec })];
+    const render = makeRender('render_001', { actionSpec });
     const onProtocolError = vi.fn<(err: ProtocolError) => void>();
-    const { config: cfg } = buildRootWireConfig({
-      sessionId: 's1',
+    const cfg = buildRootWireConfig({
+      renderId: 'render_001',
       appId: 'a1',
-      getStack: () => stack,
+      getCurrentRender: () => render,
       manager: { send },
       streamBus: new StreamBus(),
       onProtocolError,
@@ -228,11 +232,11 @@ describe('buildRootWireConfig — onProtocolError', () => {
         },
       },
     };
-    const stack: SessionStackEntry[] = [makeStackItem('top', { actionSpec })];
-    const { config: cfg } = buildRootWireConfig({
-      sessionId: 's1',
+    const render = makeRender('render_001', { actionSpec });
+    const cfg = buildRootWireConfig({
+      renderId: 'render_001',
       appId: 'a1',
-      getStack: () => stack,
+      getCurrentRender: () => render,
       manager: { send },
       streamBus: new StreamBus(),
     });
@@ -284,14 +288,14 @@ class MockWebSocket {
   }
 }
 
-function makeRegistry(session: McpAppAiGguiSessionMeta): ChannelRegistry {
+function makeRegistry(meta: McpAppAiGguiRenderMeta): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: session.sessionId,
-        appId: session.appId,
-        bootstrap: session.wsToken,
+        renderId: meta.renderId,
+        appId: meta.appId,
+        bootstrap: meta.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
       },
     }),
@@ -310,10 +314,10 @@ describe('connectViaRegistry — onProtocolError', () => {
     delete (globalThis as { WebSocket?: unknown }).WebSocket;
   });
 
-  function session(): McpAppAiGguiSessionMeta {
+  function meta(): McpAppAiGguiRenderMeta {
     return {
       wsUrl: 'ws://test/ws',
-      sessionId: 'sess_1',
+      renderId: 'render_001',
       appId: 'app_x',
       wsToken: 'bootstrap_token',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -324,8 +328,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=version on UPGRADE_REQUIRED error frame + rejects', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      session: session(),
-      registry: makeRegistry(session()),
+      meta: meta(),
+      registry: makeRegistry(meta()),
       onStatusChange: (_s: ConnectionStatus) => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -353,8 +357,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=auth on SESSION_NOT_FOUND error frame', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      session: session(),
-      registry: makeRegistry(session()),
+      meta: meta(),
+      registry: makeRegistry(meta()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -380,8 +384,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=protocol on unknown error code with extensibly-closed forwarding', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      session: session(),
-      registry: makeRegistry(session()),
+      meta: meta(),
+      registry: makeRegistry(meta()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -409,8 +413,8 @@ describe('connectViaRegistry — onProtocolError', () => {
   it('emits kind=version when client rejects ack.serverVersion mismatch', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
-      session: session(),
-      registry: makeRegistry(session()),
+      meta: meta(),
+      registry: makeRegistry(meta()),
       onStatusChange: () => {},
       onProtocolError: (e) => emitted.push(e),
     });
@@ -423,7 +427,6 @@ describe('connectViaRegistry — onProtocolError', () => {
       payload: {
         sequence: 0,
         timestamp: Date.now(),
-        stack: [],
         serverVersion: '99.0.0',
       },
     });

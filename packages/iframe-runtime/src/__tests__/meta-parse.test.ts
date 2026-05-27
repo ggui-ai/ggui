@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { parseMetaFromUiInitialize } from '../meta-parse.js';
 
@@ -13,6 +11,10 @@ import { parseMetaFromUiInitialize } from '../meta-parse.js';
  * extensions, dev tools that intercept postMessage, third-party
  * harnesses) — every guard here corresponds to a real failure shape
  * the renderer needs to surface honestly rather than crash on.
+ *
+ * Post-Phase-B (2026-05-27) the wire carries a single
+ * `ai.ggui/render` slice. Test fixtures construct
+ * `McpAppAiGguiRenderMeta` directly and wrap via `toMcpAppEnvelope`.
  *
  * Each malformed-input test builds the input shape explicitly rather
  * than mutating a happy-path fixture. That keeps `delete`-on-typed-
@@ -24,77 +26,32 @@ import { parseMetaFromUiInitialize } from '../meta-parse.js';
 const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 
 /**
- * Field names that belong on the session slice. Used by {@link flatToMeta}
- * to split a flat fixture input into the two-slice envelope shape that
- * `toMcpAppEnvelope` consumes. Kept in sync with `McpAppAiGguiSessionMeta`.
- */
-const SESSION_FIELDS = new Set<string>([
-  'sessionId',
-  'appId',
-  'runtimeUrl',
-  'wsUrl',
-  'wsToken',
-  'expiresAt',
-  'pollingUrl',
-  'themeId',
-  'themeMode',
-  'gadgets',
-  'publicEnv',
-  'streamWebSocketLocalTools',
-  'appCallableTools',
-  'permissionsPolicy',
-]);
-
-/**
- * Split a flat fixture object into the two-slice {@link McpAppAiGguiMeta}
- * shape. Unknown fields (test inputs that intentionally include garbage
- * to drive malformed-parse paths) ride on the stack-item slice so the
- * combiner's structural validation can still see them.
- */
-function flatToMeta(flat: unknown): McpAppAiGguiMeta {
-  if (flat === null || typeof flat !== 'object' || Array.isArray(flat)) {
-    // Malformed fixture — surface it on session so the combiner trips.
-    return { session: flat as unknown as McpAppAiGguiSessionMeta };
-  }
-  const sessionRaw: Record<string, unknown> = {};
-  const stackItemRaw: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(flat as Record<string, unknown>)) {
-    if (SESSION_FIELDS.has(k)) sessionRaw[k] = v;
-    else stackItemRaw[k] = v;
-  }
-  const meta: McpAppAiGguiMeta = {
-    session: sessionRaw as unknown as McpAppAiGguiSessionMeta,
-    ...(Object.keys(stackItemRaw).length > 0
-      ? { stackItem: stackItemRaw as unknown as McpAppAiGguiStackItemMeta }
-      : {}),
-  };
-  return meta;
-}
-
-/**
- * Build a `ui/initialize` `result` payload from the four wire-required
- * bootstrap fields (+ optional expiresAt). Every test composes its
- * input through this so the call sites stay ergonomic without leaking
- * `unknown` casts into the test surface.
+ * Build a `ui/initialize` `result` payload from a flat fixture shape.
+ * The fixture is treated as the raw render slice — fields write through
+ * to `toMcpAppEnvelope`. Accepts `Partial<McpAppAiGguiRenderMeta>` plus
+ * arbitrary extras (intentional garbage to drive malformed-parse paths).
  *
- * accepts an optional `hostContext` second arg
- * that lands at `result.hostContext` (sibling of `result.toolOutput`),
- * matching the MCP Apps spec's `McpUiInitializeResult` shape.
+ * Accepts an optional `hostContext` second arg that lands at
+ * `result.hostContext` (sibling of `result.toolOutput`), matching the
+ * MCP Apps spec's `McpUiInitializeResult` shape.
  */
-function buildResult(bootstrap: unknown, hostContext?: unknown): unknown {
+function buildResult(slice: unknown, hostContext?: unknown): unknown {
   return {
     toolOutput: {
-      _meta: toMcpAppEnvelope(flatToMeta(bootstrap)),
-      structuredContent: { sessionId: 'sess_001' },
+      _meta:
+        slice === null || typeof slice !== 'object' || Array.isArray(slice)
+          ? { 'ai.ggui/render': slice }
+          : toMcpAppEnvelope(slice as McpAppAiGguiRenderMeta),
+      structuredContent: {},
     },
     ...(hostContext !== undefined ? { hostContext } : {}),
   };
 }
 
-const happyBootstrap = {
+const happyBootstrap: McpAppAiGguiRenderMeta = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc123',
-  sessionId: 'sess_001',
+  renderId: 'render_001',
   appId: 'app_001',
   expiresAt: FUTURE_ISO,
   runtimeUrl: '/_ggui/iframe-runtime.js',
@@ -105,11 +62,11 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.wsUrl).toBe('wss://server.example/ws');
-      expect(result.meta.session.wsToken).toBe('tok_abc123');
-      expect(result.meta.session.sessionId).toBe('sess_001');
-      expect(result.meta.session.appId).toBe('app_001');
-      expect(result.meta.session.expiresAt).toBe(FUTURE_ISO);
+      expect(result.meta.wsUrl).toBe('wss://server.example/ws');
+      expect(result.meta.wsToken).toBe('tok_abc123');
+      expect(result.meta.renderId).toBe('render_001');
+      expect(result.meta.appId).toBe('app_001');
+      expect(result.meta.expiresAt).toBe(FUTURE_ISO);
     }
   });
 
@@ -118,25 +75,25 @@ describe('parseMetaFromUiInitialize — happy path', () => {
       buildResult({
         wsUrl: happyBootstrap.wsUrl,
         wsToken: happyBootstrap.wsToken,
-        sessionId: happyBootstrap.sessionId,
+        renderId: happyBootstrap.renderId,
         appId: happyBootstrap.appId,
         runtimeUrl: happyBootstrap.runtimeUrl,
       }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.expiresAt).toBeUndefined();
+      expect(result.meta.expiresAt).toBeUndefined();
     }
   });
 
-  it('carries the runtimeUrl field forward onto the typed session slice', () => {
+  it('carries the runtimeUrl field forward onto the typed slice', () => {
     // C8 (2026-04-23): runtimeUrl is required. parseMetaFromUiInitialize
     // MUST propagate the field verbatim so the thin-shell's script-load
     // path has a URL to point at. Missing is MALFORMED (tested below).
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+      expect(result.meta.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     }
   });
 
@@ -153,7 +110,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.appCallableTools).toEqual([
+      expect(result.meta.appCallableTools).toEqual([
         'ggui_runtime_submit_action',
         'foo_tool',
       ]);
@@ -166,7 +123,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.appCallableTools).toEqual([]);
+      expect(result.meta.appCallableTools).toEqual([]);
     }
   });
 
@@ -178,7 +135,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.appCallableTools).toEqual([]);
+      expect(result.meta.appCallableTools).toEqual([]);
     }
   });
 
@@ -191,13 +148,13 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.appCallableTools).toEqual([]);
+      expect(result.meta.appCallableTools).toEqual([]);
     }
   });
 
   // Slice 2 (2026-05-07) — `actionNextSteps` parsing. Same posture as
   // appCallableTools: optional on the wire, well-typed records
-  // propagate, malformed shapes default to `{}`.
+  // propagate, malformed shapes default to absent.
   it('propagates a well-typed actionNextSteps record', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
@@ -210,35 +167,32 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.actionNextSteps).toEqual({
+      expect(result.meta.actionNextSteps).toEqual({
         archive: 'gmail_archive',
         send: 'gmail_send',
       });
     }
   });
 
-  it('defaults actionNextSteps to {} when the field is absent (back-compat)', () => {
+  it('omits actionNextSteps when the field is absent (back-compat)', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Session-only bootstrap (no stackItem at all) — actionNextSteps
-      // lives on stackItem, so reading defaults to undefined for the
-      // whole slice. Consumers default at the read site.
-      expect(result.meta.stackItem).toBeUndefined();
+      expect(result.meta.actionNextSteps).toBeUndefined();
     }
   });
 
-  it('defaults actionNextSteps to {} when the field is malformed (non-object)', () => {
+  it('omits actionNextSteps when the field is malformed (non-object)', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, actionNextSteps: 'not-an-object' }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
+      expect(result.meta.actionNextSteps).toBeUndefined();
     }
   });
 
-  it('defaults actionNextSteps to {} when the record contains non-string values', () => {
+  it('omits actionNextSteps when the record contains non-string values', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
@@ -247,23 +201,23 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
+      expect(result.meta.actionNextSteps).toBeUndefined();
     }
   });
 
-  it('defaults actionNextSteps to {} when the field is null', () => {
+  it('omits actionNextSteps when the field is null', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, actionNextSteps: null }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.actionNextSteps).toEqual({});
+      expect(result.meta.actionNextSteps).toBeUndefined();
     }
   });
 
   // Slice 8 (2026-05-08) — `contextSlots` parsing. Same shape-preserving
   // posture as the other Slice fields: legacy bootstraps without the
-  // field default to `[]`; malformed shapes also default to `[]`.
+  // field omit it; malformed shapes default to `[]`.
   it('propagates a well-typed contextSlots array', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
@@ -287,7 +241,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      const slots = result.meta.stackItem?.contextSlots ?? [];
+      const slots = result.meta.contextSlots ?? [];
       expect(slots).toHaveLength(2);
       expect(slots[0]?.name).toBe('currentStep');
       expect(slots[0]?.contextName).toBe('CurrentStepContext');
@@ -295,12 +249,11 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     }
   });
 
-  it('defaults contextSlots to [] when the field is absent (back-compat)', () => {
+  it('omits contextSlots when the field is absent (back-compat)', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      // Session-only bootstrap omits the whole stackItem slice.
-      expect(result.meta.stackItem).toBeUndefined();
+      expect(result.meta.contextSlots).toBeUndefined();
     }
   });
 
@@ -310,7 +263,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.contextSlots).toEqual([]);
+      expect(result.meta.contextSlots).toEqual([]);
     }
   });
 
@@ -326,7 +279,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.contextSlots).toEqual([]);
+      expect(result.meta.contextSlots).toEqual([]);
     }
   });
 
@@ -349,7 +302,7 @@ describe('parseMetaFromUiInitialize — happy path', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.contextSlots).toEqual([]);
+      expect(result.meta.contextSlots).toEqual([]);
     }
   });
 });
@@ -406,7 +359,7 @@ describe('parseMetaFromUiInitialize — MISSING_META_GGUI_BOOTSTRAP', () => {
     });
   });
 
-  it('rejects when the session slice is absent from _meta', () => {
+  it('rejects when the render slice is absent from _meta', () => {
     expect(parseMetaFromUiInitialize({ toolOutput: { _meta: { other: {} } } })).toEqual({
       ok: false,
       reason: 'MISSING_META_GGUI_BOOTSTRAP',
@@ -420,7 +373,7 @@ describe('parseMetaFromUiInitialize — MISSING_META_GGUI_BOOTSTRAP', () => {
     });
   });
 
-  it('rejects when the bootstrap value is an array (combiner returns MALFORMED_SESSION)', () => {
+  it('rejects when the slice value is an array (combiner returns MALFORMED_RENDER → MALFORMED_BOOTSTRAP)', () => {
     expect(parseMetaFromUiInitialize(buildResult([]))).toEqual({
       ok: false,
       reason: 'MALFORMED_BOOTSTRAP',
@@ -434,8 +387,9 @@ describe('parseMetaFromUiInitialize — MALFORMED_BOOTSTRAP', () => {
       parseMetaFromUiInitialize(
         buildResult({
           wsToken: happyBootstrap.wsToken,
-          sessionId: happyBootstrap.sessionId,
+          renderId: happyBootstrap.renderId,
           appId: happyBootstrap.appId,
+          runtimeUrl: happyBootstrap.runtimeUrl,
         }),
       ),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
@@ -447,9 +401,9 @@ describe('parseMetaFromUiInitialize — MALFORMED_BOOTSTRAP', () => {
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
-  it('rejects when sessionId is a number (wrong type)', () => {
+  it('rejects when renderId is a number (wrong type)', () => {
     expect(
-      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, sessionId: 12345 })),
+      parseMetaFromUiInitialize(buildResult({ ...happyBootstrap, renderId: 12345 })),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
@@ -480,7 +434,7 @@ describe('parseMetaFromUiInitialize — MALFORMED_BOOTSTRAP', () => {
         buildResult({
           wsUrl: happyBootstrap.wsUrl,
           wsToken: happyBootstrap.wsToken,
-          sessionId: happyBootstrap.sessionId,
+          renderId: happyBootstrap.renderId,
           appId: happyBootstrap.appId,
           expiresAt: happyBootstrap.expiresAt,
           // runtimeUrl deliberately omitted
@@ -506,14 +460,14 @@ describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () =>
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.streamWebSocketLocalTools).toEqual([
+      expect(result.meta.streamWebSocketLocalTools).toEqual([
         'weather_now',
         'tasks_list',
       ]);
     }
   });
 
-  it('preserves an empty allowlist verbatim (server transport-aware, no tool local)', () => {
+  it('preserves an empty allowlist as undefined (collapse rule)', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
         ...happyBootstrap,
@@ -525,7 +479,7 @@ describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () =>
       // Empty array projects to undefined per the parser's
       // "shape-preserving collapse" rule (only non-empty entries
       // survive). Consumers default at the read site.
-      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
@@ -533,7 +487,7 @@ describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () =>
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
@@ -546,7 +500,7 @@ describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () =>
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 
@@ -559,7 +513,7 @@ describe('parseMetaFromUiInitialize — EE+ 1c streamWebSocketLocalTools', () =>
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.streamWebSocketLocalTools).toBeUndefined();
+      expect(result.meta.streamWebSocketLocalTools).toBeUndefined();
     }
   });
 });
@@ -587,7 +541,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toEqual([
+      expect(result.meta.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-leaflet',
         },
@@ -603,7 +557,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toBeUndefined();
+      expect(result.meta.gadgets).toBeUndefined();
     }
   });
 
@@ -616,7 +570,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toBeUndefined();
+      expect(result.meta.gadgets).toBeUndefined();
     }
   });
 
@@ -629,7 +583,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toBeUndefined();
+      expect(result.meta.gadgets).toBeUndefined();
     }
   });
 
@@ -642,7 +596,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toBeUndefined();
+      expect(result.meta.gadgets).toBeUndefined();
     }
   });
 
@@ -664,7 +618,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toEqual([
+      expect(result.meta.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-mapbox',
           bundleUrl: 'https://registry.ggui.ai/bundles/mapbox.js',
@@ -688,7 +642,7 @@ describe('parseMetaFromUiInitialize — GG.8.2 gadgets', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.gadgets).toEqual([
+      expect(result.meta.gadgets).toEqual([
         {
           package: '@ggui-samples/gadget-mapbox',
         },
@@ -715,7 +669,7 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toEqual({
+      expect(result.meta.publicEnv).toEqual({
         GGUI_PUBLIC_APP_MAPBOX_TOKEN: 'pk.eyJ...',
         GGUI_PUBLIC_APP_API_BASE: 'https://api.example.com',
       });
@@ -726,22 +680,17 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     const result = parseMetaFromUiInitialize(buildResult(happyBootstrap));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 
-  it('treats empty publicEnv as absent (#109 splitter drops empty slices)', () => {
-    // Post-#109: splitMountViewIntoSlices omits empty publicEnv from the
-    // session slice on the wire, so the combiner-driven parser sees
-    // it as absent (undefined). Empty-map and absent are now
-    // wire-equivalent; consumers that need a defined map default at
-    // their read site.
+  it('treats empty publicEnv as absent (splitter drops empty slices)', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({ ...happyBootstrap, publicEnv: {} }),
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 
@@ -757,7 +706,7 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 
@@ -770,7 +719,7 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 
@@ -780,7 +729,7 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 
@@ -793,7 +742,7 @@ describe('parseMetaFromUiInitialize — Slice 2.0 publicEnv', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.publicEnv).toBeUndefined();
+      expect(result.meta.publicEnv).toBeUndefined();
     }
   });
 });
@@ -832,7 +781,7 @@ describe('parseMetaFromUiInitialize — auth-degraded fallback (rehydrate)', () 
   it('expired + codeUrl → returns ok in degraded mode', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
-        sessionId: 'sess_001',
+        renderId: 'render_001',
         appId: 'app_001',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'wss://server.example/ws',
@@ -844,16 +793,16 @@ describe('parseMetaFromUiInitialize — auth-degraded fallback (rehydrate)', () 
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
-      expect(result.meta.session.wsUrl).toBeUndefined();
-      expect(result.meta.session.wsToken).toBeUndefined();
+      expect(result.meta.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.wsToken).toBeUndefined();
     }
   });
 
   it('expired + system kind → returns ok in degraded mode', () => {
     const result = parseMetaFromUiInitialize(
       buildResult({
-        sessionId: 'sess_001',
+        renderId: 'render_001',
         appId: 'app_001',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'wss://server.example/ws',
@@ -864,9 +813,9 @@ describe('parseMetaFromUiInitialize — auth-degraded fallback (rehydrate)', () 
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.kind).toBe('no-credentials');
-      expect(result.meta.session.wsUrl).toBeUndefined();
-      expect(result.meta.session.wsToken).toBeUndefined();
+      expect(result.meta.kind).toBe('no-credentials');
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.wsToken).toBeUndefined();
     }
   });
 
@@ -921,7 +870,7 @@ describe('parseMetaFromUiInitialize — Slice A HostContext capture', () => {
     if (result.ok) {
       // Bootstrap still parses; hostContext silently undefined.
       expect(result.hostContext).toBeUndefined();
-      expect(result.meta.session.sessionId).toBe('sess_001');
+      expect(result.meta.renderId).toBe('render_001');
     }
   });
 
@@ -939,7 +888,7 @@ describe('parseMetaFromUiInitialize — Slice A HostContext capture', () => {
     // hostContext capture must not mask a bootstrap-parse failure.
     const result = parseMetaFromUiInitialize(
       buildResult(
-        { wsUrl: 'wss://x', sessionId: 'sess_001' /* missing appId+runtimeUrl */ },
+        { wsUrl: 'wss://x', renderId: 'render_001' /* missing appId+runtimeUrl */ },
         { displayMode: 'fullscreen' },
       ),
     );
@@ -961,10 +910,10 @@ describe('parseMetaFromUiInitialize — Slice A HostContext capture', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.wsUrl).toBe('wss://server.example/ws');
-      expect(result.meta.session.wsToken).toBe('tok_abc123');
-      expect(result.meta.session.expiresAt).toBe(FUTURE_ISO);
-      expect(result.meta.stackItem?.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
+      expect(result.meta.wsUrl).toBe('wss://server.example/ws');
+      expect(result.meta.wsToken).toBe('tok_abc123');
+      expect(result.meta.expiresAt).toBe(FUTURE_ISO);
+      expect(result.meta.codeUrl).toBe('https://cdn.example/blueprint/abc.js');
     }
   });
 });

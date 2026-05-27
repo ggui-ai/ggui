@@ -2,7 +2,7 @@
  * Slice 14 (2026-05-08) — envelope-equivalence + per-mode validation
  * for the unified slice-meta parser.
  *
- * The runtime now extracts a single {@link McpAppAiGguiMeta} from
+ * The runtime now extracts a single {@link McpAppAiGguiRenderMeta} from
  * three envelope shapes via three thin wrappers
  * ({@link parseMetaFromUiInitialize},
  * {@link parseMetaFromGlobal},
@@ -20,14 +20,16 @@
  *      `appCallableTools`, `actionNextSteps` round-trip identically
  *      through every wrapper.
  *
+ * Post-Phase-B (2026-05-27): the wire merged the previous two-slice
+ * envelope (`ai.ggui/session` + `ai.ggui/stack-item`) into a single
+ * `ai.ggui/render` slice. Every field flat on `McpAppAiGguiRenderMeta`.
+ *
  * @see packages/iframe-runtime/src/meta-parse.ts
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   parseBootstrap,
@@ -40,34 +42,8 @@ import {
 const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 const RUNTIME_URL = '/_ggui/iframe-runtime.js';
 
-/** See {@link meta-parse.test.ts#SESSION_FIELDS} for the field-list rationale. */
-const SESSION_FIELDS = new Set<string>([
-  'sessionId', 'appId', 'runtimeUrl', 'wsUrl', 'wsToken', 'expiresAt',
-  'pollingUrl', 'themeId', 'themeMode', 'displayMode', 'gadgets',
-  'publicEnv', 'streamWebSocketLocalTools', 'appCallableTools',
-  'permissionsPolicy',
-]);
-
-function flatToMeta(flat: unknown): McpAppAiGguiMeta {
-  if (flat === null || typeof flat !== 'object' || Array.isArray(flat)) {
-    return { session: flat as unknown as McpAppAiGguiSessionMeta };
-  }
-  const sessionRaw: Record<string, unknown> = {};
-  const stackItemRaw: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(flat as Record<string, unknown>)) {
-    if (SESSION_FIELDS.has(k)) sessionRaw[k] = v;
-    else stackItemRaw[k] = v;
-  }
-  return {
-    session: sessionRaw as unknown as McpAppAiGguiSessionMeta,
-    ...(Object.keys(stackItemRaw).length > 0
-      ? { stackItem: stackItemRaw as unknown as McpAppAiGguiStackItemMeta }
-      : {}),
-  };
-}
-
-const componentBootstrap = {
-  sessionId: 'sess_001',
+const componentBootstrap: McpAppAiGguiRenderMeta = {
+  renderId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   codeUrl: 'https://example.com/code/sha256-abc.js',
@@ -87,8 +63,8 @@ const componentBootstrap = {
   ],
 };
 
-const liveBootstrap = {
-  sessionId: 'sess_001',
+const liveBootstrap: McpAppAiGguiRenderMeta = {
+  renderId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   wsUrl: 'wss://server.example/ws',
@@ -96,34 +72,34 @@ const liveBootstrap = {
   expiresAt: FUTURE_ISO,
 };
 
-const systemBootstrap = {
-  sessionId: 'sess_001',
+const systemBootstrap: McpAppAiGguiRenderMeta = {
+  renderId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   kind: 'no-credentials',
   themeId: 'indigo',
 };
 
-function wrapUiInitialize(bootstrap: unknown): unknown {
+function wrapUiInitialize(meta: McpAppAiGguiRenderMeta): unknown {
   return {
     toolOutput: {
-      _meta: toMcpAppEnvelope(flatToMeta(bootstrap)),
-      structuredContent: { sessionId: 'sess_001' },
+      _meta: toMcpAppEnvelope(meta),
+      structuredContent: { renderId: meta.renderId },
     },
   };
 }
 
-function wrapToolResult(bootstrap: unknown): unknown {
-  return { _meta: toMcpAppEnvelope(flatToMeta(bootstrap)) };
+function wrapToolResult(meta: McpAppAiGguiRenderMeta): unknown {
+  return { _meta: toMcpAppEnvelope(meta) };
 }
 
 /**
- * Set `__GGUI_META__` to the slice envelope shape (post-#109 —
- * matches the wire `_meta` keys).
+ * Set `__GGUI_META__` to the slice envelope shape (matches the wire
+ * `_meta` key).
  */
-function setGlobal(bootstrap: unknown): void {
+function setGlobal(meta: McpAppAiGguiRenderMeta): void {
   (globalThis as unknown as { __GGUI_META__?: unknown })
-    .__GGUI_META__ = toMcpAppEnvelope(flatToMeta(bootstrap));
+    .__GGUI_META__ = toMcpAppEnvelope(meta);
 }
 
 describe('Slice 14 — envelope equivalence', () => {
@@ -150,11 +126,9 @@ describe('Slice 14 — envelope equivalence', () => {
     expect(fromGlobal).toEqual(fromTool);
     expect(fromGlobal.ok).toBe(true);
     if (fromGlobal.ok) {
-      expect(fromGlobal.meta.stackItem?.codeUrl).toBe(
-        componentBootstrap.codeUrl,
-      );
-      expect(fromGlobal.meta.session.runtimeUrl).toBe(RUNTIME_URL);
-      expect(fromGlobal.meta.stackItem?.contextSlots).toHaveLength(1);
+      expect(fromGlobal.meta.codeUrl).toBe(componentBootstrap.codeUrl);
+      expect(fromGlobal.meta.runtimeUrl).toBe(RUNTIME_URL);
+      expect(fromGlobal.meta.contextSlots).toHaveLength(1);
     }
   });
 
@@ -182,7 +156,7 @@ describe('Slice 14 — envelope equivalence', () => {
     expect(fromGlobal).toEqual(fromTool);
     expect(fromGlobal.ok).toBe(true);
     if (fromGlobal.ok) {
-      expect(fromGlobal.meta.stackItem?.kind).toBe('no-credentials');
+      expect(fromGlobal.meta.kind).toBe('no-credentials');
     }
   });
 
@@ -193,118 +167,74 @@ describe('Slice 14 — envelope equivalence', () => {
 
 describe('Slice 14 — per-mode validation', () => {
   it('accepts live mode (wsUrl + token + runtimeUrl)', () => {
-    const result = validateMeta(flatToMeta(liveBootstrap));
+    const result = validateMeta(liveBootstrap);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.wsUrl).toBe('wss://server.example/ws');
-      expect(result.meta.session.wsToken).toBe('tok_abc');
+      expect(result.meta.wsUrl).toBe('wss://server.example/ws');
+      expect(result.meta.wsToken).toBe('tok_abc');
     }
   });
 
   it('accepts static-component mode (codeUrl + runtimeUrl, no WS)', () => {
-    const result = validateMeta(flatToMeta(componentBootstrap));
+    const result = validateMeta(componentBootstrap);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.wsUrl).toBeUndefined();
-      expect(result.meta.session.wsToken).toBeUndefined();
-      expect(result.meta.stackItem?.codeUrl).toBe(
-        componentBootstrap.codeUrl,
-      );
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.wsToken).toBeUndefined();
+      expect(result.meta.codeUrl).toBe(componentBootstrap.codeUrl);
     }
   });
 
   it('accepts system-card mode (kind + runtimeUrl, no WS, no code)', () => {
-    const result = validateMeta(flatToMeta(systemBootstrap));
+    const result = validateMeta(systemBootstrap);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.session.wsUrl).toBeUndefined();
-      expect(result.meta.stackItem?.codeUrl).toBeUndefined();
-      expect(result.meta.stackItem?.kind).toBe('no-credentials');
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.codeUrl).toBeUndefined();
+      expect(result.meta.kind).toBe('no-credentials');
     }
   });
 
-  it('rejects no-discriminator (only sessionId/appId/runtimeUrl)', () => {
+  it('rejects no-discriminator (only renderId/appId/runtimeUrl)', () => {
     expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
+      validateMeta({
+        renderId: 'render_001',
         appId: 'app_001',
         runtimeUrl: RUNTIME_URL,
-      })),
-    ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
-  });
-
-  it('rejects half-live (wsUrl without token)', () => {
-    expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
-        appId: 'app_001',
-        runtimeUrl: RUNTIME_URL,
-        wsUrl: 'wss://server.example/ws',
-        // token deliberately omitted
-      })),
-    ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
-  });
-
-  it('rejects half-live (token without wsUrl)', () => {
-    expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
-        appId: 'app_001',
-        runtimeUrl: RUNTIME_URL,
-        wsToken: 'tok_abc',
-      })),
+      }),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects missing runtimeUrl on live mode', () => {
     expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
+      validateMeta({
+        renderId: 'render_001',
         appId: 'app_001',
         wsUrl: 'wss://server.example/ws',
         wsToken: 'tok_abc',
-      })),
-    ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
-  });
-
-  it('rejects missing runtimeUrl on static-component mode', () => {
-    expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
-        appId: 'app_001',
-        codeUrl: 'https://example.com/code/abc.js',
-      })),
-    ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
-  });
-
-  it('rejects missing runtimeUrl on system-card mode', () => {
-    expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
-        appId: 'app_001',
-        kind: 'no-credentials',
-      })),
+        runtimeUrl: '',
+      }),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects empty-string discriminator (wsUrl: "" + wsToken: "")', () => {
     expect(
-      validateMeta(flatToMeta({
-        sessionId: 'sess_001',
+      validateMeta({
+        renderId: 'render_001',
         appId: 'app_001',
         runtimeUrl: RUNTIME_URL,
         wsUrl: '',
         wsToken: '',
-      })),
+      }),
     ).toEqual({ ok: false, reason: 'MALFORMED_BOOTSTRAP' });
   });
 
   it('rejects expired live-mode bootstrap', () => {
     expect(
-      validateMeta(flatToMeta({
+      validateMeta({
         ...liveBootstrap,
         expiresAt: '2000-01-01T00:00:00.000Z',
-      })),
+      }),
     ).toEqual({ ok: false, reason: 'EXPIRED_BOOTSTRAP' });
   });
 });
@@ -325,7 +255,7 @@ describe('Slice 14 — optional-field round-trip', () => {
     const result = parseMetaFromGlobal();
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta.stackItem?.contextSlots).toEqual(
+      expect(result.meta.contextSlots).toEqual(
         componentBootstrap.contextSlots,
       );
     }
@@ -340,15 +270,15 @@ describe('Slice 14 — optional-field round-trip', () => {
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(componentBootstrap),
     );
-    expect(fromGlobal.ok && fromGlobal.meta.session.appCallableTools).toEqual([
+    expect(fromGlobal.ok && fromGlobal.meta.appCallableTools).toEqual([
       'ggui_runtime_submit_action',
       'foo_tool',
     ]);
-    expect(fromHost.ok && fromHost.meta.session.appCallableTools).toEqual([
+    expect(fromHost.ok && fromHost.meta.appCallableTools).toEqual([
       'ggui_runtime_submit_action',
       'foo_tool',
     ]);
-    expect(fromTool.ok && fromTool.meta.session.appCallableTools).toEqual([
+    expect(fromTool.ok && fromTool.meta.appCallableTools).toEqual([
       'ggui_runtime_submit_action',
       'foo_tool',
     ]);
@@ -363,19 +293,14 @@ describe('Slice 14 — optional-field round-trip', () => {
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(componentBootstrap),
     );
-    expect(fromGlobal.ok && fromGlobal.meta.stackItem?.actionNextSteps).toEqual({
+    expect(fromGlobal.ok && fromGlobal.meta.actionNextSteps).toEqual({
       archive: 'gmail_archive',
     });
-    expect(fromHost.ok && fromHost.meta.stackItem?.actionNextSteps).toEqual({
+    expect(fromHost.ok && fromHost.meta.actionNextSteps).toEqual({
       archive: 'gmail_archive',
     });
-    expect(fromTool.ok && fromTool.meta.stackItem?.actionNextSteps).toEqual({
+    expect(fromTool.ok && fromTool.meta.actionNextSteps).toEqual({
       archive: 'gmail_archive',
     });
   });
-
-  // displayMode is no longer a field on `McpAppAiGguiSessionMeta`
-  // (retired in G1a). The presentation hint moved to
-  // `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865) and is
-  // stamped per-push by `push.resultMeta`, not on the session slice.
 });

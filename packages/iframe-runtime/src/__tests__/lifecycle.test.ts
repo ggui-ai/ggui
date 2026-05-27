@@ -9,7 +9,7 @@
  *   2. `makeLifecycleEvent` builds a populated event with no
  *      `undefined` keys.
  *   3. `bootSequence({onLifecycle})` fires `mounting` → `code-ready`
- *      on the happy path, in order, with the correct stackItemId
+ *      on the happy path, in order, with the correct renderId
  *      forwarding.
  *   4. `bootSequence({onLifecycle})` fires `mounting` → `error` on
  *      every failure path (UI_INITIALIZE_FAILED, MISSING_META_GGUI_
@@ -22,10 +22,9 @@
  * `onLifecycle`.
  */
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import type { SessionStackEntry } from '@ggui-ai/protocol';
+import type { Render } from '@ggui-ai/protocol';
 import type {
-  McpAppAiGguiMeta,
-  McpAppAiGguiSessionMeta,
+  McpAppAiGguiRenderMeta,
   McpAppLifecycleEvent,
   McpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -53,9 +52,9 @@ function notifyParentCalls(mock: Mock): unknown[] {
 }
 
 /**
- * Build a happy-path `connectFn` returning the supplied stack on ack.
+ * Build a happy-path `connectFn` returning the supplied render on ack.
  */
-function buildHappyConnect(stack: SessionStackEntry[]): ConnectFn {
+function buildHappyConnect(render: Render): ConnectFn {
   return async () => ({
     handle: {
       kind: 'ws' as const,
@@ -67,7 +66,7 @@ function buildHappyConnect(stack: SessionStackEntry[]): ConnectFn {
     ack: {
       sequence: 1,
       timestamp: Date.now(),
-      stack,
+      render,
       serverVersion: undefined,
     },
   });
@@ -97,7 +96,7 @@ describe('postLifecycleToParent', () => {
     }
   });
 
-  it('forwards stackItemId + error fields from the event', () => {
+  it('forwards renderId + error fields from the event', () => {
     const posted: unknown[] = [];
     const spy = vi
       .spyOn(window.parent, 'postMessage')
@@ -107,11 +106,11 @@ describe('postLifecycleToParent', () => {
     try {
       postLifecycleToParent({
         state: 'error',
-        stackItemId: 'item_a',
+        renderId: 'render_a',
         error: { code: 'BOOM', message: 'kapow' },
       });
       const msg = posted[0] as McpAppLifecycleMessage;
-      expect(msg.event.stackItemId).toBe('item_a');
+      expect(msg.event.renderId).toBe('render_a');
       expect(msg.event.error).toEqual({ code: 'BOOM', message: 'kapow' });
     } finally {
       spy.mockRestore();
@@ -142,14 +141,14 @@ describe('makeLifecycleEvent', () => {
     expect(Object.keys(event)).toEqual(['state']);
   });
 
-  it('includes stackItemId when non-empty', () => {
-    const event = makeLifecycleEvent('code-ready', { stackItemId: 'item_a' });
-    expect(event.stackItemId).toBe('item_a');
+  it('includes renderId when non-empty', () => {
+    const event = makeLifecycleEvent('code-ready', { renderId: 'render_a' });
+    expect(event.renderId).toBe('render_a');
   });
 
-  it('drops empty stackItemId — never emits a {state, stackItemId: ""} shape', () => {
-    const event = makeLifecycleEvent('code-ready', { stackItemId: '' });
-    expect(event.stackItemId).toBeUndefined();
+  it('drops empty renderId — never emits a {state, renderId: ""} shape', () => {
+    const event = makeLifecycleEvent('code-ready', { renderId: '' });
+    expect(event.renderId).toBeUndefined();
     expect(Object.keys(event)).toEqual(['state']);
   });
 
@@ -165,19 +164,17 @@ describe('makeLifecycleEvent', () => {
 // bootSequence — onLifecycle integration
 // =============================================================================
 
-const VALID_SESSION: McpAppAiGguiSessionMeta = {
+const VALID_META: McpAppAiGguiRenderMeta = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc',
-  sessionId: 'sess_001',
+  renderId: 'render_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
-const VALID_META: McpAppAiGguiMeta = { session: VALID_SESSION };
-
 function buildHappyInitResponse(
-  meta: McpAppAiGguiMeta = VALID_META,
+  meta: McpAppAiGguiRenderMeta = VALID_META,
 ): { result: unknown } {
   return {
     result: {
@@ -189,12 +186,16 @@ function buildHappyInitResponse(
   };
 }
 
-function makeStackItem(id: string): SessionStackEntry {
+function makeRender(id: string): Render {
   return {
     id,
+    appId: 'app_001',
     componentCode: '/* unused */',
     description: id,
-    createdAt: new Date().toISOString(),
+    eventSequence: 0,
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
   };
 }
 
@@ -204,7 +205,7 @@ describe('bootSequence — lifecycle on happy path', () => {
     const onLifecycle = vi.fn();
 
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
-    const connectFn = buildHappyConnect([makeStackItem('item_a')]);
+    const connectFn = buildHappyConnect(makeRender('render_001'));
 
     const result = await bootSequence({
       doc: dom,
@@ -219,19 +220,14 @@ describe('bootSequence — lifecycle on happy path', () => {
     expect(states).toEqual(['mounting', 'code-ready']);
   });
 
-  it('forwards bootstrap.stackItemId on the code-ready event when present (single-item mode)', async () => {
+  it('forwards bootstrap.renderId on the code-ready event (single-render mode)', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const pinnedMeta: McpAppAiGguiMeta = {
-      session: VALID_SESSION,
-      stackItem: { stackItemId: 'item_pinned' },
-    };
-
     const callUiInitialize = vi
       .fn()
-      .mockResolvedValue(buildHappyInitResponse(pinnedMeta));
-    const connectFn = buildHappyConnect([makeStackItem('item_pinned')]);
+      .mockResolvedValue(buildHappyInitResponse(VALID_META));
+    const connectFn = buildHappyConnect(makeRender('render_001'));
 
     await bootSequence({
       doc: dom,
@@ -243,10 +239,10 @@ describe('bootSequence — lifecycle on happy path', () => {
 
     const events = lifecycleEvents(onLifecycle);
     const codeReady = events.find((e) => e.state === 'code-ready');
-    expect(codeReady?.stackItemId).toBe('item_pinned');
+    expect(codeReady?.renderId).toBe('render_001');
 
     const mounting = events.find((e) => e.state === 'mounting');
-    expect(mounting?.stackItemId).toBeUndefined();
+    expect(mounting?.renderId).toBeUndefined();
   });
 });
 
@@ -322,7 +318,7 @@ describe('bootSequence — lifecycle on failure paths', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
-    const connectFn = buildHappyConnect([makeStackItem('item_a')]);
+    const connectFn = buildHappyConnect(makeRender('render_001'));
 
     const result = await bootSequence({
       doc: dom,

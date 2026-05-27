@@ -33,7 +33,7 @@ import {
   UPGRADE_REQUIRED,
 } from '@ggui-ai/protocol/version';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   postObservabilityToParent,
@@ -48,7 +48,7 @@ import {
 } from '../channels/index.js';
 import { mergeReservedValidators } from '../validation.js';
 import { StreamBus } from '../wire-config.js';
-import type { ActionSpec, SessionStackEntry } from '@ggui-ai/protocol';
+import type { ActionSpec, Render } from '@ggui-ai/protocol';
 
 // =============================================================================
 // postObservabilityToParent — default postMessage emitter
@@ -113,18 +113,20 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
         nextStep: 'tasks.create_tool',
       },
     };
-    const stack: SessionStackEntry[] = [
-      {
-        id: 'page-1',
-        componentCode: 'export default () => null',
-        createdAt: '2026-04-22T00:00:00Z',
-        actionSpec,
-      },
-    ];
-    const { config } = buildRootWireConfig({
-      sessionId: 'sess-1',
+    const render: Render = {
+      id: 'page-1',
       appId: 'app-1',
-      getStack: () => stack,
+      componentCode: 'export default () => null',
+      eventSequence: 0,
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      actionSpec,
+    };
+    const config = buildRootWireConfig({
+      renderId: 'render-1',
+      appId: 'app-1',
+      getCurrentRender: () => render,
       manager: managerShim,
       streamBus: new (class {
         subscribe(): () => void {
@@ -154,20 +156,22 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
   it('does NOT emit when the dispatched action has no tool binding', () => {
     const observed: ObservabilityEvent[] = [];
     const sent: WebSocketMessage[] = [];
-    const stack: SessionStackEntry[] = [
-      {
-        id: 'page-agent',
-        componentCode: 'export default () => null',
-        createdAt: '2026-04-22T00:00:00Z',
-        actionSpec: {
-          'plain.action': { label: 'Plain' /* agent-routed, no tool */ },
-        },
-      },
-    ];
-    const { config } = buildRootWireConfig({
-      sessionId: 'sess-agent',
+    const render: Render = {
+      id: 'page-agent',
       appId: 'app-agent',
-      getStack: () => stack,
+      componentCode: 'export default () => null',
+      eventSequence: 0,
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      actionSpec: {
+        'plain.action': { label: 'Plain' /* agent-routed, no tool */ },
+      },
+    };
+    const config = buildRootWireConfig({
+      renderId: 'render-agent',
+      appId: 'app-agent',
+      getCurrentRender: () => render,
       manager: { send: (m) => sent.push(m) },
       streamBus: new (class {
         subscribe(): () => void {
@@ -240,9 +244,9 @@ afterEach(() => {
   globalThis.WebSocket = originalWebSocket;
 });
 
-function sessionMeta(): McpAppAiGguiSessionMeta {
+function renderMeta(): McpAppAiGguiRenderMeta {
   return {
-    sessionId: 'sess-c12',
+    renderId: 'render-c12',
     appId: 'app-c12',
     wsUrl: 'wss://test.invalid/ws',
     wsToken: 'boot-token',
@@ -251,14 +255,14 @@ function sessionMeta(): McpAppAiGguiSessionMeta {
   };
 }
 
-function makeRegistry(session: McpAppAiGguiSessionMeta): ChannelRegistry {
+function makeRegistry(meta: McpAppAiGguiRenderMeta): ChannelRegistry {
   return new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: session.sessionId,
-        appId: session.appId,
-        bootstrap: session.wsToken,
+        renderId: meta.renderId,
+        appId: meta.appId,
+        bootstrap: meta.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
       },
     }),
@@ -273,8 +277,8 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
   it('emits observedBy=server when the pre-ack error frame is UPGRADE_REQUIRED', async () => {
     const observed: ObservabilityEvent[] = [];
     const promise = connectViaRegistry({
-      session: sessionMeta(),
-      registry: makeRegistry(sessionMeta()),
+      meta: renderMeta(),
+      registry: makeRegistry(renderMeta()),
       onStatusChange: () => {},
       onObserve: (e) => observed.push(e),
     });
@@ -309,8 +313,8 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
   it('emits observedBy=client when the ack advertises an unaccepted serverVersion', async () => {
     const observed: ObservabilityEvent[] = [];
     const promise = connectViaRegistry({
-      session: sessionMeta(),
-      registry: makeRegistry(sessionMeta()),
+      meta: renderMeta(),
+      registry: makeRegistry(renderMeta()),
       onStatusChange: () => {},
       onObserve: (e) => observed.push(e),
     });
@@ -351,14 +355,14 @@ describe('data handler — contract-error-emitted emission', () => {
     // no active streamSpec. Behaviour matches a session whose item
     // hasn't declared a streamSpec entry for the inbound channel.
     const handler = createDataHandler({
-      getCurrentItem: () => null,
+      getCurrentRender: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),
     });
 
     void handler.onMessage({
-      sessionId: 'sess-c12-obs',
+      renderId: 'render-c12-obs',
       channel: '_ggui:contract-error',
       mode: 'append',
       payload: {
@@ -386,14 +390,14 @@ describe('data handler — contract-error-emitted emission', () => {
   it('skips emission on data envelopes for non-reserved channels', () => {
     const observed: ObservabilityEvent[] = [];
     const handler = createDataHandler({
-      getCurrentItem: () => null,
+      getCurrentRender: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),
     });
 
     void handler.onMessage({
-      sessionId: 'sess-skip',
+      renderId: 'render-skip',
       channel: 'tasks',
       mode: 'replace',
       payload: [{ id: 1 }],
@@ -420,7 +424,7 @@ describe('system handler — auth-required emission (Wave 3 §S2)', () => {
       consentUrl: 'https://credentials.example.com/oauth/initiate?service=google',
       message: 'This agent needs access to your Google Calendar.',
       appId: 'app-s2-auth',
-      sessionId: 'sess-s2-auth',
+      renderId: 'render-s2-auth',
     });
 
     const event = observed.find(
@@ -548,8 +552,8 @@ describe('connectViaRegistry — subscribe-failed emission', () => {
     const observed: ObservabilityEvent[] = [];
     const statuses: string[] = [];
     const promise = connectViaRegistry({
-      session: sessionMeta(),
-      registry: makeRegistry(sessionMeta()),
+      meta: renderMeta(),
+      registry: makeRegistry(renderMeta()),
       onStatusChange: (s) => statuses.push(s),
       onObserve: (e) => observed.push(e),
     });
