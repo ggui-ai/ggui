@@ -73,7 +73,7 @@ describe('isStreamFrameNotification', () => {
       jsonrpc: '2.0',
       method: 'ui/extensions/ggui/stream-frame',
       params: {
-        stackItemId: 'p1',
+        renderId: 'r1',
         channel: 'ticker',
         payload: { price: 42 },
       },
@@ -89,7 +89,7 @@ describe('isStreamFrameNotification', () => {
     const sub: StreamSubscribeNotification = {
       jsonrpc: '2.0',
       method: 'ui/extensions/ggui/stream-subscribe',
-      params: { stackItemId: 'p1', channel: 'ticker', tool: 'fetch_quote' },
+      params: { renderId: 'r1', channel: 'ticker', tool: 'fetch_quote' },
     };
     expect(isStreamFrameNotification(sub)).toBe(false);
   });
@@ -101,7 +101,7 @@ describe('isStreamSubscribeNotification', () => {
       jsonrpc: '2.0',
       method: 'ui/extensions/ggui/stream-subscribe',
       params: {
-        stackItemId: 'p1',
+        renderId: 'r1',
         channel: 'ticker',
         tool: 'fetch_quote',
         args: { symbol: 'AAPL' },

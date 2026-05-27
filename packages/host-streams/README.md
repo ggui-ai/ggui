@@ -43,9 +43,8 @@ const streams = createHostStreamManager({
 
 // On every <McpAppIframe> mount:
 const unbind = streams.bindIframe(iframeEl, {
-  sessionId,
+  renderId,
   appId,
-  stackItemId,
 });
 
 // On unmount:

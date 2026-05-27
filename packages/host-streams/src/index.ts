@@ -9,7 +9,7 @@
  * Hosts call:
  *
  *     const streams = createHostStreamManager({...});
- *     const unbind = streams.bindIframe(iframeEl, {sessionId, appId, stackItemId});
+ *     const unbind = streams.bindIframe(iframeEl, {renderId, appId});
  *     // on unmount:
  *     unbind();
  *

@@ -44,8 +44,8 @@ export interface HostStreamWsConfig {
    * Bearer credential included on the `Sec-WebSocket-Protocol`
    * header or as a URL query param, depending on the server's
    * accept policy. `mintBootstrap`'s `token` is the typical
-   * supplier; for host-mediated this rotates per-session in the
-   * implementation phase.
+   * supplier; for host-mediated this rotates per WS connection in
+   * the implementation phase.
    */
   readonly bearer?: string;
   /**
@@ -57,27 +57,25 @@ export interface HostStreamWsConfig {
 }
 
 /**
- * Per-iframe binding handle. Identifies the (session, app, stack-
- * item) tuple the bound iframe is rendering — the manager uses
- * these to scope subscriptions when an iframe announces a channel
- * (the `stream-subscribe` notification's stackItemId MUST match;
- * mismatches are silently dropped to prevent cross-stack
- * subscription leaks).
+ * Per-iframe binding handle. Identifies the (render, app) tuple the
+ * bound iframe is rendering — the manager uses these to scope
+ * subscriptions when an iframe announces a channel (the
+ * `stream-subscribe` notification's renderId MUST match; mismatches
+ * are silently dropped to prevent cross-render subscription leaks).
  */
 export interface BindIframeOptions {
-  readonly sessionId: string;
-  readonly appId: string;
   /**
-   * Active stack-item id. Updated by the host when a push/update
-   * causes a stack rotation — call `bindIframe` again with the new
-   * id; the manager unsubscribes the prior id's channels and
-   * accepts the new id's subscribe announcements.
+   * Active render id. Updated by the host when a push/update causes
+   * the iframe to swap which render it's showing — call `bindIframe`
+   * again with the new id; the manager unsubscribes the prior id's
+   * channels and accepts the new id's subscribe announcements.
    *
-   * The host can also call `manager.rebindStackItem(iframe, newId)`
-   * if it prefers a thinner update path. Both paths converge on
-   * the same subscription-management primitive.
+   * The host can also call `manager.rebindRender(iframe, newId)` if
+   * it prefers a thinner update path. Both paths converge on the
+   * same subscription-management primitive.
    */
-  readonly stackItemId: string;
+  readonly renderId: string;
+  readonly appId: string;
   /**
    * Optional allowlist of tool names this iframe is permitted to
    * subscribe to. Default: every channel the iframe announces.
@@ -129,7 +127,7 @@ export interface HostStreamManagerConfig {
    * When absent, every channel polls regardless of WS availability.
    *
    * Resolver form (vs static) because the host may want to re-fetch
-   * per-session. Returning `undefined` is treated as "I don't know"
+   * per WS connection. Returning `undefined` is treated as "I don't know"
    * — falls through to polling. Returning `[]` is "I know, none of
    * them"; same effect.
    */
@@ -170,12 +168,12 @@ export interface HostStreamManager {
     options: BindIframeOptions,
   ): UnbindIframe;
   /**
-   * Update the bound stack-item id without re-binding the iframe.
+   * Update the bound render id without re-binding the iframe.
    * Drops the prior id's subscriptions, accepts the new id's
-   * subscribe announcements. Used when the host's stack rotates
-   * without remounting the iframe.
+   * subscribe announcements. Used when the host rotates which
+   * render the iframe is showing without remounting it.
    */
-  rebindStackItem(iframe: HTMLIFrameElement, stackItemId: string): void;
+  rebindRender(iframe: HTMLIFrameElement, renderId: string): void;
   /**
    * Tear everything down. After dispose, the manager rejects new
    * `bindIframe` calls + drops every existing binding. Mainly for
