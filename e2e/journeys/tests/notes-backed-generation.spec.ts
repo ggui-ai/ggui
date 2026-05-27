@@ -28,7 +28,7 @@
  *   2. **Mutation via the mounted MCP wire** — `notes_create` adds
  *      a row; next `notes_list` sees it.
  *   3. **Generation over Notes-backed state renders in the browser**
- *      — `ggui_push` with `story.context.notes` = full current list
+ *      — `ggui_render` with `story.context.notes` = full current list
  *      + `story.intent` referencing a seeded title → generator
  *      produces componentCode → console viewer mounts it with a
  *      `ggui-rcr-*` scope + rendered DOM (shape-only per CLAUDE.md
@@ -185,26 +185,19 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
       `Use only basic HTML elements; no external assets.`,
     ].join(' ');
 
-    // Post-Slice-5 push is handshake-first: new_session → handshake →
-    // push({handshakeId, decision}). Direct story-shaped push is
-    // retired; the legacy `story.context` carrier for backing state is
-    // no longer on the wire (the generator picks up Notes via mounted
-    // tools the LLM can call, not via inlined fixtures). Intent now
-    // carries the routing signal entirely.
-    const sessEnv = await mcpCallAs(baseUrl, token, 'tools/call', {
-      name: 'ggui_new_session',
-      arguments: {},
-    });
-    const sessionId = (
-      sessEnv.result as { structuredContent: { sessionId: string } }
-    ).structuredContent.sessionId;
+    // Post-Phase-B render is handshake-first: handshake → render
+    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // gone — every render IS the addressable scope. Direct story-
+    // shaped render is retired; the legacy `story.context` carrier
+    // for backing state is no longer on the wire (the generator picks
+    // up Notes via mounted tools the LLM can call, not via inlined
+    // fixtures). Intent carries the routing signal entirely.
     const hsEnv = await mcpCallAs(baseUrl, token, 'tools/call', {
       name: 'ggui_handshake',
       arguments: {
-        sessionId,
         intent,
         blueprintDraft: { contract: {} },
-        // Bypass the built-in blueprint matcher so the push runs real
+        // Bypass the built-in blueprint matcher so render runs real
         // generation — see live-generation.spec.ts for the rationale.
         forceCreate: true,
       },
@@ -213,10 +206,10 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
       hsEnv.result as { structuredContent: { handshakeId: string } }
     ).structuredContent.handshakeId;
 
-    const pushStart = Date.now();
-    const pushEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
+    const renderStart = Date.now();
+    const renderEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
       mcpCallAs(baseUrl, token, 'tools/call', {
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
       }),
       new Promise((_resolve, reject) =>
@@ -224,65 +217,59 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
           () =>
             reject(
               new Error(
-                `ggui_push did not return within ${GENERATION_BUDGET_MS}ms. stderr:\n${handle?.stderr() ?? ''}`,
+                `ggui_render did not return within ${GENERATION_BUDGET_MS}ms. stderr:\n${handle?.stderr() ?? ''}`,
               ),
             ),
           GENERATION_BUDGET_MS,
         ),
       ) as Promise<never>,
     ]);
-    const pushElapsedMs = Date.now() - pushStart;
+    const renderElapsedMs = Date.now() - renderStart;
 
-    expect(pushEnv.error).toBeUndefined();
-    // Post-Slice-5 structuredContent surface: {stackItemId, url,
+    expect(renderEnv.error).toBeUndefined();
+    // Post-Phase-B structuredContent surface: {renderId, url,
     // action, nextStep?}. shortCode is the tail of url's /r/<...> path;
-    // codeReady was retired (the visual stack-item assertions below
-    // are the structural proof generation succeeded).
-    const pushResult = pushEnv.result as {
-      structuredContent?: { stackItemId?: string; url?: string };
+    // codeReady was retired (the visual render assertions below are
+    // the structural proof generation succeeded).
+    const renderResult = renderEnv.result as {
+      structuredContent?: { renderId?: string; url?: string };
       isError?: boolean;
     };
     expect(
-      pushResult.isError,
-      `ggui_push returned isError: true — check CLI stderr for generator failure.`,
+      renderResult.isError,
+      `ggui_render returned isError: true — check CLI stderr for generator failure.`,
     ).not.toBe(true);
-    expect(pushResult.structuredContent?.stackItemId).toBeTruthy();
-    const pushUrl = pushResult.structuredContent?.url;
-    expect(pushUrl, 'ggui_push returned no url').toBeTruthy();
-    const shortCodeMatch = new URL(pushUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
-    expect(shortCodeMatch, `push url is not /r/<shortCode>: ${pushUrl}`).not.toBeNull();
+    expect(renderResult.structuredContent?.renderId).toBeTruthy();
+    const renderUrl = renderResult.structuredContent?.url;
+    expect(renderUrl, 'ggui_render returned no url').toBeTruthy();
+    const shortCodeMatch = new URL(renderUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
+    expect(shortCodeMatch, `render url is not /r/<shortCode>: ${renderUrl}`).not.toBeNull();
     const shortCode = shortCodeMatch![1]!;
     expect(
-      pushElapsedMs,
-      `ggui_push returned in ${pushElapsedMs}ms — too fast for a real LLM call.`,
+      renderElapsedMs,
+      `ggui_render returned in ${renderElapsedMs}ms — too fast for a real LLM call.`,
     ).toBeGreaterThan(1_000);
 
     await page.goto(`${baseUrl}/s/${shortCode}`, { waitUntil: 'networkidle' });
 
-    // The console SessionViewer mounts the rendered session inside a
-    // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
-    // it no longer carries the `<McpAppIframe>` lifecycle-mirror
-    // attribute). Inner componentCard data-attrs live INSIDE the
-    // iframe; reach them through `frameLocator`. Readiness is gated
-    // by the inner `[data-ggui-stack-item-root]` visibility check
-    // below — the renderer emits that anchor when the bundle has
-    // mounted and the first stack item is rendered.
+    // The console RenderViewer mounts the rendered UI inside a plain
+    // `<iframe srcDoc>` (read-only / visual-only — post C1-fix it no
+    // longer carries the `<McpAppIframe>` lifecycle-mirror attribute).
+    // Readiness is gated by the inner `ggui-rcr-*` scope visibility
+    // check below — the renderer React-mounts inside the iframe once
+    // the bundle has loaded.
     const liveIframe = page
       .locator('iframe[data-testid="session-viewer-iframe"]')
       .first();
     await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
-    // The renderer mounts each stack item into a
-    // `<div data-ggui-stack-item-root="<id>">` (see
-    // `iframe-runtime/src/runtime.ts::containerFor`). Inside that,
-    // the React mount wraps the tree in a `ggui-rcr-*` scope div.
+    // Post-stack-removal (2026-05-27) the iframe-runtime mounts the
+    // React tree directly into the iframe body. The React mount
+    // wraps its tree in a `ggui-rcr-*` scope div.
     const frame = page
       .frameLocator('iframe[data-testid="session-viewer-iframe"]')
       .first();
-    const stackItemRoot = frame.locator('[data-ggui-stack-item-root]');
-    await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
-
-    const rcrScope = stackItemRoot.locator('[class^="ggui-rcr-"]');
+    const rcrScope = frame.locator('[class^="ggui-rcr-"]');
     await expect(rcrScope).toBeVisible({ timeout: 30_000 });
     const scopeChildren = await rcrScope.evaluate((el) => el.children.length);
     expect(
