@@ -4,19 +4,11 @@ import {
   parseMcpAppAiGguiMeta,
   type McpAppAiGguiMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { CanvasRef, ChatEntry, StackItemRef, ToolCallEntry } from './types';
+import type { ChatEntry, StackItemRef, ToolCallEntry } from './types';
 
 interface UseChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
   readonly stackItems: ReadonlyArray<StackItemRef>;
-  /**
-   * Session-scoped canvas iframes for FULLSCREEN-mode sessions. One
-   * entry per `ggui_new_session` that stamped a session-scoped
-   * `_meta.ui.resourceUri`. Presence in this list = "this session is
-   * fullscreen" (the resourceUri-by-tool axiom — see
-   * `docs/principles/resource-uri-by-tool.md`).
-   */
-  readonly canvases: ReadonlyArray<CanvasRef>;
   readonly sending: boolean;
   readonly send: (prompt: string) => Promise<void>;
   /**
@@ -53,21 +45,12 @@ interface UseChatResult {
 export function useChat(): UseChatResult {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [stackItems, setStackItems] = useState<StackItemRef[]>([]);
-  const [canvases, setCanvases] = useState<CanvasRef[]>([]);
   const [sending, setSending] = useState(false);
   // Mirror of the latest stackItems for the meta-refetch lookup.
   // Plain state would close over the snapshot at handleEvent-call time;
   // the ref always reads current.
   const stackItemsRef = useRef<StackItemRef[]>([]);
   stackItemsRef.current = stackItems;
-  // Mirror of fullscreen-mode session ids. The push handler needs a
-  // synchronous "is this session fullscreen?" check so it can skip
-  // per-push iframe-mounting and emit a compact marker instead. Plain
-  // state would close over a stale snapshot inside handleEvent.
-  const fullscreenSessionsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    fullscreenSessionsRef.current = new Set(canvases.map((c) => c.sessionId));
-  }, [canvases]);
   // AbortController for the in-flight /chat stream. Replaced on every
   // `send`; consumed by `abort` to cancel. Ref (not state) because abort
   // is fire-and-forget — no re-render needed when it changes.
@@ -109,15 +92,6 @@ export function useChat(): UseChatResult {
     });
   }, []);
 
-  const addCanvas = useCallback((canvas: CanvasRef) => {
-    setCanvases((prev) => {
-      // Dedupe by sessionId — a session has exactly one canvas (the
-      // resourceUri-by-tool axiom enforces single new_session per
-      // session, so re-firing is a server bug not a race we handle).
-      if (prev.some((p) => p.sessionId === canvas.sessionId)) return prev;
-      return [...prev, canvas];
-    });
-  }, []);
 
   /**
    * Patch the meta slice pair on an existing stack item by id. Used
@@ -202,92 +176,6 @@ export function useChat(): UseChatResult {
     [updateStackItemMeta],
   );
 
-  /**
-   * Fetch the session-scoped canvas HTML via spec-canonical MCP
-   * `resources/read`, proxied through the sample-agent backend's
-   * `/relay/resources-read` endpoint. The response's `text` is the
-   * full iframe HTML (`__GGUI_META__` already inlined by the server's
-   * `buildSelfContainedShell`); `_meta.ui.csp` carries the sandbox-proxy
-   * CSP block. Both are required to mount the AppRenderer canvas.
-   *
-   * Returns `null` on transport / server error — the caller emits a
-   * placeholder chat entry so the user sees that something happened on
-   * `ggui_new_session` even when the canvas mount degraded.
-   */
-  const fetchCanvasResource = useCallback(
-    async (
-      uri: string,
-      sessionId: string,
-    ): Promise<CanvasRef | null> => {
-      try {
-        const res = await fetch('/relay/resources-read', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uri }),
-        });
-        if (!res.ok) {
-          console.warn('[useChat] /relay/resources-read non-2xx', res.status);
-          return null;
-        }
-        const jsonRpc = (await res.json()) as {
-          readonly result?: {
-            readonly contents?: ReadonlyArray<{
-              readonly text?: unknown;
-              readonly _meta?: unknown;
-            }>;
-          };
-          readonly error?: { readonly message?: string };
-        };
-        if (jsonRpc.error !== undefined) {
-          console.warn('[useChat] /relay/resources-read error', jsonRpc.error);
-          return null;
-        }
-        const first = jsonRpc.result?.contents?.[0];
-        const html =
-          first && typeof first.text === 'string' ? first.text : null;
-        if (html === null || html.length === 0) {
-          console.warn('[useChat] /relay/resources-read empty html');
-          return null;
-        }
-        const cspRaw =
-          first && first._meta && typeof first._meta === 'object'
-            ? ((first._meta as { ui?: { csp?: unknown } }).ui?.csp as
-                | { resourceDomains?: unknown; connectDomains?: unknown }
-                | undefined)
-            : undefined;
-        const csp: CanvasRef['csp'] | undefined =
-          cspRaw !== undefined
-            ? {
-                ...(Array.isArray(cspRaw.resourceDomains)
-                  ? {
-                      resourceDomains: (
-                        cspRaw.resourceDomains as unknown[]
-                      ).filter((s): s is string => typeof s === 'string'),
-                    }
-                  : {}),
-                ...(Array.isArray(cspRaw.connectDomains)
-                  ? {
-                      connectDomains: (
-                        cspRaw.connectDomains as unknown[]
-                      ).filter((s): s is string => typeof s === 'string'),
-                    }
-                  : {}),
-              }
-            : undefined;
-        return {
-          sessionId,
-          resourceUri: uri,
-          html,
-          ...(csp !== undefined ? { csp } : {}),
-        };
-      } catch (err) {
-        console.warn('[useChat] /relay/resources-read transport error', err);
-        return null;
-      }
-    },
-    [],
-  );
-
   const send = useCallback(
     async (prompt: string) => {
       const trimmed = prompt.trim();
@@ -355,9 +243,6 @@ export function useChat(): UseChatResult {
               `${turnId}.${counter}`,
               append,
               addStackItem,
-              addCanvas,
-              fullscreenSessionsRef.current,
-              fetchCanvasResource,
               updateStackItemMeta,
               patchToolCall,
               refetchStateById,
@@ -382,8 +267,6 @@ export function useChat(): UseChatResult {
     [
       append,
       addStackItem,
-      addCanvas,
-      fetchCanvasResource,
       updateStackItemMeta,
       patchToolCall,
       refetchStateById,
@@ -446,25 +329,7 @@ export function useChat(): UseChatResult {
     // page lifetime per getOrCreateChatSessionId's contract.
   }, []);
 
-  return { entries, stackItems, canvases, sending, send, abort };
-}
-
-/**
- * Match the session-scoped resourceUri shape stamped by
- * `ggui_new_session.resultMeta` in fullscreen mode. Returns the
- * session id when the URI shape says "this is a fullscreen-mode canvas
- * resource", null otherwise. Per the resourceUri-by-tool axiom:
- *   - `ui://ggui/session/<sessionId>` (no trailing segment) =
- *     session-scoped canvas (fullscreen)
- *   - `ui://ggui/session/<sessionId>/<shortCode>` (push-scoped) = inline
- *
- * Matching by shape (rather than reading `tool_use_result.name`) keeps
- * the detection independent of the tool's wire name and naturally
- * extends to any future tool that stamps a session-scoped resourceUri.
- */
-function parseCanvasResourceUri(uri: string): string | null {
-  const match = /^ui:\/\/ggui\/session\/([^/]+)$/.exec(uri);
-  return match ? (match[1] ?? null) : null;
+  return { entries, stackItems, sending, send, abort };
 }
 
 function handleEvent(
@@ -473,9 +338,6 @@ function handleEvent(
   baseId: string,
   append: (e: ChatEntry) => void,
   addStackItem: (s: StackItemRef) => void,
-  addCanvas: (c: CanvasRef) => void,
-  fullscreenSessions: ReadonlySet<string>,
-  fetchCanvasResource: (uri: string, sessionId: string) => Promise<CanvasRef | null>,
   updateStackItemMeta: (stackItemId: string, meta: McpAppAiGguiMeta) => void,
   patchToolCall: (
     toolUseId: string,
@@ -554,41 +416,6 @@ function handleEvent(
       }
     }
 
-    // Fullscreen-mode canvas detection (resourceUri-by-tool axiom —
-    // see `docs/principles/resource-uri-by-tool.md`). When a tool
-    // result carries `_meta.ui.resourceUri = ui://ggui/session/<id>`
-    // (no shortcode suffix), the session is in fullscreen mode and the
-    // host MUST mount ONE session-scoped canvas iframe — independent of
-    // which tool stamped it (currently only `ggui_new_session` does, but
-    // the matcher works on shape so any future session-scoped stamper
-    // lands on the same path). Subsequent pushes for this sessionId
-    // become compact markers (the canvas owns rendering via WS).
-    const uiResourceUri =
-      tmRaw && typeof tmRaw === 'object'
-        ? ((tmRaw as { ui?: { resourceUri?: unknown } }).ui?.resourceUri as
-            | string
-            | undefined)
-        : undefined;
-    if (typeof uiResourceUri === 'string' && uiResourceUri.length > 0) {
-      const canvasSessionId = parseCanvasResourceUri(uiResourceUri);
-      if (canvasSessionId !== null) {
-        void (async () => {
-          const canvas = await fetchCanvasResource(
-            uiResourceUri,
-            canvasSessionId,
-          );
-          if (canvas !== null) {
-            addCanvas(canvas);
-            append({
-              id: `${baseId}.canvas`,
-              kind: 'canvas',
-              canvas,
-            });
-          }
-        })();
-      }
-    }
-
     const content = ((msg.message as { content?: unknown[] })?.content ??
       []) as Array<Record<string, unknown>>;
     let i = 0;
@@ -628,22 +455,6 @@ function handleEvent(
       if (!sessionId || !stackItemId) continue;
       // ggui_push branch — new stack item entering the chat log.
       if (sc.updated !== true) {
-        // Fullscreen-mode short-circuit: the session canvas already
-        // owns rendering. The server-side `canvasOwnsRender` gate
-        // (see `push.ts.resultMeta`) omits per-call resourceUri AND
-        // fans the stack item through the WS subscribe ack. The host's
-        // only job here is a chat-log marker so the conversation
-        // doesn't go silent on a push that lands inside the canvas.
-        if (fullscreenSessions.has(sessionId)) {
-          append({
-            id: `${baseId}.s${i}`,
-            kind: 'push-marker',
-            sessionId,
-            stackItemId,
-            action: String(sc.action ?? 'create'),
-          });
-          continue;
-        }
         const item: StackItemRef = {
           stackItemId,
           sessionId,

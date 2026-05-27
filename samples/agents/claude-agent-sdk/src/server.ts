@@ -220,52 +220,6 @@ async function handleRequest(
     return;
   }
 
-  // Resources/read relay — forwards `resources/read` requests to the
-  // ggui MCP server over HTTP. Spec-canonical MCP-Apps hosts call
-  // `resources/read` when they see `_meta.ui.resourceUri` on a tool
-  // result; our React shell uses this to fetch the session-scoped
-  // canvas iframe HTML on `ggui_new_session` in fullscreen mode (see
-  // `docs/principles/resource-uri-by-tool.md`).
-  //
-  // Returns the spec-canonical `ReadResourceResult` envelope verbatim
-  // — `{contents: [{uri, mimeType, text, _meta?}]}` — so the client
-  // gets both the HTML payload and the `_meta.ui.csp` block the
-  // AppRenderer needs to wire up sandbox CSP.
-  if (req.method === 'POST' && url.pathname === '/relay/resources-read') {
-    const body = await readBody(req);
-    try {
-      const parsed = JSON.parse(body) as { readonly uri?: unknown };
-      if (typeof parsed.uri !== 'string' || parsed.uri.length === 0) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'uri required' }));
-        return;
-      }
-      const rpcId = Math.floor(Math.random() * 1e9);
-      const mcpReq = await fetch(opts.mcpUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: rpcId,
-          method: 'resources/read',
-          params: { uri: parsed.uri },
-        }),
-      });
-      const text = await mcpReq.text();
-      const jsonRpc = parseMcpResponse(text);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(jsonRpc));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: `resources/read relay error: ${message}` }));
-    }
-    return;
-  }
-
   // MCP Apps relay — forwards iframe-issued `tools/call` (postMessage)
   // to the ggui MCP server over HTTP. The iframe holds no auth
   // credential; this host (running in Node) is the protocol-defined
