@@ -1,43 +1,41 @@
 /**
  * Tests for {@link extractUiMoments} — the shell-side helper that reads
  * invoke-SSE `ConversationMessage[]` and produces the set of UI moments
- * to mount as `<McpAppIframe>`. Pure function; no React.
+ * to mount as `<AppRenderer>`. Pure function; no React.
  *
- * Covers both recognition paths per Phase 3 Wave 1 close-out:
- *   - option (b) — session-resource URL from `{sessionId, stackItemId}`;
- *   - option (c) — inline meta pair from the `ai.ggui/*` slices.
- * Plus precedence (c > b), filtering of non-ggui tool_results, and
- * origin trimming.
+ * Covers both recognition paths:
+ *   - render-resource — URL from `{renderId}` (GguiRenderOutput shape);
+ *   - inline meta — `_meta["ai.ggui/render"]` slice
+ *     ({@link McpAppAiGguiRenderMeta}).
+ * Plus precedence (inline wins), filtering of non-ggui tool_results,
+ * and origin trimming.
+ *
+ * Post-Phase-B: the old two-slice `{session, stackItem}` shape collapses
+ * into a single flat render slice; the URL path collapses to
+ * `/api/renders/<renderId>/resource`.
  */
 import { describe, it, expect } from 'vitest';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
 
-const META_WITH_ITEM: McpAppAiGguiMeta = {
-  session: {
-    wsUrl: 'wss://mcp.example.test/ws',
-    token: 'bootstrap_token_abc',
-    expiresAt: '2026-05-01T00:00:00.000Z',
-    sessionId: 'sess_inline',
-    appId: 'app_inline',
-    runtimeUrl: '/_ggui/iframe-runtime.js',
-  },
-  stackItem: {
-    stackItemId: 'item_pinned',
-  },
+const META_INLINE: McpAppAiGguiRenderMeta = {
+  renderId: 'render_inline',
+  appId: 'app_inline',
+  runtimeUrl: '/_ggui/iframe-runtime.js',
+  wsUrl: 'wss://mcp.example.test/ws',
+  wsToken: 'bootstrap_token_abc',
+  expiresAt: '2026-05-01T00:00:00.000Z',
 };
 
-const META_NO_ITEM: McpAppAiGguiMeta = {
-  session: {
-    wsUrl: 'wss://mcp.example.test/ws',
-    token: 'bootstrap_token_def',
-    expiresAt: '2026-05-01T00:00:00.000Z',
-    sessionId: 'sess_whole',
-    appId: 'app_whole',
-    runtimeUrl: '/_ggui/iframe-runtime.js',
-  },
+const META_INLINE_B: McpAppAiGguiRenderMeta = {
+  renderId: 'render_inline_b',
+  appId: 'app_inline_b',
+  runtimeUrl: '/_ggui/iframe-runtime.js',
+  wsUrl: 'wss://mcp.example.test/ws',
+  wsToken: 'bootstrap_token_def',
+  expiresAt: '2026-05-01T00:00:00.000Z',
 };
 
 function assistantWith(
@@ -65,16 +63,15 @@ describe('extractUiMoments', () => {
     expect(extractUiMoments(messages)).toEqual([]);
   });
 
-  describe('option (b) — session-resource URL from GguiPushOutput', () => {
-    it('builds URL when origin + {sessionId, stackItemId} both present', () => {
+  describe('render-resource URL from GguiRenderOutput', () => {
+    it('builds URL when origin + {renderId} are present', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
+            tool_use_id: 'toolu_render_1',
             content: {
-              sessionId: 'sess_123',
-              stackItemId: 'page_abc',
+              renderId: 'render_abc',
               shortCode: 'xyz',
               url: 'https://example/preview/xyz',
               action: 'create',
@@ -84,15 +81,15 @@ describe('extractUiMoments', () => {
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
       expect(out).toEqual([
         {
-          key: 'toolu_push_1',
-          itemId: 'page_abc',
+          key: 'toolu_render_1',
+          renderId: 'render_abc',
           source: {
-            kind: 'session-resource',
-            url: 'https://api.example.test/ggui/session-resource/item/sess_123/page_abc',
+            kind: 'render-resource',
+            url: 'https://api.example.test/api/renders/render_abc/resource',
           },
         },
       ]);
@@ -103,8 +100,8 @@ describe('extractUiMoments', () => {
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
-            content: { sessionId: 's', stackItemId: 'p' },
+            tool_use_id: 'toolu_render_1',
+            content: { renderId: 'render_p' },
           },
         ]),
       ];
@@ -116,108 +113,94 @@ describe('extractUiMoments', () => {
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
-            content: { sessionId: 's', stackItemId: 'p' },
+            tool_use_id: 'toolu_render_1',
+            content: { renderId: 'render_p' },
           },
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test///',
+        renderResourceOrigin: 'https://api.example.test///',
       });
-      expect(out[0]?.source.kind).toBe('session-resource');
-      if (out[0]?.source.kind === 'session-resource') {
+      expect(out[0]?.source.kind).toBe('render-resource');
+      if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/ggui/session-resource/item/s/p',
+          'https://api.example.test/api/renders/render_p/resource',
         );
       }
     });
 
-    it('URL-encodes session + page ids with unsafe characters', () => {
+    it('URL-encodes renderId with unsafe characters', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
-            content: { sessionId: 'sess/weird id', stackItemId: 'page?x=1' },
+            tool_use_id: 'toolu_render_1',
+            content: { renderId: 'render/weird id?x=1' },
           },
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
-      if (out[0]?.source.kind === 'session-resource') {
+      if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/ggui/session-resource/item/sess%2Fweird%20id/page%3Fx%3D1',
+          'https://api.example.test/api/renders/render%2Fweird%20id%3Fx%3D1/resource',
         );
       }
     });
 
-    it('tolerates one level of wrapping — {result: pushOutput}', () => {
+    it('tolerates one level of wrapping — {result: renderOutput}', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
-            content: { result: { sessionId: 's', stackItemId: 'p' } },
+            tool_use_id: 'toolu_render_1',
+            content: { result: { renderId: 'render_p' } },
           },
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
       expect(out).toHaveLength(1);
-      expect(out[0]?.itemId).toBe('p');
+      expect(out[0]?.renderId).toBe('render_p');
     });
 
-    it('skips tool_result with only partial shape (sessionId but no stackItemId)', () => {
+    it('skips tool_result with no renderId field', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_1',
-            content: { sessionId: 's' },
+            tool_use_id: 'toolu_render_1',
+            content: { other: 'irrelevant' },
           },
         ]),
       ];
       expect(
-        extractUiMoments(messages, { sessionResourceOrigin: 'https://x.test' }),
+        extractUiMoments(messages, { renderResourceOrigin: 'https://x.test' }),
       ).toEqual([]);
     });
   });
 
-  describe('option (c) — inline meta from ai.ggui/* slices', () => {
-    it('extracts meta and uses stackItem.stackItemId as itemId when present', () => {
+  describe('inline meta from ai.ggui/render slice', () => {
+    it('extracts meta and uses meta.renderId', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_c1',
-            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
+            tool_use_id: 'toolu_render_c1',
+            content: { _meta: toMcpAppEnvelope(META_INLINE) },
           },
         ]),
       ];
       const out = extractUiMoments(messages);
       expect(out).toEqual([
         {
-          key: 'toolu_push_c1',
-          itemId: 'item_pinned',
-          source: { kind: 'bootstrap-inline', meta: META_WITH_ITEM },
+          key: 'toolu_render_c1',
+          renderId: META_INLINE.renderId,
+          source: { kind: 'bootstrap-inline', meta: META_INLINE },
         },
       ]);
-    });
-
-    it('falls back to tool_use_id as itemId when meta has no stackItem.stackItemId', () => {
-      const messages = [
-        assistantWith([
-          {
-            type: 'tool_result',
-            tool_use_id: 'toolu_push_c2',
-            content: { _meta: toMcpAppEnvelope(META_NO_ITEM) },
-          },
-        ]),
-      ];
-      const out = extractUiMoments(messages);
-      expect(out[0]?.itemId).toBe('toolu_push_c2');
     });
 
     it('works without an origin (no URL construction needed)', () => {
@@ -225,8 +208,8 @@ describe('extractUiMoments', () => {
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_c3',
-            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
+            tool_use_id: 'toolu_render_c3',
+            content: { _meta: toMcpAppEnvelope(META_INLINE) },
           },
         ]),
       ];
@@ -236,33 +219,32 @@ describe('extractUiMoments', () => {
     });
   });
 
-  describe('precedence — inline meta wins over push-coordinates', () => {
+  describe('precedence — inline meta wins over render-resource coords', () => {
     it('when both signals present, chooses bootstrap-inline', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_mixed',
+            tool_use_id: 'toolu_render_mixed',
             content: {
-              sessionId: 'push_coord_sid',
-              stackItemId: 'push_coord_pid',
-              _meta: toMcpAppEnvelope(META_WITH_ITEM),
+              renderId: 'render_coord_only',
+              _meta: toMcpAppEnvelope(META_INLINE),
             },
           },
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
       expect(out).toHaveLength(1);
       expect(out[0]?.source.kind).toBe('bootstrap-inline');
-      // itemId follows stackItem.stackItemId, not pushCoord.stackItemId
-      expect(out[0]?.itemId).toBe('item_pinned');
+      // renderId follows meta.renderId, not the coordinate field.
+      expect(out[0]?.renderId).toBe(META_INLINE.renderId);
     });
   });
 
   describe('filtering — non-ggui tool_results drop silently', () => {
-    it('drops text-only tool_result (no sessionId, no _meta)', () => {
+    it('drops text-only tool_result (no renderId, no _meta)', () => {
       const messages = [
         assistantWith([
           {
@@ -273,7 +255,7 @@ describe('extractUiMoments', () => {
         ]),
       ];
       expect(
-        extractUiMoments(messages, { sessionResourceOrigin: 'https://x.test' }),
+        extractUiMoments(messages, { renderResourceOrigin: 'https://x.test' }),
       ).toEqual([]);
     });
 
@@ -289,7 +271,7 @@ describe('extractUiMoments', () => {
         ]),
       ];
       expect(
-        extractUiMoments(messages, { sessionResourceOrigin: 'https://x.test' }),
+        extractUiMoments(messages, { renderResourceOrigin: 'https://x.test' }),
       ).toEqual([]);
     });
 
@@ -305,21 +287,21 @@ describe('extractUiMoments', () => {
           { type: 'text', text: 'now rendering…' },
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_a',
-            content: { sessionId: 's1', stackItemId: 'p1' },
+            tool_use_id: 'toolu_render_a',
+            content: { renderId: 'render_a' },
           },
           {
             type: 'tool_result',
-            tool_use_id: 'toolu_push_b',
-            content: { _meta: toMcpAppEnvelope(META_WITH_ITEM) },
+            tool_use_id: 'toolu_render_b',
+            content: { _meta: toMcpAppEnvelope(META_INLINE_B) },
           },
         ]),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
-      expect(out.map((m) => m.key)).toEqual(['toolu_push_a', 'toolu_push_b']);
-      expect(out[0]?.source.kind).toBe('session-resource');
+      expect(out.map((m) => m.key)).toEqual(['toolu_render_a', 'toolu_render_b']);
+      expect(out[0]?.source.kind).toBe('render-resource');
       expect(out[1]?.source.kind).toBe('bootstrap-inline');
     });
   });
@@ -332,7 +314,7 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m1_a',
-              content: { sessionId: 's', stackItemId: 'p_m1' },
+              content: { renderId: 'render_m1' },
             },
           ],
           'msg_1',
@@ -342,14 +324,14 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m2_a',
-              content: { sessionId: 's', stackItemId: 'p_m2' },
+              content: { renderId: 'render_m2' },
             },
           ],
           'msg_2',
         ),
       ];
       const out = extractUiMoments(messages, {
-        sessionResourceOrigin: 'https://api.example.test',
+        renderResourceOrigin: 'https://api.example.test',
       });
       expect(out.map((m) => m.key)).toEqual(['toolu_m1_a', 'toolu_m2_a']);
     });

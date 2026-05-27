@@ -45,21 +45,19 @@ export interface UseInvokeOptions {
   /**
    * Fired for every `tool_use` content block the agent emits. Protocol v1.1
    * emits two kinds of tool_use that clients care about:
-   *   - `ggui_push` / `ggui_update` / `ggui_handshake` — paired by
+   *   - `ggui_render` / `ggui_update` / `ggui_handshake` — paired by
    *     `tool_use_id` with an inline `tool_result` block on the same
    *     assistant turn. Servers built on `@ggui-ai/server` emit these via
    *     `stream.toolResultPush(id, meta)` so the result's
-   *     `content._meta` carries the per-window `ai.ggui/*` slices
-   *     (`_meta["ai.ggui/session"]` with `wsUrl` / `token` /
-   *     `expiresAt` / `sessionId` / `appId` / `runtimeUrl` + optional
-   *     capability fields, and `_meta["ai.ggui/stack-item"]` with
-   *     `stackItemId` / `propsJson` / contract pointer + component-
+   *     `content._meta` carries the per-render `ai.ggui/render` slice
+   *     (`renderId` / `appId` / `runtimeUrl` + optional `wsUrl` / `wsToken` /
+   *     `expiresAt` / capability fields / contract pointer / component-
    *     mode discriminator) — the exact shape
    *     `@ggui-ai/protocol/integrations/mcp-apps` defines as
-   *     {@link McpAppAiGguiMeta}. Consumers watch for the pair and
-   *     mount `<McpAppIframe>` using `extractMcpAppAiGguiMeta(content)`
-   *     (exported from this module) to pull the meta slice pair off
-   *     the result — NOT by reading a plain `sessionId` field.
+   *     {@link McpAppAiGguiRenderMeta}. Consumers watch for the slice and
+   *     mount `<AppRenderer>` using `extractMcpAppAiGguiMeta(content)`
+   *     (exported from this module) to pull the meta off the result —
+   *     NOT by reading a plain `renderId` field.
    *   - `ggui_render_blueprint` — a pure client tool (no server result to
    *     pair with); the consumer resolves the blueprint name locally.
    * ChatShell wires both patterns internally; callers who build their own
@@ -153,12 +151,6 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   // Always-current snapshot for building `history` without re-creating `send`.
   const messagesRef = useRef<ConversationMessage[]>(messages);
   messagesRef.current = messages;
-  // Tracks the sessionId the agent surfaces via `tool_result` on turn 1 so
-  // subsequent `send()` calls can carry `X-Ggui-Session-Id` — without this
-  // the agent mints a new session per POST and turn-2 render events never
-  // reach the already-mounted `<GguiSession>`. `options.sessionId` wins for
-  // explicit-resume callers; the ref populates on stream receipt otherwise.
-  const sessionIdRef = useRef<string | null>(options.sessionId ?? null);
 
   const send = useCallback(
     async (message: string, opts?: { clientMessageId?: string }): Promise<void> => {
@@ -209,10 +201,12 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
           'X-Ggui-Protocol-Version': PROTOCOL_VERSION,
           'X-Ggui-App-Id': ctx.appId,
         };
-        // options.sessionId wins for explicit-resume callers; otherwise
-        // fall back to the sessionId surfaced on a prior turn's tool_result.
-        const effectiveSessionId = options.sessionId ?? sessionIdRef.current;
-        if (effectiveSessionId) headers['X-Ggui-Session-Id'] = effectiveSessionId;
+        // Forward the conversation/host-session id when the caller supplies
+        // one — the agent threads multi-turn invokes through its own keyed
+        // state on `X-Ggui-Session-Id`. This is the conversation envelope
+        // identity (not a per-render id); the render slice on
+        // `_meta["ai.ggui/render"]` carries the per-render `renderId`.
+        if (options.sessionId) headers['X-Ggui-Session-Id'] = options.sessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 
         // Dev-mode bridge: the pod expects POSTs at `{gatewayUrl}/{appId}` —
@@ -275,16 +269,6 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
             if (block.type === 'tool_use') {
               options.onToolUse?.(block);
             }
-            // Snap sessionId off the first tool_result that surfaces one —
-            // agent-side tools like `ggui_push` / `ggui_handshake` inline
-            // their result on the same assistant turn with a sessionId
-            // payload. Subsequent sends reuse this so the server threads
-            // user messages to the same session instead of minting a new
-            // one per POST.
-            if (block.type === 'tool_result' && !sessionIdRef.current) {
-              const maybe = extractSessionIdFromContent(block.content);
-              if (maybe) sessionIdRef.current = maybe;
-            }
             continue;
           }
           if (event.type === 'content_block_delta') {
@@ -342,11 +326,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
     setMessages([]);
     setError(null);
     setIsStreaming(false);
-    // Clear the derived sessionId — reset() implies a fresh conversation.
-    // Explicit-resume callers pass options.sessionId on the next render,
-    // which re-seeds the ref via the component re-mount cycle.
-    sessionIdRef.current = options.sessionId ?? null;
-  }, [options.sessionId]);
+  }, []);
 
   return { messages, send, isStreaming, error, abort, reset };
 }
@@ -369,25 +349,6 @@ function isInvokeError(value: unknown): value is InvokeError {
 
 function makeTransportError(message: string): InvokeError {
   return { code: 'transport_error', message };
-}
-
-/**
- * Pull a `sessionId` string out of a tool_result's content payload if one
- * is present. Tolerant of arbitrary nested shapes — agents may put the id
- * directly on the result or under a wrapper like `{ result: { sessionId } }`.
- */
-function extractSessionIdFromContent(content: unknown): string | null {
-  if (typeof content !== 'object' || content === null) return null;
-  const record = content as Record<string, unknown>;
-  if (typeof record.sessionId === 'string') return record.sessionId;
-  // One level of nesting — common when tools wrap their output in `{ result }`.
-  for (const value of Object.values(record)) {
-    if (typeof value === 'object' && value !== null) {
-      const inner = value as Record<string, unknown>;
-      if (typeof inner.sessionId === 'string') return inner.sessionId;
-    }
-  }
-  return null;
 }
 
 function mutateAssistant(
