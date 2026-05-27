@@ -110,7 +110,7 @@ const REACT_EXPORTS = [
 ] as const;
 
 const WIRE_EXPORTS = [
-  'useAction', 'useStream', 'useAuth', 'useApp', 'useSession',
+  'useAction', 'useStream', 'useAuth', 'useApp', 'useRender',
   'useGguiContext', 'useContract', 'useWireContext',
   'GguiWireProvider',
 ] as const;

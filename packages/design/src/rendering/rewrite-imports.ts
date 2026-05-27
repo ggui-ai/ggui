@@ -73,7 +73,7 @@ const WIRE_EXPORTS = [
   'useStream',
   'useAuth',
   'useApp',
-  'useSession',
+  'useRender',
   // `useGguiContext` is the contextSpec hook every generated
   // component imports for declared context slots.
   'useGguiContext',
