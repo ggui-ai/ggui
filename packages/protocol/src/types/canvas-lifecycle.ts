@@ -74,10 +74,10 @@ export interface HandshakeCompletedPayload extends JsonObject {
  * blueprint-cache hit). The eventual `push` envelope on the existing
  * wire signals completion.
  */
-export interface PushStartedPayload extends JsonObject {
-  readonly kind: 'push_started';
-  /** The stack-item id the eventual `push` envelope will carry. */
-  readonly stackItemId: string;
+export interface RenderStartedPayload extends JsonObject {
+  readonly kind: 'render_started';
+  /** The render id the eventual `render` envelope will carry. */
+  readonly renderId: string;
   /** Echoed for the animator label ("Building: <intent>"). */
   readonly intent: string;
 }
@@ -92,14 +92,14 @@ export interface ConsumePollingPayload extends JsonObject {
   /**
    * Always `'open'` today — the closing transition is signaled
    * by the existing `drain_ack` envelope (action consumed) and by the
-   * absence of further `consume_polling` for the same stack item.
+   * absence of further `consume_polling` for the same render.
    * Reserved as a discriminator field rather than implicit so future
    * `'closed'` / `'timeout'` variants can layer in without a wire
    * shape change.
    */
   readonly state: 'open';
-  /** Stack item id whose action pipe is being polled. */
-  readonly stackItemId: string;
+  /** Render id whose action pipe is being polled. */
+  readonly renderId: string;
 }
 
 /**
@@ -110,5 +110,5 @@ export interface ConsumePollingPayload extends JsonObject {
 export type CanvasLifecyclePayload =
   | HandshakeStartedPayload
   | HandshakeCompletedPayload
-  | PushStartedPayload
+  | RenderStartedPayload
   | ConsumePollingPayload;

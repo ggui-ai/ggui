@@ -1,7 +1,13 @@
 /**
- * Shared session-mutation helpers. Centralizes the contract-enforcement
+ * Shared render-mutation helpers. Centralizes the contract-enforcement
  * codepath so hosted + OSS mutation handlers converge on one set of
  * primitives.
+ *
+ * Post-Phase-B (flatten-render-identity): the prior "session-mutations"
+ * surface (vessel-wrapping-a-stack) collapsed to "render-mutations"
+ * (a render IS the addressable unit). Helpers + errors renamed; the
+ * folder retains its old name to keep import paths stable for one
+ * more slice — folder rename will land separately.
  *
  * What's here today (pure + seam-free, depend only on `@ggui-ai/protocol`):
  *
@@ -10,58 +16,29 @@
  *     PropsSpec; throw `ContractViolationError{tool:'ggui_update'}` on
  *     violation. No-op when spec is absent.
  *   - `assertStreamContract(spec, data)` — same shape for streams.
- *     Used at BOTH inbound emit (ggui_emit) and outbound fan-out
- *     (handle-data pass-through) for defense-in-depth.
  *   - `assertActionContract(spec, value)` — same shape for inbound user
  *     actions (live-channel ingress).
  *
- *   Allowlist / subscription gating (access checks, distinct from schema):
- *   - `assertEventAllowed(subscription, eventType)` — reject inbound
- *     events whose type isn't in the active stack item's
- *     `subscription.events` allowlist. Throws `EventNotAllowedError`.
- *     Composes with `assertActionContract` at the ingress call-site:
- *     allowlist first, payload second.
- *
- *   Stack mutation flow:
- *   - `applyStackItemPatch({stack, stackItemId, patch})` — pure update flow:
- *     find the target item by `id`, enforce propsSpec, return a new
- *     stack. Throws `StackItemNotFoundError` when the target is missing.
+ *   Render mutation flow:
+ *   - `applyRenderPatch({render, patch})` — pure update flow:
+ *     enforce propsSpec, return the updated render.
  *
  *   Typed errors (each maps to a distinct enforcement concern):
- *   - `StackItemNotFoundError` — target stack item id is missing
- *   - `EventNotAllowedError` — event type not in the subscription allowlist
+ *   - `RenderNotFoundError` — render id missing or cross-tenant
+ *   - `ChannelNotDeclaredError` — streamSpec or channel missing
+ *   - `InvalidCompleteError` — `complete: true` on a non-completable channel
  *   - `ContractViolationError` (from `@ggui-ai/protocol`) — payload shape
  *     violates the declared schema. Re-exported implicitly via handler
  *     throw sites.
- *
- * What's NOT here yet — and why:
- *
- *   Full ggui_push / ggui_update / ggui_emit / ggui_consume handler
- *   bodies still live in the hosted pod. Extracting them requires new
- *   seams (`LiveDeliveryTransport` for WS fan-out, a hosted-shape
- *   SessionStore adapter, HandshakeStore abstraction, ObserverNotifier)
- *   — that's seam-widening to chase extraction. We wait for the seams
- *   to land on real need, not speculatively.
- *
- * The enforcement primitives above are the slice that matters today:
- *   every existing mutation path validate+throw'd inline, with each
- *   added callsite risking drift. Routing all those callsites through
- *   one helper file makes the enforcement codepath single.
  */
 export {
-  StackItemNotFoundError,
-  EventNotAllowedError,
-  NoActiveStackItemError,
+  RenderNotFoundError,
   ChannelNotDeclaredError,
   InvalidCompleteError,
-  SessionRequiredError,
-  SessionNotFoundError,
-  SessionClosedError,
 } from './errors.js';
 export { assertPropsContract } from './assert-props-contract.js';
 export { assertStreamContract } from './assert-stream-contract.js';
 export { assertActionContract } from './assert-action-contract.js';
-export { assertEventAllowed } from './assert-event-allowed.js';
 export {
   assertGadgetsRegistered,
   GadgetNotRegisteredError,
@@ -82,18 +59,18 @@ export {
   type PublicEnvViolation,
 } from './assert-public-env.js';
 export {
-  applyStackItemPatch,
-  type ApplyStackItemPatchInput,
-  type ApplyStackItemPatchResult,
-  type StackItemTarget,
-} from './apply-stack-item-patch.js';
+  applyRenderPatch,
+  type ApplyRenderPatchInput,
+  type ApplyRenderPatchResult,
+  type RenderTarget,
+} from './apply-render-patch.js';
 export {
   handleStream,
   type HandleStreamDeps,
   type HandleStreamEnvelope,
   type SendEnvelopeFn,
   type SendEnvelopeResult,
-  type StreamSessionTarget,
+  type RenderStreamTarget,
 } from './handle-stream.js';
 export {
   applyRecordOp,
@@ -125,7 +102,7 @@ export {
 } from './push.js';
 export {
   NO_CREDENTIALS_SYSTEM_CARD_KIND,
-  buildNoCredentialsStackItem,
+  buildNoCredentialsRender,
 } from './no-credentials-card.js';
 export {
   createGguiUpdateHandler,
@@ -135,10 +112,6 @@ export {
   type PropsUpdateNotifier,
 } from './update.js';
 export {
-  createGguiNewSessionHandler,
-  type GguiNewSessionHandlerDeps,
-} from './new-session.js';
-export {
   createGguiConsumeHandler,
   type ConsumeLogger,
   type DrainAckNotifier,
@@ -146,19 +119,15 @@ export {
   type ObserverNotifier,
 } from './consume.js';
 export {
-  createGguiGetSessionHandler,
-  type GetSessionHeartbeatResult,
-  type GguiGetSessionHandlerDeps,
-} from './get-session.js';
+  createGguiGetRenderHandler,
+  type GetRenderHeartbeatResult,
+  type GguiGetRenderHandlerDeps,
+} from './get-render.js';
 export {
-  createGguiListSessionsHandler,
-  type GguiListSessionsHandlerDeps,
-  type SessionSummaryWire,
-} from './list-sessions.js';
-export {
-  createGguiGetStackHandler,
-  type GguiGetStackHandlerDeps,
-} from './get-stack.js';
+  createGguiListRendersHandler,
+  type GguiListRendersHandlerDeps,
+  type RenderSummaryWire,
+} from './list-renders.js';
 export {
   createGguiCloseHandler,
   type CloseObserverNotifier,
@@ -293,19 +262,18 @@ export {
 } from './provisional-preview.js';
 
 // Slice-meta projection helpers shared by the
-// `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` builders
-// in `push.ts` / `update.ts` AND the public-render `/r/<shortCode>`
-// route's self-contained-shell builder. Exported so any server can
-// run the same projections off the active stack item without
-// duplicating the actionSpec / contextSpec walks.
+// `_meta["ai.ggui/render"]` builder in `render.ts` / `update.ts`.
+// Exported so any server can run the same projections off the
+// resolved render without duplicating the actionSpec / contextSpec
+// walks.
 export {
   deriveBundleOrigins,
   deriveContextSlots,
   derivePropsJson,
   derivePublicEnvProjection,
   deriveContractBundle,
-  deriveStackItemMeta,
+  deriveRenderMeta,
   deriveWiredActionTools,
   resolveGadgetUrls,
-  type StackItemMetaView,
+  type RenderMetaView,
 } from './slice-meta-derivation.js';

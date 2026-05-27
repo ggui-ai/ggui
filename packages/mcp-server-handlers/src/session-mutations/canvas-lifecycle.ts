@@ -21,14 +21,17 @@
 import type { CanvasLifecyclePayload } from '@ggui-ai/protocol';
 
 /**
- * Caller-supplied dep. Wired by the session-channel server; absent
+ * Caller-supplied dep. Wired by the render-channel server; absent
  * for OSS deployments without canvas mode.
  *
  * Implementations SHOULD be cheap + non-throwing — handlers fire-
  * and-forget. A failing publish degrades the canvas animator (no
  * pill state changes) but MUST NOT impact the handler's primary
  * result.
+ *
+ * Post-Phase-B (flatten-render-identity): keyed by `renderId` (was
+ * `sessionId`) — every render IS the addressable channel.
  */
 export interface CanvasLifecycleEmitter {
-  emit(sessionId: string, payload: CanvasLifecyclePayload): void;
+  emit(renderId: string, payload: CanvasLifecyclePayload): void;
 }

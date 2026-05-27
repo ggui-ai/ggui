@@ -23,8 +23,7 @@
  *         "actionData": { "answer": "yes" },  // payload satisfying actionSpec[intent].schema; null for bare clicks
  *         "uiContext": { "draft": "" }        // iframe-local contextSpec snapshot at gesture time
  *       },
- *       "sessionId": "sess_…",                // bootstrap.sessionId
- *       "stackItemId": "stk_…",               // bootstrap.stackItemId
+ *       "renderId":  "rnd_…",                 // bootstrap.renderId
  *       "appId":     "app_…",                 // bootstrap.appId
  *       "actionId":  "a3f2b1d4",              // 8-hex correlation hash
  *       "firedAt":   "2026-05-12T10:00:00Z"   // ISO-8601 client-monotonic
@@ -36,10 +35,10 @@
  * **Behavior per `kind`:**
  *
  *   - `kind === 'dispatch'`: appends the action envelope onto the
- *     stackItem-keyed pending-events pipe so the agent's
+ *     render-keyed pending-events pipe so the agent's
  *     `ggui_consume` long-poll unblocks mid-turn. If the pipe is
- *     closed/missing (popped, session closed, never opened) the
- *     handler returns `{ok:false, code:'PIPE_NOT_FOUND'}` so the
+ *     closed/missing (render closed, never opened) the handler
+ *     returns `{ok:false, code:'PIPE_NOT_FOUND'}` so the
  *     iframe-runtime can fall through to `ui/message` chat-shortcut
  *     postMessage (the gesture reaches the agent on its next turn).
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit. The
@@ -55,6 +54,10 @@
  *   - Pipe missing for a `dispatch` → `{ok:false,
  *     code:'PIPE_NOT_FOUND'}`. Iframe-runtime falls through to
  *     `ui/message`.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from
+ * `{sessionId, stackItemId, appId, ...}` input → `{renderId, appId,
+ * ...}` input. Every render IS the addressable scope.
  */
 import { z } from 'zod';
 import {
@@ -85,24 +88,17 @@ const inputSchema = {
     .describe(
       'Per-kind payload. Shape narrowed by `kind`. See `SubmitActionEnvelope` in `@ggui-ai/protocol/integrations/mcp-apps` for the canonical per-kind shapes.',
     ),
-  sessionId: z
+  renderId: z
     .string()
-    .min(1, 'sessionId is required')
+    .min(1, 'renderId is required')
     .describe(
-      'Active session id — sourced from `_meta.ggui.bootstrap.sessionId` on the iframe boot envelope.',
-    ),
-  stackItemId: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Active stack item id — sourced from `_meta.ggui.bootstrap.stackItemId` on the iframe boot envelope. Required when `kind === "dispatch"` so the handler can append the action envelope onto the stackItem-keyed pending-events pipe (Model C). Other kinds (`openLink`, `requestDisplayMode`) only need this for audit log keying; absent is tolerated for boot scenarios that pre-date a push (system-cards, provisional previews).',
+      'Active render id — sourced from `_meta["ai.ggui/render"].renderId` on the iframe boot envelope. Required for every dispatch / audit kind; the server keys the pending-events pipe + audit log by this id.',
     ),
   appId: z
     .string()
     .min(1, 'appId is required')
     .describe(
-      'Active app id — sourced from `_meta.ggui.bootstrap.appId` on the iframe boot envelope.',
+      'Active app id — sourced from `_meta["ai.ggui/render"].appId` on the iframe boot envelope.',
     ),
   actionId: z
     .string()
@@ -126,7 +122,7 @@ const outputSchema = {
    *   - `'INVALID_ACTION_KIND'` — top-level field validation failed
    *     OR per-kind payload shape mismatch.
    *   - `'PIPE_NOT_FOUND'` — `kind:"dispatch"` envelope arrived for a
-   *     stackItemId whose pipe is closed/missing. iframe-runtime
+   *     renderId whose pipe is closed/missing. iframe-runtime
    *     branches on this to fall through to `ui/message`.
    */
   code: z.enum(['INVALID_ACTION_KIND', 'PIPE_NOT_FOUND']).optional(),
@@ -135,13 +131,13 @@ const outputSchema = {
   /**
    * On `ok:true` for `kind:"dispatch"`, whether a `ggui_consume`
    * long-poll is currently registered on the active-consumer registry
-   * for the targeted stack item:
+   * for the targeted render:
    *   - `true`  — at least one consumer is draining. The toast holds
    *     `pending` until the matching `drain_ack` frame arrives.
    *   - `false` — no consumer registered. The action IS on the pipe,
    *     but the agent won't wake on its own. Iframe SHOULD immediately
    *     emit a `ui/message` with `_meta.ggui.userAction.kind: 'queued'`
-   *     so the agent's next turn calls `ggui_consume({stackItemId})`.
+   *     so the agent's next turn calls `ggui_consume({renderId})`.
    *   - `undefined` — server has no active-consumer registry wired
    *     (graceful degradation). Iframe assumes a consumer is present.
    *
@@ -171,18 +167,9 @@ interface UserActionRejected {
 type UserActionOutput = UserActionAccepted | UserActionRejected;
 
 /**
- * Build the `ggui_runtime_submit_action` handler. Registers as app-visible
- * (`_meta.ui.visibility: ['app']`) so MCP Apps hosts route
- * iframe-issued `tools/call` invocations to it instead of rejecting
- * them per spec §401.
- *
- * Today: validate + echo + log per-kind. Future slices wire the
- * envelope onto the session channel as an `ActionEnvelope`.
- */
-/**
  * Optional deps for the submit_action handler. Wires the pending-events
  * pipe: when an iframe-runtime envelope has `kind === 'dispatch'`,
- * the handler appends the action envelope onto the stackItemId-keyed
+ * the handler appends the action envelope onto the renderId-keyed
  * pipe so the agent's `ggui_consume` long-poll can drain it.
  *
  * Absence is tolerated — the handler falls back to validate + echo
@@ -194,7 +181,7 @@ export interface GguiSubmitActionHandlerDeps {
   /**
    * Optional active-consumer awareness. When wired (typically shared
    * with the `consume.ts` handler from the same composition root), the
-   * handler queries `hasActive(stackItemId)` after a successful pipe
+   * handler queries `hasActive(renderId)` after a successful pipe
    * append and surfaces the result as `consumerPresent` on the response.
    * Absent → `consumerPresent` is omitted (iframe assumes a consumer
    * is present and lets drain_ack dismiss the toast).
@@ -207,7 +194,7 @@ export interface GguiSubmitActionHandlerDeps {
    *   1. {@link pendingEventConsumer.append} — the queue that wakes
    *      `ggui_consume` (load-bearing for the live click loop;
    *      throws → `PIPE_NOT_FOUND`).
-   *   2. `sessionStore.appendEvent({type:'user.submitted', data})` —
+   *   2. `renderStore.appendEvent({type:'user.submitted', data})` —
    *      the retained audit ledger (best-effort; errors logged but
    *      do NOT fail the dispatch — the user's gesture reaching the
    *      agent is more important than audit persistence).
@@ -221,12 +208,12 @@ export interface GguiSubmitActionHandlerDeps {
    *
    * Absence is tolerated — the handler falls back to queue-only
    * writes. Tests + minimal composers can omit; production OSS +
-   * cloud wire it from the shared session store.
+   * cloud wire it from the shared render store.
    */
-  readonly sessionStore?: import('@ggui-ai/mcp-server-core').SessionStore;
+  readonly renderStore?: import('@ggui-ai/mcp-server-core').RenderStore;
   /**
    * Optional logger for best-effort audit-write failures. When the
-   * dual-write to `sessionStore.appendEvent` errors (e.g., SQLite
+   * dual-write to `renderStore.appendEvent` errors (e.g., SQLite
    * write contention, DynamoDB throttle), we log + swallow rather
    * than fail the dispatch. Absent → silent swallow.
    */
@@ -243,7 +230,7 @@ export function createGguiSubmitActionHandler(
     title: '[runtime] Submit Action',
     audience: ['runtime'],
     description:
-      'Receives a user-action envelope from the rendered ggui UI (iframe → host relay → MCP server). Validates the discriminated `{kind, payload, …}` envelope; for `kind:"dispatch"` appends the action envelope onto the stackItemId-keyed pending-events pipe so the agent\'s `ggui_consume` long-poll unblocks mid-turn — when the pipe is closed/missing, returns `{ok:false, code:"PIPE_NOT_FOUND"}` so the iframe-runtime can fall through to `ui/message` chat-shortcut. For `kind:"openLink"` / `kind:"requestDisplayMode"`, pure audit — the user-visible host effect has already fired iframe-side. Never invoked by the model directly — `_meta.ui.visibility: [\'app\']` restricts callers to MCP Apps views per spec §401; the iframe holds no auth credential so the host is the relay party.',
+      'Receives a user-action envelope from the rendered ggui UI (iframe → host relay → MCP server). Validates the discriminated `{kind, payload, …}` envelope; for `kind:"dispatch"` appends the action envelope onto the renderId-keyed pending-events pipe so the agent\'s `ggui_consume` long-poll unblocks mid-turn — when the pipe is closed/missing, returns `{ok:false, code:"PIPE_NOT_FOUND"}` so the iframe-runtime can fall through to `ui/message` chat-shortcut. For `kind:"openLink"` / `kind:"requestDisplayMode"`, pure audit — the user-visible host effect has already fired iframe-side. Never invoked by the model directly — `_meta.ui.visibility: [\'app\']` restricts callers to MCP Apps views per spec §401; the iframe holds no auth credential so the host is the relay party.',
     inputSchema,
     outputSchema,
     _meta: {
@@ -281,43 +268,23 @@ export function createGguiSubmitActionHandler(
         };
       }
       // After both guards `parsed.data` narrows to GguiSubmitActionInput.
-      // Round-trip echo gives the caller (iframe) a confirmation
-      // signal; per-kind logging at the operator surface is layered on
-      // by SessionInspector reading from the structured logger.
       const env = parsed.data as GguiSubmitActionInput;
 
-      // Model C wire: dispatch envelopes land on the stackItem-keyed
-      // pending-events pipe. The agent's `ggui_consume` long-poll
-      // drains it. `openLink` / `requestDisplayMode` are host effects
-      // and don't need pipe append (no agent-side react step).
+      // Dispatch envelopes land on the renderId-keyed pending-events
+      // pipe. The agent's `ggui_consume` long-poll drains it. `openLink`
+      // / `requestDisplayMode` are host effects and don't need pipe
+      // append (no agent-side react step).
       //
       // Every dispatch failure mode below surfaces as
       // `{ok:false, code:'PIPE_NOT_FOUND'}` so the iframe-runtime's
       // dispatch closure observes a non-success outcome and falls
-      // through to `ui/message` — the consent-gated chat-shortcut. The
-      // gesture is then visible to the agent on its next chat turn
-      // instead of being silently dropped (the 2026-05-13 live-debug
-      // finding: claude.ai's iframe was firing dispatch with no
-      // stackItemId; pre-fix the handler returned `ok:true` without
-      // appending, the iframe saw success, the fallback never fired,
-      // and the agent's consume long-poll waited for events that would
-      // never arrive).
+      // through to `ui/message` — the consent-gated chat-shortcut.
       if (env.kind === 'dispatch') {
-        if (
-          typeof env.stackItemId !== 'string' ||
-          env.stackItemId.length === 0
-        ) {
-          return {
-            ok: false,
-            code: 'PIPE_NOT_FOUND',
-            message: `submit_action: kind="dispatch" requires a non-empty stackItemId. The active stack item is exposed on the iframe boot envelope as \`_meta.ggui.bootstrap.stackItemId\`; the runtime should thread it through. Iframe should fall through to ui/message.`,
-          };
-        }
         if (!deps.pendingEventConsumer) {
           return {
             ok: false,
             code: 'PIPE_NOT_FOUND',
-            message: `submit_action: no pending-events consumer wired on this server. Operator must configure \`consume.pendingEventConsumer\` (defaults to in-memory when push is bound). Iframe should fall through to ui/message.`,
+            message: `submit_action: no pending-events consumer wired on this server. Operator must configure \`consume.pendingEventConsumer\` (defaults to in-memory when render is bound). Iframe should fall through to ui/message.`,
           };
         }
         // Dispatch payload is `{intent, actionData, uiContext}` post-2026-05-14.
@@ -334,7 +301,7 @@ export function createGguiSubmitActionHandler(
         };
         const actionEnvelope = {
           type: 'action' as const,
-          stackItemId: env.stackItemId,
+          renderId: env.renderId,
           intent: dispatchPayload.intent,
           actionData: dispatchPayload.actionData ?? null,
           uiContext: dispatchPayload.uiContext,
@@ -349,22 +316,19 @@ export function createGguiSubmitActionHandler(
           // logged + swallowed so audit-store hiccups never silence
           // the user's click. The audit fires regardless of queue
           // success — the gesture happened either way, and the ledger
-          // reflects that. Pre-spec-mig the WS `handleInboundAction`
-          // path wrote the audit row; this restores it.
-          const ledgerWrite: Promise<unknown> = deps.sessionStore
-            ? deps.sessionStore.appendEvent({
-                sessionId: env.sessionId,
+          // reflects that.
+          const ledgerWrite: Promise<unknown> = deps.renderStore
+            ? deps.renderStore.appendEvent({
+                renderId: env.renderId,
                 type: 'user.submitted',
                 data: actionEnvelope,
               })
             : Promise.resolve();
           const [queueResult, ledgerResult] = await Promise.allSettled([
-            deps.pendingEventConsumer.append(env.stackItemId, {
+            deps.pendingEventConsumer.append(env.renderId, {
               // Use the iframe-supplied `actionId` as the pipe entry's
               // stable id so consume's drain_ack frame carries the SAME
               // id the iframe-runtime's toast resolution is keyed on.
-              // Without this, drain_ack rows ship with `id: ''` and the
-              // iframe can't match the frame against its outstanding toast.
               id: env.actionId,
               envelope: actionEnvelope,
               createdAt: env.firedAt,
@@ -376,8 +340,7 @@ export function createGguiSubmitActionHandler(
           }
           if (ledgerResult.status === 'rejected') {
             deps.logger?.warn?.('submit_action_ledger_write_failed', {
-              sessionId: env.sessionId,
-              stackItemId: env.stackItemId,
+              renderId: env.renderId,
               actionId: env.actionId,
               error:
                 ledgerResult.reason instanceof Error
@@ -397,7 +360,7 @@ export function createGguiSubmitActionHandler(
             return {
               ok: true,
               consumerPresent: deps.activeConsumerRegistry.hasActive(
-                env.stackItemId,
+                env.renderId,
               ),
             };
           }
@@ -409,7 +372,7 @@ export function createGguiSubmitActionHandler(
             return {
               ok: false,
               code: 'PIPE_NOT_FOUND',
-              message: `submit_action: no pending-events pipe for stackItemId "${env.stackItemId}". The stack item may have been popped, the session closed, or the pipe never opened. Iframe should fall through to ui/message.`,
+              message: `submit_action: no pending-events pipe for renderId "${env.renderId}". The render may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
             };
           }
           // Non-pipe-class error: still surface as PIPE_NOT_FOUND so

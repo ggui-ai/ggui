@@ -1,86 +1,75 @@
 /**
- * `ggui_update` — handler for props mutation on an existing stack
- * item.
+ * `ggui_update` — handler for props mutation on an existing render.
  *
- * `sessionId` / `stackItemId` arrive on the wire input today, but a
- * future caller dispatching this handler in-process from the live
- * channel can populate the canonical `HandlerContext` fields
- * instead; the handler reads either source.
+ * `renderId` arrives on the wire input today, but a future caller
+ * dispatching this handler in-process from the live channel can
+ * populate the canonical `HandlerContext.renderId` field instead; the
+ * handler reads either source.
  *
  * Wire input (matches `updateInputSchema` in `@ggui-ai/protocol`):
+ *   - `{renderId, kind:'replace', props}` — full props replacement.
+ *   - `{renderId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch.
  *
- *   1. Direct fast-path:    `{ sessionId, stackItemId, patch }`
- *      The agent knows the target. `patch` is the FULL new props for
- *      that stack item — not a deep-merge.
- *
- *   2. Handshake-paired:    `{ handshakeId, patch }`
- *      Negotiator decided what to update via a prior `ggui_handshake`.
- *      This branch is rejected today with a clear pointer to the
- *      direct path, because the default handshake handler stamps
- *      `action: 'create'` until a real negotiator is bound. The
- *      branch stays declared so the wire input shape passes through
- *      unchanged — no parallel schema, no silent drop.
- *
- * Pure stack mutation flow:
+ * Pure render-mutation flow:
  *   1. Validate union — surface "neither arm matched" before tenant work.
- *   2. Load + tenancy-gate the session via `sessionStore.get` + `appId` cmp.
- *   3. Apply patch via the shared `applyStackItemPatch` helper:
- *      - throws `StackItemNotFoundError` when stackItemId isn't in the stack
+ *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
+ *   3. Apply patch via the shared `applyRenderPatch` helper:
  *      - throws `ContractViolationError{tool:'ggui_update'}` on schema fail
- *   4. Persist the updated stack via `sessionStore.appendStackItem` (the
- *      seam upserts by `entry.id`, preserving stack position — see
- *      `SessionStore.appendStackItem` JSDoc for the upsert contract).
+ *   4. Persist the updated render via `renderStore.commit(...)` (upserts
+ *      by `render.id`, preserves lifecycle).
  *   5. Best-effort live delivery via the optional `propsUpdateNotifier`
  *      seam (closure forwarded by the host onto
- *      `SessionChannelServer.sendPropsUpdate`). Failures are swallowed —
+ *      `RenderChannelServer.sendPropsUpdate`). Failures are swallowed —
  *      the persistence write is the source of truth, the WS push is a
  *      latency optimization.
  *
  * What this handler does NOT do:
- *   - Real handshake-paired execution. Wired but rejected today;
- *     lands when a negotiator that can produce update-action
- *     decisions is bound.
  *   - Connection-id management. The standalone server uses
  *     live-channel fan-out; a cloud deployment's connection-id and
  *     stale-connection cleanup stay deployment-specific.
  *   - Billing / traffic-class gates. The standalone server is
  *     single-tenant by default; a cloud deployment layers its own
  *     gates on top.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from
+ * `{sessionId, stackItemId, …}` resolution + stack mutation to a single
+ * `{renderId, …}` resolution + direct render commit. The slice meta on
+ * `resultMeta` collapsed from `ai.ggui/session` + `ai.ggui/stack-item`
+ * to one `ai.ggui/render`.
  */
 import { z } from 'zod';
 import {
   ContractViolationError,
+  type ComponentRender,
   type JsonObject,
-  type SessionStackEntry,
+  type Render,
 } from '@ggui-ai/protocol';
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { SessionStore } from '@ggui-ai/mcp-server-core';
+import type { RenderStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import {
-  applyStackItemPatch,
-  type StackItemTarget,
-} from './apply-stack-item-patch.js';
+  applyRenderPatch,
+  type RenderTarget,
+} from './apply-render-patch.js';
 import {
-  deriveStackItemMeta,
-  type StackItemMetaView,
+  deriveRenderMeta,
+  type RenderMetaView,
 } from './slice-meta-derivation.js';
-import { StackItemNotFoundError, SessionNotFoundError } from './errors.js';
+import { RenderNotFoundError } from './errors.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 
 /**
  * Live-subscriber props-update notifier. The mcp-server's
- * `SessionChannelServer.sendPropsUpdate` implements this contract; the
+ * `RenderChannelServer.sendPropsUpdate` implements this contract; the
  * handler depends on the narrowed shape so the handlers package doesn't
- * take a peer dep on the full session-channel surface.
+ * take a peer dep on the full render-channel surface.
  *
- * Mirrors the {@link import('./push.js').ChannelNotifier} shape, narrowed
+ * Mirrors the {@link import('./render.js').ChannelNotifier} shape, narrowed
  * to the props_update wire frame ggui_update produces. Hosts without a
- * session channel leave this absent — the persistence write still
+ * render channel leave this absent — the persistence write still
  * commits, the live frame just isn't fanned.
  *
  * `Promise<void>` matches the underlying channel impl's signature; the
@@ -89,21 +78,17 @@ import { emitPayloadTraceEvent } from './payload-trace-sink.js';
  * call).
  */
 export interface PropsUpdateNotifier {
-  sendPropsUpdate(
-    sessionId: string,
-    stackItemId: string,
-    props: JsonObject,
-  ): Promise<void>;
+  sendPropsUpdate(renderId: string, props: JsonObject): Promise<void>;
 }
 
 /**
- * Thrown when ggui_update can't honor the requested shape — e.g. session
- * not found, cross-tenant access attempt, malformed stack row, or the
- * handshake-paired branch hits the OSS no-negotiator-bound surface.
+ * Thrown when ggui_update can't honor the requested shape — e.g.
+ * malformed render row or a structural reject the wire schema couldn't
+ * encode.
  *
- * Distinct from `StackItemNotFoundError` (page id missing within an existing
- * session) and `ContractViolationError` (props validation fail). The
- * transport layer projects these three to distinct MCP error envelopes.
+ * Distinct from `RenderNotFoundError` (render missing or cross-tenant)
+ * and `ContractViolationError` (props validation fail). The transport
+ * layer projects these three to distinct MCP error envelopes.
  */
 export class UpdateUnsupportedError extends Error {
   readonly code = 'update_unsupported' as const;
@@ -114,7 +99,7 @@ export class UpdateUnsupportedError extends Error {
 }
 
 /** Re-exported for callers that prefer to import the error from this module. */
-export { StackItemNotFoundError, SessionNotFoundError, ContractViolationError };
+export { RenderNotFoundError, ContractViolationError };
 
 /**
  * Pre-mutation gate. The handler invokes `preCheck` before any state
@@ -126,34 +111,34 @@ export { StackItemNotFoundError, SessionNotFoundError, ContractViolationError };
  * Cloud's traffic-class gate (kind=user vs kind=app vs playground vs
  * PUSH_ALLOW_NON_PLAYGROUND env override) plugs in here instead of
  * cloud's update.ts owning its own gate. The same interface is used
- * for kind-aware billing pre-checks (BYOK + credit pool) on push.
+ * for kind-aware billing pre-checks (BYOK + credit pool) on render.
  */
 export interface BillingGate {
   preCheck(input: {
     readonly ctx: HandlerContext;
     /**
      * Which tool the gate is firing for. Lets a single gate impl run
-     * different policies per call-site (e.g. update is free / push
+     * different policies per call-site (e.g. update is free / render
      * triggers a credit charge).
      */
-    readonly tool: 'ggui_update' | 'ggui_push';
+    readonly tool: 'ggui_update' | 'ggui_render';
   }): Promise<void> | void;
 }
 
 /**
- * Deps for the OSS `ggui_update` handler. Mirrors `GguiPushHandlerDeps`
+ * Deps for the OSS `ggui_update` handler. Mirrors `GguiRenderHandlerDeps`
  * shape — a small narrow seam set, all optional parts marked as such.
  */
 export interface GguiUpdateHandlerDeps {
-  /** Session-backing store. Used to load + persist the patched stack. */
-  readonly sessionStore: SessionStore;
+  /** Render-backing store. Used to load + persist the patched render. */
+  readonly renderStore: RenderStore;
   /**
    * Optional live-subscriber notifier. When present, every successful
-   * persistence fans a `{type:'props_update', payload:{stackItemId, props}}`
+   * persistence fans a `{type:'props_update', payload:{renderId, props}}`
    * live-channel frame to live subscribers via the seam. Forwarded as-is
    * to {@link PropsUpdateNotifier.sendPropsUpdate}.
    *
-   * Hosts without a session channel leave this absent — the
+   * Hosts without a render channel leave this absent — the
    * persistence write still commits, no WS frame is delivered.
    * Notifier rejections / throws are caught + logged-via-throw-swallow;
    * the tool call still returns `updated: true`.
@@ -173,40 +158,40 @@ export interface GguiUpdateHandlerDeps {
    */
   readonly description?: string;
   /**
-   * Bootstrap-credential minter mirroring `GguiPushHandlerDeps.mintWsToken`.
-   * When set, the handler's `resultMeta` emits the `ai.ggui/session` +
-   * `ai.ggui/stack-item` slice pair carrying the live trio
-   * (`wsUrl` + `token` + `expiresAt`) for the post-patch stack item.
-   * MCP Apps hosts that forward the full `CallToolResult` (including
-   * `_meta`) via `ui/notifications/tool-result` postMessage can re-apply
-   * the patched props to a still-mounted iframe WITHOUT the iframe
-   * re-subscribing — same single-source-of-truth derivation `ggui_push`
-   * uses, just sourced from the patched item.
+   * Bootstrap-credential minter mirroring `GguiRenderHandlerDeps.mintWsToken`.
+   * When set, the handler's `resultMeta` emits the `ai.ggui/render` slice
+   * carrying the live trio (`wsUrl` + `token` + `expiresAt`) for the
+   * post-patch render. MCP Apps hosts that forward the full
+   * `CallToolResult` (including `_meta`) via
+   * `ui/notifications/tool-result` postMessage can re-apply the patched
+   * props to a still-mounted iframe WITHOUT the iframe re-subscribing —
+   * same single-source-of-truth derivation `ggui_render` uses, just
+   * sourced from the patched render.
    *
    * Absent = no `_meta` on update results (matches the legacy posture).
    * Persistence + the live-channel `props_update` fan-out still fire; only
    * the spec-compliant postMessage fallback path is unwired.
    */
   readonly mintWsToken?: (
-    sessionId: string,
+    renderId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
    * Iframe-runtime bundle URL forwarded onto the
-   * `ai.ggui/session.runtimeUrl` slice field.
+   * `ai.ggui/render.runtimeUrl` slice field.
    * Required-when-set-with-mintWsToken; absent + minter absent = no
    * slice meta at all (no field to populate). Mirrors
-   * {@link GguiPushHandlerDeps.runtimeUrl}.
+   * {@link GguiRenderHandlerDeps.runtimeUrl}.
    */
   readonly runtimeUrl?: string | (() => string | undefined);
-  /** Theme preset id forwarded onto the `ai.ggui/session.themeId` slice field. */
+  /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
   readonly themeId?: string;
-  /** Theme mode forwarded onto the `ai.ggui/session.themeMode` slice field. */
+  /** Theme mode forwarded onto the `ai.ggui/render.themeMode` slice field. */
   readonly themeMode?: 'light' | 'dark';
   /**
    * Live theme getter (overrides static `themeId`/`themeMode` per-update).
    * Lets a console "Save to ggui.json" reach the next update without a
-   * server restart. Same closure pattern `ggui_push` uses.
+   * server restart. Same closure pattern `ggui_render` uses.
    */
   readonly themeProvider?: () => {
     readonly id?: string;
@@ -214,15 +199,15 @@ export interface GguiUpdateHandlerDeps {
   } | undefined;
   /**
    * Returns the names of registered tools whose `_meta.ui.visibility`
-   * includes `"app"`. Forwarded onto the `ai.ggui/session.appCallableTools`
+   * includes `"app"`. Forwarded onto the `ai.ggui/render.appCallableTools`
    * slice field so the iframe-runtime can resolve pattern α (direct
    * tools/call) vs pattern β (3-message bridge) per wired action — same
-   * posture push uses.
+   * posture render uses.
    */
   readonly appCallableTools?: () => readonly string[];
   /**
-   * Resolver for the `ai.ggui/session.streamWebSocketLocalTools` slice
-   * field. Mirrors push's resolver so the post-update session slice
+   * Resolver for the `ai.ggui/render.streamWebSocketLocalTools` slice
+   * field. Mirrors render's resolver so the post-update render slice
    * agrees with what the iframe-runtime saw on initial mount.
    */
   readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
@@ -233,27 +218,19 @@ export interface GguiUpdateHandlerDeps {
  *
  *   - `kind:'replace'` + `props` — full props replacement. The new
  *     map IS the new state.
- *   - `kind:'merge'` + `patch` — RFC 7396 JSON Merge Patch. Top-level
- *     keys merge shallow, nested objects merge recursively, `null`
- *     value deletes the key, arrays fully replace.
+ *   - `kind:'merge'` + `patch` — RFC 7396 JSON Merge Patch.
  *
  * Both validate the FINAL props (post-merge for `merge`) against the
- * stack item's `propsSpec`.
- *
- * MCP tool input is declared as a flat raw-shape (per SharedHandler
- * contract). The kind discrimination + per-kind field requirement is
- * enforced inside the handler — see the narrowing step. The wire
- * envelope is the discriminated union from
- * `@ggui-ai/protocol`'s `updateInputSchema`.
+ * render's `propsSpec`.
  */
 const inputSchema = {
   /**
-   * Globally-unique stack-item id. Optional on the wire so an
-   * in-process dispatcher (live-channel dispatch / threaded mount) can
-   * populate it via `HandlerContext.stackItemId` instead. Required at
-   * the handler level — see the resolve step inside `handler`.
+   * Globally-unique render id. Optional on the wire so an in-process
+   * dispatcher (live-channel dispatch / threaded mount) can populate it
+   * via `HandlerContext.renderId` instead. Required at the handler
+   * level — see the resolve step inside `handler`.
    */
-  stackItemId: z.string().optional(),
+  renderId: z.string().optional(),
   /**
    * Mode discriminator. `'replace'` requires `props`; `'merge'`
    * requires `patch`. The narrowing step inside `handler` enforces
@@ -262,7 +239,7 @@ const inputSchema = {
   kind: z.enum(['replace', 'merge']),
   /**
    * Full new props map. Required when `kind === 'replace'`; rejected
-   * otherwise. Validated against the stack item's `propsSpec` after
+   * otherwise. Validated against the render's `propsSpec` after
    * applying.
    */
   props: z.record(z.string(), z.unknown()).optional(),
@@ -276,25 +253,19 @@ const inputSchema = {
 } as const;
 
 const outputSchema = {
-  stackItemId: z.string(),
+  renderId: z.string(),
   updated: z.boolean(),
 } as const;
 
-type UpdateOutput = {
-  /**
-   * Internal-only — kept on the TS type because resultMeta needs the
-   * session for its slice-meta projection. Stripped by zod before
-   * structuredContent serializes (same pattern as push.ts).
-   */
-  sessionId: string;
-  stackItemId: string;
+interface UpdateOutput {
+  renderId: string;
   updated: boolean;
-};
+}
 
 /**
  * Build the OSS `ggui_update` handler. Handler is additive — declared
  * separately from `defaultHandlers` so server composers opt-in via the
- * dedicated `update:` slot (mirrors `handshake:` / `push:`). Servers
+ * dedicated `update:` slot (mirrors `handshake:` / `render:`). Servers
  * that don't expose update keep the smaller surface.
  */
 export function createGguiUpdateHandler(
@@ -306,11 +277,7 @@ export function createGguiUpdateHandler(
     audience: ['agent'],
     description:
       deps.description ??
-      "Refresh the rendered UI with new state. Two modes:  (1) `{stackItemId, kind:'replace', props}` — full props replacement; `props` IS the new state. Use when most fields change or you want deterministic restoration.  (2) `{stackItemId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta. Top-level keys merge shallow, nested objects merge recursively, a `null` value DELETES that key, arrays fully replace. Use when one or two fields change (much cheaper for the agent to construct than re-sending all props).  USE THIS TOOL AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is now staring at stale props. Skipping this leaves the iframe frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_update → loop`. The server fans a `props_update` frame to live subscribers; the mount re-renders WITHOUT losing scroll position, focus, or uncommitted input — far cheaper than re-pushing. Both modes validate the FINAL props (post-merge for `merge`) against the stack item's `propsSpec` (when declared) and reject on violation. Mutation ownership: only the session-creating identity may overwrite.",
-    // No `allowedFor` — same toolset on every pod kind. Mutation
-    // ownership (only the session-creating identity may overwrite) is
-    // enforced inside the handler against `ctx.appId`, not at
-    // registration time.
+      "Refresh the rendered UI with new state. Two modes:  (1) `{renderId, kind:'replace', props}` — full props replacement; `props` IS the new state. Use when most fields change or you want deterministic restoration.  (2) `{renderId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta. Top-level keys merge shallow, nested objects merge recursively, a `null` value DELETES that key, arrays fully replace. Use when one or two fields change (much cheaper for the agent to construct than re-sending all props).  USE THIS TOOL AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is now staring at stale props. Skipping this leaves the iframe frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_update → loop`. The server fans a `props_update` frame to live subscribers; the mount re-renders WITHOUT losing scroll position, focus, or uncommitted input — far cheaper than re-rendering. Both modes validate the FINAL props (post-merge for `merge`) against the render's `propsSpec` (when declared) and reject on violation. Mutation ownership: only the render-creating identity may overwrite.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<UpdateOutput> {
@@ -318,60 +285,34 @@ export function createGguiUpdateHandler(
 
       // Pre-mutation gate. Throws to abort BEFORE any state change.
       // OSS default: no gate bound, no-op. Cloud binds a traffic-class
-      // gate (kind=user / playground / PUSH_ALLOW_NON_PLAYGROUND
-      // override) here.
+      // gate here.
       if (deps.billingGate) {
         await deps.billingGate.preCheck({ ctx, tool: 'ggui_update' });
       }
 
-      // Direct path. Wire input carries stackItemId only — sessionId is
-      // resolved server-side via the SessionStore's stackItemId
-      // secondary index. Falls back to ctx.stackItemId when populated
-      // by an in-process dispatcher (live-channel dispatch + future
-      // mounts that thread the active stack frame).
-      const stackItemId: string | undefined =
-        parsed.stackItemId ?? ctx.stackItemId;
-      if (!stackItemId) {
-        throw new StackItemNotFoundError(
-          'ggui_update: stackItemId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
-        );
-      }
-      let sessionId: string | undefined;
-      {
-        const indexEntry = await deps.sessionStore.getSessionByStackItemId(stackItemId);
-        // Cross-tenant access AND missing-stackItemId both project to
-        // StackItemNotFoundError so the response doesn't leak whether
-        // the stackItemId exists in another tenant.
-        if (!indexEntry || indexEntry.appId !== ctx.appId) {
-          throw new StackItemNotFoundError(
-            `ggui_update: stackItemId "${stackItemId}" not found, expired, or owned by a different appId. Recovery: re-push to obtain a fresh stackItemId, or check the stackItemId from the most recent ggui_push response.`,
-          );
-        }
-        sessionId = indexEntry.sessionId;
-      }
-      if (!sessionId) {
-        throw new UpdateUnsupportedError(
-          'ggui_update: failed to resolve target session after index lookup.',
+      // Resolve renderId from wire OR threaded HandlerContext.
+      const renderId: string | undefined =
+        parsed.renderId ?? ctx.renderId;
+      if (!renderId) {
+        throw new RenderNotFoundError(
+          '',
+          'ggui_update: renderId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
         );
       }
 
-      // Tenancy gate (defensive backstop). Index lookup above already
-      // tenancy-checked; this is the same StackItemNotFoundError
-      // projection (don't leak whether the id exists in another
-      // tenant).
-      const session = await deps.sessionStore.get(sessionId);
-      if (!session || session.appId !== ctx.appId) {
-        throw new StackItemNotFoundError(
-          `ggui_update: stackItemId "${stackItemId}" cannot be resolved to a live session.`,
-        );
+      // Tenancy gate. Cross-tenant + missing surface uniformly as
+      // RenderNotFoundError so cross-tenant existence is not leaked.
+      const stored = await deps.renderStore.get(renderId);
+      if (!stored || stored.appId !== ctx.appId) {
+        throw new RenderNotFoundError(renderId);
       }
 
-      // Devtools payload trace. No-op when no sink is
-      // registered. Fires AFTER the tenancy gate so cross-tenant probes
-      // never leak into the trace. Payload is the validated wire shape.
+      // Devtools payload trace. No-op when no sink is registered.
+      // Fires AFTER the tenancy gate so cross-tenant probes never leak
+      // into the trace. Payload is the validated wire shape.
       emitPayloadTraceEvent({
         direction: 'outbound-update',
-        sessionId,
+        renderId,
         appId: ctx.appId,
         tool: 'ggui_update',
         payload: parsed,
@@ -444,116 +385,105 @@ export function createGguiUpdateHandler(
         patchInput = { mode: 'merge', patch: parsed.patch as JsonObject };
       }
 
-      // Narrow the session's stack into the StackItemTarget shape the
-      // shared helper requires. Both protocol StackItem and McpAppsStackItem
-      // satisfy `id: string` structurally; propsSpec + props flow
-      // through when present. McpAppsStackItem has no propsSpec — the
-      // helper's assertPropsContract no-ops on absent spec, so MCP Apps
-      // stack items accept any patch shape (the iframe owns its own
-      // validation).
-      const stack: ReadonlyArray<StackItemTarget & SessionStackEntry> =
-        session.stack;
-
-      // applyStackItemPatch throws StackItemNotFoundError when
-      // stackItemId is missing and ContractViolationError{tool:
-      // 'ggui_update'} on propsSpec fail (validated against the FINAL
-      // props — post-merge for `merge` mode). Both propagate verbatim
-      // — transport layer maps each.
-      const { updatedItem, finalProps } = applyStackItemPatch({
-        stack,
-        stackItemId,
+      // applyRenderPatch throws ContractViolationError{tool:'ggui_update'}
+      // on propsSpec fail (validated against the FINAL props — post-merge
+      // for `merge` mode). Propagates verbatim — transport layer maps.
+      //
+      // Pull renderTarget from `stored.render` — both ComponentRender and
+      // SystemRender satisfy `RenderTarget` (id + optional propsSpec +
+      // optional props). McpAppsRender has no propsSpec — the helper's
+      // assertPropsContract no-ops on absent spec, so MCP Apps renders
+      // accept any patch shape (the iframe owns its own validation).
+      const renderTarget: RenderTarget & Render = stored.render;
+      const { updatedRender, finalProps } = applyRenderPatch({
+        render: renderTarget,
         ...patchInput,
       });
 
-      // Persist via the seam. `appendStackItem` upserts by `entry.id`,
-      // preserving the existing stack position (see SessionStore JSDoc).
-      // The handler does NOT thread the full `updatedStack` through —
-      // the seam is the upsert primitive.
-      await deps.sessionStore.appendStackItem(sessionId, updatedItem);
+      // Persist via the commit seam — first-write mints, re-write
+      // replaces visible-bits in place. Lifecycle fields owned by the
+      // store (createdAt, eventSequence, hostSession) preserved across
+      // the upsert.
+      await deps.renderStore.commit({
+        render: updatedRender,
+        appId: stored.appId,
+        ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
+        ...(stored.endUserIdentity !== undefined
+          ? { endUserIdentity: stored.endUserIdentity }
+          : {}),
+        ...(stored.themeId !== undefined ? { themeId: stored.themeId } : {}),
+        ...(stored.hostSession !== undefined
+          ? { hostSession: stored.hostSession }
+          : {}),
+      });
 
       // Best-effort live delivery. Persistence is the source of truth;
       // the live-channel fan-out is a latency optimization. Errors are
       // swallowed — a failed notify must not fail the tool call (the
-      // renderer reads canonical state via `ack.stack` on next
+      // renderer reads canonical state via `ack.render` on next
       // (re)subscribe).
       if (deps.propsUpdateNotifier) {
         try {
-          await deps.propsUpdateNotifier.sendPropsUpdate(
-            sessionId,
-            stackItemId,
-            finalProps,
-          );
+          await deps.propsUpdateNotifier.sendPropsUpdate(renderId, finalProps);
         } catch {
-          // Silent: stay aligned with `safelyNotifyStackPush`'s posture
-          // in push.ts. A throwing notifier is a host-side bug, not a
-          // tool-call failure.
+          // Silent: stay aligned with `safelyNotifyRenderCommit`'s
+          // posture in render.ts. A throwing notifier is a host-side
+          // bug, not a tool-call failure.
         }
       }
 
       return {
-        sessionId,
-        stackItemId,
+        renderId,
         updated: true,
       };
     },
     /**
-     * Emit the `ai.ggui/session` + `ai.ggui/stack-item` slice pair
-     * mirroring `ggui_push`'s shape but **props-only** (post-2026-05-13
-     * trim). Spec-compliant MCP Apps hosts forward the full
-     * `CallToolResult` (including `_meta`) via
-     * `ui/notifications/tool-result` postMessage; iframe-runtime's
-     * `installPostMountListener` reads the envelope and re-applies the
-     * patched props to the live mount WITHOUT a WS round-trip. The WS
-     * `props_update` frame remains the first-party fast path; the
-     * slice meta is the cross-host fallback.
+     * Emit the `ai.ggui/render` slice mirroring `ggui_render`'s shape
+     * but **props-only** (post-2026-05-13 trim). Spec-compliant MCP
+     * Apps hosts forward the full `CallToolResult` (including `_meta`)
+     * via `ui/notifications/tool-result` postMessage;
+     * iframe-runtime's `installPostMountListener` reads the envelope
+     * and re-applies the patched props to the live mount WITHOUT a WS
+     * round-trip. The WS `props_update` frame remains the first-party
+     * fast path; the slice meta is the cross-host fallback.
      *
      * **Why props-only:** update mutates props, not the contract. The
      * iframe is already mounted with code + actionSpec + contextSpec +
-     * permissions from its initial push slice meta; those are mount-time
-     * invariants. Re-emitting them on every update wasted 5-50KB per
-     * call. Today's update slice meta carries only what actually
-     * changed (propsJson on the stack-item slice) plus the
-     * auth/session/runtime fields on the session slice the cross-host
-     * fallback needs to re-bind: `{sessionId, appId, runtimeUrl,
-     * themeId?, themeMode?, wsUrl?, token?, expiresAt?}` on session,
-     * `{stackItemId, propsJson?}` on stack-item.
+     * permissions from its initial render slice meta; those are
+     * mount-time invariants. Re-emitting them on every update wasted
+     * 5-50KB per call. Today's update slice meta carries only what
+     * actually changed (propsJson) plus the auth/identity/runtime
+     * fields the cross-host fallback needs to re-bind.
      *
      * Skipped entirely when no propsJson + no minter + no runtimeUrl —
      * keeps the response byte-identical for hosts that don't read
      * `_meta` (the structuredContent reply is the source of truth).
      */
     resultMeta: async (output, _input, ctx) => {
-      // Load the just-patched stack item only to derive the projected
+      // Load the just-patched render only to derive the projected
       // propsJson. The other view fields (componentCode / kind /
       // contextSlots / actionNextSteps / permissionsPolicy /
       // compiledValidators) are mount-time invariants — the initial
-      // push already shipped them, and `ggui_update` patches `props`
+      // render already shipped them, and `ggui_update` patches `props`
       // only, never the contract specs.
-      let view: StackItemMetaView = {};
-      // Capture session + stack-item themeId from the same lookup that
-      // drives `deriveStackItemMeta`. Without this, a session
-      // minted with `ggui_new_session({themeId})` followed by a
-      // `ggui_update` (props refresh) would emit slice meta WITHOUT
-      // themeId — the iframe re-mounts with the default theme even
-      // though the session has a sticky theme. Same 4-layer chain as
-      // push: liveTheme > stackItem > session > deps.themeId.
-      let stackItemThemeId: string | undefined;
-      let sessionThemeId: string | undefined;
-      // `lastSequence` — monotonic SessionEvent ledger cursor stamped on
-      // every emit (R6). Polling clients use it to initialize the /events
+      let view: RenderMetaView = {};
+      let renderThemeId: string | undefined;
+      // `lastSequence` — monotonic event-ledger cursor stamped on every
+      // emit (R6). Polling clients use it to initialize the /events
       // cursor (R7) aligned with the WS stream.
       let lastSequence: number | undefined;
       try {
-        const session = await deps.sessionStore.get(output.sessionId);
-        if (session) {
-          sessionThemeId = session.themeId;
-          lastSequence = session.eventSequence;
-        }
-        const top = session?.stack.find((s) => s.id === output.stackItemId);
-        if (top) {
-          view = deriveStackItemMeta(top);
-          if (top.type !== 'mcpApps' && top.type !== 'system') {
-            stackItemThemeId = top.themeId;
+        const stored = await deps.renderStore.get(output.renderId);
+        if (stored) {
+          lastSequence = stored.eventSequence;
+          renderThemeId = stored.themeId;
+          view = deriveRenderMeta(stored.render);
+          if (
+            stored.render.type !== 'mcpApps' &&
+            stored.render.type !== 'system'
+          ) {
+            renderThemeId =
+              (stored.render as ComponentRender).themeId ?? renderThemeId;
           }
         }
       } catch {
@@ -575,12 +505,12 @@ export function createGguiUpdateHandler(
           : deps.runtimeUrl;
       const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
       // The minter's own return shape names the credential `token`
-      // (legacy); the session slice uses `wsToken`. Remap explicitly.
+      // (legacy); the render slice uses `wsToken`. Remap explicitly.
       const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.sessionId, ctx.appId)
+        ? deps.mintWsToken(output.renderId, ctx.appId)
         : undefined;
-      const partial: Partial<
-        Pick<McpAppAiGguiSessionMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+      const authFields: Partial<
+        Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
       > = mintedTrio
         ? {
             wsUrl: mintedTrio.wsUrl,
@@ -588,54 +518,27 @@ export function createGguiUpdateHandler(
             expiresAt: mintedTrio.expiresAt,
           }
         : {};
-      // 4-layer theme resolution. Mirror of the push.resultMeta chain
-      // (liveTheme > stackItem > session > deps.themeId) so update +
-      // push surface identical theme behavior. liveTheme wins because
-      // it's the operator's debug-surface override (dev console
-      // picker) — silently outranking it would defeat the picker's
-      // purpose for sessions that already chose a theme. First non-
-      // undefined wins. themeMode stays 2-layer because no agent
-      // surface sets it per-stack / per-session today.
+      // 3-layer theme resolution. liveTheme > render > deps.themeId.
+      // First non-undefined wins. themeMode stays 2-layer because no
+      // agent surface sets it per-render today.
       const liveTheme = deps.themeProvider?.();
       const resolvedThemeId =
-        liveTheme?.id
-        ?? stackItemThemeId
-        ?? sessionThemeId
-        ?? deps.themeId;
+        liveTheme?.id ?? renderThemeId ?? deps.themeId;
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
-      // Build the two slices directly (#109 / R3). update.ts only
-      // ever refreshes propsJson + theme; the stack-item slice carries
-      // the render delta (propsJson), the session slice carries
-      // identity + live-auth + theme. Contract + component pointers
-      // stay on the initial slices from push.ts and are not re-emitted
-      // here. `partial` carries the live-auth trio (wsUrl/token/expiresAt)
-      // from `mintWsToken` — all session-slice fields.
-      const session: McpAppAiGguiSessionMeta = {
-        sessionId: output.sessionId,
+
+      const render: McpAppAiGguiRenderMeta = {
+        renderId: output.renderId,
         appId: ctx.appId,
         runtimeUrl,
-        ...partial,
+        ...authFields,
         ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
+        ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
       };
-      const stackItem: McpAppAiGguiStackItemMeta | undefined =
-        output.stackItemId !== undefined || view.propsJson
-          ? {
-              ...(output.stackItemId !== undefined
-                ? { stackItemId: output.stackItemId }
-                : {}),
-              ...(view.propsJson ? { propsJson: view.propsJson } : {}),
-            }
-          : undefined;
-      const meta: McpAppAiGguiMeta = {
-        session,
-        ...(stackItem !== undefined ? { stackItem } : {}),
-      };
-      return toMcpAppEnvelope(meta);
+      return toMcpAppEnvelope(render);
     },
   };
 }
-

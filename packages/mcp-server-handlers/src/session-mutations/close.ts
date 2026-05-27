@@ -1,31 +1,36 @@
 /**
- * `createGguiCloseHandler` — mark a session as completed.
+ * `createGguiCloseHandler` — mark a render as completed.
  *
- * Calls `sessionStore.appendEvent({type: 'session.closed'})` — the
- * in-memory and SQLite `SessionStore` impls flip the bucket's
+ * Calls `renderStore.appendEvent({type: 'session.closed'})` — the
+ * in-memory and SQLite `RenderStore` impls flip the bucket's
  * terminal flag on this event, which then surfaces as
  * `status: 'completed'` on subsequent `list({status})` queries.
+ * The event-type string preserves the legacy spelling so existing
+ * subscribers continue to receive it.
  *
  * Shared by every deployment — a cloud server composes this same
- * factory with its own `SessionStore` plus an optional
+ * factory with its own `RenderStore` plus an optional
  * `observerNotifier` for WebSocket fan-out.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from `{sessionId}`
+ * to `{renderId}` — every render IS the addressable scope.
  */
 
 import { z } from 'zod';
 import type { GguiCloseOutput } from '@ggui-ai/protocol';
 import type {
   PendingEventConsumer,
-  SessionStore,
+  RenderStore,
   ShortCodeIndex,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import { SessionNotFoundError } from './errors.js';
+import { RenderNotFoundError } from './errors.js';
 
 const inputSchema = {
-  sessionId: z
+  renderId: z
     .string()
     .min(1)
-    .describe('The session to mark completed'),
+    .describe('The render to mark completed'),
 } as const;
 
 const outputSchema = {
@@ -34,47 +39,47 @@ const outputSchema = {
 
 /**
  * Optional observer-notification seam for `ggui_close`. Cloud uses
- * this to fan a `session_closed` event to its observer WebSocket so
- * builders watching a session see the close. OSS leaves absent.
+ * this to fan a `render_closed` event to its observer WebSocket so
+ * builders watching a render see the close. OSS leaves absent.
  */
 export interface CloseObserverNotifier {
-  notifySessionClosed(args: {
+  notifyRenderClosed(args: {
     readonly appId: string;
-    readonly sessionId: string;
+    readonly renderId: string;
   }): void;
 }
 
 export interface GguiCloseHandlerDeps {
-  readonly sessionStore: SessionStore;
+  readonly renderStore: RenderStore;
   readonly observerNotifier?: CloseObserverNotifier;
   /**
    * Optional close primitive. When set, the handler invokes this in
-   * place of `sessionStore.appendEvent({type: 'session.closed'})`.
+   * place of `renderStore.appendEvent({type: 'session.closed'})`.
    * Returns `true` on success, `false` when the underlying row had
    * already disappeared (the response surfaces the boolean verbatim).
    *
-   * Cloud wires this to its `markSessionCompleted` DDB UpdateItem so
+   * Cloud wires this to its `markRenderCompleted` DDB UpdateItem so
    * the close path stays on cloud's existing primitive without needing
-   * a fully-wired `SessionStore.appendEvent` on its DynamoSessionStore
-   * adapter (currently NotImplementedInDynamoAdapter).
+   * a fully-wired `RenderStore.appendEvent` on its DynamoRenderStore
+   * adapter.
    *
-   * OSS leaves absent — falls back to `sessionStore.appendEvent`.
+   * OSS leaves absent — falls back to `renderStore.appendEvent`.
    */
-  readonly markCompleted?: (sessionId: string) => Promise<boolean> | boolean;
+  readonly markCompleted?: (renderId: string) => Promise<boolean> | boolean;
   /**
-   * Optional pipe handle. When wired, every stack item in the closing
-   * session has its pending-events pipe deleted via `markDeleted` so
-   * the agent's long-poll loop on any of them terminates (consume
-   * sees `PendingPipeNotFoundError`, falls through to status:
+   * Optional pipe handle. When wired, the closing render's
+   * pending-events pipe is deleted via `markDeleted` so the agent's
+   * long-poll loop terminates (consume sees
+   * `PendingPipeNotFoundError`, falls through to status:
    * 'completed', and returns).
    */
   readonly pendingEventConsumer?: PendingEventConsumer;
   /**
    * Optional shortCode index. When wired, every `/r/<code>` URL
-   * bound to ANY stack item of the closing session is revoked.
-   * Outstanding render URLs stop resolving the moment the session
-   * is marked completed — the capability URL stops being a
-   * capability. Best-effort: index hiccups don't fail the close.
+   * bound to the closing render is revoked. Outstanding render URLs
+   * stop resolving the moment the render is marked completed — the
+   * capability URL stops being a capability. Best-effort: index
+   * hiccups don't fail the close.
    */
   readonly shortCodeIndex?: ShortCodeIndex;
 }
@@ -84,47 +89,45 @@ export function createGguiCloseHandler(
 ): SharedHandler<typeof inputSchema, typeof outputSchema, GguiCloseOutput> {
   return {
     name: 'ggui_close',
-    title: 'Close session',
+    title: 'Close render',
     audience: ['agent'],
     description:
-      "Mark a session as completed. Future ggui_consume calls return status: 'completed' so the agent's long-poll loop terminates. Call when the user is done with the session — the row is preserved for render URLs and analytics; TTL reaps eventually.",
+      "Mark a render as completed. Future ggui_consume calls return status: 'completed' so the agent's long-poll loop terminates. Call when the user is done with the render — the row is preserved for analytics; TTL reaps eventually.",
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<GguiCloseOutput> {
-      const { sessionId } = z.object(inputSchema).parse(rawInput);
+      const { renderId } = z.object(inputSchema).parse(rawInput);
 
-      const session = await deps.sessionStore.get(sessionId);
-      if (!session || session.appId !== ctx.appId) {
+      const stored = await deps.renderStore.get(renderId);
+      if (!stored || stored.appId !== ctx.appId) {
         // Tenancy + missing both surface uniformly so cross-tenant
         // existence is not leaked.
-        throw new SessionNotFoundError(
-          `ggui_close: session "${sessionId}" not found, expired, or owned by a different appId.`,
-        );
+        throw new RenderNotFoundError(renderId);
       }
 
-      // Flip the session to its terminal `completed` state. Two paths:
+      // Flip the render to its terminal `completed` state. Two paths:
       //
       //   - `markCompleted` seam (cloud): the host owns the close
-      //     primitive (e.g. DDB UpdateItem on `sessionStatus`).
+      //     primitive (e.g. DDB UpdateItem on `renderStatus`).
       //     Returns `false` when the row vanished between the
       //     tenancy gate and the write — handler surfaces that
       //     verbatim. Returns `true` on a successful close.
-      //   - `sessionStore.appendEvent` (OSS default): writes the
+      //   - `renderStore.appendEvent` (OSS default): writes the
       //     terminal `session.closed` event; InMemory + Sqlite
-      //     SessionStore observe it and flip their internal `closed`
-      //     flag. Idempotent — re-close on an already-closed session
+      //     RenderStore observe it and flip their internal `closed`
+      //     flag. Idempotent — re-close on an already-closed render
       //     throws inside the store, which we treat as success
-      //     (post-condition holds: session is closed).
+      //     (post-condition holds: render is closed).
       let success = true;
       if (deps.markCompleted) {
-        success = await deps.markCompleted(sessionId);
+        success = await deps.markCompleted(renderId);
       } else {
         try {
-          await deps.sessionStore.appendEvent({
-            sessionId,
+          await deps.renderStore.appendEvent({
+            renderId,
             type: 'session.closed',
             data: {},
           });
@@ -140,36 +143,25 @@ export function createGguiCloseHandler(
         }
       }
 
-      // Close every stackItem-keyed pending-events pipe (Model C).
-      // The agent's `ggui_consume` long-poll on any of them
-      // terminates: the next consumeAndClear sees
-      // `PendingPipeNotFoundError`, which the handler catches as
+      // Close the renderId-keyed pending-events pipe. The agent's
+      // `ggui_consume` long-poll terminates: the next consumeAndClear
+      // sees `PendingPipeNotFoundError`, which the handler catches as
       // status: 'completed' and returns. Best-effort: failures don't
       // block the user-visible close.
       if (deps.pendingEventConsumer?.markDeleted) {
         try {
-          const stack = session.stack ?? [];
-          for (const item of stack) {
-            const id = (item as { id?: unknown }).id;
-            if (typeof id === 'string' && id.length > 0) {
-              try {
-                deps.pendingEventConsumer.markDeleted(id);
-              } catch {
-                // Per-item failures are swallowed.
-              }
-            }
-          }
+          deps.pendingEventConsumer.markDeleted(renderId);
         } catch {
-          // Stack iteration failures don't block close.
+          // Per-pipe failures are swallowed.
         }
       }
 
-      // Revoke every /r/<code> URL bound to the closing session.
-      // Single bulk call drops all bindings via the session-scoped
+      // Revoke every /r/<code> URL bound to the closing render.
+      // Single bulk call drops all bindings via the render-scoped
       // revoke. Best-effort: silent on index errors.
       if (deps.shortCodeIndex) {
         try {
-          await deps.shortCodeIndex.revokeBySessionId(sessionId);
+          await deps.shortCodeIndex.revokeBySessionId(renderId);
         } catch {
           // Intentionally swallowed.
         }
@@ -179,9 +171,9 @@ export function createGguiCloseHandler(
       // already succeeded.
       if (deps.observerNotifier) {
         try {
-          deps.observerNotifier.notifySessionClosed({
+          deps.observerNotifier.notifyRenderClosed({
             appId: ctx.appId,
-            sessionId,
+            renderId,
           });
         } catch {
           // Intentionally swallowed.

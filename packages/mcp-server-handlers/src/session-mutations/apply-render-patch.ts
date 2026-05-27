@@ -1,65 +1,64 @@
 /**
- * Pure stack-mutation flow: find the target stack item, compute the
- * new props map (full replace OR RFC 7396 merge), assert the props
- * contract against the FINAL state, return the new stack. Mirrors
- * the semantics the OSS + cloud `ggui_update` handlers route through.
+ * Pure render-mutation flow: compute the new props map (full replace
+ * OR RFC 7396 merge), assert the props contract against the FINAL
+ * state, return the updated render. Mirrors the semantics the OSS +
+ * cloud `ggui_update` handlers route through.
+ *
+ * Post-Phase-B (flatten-render-identity): the prior
+ * `applyStackItemPatch({stack, stackItemId, …})` worked over a vessel
+ * holding an array of entries. Every "stack" was length-one
+ * post-Phase-A, and Phase-B deletes the vessel — there is no array
+ * here, only a single render. The find-by-id step is gone; the caller
+ * has already resolved the target render via `renderStore.get()`.
  *
  * Pure + seam-free:
- *   - input is a typed `StackItem[]` snapshot
- *   - output is a typed `StackItem[]` snapshot
- *   - no SessionStore, no DDB, no WebSocket delivery — the caller
+ *   - input is a single typed render snapshot
+ *   - output is the updated render snapshot
+ *   - no RenderStore, no DDB, no WebSocket delivery — the caller
  *     (hosted pod / OSS handler) owns the read-modify-write
  *     persistence and any live-delivery side-effects
  *
  * Throws:
- *   - `StackItemNotFoundError` when no stack item has `id === stackItemId`
  *   - `ContractViolationError` (tool='ggui_update') when the existing
- *     stack item carries a propsSpec and the FINAL props (post-merge
- *     for `merge`) fail validation
+ *     render carries a propsSpec and the FINAL props (post-merge for
+ *     `merge`) fail validation
  *
- * The caller is expected to have already narrowed its raw DB rows
- * into `StackItem[]` — DB-shape sanity checks stay hosted-specific.
+ * The caller is expected to have already narrowed its raw DB row into
+ * a `RenderTarget` — DB-shape sanity checks stay hosted-specific.
  */
 import type { JsonObject, JsonValue, PropsSpec } from '@ggui-ai/protocol';
-import { StackItemNotFoundError } from './errors.js';
 import { assertPropsContract } from './assert-props-contract.js';
 
 /**
- * Minimum shape the helper needs to find + validate + patch a stack
- * item. Both `@ggui-ai/protocol`'s `StackItem` and the hosted pod's
- * raw DDB row projection satisfy this shape, so the helper works for
- * both without either caller needing a cast. The generic `T` carries
- * through so the returned stack preserves the caller's concrete item
- * type. `props` is included so the merge path can read the existing
- * state before computing the next.
+ * Minimum shape the helper needs to validate + patch a render. Both
+ * `@ggui-ai/protocol`'s `ComponentRender` and the hosted pod's raw DDB
+ * projection satisfy this shape, so the helper works for both without
+ * either caller needing a cast. The generic `T` carries through so the
+ * returned render preserves the caller's concrete type. `props` is
+ * included so the merge path can read the existing state before
+ * computing the next.
  */
-export interface StackItemTarget {
+export interface RenderTarget {
   readonly id: string;
   readonly propsSpec?: PropsSpec;
   readonly props?: JsonObject;
 }
 
-export type ApplyStackItemPatchInput<T extends StackItemTarget> =
+export type ApplyRenderPatchInput<T extends RenderTarget> =
   | {
-      readonly stack: ReadonlyArray<T>;
-      readonly stackItemId: string;
+      readonly render: T;
       readonly mode: 'replace';
       readonly props: JsonObject;
     }
   | {
-      readonly stack: ReadonlyArray<T>;
-      readonly stackItemId: string;
+      readonly render: T;
       readonly mode: 'merge';
       readonly patch: JsonObject;
     };
 
-export interface ApplyStackItemPatchResult<T extends StackItemTarget> {
-  /** New stack with the targeted item replaced. Safe to persist. */
-  readonly stack: T[];
-  /** The updated item (post-patch) for callers that need it directly. */
-  readonly updatedItem: T;
-  /** Index of the updated item within the returned stack. */
-  readonly updatedIndex: number;
+export interface ApplyRenderPatchResult<T extends RenderTarget> {
+  /** The updated render (post-patch). Safe to persist. */
+  readonly updatedRender: T;
   /** The final props map applied (post-merge for `mode:'merge'`). */
   readonly finalProps: JsonObject;
 }
@@ -111,20 +110,11 @@ export function applyMergePatch(
   return result;
 }
 
-export function applyStackItemPatch<T extends StackItemTarget>(
-  input: ApplyStackItemPatchInput<T>,
-): ApplyStackItemPatchResult<T> {
-  const { stack, stackItemId } = input;
-  const index = stack.findIndex((item) => item.id === stackItemId);
-  if (index === -1) {
-    throw new StackItemNotFoundError(
-      `Page not found: ${stackItemId}. Declared page ids: [${stack
-        .map((item) => item.id)
-        .join(', ')}]`,
-    );
-  }
+export function applyRenderPatch<T extends RenderTarget>(
+  input: ApplyRenderPatchInput<T>,
+): ApplyRenderPatchResult<T> {
+  const existing = input.render;
 
-  const existing = stack[index];
   // Compute the FINAL props map. For `replace` it's just the new map;
   // for `merge` we apply RFC 7396 against the current state.
   const finalProps: JsonObject =
@@ -142,14 +132,10 @@ export function applyStackItemPatch<T extends StackItemTarget>(
   // top. Cast is required because TS can't prove {...T, props:
   // JsonObject} is T (T's own props type isn't constrained here),
   // but structurally it is.
-  const updatedItem = { ...existing, props: finalProps } as unknown as T;
-  const nextStack = [...stack];
-  nextStack[index] = updatedItem;
+  const updatedRender = { ...existing, props: finalProps } as unknown as T;
 
   return {
-    stack: nextStack,
-    updatedItem,
-    updatedIndex: index,
+    updatedRender,
     finalProps,
   };
 }

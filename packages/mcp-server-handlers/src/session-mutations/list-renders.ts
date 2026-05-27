@@ -1,31 +1,37 @@
 /**
- * `ggui_list_sessions` — host-scoped session enumeration for resume.
+ * `ggui_list_renders` — host-scoped render enumeration for resume.
  *
  * Called by an MCP host (sample-agent backend, claude.ai-style host)
  * when its end-user lands on a previously-visited chat conversation
- * and needs to know which ggui sessions belong to "this chat". The
+ * and needs to know which ggui renders belong to "this chat". The
  * host passes its `hostName` + `hostSessionId` (matching what it set
- * on `_meta["ai.ggui/host-session"]` at session creation) and receives
- * the list of matching ggui session ids it can rehydrate via
- * `/api/sessions/:id/state`.
+ * on `_meta["ai.ggui/host-session"]` at render creation) and receives
+ * the list of matching render ids it can rehydrate via
+ * `/api/renders/:id/state`.
  *
  * Scoping:
  *   - ALWAYS scoped to `ctx.appId` — tenancy boundary; cross-tenant
  *     existence MUST NOT leak.
  *   - WHEN `ctx.userId` is set, also scoped to that user — prevents
- *     one signed-in user from listing another user's sessions even
+ *     one signed-in user from listing another user's renders even
  *     within the same app.
  *
- * Opt-out: sessions created without an `ai.ggui/host-session` slice
+ * Opt-out: renders created without an `ai.ggui/host-session` slice
  * have `host_session_id = NULL` and so never match a host-scoped
  * query. That's the documented behavior — opt-out hosts get one-shot
- * sessions by design.
+ * renders by design.
+ *
+ * Post-Phase-B (flatten-render-identity): renamed from
+ * `ggui_list_sessions`. The summary shape now uses `renderId` and
+ * drops the per-summary stack count (every render IS one item).
  */
 
 import { z } from 'zod';
-import type { Session } from '@ggui-ai/protocol';
-import type { SessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { SessionStore } from '@ggui-ai/mcp-server-core';
+import type { RenderSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type {
+  RenderStore,
+  StoredRender,
+} from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 
 const inputSchema = {
@@ -34,7 +40,7 @@ const inputSchema = {
     .min(1)
     .optional()
     .describe(
-      'Filter by host identifier — `sample`, `claude.ai`, `chatgpt`, etc. When paired with `hostSessionId`, returns the sessions for one specific host-conversation. When passed alone, returns every session this host has ever opened for the current user / app.',
+      'Filter by host identifier — `sample`, `claude.ai`, `chatgpt`, etc. When paired with `hostSessionId`, returns the renders for one specific host-conversation. When passed alone, returns every render this host has ever opened for the current user / app.',
     ),
   hostSessionId: z
     .string()
@@ -50,91 +56,90 @@ const inputSchema = {
     .max(200)
     .optional()
     .describe(
-      'Maximum number of session summaries to return. Defaults to 50; capped at 200. Newest-last ordering matches the natural conversation timeline.',
+      'Maximum number of render summaries to return. Defaults to 50; capped at 200. Newest-last ordering matches the natural conversation timeline.',
     ),
 } as const;
 
-const sessionSummaryWireSchema = z
+const renderSummaryWireSchema = z
   .object({
-    sessionId: z.string(),
+    renderId: z.string(),
     hostName: z.string().optional(),
     hostSessionId: z.string().optional(),
     createdAt: z.string(),
     lastActivityAt: z.string(),
     status: z.string(),
-    stackItemCount: z.number().int().nonnegative(),
     // wsToken + expiresAt are populated iff the deployment wired a
-    // `mintWsToken` seam. Hosts that just want to enumerate sessions
+    // `mintWsToken` seam. Hosts that just want to enumerate renders
     // (without immediately rehydrating) wire no seam and get the lean
     // summary; hosts driving a resume flow wire the seam and get a
-    // fresh credential per session so the frontend can immediately
-    // call `/api/sessions/:id/state?wsToken=<>` to mount each iframe.
+    // fresh credential per render so the frontend can immediately
+    // call `/api/renders/:id/state?wsToken=<>` to mount each iframe.
     wsToken: z.string().optional(),
     wsTokenExpiresAt: z.string().optional(),
   })
   .passthrough();
 
 const outputSchema = {
-  sessions: z.array(sessionSummaryWireSchema),
+  renders: z.array(renderSummaryWireSchema),
 } as const;
 
-// `SessionSummaryWire` is re-exported below from
+// `RenderSummaryWire` is re-exported below from
 // `@ggui-ai/protocol/integrations/mcp-apps` — single typed source of
 // truth, kept on the protocol so non-handler consumers (sample-agent's
 // `/chat/restore` route, future host SDK helpers) import the same
 // shape rather than redeclaring it.
-export type { SessionSummaryWire };
+export type { RenderSummaryWire };
 
-interface ListSessionsOutput {
-  readonly sessions: readonly SessionSummaryWire[];
+interface ListRendersOutput {
+  readonly renders: readonly RenderSummaryWire[];
 }
 
 /**
  * Seam for the freshly-minted ws-token attached to each listed
- * session. Implementations sign with the same shared secret the rest
+ * render. Implementations sign with the same shared secret the rest
  * of the live-channel auth path uses (OSS: `MCP_BOOTSTRAP_SECRET`;
  * cloud pod: the per-pod KMS-backed equivalent). Returning a token
  * that wouldn't pass the WS upgrade is a deployment bug, not a wire-
  * contract failure — this seam is trusted.
  */
-export interface ListSessionsMintSeam {
+export interface ListRendersMintSeam {
   mint(input: {
-    readonly sessionId: string;
+    readonly renderId: string;
     readonly appId: string;
   }): { token: string; expiresAt: string };
 }
 
-export interface GguiListSessionsHandlerDeps {
-  readonly sessionStore: SessionStore;
+export interface GguiListRendersHandlerDeps {
+  readonly renderStore: RenderStore;
   /**
-   * Optional ws-token minter. When wired, each listed session
+   * Optional ws-token minter. When wired, each listed render
    * summary carries a fresh `wsToken` + `wsTokenExpiresAt` the
-   * frontend can pass straight to `/api/sessions/:id/state`. When
+   * frontend can pass straight to `/api/renders/:id/state`. When
    * absent, summaries omit those fields and the caller is
    * responsible for minting via another seam.
    */
-  readonly mintWsToken?: ListSessionsMintSeam;
+  readonly mintWsToken?: ListRendersMintSeam;
 }
 
 const DEFAULT_LIMIT = 50;
 
-export function createGguiListSessionsHandler(
-  deps: GguiListSessionsHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListSessionsOutput> {
+export function createGguiListRendersHandler(
+  deps: GguiListRendersHandlerDeps,
+): SharedHandler<typeof inputSchema, typeof outputSchema, ListRendersOutput> {
   return {
-    name: 'ggui_list_sessions',
-    title: 'List sessions',
+    name: 'ggui_list_renders',
+    title: 'List renders',
     audience: ['agent'],
     description:
-      'List ggui sessions scoped to the caller, optionally narrowed to a host conversation. Pass `hostName` + `hostSessionId` (the same pair the host set on `_meta["ai.ggui/host-session"]` at session creation) to find the sessions belonging to one chat conversation. Pass `hostName` alone to list every session opened by that host for this caller. Pass nothing for every session this caller owns. Sessions without a host slice (opt-out hosts) never appear in host-scoped queries.',
+      'List ggui renders scoped to the caller, optionally narrowed to a host conversation. Pass `hostName` + `hostSessionId` (the same pair the host set on `_meta["ai.ggui/host-session"]` at render creation) to find the renders belonging to one chat conversation. Pass `hostName` alone to list every render opened by that host for this caller. Pass nothing for every render this caller owns. Renders without a host slice (opt-out hosts) never appear in host-scoped queries.',
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<ListSessionsOutput> {
+    ): Promise<ListRendersOutput> {
       const parsed = z.object(inputSchema).parse(rawInput);
-      const sessions = await deps.sessionStore.list({
+      const renders = await deps.renderStore.list({
         appId: ctx.appId,
         ...(ctx.userId !== undefined ? { userId: ctx.userId } : {}),
         ...(parsed.hostName !== undefined
@@ -146,8 +151,8 @@ export function createGguiListSessionsHandler(
         limit: parsed.limit ?? DEFAULT_LIMIT,
       });
       return {
-        sessions: sessions.map((session) =>
-          projectSummary(session, deps.mintWsToken),
+        renders: renders.map((stored) =>
+          projectSummary(stored, deps.mintWsToken),
         ),
       };
     },
@@ -155,25 +160,24 @@ export function createGguiListSessionsHandler(
 }
 
 function projectSummary(
-  session: Session,
-  mintWsToken: ListSessionsMintSeam | undefined,
-): SessionSummaryWire {
+  stored: StoredRender,
+  mintWsToken: ListRendersMintSeam | undefined,
+): RenderSummaryWire {
   const minted = mintWsToken?.mint({
-    sessionId: session.id,
-    appId: session.appId,
+    renderId: stored.id,
+    appId: stored.appId,
   });
   return {
-    sessionId: session.id,
-    ...(session.hostSession?.hostName !== undefined
-      ? { hostName: session.hostSession.hostName }
+    renderId: stored.id,
+    ...(stored.hostSession?.hostName !== undefined
+      ? { hostName: stored.hostSession.hostName }
       : {}),
-    ...(session.hostSession?.hostSessionId !== undefined
-      ? { hostSessionId: session.hostSession.hostSessionId }
+    ...(stored.hostSession?.hostSessionId !== undefined
+      ? { hostSessionId: stored.hostSession.hostSessionId }
       : {}),
-    createdAt: toIso(session.createdAt),
-    lastActivityAt: toIso(session.lastActivityAt),
-    status: session.status ?? 'active',
-    stackItemCount: session.stack.length,
+    createdAt: toIso(stored.createdAt),
+    lastActivityAt: toIso(stored.lastActivityAt),
+    status: stored.status ?? 'active',
     ...(minted
       ? { wsToken: minted.token, wsTokenExpiresAt: minted.expiresAt }
       : {}),

@@ -74,41 +74,33 @@ export interface HandlerContext {
    */
   readonly userId?: string;
   /**
-   * Active session id, when the dispatcher knows it at invocation time.
+   * Active render id, when the dispatcher knows it at invocation time.
    *
-   * Populated for session-scoped invocations — today's two paths:
+   * Populated for render-scoped invocations — today's two paths:
    *
-   *   1. Wired-action dispatch. The session-channel router
-   *      synthesizes the runtime ctx for mount handlers as a
-   *      structural superset of `HandlerContext` + `WiredActionContext`;
-   *      formally declaring `sessionId` here lets the same `ctx`
-   *      argument carry it under the canonical static type, no cast
-   *      needed at the mount-handler call site.
-   *   2. Agent-driven `ggui_update`. The handler reads `sessionId`
+   *   1. Wired-action dispatch. The render-channel router synthesizes
+   *      the runtime ctx for mount handlers as a structural superset
+   *      of `HandlerContext` + `WiredActionContext`; formally
+   *      declaring `renderId` here lets the same `ctx` argument carry
+   *      it under the canonical static type, no cast needed at the
+   *      mount-handler call site.
+   *   2. Agent-driven `ggui_update`. The handler reads `renderId`
    *      off the wire input directly — but when a future caller
    *      (live-channel dispatch, console inspector) invokes the
    *      handler in-process, populating this field threads the active
-   *      session through the canonical context shape rather than a
+   *      render through the canonical context shape rather than a
    *      parallel parameter.
    *
    * `undefined` for everything else: `/mcp` HTTP ingress (per-request
-   * context built from auth identity, no session bound), blueprint /
-   * thread / preflight handlers (no session scope). Handlers MUST treat
+   * context built from auth identity, no render bound), blueprint /
+   * thread / preflight handlers (no render scope). Handlers MUST treat
    * it as optional and fall back to wire-input fields when bound.
-   */
-  readonly sessionId?: string;
-  /**
-   * Active stack-item (page) id, when the dispatcher knows it at
-   * invocation time. Same population rule as {@link sessionId}: present
-   * for stack-item-scoped invocations (wired-action dispatch carrying
-   * the active stack frame, future in-process `ggui_update` callers),
-   * absent for HTTP ingress and non-stack-scoped tools.
    *
-   * Mounts that fire `WiredActionContext.sendPropsUpdate` typically
-   * pass this verbatim — only a mount that intentionally targets a
-   * sibling stack entry would pick a different value.
+   * Post-Phase-B (flatten-render-identity): collapsed from the prior
+   * `sessionId` + `stackItemId` pair to a single `renderId` — every
+   * render IS the addressable scope.
    */
-  readonly stackItemId?: string;
+  readonly renderId?: string;
   /**
    * Host-supplied `_meta` from the inbound JSON-RPC `tools/call`
    * request. The MCP SDK extracts this from `params._meta` and the

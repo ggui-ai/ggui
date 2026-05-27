@@ -1,6 +1,6 @@
 /**
  * `createGguiConsumeHandler` — long-poll fetch-and-clear for buffered
- * agent-bound events on a stack item.
+ * agent-bound events on a render.
  *
  * Lifted from cloud pod's parallel `consume.ts` so OSS gets parity:
  * `ggui_consume` is now real on `@ggui-ai/mcp-server`, completing
@@ -11,9 +11,8 @@
  *     from `@ggui-ai/mcp-server-core`) owns the atomic fetch-and-clear
  *     contract. The standalone server uses in-memory / SQLite; a
  *     cloud deployment wraps an atomic-read-and-clear datastore op.
- *   - `sessionStore` resolves the owning session via the stackItemId
- *     secondary index, tenancy-checks via `ctx.appId`, and reads
- *     session TTL for the activity heartbeat.
+ *   - `renderStore.get(renderId)` resolves the render, tenancy-checks
+ *     via `ctx.appId`, and reads TTL for the activity heartbeat.
  *   - Long-poll is server-side (1-900s, default cap 900s). The
  *     original 25s ceiling assumed an API Gateway 30s kill in front
  *     of the handler; that constraint went away when cloud migrated
@@ -22,10 +21,16 @@
  *     short-killing proxy can lower the cap via `maxTimeoutSeconds`.
  *
  * Output schema mirrors the cloud handler verbatim:
- * `{events: ConsumeEventEntry[], status: SessionStatus}`. Each row is
+ * `{events: ConsumeEventEntry[], status: RenderStatus}`. Each row is
  * normalized to canonical `PendingEvent` then unwrapped to its
  * `envelope` payload via `parsePendingEnvelope` so SDK consumers
  * read the per-gesture entry shape directly.
+ *
+ * Post-Phase-B (flatten-render-identity): collapsed from the prior
+ * `{stackItemId}` input + session/stack-item double-resolution into a
+ * single `{renderId}` input + one render lookup. The pending-events
+ * pipe is keyed by `renderId` (was `stackItemId`); the value is the
+ * same.
  */
 
 import { z } from 'zod';
@@ -35,15 +40,15 @@ import {
   type ConsumeEventEntry,
   type GguiConsumeOutput,
   type PendingEvent,
-  type SessionStatus,
+  type RenderStatus,
 } from '@ggui-ai/protocol';
 import {
   type ActiveConsumerRegistry,
   type PendingEventConsumer,
-  type SessionStore,
+  type RenderStore,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import { StackItemNotFoundError } from './errors.js';
+import { RenderNotFoundError } from './errors.js';
 
 /**
  * Default server-side cap on the actual inline long-poll wait —
@@ -71,11 +76,11 @@ const DEFAULT_MAX_TIMEOUT_SECONDS = 120;
 const POLL_INTERVAL_MS = 1500;
 
 const inputSchema = {
-  stackItemId: z
+  renderId: z
     .string()
     .min(1)
     .describe(
-      'Globally-unique stackItemId to consume events from. Server resolves the owning session via its secondary index. Cross-tenant access surfaces uniformly as stack_item_not_found.',
+      'Globally-unique renderId to consume events from. Cross-tenant access surfaces uniformly as render_not_found.',
     ),
   timeout: z
     .number()
@@ -92,7 +97,7 @@ const outputSchema = {
   events: z.array(z.record(z.string(), z.unknown())),
   status: z.string(),
   // same `client.hostContext` surface
-  // handshake exposes. Lets the agent pick up mid-session changes
+  // handshake exposes. Lets the agent pick up mid-render changes
   // (window resize, user toggling fullscreen, etc.) on its next
   // consume hit without waiting for the next handshake.
   client: clientObservationsSchema,
@@ -101,7 +106,7 @@ const outputSchema = {
 /**
  * Optional observer-notification seam. Cloud uses this to fan a
  * `ggui_consume` tool-call event onto its observer WebSocket so
- * builders watching a session see consume hits. OSS leaves absent
+ * builders watching a render see consume hits. OSS leaves absent
  * by default; the handler short-circuits its observer call when
  * the seam is missing.
  */
@@ -109,7 +114,7 @@ export interface ObserverNotifier {
   notifyToolCall(args: {
     readonly appId: string;
     readonly tool: string;
-    readonly sessionId: string;
+    readonly renderId: string;
     readonly args: Record<string, unknown>;
     readonly result: {
       readonly eventCount: number;
@@ -121,23 +126,22 @@ export interface ObserverNotifier {
 
 /**
  * Drain-ack notifier. Fires once per event the consume handler pops
- * from a stack item's pending-events pipe — the iframe-runtime listens
+ * from a render's pending-events pipe — the iframe-runtime listens
  * on its existing WS connection and uses these frames to dismiss the
  * matching per-action toast.
  *
- * `mcp-server`'s `SessionChannelServer.sendDrainAck` implements this
+ * `mcp-server`'s `RenderChannelServer.sendDrainAck` implements this
  * contract; the handler depends on the narrowed shape so the handlers
- * package doesn't take a peer dep on the full session-channel surface
+ * package doesn't take a peer dep on the full render-channel surface
  * (parallels `PropsUpdateNotifier` in `update.ts`).
  *
- * Hosts without a session channel leave this absent — the pop still
+ * Hosts without a render channel leave this absent — the pop still
  * commits, the live frame just isn't fanned.
  */
 export interface DrainAckNotifier {
   sendDrainAck(args: {
-    readonly sessionId: string;
+    readonly renderId: string;
     readonly appId: string;
-    readonly stackItemId: string;
     readonly eventId: string;
     readonly drainedAt: string;
   }): void;
@@ -155,11 +159,11 @@ export interface ConsumeLogger {
 
 export interface GguiConsumeHandlerDeps {
   readonly pendingEventConsumer: PendingEventConsumer;
-  readonly sessionStore: SessionStore;
-  /** Default session TTL in seconds when the session row carries
+  readonly renderStore: RenderStore;
+  /** Default render TTL in seconds when the render row carries
    *  no explicit ttl. Cloud reads from config; OSS reads from
    *  ggui.json. Falls back to ~1 day on absence. */
-  readonly defaultSessionTtlSeconds?: number;
+  readonly defaultRenderTtlSeconds?: number;
   /**
    * Upper bound on the inline long-poll wait, in seconds. Defaults
    * to 30 (the schema's `timeout.max`, lowered from 900 on
@@ -187,11 +191,11 @@ export interface GguiConsumeHandlerDeps {
   readonly logger?: ConsumeLogger;
   /**
    * Optional active-consumer awareness seam. When bound, the handler
-   * calls `enter(stackItemId)` at the top of the long-poll and
-   * `exit(stackItemId)` in `finally` so a concurrent
+   * calls `enter(renderId)` at the top of the long-poll and
+   * `exit(renderId)` in `finally` so a concurrent
    * `ggui_runtime_submit_action` append can query `hasActive` and
    * surface `consumerPresent: false` to the iframe when no long-poll
-   * is registered for the targeted stack item — the iframe then emits
+   * is registered for the targeted render — the iframe then emits
    * a `ui/message` queued-userAction nudge IMMEDIATELY instead of
    * waiting for a drain. Absent → submit-action omits `consumerPresent`
    * and the iframe assumes a consumer is present.
@@ -220,7 +224,7 @@ const CONSUME_SLOW_THRESHOLD_MS = 2000;
 
 interface ConsumeResultRaw {
   readonly events: ReadonlyArray<Record<string, unknown>>;
-  readonly status: SessionStatus;
+  readonly status: RenderStatus;
 }
 
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60; // 1 day
@@ -233,192 +237,178 @@ export function createGguiConsumeHandler(
     title: 'Consume',
     audience: ['agent'],
     description:
-      'Long-poll for buffered events on a stack item. CALL THIS RIGHT AFTER EVERY `ggui_push` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by stackItemId (global UUID). The server resolves the owning session via its stackItemId secondary index and tenancy-checks via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the session completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"completed".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
+      'Long-poll for buffered events on a render. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by renderId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"completed".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<GguiConsumeOutput> {
-      const { stackItemId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
+      const { renderId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
       // Register this long-poll on the active-consumer registry IMMEDIATELY
-      // — before the session/tenancy resolution awaits — so a concurrent
+      // — before the tenancy resolution awaits — so a concurrent
       // `submit-action.ts` append observes `hasActive: true` for the
       // earliest possible window. `exit` is paired in `finally` below so
       // every termination path (success, timeout, error, tenancy reject)
       // decrements the count exactly once.
-      deps.activeConsumerRegistry?.enter(stackItemId);
+      deps.activeConsumerRegistry?.enter(renderId);
       try {
-
-      // Resolve session via the stackItemId secondary index.
-      // Cross-tenant + missing surface uniformly as stack_item_not_found
-      // (don't leak whether the id exists in another tenant).
-      const indexEntry =
-        await deps.sessionStore.getSessionByStackItemId(stackItemId);
-      if (!indexEntry || indexEntry.appId !== ctx.appId) {
-        throw new StackItemNotFoundError(
-          `ggui_consume: stackItemId "${stackItemId}" not found, expired, or owned by a different appId. Recovery: re-push to obtain a fresh stackItemId, or check the stackItemId from the most recent ggui_push response.`,
-        );
-      }
-      const sessionId = indexEntry.sessionId;
-
-      // Ownership check — single GetItem-equivalent. The session row
-      // also carries the resolved TTL.
-      const session = await deps.sessionStore.get(sessionId);
-      if (!session || session.appId !== ctx.appId) {
-        throw new StackItemNotFoundError(
-          `ggui_consume: stackItemId "${stackItemId}" not found, expired, or owned by a different appId. Recovery: re-push to obtain a fresh stackItemId, or check the stackItemId from the most recent ggui_push response.`,
-        );
-      }
-
-      const maxTimeoutSeconds =
-        deps.maxTimeoutSeconds ?? DEFAULT_MAX_TIMEOUT_SECONDS;
-      const cappedTimeout = Math.min(Math.max(timeout, 0), maxTimeoutSeconds);
-      const deadline = Date.now() + cappedTimeout * 1000;
-      const ttlMs = resolveTtlMs(
-        session,
-        deps.defaultSessionTtlSeconds ?? DEFAULT_TTL_SECONDS,
-      );
-
-      // Model C: the pending-event pipe is keyed by stackItemId, NOT
-      // sessionId. The sessionStore lookup above is purely a tenancy
-      // gate; pipe reads use stackItemId directly so two stack items
-      // in the same session keep separate back-channels.
-      let result = await fetchAndClearSafe(
-        deps.pendingEventConsumer,
-        stackItemId,
-        ttlMs,
-      );
-
-      // Long-poll loop — only engages when the first read returned
-      // nothing AND the pipe is still active. Completed pipes
-      // short-circuit because there will never be new events.
-      if (
-        cappedTimeout > 0 &&
-        result.events.length === 0 &&
-        result.status !== 'completed'
-      ) {
-        // emit consume_polling:open so
-        // the canvas animator transitions to its `listening` state.
-        // We only emit once per consume call (not on every poll tick)
-        // because the closing transition relies on the absence of
-        // further opens for the same stack item; spamming would mask
-        // the close signal. Fire-and-forget — absent emitter no-ops.
-        deps.canvasLifecycle?.emit(session.id, {
-          kind: 'consume_polling',
-          state: 'open',
-          stackItemId,
-        });
-        while (Date.now() < deadline) {
-          await sleep(POLL_INTERVAL_MS);
-          result = await fetchAndClearSafe(
-            deps.pendingEventConsumer,
-            stackItemId,
-            ttlMs,
-          );
-          if (result.events.length > 0 || result.status === 'completed') break;
+        // Resolve render. Cross-tenant + missing surface uniformly as
+        // render_not_found (don't leak whether the id exists in another
+        // tenant).
+        const stored = await deps.renderStore.get(renderId);
+        if (!stored || stored.appId !== ctx.appId) {
+          throw new RenderNotFoundError(renderId);
         }
-      }
 
-      // Normalize each row to canonical PendingEvent shape, then emit
-      // the stored ConsumeEventEntry directly — the pipe IS the source
-      // of truth for the {intent, actionData, uiContext, ...} shape
-      // (see submit-action.ts kind:'dispatch' branch).
-      const parsed: PendingEvent[] = result.events.map((raw) =>
-        normalizeEvent(raw),
-      );
-      const events: ConsumeEventEntry[] = parsed.map((pe) =>
-        parsePendingEnvelope(pe.envelope),
-      );
+        const maxTimeoutSeconds =
+          deps.maxTimeoutSeconds ?? DEFAULT_MAX_TIMEOUT_SECONDS;
+        const cappedTimeout = Math.min(
+          Math.max(timeout, 0),
+          maxTimeoutSeconds,
+        );
+        const deadline = Date.now() + cappedTimeout * 1000;
+        const ttlMs = resolveTtlMs(
+          stored,
+          deps.defaultRenderTtlSeconds ?? DEFAULT_TTL_SECONDS,
+        );
 
-      // drain_ack fan-out + slow-consume telemetry. One frame per
-      // drained event so the iframe-runtime can match by `eventId`
-      // and dismiss the matching toast. Yellow-flag info-event for
-      // events that sat in the pipe longer than the consume_slow
-      // threshold — operators
-      // see protocol-adherence degradation before it hits the red-
-      // flag claim_timeout path. Both are best-effort; thrown errors
-      // never fail the consume tool call.
-      if (parsed.length > 0) {
-        const drainedAt = new Date().toISOString();
-        const drainedAtMs = Date.parse(drainedAt);
-        for (const pe of parsed) {
-          if (deps.logger) {
-            const submittedAtMs = Date.parse(pe.createdAt);
-            if (Number.isFinite(submittedAtMs)) {
-              const latencyMs = drainedAtMs - submittedAtMs;
-              if (latencyMs > CONSUME_SLOW_THRESHOLD_MS) {
-                try {
-                  deps.logger.info('action_consume_slow', {
-                    stackItemId,
-                    appId: ctx.appId,
-                    sessionId,
-                    eventId: pe.id,
-                    latencyMs,
-                    thresholdMs: CONSUME_SLOW_THRESHOLD_MS,
-                  });
-                } catch {
-                  /* logger faults must not fail the tool call */
+        // The pending-event pipe is keyed by renderId. The render
+        // lookup above is purely a tenancy gate; pipe reads use
+        // renderId directly.
+        let result = await fetchAndClearSafe(
+          deps.pendingEventConsumer,
+          renderId,
+          ttlMs,
+        );
+
+        // Long-poll loop — only engages when the first read returned
+        // nothing AND the pipe is still active. Completed pipes
+        // short-circuit because there will never be new events.
+        if (
+          cappedTimeout > 0 &&
+          result.events.length === 0 &&
+          result.status !== 'completed'
+        ) {
+          // emit consume_polling:open so the canvas animator
+          // transitions to its `listening` state. We only emit once
+          // per consume call (not on every poll tick) because the
+          // closing transition relies on the absence of further opens
+          // for the same render; spamming would mask the close signal.
+          // Fire-and-forget — absent emitter no-ops.
+          deps.canvasLifecycle?.emit(renderId, {
+            kind: 'consume_polling',
+            state: 'open',
+            renderId,
+          });
+          while (Date.now() < deadline) {
+            await sleep(POLL_INTERVAL_MS);
+            result = await fetchAndClearSafe(
+              deps.pendingEventConsumer,
+              renderId,
+              ttlMs,
+            );
+            if (result.events.length > 0 || result.status === 'completed') {
+              break;
+            }
+          }
+        }
+
+        // Normalize each row to canonical PendingEvent shape, then emit
+        // the stored ConsumeEventEntry directly — the pipe IS the source
+        // of truth for the {intent, actionData, uiContext, ...} shape
+        // (see submit-action.ts kind:'dispatch' branch).
+        const parsed: PendingEvent[] = result.events.map((raw) =>
+          normalizeEvent(raw),
+        );
+        const events: ConsumeEventEntry[] = parsed.map((pe) =>
+          parsePendingEnvelope(pe.envelope),
+        );
+
+        // drain_ack fan-out + slow-consume telemetry. One frame per
+        // drained event so the iframe-runtime can match by `eventId`
+        // and dismiss the matching toast. Yellow-flag info-event for
+        // events that sat in the pipe longer than the consume_slow
+        // threshold — operators see protocol-adherence degradation
+        // before it hits the red-flag claim_timeout path. Both are
+        // best-effort; thrown errors never fail the consume tool call.
+        if (parsed.length > 0) {
+          const drainedAt = new Date().toISOString();
+          const drainedAtMs = Date.parse(drainedAt);
+          for (const pe of parsed) {
+            if (deps.logger) {
+              const submittedAtMs = Date.parse(pe.createdAt);
+              if (Number.isFinite(submittedAtMs)) {
+                const latencyMs = drainedAtMs - submittedAtMs;
+                if (latencyMs > CONSUME_SLOW_THRESHOLD_MS) {
+                  try {
+                    deps.logger.info('action_consume_slow', {
+                      renderId,
+                      appId: ctx.appId,
+                      eventId: pe.id,
+                      latencyMs,
+                      thresholdMs: CONSUME_SLOW_THRESHOLD_MS,
+                    });
+                  } catch {
+                    /* logger faults must not fail the tool call */
+                  }
                 }
               }
             }
-          }
-          if (deps.drainAckNotifier && pe.id.length > 0) {
-            try {
-              deps.drainAckNotifier.sendDrainAck({
-                sessionId,
-                appId: ctx.appId,
-                stackItemId,
-                eventId: pe.id,
-                drainedAt,
-              });
-            } catch {
-              /* notifier faults are absorbed; the consume tool call
-               * still returns the drained events. Missing the drain_ack
-               * frame just leaves a transient toast on the iframe. */
+            if (deps.drainAckNotifier && pe.id.length > 0) {
+              try {
+                deps.drainAckNotifier.sendDrainAck({
+                  renderId,
+                  appId: ctx.appId,
+                  eventId: pe.id,
+                  drainedAt,
+                });
+              } catch {
+                /* notifier faults are absorbed; the consume tool call
+                 * still returns the drained events. Missing the drain_ack
+                 * frame just leaves a transient toast on the iframe. */
+              }
             }
           }
         }
-      }
 
-      // Optional observer fan-out — only when events were actually
-      // returned. Firing on empty long-poll cycles would spam the
-      // observer surface.
-      if (events.length > 0 && deps.observerNotifier) {
-        const eventTypes = events.map((e) => e.type ?? 'unknown');
-        deps.observerNotifier.notifyToolCall({
-          appId: ctx.appId,
-          tool: 'ggui_consume',
-          sessionId,
-          args: { timeout: cappedTimeout },
-          result: {
-            eventCount: events.length,
-            eventTypes,
-            status: result.status,
-          },
-        });
-      }
+        // Optional observer fan-out — only when events were actually
+        // returned. Firing on empty long-poll cycles would spam the
+        // observer surface.
+        if (events.length > 0 && deps.observerNotifier) {
+          const eventTypes = events.map((e) => e.type ?? 'unknown');
+          deps.observerNotifier.notifyToolCall({
+            appId: ctx.appId,
+            tool: 'ggui_consume',
+            renderId,
+            args: { timeout: cappedTimeout },
+            result: {
+              eventCount: events.length,
+              eventTypes,
+              status: result.status,
+            },
+          });
+        }
 
-      // 2026-05-14 — top-level `contextSnapshot` retired. Each drained
-      // event now carries its own `uiContext` snapshot captured at
-      // gesture time on the iframe (see submit-action.ts), so consume's
-      // output is just `{events, status}`. The pipe is the single
-      // source of truth.
-      //
-      // `session.hostContext` (read at line 251
-      // above) is now also surfaced so the agent picks up mid-session
-      // changes without waiting for the next handshake. Wrapper omitted
-      // when no projection exists yet.
-      return {
-        events,
-        status: result.status ?? ('active' as SessionStatus),
-        ...(session.hostContext !== undefined
-          ? { client: { hostContext: session.hostContext } }
-          : {}),
-      };
+        // 2026-05-14 — top-level `contextSnapshot` retired. Each drained
+        // event now carries its own `uiContext` snapshot captured at
+        // gesture time on the iframe (see submit-action.ts), so consume's
+        // output is just `{events, status}`. The pipe is the single
+        // source of truth.
+        //
+        // `stored.hostContext` is now surfaced so the agent picks up
+        // mid-render changes without waiting for the next handshake.
+        // Wrapper omitted when no projection exists yet.
+        return {
+          events,
+          status: result.status ?? ('active' as RenderStatus),
+          ...(stored.hostContext !== undefined
+            ? { client: { hostContext: stored.hostContext } }
+            : {}),
+        };
       } finally {
-        deps.activeConsumerRegistry?.exit(stackItemId);
+        deps.activeConsumerRegistry?.exit(renderId);
       }
     },
   };
@@ -426,30 +416,31 @@ export function createGguiConsumeHandler(
 
 /**
  * Wrap consumeAndClear to map `PendingPipeNotFoundError` (race with
- * `markDeleted` from a paired pop/close during long-poll) to an
+ * `markDeleted` from a paired close during long-poll) to an
  * empty-events result rather than throwing. The long-poll shouldn't
- * erase the stack item out from under a still-listening caller — if
+ * erase the render out from under a still-listening caller — if
  * the pipe truly vanished, returning empty + a fresh ownership
  * failure on the next call is the honest wire shape.
  */
 async function fetchAndClearSafe(
   consumer: PendingEventConsumer,
-  stackItemId: string,
+  renderId: string,
   ttlMs: number,
 ): Promise<ConsumeResultRaw> {
   try {
-    const r = await consumer.consumeAndClear(stackItemId, ttlMs);
+    const r = await consumer.consumeAndClear(renderId, ttlMs);
     return { events: r.events, status: r.status };
   } catch (err) {
     if (
       err instanceof Error &&
       (err.name === 'PendingPipeNotFoundError' ||
+        err.name === 'RenderNotFoundError' ||
         err.name === 'SessionNotFoundError')
     ) {
       // Treat mid-long-poll disappearance as 'completed' to unblock
       // callers without forcing them to handle yet another error.
-      // (`SessionNotFoundError` retained for the cloud Dynamo adapter
-      // which still throws the legacy name.)
+      // (`SessionNotFoundError` retained for older cloud adapters that
+      // still throw the legacy name.)
       return { events: [], status: 'completed' };
     }
     throw err;
@@ -470,19 +461,19 @@ function normalizeEvent(raw: Record<string, unknown>): PendingEvent {
   };
 }
 
-/** Resolve the activity-bump TTL from the session row, falling back
- *  to the configured default. Sessions with infinite TTL pass
+/** Resolve the activity-bump TTL from the render row, falling back
+ *  to the configured default. Renders with infinite TTL pass
  *  Number.MAX_SAFE_INTEGER. */
 function resolveTtlMs(
-  session: { readonly expiresAt?: number; readonly createdAt?: number },
+  stored: { readonly expiresAt?: number; readonly createdAt?: number },
   defaultTtlSeconds: number,
 ): number {
   if (
-    session.expiresAt !== undefined &&
-    session.createdAt !== undefined &&
-    session.expiresAt > session.createdAt
+    stored.expiresAt !== undefined &&
+    stored.createdAt !== undefined &&
+    stored.expiresAt > stored.createdAt
   ) {
-    return session.expiresAt - session.createdAt;
+    return stored.expiresAt - stored.createdAt;
   }
   return defaultTtlSeconds * 1000;
 }

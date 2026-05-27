@@ -28,7 +28,7 @@
  * MCP-Apps slice meta for component items, so claude.ai's iframe
  * crashed accessing declared propsSpec fields).
  *
- * {@link deriveStackItemMeta} is the single entry point.
+ * {@link deriveRenderMeta} is the single entry point.
  * Every transport SHOULD route stack-item-derived fields through it.
  * The lower-level `derive*` helpers stay exported for callers that
  * only need a single field (e.g. legacy code paths during migration).
@@ -44,7 +44,7 @@ import {
   type GadgetDescriptor,
   type JsonSchema,
   type JsonValue,
-  type SessionStackEntry,
+  type Render,
 } from '@ggui-ai/protocol';
 import {
   deriveContextName,
@@ -111,7 +111,7 @@ export function resolveGadgetUrls(
  * otherwise call `resolveGadgetUrls(entry)` independently — one call
  * per gadget per consumer = 2N resolves per push. WeakMap-keyed on
  * the entry object
- * collapses that to N: `deriveStackItemMeta` is the only
+ * collapses that to N: `deriveRenderMeta` is the only
  * site that mutates entries; subsequent consumers see the cached
  * value.
  *
@@ -185,12 +185,12 @@ function resolveGadgetUrlsImpl(
  * are omitted.
  */
 export function deriveWiredActionTools(
-  item: SessionStackEntry,
+  item: Render,
 ): Record<string, string> | undefined {
-  // McpApps + system variants don't carry an actionSpec. Optional-chain
-  // through the union — TS narrows ContextSpec/ActionSpec to undefined
-  // on the non-component variants, the lookup short-circuits cleanly.
-  const actionSpec = 'actionSpec' in item ? item.actionSpec : undefined;
+  // McpApps + system variants don't carry an actionSpec. Discriminator
+  // narrowing gives typed access to ComponentRender.actionSpec.
+  if (item.type === 'mcpApps' || item.type === 'system') return undefined;
+  const actionSpec = item.actionSpec;
   if (actionSpec === undefined || actionSpec === null) return undefined;
   const collected: Record<string, string> = {};
   for (const [actionName, entry] of Object.entries(actionSpec)) {
@@ -227,7 +227,7 @@ export function deriveWiredActionTools(
  * state instead of resetting to the contract default.
  */
 export function deriveContextSlots(
-  item: SessionStackEntry,
+  item: Render,
 ): ReadonlyArray<{
   name: string;
   contextName: string;
@@ -314,7 +314,7 @@ export function deriveContextSlots(
  *     (entries appear in declaration order from the libraries map).
  */
 export function derivePermissionsPolicy(
-  item: SessionStackEntry,
+  item: Render,
 ): readonly string[] | undefined {
   // Read from the descriptor sidecar (not the wire use map). The
   // wire's `GadgetExportUse` doesn't carry `permission`; the resolved
@@ -382,7 +382,7 @@ export function derivePermissionsPolicy(
  * to throw mid-request.
  */
 export function deriveBundleOrigins(
-  item: SessionStackEntry,
+  item: Render,
 ): { script: readonly string[]; style: readonly string[]; connect: readonly string[] } | undefined {
   // Read from the descriptor sidecar.
   const descriptors =
@@ -552,7 +552,7 @@ export function derivePropsJson(item: SessionStackEntry): string | undefined {
  * empty view — those items have their own shell wiring and don't
  * route through this helper.
  */
-export interface StackItemMetaView {
+export interface RenderMetaView {
   readonly kind?: string;
   readonly propsJson?: string;
   readonly actionNextSteps?: Record<string, string>;
@@ -655,7 +655,7 @@ export interface StackItemMetaView {
  *   - `appPublicEnv` is empty / undefined
  */
 export function derivePublicEnvProjection(
-  item: SessionStackEntry,
+  item: Render,
   appPublicEnv: Readonly<Record<string, string>> | undefined,
 ): Readonly<Record<string, string>> | undefined {
   // Read from the descriptor sidecar (`requires` is descriptor-side).
@@ -706,7 +706,7 @@ export function derivePublicEnvProjection(
  * or resolves to only STDLIB packages.
  */
 export function deriveGadgetRegistrations(
-  item: SessionStackEntry,
+  item: Render,
 ): ReadonlyArray<{
   readonly package: string;
   readonly bundleUrl?: string;
@@ -776,7 +776,7 @@ export function deriveGadgetRegistrations(
  * for component items that declare no runtime-validated schema.
  */
 export async function deriveContractBundle(
-  item: SessionStackEntry,
+  item: Render,
 ): Promise<
   | {
       readonly contractHash: string;
@@ -795,7 +795,7 @@ export async function deriveContractBundle(
 }
 
 /**
- * Build the {@link StackItemMetaView} for a stack item — the
+ * Build the {@link RenderMetaView} for a stack item — the
  * single-entry-point projection function every bootstrap transport
  * SHOULD call. Composing transports take the view, spread it into
  * their own envelope alongside session/auth/runtime concerns. The
@@ -805,9 +805,9 @@ export async function deriveContractBundle(
  *
  * Pure. Same input → identical output, byte-for-byte.
  */
-export function deriveStackItemMeta(
-  item: SessionStackEntry,
-): StackItemMetaView {
+export function deriveRenderMeta(
+  item: Render,
+): RenderMetaView {
   // MCP Apps items wire through their own shell — no projection here.
   if (item.type === 'mcpApps') return {};
 

@@ -1,14 +1,17 @@
 /**
  * `ggui_handshake` — the contract-negotiation step of the
- * handshake/push protocol.
+ * handshake/render protocol.
  *
  * ## What this handler does
  *
- *   1. Validates the handshake input shape (`{ sessionId, intent,
- *      blueprintDraft, forceCreate? }`).
- *   2. Resolves session existence + tenancy.
- *   3. Resolves the per-app gadget catalog.
- *   4. Delegates suggestion production to the bound
+ *   1. Validates the handshake input shape (`{ intent, blueprintDraft,
+ *      forceCreate? }`). Post-Phase-B (flatten-render-identity) the
+ *      input no longer carries `sessionId` — the paired `ggui_render`
+ *      mints the render server-side. Host conversation grouping (sibling
+ *      renders within one host chat) lives on the `_meta["ai.ggui/host-session"]`
+ *      envelope, captured ONCE at render creation.
+ *   2. Resolves the per-app gadget catalog.
+ *   3. Delegates suggestion production to the bound
  *      {@link HandshakeNegotiator} — which produces a
  *      {@link HandshakeSuggestion} routed by `origin: cache | agent | synth`.
  *      The negotiator implementation owns the search + validate
@@ -17,10 +20,10 @@
  *      falling through to a `synth.amend` seam when validation fails).
  *      Absent negotiator → the seam stamps an `origin: 'agent'`
  *      suggestion using the agent's draft verbatim (no enrichment).
- *   5. Persists a {@link HandshakeRecord} under a TTL-bounded
- *      {@link KeyValueStore} key. Single-use: the paired `ggui_push`
+ *   4. Persists a {@link HandshakeRecord} under a TTL-bounded
+ *      {@link KeyValueStore} key. Single-use: the paired `ggui_render`
  *      consumes it via `getAndDelete`.
- *   6. Returns a `GguiHandshakeOutput`-shaped result carrying the
+ *   5. Returns a `GguiHandshakeOutput`-shaped result carrying the
  *      handshakeId, the suggestion, optional alternatives, and the
  *      canonical hash of the agent's draft.
  *
@@ -33,7 +36,6 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { assertContractNoRetiredFields } from './assert-contract-no-retired-fields.js';
 import { assertGeneratorRegistered } from './assert-generator.js';
-import { clientObservationsSchema } from './client-observations.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   STDLIB_GADGETS,
@@ -56,21 +58,19 @@ import {
 import type {
   AppMetadataStore,
   KeyValueStore,
-  SessionStore,
   TelemetrySink,
   VariantSelectionContext,
   VariantSelectionDecision,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import type { CanvasLifecycleEmitter } from './canvas-lifecycle.js';
-import { SessionNotFoundError, SessionRequiredError } from './errors.js';
 
 /**
  * Handshake-time input shape.
  *
  * `blueprintDraft` carries the agent's draft (contract + optional
  * variance + optional generator hint). `forceCreate` short-circuits
- * cache search so the paired push always cold-gens.
+ * cache search so the paired render always cold-gens.
  */
 export interface HandshakeStoredInput {
   /** Concise semantic identity of the UI — drives intent-axis search keying. */
@@ -86,18 +86,20 @@ export interface HandshakeStoredInput {
 }
 
 /**
- * Routing hint carried from handshake to the paired push. Populated
- * by the suggestion's `target` field (passed through from the
- * negotiator) so the push reuses the session the handshake already
- * resolved against.
+ * Routing hint carried from handshake to the paired render.
+ *
+ * Post-Phase-B (flatten-render-identity): the prior `sessionId` +
+ * `stackItemId` pair collapsed to a single optional `renderId`. The
+ * negotiator MAY suggest reusing an existing render (the cache /
+ * update path); absent ⇒ the paired `ggui_render` mints a fresh
+ * render.
  */
 export interface HandshakeStoredTarget {
-  readonly sessionId?: string;
-  readonly stackItemId?: string;
+  readonly renderId?: string;
 }
 
 /**
- * Persisted handshake record. The paired `ggui_push` reads:
+ * Persisted handshake record. The paired `ggui_render` reads:
  *
  *   - `suggestion.blueprintMeta` — the provisional blueprintId +
  *     contractHash + (when cache) codeHash for accept-path delivery.
@@ -110,11 +112,11 @@ export interface HandshakeStoredTarget {
  *     accept-path. Equals the agent's draft for `origin: agent`, the
  *     amended contract for `origin: synth`, the cached blueprint's
  *     contract for `origin: cache`.
- *   - `target` — session + optional stackItemId routing.
+ *   - `target` — optional renderId routing hint (cache / update path).
  */
 export interface HandshakeRecord {
   readonly handshakeId: string;
-  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'compose' | 'declined';
+  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
   readonly reason: string;
   /** Agent's original draft input — for telemetry + override-path validation. */
   readonly input: HandshakeStoredInput;
@@ -133,7 +135,7 @@ export interface HandshakeRecord {
    *                          whose canonical hash equals
    *                          `blueprintMeta.contractHash`).
    *
-   * Materialized at handshake-time so the push doesn't re-derive.
+   * Materialized at handshake-time so the render doesn't re-derive.
    */
   readonly effectiveContract: DataContract;
   readonly appId: string;
@@ -142,17 +144,17 @@ export interface HandshakeRecord {
 
 /**
  * Negotiator binding. The negotiator's role is to PRODUCE the
- * {@link HandshakeSuggestion} — given the agent's draft, the resolved
- * session, and any per-app context, the negotiator returns:
+ * {@link HandshakeSuggestion} — given the agent's draft and any
+ * per-app context, the negotiator returns:
  *
- *   - `suggestion` — always present (Option B from the plan).
+ *   - `suggestion` — always present.
  *   - `action` — `'reuse'` for cache hits, `'create'` otherwise.
  *   - `reason` — human-readable explanation.
  *   - `target` — optional routing hint.
  *   - `alternatives` — optional top-N alternative blueprints.
  *   - `effectiveContract` — the contract gen runs against on
  *                           accept-path. The handshake handler
- *                           persists this so push doesn't re-derive.
+ *                           persists this so render doesn't re-derive.
  *
  * Negotiator implementations may:
  *
@@ -172,8 +174,6 @@ export interface HandshakeNegotiator {
     readonly forceCreate?: boolean;
     /** Per-app gadget catalog — synth uses to populate gadgets. */
     readonly gadgets?: readonly GadgetDescriptor[];
-    /** Resolved sessionId — validated by the handler before invoking. */
-    readonly sessionId: string;
     readonly ctx: HandlerContext;
   }): Promise<HandshakeNegotiatorResult> | HandshakeNegotiatorResult;
 
@@ -208,14 +208,12 @@ export interface HandshakeNegotiator {
     readonly candidates: readonly Blueprint[];
     /** Per-call inputs — see {@link VariantSelectionContext}. */
     readonly context: VariantSelectionContext;
-    /** Resolved sessionId — same trust root as `decide()`. */
-    readonly sessionId: string;
     readonly ctx: HandlerContext;
   }): Promise<VariantSelectionDecision>;
 }
 
 export interface HandshakeNegotiatorResult {
-  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'compose' | 'declined';
+  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
   readonly reason: string;
   readonly suggestion: HandshakeSuggestion;
   /**
@@ -237,13 +235,6 @@ export interface GguiHandshakeHandlerDeps {
    * consumption of each `handshakeId`.
    */
   readonly kvStore: KeyValueStore;
-  /**
-   * Session store. When bound, the handshake handler validates the
-   * `sessionId` field on the wire input — must exist AND belong to
-   * `ctx.appId`. Unknown / cross-tenant ids surface as
-   * `SessionNotFoundError`.
-   */
-  readonly sessionStore?: SessionStore;
   /**
    * Optional per-app metadata resolver. When bound, the handler reads
    * `app.gadgets` for the resolved `ctx.appId` and threads it
@@ -296,13 +287,16 @@ export interface GguiHandshakeHandlerDeps {
    */
   readonly defaultGenerator?: string;
   /**
-   * Canvas-mode lifecycle emitter. When
-   * wired, the handler fires `handshake_started` at entry and
-   * `handshake_completed` just before return on the `_ggui:lifecycle`
-   * channel. Fire-and-forget — emit errors are absorbed by the impl.
+   * Canvas-mode lifecycle emitter. When wired, the handler fires
+   * `handshake_started` at entry and `handshake_completed` just
+   * before return on the `_ggui:lifecycle` channel. Fire-and-forget
+   * — emit errors are absorbed by the impl.
    *
-   * Absent ⇒ no emissions. Sessions without canvas mode wired (the
-   * vast majority today) pay zero cost.
+   * Post-Phase-B (flatten-render-identity): the emitter is keyed by
+   * `handshakeId` instead of `sessionId` — handshakes happen BEFORE
+   * a render exists; canvas mode that wants to bracket the gap binds
+   * its emitter on the renderId returned by the paired `ggui_render`.
+   * Absent ⇒ no emissions.
    */
   readonly canvasLifecycle?: CanvasLifecycleEmitter;
   /**
@@ -310,7 +304,7 @@ export interface GguiHandshakeHandlerDeps {
    * a `handshake.decided` event on every successful handshake
    * carrying:
    *
-   *   - `appId`, `handshakeId`, `sessionId`
+   *   - `appId`, `handshakeId`
    *   - `origin` — `cache | agent | synth` from the suggestion
    *   - `action` — `'create' | 'reuse' | …` from the negotiator
    *   - `selectedBlueprintId` — the provisional id on the suggestion
@@ -327,9 +321,6 @@ export interface GguiHandshakeHandlerDeps {
    *
    * Lossy + non-throwing per the {@link TelemetrySink} contract;
    * absent dep is a NoopTelemetrySink semantic equivalent.
-   *
-   * These fields ride through every handshake decision so operators
-   * can plot LLM-pick vs ladder-fallback frequency from one stream.
    */
   readonly telemetrySink?: TelemetrySink;
 }
@@ -342,8 +333,8 @@ export const DEFAULT_GENERATOR_SLUG = 'ui-gen-default-haiku-4-5';
 
 /**
  * Compose the KV key for a given (appId, handshakeId) pair. Exported
- * so the paired push handler reads the same shape — single source of
- * truth for the key format.
+ * so the paired render handler reads the same shape — single source
+ * of truth for the key format.
  */
 export function handshakeRecordKey(
   appId: string,
@@ -397,7 +388,6 @@ export async function consumeHandshakeRecord(
 
 /** Input zod-shape mirror — same shape as `handshakeInputSchema`. */
 const inputSchema = {
-  sessionId: z.string().min(1, 'sessionId is required — call ggui_new_session first'),
   intent: z.string().min(1, 'intent is required'),
   /**
    * Agent's draft — contract (required) + variance + generator hint.
@@ -406,18 +396,6 @@ const inputSchema = {
    */
   blueprintDraft: z
     .object({
-      // `dataContractSchema` enforces the strict per-entry wrappers
-      // — PropEntry / ActionEntry / StreamChannelEntry / ContextEntry
-      // wrappers reject extras. The most common author confusion this
-      // catches: putting a JSON Schema flat at the entry level
-      // (`propsSpec.properties.todos = {type: 'array', ...}`)
-      // instead of wrapping it (`propsSpec.properties.todos =
-      // {schema: {type: 'array', ...}, required: true}`). Pre-tighten,
-      // the loose `z.object({}).passthrough()` here let the bad shape
-      // through and the failure surfaced as an opaque
-      // ContractSchemaMetaError at layer-B meta-validation. Now zod
-      // rejects with a precise `propsSpec.properties.todos.schema:
-      // Required` path before layer-B runs.
       contract: dataContractSchema,
       variance: z
         .object({
@@ -428,14 +406,6 @@ const inputSchema = {
         })
         .strict()
         .optional(),
-      // Identifier string naming a server-registered generator
-      // (e.g. "anthropic-claude-haiku-4-5"). NOT a place for
-      // component source code — the LLM has been observed stuffing
-      // a full function body in here when the override-path
-      // mental model is unclear. Cap length + restrict charset
-      // so any non-identifier value fails at the wire boundary
-      // instead of silently falling back to default deeper in
-      // synth dispatch.
       generator: z
         .string()
         .max(120)
@@ -452,66 +422,38 @@ const inputSchema = {
 /** Output zod-shape mirror. Same shape as `handshakeOutputSchema`. */
 const outputSchema = {
   handshakeId: z.string(),
-  action: z.enum(['create', 'reuse', 'update', 'replace', 'compose', 'declined']),
-  // Server controls this shape end-to-end — `handshakeSuggestionSchema`
-  // is `.strict()` on every nested layer (blueprintMeta, amendments,
-  // validationFindings). Tightening from `z.object({}).passthrough()`
-  // makes drift between the protocol type and the handler's emitted
-  // shape a typecheck/runtime failure instead of a silent passthrough.
+  action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   suggestion: handshakeSuggestionSchema,
   nextStep: z
     .object({
-      tool: z.literal('ggui_push'),
+      tool: z.literal('ggui_render'),
       example: z.string(),
     })
     .optional(),
-  // surface the iframe-captured HostContext
-  // projection to the agent so it can reason about device class,
-  // available display modes, and container dimensions on the next push.
-  // Absent ⇒ iframe hasn't echoed yet (first handshake before iframe
-  // mount, or non-spec-compliant host); agent falls back to ggui's
-  // own InterfaceContext.
-  client: clientObservationsSchema,
 } as const;
 
 interface HandshakeOutput {
   handshakeId: string;
-  action: 'create' | 'reuse' | 'update' | 'replace' | 'compose' | 'declined';
+  action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
   /**
    * Negotiator reason — internal-only after the 2026-05-13 output trim.
    * Persisted on the HandshakeRecord for telemetry / cache-trace; zod
-   * strips it before structuredContent serialization. Kept on the TS
-   * shape so internal seams (push handler post-classify trace) still
-   * read it from the consumed record without re-derivation.
+   * strips it before structuredContent serialization.
    */
   reason: string;
   /** Routing hint — internal-only. Same pattern as `reason`. */
   target: HandshakeStoredTarget;
   suggestion: HandshakeSuggestion;
-  /** Top-N alternatives — internal-only. Same pattern. */
+  /** Top-N alternatives — internal-only. */
   alternatives?: readonly Blueprint[];
   /** Canonical hash — internal-only telemetry. */
   contractHash: string;
   nextStep?: {
-    readonly tool: 'ggui_push';
+    readonly tool: 'ggui_render';
     readonly example: string;
   };
   /** Server capabilities — internal-only; bootstrap-meta projects this. */
   serverCapabilities?: ServerCapabilities;
-  /**
-   * Client-side observed state echoed back to the agent. Today carries
-   * only the iframe-captured `HostContextProjection`. Future
-   * additions may layer further client signals (e.g. an echoed
-   * `InterfaceContext`, last-known navigation state) onto this same
-   * envelope.
-   *
-   * Absent ⇒ no client observations available for this session yet —
-   * usually means the iframe hasn't completed `ui/initialize`. Agent
-   * falls back to ggui's own `InterfaceContext` pipeline in that case.
-   */
-  client?: {
-    readonly hostContext?: import('@ggui-ai/protocol').HostContextProjection;
-  };
 }
 
 /**
@@ -533,59 +475,14 @@ export function createGguiHandshakeHandler(
     audience: ['agent'],
     description:
       deps.description ??
-      "Negotiate a contract for a UI you want to deliver. Call AFTER ggui_new_session (once per chat) and BEFORE ggui_push. Input: {sessionId, intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely (open-ended form submits, the agent composes the next call from broader context). WORKED EXAMPLE: {propsSpec: {properties: {todos: {schema: {type: 'array', items: {type: 'object', properties: {id: {type: 'string'}, text: {type: 'string'}, completed: {type: 'boolean'}}, required: ['id', 'text', 'completed']}}, required: true}}}, actionSpec: {toggleTodo: {label: 'Toggle todo', schema: {type: 'object', properties: {id: {type: 'string'}}, required: ['id']}, nextStep: 'todo_toggle'}}, agentCapabilities: {tools: {todo_toggle: {description: 'Flip a todo done/undone', inputSchema: {type: 'object', properties: {id: {type: 'string'}}, required: ['id']}}}}}. COMMON MISTAKES — (1) putting JSON Schema flat: `{propsSpec: {properties: {todos: {type: 'array', items: ...}}}}` REJECTS with `Missing 'schema' field`. (2) using `dispatch: {kind: ...}` on an actionSpec entry — that vocabulary is RETIRED; use flat optional `nextStep: '<toolName>'` instead, or omit. (3) referencing a tool from `actionSpec[*].nextStep` without declaring it in `agentCapabilities.tools` — handshake AND push validation both reject with `cross_reference_unresolved` listing the dangling reference. Returns a `suggestion` with origin = cache | agent | synth — server matched an existing blueprint (cache), accepted your draft as-is (agent), or amended it (synth; diff in suggestion.amendments). On the paired ggui_push you send `decision: {kind: 'accept'}` (use the suggestion verbatim) or `decision: {kind: 'override', blueprintDraft}` (mint fresh against a NEW draft). Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
+      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. Returns a `suggestion` with origin = cache | agent | synth — server matched an existing blueprint (cache), accepted your draft as-is (agent), or amended it (synth; diff in suggestion.amendments). On the paired ggui_render you send `decision: {kind: 'accept'}` (use the suggestion verbatim) or `decision: {kind: 'override', blueprintDraft}` (mint fresh against a NEW draft). Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<HandshakeOutput> {
-      // Pre-zod sessionId guard. Surfaces a typed SessionRequiredError
-      // (with recovery prose) when the agent omits sessionId entirely.
-      if (
-        input === null ||
-        typeof input !== 'object' ||
-        typeof (input as { sessionId?: unknown }).sessionId !== 'string' ||
-        (input as { sessionId: string }).sessionId.length === 0
-      ) {
-        throw new SessionRequiredError();
-      }
       const parsed = z.object(inputSchema).parse(input);
       const normalizedInput = normalizeInput(parsed);
-      const sessionId = parsed.sessionId;
 
-      // Session existence + tenancy check. Also captures hostContext
-      // for surfacing to the agent in the return value.
-      let sessionHostContext: import('@ggui-ai/protocol').HostContextProjection | undefined;
-      if (deps.sessionStore) {
-        const session = await deps.sessionStore.get(sessionId);
-        if (!session || session.appId !== ctx.appId) {
-          throw new SessionNotFoundError(sessionId);
-        }
-        sessionHostContext = session.hostContext;
-      }
-
-      // Contract validation chain — symmetric with `ggui_push` against
-      // `effectiveContract`. Running these at handshake too means agents
-      // get author-recoverable feedback BEFORE the negotiator runs and
-      // BEFORE any blueprint is cached, saving a round-trip on contracts
-      // that have structural mistakes the agent could fix immediately.
-      //
-      //   1. Layer-B meta-validation: every inner JSON Schema is
-      //      well-formed under Ajv strict mode.
-      //   2. Cross-reference invariants: every `actionSpec[*].nextStep`
-      //      and `streamSpec[*].source.tool` resolves in the contract's
-      //      own `agentCapabilities.tools` catalog.
-      //   3. Name invariants: no collisions across actionSpec /
-      //      streamSpec / contextSpec keys; no `_ggui:` reserved-prefix
-      //      keys on actionSpec / contextSpec.
-      //   4. Schema-compat invariants: action.schema ⊆
-      //      agentCapabilities.tools[nextStep].inputSchema and
-      //      channel.schema ⊇ agentCapabilities.tools[source.tool]
-      //      .outputSchema against the contract's OWN catalog.
-      //
-      // The server-registry schema-compat check (knownActionTools)
-      // stays in push — server-side schema-compat is a per-deployment
-      // concern; the handshake doesn't know which server will
-      // ultimately commit.
-      // Semantic check on generator name — shared with push.ts's
+      // Semantic check on generator name — shared with render.ts's
       // override path so the two seams cannot drift.
       assertGeneratorRegistered(
         normalizedInput.blueprintDraft.generator,
@@ -617,7 +514,6 @@ export function createGguiHandshakeHandler(
               ? { forceCreate: true as const }
               : {}),
             ...(gadgets !== undefined ? { gadgets } : {}),
-            sessionId,
             ctx,
           })
         : buildDefaultAgentSuggestion(
@@ -630,18 +526,7 @@ export function createGguiHandshakeHandler(
       // `effectiveContract`. The agent-draft path above already passed
       // these on the input contract, but the negotiator may have
       // returned an amended contract (`suggestion.origin === 'synth'`)
-      // OR a cached contract — both bypass the input gate. Without
-      // this, a malformed synth output reaches the agent as a
-      // valid-looking suggestion and push rejects on accept-path,
-      // leaving the agent with a dead handshakeId. Validating here
-      // makes the failure observable at the same surface that produced
-      // it — agent retries the handshake with a different intent, no
-      // wasted push call.
-      //
-      // Pure-functional check; redundant on agent-draft path (same
-      // contract validated above) but cheap, and the redundancy
-      // protects against future negotiator changes that might
-      // accidentally bypass.
+      // OR a cached contract — both bypass the input gate.
       assertContractNoRetiredFields(negotiated.effectiveContract);
       assertContractSchemasValid(negotiated.effectiveContract);
       assertCrossReferences(negotiated.effectiveContract);
@@ -649,22 +534,17 @@ export function createGguiHandshakeHandler(
       assertSchemaCompat(negotiated.effectiveContract);
 
       const handshakeId = mintHandshakeId();
-      // emit handshake_started so the canvas
-      // animator transitions to its `handshake` state. Fire-and-
-      // forget; absent emitter is a no-op.
-      deps.canvasLifecycle?.emit(sessionId, {
+      // Emit handshake_started so the canvas animator transitions to
+      // its `handshake` state. Fire-and-forget; absent emitter is a
+      // no-op. Keyed by handshakeId — no render exists yet.
+      deps.canvasLifecycle?.emit(handshakeId, {
         kind: 'handshake_started',
         handshakeId,
         intent: normalizedInput.intent,
       });
-      const target: HandshakeStoredTarget = {
-        ...(negotiated.target ?? {}),
-        sessionId,
-      };
+      const target: HandshakeStoredTarget = negotiated.target ?? {};
 
       // Canonical hash of the AGENT'S DRAFT contract (pre-amendment).
-      // Telemetry threads through this; the suggestion's
-      // blueprintMeta.contractHash may differ on `origin: 'synth'`.
       const draftHash = blueprintKey(normalizedInput.blueprintDraft.contract);
 
       const record: HandshakeRecord = {
@@ -686,32 +566,20 @@ export function createGguiHandshakeHandler(
       );
 
       // Emit `handshake.decided` with selection signals.
-      // Lossy + non-throwing per the TelemetrySink contract; absent
-      // sink is a noop. The `selectionConfidence` axis surfaces only
-      // when the negotiator's selectVariant ran AND threaded
-      // confidence into blueprintMeta.selectedReason (encoded as
-      // `conf=<n>` suffix per the convention). Operators tune
-      // LLM-pick frequency from `origin` + `selectionConfidence` on
-      // this stream.
       emitHandshakeDecided(deps.telemetrySink, {
         appId: ctx.appId,
-        sessionId,
         handshakeId,
         record,
       });
 
-      // emit handshake_completed. Outcome derived
-      // from suggestion.origin; genExpected when the negotiator's
-      // action is `create` (cold gen will follow). The animator
-      // pre-warms its `constructing` state on `genExpected: true`
-      // so the handshake→constructing transition doesn't flicker.
+      // Emit handshake_completed.
       const lifecycleOutcome: 'accepted' | 'amended' | 'cached' =
         negotiated.suggestion.origin === 'cache'
           ? 'cached'
           : negotiated.suggestion.origin === 'synth'
             ? 'amended'
             : 'accepted';
-      deps.canvasLifecycle?.emit(sessionId, {
+      deps.canvasLifecycle?.emit(handshakeId, {
         kind: 'handshake_completed',
         handshakeId,
         outcome: lifecycleOutcome,
@@ -724,10 +592,7 @@ export function createGguiHandshakeHandler(
       });
 
       const serverCapabilities = deps.serverCapabilities?.();
-      // Truncate `reason` to the wire-output cap (280 chars) so the
-      // structuredContent payload stays predictable. The full
-      // untruncated value remains in the session-store record for
-      // telemetry.
+      // Truncate `reason` to the wire-output cap (280 chars).
       const truncatedReason =
         record.reason.length > 280
           ? `${record.reason.slice(0, 277)}...`
@@ -744,11 +609,6 @@ export function createGguiHandshakeHandler(
         contractHash: draftHash,
         ...(nextStep ? { nextStep } : {}),
         ...(serverCapabilities ? { serverCapabilities } : {}),
-        // surface iframe-captured HostContext to the agent.
-        // Only include the wrapper when there's something to report.
-        ...(sessionHostContext !== undefined
-          ? { client: { hostContext: sessionHostContext } }
-          : {}),
       };
     },
   };
@@ -868,16 +728,7 @@ function isJsonObject(v: unknown): v is Record<string, unknown> {
 /**
  * Build the wire-shape recovery hint surfaced on the handshake
  * response as `nextStep`. The agent should be able to copy
- * `nextStep.example` verbatim into its next `ggui_push` call.
- *
- * Branches on `suggestion.origin`:
- *
- *   - `cache`  → accept-path example (cached delivery).
- *   - `agent` / `synth` → accept-path example (gen pending).
- *
- * Override examples are NOT emitted by default — the agent reads the
- * `suggestion` and decides whether to override. The doc string on
- * ggui_push covers the override shape.
+ * `nextStep.example` verbatim into its next `ggui_render` call.
  */
 function buildNextStepHint(input: {
   handshakeId: string;
@@ -886,9 +737,9 @@ function buildNextStepHint(input: {
   const { handshakeId, suggestion } = input;
   const propsExample = buildPropsExample(suggestion.blueprintMeta.contractHash);
   const propsSegment = propsExample !== undefined ? `,"props":${propsExample}` : '';
-  const example = `ggui_push({"handshakeId":"${handshakeId}","decision":{"kind":"accept"}${propsSegment}})`;
+  const example = `ggui_render({"handshakeId":"${handshakeId}","decision":{"kind":"accept"}${propsSegment}})`;
   return {
-    tool: 'ggui_push',
+    tool: 'ggui_render',
     example,
   };
 }
@@ -897,83 +748,52 @@ function buildNextStepHint(input: {
  * Build a placeholder JSON example for `props` when the suggestion
  * carries a non-empty propsSpec. Without access to the full contract
  * here, we just leave `props` absent; the propsSpec hint surface is
- * delegated to the push.ts handler's recovery error messages.
+ * delegated to the render.ts handler's recovery error messages.
  */
 function buildPropsExample(_contractHash: string): string | undefined {
   return undefined;
 }
 
 /**
- * Typed error thrown by `ggui_push` when the supplied handshakeId
+ * Typed error thrown by `ggui_render` when the supplied handshakeId
  * doesn't resolve (unknown, already-consumed, or TTL-expired).
  */
 export class HandshakeNotFoundError extends Error {
   readonly code = 'handshake_not_found' as const;
   constructor(public readonly handshakeId: string) {
     super(
-      `ggui_push: handshakeId "${handshakeId}" not found. Handshake records are SINGLE-USE (consumed on push) and expire after ${HANDSHAKE_RECORD_TTL_SEC / 60} minutes. To recover: call ggui_handshake({sessionId, intent, blueprintDraft}) again to mint a fresh handshakeId, then push with the new pair. Each render-emission requires its own handshake; do not cache handshakeIds across calls.`,
+      `ggui_render: handshakeId "${handshakeId}" not found. Handshake records are SINGLE-USE (consumed on render) and expire after ${HANDSHAKE_RECORD_TTL_SEC / 60} minutes. To recover: call ggui_handshake({intent, blueprintDraft}) again to mint a fresh handshakeId, then render with the new pair. Each render-emission requires its own handshake; do not cache handshakeIds across calls.`,
     );
     this.name = 'HandshakeNotFoundError';
   }
 }
 
-// Re-export some types for backwards-import-paths (consumers that
-// imported these from `handshake.ts` before).
+// Re-export some types for backwards-import-paths.
 export type { SuggestionFinding };
 
 /**
  * Telemetry event name emitted by the handshake handler on every
- * successful negotiation. Exposed so consumers can pattern-match
- * against a stable reference instead of string-sniffing.
+ * successful negotiation.
  */
 export const HANDSHAKE_DECIDED_EVENT = 'handshake.decided';
 
 /**
- * Telemetry attributes shape on `handshake.decided`. The fields ride
- * through every handshake decision so operators plot:
- *
- *   - LLM-pick vs deterministic-ladder frequency
- *     (`selectionConfidence` presence + magnitude)
- *   - cache-hit vs novel-vs-amended routing (`origin`)
- *   - per-app, per-session selection patterns (`appId`, `sessionId`)
+ * Telemetry attributes shape on `handshake.decided`.
  */
 export interface HandshakeDecidedAttributes {
   readonly appId: string;
-  readonly sessionId: string;
   readonly handshakeId: string;
-  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'compose' | 'declined';
+  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
   readonly origin: 'cache' | 'agent' | 'synth';
   readonly selectedBlueprintId: string;
   readonly selectionReason: string;
-  /**
-   * Surfaced only when the negotiator's `selectVariant` seam
-   * ran AND threaded calibrated confidence onto the blueprintMeta's
-   * `selectedReason` field (encoded as a `conf=<n>` suffix on the
-   * reason string). Absent on negotiators that don't implement the
-   * optional `selectVariant` seam — the deterministic ladder
-   * doesn't expose a confidence axis.
-   */
   readonly selectionConfidence?: number;
-  /**
-   * Generator slug the suggestion's blueprintMeta carries. Operators
-   * plot generator-mix on this axis (default vs advanced vs future
-   * cohorts).
-   */
   readonly generator: string;
 }
 
 /**
  * Extract a `conf=<n>` confidence suffix from the
- * `blueprintMeta.selectedReason` string when present. The
- * variant-selector orchestration encodes confidence onto the
- * reason field so it round-trips through every storage layer
- * without widening the protocol shape (the BlueprintMeta type
- * doesn't carry `confidence` as a first-class field).
- *
- * Returns `undefined` when no `conf=<n>` suffix matches — the
- * telemetry payload simply omits the axis.
- *
- * Pure / deterministic; exposed for testing.
+ * `blueprintMeta.selectedReason` string when present.
  */
 export function extractSelectionConfidence(
   reason: string | undefined,
@@ -990,7 +810,6 @@ function emitHandshakeDecided(
   sink: TelemetrySink | undefined,
   args: {
     readonly appId: string;
-    readonly sessionId: string;
     readonly handshakeId: string;
     readonly record: HandshakeRecord;
   },
@@ -1000,11 +819,8 @@ function emitHandshakeDecided(
   const meta = record.suggestion.blueprintMeta;
   const reason = meta.selectedReason ?? record.suggestion.rationale;
   const confidence = extractSelectionConfidence(meta.selectedReason);
-  // Build a flat string|number|boolean attribute map — the
-  // TelemetrySink contract restricts to primitives.
   const attributes: Record<string, string | number | boolean> = {
     appId: args.appId,
-    sessionId: args.sessionId,
     handshakeId: args.handshakeId,
     action: record.action,
     origin: record.suggestion.origin,
