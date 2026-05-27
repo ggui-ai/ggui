@@ -5,6 +5,10 @@
  * the canonical contract — these tests catch handler drift if a
  * future edit accidentally widens or narrows shape independently.
  *
+ * Post-Phase-B (flatten-render-identity): the wire input collapsed
+ * from `{sessionId, stackItemId, appId, …}` to `{renderId, appId, …}`.
+ * The pending-events pipe is keyed by `renderId`.
+ *
  * Empirically critical: the iframe-runtime `emitAudit` helper posts
  * EXACTLY these envelopes via `tools/call`, and a shape mismatch
  * would silently swallow every gesture audit on production hosts
@@ -19,7 +23,7 @@ import {
 import { createGguiSubmitActionHandler } from './submit-action.js';
 
 const baseEnv = {
-  sessionId: 'sess_1',
+  renderId: 'render_1',
   appId: 'app_1',
   actionId: 'a3f2b1d4',
   firedAt: '2026-05-07T10:00:00.000Z',
@@ -44,16 +48,16 @@ describe('createGguiSubmitActionHandler', () => {
   describe('accepts canonical action envelopes', () => {
     it('appends a dispatch envelope to the pipe (verified via consume)', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const stackItemId = 'stack-item-1';
-      await consumer.markCreated(stackItemId);
+      const renderId = 'render-dispatch-1';
+      await consumer.markCreated(renderId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
       });
       const out = await h.handler(
         {
           ...baseEnv,
+          renderId,
           kind: 'dispatch',
-          stackItemId,
           payload: {
             intent: 'submit',
             actionData: { title: 'Team sync' },
@@ -67,11 +71,11 @@ describe('createGguiSubmitActionHandler', () => {
       // reads ok/code only; the envelope state is observable through
       // the pipe drain below).
       expect(out).toEqual({ ok: true });
-      const drained = await consumer.consumeAndClear(stackItemId, 100);
+      const drained = await consumer.consumeAndClear(renderId, 100);
       expect(drained.events.length).toBe(1);
       expect(drained.events[0]?.envelope).toMatchObject({
         type: 'action',
-        stackItemId,
+        renderId,
         intent: 'submit',
         actionData: { title: 'Team sync' },
         uiContext: { draft: 'wip' },
@@ -111,7 +115,7 @@ describe('createGguiSubmitActionHandler', () => {
     it.each([
       ['missing kind', { ...baseEnv, payload: { url: 'x' } }],
       ['missing payload', { ...baseEnv, kind: 'openLink' }],
-      ['missing actionId', { kind: 'openLink', payload: { url: 'x' }, sessionId: 's', appId: 'a', firedAt: 't' }],
+      ['missing actionId', { kind: 'openLink', payload: { url: 'x' }, renderId: 'r', appId: 'a', firedAt: 't' }],
       [
         'dispatch missing intent',
         { ...baseEnv, kind: 'dispatch', payload: { actionData: {}, uiContext: {} } },
@@ -141,59 +145,12 @@ describe('createGguiSubmitActionHandler', () => {
     // non-success outcome and post `ui/message` so the gesture reaches
     // the chat surface on the next turn.
 
-    it('rejects kind:dispatch with no stackItemId — surfaces PIPE_NOT_FOUND', async () => {
-      const consumer = new InMemoryPendingEventConsumer();
-      const h = createGguiSubmitActionHandler({
-        pendingEventConsumer: consumer,
-      });
-      const out = await h.handler(
-        {
-          ...baseEnv,
-          kind: 'dispatch',
-          payload: { intent: 'submit', actionData: null, uiContext: {} },
-          // no stackItemId
-        },
-        ctx,
-      );
-      expect(out.ok).toBe(false);
-      if (out.ok) throw new Error('expected ok:false');
-      expect(out.code).toBe('PIPE_NOT_FOUND');
-      expect(out.message).toMatch(/requires a non-empty stackItemId/);
-    });
-
-    it('rejects kind:dispatch with empty-string stackItemId — surfaces failure (zod min(1) rejects upstream)', async () => {
-      // Empty-string stackItemId trips the zod `.min(1)` constraint in
-      // the top-level input schema BEFORE reaching the dispatch-branch
-      // check, so the failure code is `INVALID_ACTION_KIND` rather than
-      // `PIPE_NOT_FOUND`. The iframe-runtime's
-      // `classifySubmitActionResponse` treats both as non-success and
-      // falls through to `ui/message`, so the user-facing behavior is
-      // identical — the test pins the surface, not the specific code.
-      const consumer = new InMemoryPendingEventConsumer();
-      const h = createGguiSubmitActionHandler({
-        pendingEventConsumer: consumer,
-      });
-      const out = await h.handler(
-        {
-          ...baseEnv,
-          kind: 'dispatch',
-          stackItemId: '',
-          payload: { intent: 'submit', actionData: null, uiContext: {} },
-        },
-        ctx,
-      );
-      expect(out.ok).toBe(false);
-      if (out.ok) throw new Error('expected ok:false');
-      expect(['PIPE_NOT_FOUND', 'INVALID_ACTION_KIND']).toContain(out.code);
-    });
-
     it('rejects kind:dispatch when no pendingEventConsumer is wired — surfaces PIPE_NOT_FOUND', async () => {
       const h = createGguiSubmitActionHandler();
       const out = await h.handler(
         {
           ...baseEnv,
           kind: 'dispatch',
-          stackItemId: 'stack-item-x',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -204,7 +161,7 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out.message).toMatch(/no pending-events consumer/);
     });
 
-    it('rejects kind:dispatch when pipe was never markCreated (stack item popped / session closed)', async () => {
+    it('rejects kind:dispatch when pipe was never markCreated (render closed / never opened)', async () => {
       const consumer = new InMemoryPendingEventConsumer();
       // Intentionally NOT calling markCreated — the pipe is absent.
       const h = createGguiSubmitActionHandler({
@@ -213,8 +170,8 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
+          renderId: 'orphan-render',
           kind: 'dispatch',
-          stackItemId: 'orphan-stack-item',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -224,7 +181,7 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out.code).toBe('PIPE_NOT_FOUND');
     });
 
-    it('openLink + requestDisplayMode still pass without stackItemId (no pipe-append for those kinds)', async () => {
+    it('openLink + requestDisplayMode still pass without a pipe (no pipe-append for those kinds)', async () => {
       const h = createGguiSubmitActionHandler();
       const openLink = await h.handler(
         {
@@ -246,16 +203,16 @@ describe('createGguiSubmitActionHandler', () => {
   describe('consumerPresent on successful dispatch (active-consumer awareness)', () => {
     it('omits consumerPresent when no activeConsumerRegistry is wired', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const stackItemId = 'stack-no-registry';
-      await consumer.markCreated(stackItemId);
+      const renderId = 'render-no-registry';
+      await consumer.markCreated(renderId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
       });
       const out = await h.handler(
         {
           ...baseEnv,
+          renderId,
           kind: 'dispatch',
-          stackItemId,
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -265,10 +222,10 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out).toEqual({ ok: true });
     });
 
-    it('reports consumerPresent:false when registry has no entry for the stack item', async () => {
+    it('reports consumerPresent:false when registry has no entry for the render', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const stackItemId = 'stack-no-consumer';
-      await consumer.markCreated(stackItemId);
+      const renderId = 'render-no-consumer';
+      await consumer.markCreated(renderId);
       const registry = new InMemoryActiveConsumerRegistry();
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
@@ -277,8 +234,8 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
+          renderId,
           kind: 'dispatch',
-          stackItemId,
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -286,12 +243,12 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out).toEqual({ ok: true, consumerPresent: false });
     });
 
-    it('reports consumerPresent:true when a consumer is currently registered for the stack item', async () => {
+    it('reports consumerPresent:true when a consumer is currently registered for the render', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const stackItemId = 'stack-with-consumer';
-      await consumer.markCreated(stackItemId);
+      const renderId = 'render-with-consumer';
+      await consumer.markCreated(renderId);
       const registry = new InMemoryActiveConsumerRegistry();
-      registry.enter(stackItemId);
+      registry.enter(renderId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
         activeConsumerRegistry: registry,
@@ -299,8 +256,8 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
+          renderId,
           kind: 'dispatch',
-          stackItemId,
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -308,12 +265,12 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out).toEqual({ ok: true, consumerPresent: true });
     });
 
-    it('isolates consumer presence by stackItemId', async () => {
+    it('isolates consumer presence by renderId', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      await consumer.markCreated('stack-A');
-      await consumer.markCreated('stack-B');
+      await consumer.markCreated('render-A');
+      await consumer.markCreated('render-B');
       const registry = new InMemoryActiveConsumerRegistry();
-      registry.enter('stack-A'); // Only A has a consumer.
+      registry.enter('render-A'); // Only A has a consumer.
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
         activeConsumerRegistry: registry,
@@ -321,8 +278,8 @@ describe('createGguiSubmitActionHandler', () => {
       const outA = await h.handler(
         {
           ...baseEnv,
+          renderId: 'render-A',
           kind: 'dispatch',
-          stackItemId: 'stack-A',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
@@ -330,8 +287,8 @@ describe('createGguiSubmitActionHandler', () => {
       const outB = await h.handler(
         {
           ...baseEnv,
+          renderId: 'render-B',
           kind: 'dispatch',
-          stackItemId: 'stack-B',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
         ctx,
