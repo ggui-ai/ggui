@@ -90,9 +90,10 @@ export type AdapterPermissions = {
  *     a historical snapshot.
  *
  * There is no explicit terminal state. Renders decay implicitly via TTL.
- * The dropped `'completed'` state (and the `ggui_close` tool that wrote
- * it) was a vestige of the deleted Session vessel — kept symmetrical with
- * `ggui_new_session`, which was deleted in the earlier handshake collapse.
+ * The dropped `'completed'` state was a vestige of the deleted Session
+ * vessel — kept symmetrical with `ggui_new_session`, which was deleted
+ * in the earlier handshake collapse. The companion `ggui_close` tool
+ * that wrote it was removed in the same slice.
  */
 export type RenderStatus = 'active' | 'expired';
 
