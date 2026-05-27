@@ -3,9 +3,9 @@
 UI decision engine for [ggui](https://github.com/ggui-ai/ggui).
 
 Given an agent's signal (data, prompt, context, agent tools) and the current
-session state, the negotiator decides **which UI to render** — create a new
-interface, update an existing one, compose with what's on screen, or replace
-it — and, on the cold path, synthesizes the data contract that drives it.
+render state, the negotiator decides **which UI to render** — create a new
+interface, update an existing one, or replace it — and, on the cold path,
+synthesizes the data contract that drives it.
 
 The package is deployment-agnostic. It composes the storage interfaces
 defined in `@ggui-ai/mcp-server-core` (`EmbeddingProvider`, `VectorStore`),
@@ -21,10 +21,10 @@ pnpm add @ggui-ai/negotiator
 ## What's in the box
 
 - **`negotiate(deps, input)`** — top-level orchestrator. Runs RAG search over
-  registered blueprints, reads session state, fast-paths exact blueprint
+  registered blueprints, reads render state, fast-paths exact blueprint
   hits, and otherwise calls the decision LLM.
 - **`makeDecision(...)`** — the decision step in isolation: pick an action
-  (`create` / `update` / `compose` / `replace`) and a blueprint from the
+  (`create` / `update` / `replace`) and a blueprint from the
   candidate set.
 - **`synthesizeContract(...)`** — cold-path contract synthesizer. Turns an
   agent intent into a `DataContract` (props / context / action / stream
@@ -40,7 +40,7 @@ pnpm add @ggui-ai/negotiator
 import { negotiate } from "@ggui-ai/negotiator";
 
 const result = await negotiate(deps, input);
-// result.action — "create" | "update" | "compose" | "replace"
+// result.action — "create" | "update" | "replace"
 // result.blueprint — the picked blueprint, if any
 ```
 
