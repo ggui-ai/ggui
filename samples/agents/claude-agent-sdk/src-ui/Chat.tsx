@@ -33,6 +33,18 @@ export function Chat() {
   const historyRef = useRef<HTMLDivElement | null>(null);
   const sandboxUrl = resolveSandboxUrl();
 
+  // `ui/message` from an iframe component (MCP-Apps SEP-1865) → fire a
+  // fresh chat turn. The iframe's emitted text appears in the chat log
+  // as a user message and the agent processes it through the usual
+  // `/chat` SSE round-trip. Passed down through `<StackItem
+  // onUiMessage>`.
+  const onUiMessage = useCallback(
+    (text: string) => {
+      void send(text);
+    },
+    [send],
+  );
+
   // Host-side presentation hint pickup.
   // `_meta.ui.displayMode` is the spec-native MCP-Apps SEP-1865 per-push
   // hint, stamped from `App.defaultDisplayMode` (and/or per-push agent
@@ -104,6 +116,7 @@ export function Chat() {
               entry={entry}
               renderStackInline={layout === 'inline'}
               sandboxUrl={sandboxUrl}
+              onUiMessage={onUiMessage}
             />
           ))}
         </div>
@@ -160,7 +173,11 @@ export function Chat() {
        * between conversation turns. */}
       {layout === 'panel' ? (
         <main className="ui-pane">
-          <PanelView stackItems={stackItems} sandboxUrl={sandboxUrl} />
+          <PanelView
+            stackItems={stackItems}
+            sandboxUrl={sandboxUrl}
+            onUiMessage={onUiMessage}
+          />
         </main>
       ) : null}
     </div>
@@ -191,16 +208,22 @@ function ChatEntryView({
   entry,
   renderStackInline,
   sandboxUrl,
+  onUiMessage,
 }: {
   entry: ChatEntry;
   renderStackInline: boolean;
   sandboxUrl: string;
+  onUiMessage: (text: string) => void;
 }) {
   if (entry.kind === 'stack-item') {
     if (renderStackInline) {
       return (
         <div className="msg stack-item-wrap">
-          <StackItem item={entry.stackItem} sandboxUrl={sandboxUrl} />
+          <StackItem
+            item={entry.stackItem}
+            sandboxUrl={sandboxUrl}
+            onUiMessage={onUiMessage}
+          />
         </div>
       );
     }
@@ -290,9 +313,11 @@ function prettyJson(value: unknown): string {
 function PanelView({
   stackItems,
   sandboxUrl,
+  onUiMessage,
 }: {
   stackItems: ReadonlyArray<StackItemRef>;
   sandboxUrl: string;
+  onUiMessage: (text: string) => void;
 }) {
   const top = stackItems[stackItems.length - 1];
   if (!top) {
@@ -307,7 +332,12 @@ function PanelView({
   }
   return (
     <div className="panel-frame">
-      <StackItem item={top} sandboxUrl={sandboxUrl} fillContainer />
+      <StackItem
+        item={top}
+        sandboxUrl={sandboxUrl}
+        onUiMessage={onUiMessage}
+        fillContainer
+      />
     </div>
   );
 }
