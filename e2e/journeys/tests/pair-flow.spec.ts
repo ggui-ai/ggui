@@ -11,7 +11,7 @@
  *         consume → one-shot replay rejection → admin-init with the
  *         just-minted builder token → second consume.
  *   - G6  A token minted by `POST /pair` authenticates a real MCP
- *         `tools/list` AND `tools/call ggui_push` — proves the
+ *         `tools/list` AND `tools/call ggui_render` — proves the
  *         `onTokenIssued` bridge registered the token on the live
  *         `AuthAdapter` at mint time, along the full write-path.
  *   - G14 No browser-side request targets hosted infrastructure
@@ -329,7 +329,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     expect(completion.token).not.toBe(firstPairToken); // distinct bearers
 
     // 3. BOTH minted tokens authenticate /mcp. `tools/list` for T1
-    //    keeps it hermetic (no session side-effect); `ggui_push`
+    //    keeps it hermetic (no render side-effect); `ggui_render`
     //    for T2 exercises the full write-path to prove the bridge
     //    covers it. Blocking timing on `tools/list` — no LLM, no
     //    cache, purely in-memory registry scan.
@@ -339,15 +339,15 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     const tools = (listed.result?.['tools'] ?? []) as Array<{ name: string }>;
     const toolNames = tools.map((t) => t.name);
     // The authenticated bearer sees the native ggui tool surface. The
-    // exact roster grows slice over slice (gadget / theme / stack
-    // readers, …) — pin the always-on core plus the conditional-
-    // registration invariant, not an exhaustive list that rots every
-    // slice (that exact-count canary is tarball-smoke's job).
+    // exact roster grows slice over slice (gadget / theme readers, …)
+    // — pin the always-on core plus the conditional-registration
+    // invariant, not an exhaustive list that rots every slice (that
+    // exact-count canary is tarball-smoke's job).
     expect(toolNames).toEqual(
       expect.arrayContaining([
         'ggui_handshake',
         'ggui_list_featured_blueprints',
-        'ggui_push',
+        'ggui_render',
         'ggui_search_blueprints',
         'ggui_update',
         'ggui_runtime_submit_action',
@@ -357,20 +357,12 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     // present (server.ts conditional) — absent here in the empty cwd.
     expect(toolNames).not.toContain('ggui_render_blueprint');
 
-    // Post-Slice-5 push is handshake-first: new_session → handshake →
-    // push({handshakeId, decision}). Direct story-shaped push is retired.
-    const sessEnv = await mcpCallAs(handle.baseUrl, completion.token, 'tools/call', {
-      name: 'ggui_new_session',
-      arguments: {},
-    });
-    expect(sessEnv.error).toBeUndefined();
-    const sessionId = (
-      sessEnv.result as { structuredContent: { sessionId: string } }
-    ).structuredContent.sessionId;
+    // Post-Phase-B render is handshake-first: handshake → render
+    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // gone — every render IS the addressable scope.
     const hsEnv = await mcpCallAs(handle.baseUrl, completion.token, 'tools/call', {
       name: 'ggui_handshake',
       arguments: {
-        sessionId,
         intent: 'pair-token smoke: weather card',
         blueprintDraft: { contract: {} },
       },
@@ -380,27 +372,24 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
       hsEnv.result as { structuredContent: { handshakeId: string } }
     ).structuredContent.handshakeId;
 
-    const pushEnv = await mcpCallAs(
+    const renderEnv = await mcpCallAs(
       handle.baseUrl,
       completion.token,
       'tools/call',
       {
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
       },
     );
-    expect(pushEnv.error).toBeUndefined();
-    // Retired in Slice 5+: structuredContent no longer carries
-    // `sessionId` / `shortCode`. The proof the push committed is now
-    // `stackItemId` + a `/r/<shortCode>` URL; sessionId lives on the
-    // R3/R4 slice envelope at `_meta["ai.ggui/session"].sessionId`.
-    const pushResult = pushEnv.result as {
-      structuredContent?: { stackItemId?: string; url?: string };
-      _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
+    expect(renderEnv.error).toBeUndefined();
+    // Post-Phase-B structuredContent: {renderId, url, action,
+    // nextStep?}. The proof the render committed is `renderId` + a
+    // `/r/<shortCode>` URL.
+    const renderResult = renderEnv.result as {
+      structuredContent?: { renderId?: string; url?: string };
     };
-    expect(pushResult.structuredContent?.stackItemId).toBeTruthy();
-    expect(pushResult.structuredContent?.url).toMatch(/\/r\/[a-z0-9]+/);
-    expect(pushResult._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
+    expect(renderResult.structuredContent?.renderId).toBeTruthy();
+    expect(renderResult.structuredContent?.url).toMatch(/\/r\/[a-z0-9]+/);
 
     // 4. Network gate — no browser-side call attempted hosted / AWS
     //    / Cognito during this sub-test.

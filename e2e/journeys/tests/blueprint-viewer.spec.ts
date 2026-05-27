@@ -18,14 +18,14 @@
  *      scoring / ordering change doesn't make this spec brittle.
  *   4. Navigate the browser to `/preview/weather-card-fixture`. The
  *      SPA fetches `GET /ggui/console/blueprint/:id`, receives the
- *      inline compiled bundle, and hands it to `StackItemRenderer`
+ *      inline compiled bundle, and hands it to the renderer
  *      (the same primitive `/s/<shortCode>` uses).
  *   5. Assert the mount card + the fixture's distinctive DOM
  *      markers (`Weather Card Fixture` heading + the
  *      `data-testid="weather-card-fixture"` anchor the TSX defines).
  *      Seeing those markers in the live DOM is the load-bearing
  *      proof that: render resolved → server endpoint returned the
- *      code → client fetched → `StackItemRenderer` compiled + mounted.
+ *      code → client fetched → renderer compiled + mounted.
  *
  * Lane 1 of the 4-lane taxonomy (browser + spawned CLI, no LLM,
  * blocking every PR, <60s). Reuses `installNetworkGate` so any

@@ -203,7 +203,7 @@ test.describe.serial('Phase 5 — manifest capability consumption', () => {
     // Happy-path search proof. Post-slice `ggui_search_blueprints`
     // consults both the semantic `VectorStore` AND the manifest
     // `BlueprintProvider` (merged + deduped by id). The fixture's
-    // vector store is empty on this boot (no `ggui_push` has fired),
+    // vector store is empty on this boot (no `ggui_render` has fired),
     // so every match comes from the manifest branch. Query is a
     // substring of the blueprint's description so the two-tier
     // manifest-scoring path (substring = 0.7) is the one exercised.

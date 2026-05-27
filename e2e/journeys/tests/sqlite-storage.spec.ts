@@ -19,9 +19,9 @@
  *      (`resolveStorageFromConfigSafely`) with a remediation hint;
  *      this spec would see READY never arriving.
  *   3. Exercises the write path: mint a pair token, fire a
- *      `ggui_push` story, and confirm the `.sqlite` artifact
+ *      `ggui_render` story, and confirm the `.sqlite` artifact
  *      mutates (file size grows from the zero-turn baseline). This
- *      proves the SqliteSessionStore is actually persisting events,
+ *      proves the SqliteRenderStore is actually persisting events,
  *      not just being instantiated.
  *
  * What this spec deliberately does NOT cover (called out so future
@@ -151,8 +151,8 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
       `threads sqlite file missing at ${threadsDb}`,
     ).toBe(true);
 
-    // 3. Write-path proof — mint a pair token, fire a `ggui_push`
-    //    against the sqlite-backed session store, then assert the
+    // 3. Write-path proof — mint a pair token, fire a `ggui_render`
+    //    against the sqlite-backed render store, then assert the
     //    sessions db artifact family (main + `-wal` + `-shm`) grew
     //    past the boot baseline. The particular byte count isn't
     //    load-bearing (depends on better-sqlite3 page size + journal
@@ -168,22 +168,12 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     const { token } = await mintPairToken(handle, 'sqlite-storage-spec');
     expect(token.length).toBeGreaterThan(0);
 
-    // Post-Slice-5 push is handshake-first: new_session → handshake →
-    // push({handshakeId, decision}). Direct story-shaped push is retired.
-    const sessEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
-      name: 'ggui_new_session',
-      arguments: {},
-    });
-    expect(sessEnv.error).toBeUndefined();
-    const sessionId = (
-      sessEnv.result as { structuredContent: { sessionId: string } }
-    ).structuredContent.sessionId;
-    expect(sessionId).toBeTruthy();
-
+    // Post-Phase-B render is handshake-first: handshake → render
+    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // gone — every render IS the addressable scope.
     const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
       name: 'ggui_handshake',
       arguments: {
-        sessionId,
         intent: 'sqlite driver boot smoke',
         blueprintDraft: { contract: {} },
       },
@@ -194,22 +184,19 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     ).structuredContent.handshakeId;
     expect(handshakeId).toBeTruthy();
 
-    const pushEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
-      name: 'ggui_push',
+    const renderEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
+      name: 'ggui_render',
       arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
     });
-    expect(pushEnv.error).toBeUndefined();
-    // Retired in Slice 5+: `sessionId` / `shortCode` are no longer on
-    // structuredContent. The presence of `stackItemId` is the new proof
-    // the push committed; sessionId now lives on the R3/R4 slice envelope
-    // at `_meta["ai.ggui/session"].sessionId`.
-    const pushOutput = pushEnv.result as {
-      structuredContent?: { stackItemId?: string; url?: string };
-      _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
+    expect(renderEnv.error).toBeUndefined();
+    // Post-Phase-B structuredContent surface: {renderId, url, action,
+    // nextStep?}. The presence of `renderId` is the proof the render
+    // committed.
+    const renderOutput = renderEnv.result as {
+      structuredContent?: { renderId?: string; url?: string };
       isError?: boolean;
     };
-    expect(pushOutput.structuredContent?.stackItemId).toBeTruthy();
-    expect(pushOutput._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
+    expect(renderOutput.structuredContent?.renderId).toBeTruthy();
 
     const postWriteBytes = sqliteFamilyBytes(
       handle.tempCwd,
@@ -217,8 +204,8 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     );
     expect(
       postWriteBytes,
-      `sessions sqlite family did not grow after ggui_push — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
-        `The SqliteSessionStore may be silently falling through to in-memory. ` +
+      `sessions sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
+        `The SqliteRenderStore may be silently falling through to in-memory. ` +
         `(Sum spans ggui-sessions.sqlite + ggui-sessions.sqlite-wal + ggui-sessions.sqlite-shm.)`,
     ).toBeGreaterThan(baselineBytes);
   });

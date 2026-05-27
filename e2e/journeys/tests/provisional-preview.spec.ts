@@ -4,22 +4,21 @@
  *
  * Proves the slice's claim: a freshly-spawned `ggui serve` actually
  * paints provisional A2UI frames into the user-visible
- * `/s/<shortCode>` viewer the first time an agent calls `ggui_push`,
- * with no LLM, no real generation, no BYOK, no `ggui_handshake`.
+ * `/s/<shortCode>` viewer the first time an agent calls `ggui_render`,
+ * with no LLM, no real generation, no BYOK.
  *
  *   1. Boot `ggui serve` under the standard clean-room harness.
  *   2. Mint a pair token (strict-auth `/mcp` requires a real bearer).
- *   3. Call `tools/call ggui_push` with an intent that triggers the
+ *   3. Call `tools/call ggui_render` with an intent that triggers the
  *      deterministic emitter's `form` shell heuristic ("Show me a
  *      sign-up form for my app"). The handler appends a placeholder
- *      stack item (empty componentCode), which the iframe-runtime's
- *      `stack-item-renderer.ts` routes to `mountProvisional` — that's
- *      the surface the deterministic frames paint into.
+ *      render (empty componentCode), which the iframe-runtime routes
+ *      to `mountProvisional` — that's the surface the deterministic
+ *      frames paint into.
  *   4. Navigate the browser to the returned `/s/<shortCode>` viewer.
  *   5. Wait for the live-channel connection to come up + the
- *      provisional renderer mounted PER-STACK-ITEM (post-C9.5
- *      doctrine) to receive the deterministic frames over
- *      `_ggui:preview`.
+ *      provisional renderer to receive the deterministic frames
+ *      over `_ggui:preview`.
  *   6. Assert the preview surface paints the intent-derived heading
  *      AND the form-shell shape (TextField label + "Submit" button).
  *   7. Confirm the hosted-network gate stayed at `[]` — preview frames
@@ -86,7 +85,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('ggui_push fires preview emitter; viewer paints heading + form shell', async ({ page }) => {
+    test('ggui_render fires preview emitter; viewer paints heading + form shell', async ({ page }) => {
       // The provisional preview is the pre-LLM stand-in shown while a
       // real generator runs. With `ANTHROPIC_API_KEY` set, the OSS
       // generator runs synchronously enough that the provisional
@@ -109,23 +108,15 @@ test.describe.serial(
       const { token } = await mintPairToken(handle, 'preview-slice-1');
       expect(token.length).toBeGreaterThan(0);
 
-      // 2. Mint session + handshake + push. The deterministic emitter's
-      //    keyword heuristic recognises "sign-up" / "form" and emits the
+      // 2. Handshake + render. The deterministic emitter's keyword
+      //    heuristic recognises "sign-up" / "form" and emits the
       //    form-shell fragment set (Card → Column → TextField{label:
       //    "Input"} + Button{label:"Submit"}). Independent of LLM
-      //    availability — fully reproducible. Post-Slice-5 push is
-      //    handshake-first.
-      const sessEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
-        name: 'ggui_new_session',
-        arguments: {},
-      });
-      const sessionId = (
-        sessEnv.result as { structuredContent: { sessionId: string } }
-      ).structuredContent.sessionId;
+      //    availability — fully reproducible. Post-Phase-B render is
+      //    handshake-first; the prior `ggui_new_session` mint is gone.
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_handshake',
         arguments: {
-          sessionId,
           intent: PUSH_INTENT,
           blueprintDraft: { contract: {} },
         },
@@ -134,20 +125,20 @@ test.describe.serial(
         hsEnv.result as { structuredContent: { handshakeId: string } }
       ).structuredContent.handshakeId;
 
-      const pushEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
-        name: 'ggui_push',
+      const renderEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
+        name: 'ggui_render',
         arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
       });
-      expect(pushEnv.error).toBeUndefined();
-      // Post-Slice-5 structuredContent: {stackItemId, url, action,
+      expect(renderEnv.error).toBeUndefined();
+      // Post-Phase-B structuredContent: {renderId, url, action,
       // nextStep?}. `shortCode` is derived from the url tail.
-      const pushResult = pushEnv.result as {
-        structuredContent?: { stackItemId?: string; url?: string };
+      const renderResult = renderEnv.result as {
+        structuredContent?: { renderId?: string; url?: string };
       };
-      const pushUrl = pushResult.structuredContent?.url;
-      expect(pushUrl, 'ggui_push returned no url').toBeTruthy();
-      const shortCodeMatch = new URL(pushUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
-      expect(shortCodeMatch, `push url is not /r/<shortCode>: ${pushUrl}`).not.toBeNull();
+      const renderUrl = renderResult.structuredContent?.url;
+      expect(renderUrl, 'ggui_render returned no url').toBeTruthy();
+      const shortCodeMatch = new URL(renderUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
+      expect(shortCodeMatch, `render url is not /r/<shortCode>: ${renderUrl}`).not.toBeNull();
       const shortCode = shortCodeMatch![1]!;
 
       // 3. Navigate to the same-origin viewer. The cookie mint +
@@ -158,13 +149,13 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 4. The console SessionViewer mounts the rendered session
-      //    inside a plain `<iframe srcDoc>` (read-only / visual-only
-      //    — post C1-fix it no longer carries the `<McpAppIframe>`
-      //    lifecycle-mirror attribute). Inner connection-status text
-      //    lives INSIDE the iframe and is reachable only via
-      //    `frameLocator`. Readiness is gated by the inner
-      //    `data-ggui-preview` assertion below.
+      // 4. The console RenderViewer mounts the rendered UI inside a
+      //    plain `<iframe srcDoc>` (read-only / visual-only — post
+      //    C1-fix it no longer carries the `<McpAppIframe>` lifecycle-
+      //    mirror attribute). Inner connection-status text lives INSIDE
+      //    the iframe and is reachable only via `frameLocator`.
+      //    Readiness is gated by the inner `data-ggui-preview`
+      //    assertion below.
       const liveIframe = page
         .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();

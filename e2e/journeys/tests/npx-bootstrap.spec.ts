@@ -1,5 +1,5 @@
 /**
- * OSS hero-path E2E: `ggui serve` → MCP wire → ggui_push →
+ * OSS hero-path E2E: `ggui serve` → MCP wire → ggui_render →
  * console viewer. No hosted account, no cloud, no Docker — the
  * whole journey runs against the real `@ggui-ai/cli` binary booted on
  * an ephemeral 127.0.0.1 port.
@@ -21,15 +21,14 @@
  *      wiring (sessionChannel + pairing + console.sessionCookie +
  *      shortCodeIndex + mcpApps). See
  *      `packages/ggui-cli/src/mcp-backend.ts` for the composition.
- *   2. `GET /ggui/health` reports 4 tools (3 blueprint-read + ggui_push)
+ *   2. `GET /ggui/health` reports 4 tools (3 blueprint-read + ggui_render)
  *      and a live `/ws` channel.
- *   3. `tools/list` over real MCP JSON-RPC surfaces `ggui_push` with the
+ *   3. `tools/list` over real MCP JSON-RPC surfaces `ggui_render` with the
  *      `_meta.ui.resourceUri` + `_meta.ui.visibility` entry-point stamp
  *      per `docs/plans/2026-04-17-ggui-oss-split.md` §2.4.1.
- *   4. `tools/call ggui_push` creates a session, returns a structured
- *      shortCode/url/sessionId tuple, and carries the R3/R4 slice envelope
- *      at `_meta["ai.ggui/session"]`. The `url` points back at the
- *      same-origin console viewer.
+ *   4. `tools/call ggui_render` creates a render, returns a structured
+ *      renderId tuple, and carries the post-Phase-B slice envelope at
+ *      `_meta["ai.ggui/render"]`.
  *   5. `GET /` serves the console landing bundle with the CSP /
  *      security-header set per `packages/console/README.md` §Security.
  *   6. `GET /ggui/console/info` returns the server-identity block.
@@ -42,12 +41,12 @@
  *      false` note in `packages/mcp-server-handlers/src/session-mutations/push.ts`).
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
- *   - Real component-code generation. The OSS `ggui_push` deliberately
+ *   - Real component-code generation. The OSS `ggui_render` deliberately
  *     allocates a placeholder `pageId` and returns `codeReady: false`
  *     today — the generator + harness + negotiator live on the hosted
  *     pod (Slice B+ per §10 of the OSS split plan). The viewer therefore
- *     renders the live session shell ("No stack items yet. Waiting for
- *     `ggui_push` from the agent.") rather than a generated UI. When the
+ *     renders the live shell ("Waiting for `ggui_render` from the
+ *     agent.") rather than a generated UI. When the
  *     OSS generator seam lands, extend this spec to assert on a real
  *     rendered component.
  *   - User-action roundtrip through `ggui_consume`. Without a rendered
@@ -262,7 +261,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     }
   });
 
-  test('boot → MCP → ggui_push → console viewer', async () => {
+  test('boot → MCP → ggui_render → console viewer', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     // ── 1. Health shape ────────────────────────────────────────────
@@ -289,60 +288,45 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     expect(health.tools).toBeGreaterThanOrEqual(15);
     expect(health.channel?.path).toBe('/ws');
 
-    // ── 2. tools/list — MCP Apps entry-point stamp on ggui_push ────
+    // ── 2. tools/list — MCP Apps entry-point stamp on ggui_render ──
     const listed = await mcpCall(baseUrl, pairToken, 'tools/list', {});
     const tools = (listed.result?.tools ?? []) as Array<{
       name: string;
       _meta?: { ui?: { resourceUri?: string; visibility?: readonly string[] } };
     }>;
     const toolNames = tools.map((t) => t.name).sort();
-    // Required surface: the 4 historical tools (handshake / push /
-    // update / blueprint-search) + the 5 lifecycle tools (new_session,
-    // consume, emit, get_session, get_stack) that ground the OSS hero
-    // path. Other native tools (runtime_*, list_gadgets, etc.) ride
-    // along but aren't load-bearing for this spec — present is enough,
-    // exhaustive pinning is brittle.
+    // Required surface: the 4 historical tools (handshake / render /
+    // update / blueprint-search) + the 3 lifecycle tools (consume,
+    // emit, get_render) that ground the OSS hero path. Other native
+    // tools (runtime_*, list_gadgets, etc.) ride along but aren't
+    // load-bearing for this spec — present is enough, exhaustive
+    // pinning is brittle.
     expect(toolNames).toEqual(
       expect.arrayContaining([
         'ggui_handshake',
         'ggui_list_featured_blueprints',
-        'ggui_new_session',
-        'ggui_push',
+        'ggui_render',
         'ggui_search_blueprints',
         'ggui_update',
       ]),
     );
-    const push = tools.find((t) => t.name === 'ggui_push');
-    expect(push?._meta?.ui?.resourceUri).toBe('ui://ggui/session');
-    expect(push?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
+    const renderTool = tools.find((t) => t.name === 'ggui_render');
+    expect(renderTool?._meta?.ui?.resourceUri).toBe('ui://ggui/render');
+    expect(renderTool?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
 
-    // ── 3. tools/call ggui_new_session → ggui_handshake → ggui_push ─
+    // ── 3. tools/call ggui_handshake → ggui_render ────────────────
     //
-    // Post-Slice-5 the direct story-shaped push is retired. The agent
-    // mints a session, negotiates via handshake, then pushes with the
-    // returned handshakeId. The retired fields that previously rode on
-    // `structuredContent` (sessionId, shortCode, codeReady, handshakeId,
-    // contractHash, decision) are gone — `_meta["ai.ggui/session"].sessionId`
-    // (R3/R4 slice envelope) carries the sessionId, and shortCode is
-    // derivable from the url tail.
-    const sessEnv = await mcpCall(baseUrl, pairToken, 'tools/call', {
-      name: 'ggui_new_session',
-      arguments: {},
-    });
-    const mintedSessionId = (
-      sessEnv.result as { structuredContent: { sessionId: string } }
-    ).structuredContent.sessionId;
-    // `ggui_new_session` with no `seed` mints a `randomUUID()` session
-    // id (see `new-session.ts` — the `sess-`+sha256 form is the seeded
-    // derivation path only). Assert the UUIDv4 shape.
-    expect(mintedSessionId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
-
+    // Post-Phase-B the direct story-shaped render is retired. The
+    // agent negotiates via handshake, then renders with the returned
+    // handshakeId. The prior `ggui_new_session` mint is gone — every
+    // render IS the addressable scope. The retired fields that
+    // previously rode on `structuredContent` (sessionId, stackItemId,
+    // shortCode, codeReady, handshakeId, contractHash, decision) are
+    // gone — `_meta["ai.ggui/render"]` (Phase-B slice envelope)
+    // carries the renderId + auth tuple.
     const hsEnvelope = await mcpCall(baseUrl, pairToken, 'tools/call', {
       name: 'ggui_handshake',
       arguments: {
-        sessionId: mintedSessionId,
         intent: 'weather dashboard for Tokyo — current + 3-day forecast',
         blueprintDraft: { contract: {} },
       },
@@ -352,55 +336,53 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     ).structuredContent.handshakeId;
     expect(handshakeId).toBeTruthy();
 
-    const pushEnvelope = await mcpCall(baseUrl, pairToken, 'tools/call', {
-      name: 'ggui_push',
+    const renderEnvelope = await mcpCall(baseUrl, pairToken, 'tools/call', {
+      name: 'ggui_render',
       arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
     });
-    const pushResult = pushEnvelope.result as {
+    const renderResult = renderEnvelope.result as {
       content?: ReadonlyArray<{ type: string; text: string }>;
       structuredContent?: {
-        stackItemId: string;
+        renderId: string;
         action: string;
-        nextStep?: { tool: string; args: { stackItemId: string } };
+        nextStep?: { tool: string; args: { renderId: string } };
       };
       _meta?: {
-        // R3/R4 slice envelope — `_meta["ai.ggui/session"]` replaced the
-        // legacy `_meta.ggui.bootstrap` nesting. The bearer field is now
-        // `wsToken` (was `token`); the rest of the slice carries through.
-        'ai.ggui/session'?: {
+        // Phase-B slice envelope — `_meta["ai.ggui/render"]` replaced
+        // the legacy session-keyed nesting. The bearer field is
+        // `wsToken`; the rest of the slice carries through.
+        'ai.ggui/render'?: {
           wsUrl: string;
           wsToken: string;
           expiresAt: string;
-          sessionId: string;
+          renderId: string;
           appId: string;
         };
       };
     };
-    expect(pushResult).toBeTruthy();
+    expect(renderResult).toBeTruthy();
     const out =
-      pushResult.structuredContent ??
-      (JSON.parse(pushResult.content![0].text) as NonNullable<
-        typeof pushResult.structuredContent
+      renderResult.structuredContent ??
+      (JSON.parse(renderResult.content![0].text) as NonNullable<
+        typeof renderResult.structuredContent
       >);
-    expect(out.stackItemId).toBeTruthy();
-    // First push on a brand-new session reuses (handshake target carries
-    // the sessionId, push finds the existing session) — `reuse`. Pre-
-    // Slice-5 this would have been `create` because handshake itself
-    // implicitly minted the session; post-`ggui_new_session` the session
-    // already exists by the time push runs.
+    expect(out.renderId).toBeTruthy();
+    // First render mints a fresh render — `create`. (Cache hits would
+    // surface as `reuse`; on a brand-new server the catalog can also
+    // exact-key match, accept either.)
     expect(['create', 'reuse']).toContain(out.action);
     // Post-R5 (fix-A 2026-05-26): there is no `url` field on
     // structuredContent. The `/r/<shortCode>` route was deleted; hosts
-    // mount via `_meta.ui.resourceUri` or resolve
-    // `{sessionId, stackItemId}` through their own session-resource
-    // endpoint. Assert the dead field really is gone.
+    // mount via `_meta.ui.resourceUri` or resolve `{renderId}`
+    // through their own render-resource endpoint. Assert the dead
+    // field really is gone.
     expect(Object.keys(out)).not.toContain('url');
 
-    const sessionSlice = pushResult._meta?.['ai.ggui/session'];
-    expect(sessionSlice).toBeTruthy();
-    expect(sessionSlice?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
-    expect(typeof sessionSlice?.wsToken).toBe('string');
-    expect(sessionSlice?.sessionId).toBe(mintedSessionId);
+    const renderSlice = renderResult._meta?.['ai.ggui/render'];
+    expect(renderSlice).toBeTruthy();
+    expect(renderSlice?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
+    expect(typeof renderSlice?.wsToken).toBe('string');
+    expect(renderSlice?.renderId).toBe(out.renderId);
 
     // ── 4. Console info endpoint ───────────────────────────────────
     // Admin-gated since the Slice 4 admin-zone refactor — pass the
