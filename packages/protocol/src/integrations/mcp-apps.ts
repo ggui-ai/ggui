@@ -285,9 +285,6 @@ export interface McpAppAiGguiSessionMeta {
   readonly themeId?: string;
   readonly themeMode?: 'light' | 'dark';
 
-  // Architectural discriminator: canvas-scoped vs per-stack-item iframe
-  readonly canvasMode?: boolean;
-
   // Capability accumulators (union across all stack items in the session)
   readonly gadgets?: ReadonlyArray<McpAppGadgetRef>;
   readonly publicEnv?: Readonly<Record<string, string>>;
@@ -451,9 +448,6 @@ export function parseMcpAppAiGguiMeta(meta: unknown): CombineMcpAppAiGguiMetaRes
       ...(s.themeMode !== undefined
         ? { themeMode: s.themeMode as 'light' | 'dark' }
         : {}),
-      ...(s.canvasMode !== undefined
-        ? { canvasMode: s.canvasMode as boolean }
-        : {}),
       ...(s.gadgets !== undefined
         ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
         : {}),
@@ -575,6 +569,147 @@ export function toMcpAppEnvelope(
   };
 }
 
+
+// =============================================================================
+// Request-side `_meta` — host-supplied metadata on inbound `tools/call`.
+//
+// Set BY the MCP host (claude.ai, ChatGPT, sample-agent), READ BY the ggui
+// server when the agent inside the host invokes a `ggui_*` tool. Distinct
+// from the outbound session/stack-item slices above (server → host on tool
+// results) — different direction, different parser, different lifecycle.
+// =============================================================================
+
+/**
+ * `_meta` key carrying host-supplied session-grouping metadata on every
+ * inbound `tools/call` request. Captured ONCE on the first call that
+ * materializes a ggui session row (today: `ggui_new_session`) and
+ * persisted on the session as opt-in identity for later rehydration.
+ *
+ * Hosts that don't set this key produce one-shot sessions — they work
+ * fine for a single chat turn but cannot be re-listed or restored
+ * after the host closes the conversation surface. Opt-in is the whole
+ * design: hosts that want resume thread their conversation id here;
+ * hosts that don't get the simple write-only path.
+ *
+ * @public
+ */
+export const MCP_APP_AI_GGUI_HOST_SESSION_META_KEY = 'ai.ggui/host-session' as const;
+
+/**
+ * Host-supplied session-grouping slice. Sent on the request `_meta` of
+ * the first `ggui_*` tool call that creates a ggui session (today:
+ * `ggui_new_session`; subsequent calls naming the same session ignore
+ * the field — set-at-creation, immutable).
+ *
+ * Opaque grouping key, NOT a credential. Auth still comes from the
+ * caller's identity (API key, OAuth bearer, cookie). `hostSessionId`
+ * scopes which sessions the authenticated caller can rehydrate; it
+ * does NOT itself authorize access.
+ *
+ * Both fields are required when the slice is present. A slice with a
+ * missing/empty field is treated as absent (degrades to one-shot).
+ *
+ * @public
+ */
+export interface McpAppAiGguiHostSessionMeta {
+  /**
+   * Stable host identifier — e.g. `'sample'`, `'claude.ai'`, `'chatgpt'`.
+   * Used to partition `hostSessionId` namespace so the same chat-id
+   * across two different hosts cannot alias.
+   */
+  readonly hostName: string;
+  /**
+   * Host's grouping key for "this conversation" — opaque to ggui.
+   * Typically: claude.ai thread id, ChatGPT chat id, sample-agent
+   * chatSessionId. The server treats it as an opaque string.
+   */
+  readonly hostSessionId: string;
+}
+
+/**
+ * Discriminated result of {@link parseMcpAppAiGguiHostSessionMeta}.
+ *
+ * Three outcomes:
+ *   - `ok: true, hostSession: <slice>` — slice present + well-formed.
+ *   - `ok: true, hostSession: undefined` — slice absent (host opted out
+ *     of rehydration). Caller proceeds without it; the session it
+ *     creates is one-shot.
+ *   - `ok: false` — slice present but structurally invalid. Caller's
+ *     choice whether to reject the request or proceed as "absent".
+ *     The handler MAY log + proceed; this is host implementor error,
+ *     not a security boundary.
+ *
+ * @public
+ */
+export type ParseMcpAppAiGguiHostSessionMetaResult =
+  | { readonly ok: true; readonly hostSession?: McpAppAiGguiHostSessionMeta }
+  | { readonly ok: false; readonly reason: 'MALFORMED_HOST_SESSION' };
+
+/**
+ * Read the `ai.ggui/host-session` slice off a parsed inbound `_meta`
+ * object. Structural validation only — `hostName` + `hostSessionId`
+ * both required and non-empty. Both missing entirely returns
+ * `{ok: true, hostSession: undefined}` (the documented opt-out path).
+ *
+ * @public
+ */
+export function parseMcpAppAiGguiHostSessionMeta(
+  meta: unknown,
+): ParseMcpAppAiGguiHostSessionMetaResult {
+  if (meta === null || typeof meta !== 'object') {
+    return { ok: true };
+  }
+  const m = meta as Record<string, unknown>;
+  const raw = m[MCP_APP_AI_GGUI_HOST_SESSION_META_KEY];
+  if (raw === undefined) {
+    return { ok: true };
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, reason: 'MALFORMED_HOST_SESSION' };
+  }
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r.hostName !== 'string' ||
+    r.hostName.length === 0 ||
+    typeof r.hostSessionId !== 'string' ||
+    r.hostSessionId.length === 0
+  ) {
+    return { ok: false, reason: 'MALFORMED_HOST_SESSION' };
+  }
+  return {
+    ok: true,
+    hostSession: {
+      hostName: r.hostName,
+      hostSessionId: r.hostSessionId,
+    },
+  };
+}
+
+/**
+ * Wire shape of one row in `ggui_list_sessions` output. Mirrors the
+ * handler's Zod-described `sessions[*]`. Surfaced at the protocol
+ * level so non-handler consumers (sample-agent's `/chat/restore`
+ * server, future host SDK helpers) can import a single typed shape
+ * instead of redeclaring it — preventing drift if the handler ever
+ * grows fields.
+ *
+ * `wsToken` + `wsTokenExpiresAt` are populated when the deployment
+ * wired a `mintWsToken` seam on the handler — otherwise the lean
+ * summary path returns them absent.
+ *
+ * @public
+ */
+export interface SessionSummaryWire {
+  readonly sessionId: string;
+  readonly hostName?: string;
+  readonly hostSessionId?: string;
+  readonly createdAt: string;
+  readonly lastActivityAt: string;
+  readonly status: string;
+  readonly stackItemCount: number;
+  readonly wsToken?: string;
+  readonly wsTokenExpiresAt?: string;
+}
 
 // =============================================================================
 // Inbound — third-party MCP Apps hosted inside a ggui session.

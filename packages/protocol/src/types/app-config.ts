@@ -1,36 +1,9 @@
 /**
- * How a ggui app surfaces in MCP-Apps-capable hosts (Claude Desktop,
- * claude.ai, future spec-compliant clients).
- *
- *   - `'inline'` (default): each `ggui_push` returns its own `ui://`
- *     resource; the host mounts one iframe per push as a chat-message
- *     widget. Today's behavior.
- *   - `'canvas'`: `ggui_new_session` mints a single session-scoped
- *     iframe (`ui://ggui/session/<sessionId>`) that persists for the
- *     session; `ggui_push` delivers state via WebSocket to that
- *     canvas. The canvas owns its own navigation stack + animator
- *     chrome.
- *
- * Selecting `'canvas'` does NOT guarantee canvas rendering — the host
- * may not support fullscreen / pip display modes. The canvas degrades
- * gracefully to inline-style rendering when host capability is
- * missing.
- *
- * Distinct from `defaultShellType`. `defaultShellType` controls how
- * the LLM-generated UI adapts to its chrome (chat-card / fullscreen
- * swipe / spatial floating). `defaultMcpAppsMode` controls how the
- * MCP host presents ggui's iframe (one-per-push card / one-per-session
- * canvas). Same app may set `defaultShellType: 'fullscreen'` AND
- * `defaultMcpAppsMode: 'canvas'` — they're orthogonal concerns.
- *
- * 
- */
-export type McpAppsMode = 'inline' | 'canvas';
-
-/**
  * Public display configuration for a ggui app.
  * Returned by the app config endpoint — no secrets, no auth required.
  */
+import type { McpUiDisplayMode } from './host-context.js';
+
 export interface AppDisplayConfig {
   appId: string;
   name: string;
@@ -53,9 +26,21 @@ export interface AppDisplayConfig {
    */
   endpointUrl?: string;
   /**
-   * How this app surfaces in MCP-Apps-capable hosts. Absent ⇒
-   * `'inline'` (100% backward-compatible default). See {@link McpAppsMode}.
-   * 
+   * App-default display-mode hint stamped on every `ggui_push` from this
+   * app via `_meta.ui.displayMode`. Honored by hosts as a PRESENTATION
+   * preference — `'fullscreen'` says "render this as a main view,
+   * replacing the previous iframe in the primary slot"; `'inline'` says
+   * "stack vertically in the chat log"; `'pip'` says "render as
+   * picture-in-picture overlay" (reserved).
+   *
+   * The wire mechanism is identical regardless of mode: every push
+   * stamps its own `_meta.ui.resourceUri`, every iframe goes through
+   * the same runtime mount path. Display mode controls ONLY how the
+   * host arranges the iframes it mounts. Per-push agents can override
+   * via `ggui_push.input.displayMode`.
+   *
+   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * default, typically `'inline'`).
    */
-  defaultMcpAppsMode?: McpAppsMode;
+  defaultDisplayMode?: McpUiDisplayMode;
 }

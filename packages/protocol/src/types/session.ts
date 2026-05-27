@@ -13,7 +13,6 @@ import type {
 } from './data-contract';
 import type { EndUserIdentity } from './auth';
 import type { HostContextProjection } from './host-context';
-import type { McpAppsMode } from './app-config';
 // MCP Apps inbound variant lives behind a boundary subpath to keep core
 // session typing opt-in. The import IS legitimate — the design lock
 // explicitly treats the `StackItem` union as core's one concession to
@@ -354,34 +353,6 @@ export interface Session {
    */
   hostContext?: HostContextProjection;
   /**
-   * Resolved MCP-Apps presentation mode for this session. Persisted at
-   * `ggui_new_session` time from the app config's `defaultMcpAppsMode`
-   * so mid-session app-config changes don't disrupt live sessions.
-   *
-   *   - `'inline'` (default): each `ggui_push` returns its own ui://
-   *     resource. Today's behavior.
-   *   - `'canvas'`: a session-scoped iframe was minted by
-   *     `ggui_new_session`. `ggui_push` delivers via live-channel WS once
-   *     the canvas iframe completes its `ui/initialize` handshake (see
-   *     {@link canvasLoaded}).
-   *
-   * Absent ⇒ `'inline'` (zero-config default for legacy sessions).
-   * 
-   */
-  mcpAppsMode?: McpAppsMode;
-  /**
-   * Set to `true` when the canvas iframe (for `mcpAppsMode === 'canvas'`
-   * sessions) has completed its `ui/initialize` handshake AND opened
-   * its live-channel subscription. Read by `ggui_push` to decide whether
-   * to deliver state via WS (canvas loaded) or return a per-push
-   * resource (canvas not yet loaded → fallback to inline-style
-   * delivery for that single push).
-   *
-   * Always undefined / false for `mcpAppsMode === 'inline'` sessions.
-   * 
-   */
-  canvasLoaded?: boolean;
-  /**
    * Currently-active stack item id from the canvas's user nav stack.
    * Updated server-side on every `canvas_navigated` envelope from the
    * iframe. Drives `ggui_consume`'s active-pipe resolution (consumer
@@ -399,6 +370,25 @@ export interface Session {
    * before any `canvas_navigated` lands..
    */
   activeStackItemId?: string;
+  /**
+   * Host-supplied session-grouping metadata, captured ONCE at session
+   * creation from `_meta["ai.ggui/host-session"]` on the inbound
+   * `ggui_new_session` tool call. Identifies the MCP host (claude.ai,
+   * sample, etc.) and the host's opaque grouping key for "this
+   * conversation" — typically the host's thread id or chat id.
+   *
+   * Opt-in: hosts that don't pass the slice get one-shot sessions
+   * (functional but non-rehydratable). Once captured, the field is
+   * immutable for the session's lifetime — subsequent calls naming
+   * the same session ignore any `_meta["ai.ggui/host-session"]` they
+   * carry. Persisted on stores that survive restart; powers the
+   * `ggui_list_sessions(hostName, hostSessionId)` lookup that
+   * end-user resume flows query.
+   */
+  hostSession?: {
+    readonly hostName: string;
+    readonly hostSessionId: string;
+  };
 }
 
 /**
