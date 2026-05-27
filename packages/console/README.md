@@ -85,7 +85,7 @@ rebadge of bootstrap/session tokens:
 | Ingress          | Credential                    | Who mints it                        |
 | ---------------- | ----------------------------- | ----------------------------------- |
 | `/mcp`           | `Authorization: Bearer …`     | AuthAdapter / pairing               |
-| `/ws` (MCP Apps) | `?bootstrap=<token>`          | `ggui_push` bootstrap mint          |
+| `/ws` (MCP Apps) | `?bootstrap=<token>`          | `ggui_render` bootstrap mint        |
 | `/ws` (console)  | `ggui_console_session` cookie | `POST /ggui/console/session-cookie` |
 
 The cookie authenticates **only** the live-channel `/ws` upgrade. It is

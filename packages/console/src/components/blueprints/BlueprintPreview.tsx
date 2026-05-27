@@ -8,7 +8,7 @@
  * surfaces a "pending" placeholder rather than mounting a broken
  * iframe.
  *
- * **Why iframe and not in-process `StackItemRenderer`.** Blueprint
+ * **Why iframe and not in-process `RenderRenderer`.** Blueprint
  * variant code lives in S3 (cloud) or an in-memory map (OSS); to
  * fetch it for in-process render the SPA would need a code-body REST
  * endpoint the console does not have. The iframe approach pushes

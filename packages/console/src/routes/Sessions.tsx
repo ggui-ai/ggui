@@ -117,7 +117,7 @@ export function Sessions(): ReactElement {
             Every row is an active session on this server. Click-through
             to the viewer when a session has a{' '}
             <code className="ggui-code">shortCode</code> minted by{' '}
-            <code className="ggui-code">ggui_push</code>.
+            <code className="ggui-code">ggui_render</code>.
           </>
         }
       />
@@ -267,7 +267,7 @@ function SessionRow({
         ) : (
           <span className="ggui-muted">
             No shortCode — push a stack item via{' '}
-            <code className="ggui-code">ggui_push</code> to mint one.
+            <code className="ggui-code">ggui_render</code> to mint one.
           </span>
         )}
       </div>
@@ -306,7 +306,7 @@ function EmptySessions(): ReactElement {
       <div className="ggui-card__body">
         <p className="ggui-body">No sessions yet.</p>
         <p className="ggui-muted">
-          Push from an agent (<code className="ggui-code">ggui_push</code>)
+          Push from an agent (<code className="ggui-code">ggui_render</code>)
           or open <code className="ggui-code">/chat</code> to start a
           generation — new sessions appear here on reload.
         </p>

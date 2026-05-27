@@ -455,7 +455,7 @@ function LiveSessionsHero({
             playground
           </button>{' '}
           to start one, or point an agent at{' '}
-          <code className="ggui-code">ggui_push</code>.
+          <code className="ggui-code">ggui_render</code>.
         </p>
       </div>
     );

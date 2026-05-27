@@ -11,7 +11,7 @@
  *
  * Render shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + direction chip (inbound-push / outbound-update)
- *   - tool name (`ggui_push` / `ggui_update`)
+ *   - tool name (`ggui_render` / `ggui_update`)
  *   - sessionId truncated to 8 chars
  *   - byte size of the payload
  *   - expandable detail panel with pretty-printed JSON in a paper-2
@@ -135,7 +135,7 @@ export function Payloads(): ReactElement {
         mute="Live."
         intro={
           <>
-            Every <code className="ggui-code">ggui_push</code> and{' '}
+            Every <code className="ggui-code">ggui_render</code> and{' '}
             <code className="ggui-code">ggui_update</code> tool call as it
             lands on the handler — exactly the JSON the agent sent.
             Useful when contract drift or the agent paraphrases an
@@ -167,7 +167,7 @@ export function Payloads(): ReactElement {
           {events.length === 0 && status !== 'error' ? (
             <p className="ggui-muted">
               No payloads yet. Trigger a{' '}
-              <code className="ggui-code">ggui_push</code> from your MCP
+              <code className="ggui-code">ggui_render</code> from your MCP
               client and it'll appear here as it lands.
             </p>
           ) : null}

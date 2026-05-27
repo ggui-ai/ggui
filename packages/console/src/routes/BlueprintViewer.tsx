@@ -4,9 +4,9 @@
  * One-shot mount surface for a manifest-registered blueprint. The SPA
  * fetches the blueprint's compiled bundle from
  * `GET /ggui/console/blueprint/:id`, then hands the code to
- * `StackItemRenderer` — the same primitive `SessionViewer` uses for
- * session stack entries. No WebSocket, no session cookie; a blueprint
- * is an authored UI rendering in isolation.
+ * `RenderRenderer` — the same primitive shells use to mount a single
+ * `ComponentRender`. No WebSocket, no session cookie; a blueprint is
+ * an authored UI rendering in isolation.
  *
  * Route scope:
  *
@@ -30,7 +30,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { StackItemRenderer } from '@ggui-ai/react';
+import { RenderRenderer } from '@ggui-ai/react';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
@@ -130,7 +130,7 @@ export function BlueprintViewer({
 }
 
 /**
- * Mount card — wraps `StackItemRenderer` in the canonical
+ * Mount card — wraps `RenderRenderer` in the canonical
  * `data-ggui-stack-entry="component"` shell. Reusing this data-attr
  * contract across console surfaces lets browser specs target one
  * selector against both in-process and blueprint mounts.
@@ -169,8 +169,8 @@ function BlueprintMount({
         <TryLiveAction blueprintId={blueprint.blueprintId} />
       </div>
       <div className="ggui-pane__body">
-        <StackItemRenderer
-          stackItem={{
+        <RenderRenderer
+          render={{
             id: blueprint.blueprintId,
             componentCode: blueprint.code,
           }}

@@ -31,7 +31,7 @@ import {
 import { act, render, waitFor } from '@testing-library/react';
 import { BlueprintViewer } from './BlueprintViewer.js';
 
-// The `StackItemRenderer` path invokes `URL.createObjectURL` on the
+// The `RenderRenderer` path invokes `URL.createObjectURL` on the
 // componentCode blob; jsdom doesn't ship it. Stub it here — the
 // compiled blob-URL load fails under jsdom, which is fine since we
 // only assert on the enclosing `data-ggui-*` anchors.

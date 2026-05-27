@@ -250,8 +250,8 @@ function SessionsPane({
           </p>
         ) : state.data.sessions.length === 0 ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-            No sessions yet. Push from an agent (
-            <code className="ggui-code">ggui_push</code>) to create one.
+            No sessions yet. Render from an agent (
+            <code className="ggui-code">ggui_render</code>) to create one.
           </p>
         ) : (
           <ul

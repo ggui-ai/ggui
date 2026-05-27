@@ -21,7 +21,7 @@
  *     the iframe's `srcdoc`, the meta slice replies to `ui/initialize`.
  *   - `ui/initialize` postMessage from the iframe's contentWindow
  *     receives a JSON-RPC reply whose
- *     `result.toolOutput._meta["ai.ggui/session"]` matches the fetched
+ *     `result.toolOutput._meta["ai.ggui/render"]` matches the fetched
  *     meta (spec Path-B inline-meta delivery).
  *   - Resource-fetch failure transitions the state machine to
  *     `resource-failed` and renders the failure copy.
@@ -91,11 +91,11 @@ function installFetchMock({
     if (url.includes('/ggui/console/sessions/') && url.endsWith('/meta')) {
       if (bootstrap) return bootstrap();
       return jsonResponse({
-        'ai.ggui/session': {
+        'ai.ggui/render': {
           wsUrl: 'wss://test.example/ws',
           wsToken: 'mock-token',
           expiresAt: '2099-12-31T23:59:59.999Z',
-          sessionId: 'sess-xyz',
+          renderId: 'sess-xyz',
           appId: 'app-demo',
           runtimeUrl: '/_ggui/iframe-runtime.js',
         },
@@ -114,7 +114,7 @@ function installFetchMock({
       return jsonResponse({
         contents: [
           {
-            uri: 'ui://ggui/session',
+            uri: 'ui://ggui/render',
             mimeType: 'text/html;profile=mcp-app',
             text: '<html><body data-ggui-shell="thin">shell</body></html>',
           },
@@ -223,8 +223,8 @@ describe('SessionViewer — mount pipeline', () => {
       result?: {
         toolOutput?: {
           _meta?: {
-            'ai.ggui/session'?: {
-              sessionId?: string;
+            'ai.ggui/render'?: {
+              renderId?: string;
               runtimeUrl?: string;
             };
           };
@@ -233,10 +233,10 @@ describe('SessionViewer — mount pipeline', () => {
     };
     expect(reply.jsonrpc).toBe('2.0');
     expect(reply.id).toBe(1);
-    const sessionSlice = reply.result?.toolOutput?._meta?.['ai.ggui/session'];
-    expect(sessionSlice).toBeTruthy();
-    expect(sessionSlice?.sessionId).toBe('sess-xyz');
-    expect(sessionSlice?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    const renderSlice = reply.result?.toolOutput?._meta?.['ai.ggui/render'];
+    expect(renderSlice).toBeTruthy();
+    expect(renderSlice?.renderId).toBe('sess-xyz');
+    expect(renderSlice?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 
   it('ignores non-ui/initialize postMessages', async () => {
@@ -339,14 +339,14 @@ describe('SessionViewer — mount pipeline', () => {
     expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();
   });
 
-  it('transitions to resource-failed when the sessions/:id/meta response is missing the session slice', async () => {
+  it('transitions to resource-failed when the sessions/:id/meta response is missing the render slice', async () => {
     installFetchMock({
       bootstrap: async () => jsonResponse({}),
     });
     render(<SessionViewer shortCode="scode0005" />);
     await waitFor(() => {
       expect(
-        screen.getByText(/missing `ai\.ggui\/session` slice/i),
+        screen.getByText(/missing `ai\.ggui\/render` slice/i),
       ).toBeTruthy();
     });
     expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();

@@ -32,8 +32,9 @@
  *        `ResourceContents` blob whose `text` is the production thin-
  *        shell HTML.
  *      - GET `/ggui/console/sessions/<sessionId>/meta` →
- *        slice-envelope JSON (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`,
- *        same shape as the wire `_meta`).
+ *        slice-envelope JSON (`{ "ai.ggui/render": {...} }`, same
+ *        shape as the wire `_meta` after the Phase-B session+stackItem
+ *        collapse).
  *      - GET `/ggui/console/session-stack?session=<sessionId>` →
  *        observational stack snapshot (currently unused by the
  *        read-only viewer; kept in the fetch fan-out so the server
@@ -52,7 +53,7 @@
  *   - 500/4xx on cookie-mint: error card with status.
  *   - Network fail on any fetch: raw error message.
  *   - Resource OR meta fetch fails (401/403/404/503/network) OR
- *     `contents[]` empty OR missing `ai.ggui/session` slice: explicit
+ *     `contents[]` empty OR missing `ai.ggui/render` slice: explicit
  *     `resource-failed` state with message.
  */
 import {
@@ -66,9 +67,9 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  parseMcpAppAiGguiMeta,
+  parseMcpAppAiGguiRenderMeta,
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
@@ -113,7 +114,7 @@ type BootstrapState =
       readonly kind: 'ready';
       readonly session: SessionCookieResponse;
       readonly resource: SessionResourceContents;
-      readonly meta: McpAppAiGguiMeta;
+      readonly meta: McpAppAiGguiRenderMeta;
     }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'resource-failed'; readonly message: string }
@@ -230,11 +231,11 @@ export function SessionViewer({
           return;
         }
         const metaBody = (await metaRes.json()) as unknown;
-        const parsedMeta = parseMcpAppAiGguiMeta(metaBody);
-        if (!parsedMeta.ok || !parsedMeta.meta.session) {
+        const parsedMeta = parseMcpAppAiGguiRenderMeta(metaBody);
+        if (!parsedMeta.ok || !parsedMeta.meta) {
           setState({
             kind: 'resource-failed',
-            message: 'sessions/:id/meta response missing `ai.ggui/session` slice',
+            message: 'sessions/:id/meta response missing `ai.ggui/render` slice',
           });
           return;
         }
@@ -352,7 +353,7 @@ function LiveViewer({
 }: {
   readonly session: SessionCookieResponse;
   readonly resource: SessionResourceContents;
-  readonly meta: McpAppAiGguiMeta;
+  readonly meta: McpAppAiGguiRenderMeta;
   readonly shortCode: string;
 }): ReactElement {
   const iframeRef = useRef<HTMLIFrameElement>(null);
