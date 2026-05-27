@@ -7,7 +7,7 @@
  * The push-time gadget gate answers a pure question: given a contract
  * and the app's registered `App.gadgets` catalog, does every
  * `(package, export)` the contract references resolve — and if not,
- * which precise reject code applies? There is no session, no
+ * which precise reject code applies? There is no render, no
  * transport, no wire frame in that question — it is a deterministic
  * classification, exactly like the `clientCapabilities` schema check
  * in `../schema-conformance`.

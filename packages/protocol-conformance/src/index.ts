@@ -24,14 +24,14 @@ export type {
   TestCase,
   // Setup vocabulary (JSON-authoring surface)
   SetupStep,
-  CreateSessionStep,
+  CreateRenderStep,
   RegisterToolStep,
   EmitEnvelopeStep,
   SeedChannelStep,
   UnknownSetupStep,
   // Teardown vocabulary (JSON-authoring surface)
   TeardownStep,
-  CloseSessionStep,
+  CloseRenderStep,
   UnregisterToolStep,
   UnknownTeardownStep,
   // Expected-behavior vocabulary
@@ -60,7 +60,7 @@ export type {
   ConformanceHost,
   // Setup directives (runtime surface — narrowed)
   SetupStep as HostSetupStep,
-  CreateSessionSetup,
+  CreateRenderSetup,
   RegisterToolSetup,
   RegisterActionSpecSetup,
   EmitEnvelopeSetup,
@@ -70,7 +70,7 @@ export type {
   UnknownSetupStep as HostUnknownSetupStep,
   // Teardown directives (runtime surface — narrowed)
   TeardownStep as HostTeardownStep,
-  CloseSessionTeardown,
+  CloseRenderTeardown,
   UnregisterToolTeardown,
   UnknownTeardownStep as HostUnknownTeardownStep,
 } from './conformance-host.js';

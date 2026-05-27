@@ -13,7 +13,7 @@
  * This catalog asserts a *structural* obligation: which
  * `clientCapabilities` payloads a spec-conformant parser MUST accept
  * and which it MUST reject — a property of the schema alone, with no
- * session, no transport, no host. Folding it into the behavioral
+ * render, no transport, no host. Folding it into the behavioral
  * fixture shape (`TestCase`) would mean inventing a no-op
  * `inputEnvelope` and a fake behavior kind for every case. Keeping it
  * a distinct, smaller artifact is the honest modeling.

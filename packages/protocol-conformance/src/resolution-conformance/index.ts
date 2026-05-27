@@ -7,7 +7,7 @@
  * Given a gadget descriptor's transport fields, the server computes
  * the bundle + style URLs the iframe sees in
  * `_meta.ggui.bootstrap.gadgets[*]`. That computation is a pure,
- * deterministic function — no session, transport, or wire frame — so
+ * deterministic function — no render, transport, or wire frame — so
  * it gets the same treatment as the wire schema (`../schema-conformance`)
  * and the registry gate (`../registration-conformance`): a catalog of
  * cases graded against a caller-supplied resolver.

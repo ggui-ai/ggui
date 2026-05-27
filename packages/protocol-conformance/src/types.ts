@@ -125,18 +125,18 @@ export type AuthConfig =
  * extend the setup vocabulary without a kit version bump.
  */
 export type SetupStep =
-  | CreateSessionStep
+  | CreateRenderStep
   | RegisterToolStep
   | EmitEnvelopeStep
   | SeedChannelStep
   | UnknownSetupStep;
 
-export interface CreateSessionStep {
-  readonly type: 'create-session';
-  /** Opaque session id the host allocates. Downstream steps + the
+export interface CreateRenderStep {
+  readonly type: 'create-render';
+  /** Opaque render id the host allocates. Downstream steps + the
    *  fixture's `inputEnvelope` reference it by value. */
-  readonly sessionId: string;
-  /** Optional app (tenant) id the session scopes to. Defaults to the
+  readonly renderId: string;
+  /** Optional app (tenant) id the render scopes to. Defaults to the
    *  host's implementation-defined "default app". */
   readonly appId?: string;
 }
@@ -169,7 +169,7 @@ export interface EmitEnvelopeStep {
 
 export interface SeedChannelStep {
   readonly type: 'seed-channel';
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly channel: string;
   readonly value: unknown;
 }
@@ -188,13 +188,13 @@ export interface UnknownSetupStep {
  * to cleanup.
  */
 export type TeardownStep =
-  | CloseSessionStep
+  | CloseRenderStep
   | UnregisterToolStep
   | UnknownTeardownStep;
 
-export interface CloseSessionStep {
-  readonly type: 'close-session';
-  readonly sessionId: string;
+export interface CloseRenderStep {
+  readonly type: 'close-render';
+  readonly renderId: string;
 }
 
 export interface UnregisterToolStep {
@@ -403,9 +403,9 @@ export interface TestCase {
    * shape — the runner passes it verbatim to the host's transport.
    *
    * Typically an object like
-   * `{type: 'action', channel: 0, sessionId: 'test-s1', action: {…}}`
+   * `{type: 'action', channel: 0, renderId: 'test-r1', action: {…}}`
    * (channel 0 = wired-action dispatch) or
-   * `{type: 'render', sessionId: 'test-s1', resource: {…}}` for
+   * `{type: 'render', renderId: 'test-r1', resource: {…}}` for
    * bootstrap-path fixtures.
    *
    * `unknown` rather than a typed union because the kit may drive

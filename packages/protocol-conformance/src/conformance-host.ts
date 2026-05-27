@@ -57,7 +57,7 @@
  * never silently succeed.
  */
 export type SetupStep =
-  | CreateSessionSetup
+  | CreateRenderSetup
   | RegisterToolSetup
   | RegisterActionSpecSetup
   | EmitEnvelopeSetup
@@ -66,9 +66,9 @@ export type SetupStep =
   | ServerVersionOverrideSetup
   | UnknownSetupStep;
 
-export interface CreateSessionSetup {
-  readonly kind: 'create-session';
-  readonly sessionId: string;
+export interface CreateRenderSetup {
+  readonly kind: 'create-render';
+  readonly renderId: string;
   readonly appId?: string;
 }
 
@@ -128,13 +128,13 @@ export type UnknownSetupStep = Record<string, unknown> & {
 // =============================================================================
 
 export type TeardownStep =
-  | CloseSessionTeardown
+  | CloseRenderTeardown
   | UnregisterToolTeardown
   | UnknownTeardownStep;
 
-export interface CloseSessionTeardown {
-  readonly kind: 'close-session';
-  readonly sessionId: string;
+export interface CloseRenderTeardown {
+  readonly kind: 'close-render';
+  readonly renderId: string;
 }
 
 export interface UnregisterToolTeardown {

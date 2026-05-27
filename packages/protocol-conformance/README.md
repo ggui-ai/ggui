@@ -33,7 +33,7 @@ The partition is intentional: Path-A FAILs are vendor-neutrality bugs the server
 
 ## Pure-function conformance catalogs
 
-The behavioral fixture catalog above asserts what an implementation _does_ over the wire. Some protocol obligations aren't transport-observable at all — they are deterministic _validation functions_: given an input, accept or reject it. SPEC §7.7.2's gadget obligations are exactly this. Modeling them as WebSocket fixtures would mean faking wire frames the protocol never emits; instead the kit ships **pure-function catalogs** — accept/reject cases graded against a caller-supplied function, with no host, session, or transport.
+The behavioral fixture catalog above asserts what an implementation _does_ over the wire. Some protocol obligations aren't transport-observable at all — they are deterministic _validation functions_: given an input, accept or reject it. SPEC §7.7.2's gadget obligations are exactly this. Modeling them as WebSocket fixtures would mean faking wire frames the protocol never emits; instead the kit ships **pure-function catalogs** — accept/reject cases graded against a caller-supplied function, with no host, render, or transport.
 
 Each catalog ships its cases as raw JSON so a non-TypeScript implementer can grade their own implementation, and each runner takes the implementation as a callback — the kit never hard-binds a concrete one. Three catalogs ship today:
 

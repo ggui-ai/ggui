@@ -11,8 +11,8 @@
  * land as sibling modules with the same `Transport` shape. The
  * transport is NOT a full MCP client — it does not try to be
  * compatible with the MCP SDK, and it does not implement stack
- * management. The kit runs against an already-provisioned session
- * (the host's `create-session` setup step ran first) and treats the
+ * management. The kit runs against an already-provisioned render
+ * (the host's `create-render` setup step ran first) and treats the
  * wire as opaque after that.
  *
  * Auth:
@@ -36,7 +36,7 @@ export type ObservedFrame =
 /**
  * Opaque handle returned by {@link openWsTransport}. Closed explicitly
  * via {@link WsTransport.close} — the runner closes after each
- * fixture so sessions don't leak between cases.
+ * fixture so renders don't leak between cases.
  */
 export interface WsTransport {
   /** Send one frame over the wire. Serializes `frame` as JSON. */

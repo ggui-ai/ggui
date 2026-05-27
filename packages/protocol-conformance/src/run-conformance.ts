@@ -206,11 +206,11 @@ async function runOneFixture(
     const wsUrl = deriveWsUrl(config.serverUrl);
     transport = await openWsTransport({ kind: 'ws', url: wsUrl, auth: config.auth });
 
-    const sessionId = extractSessionId(fixture);
+    const renderId = extractRenderId(fixture);
     transport.send({
       type: 'subscribe',
       payload: {
-        sessionId,
+        renderId,
         appId: 'conformance',
         role: 'user',
         ...(maybeSupportedVersions(fixture.expectedBehavior) ?? {}),
@@ -296,26 +296,26 @@ function deriveWsUrl(serverUrl: string): string {
   return `ws://${trimmed}/ws`;
 }
 
-function extractSessionId(fixture: TestCase): string {
-  // Prefer a sessionId from the first `create-session` setup step —
-  // this is the fixture's declared session identity. Fall back to
-  // inputEnvelope.sessionId, then to the fixture name.
+function extractRenderId(fixture: TestCase): string {
+  // Prefer a renderId from the first `create-render` setup step —
+  // this is the fixture's declared render identity. Fall back to
+  // inputEnvelope.renderId, then to the fixture name.
   for (const step of fixture.setup) {
     if (
-      (step as { type?: unknown }).type === 'create-session' &&
-      typeof (step as { sessionId?: unknown }).sessionId === 'string'
+      (step as { type?: unknown }).type === 'create-render' &&
+      typeof (step as { renderId?: unknown }).renderId === 'string'
     ) {
-      return (step as { sessionId: string }).sessionId;
+      return (step as { renderId: string }).renderId;
     }
   }
   const envelope = fixture.inputEnvelope;
   if (
     envelope !== null &&
     typeof envelope === 'object' &&
-    'sessionId' in envelope &&
-    typeof (envelope as { sessionId?: unknown }).sessionId === 'string'
+    'renderId' in envelope &&
+    typeof (envelope as { renderId?: unknown }).renderId === 'string'
   ) {
-    return (envelope as { sessionId: string }).sessionId;
+    return (envelope as { renderId: string }).renderId;
   }
   return fixture.name;
 }
@@ -330,7 +330,7 @@ function shouldDispatchInputEnvelope(fixture: TestCase): boolean {
   const envelope = fixture.inputEnvelope;
   if (envelope === null || typeof envelope !== 'object') return false;
   const type = (envelope as { type?: unknown }).type;
-  return type === 'action' || type === 'pop' || type === 'close';
+  return type === 'action';
 }
 
 function maybeSupportedVersions(
