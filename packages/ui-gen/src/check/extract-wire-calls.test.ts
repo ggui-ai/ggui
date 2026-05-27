@@ -257,6 +257,69 @@ describe("checkWirePreservation", () => {
       extra: [],
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Issue #197 regression — "Triad calibration: agent generates contract
+  // field `initialValue` but component updates `count`".
+  //
+  // Bug shape: the agent authors a counter UI with `propsSpec.initialValue`
+  // (the seed value pushed once at `ggui_push`), but the code-gen LLM
+  // emits a component that mirrors the live count to the agent via
+  // `useGguiContext('count')` — a slot the contract never declared. At
+  // runtime the iframe throws on mount (`no Context registered for
+  // 'count'`) and the agent's later `ggui_update({props: {count: N}})`
+  // is rejected by the propsSpec validator.
+  //
+  // The unconditional `wire_undeclared` tier-0 check (shipped in
+  // 42e3328a5 "feat(ui-gen): unconditional wire_undeclared check +
+  // four-spec authoring") catches this fail-loud at generation time so
+  // the LLM gets a remediation message ("declare contextSpec.count or
+  // remove the useGguiContext('count') call") instead of shipping
+  // broken code. The system prompt's rule #3
+  // (oss/packages/ui-gen/src/boilerplate/system-prompt.ts) teaches the
+  // same invariant: "Every useAction('X'), useStream('X'),
+  // useGguiContext('X') etc. MUST correspond to a declared entry on
+  // the contract."
+  //
+  // This named-fixture test locks the exact shape from #197 so future
+  // drift trips a clearly-labeled failure rather than a generic
+  // extra-wires assertion.
+  it("contract drift: propsSpec declares 'initialValue' but component updates 'count' via useGguiContext (issue #197)", () => {
+    const contract: DataContract = {
+      propsSpec: {
+        properties: {
+          initialValue: {
+            schema: { type: "number" },
+            required: false,
+            description: "Seed value for the counter, pushed once at ggui_push.",
+          },
+        },
+      },
+    };
+    const code = `
+      import { useGguiContext } from '@ggui-ai/wire';
+      export default function Counter(props: { initialValue?: number }) {
+        // BUG: code mirrors the live count to the agent via a contextSpec
+        // slot the contract never declared. The propsSpec field
+        // 'initialValue' is the one-shot seed; mutation of 'count' has
+        // no declared surface.
+        const [count, setCount] = useGguiContext<number>('count');
+        return (
+          <button onClick={() => setCount((c) => (c ?? props.initialValue ?? 0) + 1)}>
+            {count ?? props.initialValue ?? 0}
+          </button>
+        );
+      }
+    `;
+
+    const report = checkWirePreservation(code, contract);
+
+    // propsSpec fields are NOT wire surfaces — they don't appear in
+    // `missing`. The bug surfaces as an `extra` context-kind site for
+    // the undeclared 'count' slot.
+    expect(report.missing).toEqual([]);
+    expect(report.extra).toEqual([{ kind: "context", name: "count" }]);
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────
