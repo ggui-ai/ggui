@@ -28,7 +28,7 @@
 
 import {
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   McpAppIframeDimensions,
@@ -67,7 +67,7 @@ export interface HostBridgeContext {
    * When present, `dispatchHostBridgeRequest`'s `ui/initialize`
    * branch adds `toolOutput._meta` (carrying the
    * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
-   * slices that are present on the supplied {@link McpAppAiGguiMeta})
+   * slices that are present on the supplied {@link McpAppAiGguiRenderMeta})
    * to the response alongside the existing `theme` /
    * `containerDimensions` / `locale` adapter-boundary fields. The
    * renderer's `parseBootstrap` (`packages/iframe-runtime/src/
@@ -81,12 +81,12 @@ export interface HostBridgeContext {
    * exists to prevent.
    *
    * Carrier shape mirrors the wire — the same
-   * {@link McpAppAiGguiMeta} the server stamps onto the `ggui_push`
+   * {@link McpAppAiGguiRenderMeta} the server stamps onto the `ggui_push`
    * tool result's `_meta["ai.ggui/*"]` slices ends up here verbatim.
    * No transformation, no per-namespace whitelisting; the host's
    * contract is "thread the forwarded meta through" and that's it.
    */
-  readonly meta?: McpAppAiGguiMeta;
+  readonly meta?: McpAppAiGguiRenderMeta;
 }
 
 export const DEFAULT_HOST_THEME: Readonly<Record<string, string>> = {
@@ -146,7 +146,7 @@ export async function dispatchHostBridgeRequest(
       // state leaks into the iframe.
       //
       // READING-B EXCEPTION (opt-in via `ctx.meta`). When the
-      // host has explicitly threaded a `McpAppAiGguiMeta` for a
+      // host has explicitly threaded a `McpAppAiGguiRenderMeta` for a
       // first-party ggui renderer iframe (see `McpAppIframeProps.
       // meta` JSDoc), augment the result with
       // `toolOutput._meta = toMcpAppEnvelope(ctx.meta)` (the wire

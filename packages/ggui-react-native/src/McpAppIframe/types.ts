@@ -12,7 +12,7 @@ import type {
   ProtocolError,
 } from '@ggui-ai/iframe-runtime';
 import type {
-  McpAppAiGguiMeta,
+  McpAppAiGguiRenderMeta,
   McpAppLifecycleEvent,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
@@ -105,7 +105,7 @@ export interface McpAppIframeProps {
    * **When set:** the host's `ui/initialize` response gains a
    * `toolOutput._meta` envelope carrying the
    * `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` slices
-   * (whichever are present on the supplied {@link McpAppAiGguiMeta}),
+   * (whichever are present on the supplied {@link McpAppAiGguiRenderMeta}),
    * alongside the existing `theme` / `containerDimensions` / `locale`
    * adapter-boundary fields. The renderer's `parseBootstrap()`
    * (`packages/renderer/src/bootstrap.ts`) reads exactly that path
@@ -134,7 +134,7 @@ export interface McpAppIframeProps {
    * forwarding does NOT cascade through to third-party content the
    * renderer is itself hosting.
    */
-  readonly meta?: McpAppAiGguiMeta;
+  readonly meta?: McpAppAiGguiRenderMeta;
 
   /**
    * Caller-provided handler for `tools/call` dispatches from the

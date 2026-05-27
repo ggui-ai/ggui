@@ -16,7 +16,7 @@ export interface NetInfoState {
  */
 export interface WebSocketManagerOptions {
   url: string;
-  sessionId: string;
+  renderId: string;
   appId: string;
   onMessage: (message: WebSocketMessage) => void;
   onStatusChange: (status: ConnectionStatus) => void;
@@ -75,24 +75,24 @@ export class WebSocketManager {
     // Load any persisted buffered events on first connect
     await this.buffer.loadPersisted();
 
-    const { url, sessionId, appId, onStatusChange } = this.options;
+    const { url, renderId, appId, onStatusChange } = this.options;
     onStatusChange('connecting');
 
-    const wsUrl = `${url}?sessionId=${sessionId}&appId=${appId}`;
+    const wsUrl = `${url}?renderId=${renderId}&appId=${appId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
       onStatusChange('connected');
 
-      // Send subscribe message to register for session updates.
+      // Send subscribe message to register for render updates.
       // `supportedVersions` opts into the protocol-version handshake;
       // servers that don't read the field silently ignore it (older
       // servers pass through unchanged).
       this.ws?.send(JSON.stringify({
         type: 'subscribe',
         payload: {
-          sessionId,
+          renderId,
           appId,
           supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
         },

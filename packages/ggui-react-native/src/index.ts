@@ -41,9 +41,13 @@ export type {
 export type {
   ActionEnvelope,
   EventType,
-  EventSubscription,
-  Session,
-  StackItem,
+  // Post-Phase-B render shape — replaces the deleted Session/StackItem
+  // pair with a single Render union (ComponentRender, SystemRender,
+  // McpAppsRender) keyed by the flat `renderId`.
+  Render,
+  ComponentRender,
+  SystemRender,
+  RenderStatus,
   AdapterPermissions,
   PermissionStatus,
   SubscribePayload,
@@ -53,11 +57,11 @@ export type {
   ErrorPayload,
   ProgressStep,
   ProgressPayload,
-  SessionPayload,
+  RenderPayload,
+  PropsUpdatePayload,
   UrlPayload,
   SystemPayload,
   SystemAction,
-  GeneratePayload,
   ShellType,
   InterfaceContext,
   DeviceCategory,
@@ -100,9 +104,9 @@ export { GguiProvider, useGguiContext, useAdapter } from './components/GguiProvi
 export type { GguiProviderProps } from './components/GguiProvider';
 export type { AdapterRegistry } from './context/GguiContext';
 
-// Session
-export { GguiSession } from './components/GguiSession';
-export type { GguiSessionProps, SessionApi, SessionInfo } from './components/GguiSession';
+// Render
+export { GguiRender } from './components/GguiRender';
+export type { GguiRenderProps, RenderApi, RenderInfo } from './components/GguiRender';
 
 // Dynamic Component Rendering
 export {

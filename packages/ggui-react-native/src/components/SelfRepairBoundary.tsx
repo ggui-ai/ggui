@@ -36,12 +36,11 @@ import type {
 export interface SelfRepairBoundaryProps {
   /** Child components to wrap */
   children: ReactNode;
-  /** Session ID */
-  sessionId: string;
   /** App ID */
   appId: string;
-  /** Page ID of the component */
-  stackItemId: string;
+  /** Render identity — single flat id post-Phase-B (replaces the legacy
+   *  `sessionId` + `stackItemId` pair). */
+  renderId: string;
   /** Original source code (if available) */
   sourceCode?: string;
   /** Compiled code */
@@ -140,7 +139,7 @@ export class SelfRepairBoundary extends Component<
   }
 
   private async attemptRepair(error: Error, componentStack?: string): Promise<void> {
-    const { config, sessionId, appId, stackItemId, sourceCode, compiledCode, onReportError } =
+    const { config, appId, renderId, sourceCode, compiledCode, onReportError } =
       this.props;
     const { attemptCount, errorId } = this.state;
 
@@ -155,9 +154,8 @@ export class SelfRepairBoundary extends Component<
 
     const report: ComponentErrorReport = {
       errorId: errorId || generateErrorId(),
-      sessionId,
       appId,
-      stackItemId,
+      renderId,
       error: {
         message: error.message,
         name: error.name,
