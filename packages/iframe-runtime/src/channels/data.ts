@@ -19,8 +19,6 @@
 import type { ChannelHandler } from '@ggui-ai/live-channel';
 import {
   CONTRACT_ERROR_CHANNEL,
-  LIFECYCLE_CHANNEL,
-  type CanvasLifecyclePayload,
   type SessionStackEntry,
   type StreamEnvelope,
 } from '@ggui-ai/protocol';
@@ -48,17 +46,6 @@ export interface DataHandlerDeps {
    * bound).
    */
   readonly onObserve?: ObservabilityEmitter;
-  /**
-   * Optional canvas-mode lifecycle sink. When present, every envelope
-   * on the reserved `_ggui:lifecycle` channel fires this callback
-   * with the parsed payload. Production wires it to mount.tsx's
-   * AnimatorEventBus so the animator pill state machine advances.
-   * Non-canvas iframes leave it absent and the envelopes drop
-   * silently — `validateInboundStreamPayload` rejects lifecycle
-   * payloads when no reserved validator is registered for them
-   * client-side, so they never reach `streamBus.emit` either.
-   */
-  readonly onCanvasLifecycle?: (payload: CanvasLifecyclePayload) => void;
 }
 
 export function createDataHandler(
@@ -86,29 +73,6 @@ export function createDataHandler(
         deps.onObserve !== undefined
       ) {
         emitContractErrorFromDataFrame(envelope, deps.onObserve);
-      }
-
-      // Canvas-mode lifecycle
-      // envelopes — fires BEFORE validation for the same reason as
-      // the contract-error path: the wire shape is server-owned, and
-      // any reachable envelope is a server-emitted signal. The
-      // payload's `kind` discriminator narrows downstream; the
-      // animator host treats unknown kinds as no-ops. Invalid shapes
-      // silently drop here (typeof check) — defensive against future
-      // wire shape drift.
-      if (
-        envelope.channel === LIFECYCLE_CHANNEL &&
-        deps.onCanvasLifecycle !== undefined
-      ) {
-        const payload = envelope.payload;
-        if (
-          payload !== null &&
-          typeof payload === 'object' &&
-          !Array.isArray(payload) &&
-          typeof (payload as { kind?: unknown }).kind === 'string'
-        ) {
-          deps.onCanvasLifecycle(payload as CanvasLifecyclePayload);
-        }
       }
 
       // Active stack item carries the streamSpec — mirrors

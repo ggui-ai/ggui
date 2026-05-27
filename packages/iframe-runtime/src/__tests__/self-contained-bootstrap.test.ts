@@ -29,7 +29,7 @@ const SAMPLE_RUNTIME_URL = '/_ggui/iframe-runtime.js';
 
 const SESSION_FIELDS = new Set<string>([
   'sessionId', 'appId', 'runtimeUrl', 'wsUrl', 'token', 'expiresAt',
-  'pollingUrl', 'themeId', 'themeMode', 'canvasMode', 'gadgets',
+  'pollingUrl', 'themeId', 'themeMode', 'gadgets',
   'publicEnv', 'streamWebSocketLocalTools', 'appCallableTools',
   'permissionsPolicy',
 ]);

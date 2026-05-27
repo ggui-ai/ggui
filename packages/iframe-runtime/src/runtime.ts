@@ -49,7 +49,6 @@ import type { ModuleNamespace } from './globals.js';
 import {
   attachListener as attachHostContextListener,
   seed as seedHostContext,
-  subscribeLocal as subscribeHostContextLocal,
 } from './host-context-emitter.js';
 import {
   buildRootWireConfig,
@@ -399,20 +398,6 @@ export interface BootSequenceOptions {
    */
   readonly triadWiring?: TriadWiringHooks;
   /**
-   * Optional canvas-mount hook. When the parsed bootstrap carries
-   * `canvasMode: true` AND this hook is supplied, bootSequence mounts
-   * the React-tree {@link CanvasShell} into `refs.stack` via the hook
-   * and substitutes the hook's `contentEl` as the `renderInto`
-   * passed to `triadWiring.setup()` — so the existing per-stack-item
-   * renderer writes into the canvas's content slot rather than the
-   * raw status DOM. Subsequent ack/push frames sync into the returned
-   * {@link CanvasMountHandle.navStack}.
-   *
-   * Absent OR `bootstrap.canvasMode !== true` ⇒ the inline path
-   * (per-push iframe).
-   */
-  readonly canvasMount?: CanvasMountHook;
-  /**
    * Spec-canonical async slice-meta source — wraps a listener for the
    * inbound `ui/notifications/tool-result` postMessage defined by
    * MCP Apps (SEP-1865). Called once, BEFORE `callUiInitialize`, so
@@ -454,16 +439,6 @@ export interface BootSequenceOptions {
 }
 
 /**
- * Hook signature for the canvas-mode mount. Production wires this
- * through `bootProduction` (where React + canvas modules are already
- * dynamic-imported); tests pass a stub that fakes the React tree.
- */
-export type CanvasMountHook = (params: {
-  readonly mountTarget: HTMLElement;
-  readonly callbacks: import('./canvas/mount.js').CanvasMountCallbacks;
-}) => import('./canvas/mount.js').CanvasMountHandle;
-
-/**
  * Renderer-triad wiring hooks. The real iframe boot plumbs these via
  * `autoBootSequence` below; tests may pass their own fakes when
  * exercising the full flow.
@@ -492,15 +467,6 @@ export interface TriadWiringHooks {
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
-    /**
-     * Canvas-mode lifecycle sink. When wired,
-     * the triad's `data` channel handler forwards every envelope on
-     * the reserved `_ggui:lifecycle` channel to this callback so the
-     * canvas animator state machine advances. Absent ⇒ envelopes
-     * still emit on `streamBus` for declarative consumers but no
-     * animator-side dispatch fires (non-canvas iframes).
-     */
-    readonly onCanvasLifecycle?: (payload: import('@ggui-ai/protocol').CanvasLifecyclePayload) => void;
   }): TriadHandle;
   /**
    * Bind the real WS manager into the triad AFTER `connectFn` resolves.
@@ -743,96 +709,20 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     stackModel = new StackModel({ filterToItemId: stackItem.stackItemId });
   }
 
-  // Canvas mode: when bootstrap.canvasMode
-  // AND a canvasMount hook is wired, mount CanvasShell as a React
-  // tree into refs.stack BEFORE triadWiring.setup so the triad's
-  // renderer writes into the canvas's content slot. The canvas's
-  // NavStackModel is kept in sync with stackModel on every applyAck.
-  // No canvasMount hook OR canvasMode !== true ⇒ legacy inline path.
-  let canvasMountHandle:
-    | import('./canvas/mount.js').CanvasMountHandle
-    | null = null;
-  let renderIntoEl: HTMLElement = refs.stack;
-  // Late-bound send surface for canvas's
-  // outbound `canvas_navigated` envelopes. The triad's `manager`
-  // (constructed inside triadWiring.setup below) is the producer; we
-  // capture it here so the canvas callbacks — installed at mount time
-  // BEFORE setup — can dispatch through the buffered shim once the
-  // WS is up. Calls during the bind gap silently no-op (the user
-  // can't physically click back-arrow before the canvas is rendered).
-  let canvasOutboundSend:
-    | ((msg: WebSocketMessage) => void)
-    | null = null;
-  if (session.canvasMode === true && opts.canvasMount !== undefined) {
-    canvasMountHandle = opts.canvasMount({
-      mountTarget: refs.stack,
-      callbacks: {
-        // Back-gesture → live-channel
-        // `canvas_navigated` outbound. The server updates
-        // `session.activeStackItemId` so ggui_consume's active-pipe
-        // resolution stays aligned with the user's nav focus.
-        onBackGesture: ({ previousActiveItemId, activeItemId }) => {
-          canvasOutboundSend?.({
-            type: 'canvas_navigated',
-            payload: {
-              sessionId: session.sessionId,
-              previousActiveItemId,
-              activeItemId,
-            },
-          });
-        },
-        // Display-mode escalation → spec
-        // postMessage to the host. The escalation policy decides
-        // which mode to request based on host capabilities + content
-        // state;
-        // this just forwards the decision via the existing
-        // `requestDisplayModeInParent` helper (paired audit
-        // envelope fires automatically). Hosts that don't speak the
-        // spec drop the postMessage silently, so the request is
-        // safe to fire unconditionally — the policy already gates
-        // on `availableDisplayModes`.
-        onRequestDisplayMode: (mode) => {
-          requestDisplayModeInParent({
-            toolName: 'ggui_canvas_shell',
-            mode,
-            sessionId: session.sessionId,
-            appId: session.appId,
-          });
-        },
-      },
-    });
-    renderIntoEl = canvasMountHandle.contentEl;
-  }
-
   // Triad wiring — when supplied, the handler routes frames through
   // StackRenderer + WireConfig + StreamBus. When absent, the placeholder
   // path runs (boot.test.ts relies on the latter to keep its import
   // graph tiny). The triad's channelRegistry is the dispatch surface
   // for every WS frame; `connectFn` registers handshake handlers on
   // top of the existing registry then binds the transport.
-  // When canvas-mode is active, build the
-  // lifecycle-payload sink that translates wire-shape
-  // `CanvasLifecyclePayload` envelopes into the animator-event
-  // shape and publishes on the mount's event bus. The triad's `data`
-  // channel handler invokes this for every envelope on the reserved
-  // `_ggui:lifecycle` channel.
-  const canvasLifecycleSink =
-    canvasMountHandle !== null
-      ? canvasMountHandle.events.publishLifecycle.bind(
-          canvasMountHandle.events,
-        )
-      : undefined;
   const triad =
     triadWiring !== undefined
       ? triadWiring.setup({
           meta: parsed.meta,
           stackModel,
-          renderInto: renderIntoEl,
+          renderInto: refs.stack,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
-          ...(canvasLifecycleSink !== undefined
-            ? { onCanvasLifecycle: canvasLifecycleSink }
-            : {}),
         })
       : null;
 
@@ -852,32 +742,6 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
   const activeRegistry = triad?.channelRegistry ?? placeholderRegistry!;
-
-  // Bind the canvas's outbound send surface to
-  // the triad's buffered-send shim. The shim queues frames pre-WS;
-  // they flush automatically once `attachManager` swaps in the real
-  // socket. No need to await — the canvas's back-arrow won't fire
-  // until the user can physically click, which requires render +
-  // layout that always come after this binding.
-  if (canvasMountHandle !== null && triad !== null) {
-    canvasOutboundSend = (msg) => triad.manager.send(msg);
-  }
-  // Subscribe the canvas mount to local
-  // host-context-emitter updates so the display-mode escalation
-  // policy reconciles against the latest host capabilities. Fires
-  // once on
-  // subscribe with the seeded projection (if any) AND on every
-  // `host-context-changed` notification. Captures the local handle
-  // so the subscription is scoped to this boot pass — re-mounts
-  // would re-subscribe.
-  if (canvasMountHandle !== null) {
-    const localHandle = canvasMountHandle;
-    const unsubscribeHostContext = subscribeHostContextLocal((projection) => {
-      localHandle.setAvailableDisplayModes(projection.availableDisplayModes);
-      localHandle.setDisplayMode(projection.currentDisplayMode);
-    });
-    localHandle.registerCleanup(unsubscribeHostContext);
-  }
 
   /**
    * Apply an ack's stack snapshot to the runtime — populates the model,
@@ -901,19 +765,6 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     if (ackPayload.stack === undefined) return;
     stackModel.setAll(ackPayload.stack);
     refreshStackDom(refs, stackModel);
-    // Mirror the server snapshot into the canvas's NavStackModel so
-    // the React shell re-renders with the active item. `reset` fires
-    // `onMutation` → version bump → React bridge re-reads. It also
-    // fires `onNavChange` when the top item identity moves, but that
-    // listener is intentionally NOT wired in production: server-side
-    // stack resets flowing through this ack path do not echo
-    // `canvas_navigated` back — the server already owns
-    // `activeStackItemId` for state it produced. Outbound
-    // `canvas_navigated` originates only from the `onBackGesture`
-    // callback (user-driven pop). `onNavChange` remains available for
-    // future programmatic navigation triggers that originate inside
-    // the canvas without a back-gesture.
-    canvasMountHandle?.setStack(ackPayload.stack);
     if (triad !== null) {
       await triad.stackRenderer.applyStack(stackModel.snapshot());
       const snapshot = stackModel.snapshot();
@@ -3277,7 +3128,7 @@ async function bootProduction(opts: {
   // Triad wiring hook — constructs buses + stack renderer + wire
   // config on demand inside bootSequence.
   const triadWiring: TriadWiringHooks = {
-    setup: ({ meta, stackModel, renderInto, statusRefs, onObserve, onCanvasLifecycle }) => {
+    setup: ({ meta, stackModel, renderInto, statusRefs, onObserve }) => {
       // Destructure once — session is guaranteed present on the
       // ok:true arm; stackItem may be absent (session-only).
       const { session, stackItem } = meta;
@@ -3604,12 +3455,6 @@ async function bootProduction(opts: {
           streamBus,
           validatorCtx,
           ...(onObserve !== undefined ? { onObserve } : {}),
-          // Canvas-mode lifecycle envelopes
-          // → AnimatorEventBus publish (via the sink built in
-          // bootSequence from the canvas mount handle).
-          ...(onCanvasLifecycle !== undefined
-            ? { onCanvasLifecycle }
-            : {}),
         }),
       );
       channelRegistry.register(
@@ -3663,26 +3508,11 @@ async function bootProduction(opts: {
     },
   };
 
-  // Canvas-mode mount hook. Constructed
-  // here because React + the canvas modules are already dynamic-
-  // imported above; bootSequence calls it lazily only when the parsed
-  // bootstrap carries `canvasMode: true`. Non-canvas sessions never
-  // pay the canvas-mount cost; canvas sessions never re-import React
-  // separately.
-  const canvasMountMod = await import('./canvas/mount.js');
-  const canvasMount: CanvasMountHook = ({ mountTarget, callbacks }) =>
-    canvasMountMod.mountCanvas(
-      mountTarget,
-      { react: reactMod, reactDomClient },
-      callbacks,
-    );
-
   await bootSequence({
     doc: opts.doc,
     callUiInitialize: opts.callUiInitialize,
     notifyParent: opts.notifyParent,
     triadWiring,
-    canvasMount,
     ...(opts.onObserve !== undefined ? { onObserve: opts.onObserve } : {}),
     ...(opts.onLifecycle !== undefined ? { onLifecycle: opts.onLifecycle } : {}),
     ...(opts.preResolvedMeta !== undefined

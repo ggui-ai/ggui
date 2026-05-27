@@ -43,7 +43,7 @@ const RUNTIME_URL = '/_ggui/iframe-runtime.js';
 /** See {@link meta-parse.test.ts#SESSION_FIELDS} for the field-list rationale. */
 const SESSION_FIELDS = new Set<string>([
   'sessionId', 'appId', 'runtimeUrl', 'wsUrl', 'wsToken', 'expiresAt',
-  'pollingUrl', 'themeId', 'themeMode', 'canvasMode', 'gadgets',
+  'pollingUrl', 'themeId', 'themeMode', 'displayMode', 'gadgets',
   'publicEnv', 'streamWebSocketLocalTools', 'appCallableTools',
   'permissionsPolicy',
 ]);
@@ -374,33 +374,8 @@ describe('Slice 14 — optional-field round-trip', () => {
     });
   });
 
-  it('preserves canvasMode through every extractor', () => {
-    const canvasBootstrap = { ...liveBootstrap, canvasMode: true };
-    setGlobal(canvasBootstrap);
-    const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(canvasBootstrap),
-    );
-    const fromTool = parseMetaFromToolResult(
-      wrapToolResult(canvasBootstrap),
-    );
-    expect(fromGlobal.ok && fromGlobal.meta.session.canvasMode).toBe(true);
-    expect(fromHost.ok && fromHost.meta.session.canvasMode).toBe(true);
-    expect(fromTool.ok && fromTool.meta.session.canvasMode).toBe(true);
-  });
-
-  it('drops non-boolean canvasMode values (defensive parse)', () => {
-    for (const bogus of ['true', 1, {}, [], null]) {
-      const result = validateMeta(flatToMeta({
-        ...liveBootstrap,
-        canvasMode: bogus,
-      }));
-      expect(result.ok && result.meta.session.canvasMode).toBeUndefined();
-    }
-  });
-
-  it('omits canvasMode when absent', () => {
-    const result = validateMeta(flatToMeta(liveBootstrap));
-    expect(result.ok && result.meta.session.canvasMode).toBeUndefined();
-  });
+  // displayMode is no longer a field on `McpAppAiGguiSessionMeta`
+  // (retired in G1a). The presentation hint moved to
+  // `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865) and is
+  // stamped per-push by `push.resultMeta`, not on the session slice.
 });

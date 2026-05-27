@@ -36,7 +36,7 @@
  * {@link McpAppAiGguiMeta} (`session` + `stackItem`). The combiner
  * does STRUCTURAL slice-shape validation; this module's
  * {@link validateSlices} layers in cross-slice business rules
- * (mode discriminator, expiresAt expiration, canvasMode/stackItemId
+ * (mode discriminator, expiresAt expiration, stackItemId
  * mutual exclusion) and field-level defensive parsing for the
  * optional containers (`contextSlots`, `gadgets`, `publicEnv`,
  * `permissionsPolicy`, `appCallableTools`, `actionNextSteps`,
@@ -255,12 +255,6 @@ function projectSession(
       ? themeModeRaw
       : undefined;
 
-  // canvasMode is a strict boolean; non-boolean values (incl. truthy
-  // strings, numbers, `null`) collapse to undefined.
-  const canvasModeRaw = session.canvasMode;
-  const canvasMode: boolean | undefined =
-    typeof canvasModeRaw === 'boolean' ? canvasModeRaw : undefined;
-
   const projected: McpAppAiGguiSessionMeta = {
     sessionId: session.sessionId,
     appId: session.appId,
@@ -279,7 +273,6 @@ function projectSession(
       : {}),
     ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),
-    ...(canvasMode !== undefined ? { canvasMode } : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(streamWebSocketLocalTools !== undefined

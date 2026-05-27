@@ -38,7 +38,6 @@ const SESSION_FIELDS = new Set<string>([
   'pollingUrl',
   'themeId',
   'themeMode',
-  'canvasMode',
   'gadgets',
   'publicEnv',
   'streamWebSocketLocalTools',
