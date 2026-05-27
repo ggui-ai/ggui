@@ -3364,6 +3364,16 @@ async function bootProduction(opts: {
         },
         streamBus,
         sessionId: session.sessionId,
+        // Forward bootstrap-stamped theme onto the renderer so per-stack-item
+        // mounts inject the configured theme's CSS vars (indigo, claudic, etc).
+        // Without this, react-renderer.ts falls back to `getScopedCssTokens`
+        // (no preset) and every iframe renders with the default ggui theme
+        // — even when `_meta["ai.ggui/session"].themeId` is `'indigo'`.
+        // The sibling `bootSelfContained` path already threads these onto
+        // its `mountOpts`; this seeds the same fields onto the renderer
+        // hooks path so both boot routes produce the same theming.
+        ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
+        ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
       };
       const stackRenderer = new StackRenderer(stackCtx);
 
