@@ -64,9 +64,7 @@ export type {
   EndUserIdentity,
   UserAuthMode,
 } from '@ggui-ai/protocol';
-export { BRIDGE_EVENTS, DEFAULT_SUBSCRIPTION, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
-export { stackNavigationReducer, initialNavigationState } from '@ggui-ai/protocol';
-export type { StackNavigationState, StackNavigationAction } from '@ggui-ai/protocol';
+export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
 
 // Invoke protocol message block types — re-exported at root so facade
 // consumers can pull them from the same import path as useInvoke.
@@ -163,10 +161,6 @@ export type {
 // Native Component Registry (built-in RN component mappings)
 export { registerBuiltinComponents } from './components/NativeRegistry';
 
-// Navigator
-export { GguiNavigator } from './components/GguiNavigator';
-export type { GguiNavigatorProps } from './components/GguiNavigator';
-
 // Error Boundary
 export { ErrorBoundary } from './components/ErrorBoundary';
 export type { ErrorBoundaryProps } from './components/ErrorBoundary';
@@ -190,8 +184,6 @@ export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeErro
 export { useWebSocket } from './hooks/useWebSocket';
 export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
 export { useAppState } from './hooks/useAppState';
-export { useStackNavigation } from './hooks/useStackNavigation';
-export type { UseStackNavigationOptions, UseStackNavigationReturn } from './hooks/useStackNavigation';
 export { useAgentStream } from './hooks/useAgentStream';
 export type { UseAgentStreamOptions } from './hooks/useAgentStream';
 export { useGenerationProgress, STEP_PROGRESS } from './hooks/useGenerationProgress';

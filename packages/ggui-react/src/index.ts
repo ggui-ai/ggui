@@ -58,9 +58,7 @@ export type {
   SystemPayload,
   SystemAction,
 } from '@ggui-ai/protocol';
-export { BRIDGE_EVENTS, DEFAULT_SUBSCRIPTION, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
-export { stackNavigationReducer, initialNavigationState } from '@ggui-ai/protocol';
-export type { StackNavigationState, StackNavigationAction } from '@ggui-ai/protocol';
+export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
 
 // Invoke protocol message block types — re-exported at root so facade
 // consumers can pull them from the same import path as useInvoke.
@@ -217,10 +215,6 @@ export type { ProvisionalRendererProps } from './components/ProvisionalRenderer'
 export { SelfRepairBoundary } from './components/SelfRepairBoundary';
 export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
 
-// Navigator
-export { GguiNavigator } from './components/GguiNavigator';
-export type { GguiNavigatorProps } from './components/GguiNavigator';
-
 // Agent Browse Panel
 export { AgentBrowsePanel } from './components/AgentBrowsePanel';
 export type { AgentBrowsePanelProps } from './components/AgentBrowsePanel';
@@ -228,8 +222,6 @@ export type { AgentBrowsePanelProps } from './components/AgentBrowsePanel';
 // Hooks
 export { useWebSocket } from './hooks/useWebSocket';
 export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
-export { useStackNavigation } from './hooks/useStackNavigation';
-export type { UseStackNavigationOptions, UseStackNavigationReturn } from './hooks/useStackNavigation';
 export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
 export {
