@@ -247,7 +247,6 @@ import {
   createGguiGetSessionHandler,
   createGguiGetStackHandler,
   createGguiListSessionsHandler,
-  createGguiPopHandler,
   createGguiEmitHandler,
   createGguiHandshakeHandler,
   createGguiNewSessionHandler,
@@ -1367,15 +1366,6 @@ export function defaultHandlers(deps: {
     );
     handlers.push(
       createGguiCloseHandler({
-        sessionStore: deps.push.sessionStore,
-        pendingEventConsumer,
-        ...(deps.push.shortCodeIndex
-          ? { shortCodeIndex: deps.push.shortCodeIndex }
-          : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
-    );
-    handlers.push(
-      createGguiPopHandler({
         sessionStore: deps.push.sessionStore,
         pendingEventConsumer,
         ...(deps.push.shortCodeIndex

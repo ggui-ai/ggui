@@ -103,8 +103,6 @@ const DEFAULT_PRESET_BODY = [
     '',
     '  • ggui_emit    — push frames to a streamSpec channel on a delivered UI. Use when the contract declared streamSpec (chat tokens, progress bars, live data). Frames must match the channel\'s declared `schema`. The live channel of the wire carries these.',
     '',
-    '  • ggui_pop       — pop the top stack item (e.g., close a modal you pushed). Idempotent — popping an empty stack returns null without error.',
-    '',
     '  • ggui_close     — explicitly end a session. Optional; sessions GC on their own. Use when the user has clearly finished and you want to free resources.',
     '',
     '  • ggui_get_session / ggui_get_stack — inspect current session state if you\'ve lost track of what\'s rendered. ggui_get_stack also returns each item\'s `contextSnapshot` — the canonical way to read contextSpec values from a raw MCP client.',

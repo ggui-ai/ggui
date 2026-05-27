@@ -151,6 +151,11 @@ export {
   type GguiGetSessionHandlerDeps,
 } from './get-session.js';
 export {
+  createGguiListSessionsHandler,
+  type GguiListSessionsHandlerDeps,
+  type SessionSummaryWire,
+} from './list-sessions.js';
+export {
   createGguiGetStackHandler,
   type GguiGetStackHandlerDeps,
 } from './get-stack.js';
@@ -159,10 +164,6 @@ export {
   type CloseObserverNotifier,
   type GguiCloseHandlerDeps,
 } from './close.js';
-export {
-  createGguiPopHandler,
-  type GguiPopHandlerDeps,
-} from './pop.js';
 export {
   createGguiEmitHandler,
   type GguiEmitHandlerDeps,

@@ -59,14 +59,6 @@ export interface PendingEvent {
 }
 
 /**
- * Input for ggui_pop tool - removes top UI from stack
- */
-export interface GguiPopInput {
-  /** Session ID to pop from */
-  sessionId: string;
-}
-
-/**
  * Input for ggui_consume tool — long-poll for buffered events on a
  * specific stack item.
  *
@@ -278,16 +270,6 @@ export interface NegotiatorAlternative {
 // =============================================================================
 // MCP Tool Output Types
 // =============================================================================
-
-/**
- * Output from ggui_pop tool
- */
-export interface GguiPopOutput {
-  /** ID of the card that was popped */
-  poppedId: string | null;
-  /** Current stack size after pop */
-  stackSize: number;
-}
 
 /**
  * Per-event entry returned by `ggui_consume`. The shape written by
