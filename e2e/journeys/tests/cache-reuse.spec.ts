@@ -92,7 +92,7 @@ const PUSH_INTENT =
  * collides with a built-in blueprint of the catalog; a contract with
  * these named props yields a canonical key no built-in shares, so the
  * Tier-1 (exact-key) matcher misses on a cold server. Both props are
- * optional so `ggui_push` needs no `props` payload.
+ * optional so `ggui_render` needs no `props` payload.
  */
 const PUSH_CONTRACT = {
   propsSpec: {
@@ -115,17 +115,17 @@ const PUSH_CONTRACT = {
 /** Env-var name that signals "explicitly skip this spec even if a key is set." */
 
 /**
- * Narrow the push RPC result down to the shape this spec reads.
+ * Narrow the render RPC result down to the shape this spec reads.
  *
- * Post-Slice-5 the push handler's LLM-visible `structuredContent` is
- * the lean `{stackItemId, url, action, nextStep?}` surface; retired
- * fields (sessionId, shortCode, codeReady, decision, handshakeId,
- * contractHash, cache) are gone from the wire. `sessionId` moved to
- * `_meta.ggui.bootstrap.sessionId`; `shortCode` is derivable as the
- * tail of `url`'s `/r/<shortCode>` path.
+ * Post-Phase-B the render handler's LLM-visible `structuredContent` is
+ * the lean `{renderId, url, action, nextStep?}` surface; retired
+ * fields (sessionId, stackItemId, shortCode, codeReady, decision,
+ * handshakeId, contractHash, cache) are gone from the wire.
+ * `shortCode` is derivable as the tail of `url`'s `/r/<shortCode>`
+ * path.
  *
  * **STRUCTURAL GAP** — the cache marker (`cache.hit / similarity /
- * cachedBlueprintId / llmCallsAvoided`) is no longer in the push
+ * cachedBlueprintId / llmCallsAvoided`) is no longer in the render
  * response. This spec previously asserted directly on those fields;
  * the post-migration proof relies on the latency channel (turn-2 stays
  * under 2s if and only if the LLM call was skipped) plus the
@@ -133,52 +133,37 @@ const PUSH_CONTRACT = {
  * cache trace via `_meta.ggui` so direct assertions return, but until
  * then turn-2-vs-turn-1 latency IS the cache-hit signal.
  */
-interface PushStructuredContent {
-  readonly stackItemId?: string;
+interface RenderStructuredContent {
+  readonly renderId?: string;
   readonly url?: string;
   readonly action?: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
 }
 
-interface PushOutput {
-  readonly result: PushStructuredContent;
+interface RenderOutput {
+  readonly result: RenderStructuredContent;
   readonly elapsedMs: number;
-  readonly sessionIdFromBootstrap?: string;
 }
 
 /**
- * Run the 3-step handshake-first flow (new_session + handshake + push)
- * once and return push timing + structuredContent. Uses an existing
- * sessionId if one is supplied (turn-2 of a repeated-turn proof reuses
- * the same scope so the cache cosmos shares an embedding bucket).
+ * Run the 2-step handshake → render flow once and return render timing
+ * + structuredContent. Phase B deleted the `sessionId` axis from the
+ * wire entirely — every render IS the addressable scope; cache keys
+ * are appId+contract derived, no session knob involved.
  *
- * Wraps the push call in a Promise.race against `budgetMs` so a hanging
- * LLM surfaces as a clean "did not return in N ms" rather than an
- * unbounded worker timeout. Mirrors the live-generation.spec.ts shape.
+ * Wraps the render call in a Promise.race against `budgetMs` so a
+ * hanging LLM surfaces as a clean "did not return in N ms" rather than
+ * an unbounded worker timeout. Mirrors the live-generation.spec.ts
+ * shape.
  */
-async function pushWithTimeout(
+async function renderWithTimeout(
   baseUrl: string,
   token: string,
   budgetMs: number,
-  opts: { sessionId?: string; forceCreate?: boolean } = {},
-): Promise<PushOutput & { sessionId: string }> {
-  let sessionId = opts.sessionId;
-  if (!sessionId) {
-    const sessEnv = await mcpCallAs(baseUrl, token, 'tools/call', {
-      name: 'ggui_new_session',
-      arguments: {},
-    });
-    if (sessEnv.error) {
-      throw new Error(`ggui_new_session error: ${JSON.stringify(sessEnv.error)}`);
-    }
-    sessionId = (
-      sessEnv.result as { structuredContent: { sessionId: string } }
-    ).structuredContent.sessionId;
-  }
-
+  opts: { forceCreate?: boolean } = {},
+): Promise<RenderOutput> {
   const hsEnv = await mcpCallAs(baseUrl, token, 'tools/call', {
     name: 'ggui_handshake',
     arguments: {
-      sessionId,
       intent: PUSH_INTENT,
       blueprintDraft: { contract: PUSH_CONTRACT },
       // The cold legs (turn-1, turn-3) pass `forceCreate` to bypass the
@@ -199,7 +184,7 @@ async function pushWithTimeout(
   const start = Date.now();
   const env = await Promise.race<ReturnType<typeof mcpCallAs>>([
     mcpCallAs(baseUrl, token, 'tools/call', {
-      name: 'ggui_push',
+      name: 'ggui_render',
       arguments: {
         handshakeId,
         decision: {
@@ -213,7 +198,7 @@ async function pushWithTimeout(
         () =>
           reject(
             new Error(
-              `ggui_push did not return within ${budgetMs}ms — LLM call may be hanging.`,
+              `ggui_render did not return within ${budgetMs}ms — LLM call may be hanging.`,
             ),
           ),
         budgetMs,
@@ -222,38 +207,33 @@ async function pushWithTimeout(
   ]);
   const elapsedMs = Date.now() - start;
   if (env.error) {
-    throw new Error(`ggui_push JSON-RPC error: ${JSON.stringify(env.error)}`);
+    throw new Error(`ggui_render JSON-RPC error: ${JSON.stringify(env.error)}`);
   }
   const outer = env.result as {
-    structuredContent?: PushStructuredContent;
-    // R3/R4 slice envelope — `_meta["ai.ggui/session"]` replaced the
-    // legacy `_meta.ggui.bootstrap` nesting.
-    _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
+    structuredContent?: RenderStructuredContent;
     isError?: boolean;
   };
   if (outer.isError === true) {
     throw new Error(
-      `ggui_push returned isError: true (see server stderr for cause).`,
+      `ggui_render returned isError: true (see server stderr for cause).`,
     );
   }
   const sc = outer.structuredContent;
   if (!sc) {
     throw new Error(
-      `ggui_push returned no structuredContent — expected a Slice 5+ payload.`,
+      `ggui_render returned no structuredContent — expected a Phase-B+ payload.`,
     );
   }
   return {
     result: sc,
     elapsedMs,
-    sessionId,
-    sessionIdFromBootstrap: outer._meta?.['ai.ggui/session']?.sessionId,
   };
 }
 
 /** Derive shortCode from the post-Slice-5 `url` (`/r/<shortCode>` tail). */
 function shortCodeFromUrl(url: string): string {
   const m = new URL(url).pathname.match(/^\/[rs]\/([^/?]+)/);
-  if (!m) throw new Error(`push url is not /r/<shortCode>: ${url}`);
+  if (!m) throw new Error(`render url is not /r/<shortCode>: ${url}`);
   return m[1]!;
 }
 
@@ -323,7 +303,7 @@ test.describe.serial(
       //    structural proof (the in-band `cache.hit` / `similarity` /
       //    `cachedBlueprintId` marker no longer rides on
       //    `structuredContent` — see PushStructuredContent above).
-      const turn1 = await pushWithTimeout(
+      const turn1 = await renderWithTimeout(
         handle.baseUrl,
         token,
         GENERATION_BUDGET_MS,
@@ -334,7 +314,7 @@ test.describe.serial(
         turn1.elapsedMs,
         'cache miss — real LLM',
       );
-      expect(turn1.result.stackItemId).toBeTruthy();
+      expect(turn1.result.renderId).toBeTruthy();
       expect(turn1.result.url).toMatch(/\/r\/[a-z0-9]+/);
       // Real-LLM floor. Matches `live-generation.spec.ts`; catches a
       // regression where the generator itself is stubbed.
@@ -347,15 +327,15 @@ test.describe.serial(
       //    key → same embedding → ≈1.0 cosine similarity with the
       //    turn-1 entry. The handler's pre-generation lookup fires
       //    BEFORE the generator so this round-trip skips the LLM.
-      //    Reuse the same sessionId as turn-1 so handshake routes
-      //    against the same scope.
-      const turn2 = await pushWithTimeout(
+      //    Phase B removed the sessionId axis — the cache key is appId
+      //    + contract derived, so same-app same-contract second handshake
+      //    naturally lands on turn-1's registered blueprint.
+      const turn2 = await renderWithTimeout(
         handle.baseUrl,
         token,
         // Cache hit should be fast; keep a small envelope to catch a
         // regression where the cache silently fails over to the LLM.
         15_000,
-        { sessionId: turn1.sessionId },
       );
       // Blocking record — turn-2 is a pure cache hit (no LLM call);
       // the 2s budget from BUDGET_RATIONALE catches LLM fallthrough
@@ -367,7 +347,7 @@ test.describe.serial(
         turn2.elapsedMs,
         'cache hit — no LLM call',
       );
-      expect(turn2.result.stackItemId).toBeTruthy();
+      expect(turn2.result.renderId).toBeTruthy();
       // Load-bearing: cache-hit path must NOT re-invoke the LLM.
       // Anything above ~2s on the local loopback is a red flag that
       // we silently fell through to generation. With the in-band cache
@@ -399,22 +379,15 @@ test.describe.serial(
         .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
-      // The renderer mounts each stack item into a
-      // `<div data-ggui-stack-item-root="<id>">` (see
-      // `iframe-runtime/src/runtime.ts::containerFor`). Inside that,
-      // the React mount wraps the tree in a `ggui-rcr-*` scope div
-      // (`react-renderer.ts::makeScopeClass`).
+      // Post-stack-removal the iframe-runtime mounts the React tree
+      // directly into `renderInto`; the per-stack-item container
+      // wrapper is gone. The React mount still wraps in a `ggui-rcr-*`
+      // scope div (`react-renderer.ts::makeScopeClass`); assert against
+      // that scope directly.
       const frame = page
         .frameLocator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      // Two turns → two stack items in the session; assert against the
-      // most recent (turn-2, the cache-hit push) — a bare locator would
-      // strict-mode-fail on the two matches.
-      const stackItemRoot = frame
-        .locator('[data-ggui-stack-item-root]')
-        .last();
-      await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
-      const rcrScope = stackItemRoot.locator('[class^="ggui-rcr-"]');
+      const rcrScope = frame.locator('[class^="ggui-rcr-"]').last();
       await expect(rcrScope).toBeVisible({ timeout: 30_000 });
       const scopeChildren = await rcrScope.evaluate((el) => el.children.length);
       expect(
@@ -520,7 +493,7 @@ test.describe.serial(
         // retired from structuredContent — see PushStructuredContent
         // docstring above). Turn-1 must take real-LLM time; turn-2 on
         // the same scope must finish under the cache-hit ceiling.
-        const turn1 = await pushWithTimeout(
+        const turn1 = await renderWithTimeout(
           handleA.baseUrl,
           tokenA,
           GENERATION_BUDGET_MS,
@@ -533,9 +506,7 @@ test.describe.serial(
         );
         expect(turn1.elapsedMs).toBeGreaterThan(1_000);
 
-        const turn2 = await pushWithTimeout(handleA.baseUrl, tokenA, 15_000, {
-          sessionId: turn1.sessionId,
-        });
+        const turn2 = await renderWithTimeout(handleA.baseUrl, tokenA, 15_000);
         perf.recordBlocking(
           // Reuse the existing blocking budget key — same invariant
           // (sub-2s cache hit, no LLM fallthrough), just captured here
@@ -576,7 +547,7 @@ test.describe.serial(
         );
         expect(tokenB.length).toBeGreaterThan(0);
 
-        const turn3 = await pushWithTimeout(
+        const turn3 = await renderWithTimeout(
           handleB.baseUrl,
           tokenB,
           GENERATION_BUDGET_MS,

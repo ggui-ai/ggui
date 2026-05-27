@@ -124,8 +124,8 @@ for (const entry of MATRIX) {
       page,
     }) => {
       // What this test proves: the host-session resume slice
-      // (`_meta["ai.ggui/host-session"]` capture at ggui_new_session,
-      // `ggui_list_sessions(hostName, hostSessionId)` enumeration,
+      // (`_meta["ai.ggui/host-session"]` capture at ggui_handshake,
+      // `ggui_list_renders(hostName, hostSessionId)` enumeration,
       // /chat/restore bootstrap envelope replay) wires end-to-end.
       // After a page.reload() the iframe re-mounts with the same
       // rendered state, without a new agent turn.
@@ -176,7 +176,7 @@ for (const entry of MATRIX) {
 
       // Wait for the iframe to be visible after the reload — it has
       // to come from /chat/restore's bootstrap envelope, not a new
-      // ggui_push (we never re-sent the prompt).
+      // ggui_render (we never re-sent the prompt).
       const afterFrame = page
         .frameLocator('iframe')
         .first()

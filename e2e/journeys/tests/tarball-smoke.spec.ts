@@ -150,18 +150,15 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
     );
     const tools = (listed.result?.['tools'] ?? []) as Array<{ name: string }>;
     expect(tools.map((t) => t.name).sort()).toEqual([
-      'ggui_close',
       'ggui_consume',
       'ggui_emit',
-      'ggui_get_session',
-      'ggui_get_stack',
+      'ggui_get_render',
       'ggui_handshake',
       'ggui_list_featured_blueprints',
       'ggui_list_gadgets',
+      'ggui_list_renders',
       'ggui_list_themes',
-      'ggui_new_session',
-      'ggui_pop',
-      'ggui_push',
+      'ggui_render',
       'ggui_runtime_refresh_ws_token',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
