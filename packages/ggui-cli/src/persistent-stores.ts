@@ -1,9 +1,9 @@
 /**
  * Default-on persistent stores under `<persistentDir>/`. Used when the
  * operator hasn't declared `storage.sessions` / `storage.vectors` in
- * `ggui.json` AND hasn't passed `--ephemeral`. Closes the SessionStore
+ * `ggui.json` AND hasn't passed `--ephemeral`. Closes the RenderStore
  * leg of the rehydrate problem: without this, a restart drops every
- * session row even though the HMAC secret + ShortCodeIndex now persist.
+ * render row even though the HMAC secret + ShortCodeIndex now persist.
  *
  * Override precedence (caller enforces):
  *   1. Explicit `ggui.json#storage.sessions` / `.vectors`   (user wins)
@@ -17,19 +17,19 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
-  SessionStore,
+  RenderStore,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 
-export async function createPersistentSessionStore(
+export async function createPersistentRenderStore(
   persistentDir: string,
-): Promise<SessionStore> {
+): Promise<RenderStore> {
   mkdirSync(persistentDir, { recursive: true });
-  const { SqliteSessionStore } = await import(
+  const { SqliteRenderStore } = await import(
     '@ggui-ai/mcp-server-core/sqlite'
   );
-  return new SqliteSessionStore({
-    filename: join(persistentDir, 'sessions.sqlite'),
+  return new SqliteRenderStore({
+    filename: join(persistentDir, 'renders.sqlite'),
   });
 }
 

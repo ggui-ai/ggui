@@ -45,7 +45,7 @@ import {
 import {
   ManifestBlueprintProvider,
   resolveStorageFromConfig,
-  buildNoCredentialsStackItem,
+  buildNoCredentialsRender,
   type BlueprintProvider,
   type LlmProvider,
   type McpServerMount,
@@ -68,7 +68,7 @@ import { createThemeWriter } from './theme-writer.js';
 import { createThemeFileUploader } from './theme-file-uploader.js';
 import { getPersistentDir } from './paths.js';
 import {
-  createPersistentSessionStore,
+  createPersistentRenderStore,
   createPersistentVectorStore,
 } from './persistent-stores.js';
 import {
@@ -300,7 +300,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Persistent default for SessionStore + VectorStore — layered AFTER
+  // Persistent default for RenderStore + VectorStore — layered AFTER
   // the manifest resolver so explicit `ggui.json#storage` declarations
   // always win, and BEFORE the banner so `describeStorageStatus`
   // reflects the actual wired state. Without this layer, ggui-default
@@ -312,7 +312,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     // `--ephemeral` skips the whole persistent layering. Operators who
     // pass the flag get pure in-memory defaults across the board (HMAC
     // secrets mint fresh per process). Without the flag, the
-    // sqlite-backed VectorStore + SessionStore persist across restarts
+    // sqlite-backed VectorStore + RenderStore persist across restarts
     // — note this means the install-to-cache bridge can serve stale
     // install-provenance rows after a boot if the source TSX behind a
     // cached row has been edited or uninstalled in the meantime.
@@ -328,14 +328,14 @@ async function runServeCommand(args: string[]): Promise<number> {
       // `better-sqlite3` later upgrades them to persistence. An
       // explicit `ggui.json#storage` declaration still hard-fails (it
       // resolved above) — the operator asked for it by name.
-      if (!manifestDeclaresSessions && storage.sessionStore === undefined) {
+      if (!manifestDeclaresSessions && storage.renderStore === undefined) {
         try {
-          const sessionStore = await createPersistentSessionStore(persistentDir);
-          storage = { ...storage, sessionStore };
+          const renderStore = await createPersistentRenderStore(persistentDir);
+          storage = { ...storage, renderStore };
         } catch (err) {
           process.stderr.write(
-            `ggui serve: persistent session store unavailable — using in-memory `
-              + `(sessions reset on restart; install \`better-sqlite3\` for persistence). `
+            `ggui serve: persistent render store unavailable — using in-memory `
+              + `(renders reset on restart; install \`better-sqlite3\` for persistence). `
               + `[${err instanceof Error ? err.message : String(err)}]\n`,
           );
         }
@@ -549,16 +549,20 @@ async function runServeCommand(args: string[]): Promise<number> {
   // BYOK probe — boot scan + per-request resolver. The probe ALWAYS
   // returns a `GenerationBinding` now (post-H2): when no env / global
   // / user-scope key resolved at boot, the binding's `resolveLlm`
-  // re-runs at every push with `userScope: ctx.appId` (per-user keys
+  // re-runs at every render with `userScope: ctx.appId` (per-user keys
   // stored in `~/.ggui/credentials.json` flip in there); when the
   // re-run also misses, the bound `onNoCredentials` hook produces
-  // a Connect-Claude card stack item pointing at THIS server's
-  // `/settings`. Story-path `ggui_push` therefore always lands a
-  // real stack item — either a generated component (key found) or
+  // a Connect-Claude card render pointing at THIS server's
+  // `/settings`. Story-path `ggui_render` therefore always lands a
+  // real render — either a generated component (key found) or
   // the card (key missing).
   const baseUrlForCard =
     parsed.publicBaseUrl ?? `http://${parsed.host}:${effectivePort}`;
   const settingsUrl = `${baseUrlForCard}/settings`;
+  // No-credentials cards live for an hour from mint — long enough for
+  // the operator to follow the Connect-Claude link, paste a key, and
+  // re-prompt before the persisted render is GC'd.
+  const NO_CREDENTIALS_CARD_TTL_MS = 60 * 60 * 1000;
 
   // Resolve the operator's explicit `generation.model` route, if any.
   // The schema-side `parseAnyLlmRoute` transform yields a typed
@@ -587,13 +591,17 @@ async function runServeCommand(args: string[]): Promise<number> {
       resolver: createByokResolver(),
       blueprints: blueprintsForGen,
       ...(configuredRoute ? { configuredRoute } : {}),
-      onNoCredentials: (_ctx, story) =>
-        buildNoCredentialsStackItem({
-          stackItemId: story.stackItemId,
+      onNoCredentials: (ctx, story) => {
+        const nowEpochMs = Date.parse(story.nowIso);
+        return buildNoCredentialsRender({
+          renderId: story.renderId,
+          appId: ctx.appId,
           intent: story.intent,
-          nowIso: story.nowIso,
+          nowEpochMs,
+          expiresAt: nowEpochMs + NO_CREDENTIALS_CARD_TTL_MS,
           settingsUrl,
-        }),
+        });
+      },
     });
   } catch (err) {
     // Don't fail boot on a probe error (malformed credentials file,
@@ -858,7 +866,7 @@ function describeStorageStatus(
   const lines: string[] = [];
   if (config.sessions) {
     lines.push(
-      resolved.sessionStore
+      resolved.renderStore
         ? `storage: sessions → sqlite (${config.sessions.driver === 'sqlite' ? config.sessions.path : '—'})`
         : `storage: sessions → in-memory`,
     );

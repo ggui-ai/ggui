@@ -17,12 +17,12 @@
  *      server restart. Multi-tenant `ggui serve` lives off this
  *      seam: each authenticated user manages their OWN provider
  *      key via `/settings`, the resolver picks it up on the next
- *      `ggui_push`.
+ *      `ggui_render`.
  *   3. **No-key default** — when the boot scan finds nothing, we
  *      STILL return a binding (provider=`anthropic`, model=
  *      `claude-haiku-4-5`). Generation stays wired; the
  *      no-credentials path now produces a Connect-Claude card
- *      stack item via {@link GenerationDeps.onNoCredentials}
+ *      render via {@link GenerationDeps.onNoCredentials}
  *      instead of the broken `codeReady:false` placeholder.
  *      Caller-supplied `onNoCredentials` is threaded through
  *      verbatim.
@@ -45,7 +45,7 @@ import type {
   LlmRoute,
   LlmSelection,
   ProviderKeyRef,
-  SessionStackEntry,
+  Render,
 } from '@ggui-ai/mcp-server';
 import { createUiGenerator } from '@ggui-ai/ui-gen';
 import type {
@@ -124,10 +124,10 @@ export interface ProbeGenerationBindingOptions {
     ctx: HandlerContext,
     story: {
       readonly intent: string;
-      readonly stackItemId: string;
+      readonly renderId: string;
       readonly nowIso: string;
     },
-  ) => SessionStackEntry | null | Promise<SessionStackEntry | null>;
+  ) => Render | null | Promise<Render | null>;
 }
 
 /**
