@@ -518,13 +518,20 @@ function handleEvent(
         }
         continue;
       }
-      // ggui_update branch — existing stack item gets new props.
+      // ggui_update branch — DO NOTHING at the host level. Live props
+      // updates flow through the WS `props_update` channel directly to
+      // iframe-runtime (`oss/packages/iframe-runtime/src/channels/props-update.ts`),
+      // which patches the running React tree in place. The host re-feeding
+      // meta on every tool_result was the "pipe B" that, in combination
+      // with AppRenderer's `toolResult` prop reactivity, re-injected HTML
+      // into the sandbox and blanked the inner iframe — even after the
+      // F9 `html`-prop stabilisation. WS is authoritative; host stays out.
+      //
+      // The host still learns about NEW iframes on ggui_push above (to
+      // mount AppRenderer for the first time) and destroyed iframes
+      // on session pop — but updates are wire-only.
       if (sc.updated === true) {
-        if (initialMeta) {
-          updateStackItemMeta(stackItemId, initialMeta);
-        } else {
-          void refetchStateById(stackItemId, sessionId);
-        }
+        continue;
       }
     }
     return;
