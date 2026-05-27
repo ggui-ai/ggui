@@ -24,7 +24,7 @@ import type {
 /**
  * Get tool context from GguiProvider.
  *
- * Reads appId, sessionId, apiBaseUrl, and auth from the GguiContext.
+ * Reads appId, renderId, apiBaseUrl, and auth from the GguiContext.
  * The `resolved` field starts empty and is populated per-tool-call
  * during binding resolution.
  */
@@ -33,7 +33,7 @@ function useToolContext(): ToolContext {
   return {
     resolved: {},
     appId: ctx.appId,
-    sessionId: ctx.sessionId ?? '',
+    renderId: ctx.renderId ?? '',
     auth: ctx.auth,
     apiBaseUrl: ctx.apiBaseUrl,
   };

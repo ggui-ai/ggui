@@ -71,9 +71,9 @@ export const fetchTool = defineTool<FetchToolConfig['config'], unknown>({
     const baseUrl = context.apiBaseUrl || '';
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-    // Scope cache key by sessionId to prevent cross-session leaks
+    // Scope cache key by renderId to prevent cross-render leaks
     const rawCacheKey = cacheConfig?.key || url;
-    const cacheKey = context.sessionId ? `${context.sessionId}:${rawCacheKey}` : rawCacheKey;
+    const cacheKey = context.renderId ? `${context.renderId}:${rawCacheKey}` : rawCacheKey;
     if (method === 'GET' && cacheConfig?.ttl) {
       const cached = getCached(cacheKey);
       if (cached !== undefined) {

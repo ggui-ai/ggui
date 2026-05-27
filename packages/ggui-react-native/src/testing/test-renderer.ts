@@ -23,7 +23,7 @@ export async function resolveBindingsForTest(
   const fullContext: ToolContext = {
     resolved: {},
     appId: context.appId ?? 'test-app',
-    sessionId: context.sessionId ?? 'test-session',
+    renderId: context.renderId ?? 'test-render',
     auth: context.auth ?? { isAuthenticated: false },
     ...context,
   };
@@ -103,7 +103,7 @@ export function validateControllerCode(code: string): ValidationResult {
 
 export interface TestContextOptions {
   appId?: string;
-  sessionId?: string;
+  renderId?: string;
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;
@@ -118,7 +118,7 @@ export function createTestContext(options: TestContextOptions = {}): ToolContext
   return {
     resolved: options.resolved ?? {},
     appId: options.appId ?? 'test-app',
-    sessionId: options.sessionId ?? 'test-session',
+    renderId: options.renderId ?? 'test-render',
     auth: options.auth ?? { isAuthenticated: false },
     apiBaseUrl: options.apiBaseUrl,
   };

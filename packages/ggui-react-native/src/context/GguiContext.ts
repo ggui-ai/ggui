@@ -56,8 +56,8 @@ export interface GguiContextValue {
     token?: string;
     isAuthenticated: boolean;
   };
-  /** Session ID for tools system */
-  sessionId?: string;
+  /** Render ID for tools system */
+  renderId?: string;
   /** Base URL for API calls (used by fetch tool) */
   apiBaseUrl?: string;
   /** React version for WebView import map (default: '18.2.0') */
