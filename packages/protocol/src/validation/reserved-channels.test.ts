@@ -614,8 +614,8 @@ describe('validateCanvasLifecyclePayload', () => {
     ).toBe(true);
     expect(
       validateCanvasLifecyclePayload({
-        kind: 'push_started',
-        stackItemId: 'stk-1',
+        kind: 'render_started',
+        renderId: 'render-1',
         intent: 'show weather',
       }).valid,
     ).toBe(true);
@@ -623,7 +623,7 @@ describe('validateCanvasLifecyclePayload', () => {
       validateCanvasLifecyclePayload({
         kind: 'consume_polling',
         state: 'open',
-        stackItemId: 'stk-1',
+        renderId: 'render-1',
       }).valid,
     ).toBe(true);
   });
@@ -649,13 +649,13 @@ describe('validateCanvasLifecyclePayload', () => {
       validateCanvasLifecyclePayload({ kind: 'handshake_started' }).valid,
     ).toBe(false);
     expect(
-      validateCanvasLifecyclePayload({ kind: 'push_started', stackItemId: 'x' })
+      validateCanvasLifecyclePayload({ kind: 'render_started', renderId: 'x' })
         .valid,
     ).toBe(false);
     expect(
       validateCanvasLifecyclePayload({
         kind: 'consume_polling',
-        stackItemId: 'x',
+        renderId: 'x',
         state: 'closed', // wrong literal
       }).valid,
     ).toBe(false);

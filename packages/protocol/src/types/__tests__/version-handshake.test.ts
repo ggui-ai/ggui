@@ -27,18 +27,18 @@ describe('SubscribePayload.supportedVersions', () => {
     // MUST continue to subscribe exactly as before. No field added on
     // serialization.
     const legacy: SubscribePayload = {
-      sessionId: 'sess_a',
+      renderId: 'render_a',
       appId: 'app_x',
     };
     const wire = JSON.stringify(legacy);
     const parsed = JSON.parse(wire) as SubscribePayload;
-    expect(parsed).toEqual({ sessionId: 'sess_a', appId: 'app_x' });
+    expect(parsed).toEqual({ renderId: 'render_a', appId: 'app_x' });
     expect('supportedVersions' in parsed).toBe(false);
   });
 
   it('round-trips a populated supportedVersions array', () => {
     const envelope: SubscribePayload = {
-      sessionId: 'sess_a',
+      renderId: 'render_a',
       appId: 'app_x',
       supportedVersions: [PROTOCOL_SCHEMA_VERSION],
     };

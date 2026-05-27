@@ -8,7 +8,7 @@
  *      `@ggui-ai/protocol/transport/websocket` — subpath only.
  *
  *   2. Live-channel contract payload types (`SubscribePayload`,
- *      `AckPayload`, `StreamEnvelope`, `PushPayload`, etc.) live at
+ *      `AckPayload`, `StreamEnvelope`, `RenderPayload`, etc.) live at
  *      `@ggui-ai/protocol` root.
  *
  * The tests below LOCK that decision so an accidental reversal breaks
@@ -43,13 +43,10 @@ import type {
   AckPayload,
   ClosePayload,
   ErrorPayload,
-  GeneratePayload,
-  GetStackPayload,
   InternalProgressPayload,
-  PopPayload,
   ProgressPayload,
   PropsUpdatePayload,
-  PushPayload,
+  RenderPayload,
   StreamEnvelope,
   StreamPayload,
   SubscribePayload,
@@ -82,20 +79,20 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'action',
       payload: {
-        sessionId: 'sess-1',
+        renderId: 'render-1',
         type: 'data:submit',
         payload: { action: 'submit', data: { text: 'hi' } },
       },
     };
     if (msg.type !== 'action') throw new Error('narrowing');
     const envelope: ActionEnvelope = msg.payload;
-    expect(envelope.sessionId).toBe('sess-1');
+    expect(envelope.renderId).toBe('render-1');
     expect(envelope.type).toBe('data:submit');
   });
 
   it('narrows to StreamEnvelope on type:data', () => {
     const envelope: StreamEnvelope = {
-      sessionId: 'sess-1',
+      renderId: 'render-1',
       channel: 'tick',
       mode: 'append',
       payload: { count: 1 },
@@ -107,7 +104,7 @@ describe('websocket transport boundary — type narrowing', () => {
 
   it('narrows to SubscribePayload on type:subscribe', () => {
     const sub: SubscribePayload = {
-      sessionId: 'sess-1',
+      renderId: 'render-1',
       appId: 'app-1',
       fromSeq: 42,
     };
@@ -129,26 +126,29 @@ describe('websocket transport boundary — type narrowing', () => {
     expect(msg.payload.replayTruncated).toBe(true);
   });
 
-  it('narrows to PushPayload on type:push', () => {
-    const push: PushPayload = {
-      stackItem: {
-        id: 'page-1',
+  it('narrows to RenderPayload on type:render', () => {
+    const render: RenderPayload = {
+      render: {
+        id: 'render-1',
+        appId: 'app-1',
+        eventSequence: 0,
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
         componentCode: '/* */',
-        createdAt: new Date().toISOString(),
       },
     };
-    const msg: WebSocketMessage = { type: 'push', payload: push };
-    if (msg.type !== 'push') throw new Error('narrowing');
-    expect(msg.payload.stackItem.id).toBe('page-1');
+    const msg: WebSocketMessage = { type: 'render', payload: render };
+    if (msg.type !== 'render') throw new Error('narrowing');
+    expect(msg.payload.render.id).toBe('render-1');
   });
 
   it('narrows to ChannelSubscribePayload on type:channel_subscribe (EE+ 1b)', () => {
     const msg: WebSocketMessage = {
       type: 'channel_subscribe',
       payload: {
-        sessionId: 's',
+        renderId: 'render-1',
         appId: 'a',
-        stackItemId: 'si',
         channelName: 'weather',
         pollIntervalMs: 5000,
         args: { city: 'Tokyo' },
@@ -164,9 +164,8 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'channel_payload',
       payload: {
-        sessionId: 's',
+        renderId: 'render-1',
         appId: 'a',
-        stackItemId: 'si',
         channelName: 'weather',
         seq: 1,
         ts: '2026-05-12T00:00:00Z',
@@ -184,7 +183,7 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'channel_error',
       payload: {
-        sessionId: 's',
+        renderId: 'render-1',
         channelName: 'weather',
         code: 'CHANNEL_NOT_LOCAL',
         message: 'tool not in streamWebSocketLocalTools',
@@ -199,9 +198,8 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'drain_ack',
       payload: {
-        sessionId: 's',
+        renderId: 'render-1',
         appId: 'a',
-        stackItemId: 'si',
         eventId: 'evt_1',
         drainedAt: '2026-05-14T00:00:00.000Z',
       },
@@ -227,7 +225,7 @@ describe('websocket transport boundary — type narrowing', () => {
 // ── Runtime locks: WebSocketMessageType enumerates all variants ────────
 
 describe('websocket transport boundary — discriminator coverage', () => {
-  it('covers the full 21-variant dispatch surface', () => {
+  it('covers the full dispatch surface', () => {
     // Structural lock: if a new variant lands in `WebSocketMessage` but
     // not in `WebSocketMessageType`, or vice versa, this assignment
     // drifts — forcing a deliberate update here. Captured as a value
@@ -237,19 +235,15 @@ describe('websocket transport boundary — discriminator coverage', () => {
     const types: WebSocketMessageType[] = [
       'action',
       'subscribe',
-      'generate',
-      'pop',
       'close',
-      'get_stack',
       'feedback',
       'ping',
       'pong',
       'ack',
       'error',
-      'push',
+      'render',
       'data',
       'stream',
-      'session',
       'progress',
       'agent-msg',
       'props_update',
@@ -263,8 +257,12 @@ describe('websocket transport boundary — discriminator coverage', () => {
       'channel_error',
       // A2 — action-drain ack.
       'drain_ack',
+      // Canvas-mode host-context capture.
+      'host_context_observed',
+      // R7 — ledger replay frame.
+      'session_event',
     ];
-    expect(types).toHaveLength(26);
+    expect(types).toHaveLength(24);
     // Structural lock: ConnectionStatus values also stable.
     const statuses: ConnectionStatus[] = [
       'connecting',
@@ -286,14 +284,11 @@ describe('websocket transport boundary — discriminator coverage', () => {
 void (function _contractPayloadsStayOnRoot(): void {
   type _S = SubscribePayload;
   type _A = AckPayload;
-  type _P = PushPayload;
+  type _R = RenderPayload;
   type _SE = StreamEnvelope;
   type _ST = StreamPayload;
   type _E = ErrorPayload;
-  type _Pop = PopPayload;
   type _C = ClosePayload;
-  type _G = GetStackPayload;
-  type _Gen = GeneratePayload;
   type _Pr = ProgressPayload;
   type _U = UrlPayload;
   type _Sys = SystemPayload;

@@ -176,7 +176,7 @@ describe('projectHostContext', () => {
       theme: 'light',
       styles: { variables: {} },
       userAgent: 'Claude Desktop/1.2.3',
-      toolInfo: { id: 'req-1', tool: { name: 'ggui_push' } },
+      toolInfo: { id: 'req-1', tool: { name: 'ggui_render' } },
     });
     expect(result).toEqual({
       currentDisplayMode: 'fullscreen',

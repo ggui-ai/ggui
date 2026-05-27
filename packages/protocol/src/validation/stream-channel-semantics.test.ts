@@ -142,7 +142,7 @@ describe('stream channel semantics — envelope agrees with spec', () => {
   it('append-mode spec channels match append-mode envelopes', () => {
     const resolved = resolveStreamChannel(APPEND_SPEC, 'tick');
     const envelope: StreamEnvelope = {
-      sessionId: 'sess-x',
+      renderId: 'render-x',
       channel: 'tick',
       mode: 'append',
       payload: {},
@@ -153,7 +153,7 @@ describe('stream channel semantics — envelope agrees with spec', () => {
   it('replace-mode spec channels match replace-mode envelopes', () => {
     const resolved = resolveStreamChannel(REPLACE_SPEC, 'snapshot');
     const envelope: StreamEnvelope = {
-      sessionId: 'sess-x',
+      renderId: 'render-x',
       channel: 'snapshot',
       mode: 'replace',
       payload: {},
@@ -165,7 +165,7 @@ describe('stream channel semantics — envelope agrees with spec', () => {
     const resolved = resolveStreamChannel(COMPLETABLE_SPEC, 'finale');
     expect(resolved?.complete).toBe(true);
     const envelope: StreamEnvelope = {
-      sessionId: 'sess-x',
+      renderId: 'render-x',
       channel: 'finale',
       mode: 'append',
       payload: {},
@@ -186,7 +186,7 @@ describe('stream channel semantics — envelope agrees with spec', () => {
     const resolved = resolveStreamChannel(spec, 'open');
     expect(resolved?.complete).toBe(false); // DEFAULT_STREAM_CHANNEL_COMPLETE
     const envelope: StreamEnvelope = {
-      sessionId: 'sess-x',
+      renderId: 'render-x',
       channel: 'open',
       mode: 'append',
       payload: {},
@@ -207,7 +207,7 @@ describe('stream channel semantics — replay is a declaration, not behavior', (
     expect(resolved?.replay).toBe('latest');
 
     const envelope = {
-      sessionId: 'sess-x',
+      renderId: 'render-x',
       channel: 'tick',
       mode: 'append',
       payload: {},

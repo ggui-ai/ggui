@@ -439,7 +439,7 @@ describe('ContractViolationError with ggui_event tool', () => {
       violations: [{ field: 'action', message: 'bad' }],
     });
     expect(err.hint).toContain('actionSpec');
-    expect(err.hint).not.toContain('ggui_push'); // different framing than the mutation default
+    expect(err.hint).not.toContain('ggui_render'); // different framing than the mutation default
   });
 
   it('keeps the original default hint for mutation tools', () => {
@@ -447,7 +447,7 @@ describe('ContractViolationError with ggui_event tool', () => {
       tool: 'ggui_update',
       violations: [{ field: 'props.x', message: 'bad' }],
     });
-    expect(err.hint).toContain('ggui_push');
+    expect(err.hint).toContain('ggui_render');
   });
 
   it('toErrorData carries tool=ggui_event and violations', () => {

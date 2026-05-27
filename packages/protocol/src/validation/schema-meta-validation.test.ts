@@ -188,6 +188,6 @@ describe('assertContractSchemasValid', () => {
     }
     expect(error?.code).toBe('contract_schema_invalid');
     expect(error?.hint).toContain('Fix the JSON Schema');
-    expect(error?.hint).toContain('ggui_push');
+    expect(error?.hint).toContain('ggui_render');
   });
 });

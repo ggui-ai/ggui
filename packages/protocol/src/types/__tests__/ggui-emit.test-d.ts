@@ -18,21 +18,21 @@ type Equal<A, B> =
 
 // ── GguiEmitInput — keys lock ────────────────────────────────────
 //
-// Exactly these five field names appear on the tool input. Adding a
+// Exactly these four field names appear on the tool input. Adding a
 // new property causes this assertion to flip, forcing the author to
 // revisit the design lock.
 type _GguiEmitInputKeys = Expect<
-  Equal<keyof GguiEmitInput, 'sessionId' | 'channel' | 'payload' | 'complete' | 'stackItemId'>
+  Equal<keyof GguiEmitInput, 'renderId' | 'channel' | 'payload' | 'complete'>
 >;
 
 // ── Per-field type locks — required fields are non-optional ────────
 //
-// `sessionId` / `channel` / `payload` must be required. Losing
+// `renderId` / `channel` / `payload` must be required. Losing
 // required-ness silently would let agents omit them and hit runtime
 // rejection instead of typecheck failure.
-type _SessionIdRequired = Expect<
+type _RenderIdRequired = Expect<
   Equal<
-    undefined extends GguiEmitInput['sessionId'] ? true : false,
+    undefined extends GguiEmitInput['renderId'] ? true : false,
     false
   >
 >;
@@ -47,16 +47,15 @@ type _PayloadRequired = Expect<
 type _CompleteOptional = Expect<
   Equal<undefined extends GguiEmitInput['complete'] ? true : false, true>
 >;
-type _PageIdOptional = Expect<
-  Equal<undefined extends GguiEmitInput['stackItemId'] ? true : false, true>
->;
 
 // ── Retired fields MUST NOT reappear ───────────────────────────────
 //
 // The `data` field was the pre-rewrite input shape. The agent-supplied
 // `mode` / `seq` / `timestamp` / `connectionId` fields never existed
 // on the tool surface — they're explicitly derived/assigned server-
-// side. If someone tries to add any of them, these assertions flip.
+// side. Post-Phase-B the `sessionId` / `stackItemId` identity pair
+// collapsed to `renderId` — neither retired field may reappear.
+// If someone tries to add any of them, these assertions flip.
 type _NoDataField = Expect<Equal<'data' extends keyof GguiEmitInput ? true : false, false>>;
 type _NoModeField = Expect<Equal<'mode' extends keyof GguiEmitInput ? true : false, false>>;
 type _NoSeqField = Expect<Equal<'seq' extends keyof GguiEmitInput ? true : false, false>>;
@@ -65,6 +64,12 @@ type _NoTimestampField = Expect<
 >;
 type _NoConnectionIdField = Expect<
   Equal<'connectionId' extends keyof GguiEmitInput ? true : false, false>
+>;
+type _NoSessionIdField = Expect<
+  Equal<'sessionId' extends keyof GguiEmitInput ? true : false, false>
+>;
+type _NoStackItemIdField = Expect<
+  Equal<'stackItemId' extends keyof GguiEmitInput ? true : false, false>
 >;
 
 // ── GguiEmitOutput — keys + shape lock ───────────────────────────

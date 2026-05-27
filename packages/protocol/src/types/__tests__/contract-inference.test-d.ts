@@ -204,10 +204,10 @@ type _TA = Expect<Equal<TypedAction<W>,
 >>;
 
 // TypedStreamEvent union — canonical post-rewrite shape
-// ({channel, payload, complete?, stackItemId?} per channel)
+// ({channel, payload, complete?} per channel)
 type _TSE = Expect<Equal<TypedStreamEvent<W>,
-  | { channel: 'weatherUpdate'; payload: { temp: number; conditions: string }; complete?: boolean; stackItemId?: string }
-  | { channel: 'alert'; payload: string; complete?: boolean; stackItemId?: string }
+  | { channel: 'weatherUpdate'; payload: { temp: number; conditions: string }; complete?: boolean }
+  | { channel: 'alert'; payload: string; complete?: boolean }
 >>;
 
 // =============================================================================
