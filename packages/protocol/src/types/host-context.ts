@@ -144,7 +144,7 @@ export interface HostContextProjection {
 /**
  * Live-channel inbound (client → server) payload that delivers the
  * iframe-captured `HostContextProjection` to the server. Server-side
- * handler writes to `SessionRecord.hostContext`; subsequent
+ * handler writes to `RenderRecord.hostContext`; subsequent
  * `ggui_handshake` / `ggui_consume` responses surface the value to the
  * agent via the optional `client.hostContext` field.
  *
@@ -158,7 +158,7 @@ export interface HostContextProjection {
  * stored value; no merge logic.
  */
 export interface HostContextObservedPayload {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly hostContext: HostContextProjection;
 }
 

@@ -14,10 +14,8 @@ export type FeedbackRating = 'love' | 'dislike' | 'other';
  * Input payload for submitting UI feedback via WebSocket.
  */
 export interface UIFeedbackPayload {
-  /** Page (stack item) being rated */
-  stackItemId: string;
-  /** Session the page belongs to */
-  sessionId: string;
+  /** Render being rated */
+  renderId: string;
   /** Rating type */
   rating: FeedbackRating;
   /** Free-text comment (required when rating is 'other', optional otherwise) */
