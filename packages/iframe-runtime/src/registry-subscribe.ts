@@ -1,6 +1,6 @@
 /**
  * Registry-driven subscribe orchestration — owns the renderer's
- * "I have a parsed session-meta, now drive the live-channel handshake
+ * "I have a parsed render-meta, now drive the live-channel handshake
  * to first ack" flow on top of `ChannelRegistry.bind()`.
  *
  * Replaces the pre-B3b `subscribe()` helper + the `RendererWebSocketManager`
@@ -48,7 +48,7 @@ import type {
   ContractErrorPayload,
 } from '@ggui-ai/protocol';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChannelRegistry,
   RegistryPollingOptions,
@@ -67,8 +67,8 @@ import type { ObservabilityEmitter } from './observability.js';
  * Result of a successful handshake — the live typed transport handle
  * plus the resolved `AckPayload` from the first ack frame. The caller
  * attaches `handle` to the renderer's outbound send surface (via the
- * BufferedManagerShim flush) and applies `ack.stack` to the stack
- * model.
+ * BufferedManagerShim flush) and applies `ack.render` to the mounted
+ * render slot.
  */
 export interface RegistrySubscribeHandle {
   readonly handle: WsTransportHandle;
@@ -81,12 +81,13 @@ export interface RegistrySubscribeHandle {
  */
 export interface ConnectViaRegistryOptions {
   /**
-   * Session slice (`McpAppAiGguiSessionMeta`) — the live-channel
-   * credentials this subscribe path actually needs: `sessionId`,
-   * `appId`, `wsUrl`, `wsToken`. The stack-item slice is not consulted
-   * here (it's load-bearing only for the renderer / mount layer).
+   * Render slice (`McpAppAiGguiRenderMeta`) — the live-channel
+   * credentials this subscribe path actually needs: `renderId`,
+   * `appId`, `wsUrl`, `wsToken`. The rest of the slice (codeUrl /
+   * propsJson / contextSlots / etc.) is load-bearing only for the
+   * renderer / mount layer.
    */
-  readonly session: McpAppAiGguiSessionMeta;
+  readonly meta: McpAppAiGguiRenderMeta;
   readonly registry: ChannelRegistry;
   /**
    * Fires on every transport-status transition mapped onto the
@@ -127,12 +128,12 @@ export interface ConnectViaRegistryOptions {
    * Optional post-handshake ack callback. Fires for every ack frame
    * AFTER the initial handshake settled — i.e. on every reconnect's
    * subscribe ack. The runtime uses this to reapply the server's
-   * authoritative `stack` snapshot so a push or update that landed
+   * authoritative `render` snapshot so a render or update that landed
    * during a WS dropout window flows back into the iframe on
    * reconnect.
    *
-   * Idempotent at the runtime layer: `stackModel.setAll(ack.stack)`
-   * is a snapshot replace. Channels re-subscribed by
+   * Idempotent at the runtime layer: `applyRender(ack.render)` patches
+   * in place. Channels re-subscribed by
    * `ChannelTransportRouter.onWsStatusChange('connected')` upstream
    * of this callback, so the per-channel transport state is already
    * coherent by the time the resubscribe-ack arrives.
@@ -144,8 +145,8 @@ export interface ConnectViaRegistryOptions {
    * `WSTransport` reaches `'failed'`. Absent → no polling fallback
    * (WS-only mode; once WS is exhausted, handlers stay inert).
    *
-   * Composed at the runtime layer from `session.pollingUrl` +
-   * `session.lastSequence` (cursor seed) — the live-channel itself is
+   * Composed at the runtime layer from `meta.pollingUrl` +
+   * `meta.lastSequence` (cursor seed) — the live-channel itself is
    * URL- and shape-agnostic.
    */
   readonly polling?: RegistryPollingOptions;
@@ -260,12 +261,12 @@ export function connectViaRegistry(
     // Defense-in-depth — live mode requires both wsUrl + wsToken. The
     // caller validates this before invoking; reject early with a
     // typed transport failure if either is missing.
-    const wsUrl = opts.session.wsUrl;
-    const wsToken = opts.session.wsToken;
+    const wsUrl = opts.meta.wsUrl;
+    const wsToken = opts.meta.wsToken;
     if (typeof wsUrl !== 'string' || wsUrl.length === 0 ||
         typeof wsToken !== 'string' || wsToken.length === 0) {
       const err = new Error(
-        'connectViaRegistry: session-meta missing wsUrl/wsToken — live-mode required',
+        'connectViaRegistry: render-meta missing wsUrl/wsToken — live-mode required',
       );
       emitProtocolError(fromTransportFailure('DISCONNECTED', false, err.message));
       reject(err);
@@ -429,8 +430,8 @@ export function connectViaRegistry(
         bootstrap: {
           wsUrl: composedUrl,
           wsToken,
-          sessionId: opts.session.sessionId,
-          appId: opts.session.appId,
+          renderId: opts.meta.renderId,
+          appId: opts.meta.appId,
         },
         onStatusChange: mappedStatusCallback,
         ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
@@ -444,7 +445,7 @@ export function connectViaRegistry(
             settled = true;
             reject(
               new Error(
-                "connectViaRegistry: registry returned non-ws transport despite wsUrl+wsToken session-meta",
+                "connectViaRegistry: registry returned non-ws transport despite wsUrl+wsToken render-meta",
               ),
             );
           }

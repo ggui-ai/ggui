@@ -5,15 +5,15 @@
  * thin-shell HTML loads it via `<script type="module" src=".../renderer.js">`;
  * on import the side-effects below take over: build a status DOM,
  * postMessage `ui/initialize` to the parent, parse the bootstrap, open
- * the WebSocket, run the version handshake, and mount the stack
+ * the WebSocket, run the version handshake, and mount the render
  * placeholder.
  *
  * Boot sequence:
- *   - Boot from `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]`
- *     slices received via `ui/initialize`.
+ *   - Boot from the `_meta["ai.ggui/render"]` slice received via
+ *     `ui/initialize`.
  *   - Open the WebSocket, run the subscribe handshake.
- *   - Render each stack item — either a structural placeholder or,
- *     when the renderer hooks are wired, a React mount of `componentCode`.
+ *   - Mount the render — either a structural placeholder or, when
+ *     the renderer hooks are wired, a React mount of `componentCode`.
  *
  * The runtime advertises its build version via a post-`ui/initialize`
  * notification (`ggui:renderer-ready`).
@@ -29,10 +29,10 @@ import type { ReactNode } from 'react';
 import type {
   DrainAckPayload,
   JsonValue,
-  SessionStackEntry,
+  Render,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ValidatedMcpAppAiGguiMeta } from './types.js';
 import {
   parseMetaFromUiInitialize,
@@ -65,7 +65,7 @@ import {
   createDrainAckHandler,
   createFeedbackHandler,
   createPropsUpdateHandler,
-  createPushHandler,
+  createRenderHandler,
   createSystemHandler,
 } from './channels/index.js';
 import {
@@ -87,10 +87,10 @@ import {
 } from './validation.js';
 import { loadCompiledValidatorsFromUrl } from './compiled-validators.js';
 import {
-  renderStackItem,
-  type StackItemHandle,
-  type StackItemRendererOptions,
-} from './stack-item-renderer.js';
+  mountRender,
+  type RenderItemHandle,
+  type RenderItemOptions,
+} from './render-item.js';
 import type { WireConfig } from '@ggui-ai/wire';
 import {
   fromBootstrapFailure,
@@ -445,12 +445,12 @@ export interface BootSequenceOptions {
 export interface RendererHooks {
   /**
    * Called after bootstrap parse succeeds. Return value threads the
-   * root `WireConfig` + the single-item mount surface back into the
+   * root `WireConfig` + the single-render mount surface back into the
    * runtime so the channel handlers can route frames through them.
    *
    * `renderInto` — a DOM element the renderer owns. Post-stack-removal
    * (2026-05-27) the iframe-runtime mounts exactly one React tree
-   * directly into `renderInto`; the earlier per-stack-item
+   * directly into `renderInto`; the earlier per-render
    * `<div data-ggui-stack-item-root>` containers were retired along
    * with `StackRenderer`.
    *
@@ -485,22 +485,22 @@ export interface RendererHandle {
   readonly rootWireConfig: WireConfig;
   readonly streamBus: StreamBus;
   /**
-   * Apply (mount-or-update) a stack entry to the single render slot.
+   * Apply (mount-or-update) a render to the single mount slot.
    * First call mounts the React tree into `renderInto`; subsequent
-   * calls re-apply through {@link StackItemHandle.update} (same kind ⇒
+   * calls re-apply through {@link RenderItemHandle.update} (same kind ⇒
    * in-place; kind transition ⇒ tear-down + remount).
    *
-   * Shared by the `push` and `props_update` channel handlers so React
+   * Shared by the `render` and `props_update` channel handlers so React
    * updates flow through one path.
    */
-  applyItem(item: SessionStackEntry): Promise<void>;
+  applyRender(render: Render): Promise<void>;
   /**
-   * Read the currently-mounted stack entry. `null` until the first
-   * push lands. Read by the `props_update` + `data` channel handlers
-   * to validate inbound payloads against the active item's
+   * Read the currently-mounted render. `null` until the first
+   * render frame lands. Read by the `props_update` + `data` channel
+   * handlers to validate inbound payloads against the active render's
    * `propsSpec` / `streamSpec`.
    */
-  getCurrentItem(): SessionStackEntry | null;
+  getCurrentRender(): Render | null;
   readonly validatorCtx: RendererValidatorContext;
   /**
    * Send surface for outbound frames. Wired by `setup()` to the WS
@@ -510,10 +510,10 @@ export interface RendererHandle {
   readonly manager: { send: (msg: WebSocketMessage) => void };
   /**
    * Per-channel transport router. When the bootstrap carries
-   * `streamWebSocketLocalTools` and the active stack item declares
+   * `streamWebSocketLocalTools` and the active render declares
    * `streamSpec[ch].source.tool`, the router decides per-channel
    * between WS subscribe + iframe-polling fallback. Updated on every
-   * push via the push handler.
+   * render frame via the render handler.
    *
    * Always present — the router gracefully no-ops when no channel
    * declares `source.tool` (legacy data-frame path is unaffected).
@@ -521,7 +521,7 @@ export interface RendererHandle {
   readonly channelTransport: ChannelTransportRouter;
   /**
    * Channel-client registry holding handlers for every WS frame type
-   * the iframe routes (`push`, `data`, `props_update`, `drain_ack`,
+   * the iframe routes (`render`, `data`, `props_update`, `drain_ack`,
    * `channel_payload`, `channel_error`, `system`, `feedback`). The
    * registry-bound transport is the sole dispatch surface — frames
    * arrive directly through registered handlers, no longer through a
@@ -539,13 +539,13 @@ export interface RendererHandle {
 export interface BootSequenceResult {
   readonly ok: boolean;
   /**
-   * The stack entry that ended up mounted in this iframe, or `null` if
-   * the boot path bailed before the first ack landed. Post-stack-
-   * removal (2026-05-27) every iframe holds at most one item; this
-   * replaces the earlier `StackModel` return that wrapped a multi-item
-   * model.
+   * The render that ended up mounted in this iframe, or `null` if
+   * the boot path bailed before the first ack landed. Post-render-
+   * identity-collapse (2026-05-27) every iframe holds at most one
+   * render; this replaces the earlier `StackModel` return that wrapped
+   * a multi-item model.
    */
-  readonly mountedItem: SessionStackEntry | null;
+  readonly mountedRender: Render | null;
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
@@ -580,12 +580,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   };
 
   const refs = ensureStatusDom(doc);
-  // The mounted item is established after the first ack lands —
+  // The mounted render is established after the first ack lands —
   // populated by `applyAck` below + read back by every channel handler
   // that needs `propsSpec` / `streamSpec`. Tracked as a closure-scoped
   // ref so the failure-path returns can carry the same value through
   // `BootSequenceResult`.
-  let mountedItem: SessionStackEntry | null = null;
+  let mountedRender: Render | null = null;
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
   notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
@@ -618,7 +618,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const message = initResp.error?.message ?? 'ui/initialize returned no result';
     setStatus(refs, `ui/initialize failed: ${message}`, 'error');
     emitBootFailure('UI_INITIALIZE_FAILED', message);
-    return { ok: false, mountedItem };
+    return { ok: false, mountedRender };
   }
 
   // Slice-meta resolution — spec-canonical primary, in-house Reading-B
@@ -698,13 +698,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
     emitBootFailure(parsed.reason, message);
-    return { ok: false, mountedItem };
+    return { ok: false, mountedRender };
   }
 
-  // Destructure the parsed slices once — `session` is guaranteed
-  // present on the ok:true arm by `validateSlices`; `stackItem` is
-  // optional (session-only refresh envelopes).
-  const { session, stackItem } = parsed.meta;
+  // Single render slice — post-Phase-B the wire merged the
+  // `ai.ggui/session` + `ai.ggui/stack-item` pair into one
+  // `ai.ggui/render` slice. The parser surfaces it directly on
+  // `parsed.meta`.
+  const meta = parsed.meta;
 
   // Install the precompiled, eval-free contract validators shipped on
   // the bootstrap BEFORE any wire traffic is validated. Self-contained
@@ -713,20 +714,18 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // to fall back to in-iframe compilation (CSP-blocked, but no worse
   // than pre-A4).
   setActiveValidatorSet(
-    await loadCompiledValidatorsFromUrl(stackItem?.validatorsUrl),
+    await loadCompiledValidatorsFromUrl(meta.validatorsUrl),
   );
 
-  // Pin — this iframe binds to exactly one stack-item id for its
-  // lifetime (post-stack-removal each iframe = one mounted item, per
-  // [[kill-displaymode-divergence]]). When the bootstrap carries a
-  // `stackItemId` we pin to it; the push handler drops any push
-  // addressed elsewhere. Bootstraps without `stackItemId` (session-
-  // only resources, rare post-displayMode) accept the first push as
-  // the pin.
-  const pinnedItemId: string | undefined = stackItem?.stackItemId;
+  // Pin — this iframe binds to exactly one render id for its lifetime
+  // (post-render-identity-collapse each iframe = one mounted render,
+  // per [[kill-displaymode-divergence]]). The bootstrap's `renderId`
+  // is the pin; the render handler drops any frame addressed
+  // elsewhere.
+  const pinnedRenderId: string = meta.renderId;
 
   // Renderer wiring — when supplied, the handler routes frames through
-  // the single-item mount surface + WireConfig + StreamBus. When
+  // the single-render mount surface + WireConfig + StreamBus. When
   // absent, the placeholder path runs (boot.test.ts relies on the
   // latter to keep its import graph tiny). The renderer's
   // channelRegistry is the dispatch surface for every WS frame;
@@ -735,66 +734,63 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const renderer =
     rendererHooks !== undefined
       ? rendererHooks.setup({
-          meta: parsed.meta,
+          meta,
           renderInto: refs.stack,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
         })
       : null;
 
-  setStatus(refs, `Connecting to ${session.sessionId}…`, 'connecting');
+  setStatus(refs, `Connecting to ${meta.renderId}…`, 'connecting');
 
   // Boot-without-renderer path: we still need a ChannelRegistry to
   // receive frames, because the registry is the only dispatch
-  // surface. Build a minimal one with just the `push` placeholder
+  // surface. Build a minimal one with just the `render` placeholder
   // handler so non-renderer consumers (boot.test.ts) can observe
   // bootstrap-orchestration outcomes without paying React import
   // cost. The handler logs status but does not mount React.
   const placeholderRegistry =
     renderer === null
       ? createPlaceholderRegistry({
-          session,
+          meta,
           statusRefs: refs,
-          ...(pinnedItemId !== undefined ? { pinnedItemId } : {}),
+          pinnedRenderId,
         })
       : null;
   const activeRegistry = renderer?.channelRegistry ?? placeholderRegistry!;
 
   /**
-   * Apply an ack's stack snapshot to the runtime — picks the entry
-   * matching `pinnedItemId` (or the first entry when there's no pin)
-   * and mounts it through the renderer. Used by:
+   * Apply an ack's render snapshot to the runtime — when the ack
+   * carries a render matching `pinnedRenderId`, mount it through the
+   * renderer. Used by:
    *
    *   - The initial bootSequence path (first ack after subscribe).
    *   - The WS reconnect-with-rebootstrap path (every subsequent ack
    *     when the underlying WSTransport reconnects + re-fires
-   *     subscribe). A push or update that landed during the dropout
-   *     window flows back through here.
+   *     subscribe). A render or update that landed during the
+   *     dropout window flows back through here.
    *
-   * Idempotent on identical inputs — `applyItem` patches in place
-   * via {@link StackItemHandle.update} when called with the same item
-   * id; `channelTransport.applyStackItem` is server-side idempotent
-   * on the (stackItemId, channelName) tuple.
+   * Idempotent on identical inputs — `applyRender` patches in place
+   * via {@link RenderItemHandle.update} when called with the same
+   * render id; `channelTransport.applyRender` is server-side
+   * idempotent on the (renderId, channelName) tuple.
    */
   const applyAck = async (ackPayload: {
-    readonly stack?: readonly SessionStackEntry[];
+    readonly render?: Render;
   }): Promise<void> => {
-    if (ackPayload.stack === undefined) return;
-    const target =
-      pinnedItemId !== undefined
-        ? ackPayload.stack.find((item) => item.id === pinnedItemId)
-        : ackPayload.stack[0];
-    if (target === undefined) {
-      // Server's snapshot doesn't include our pinned item — likely the
-      // server pruned it (session ended, gc'd). Nothing to mount.
+    const target = ackPayload.render;
+    if (target === undefined) return;
+    if (target.id !== pinnedRenderId) {
+      // Server's snapshot is for a different render — likely a stale
+      // re-subscribe after the server pruned ours. Nothing to mount.
       return;
     }
-    mountedItem = target;
+    mountedRender = target;
     if (renderer !== null) {
-      await renderer.applyItem(target);
+      await renderer.applyRender(target);
       if (target.type !== 'mcpApps' && target.type !== 'system') {
-        renderer.channelTransport.applyStackItem({
-          stackItemId: target.id,
+        renderer.channelTransport.applyRender({
+          renderId: target.id,
           ...(target.streamSpec !== undefined
             ? { streamSpec: target.streamSpec }
             : {}),
@@ -806,7 +802,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
-      session,
+      meta,
       registry: activeRegistry,
       onStatusChange: (status) => {
         setStatus(
@@ -833,25 +829,25 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       ...(onObserve !== undefined ? { onObserve } : {}),
       // Reconnect-with-rebootstrap — on every ack received AFTER the
       // initial handshake settled, reapply the server's authoritative
-      // `stack` snapshot. A push or update that landed during a WS
+      // `render` snapshot. A render or update that landed during a WS
       // dropout window restores here without an agent re-prompt.
       onResubscribeAck: (ack) => {
         void applyAck(ack);
       },
       // R7 — registry-level events-polling fallback. Composed once at
-      // bind time from `session.pollingUrl` (server-stamped wsToken-
-      // gated /api/sessions/<id>/events URL) + `session.lastSequence`
+      // bind time from `meta.pollingUrl` (server-stamped wsToken-
+      // gated /api/renders/<id>/events URL) + `meta.lastSequence`
       // (cursor seed). FailoverHandle uses this when WS reaches
       // 'failed'; absent → no polling fallback (WS-only mode).
       //
       // Same cursor model as the WS subscribe `sinceSequence` replay
       // path — switching transports does not lose events.
-      ...(typeof session.pollingUrl === 'string' && session.pollingUrl.length > 0
+      ...(typeof meta.pollingUrl === 'string' && meta.pollingUrl.length > 0
         ? {
             polling: buildEventsPolling({
-              baseUrl: session.pollingUrl,
-              ...(session.lastSequence !== undefined
-                ? { initialSinceSequence: session.lastSequence }
+              baseUrl: meta.pollingUrl,
+              ...(meta.lastSequence !== undefined
+                ? { initialSinceSequence: meta.lastSequence }
                 : {}),
             }),
           }
@@ -867,12 +863,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       // here carries the coarse-grained reason for hosts that only
       // pattern-match `kind: 'bootstrap'`.
       emitBootFailure('UPGRADE_REQUIRED', message);
-      return { ok: false, mountedItem };
+      return { ok: false, mountedRender };
     }
     const message = err instanceof Error ? err.message : String(err);
     setStatus(refs, `WS handshake failed: ${message}`, 'error');
     emitBootFailure('WS_HANDSHAKE_FAILED', message);
-    return { ok: false, mountedItem };
+    return { ok: false, mountedRender };
   }
 
   // Attach the live transport handle to the renderer — flushes any
@@ -891,36 +887,33 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // didn't emit a HostContext (parsed.hostContext === undefined).
   if (parsed.hostContext !== undefined) {
     seedHostContext({
-      sessionId: session.sessionId,
+      sessionId: meta.renderId,
       send: (msg) => handle.handle.send(msg),
       initial: parsed.hostContext,
     });
     attachHostContextListener();
   }
 
-  // First ack — pick the matching/first stack entry from the snapshot
-  // the server returned and (under renderer mode) mount it. Reuses the
-  // same `applyAck` helper the reconnect-rebootstrap path uses — so a
-  // server-restart-driven full snapshot replay and the first-boot
-  // snapshot apply flow through one implementation.
+  // First ack — apply the server's render snapshot (when matching
+  // `pinnedRenderId`) and mount it. Reuses the same `applyAck` helper
+  // the reconnect-rebootstrap path uses — so a server-restart-driven
+  // snapshot replay and the first-boot snapshot apply flow through
+  // one implementation.
   await applyAck(handle.ack);
   setConnectedStatus(refs);
   // Lifecycle `code-ready` — terminal happy state. The bundle has
   // evaluated, the WS handshake completed, the first ack folded into
-  // the stack. Hosts pinning selectors on `code-ready` (E2E specs,
-  // accessibility scanners) re-resolve here. When the bootstrap pinned
-  // a `stackItemId` (single-item mode), forward it so the host can
-  // mirror per-card lifecycle on the outer element if it's keyed by
-  // stack item id.
+  // the mount slot. Hosts pinning selectors on `code-ready` (E2E
+  // specs, accessibility scanners) re-resolve here. Forward the
+  // bootstrap's `renderId` so the host can mirror per-render
+  // lifecycle on the outer element keyed by render id.
   onLifecycle?.(
     makeLifecycleEvent('code-ready', {
-      ...(stackItem?.stackItemId !== undefined
-        ? { stackItemId: stackItem.stackItemId }
-        : {}),
+      renderId: meta.renderId,
     }),
   );
 
-  return { ok: true, mountedItem };
+  return { ok: true, mountedRender };
 }
 
 /**
@@ -933,29 +926,27 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
  * supplies a fully-populated renderer with the rich handler set.
  */
 function createPlaceholderRegistry(params: {
-  readonly session: McpAppAiGguiSessionMeta;
+  readonly meta: McpAppAiGguiRenderMeta;
   readonly statusRefs: StatusRefs;
-  /** Pin — push payloads with a different stackItemId drop with a warning. */
-  readonly pinnedItemId?: string;
+  /** Pin — render frames with a different renderId drop with a warning. */
+  readonly pinnedRenderId: string;
 }): ChannelRegistry {
   const registry = new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        sessionId: params.session.sessionId,
-        appId: params.session.appId,
-        ...(params.session.wsToken !== undefined
-          ? { wsToken: params.session.wsToken }
+        renderId: params.meta.renderId,
+        appId: params.meta.appId,
+        ...(params.meta.wsToken !== undefined
+          ? { wsToken: params.meta.wsToken }
           : {}),
       },
     }),
   });
   registry.register(
-    createPushHandler({
+    createRenderHandler({
       statusRefs: params.statusRefs,
-      ...(params.pinnedItemId !== undefined
-        ? { pinnedItemId: params.pinnedItemId }
-        : {}),
+      pinnedRenderId: params.pinnedRenderId,
     }),
   );
   return registry;
@@ -963,7 +954,7 @@ function createPlaceholderRegistry(params: {
 
 /**
  * Frame dispatch lives inside `@ggui-ai/live-channel`'s
- * `ChannelRegistry`. Every WS frame type (`push`, `data`,
+ * `ChannelRegistry`. Every WS frame type (`render`, `data`,
  * `props_update`, `drain_ack`, `feedback`, `channel_payload`,
  * `channel_error`, `system`) has a registered handler in
  * `channels/*.ts`; the registry's bound transport routes inbound
@@ -1018,19 +1009,18 @@ function shouldAutostart(): boolean {
 // Self-contained bootstrap (`window.__GGUI_META__`).
 //
 // The default boot path (postMessage `ui/initialize` → parse the
-// `_meta["ai.ggui/session"]` + `_meta["ai.ggui/stack-item"]` slices →
-// open WebSocket → subscribe → render stack from frames) is strictly
-// first-party: it requires the host to speak ggui's custom postMessage
-// protocol AND a reachable live-channel WebSocket the renderer can
-// subscribe against. MCP Apps hosts in the wild (Claude Desktop,
-// claude.ai web) speak only the canonical MCP Apps lifecycle and have
-// no commitment to forward those slice keys back through
-// `ui/initialize`. The full first-party path stays intact for callers
-// that own both ends; this self-contained path is what makes the same
-// runtime bundle work in third-party MCP Apps hosts.
+// `_meta["ai.ggui/render"]` slice → open WebSocket → subscribe →
+// render from frames) is strictly first-party: it requires the host to
+// speak ggui's custom postMessage protocol AND a reachable live-channel
+// WebSocket the renderer can subscribe against. MCP Apps hosts in the
+// wild (Claude Desktop, claude.ai web) speak only the canonical MCP
+// Apps lifecycle and have no commitment to forward the slice key back
+// through `ui/initialize`. The full first-party path stays intact for
+// callers that own both ends; this self-contained path is what makes
+// the same runtime bundle work in third-party MCP Apps hosts.
 //
 // Contract: when the embedding HTML inlines a global of shape
-//   { sessionId: string, appId: string, componentCode: string }
+//   { renderId: string, appId: string, componentCode: string }
 // (where `componentCode` is base64-encoded compiled ES module source
 // of a React component) BEFORE this bundle's `<script type="module">`
 // executes, the runtime takes over synchronously, mounts the compiled
@@ -1050,13 +1040,8 @@ function shouldAutostart(): boolean {
 
 /**
  * Self-contained slice-meta shape — alias for {@link
- * ValidatedMcpAppAiGguiMeta}. Earlier versions of this module had
- * separate `SelfContainedComponentBootstrap` /
- * `SelfContainedSystemBootstrap` narrowings, then collapsed to a single
- * `McpAppAiGguiMeta`. Post-#109 the aggregated view is gone:
- * consumers read the two per-window slices (`session` + `stackItem`)
- * directly. The same shared parser pipeline produces a {@link
- * McpAppAiGguiMeta} from any of three delivery channels.
+ * ValidatedMcpAppAiGguiMeta}. Post-Phase-B every delivery channel
+ * produces a single `McpAppAiGguiRenderMeta` slice.
  *
  * The export is kept so downstream consumers (`@ggui-ai/iframe-runtime`
  * barrel, dependent test suites) don't break.
@@ -1240,7 +1225,7 @@ let anchorClickInterceptInstalled = false;
  * Module-level guard for {@link installFullscreenInterceptors}. The
  * fullscreen interceptors REPLACE prototype methods on `Element` and
  * `Document`; re-overriding on every re-mount would chain wrappers
- * and (if the captured `args` differ) leak stale `sessionId`/`appId`.
+ * and (if the captured `args` differ) leak stale `renderId`/`appId`.
  * The guard ensures exactly one prototype patch.
  */
 let fullscreenInterceptInstalled = false;
@@ -1444,8 +1429,7 @@ export function emitAudit(args: {
   readonly toolName: string;
   readonly kind: 'dispatch' | 'openLink' | 'requestDisplayMode';
   readonly payload: Record<string, unknown>;
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
   readonly actionId: string;
   readonly firedAt: string;
@@ -1459,10 +1443,7 @@ export function emitAudit(args: {
       arguments: {
         kind: args.kind,
         payload: args.payload,
-        sessionId: args.sessionId,
-        ...(args.stackItemId !== undefined
-          ? { stackItemId: args.stackItemId }
-          : {}),
+        renderId: args.renderId,
         appId: args.appId,
         actionId: args.actionId,
         firedAt: args.firedAt,
@@ -1700,7 +1681,7 @@ function emitUserActionInline(args: {
   readonly actionData: unknown;
   readonly uiContext: Record<string, unknown>;
   readonly actionId: string;
-  readonly stackItemId: string;
+  readonly renderId: string;
   readonly submittedAt: string;
   readonly nextStep?: string;
 }): void {
@@ -1714,13 +1695,13 @@ function emitUserActionInline(args: {
   // it through the spec's trusted path) and let the text carry a
   // natural-language summary that no classifier can mistake for a
   // tool-call injection.
-  const description = `User fired ${args.intent} on ${args.stackItemId}`;
+  const description = `User fired ${args.intent} on ${args.renderId}`;
   const text =
-    `User fired "${args.intent}" on stack item ${args.stackItemId}. ` +
+    `User fired "${args.intent}" on render ${args.renderId}. ` +
     `The action pipe was unavailable, so the gesture is inlined on this ` +
     `message instead of queued on the consume pipe. Use the userAction ` +
     `payload to handle it directly; do NOT call ggui_consume for this ` +
-    `stack item.`;
+    `render.`;
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -1733,7 +1714,7 @@ function emitUserActionInline(args: {
           userAction: {
             kind: 'inline',
             description,
-            stackItemId: args.stackItemId,
+            renderId: args.renderId,
             actionId: args.actionId,
             submittedAt: args.submittedAt,
             intent: args.intent,
@@ -1759,7 +1740,7 @@ function emitUserActionInline(args: {
  */
 function emitUserActionQueued(args: {
   readonly intent: string;
-  readonly stackItemId: string;
+  readonly renderId: string;
   readonly actionId: string;
   readonly submittedAt: string;
 }): void {
@@ -1768,14 +1749,14 @@ function emitUserActionQueued(args: {
   // of Anthropic's tool-call wire shape. claude.ai's prompt-injection
   // classifier flagged this even on the user-trusted `ui/message`
   // channel: data that looks like a tool-call injection IS treated as
-  // one, regardless of who supplied it. The stackItemId + next-tool
+  // one, regardless of who supplied it. The renderId + next-tool
   // hint stay in prose; the canonical machine-readable form lives on
   // `_meta.ggui.userAction.nextStep`.
-  const description = `User fired ${args.intent} on ${args.stackItemId}`;
+  const description = `User fired ${args.intent} on ${args.renderId}`;
   const text =
-    `User fired "${args.intent}" on stack item ${args.stackItemId}. ` +
+    `User fired "${args.intent}" on render ${args.renderId}. ` +
     `The gesture is queued on the consume pipe but no consumer is active — ` +
-    `call ggui_consume with this stackItemId next to drain the canonical payload.`;
+    `call ggui_consume with this renderId next to drain the canonical payload.`;
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -1788,13 +1769,13 @@ function emitUserActionQueued(args: {
           userAction: {
             kind: 'queued',
             description,
-            stackItemId: args.stackItemId,
+            renderId: args.renderId,
             actionId: args.actionId,
             submittedAt: args.submittedAt,
             intent: args.intent,
             nextStep: {
               tool: 'ggui_consume',
-              args: { stackItemId: args.stackItemId },
+              args: { renderId: args.renderId },
             },
           },
         },
@@ -1808,8 +1789,7 @@ export function dispatchWiredAction(args: {
   readonly toolName: string;
   readonly intent: string;
   readonly data: unknown;
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
   /**
    * Optional `actionSpec[intent].nextStep` hint forwarded by the
@@ -1820,7 +1800,7 @@ export function dispatchWiredAction(args: {
   readonly nextStep?: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, intent, data, sessionId, stackItemId, appId, nextStep } = args;
+  const { toolName, intent, data, renderId, appId, nextStep } = args;
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
@@ -1846,7 +1826,7 @@ export function dispatchWiredAction(args: {
             intent,
             data: data ?? null,
             firedAt,
-            sessionId,
+            renderId,
             appId,
           })}`,
         },
@@ -1886,8 +1866,7 @@ export function dispatchWiredAction(args: {
             actionData: data ?? null,
             uiContext,
           },
-          sessionId,
-          ...(stackItemId !== undefined ? { stackItemId } : {}),
+          renderId,
           appId,
           actionId,
           firedAt,
@@ -1899,25 +1878,21 @@ export function dispatchWiredAction(args: {
     }
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
       const consumerPresent = extractConsumerPresent(resp);
-      if (consumerPresent === false && stackItemId !== undefined) {
+      if (consumerPresent === false) {
         showActionToast(
           `💬 ${intent}${dataPart} — agent not listening, sent to chat`,
           'action_required',
         );
         emitUserActionQueued({
           intent,
-          stackItemId,
+          renderId,
           actionId,
           submittedAt: firedAt,
         });
         return;
       }
-      if (stackItemId === undefined) {
-        // Bootstrap didn't carry a stackItemId — no specific pipe to
-        // drain. Treat as a one-shot success.
-        showActionToast(`✓ ${intent} queued for agent`, 'success');
-      }
-      // Otherwise toast stays `pending`; drain_ack listener dismisses
+      // consumerPresent is true (or undefined — agnostic host stripped
+      // the field). Toast stays `pending`; drain_ack listener dismisses
       // it when ggui_consume drains the event.
       return;
     }
@@ -1933,7 +1908,7 @@ export function dispatchWiredAction(args: {
       actionData: data ?? null,
       uiContext,
       actionId,
-      stackItemId: stackItemId ?? '',
+      renderId,
       submittedAt: firedAt,
       ...(nextStep !== undefined ? { nextStep } : {}),
     });
@@ -2022,8 +1997,7 @@ export function routeDispatch(args: {
   readonly actionName: string;
   readonly data: unknown;
   readonly meta: {
-    readonly sessionId: string;
-    readonly stackItemId?: string;
+    readonly renderId: string;
     readonly appId: string;
     readonly appCallableTools?: readonly string[];
     readonly actionNextSteps?: Readonly<Record<string, string>>;
@@ -2052,8 +2026,7 @@ export function routeDispatch(args: {
       toolName: dispatchToolName,
       intent: actionName,
       data,
-      sessionId: meta.sessionId,
-      stackItemId: meta.stackItemId,
+      renderId: meta.renderId,
       appId: meta.appId,
       ...(tool !== undefined ? { nextStep: tool } : {}),
     });
@@ -2069,12 +2042,11 @@ export function routeDispatch(args: {
 export function openLinkInParent(args: {
   readonly toolName: string;
   readonly url: string;
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, url, sessionId, stackItemId, appId } = args;
+  const { toolName, url, renderId, appId } = args;
   if (typeof url !== 'string' || url.length === 0) {
     throw new RangeError(
       'wire.openLink(url): `url` must be a non-empty string.',
@@ -2086,8 +2058,7 @@ export function openLinkInParent(args: {
     toolName,
     kind: 'openLink',
     payload: { url },
-    sessionId,
-    stackItemId,
+    renderId,
     appId,
     actionId,
     firedAt,
@@ -2110,20 +2081,18 @@ export function openLinkInParent(args: {
 export function requestDisplayModeInParent(args: {
   readonly toolName: string;
   readonly mode: 'fullscreen' | 'pip' | 'inline';
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, mode, sessionId, stackItemId, appId } = args;
+  const { toolName, mode, renderId, appId } = args;
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(`requestDisplayMode|${mode}|${firedAt}`);
   emitAudit({
     toolName,
     kind: 'requestDisplayMode',
     payload: { mode },
-    sessionId,
-    stackItemId,
+    renderId,
     appId,
     actionId,
     firedAt,
@@ -2173,8 +2142,7 @@ export function requestDisplayModeInParent(args: {
 /** @internal — exported for unit tests. */
 export function installAnchorClickInterceptor(args: {
   readonly dispatchToolName: string;
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
 }): void {
   if (anchorClickInterceptInstalled) return;
@@ -2182,7 +2150,7 @@ export function installAnchorClickInterceptor(args: {
   if (typeof document === 'undefined') return;
   anchorClickInterceptInstalled = true;
 
-  const { dispatchToolName, sessionId, stackItemId, appId } = args;
+  const { dispatchToolName, renderId, appId } = args;
 
   const onClick = (event: MouseEvent): void => {
     if (event.defaultPrevented) return;
@@ -2227,8 +2195,7 @@ export function installAnchorClickInterceptor(args: {
     openLinkInParent({
       toolName: dispatchToolName,
       url: absoluteHref,
-      sessionId,
-      stackItemId,
+      renderId,
       appId,
     });
   };
@@ -2270,13 +2237,12 @@ export function installAnchorClickInterceptor(args: {
  *
  * Idempotent: the {@link fullscreenInterceptInstalled} guard prevents
  * re-mounts from chaining wrappers (which would also leak the prior
- * mount's `sessionId`/`appId` if they ever differed).
+ * mount's `renderId`/`appId` if they ever differed).
  */
 /** @internal — exported for unit tests. */
 export function installFullscreenInterceptors(args: {
   readonly dispatchToolName: string;
-  readonly sessionId: string;
-  readonly stackItemId?: string;
+  readonly renderId: string;
   readonly appId: string;
 }): void {
   if (fullscreenInterceptInstalled) return;
@@ -2286,7 +2252,7 @@ export function installFullscreenInterceptors(args: {
   }
   fullscreenInterceptInstalled = true;
 
-  const { dispatchToolName, sessionId, stackItemId, appId } = args;
+  const { dispatchToolName, renderId, appId } = args;
 
   Element.prototype.requestFullscreen = function (
     this: Element,
@@ -2295,8 +2261,7 @@ export function installFullscreenInterceptors(args: {
     requestDisplayModeInParent({
       toolName: dispatchToolName,
       mode: 'fullscreen',
-      sessionId,
-      stackItemId,
+      renderId,
       appId,
     });
     return Promise.resolve();
@@ -2308,8 +2273,7 @@ export function installFullscreenInterceptors(args: {
     requestDisplayModeInParent({
       toolName: dispatchToolName,
       mode: 'inline',
-      sessionId,
-      stackItemId,
+      renderId,
       appId,
     });
     return Promise.resolve();
@@ -2331,10 +2295,10 @@ export function __resetInterceptorsForTest(): void {
  * Install a persistent `message` listener that catches
  * `ui/notifications/tool-result` notifications arriving AFTER the
  * initial mount. Each new tool-result that carries a different
- * bootstrap (different stackItemId / codeUrl / kind) triggers a
+ * bootstrap (different renderId / codeUrl / kind) triggers a
  * re-mount via {@link bootSelfContained}. This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
- * a second `ggui_push` to the same session-resource.
+ * a second `ggui_render` to the same render-resource.
  *
  * Idempotent: subsequent calls no-op via {@link postMountListenerInstalled}.
  *
@@ -2363,9 +2327,6 @@ function installPostMountListener(): void {
     }
     const meta = extractMetaFromToolResult(data.params);
     if (meta === null) return;
-    const { session, stackItem } = meta;
-    // The parser guarantees session is present when ok:true; defense.
-    if (session === undefined) return;
     // Cheap dedupe — the host may emit the same tool-result more
     // than once (claude.ai re-broadcasts on iframe re-attach).
     // Re-mounting the same slice meta would flicker without changing
@@ -2375,22 +2336,22 @@ function installPostMountListener(): void {
     // claude.ai) often emit the initial meta WITHOUT the wsUrl+token
     // pair (the Anthropic SDK strips `_meta` from tool results), then
     // refetch + re-emit the FULL envelope. The two envelopes share
-    // stackItemId/kind/codeUrl/propsJson but differ on the live trio —
+    // renderId/kind/codeUrl/propsJson but differ on the live trio —
     // without trio in the key, the second arrival deduped silently and
     // bootSelfContained never opened the WS, so `ggui_update` props_update
     // frames fanned to zero subscribers.
     const liveTrio =
-      typeof session.wsUrl === 'string' &&
-      session.wsUrl.length > 0 &&
-      typeof session.wsToken === 'string' &&
-      session.wsToken.length > 0
+      typeof meta.wsUrl === 'string' &&
+      meta.wsUrl.length > 0 &&
+      typeof meta.wsToken === 'string' &&
+      meta.wsToken.length > 0
         ? 'live'
         : '-';
     const key = [
-      stackItem?.stackItemId ?? '-',
-      stackItem?.kind ?? '-',
-      stackItem?.codeUrl ?? '-',
-      stackItem?.propsJson ?? '-',
+      meta.renderId,
+      meta.kind ?? '-',
+      meta.codeUrl ?? '-',
+      meta.propsJson ?? '-',
       liveTrio,
     ].join('|');
     if (key === lastMetaKey) return;
@@ -2412,16 +2373,12 @@ function installPostMountListener(): void {
       // survival of stale entries was never load-bearing — only the
       // active slot names are.
       const activeSlotNames = new Set(
-        (stackItem?.contextSlots ?? []).map((s) => s.name),
+        (meta.contextSlots ?? []).map((s) => s.name),
       );
-      const reemitIdentity =
-        stackItem?.stackItemId !== undefined
-          ? {
-              sessionId: session.sessionId,
-              appId: session.appId,
-              stackItemId: stackItem.stackItemId,
-            }
-          : undefined;
+      const reemitIdentity = {
+        renderId: meta.renderId,
+        appId: meta.appId,
+      };
       reemitLastContextValues(
         postToParent,
         activeSlotNames,
@@ -2454,9 +2411,8 @@ async function bootSelfContained(
   doc: Document,
   meta: SelfContainedMcpAppAiGguiMeta,
 ): Promise<void> {
-  // Destructure once — session is guaranteed by validateSlices on the
-  // ok:true arm; stackItem is optional (session-only refresh envelopes).
-  const { session, stackItem } = meta;
+  // Post-Phase-B the slice is flat — `renderId` / `appId` / `runtimeUrl`
+  // / `codeUrl` / `kind` / `propsJson` etc. all live directly on `meta`.
 
   // Lifecycle: `mounting` first, paired with `ggui:renderer-ready` so
   // outer-DOM observers see the same sequence as the postMessage path.
@@ -2479,16 +2435,16 @@ async function bootSelfContained(
     // `__ggui__` dependency. System-card bootstraps carry none (the
     // loader returns the empty set); harmless to call unconditionally.
     setActiveValidatorSet(
-      await loadCompiledValidatorsFromUrl(stackItem?.validatorsUrl),
+      await loadCompiledValidatorsFromUrl(meta.validatorsUrl),
     );
 
     // Parse propsJson up-front — both branches (system card + compiled
     // component) consume props from the same field, just in different
     // shapes downstream.
     let props: Record<string, unknown> | undefined;
-    if (stackItem?.propsJson !== undefined) {
+    if (meta.propsJson !== undefined) {
       try {
-        const parsed: unknown = JSON.parse(stackItem.propsJson);
+        const parsed: unknown = JSON.parse(meta.propsJson);
         if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
           props = parsed as Record<string, unknown>;
         }
@@ -2503,7 +2459,7 @@ async function bootSelfContained(
     // dispatch wire actions). The registry handles unknown kinds via
     // a typed fallback, so a new server emitting a kind this runtime
     // doesn't know still surfaces something visible.
-    if (stackItem?.kind !== undefined) {
+    if (meta.kind !== undefined) {
       const [reactMod, reactDomClient, systemCardsMod] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -2513,15 +2469,11 @@ async function bootSelfContained(
       root.render(
         reactMod.createElement(
           systemCardsMod.SystemCardHost,
-          { kind: stackItem.kind, props: props ?? {}, themeId: session.themeId },
+          { kind: meta.kind, props: props ?? {}, themeId: meta.themeId },
         ),
       );
       postLifecycleToParent(
-        makeLifecycleEvent('code-ready', {
-          ...(stackItem.stackItemId !== undefined
-            ? { stackItemId: stackItem.stackItemId }
-            : {}),
-        }),
+        makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
       );
       installResizeObserver(container);
       installPostMountListener();
@@ -2532,15 +2484,15 @@ async function bootSelfContained(
     // (content-addressable, immutable cache). T3-1 (2026-05-13) retired
     // the inline base64 `componentCode` channel — every static-component
     // bootstrap is delivered via the URL.
-    if (stackItem?.codeUrl === undefined) {
+    if (meta.codeUrl === undefined) {
       throw new Error(
         'bootSelfContained: bootstrap missing codeUrl (static-component mode requires the URL channel)',
       );
     }
-    const res = await fetch(stackItem.codeUrl);
+    const res = await fetch(meta.codeUrl);
     if (!res.ok) {
       throw new Error(
-        `bootSelfContained: codeUrl fetch failed (${res.status}): ${stackItem.codeUrl}`,
+        `bootSelfContained: codeUrl fetch failed (${res.status}): ${meta.codeUrl}`,
       );
     }
     const componentCode = await res.text();
@@ -2589,7 +2541,7 @@ async function bootSelfContained(
     const composedGadgets =
       await gadgetLoaderMod.loadGadgetRegistry(
         gadgetsMod,
-        session.gadgets ?? [],
+        meta.gadgets ?? [],
       );
 
     // Install `globalThis.__ggui__` BEFORE mountReactRoot — the data-
@@ -2610,7 +2562,7 @@ async function bootSelfContained(
       // Server-filtered public env values for wrapper hooks to read
       // via `getPublicEnv(key)`. Absent ⇒ empty record; wrappers
       // needing values throw at hook-mount.
-      publicEnv: session.publicEnv ?? {},
+      publicEnv: meta.publicEnv ?? {},
     });
 
     // Synthesize one React.createContext(default) per declared
@@ -2623,11 +2575,11 @@ async function bootSelfContained(
     // resolves on the first mount paint.
     const registry = globalsMod.getGlobalRegistry();
     const resolvedSlots: ReadonlyArray<ResolvedContextSlot> =
-      registry !== undefined && stackItem?.contextSlots !== undefined
+      registry !== undefined && meta.contextSlots !== undefined
         ? installContextRegistry(
             registry.contexts,
             reactMod,
-            stackItem.contextSlots,
+            meta.contextSlots,
           )
         : [];
 
@@ -2647,8 +2599,8 @@ async function bootSelfContained(
     // confirmed in a protocol probe.
     const dispatchToolName = resolveDispatchToolName();
     const wireConfig: import('@ggui-ai/wire').WireConfig = {
-      app: { appId: session.appId, appName: session.appId },
-      session: { sessionId: session.sessionId, isConnected: true },
+      app: { appId: meta.appId, appName: meta.appId },
+      render: { renderId: meta.renderId, isConnected: true },
       auth: { isAuthenticated: false },
       dispatch: (actionName, data) => {
         // Per-action routing — extracted to {@link routeDispatch} as
@@ -2660,16 +2612,13 @@ async function bootSelfContained(
           actionName,
           data,
           meta: {
-            sessionId: session.sessionId,
-            appId: session.appId,
-            ...(stackItem?.stackItemId !== undefined
-              ? { stackItemId: stackItem.stackItemId }
+            renderId: meta.renderId,
+            appId: meta.appId,
+            ...(meta.appCallableTools !== undefined
+              ? { appCallableTools: meta.appCallableTools }
               : {}),
-            ...(session.appCallableTools !== undefined
-              ? { appCallableTools: session.appCallableTools }
-              : {}),
-            ...(stackItem?.actionNextSteps !== undefined
-              ? { actionNextSteps: stackItem.actionNextSteps }
+            ...(meta.actionNextSteps !== undefined
+              ? { actionNextSteps: meta.actionNextSteps }
               : {}),
           },
           dispatchToolName,
@@ -2705,15 +2654,10 @@ async function bootSelfContained(
         typeof console !== 'undefined' && typeof console.warn === 'function'
           ? console.warn.bind(console)
           : undefined,
-      ...(stackItem?.stackItemId !== undefined
-        ? {
-            identity: {
-              sessionId: session.sessionId,
-              appId: session.appId,
-              stackItemId: stackItem.stackItemId,
-            },
-          }
-        : {}),
+      identity: {
+        renderId: meta.renderId,
+        appId: meta.appId,
+      },
     });
 
     const renderWrapper = (mountedComponent: ReactNode): ReactNode =>
@@ -2735,45 +2679,35 @@ async function bootSelfContained(
     // stacking.
     installAnchorClickInterceptor({
       dispatchToolName,
-      sessionId: session.sessionId,
-      ...(stackItem?.stackItemId !== undefined
-        ? { stackItemId: stackItem.stackItemId }
-        : {}),
-      appId: session.appId,
+      renderId: meta.renderId,
+      appId: meta.appId,
     });
     installFullscreenInterceptors({
       dispatchToolName,
-      sessionId: session.sessionId,
-      ...(stackItem?.stackItemId !== undefined
-        ? { stackItemId: stackItem.stackItemId }
-        : {}),
-      appId: session.appId,
+      renderId: meta.renderId,
+      appId: meta.appId,
     });
 
     const mountOpts = {
-      stackItem: {
-        ...(stackItem?.stackItemId !== undefined ? { id: stackItem.stackItemId } : {}),
+      render: {
+        id: meta.renderId,
         componentCode,
         ...(props !== undefined ? { props } : {}),
       },
       renderWrapper,
-      ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-      ...(session.themeMode !== undefined ? { themeMode: session.themeMode } : {}),
+      ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
+      ...(meta.themeMode !== undefined ? { themeMode: meta.themeMode } : {}),
       // GG.8.2 — operator-registered 3rd-party gadget packages so the
       // rewriter resolves each direct gadget import to its per-package
       // shim. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
-      ...(session.gadgets !== undefined
-        ? { gadgetPackages: session.gadgets.map((g) => g.package) }
+      ...(meta.gadgets !== undefined
+        ? { gadgetPackages: meta.gadgets.map((g) => g.package) }
         : {}),
     };
     const mount = await reactRendererMod.mountReactRoot(container, mountOpts);
 
     postLifecycleToParent(
-      makeLifecycleEvent('code-ready', {
-        ...(stackItem?.stackItemId !== undefined
-          ? { stackItemId: stackItem.stackItemId }
-          : {}),
-      }),
+      makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
     );
     installResizeObserver(container);
     installPostMountListener();
@@ -2786,7 +2720,7 @@ async function bootSelfContained(
     //
     // Targeted scope: this path mounts a SINGLE component (not the
     // full stack), so the only frame type we need is `props_update`
-    // matching THIS stackItemId. Other frame types are silently
+    // matching THIS renderId. Other frame types are silently
     // dropped — no handler registered means the registry's dispatch
     // is a no-op for them.
     //
@@ -2795,21 +2729,20 @@ async function bootSelfContained(
     // without live updates). When the WS goes down, mount.update()
     // simply stops firing — gracefully degrades.
     if (
-      typeof session.wsUrl === 'string' &&
-      session.wsUrl.length > 0 &&
-      typeof session.wsToken === 'string' &&
-      session.wsToken.length > 0 &&
-      stackItem?.stackItemId !== undefined
+      typeof meta.wsUrl === 'string' &&
+      meta.wsUrl.length > 0 &&
+      typeof meta.wsToken === 'string' &&
+      meta.wsToken.length > 0
     ) {
-      const targetStackItemId = stackItem.stackItemId;
-      const sessionWsToken = session.wsToken;
+      const targetRenderId = meta.renderId;
+      const renderWsToken = meta.wsToken;
       const subscribeRegistry = new ChannelRegistry({
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
           payload: {
-            sessionId: session.sessionId,
-            appId: session.appId,
-            wsToken: sessionWsToken,
+            renderId: meta.renderId,
+            appId: meta.appId,
+            wsToken: renderWsToken,
           },
         }),
       });
@@ -2820,22 +2753,22 @@ async function bootSelfContained(
         type: 'props_update',
         onMessage: (payload) => {
           const shaped = payload as {
-            readonly stackItemId?: unknown;
+            readonly renderId?: unknown;
             readonly props?: unknown;
           };
-          if (shaped.stackItemId !== targetStackItemId) return;
+          if (shaped.renderId !== targetRenderId) return;
           if (shaped.props === null || typeof shaped.props !== 'object') return;
           void mount.update({
             ...mountOpts,
-            stackItem: {
-              ...mountOpts.stackItem,
+            render: {
+              ...mountOpts.render,
               props: shaped.props as Record<string, unknown>,
             },
           });
         },
       });
       void connectViaRegistry({
-        session,
+        meta,
         registry: subscribeRegistry,
         onStatusChange: () => {
           /* no-op — placeholder UI is not used in self-contained mode */
@@ -2872,14 +2805,14 @@ async function bootSelfContained(
 
 /**
  * Detect a live-channel bootstrap shape inlined onto `__GGUI_META__`.
- * The first-party session shells (`/s/<shortCode>`,
- * `ui://ggui/session/<sessionId>`, the embedded-ui SessionViewer's
- * thin shell) populate this synchronously before the runtime loads.
+ * The first-party render shells (`/r/<shortCode>`,
+ * `ui://ggui/render/<renderId>`, the embedded-ui RenderViewer's thin
+ * shell) populate this synchronously before the runtime loads.
  *
- * Post-#109 the global carries a slice ENVELOPE (same shape as the
- * wire `_meta`): `{ "ai.ggui/session": {...}, "ai.ggui/stack-item":
- * {...} }`. A live-channel shell omits a static stack-item (no codeUrl
- * / kind) and ships wsUrl+token on the session slice instead.
+ * Post-Phase-B the global carries a slice ENVELOPE (same shape as the
+ * wire `_meta`): `{ "ai.ggui/render": {...} }`. A live-channel shell
+ * omits static content (no codeUrl / kind) and ships wsUrl+token
+ * inside the render slice instead.
  *
  * This predicate exists so the autostart path can distinguish
  * "shell-inlined a live bootstrap, run `bootProduction` immediately"
@@ -2897,20 +2830,20 @@ function readLiveBootstrapShape(): boolean {
     return false;
   }
   const bag = raw as Record<string, unknown>;
-  const sessionRaw = bag['ai.ggui/session'];
-  if (sessionRaw === null || typeof sessionRaw !== 'object' || Array.isArray(sessionRaw)) {
+  const renderRaw = bag['ai.ggui/render'];
+  if (renderRaw === null || typeof renderRaw !== 'object' || Array.isArray(renderRaw)) {
     return false;
   }
-  const sessionBag = sessionRaw as Record<string, unknown>;
+  const renderBag = renderRaw as Record<string, unknown>;
   return (
-    typeof sessionBag['wsUrl'] === 'string' &&
-    (sessionBag['wsUrl'] as string).length > 0 &&
-    typeof sessionBag['wsToken'] === 'string' &&
-    (sessionBag['wsToken'] as string).length > 0 &&
-    typeof sessionBag['sessionId'] === 'string' &&
-    (sessionBag['sessionId'] as string).length > 0 &&
-    typeof sessionBag['appId'] === 'string' &&
-    (sessionBag['appId'] as string).length > 0
+    typeof renderBag['wsUrl'] === 'string' &&
+    (renderBag['wsUrl'] as string).length > 0 &&
+    typeof renderBag['wsToken'] === 'string' &&
+    (renderBag['wsToken'] as string).length > 0 &&
+    typeof renderBag['renderId'] === 'string' &&
+    (renderBag['renderId'] as string).length > 0 &&
+    typeof renderBag['appId'] === 'string' &&
+    (renderBag['appId'] as string).length > 0
   );
 }
 
@@ -3007,8 +2940,8 @@ if (shouldAutostart() && typeof window !== 'undefined') {
   const inline = readSelfContainedMeta();
   const inlineHasStatic =
     inline !== null
-    && (typeof inline.stackItem?.codeUrl === 'string'
-      || typeof inline.stackItem?.kind === 'string');
+    && (typeof inline.codeUrl === 'string'
+      || typeof inline.kind === 'string');
   if (inline !== null && inlineHasStatic) {
     void bootSelfContained(document, inline);
   } else if (inline !== null) {
@@ -3020,19 +2953,19 @@ if (shouldAutostart() && typeof window !== 'undefined') {
     const buffered = readPendingToolResults();
     const bufferedHasStatic =
       buffered !== null
-      && (typeof buffered.stackItem?.codeUrl === 'string'
-        || typeof buffered.stackItem?.kind === 'string');
+      && (typeof buffered.codeUrl === 'string'
+        || typeof buffered.kind === 'string');
     if (buffered !== null && bufferedHasStatic) {
       void bootSelfContained(document, buffered);
     } else if (buffered !== null) {
       runBootProduction(buffered);
     } else {
       // Pre-empt the postMessage tool-result race when `__GGUI_META__`
-      // already carries a live-channel envelope (wsUrl + token + sessionId
-      // + appId on `ai.ggui/session`) without a static stack-item slice —
+      // already carries a live-channel envelope (wsUrl + token +
+      // renderId + appId on `ai.ggui/render`) without static content —
       // that shape doesn't trip `readSelfContainedMeta` (no codeUrl /
       // kind to mount), but it IS the signal that a first-party shell
-      // (`/s/<shortCode>`, `ui://ggui/session/<sessionId>`) has already
+      // (`/r/<shortCode>`, `ui://ggui/render/<renderId>`) has already
       // inlined the WS-driven boot envelope. Skip the 30s tool-result
       // wait and hand off to `bootProduction` directly — `bootProduction`
       // re-issues `ui/initialize` to the host, which re-emits the same
@@ -3055,8 +2988,8 @@ if (shouldAutostart() && typeof window !== 'undefined') {
           (postMessageMeta) => {
             const hasStatic =
               postMessageMeta !== null
-              && (typeof postMessageMeta.stackItem?.codeUrl === 'string'
-                || typeof postMessageMeta.stackItem?.kind === 'string');
+              && (typeof postMessageMeta.codeUrl === 'string'
+                || typeof postMessageMeta.kind === 'string');
             if (postMessageMeta !== null && hasStatic) {
               void bootSelfContained(document, postMessageMeta);
               return;
@@ -3083,15 +3016,15 @@ if (shouldAutostart() && typeof window !== 'undefined') {
 //   4. installGlobalRegistry (with real React+ReactDOM+design+wire
 //      module handles).
 //   5. Build StreamBus + root WireConfig.
-//   6. Wire `applyItem(item)` closure — first call mounts the React
-//      tree into the renderer's slot; later calls re-apply via the
-//      `StackItemHandle.update` lifecycle.
+//   6. Wire `applyRender(render)` closure — first call mounts the
+//      React tree into the renderer's slot; later calls re-apply via
+//      the `RenderItemHandle.update` lifecycle.
 //   7. Populate the channel registry; bootSequence calls connectFn
 //      (default `connectViaRegistry`) which binds the WS transport.
 //      Frames arrive directly through the registered handlers.
 //
-// Step 4 is the TOCTOU-critical barrier: MUST run before any stack
-// item renders (generated code's data-URL shims read the global
+// Step 4 is the TOCTOU-critical barrier: MUST run before any render
+// mounts (generated code's data-URL shims read the global
 // synchronously during `loadModule`).
 // =============================================================================
 /**
@@ -3144,13 +3077,16 @@ async function bootProduction(opts: {
     import('./gadget-loader.js'),
   ]);
 
-  // Renderer wiring hook — constructs buses + single-item mount surface
+  // Renderer wiring hook — constructs buses + single-render mount surface
   // + wire config on demand inside bootSequence.
   const renderer: RendererHooks = {
     setup: ({ meta, renderInto, statusRefs, onObserve }) => {
-      // Destructure once — session is guaranteed present on the
-      // ok:true arm; stackItem may be absent (session-only).
-      const { session, stackItem } = meta;
+      // Post-Phase-B `meta` is the flat render slice — `renderId` /
+      // `appId` / `runtimeUrl` / `wsUrl` / `wsToken` / `themeId` /
+      // `gadgets` / `publicEnv` / `contextSlots` / `actionNextSteps` /
+      // `appCallableTools` / `streamWebSocketLocalTools` all live
+      // directly on `meta`.
+
       // Compose the gadget registry: STDLIB seed PLUS any
       // operator-registered wrappers carried on the bootstrap.
       // Awaited inside the synchronous `setup` callback via an IIFE
@@ -3159,15 +3095,15 @@ async function bootProduction(opts: {
       // is fast (already-resolved bundles hit the module cache).
       //
       // For now we fall back to the STDLIB-only seed if the bootstrap
-      // omits `gadgets`. The install happens BEFORE any stack
-      // item renders so `rewrite-imports.ts` reads a fully-populated
-      // registry on the first `loadModule` call.
+      // omits `gadgets`. The install happens BEFORE any render mounts
+      // so `rewrite-imports.ts` reads a fully-populated registry on
+      // the first `loadModule` call.
       const composedGadgets = gadgetLoaderMod
         // Empty registrations → resolves to a Promise of the STDLIB
         // seed only; the boot path doesn't wait on wrapper imports.
         .loadGadgetRegistry(
           gadgetsMod,
-          session.gadgets ?? [],
+          meta.gadgets ?? [],
         );
       // Install with the synchronous STDLIB seed first; the WS-driven
       // boot path doesn't await wrapper loads here (the registry
@@ -3190,7 +3126,7 @@ async function bootProduction(opts: {
         // Public env values from the bootstrap. The WS-driven path
         // receives bootstrap synchronously via
         // setup({meta, ...}) so installing here is correct.
-        publicEnv: session.publicEnv ?? {},
+        publicEnv: meta.publicEnv ?? {},
       });
       // Merge 3rd-party package namespaces into the LIVE slot object —
       // not a slot replacement. The per-package data-URL shims read
@@ -3218,11 +3154,11 @@ async function bootProduction(opts: {
       // runtime so `useGguiContext(slot)` reads the live tuple.
       const registry = globalsMod.getGlobalRegistry();
       const resolvedSlots: ReadonlyArray<ResolvedContextSlot> =
-        registry !== undefined && stackItem?.contextSlots !== undefined
+        registry !== undefined && meta.contextSlots !== undefined
           ? installContextRegistry(
               registry.contexts,
               reactMod,
-              stackItem.contextSlots,
+              meta.contextSlots,
             )
           : [];
       const ContextStateHost = createContextStateHost({
@@ -3232,15 +3168,10 @@ async function bootProduction(opts: {
           typeof console !== 'undefined' && typeof console.warn === 'function'
             ? console.warn.bind(console)
             : undefined,
-        ...(stackItem?.stackItemId !== undefined
-          ? {
-              identity: {
-                sessionId: session.sessionId,
-                appId: session.appId,
-                stackItemId: stackItem.stackItemId,
-              },
-            }
-          : {}),
+        identity: {
+          renderId: meta.renderId,
+          appId: meta.appId,
+        },
       });
 
       const streamBus = new StreamBus();
@@ -3272,7 +3203,7 @@ async function bootProduction(opts: {
 
       // Spec-canonical outbound dispatch. The WS pipe is for streamSpec
       // subscriptions ONLY (inbound `ggui_emit` fanout + `props_update` +
-      // `push` + `data` + `feedback` + `drain_ack` + `channel_payload`).
+      // `render` + `data` + `feedback` + `drain_ack` + `channel_payload`).
       // Outbound user actions go through the MCP-Apps host relay per
       // spec §401: postMessage `tools/call:ggui_runtime_submit_action`
       // to the parent → `AppRenderer.onCallTool` → sample agent's
@@ -3283,21 +3214,18 @@ async function bootProduction(opts: {
       // downstream consumer — so the WS action path silently drops
       // clicks. `routeDispatch` is the same helper `bootSelfContained`
       // uses; threading it here aligns LIVE-mode with self-contained.
-      // Single mounted item — populated by `applyItem` on the first
-      // push. The wire config + data channel handler read it through
-      // `currentItem`-returning thunks so they always see the latest
-      // snapshot without holding stale refs.
-      let currentItem: SessionStackEntry | null = null;
-      let itemHandle: StackItemHandle | null = null;
+      // Single mounted render — populated by `applyRender` on the first
+      // render frame. The wire config + data channel handler read it
+      // through `currentRender`-returning thunks so they always see the
+      // latest snapshot without holding stale refs.
+      let currentRender: Render | null = null;
+      let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
-      const { config: rootConfig, buildScopedConfig } = buildRootWireConfig({
-        sessionId: session.sessionId,
-        appId: session.appId,
-        // Post-stack-removal the wire config gets a single-item view —
-        // `buildRootWireConfig.getStack` is preserved as a snapshot
-        // function but always returns at most one entry.
-        getStack: () => (currentItem !== null ? [currentItem] : []),
+      const rootConfig = buildRootWireConfig({
+        renderId: meta.renderId,
+        appId: meta.appId,
+        getCurrentRender: () => currentRender,
         manager,
         streamBus,
         ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3317,16 +3245,13 @@ async function bootProduction(opts: {
             actionName: payload.action,
             data: payload.data,
             meta: {
-              sessionId: session.sessionId,
-              appId: session.appId,
-              ...(stackItem?.stackItemId !== undefined
-                ? { stackItemId: stackItem.stackItemId }
+              renderId: meta.renderId,
+              appId: meta.appId,
+              ...(meta.appCallableTools !== undefined
+                ? { appCallableTools: meta.appCallableTools }
                 : {}),
-              ...(session.appCallableTools !== undefined
-                ? { appCallableTools: session.appCallableTools }
-                : {}),
-              ...(stackItem?.actionNextSteps !== undefined
-                ? { actionNextSteps: stackItem.actionNextSteps }
+              ...(meta.actionNextSteps !== undefined
+                ? { actionNextSteps: meta.actionNextSteps }
                 : {}),
             },
             dispatchToolName,
@@ -3334,18 +3259,18 @@ async function bootProduction(opts: {
         },
       });
 
-      // Build the wrap factory used by every per-mount React tree:
+      // Build the wrap factory used by every mount React tree:
       // `<ContextStateHost slots={resolvedSlots}>` so contextSpec
       // values flow through `ui/update-model-context` exactly like the
-      // self-contained path. mcpApps + system items skip the wrap
+      // self-contained path. mcpApps + system renders skip the wrap
       // (their renderers don't run user component code that reads
       // contexts). When `resolvedSlots` is empty ContextStateHost
-      // short-circuits to a Fragment, so the wrap is free for items
+      // short-circuits to a Fragment, so the wrap is free for renders
       // with no contextSpec.
       const buildOuterWrapper = (
-        item: SessionStackEntry,
+        render: Render,
       ): ((mountedTree: ReactNode) => ReactNode) | undefined => {
-        if (item.type === 'mcpApps' || item.type === 'system') return undefined;
+        if (render.type === 'mcpApps' || render.type === 'system') return undefined;
         return (mountedTree) =>
           reactMod.createElement(ContextStateHost, {
             slots: resolvedSlots,
@@ -3353,38 +3278,35 @@ async function bootProduction(opts: {
           });
       };
 
-      // Build the scoped wire config for a given item. mcpApps stack
-      // items get NO wire config — their iframe host has its own
-      // contract (adapter-boundary rule). Component items scope via
-      // `buildScopedConfig` (see `packages/wire/src/context.ts`).
-      // `contractHash` is intentionally absent — it lives on the event
-      // envelope, not on the stack item shape.
-      const buildScopedWireFor = (item: SessionStackEntry): WireConfig | null => {
-        if (item.type === 'mcpApps' || item.type === 'system') return null;
-        return buildScopedConfig({
-          stackItemId: item.id,
-          ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
-        });
+      // Build the scoped wire config for the active render. mcpApps +
+      // system renders get NO wire config — their iframe / built-in
+      // host has its own contract (adapter-boundary rule).
+      // Post-render-identity-collapse the WireConfig is bound to the
+      // single render at boot, so there's no per-render scope factory
+      // — every dispatch resolves through `getCurrentRender`.
+      const buildScopedWireFor = (render: Render): WireConfig | null => {
+        if (render.type === 'mcpApps' || render.type === 'system') return null;
+        return rootConfig;
       };
 
-      // Build the renderer options for a given item. Theme is forwarded
-      // from the bootstrap so per-mount React trees inject the
-      // configured theme's CSS vars (indigo, claudic, etc). Without
-      // this, react-renderer.ts falls back to `getScopedCssTokens`
-      // (no preset) and the iframe renders with the default ggui theme
-      // even when `_meta["ai.ggui/session"].themeId` is `'indigo'`.
-      // Sibling `bootSelfContained` path threads the same fields onto
-      // its `mountOpts` for parity.
-      const buildOpts = (item: SessionStackEntry): StackItemRendererOptions => {
-        const wrapOuter = buildOuterWrapper(item);
+      // Build the renderer options for the active render. Theme is
+      // forwarded from the bootstrap so the mounted React tree injects
+      // the configured theme's CSS vars (indigo, claudic, etc).
+      // Without this, react-renderer.ts falls back to
+      // `getScopedCssTokens` (no preset) and the iframe renders with
+      // the default ggui theme even when `_meta["ai.ggui/render"].themeId`
+      // is `'indigo'`. Sibling `bootSelfContained` path threads the
+      // same fields onto its `mountOpts` for parity.
+      const buildOpts = (render: Render): RenderItemOptions => {
+        const wrapOuter = buildOuterWrapper(render);
         return {
-          stackItem: item,
-          scopedWireConfig: buildScopedWireFor(item),
+          render,
+          scopedWireConfig: buildScopedWireFor(render),
           streamBus,
-          sessionId: session.sessionId,
-          ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-          ...(session.themeMode !== undefined
-            ? { themeMode: session.themeMode }
+          renderId: meta.renderId,
+          ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
+          ...(meta.themeMode !== undefined
+            ? { themeMode: meta.themeMode }
             : {}),
           ...(wrapOuter !== undefined ? { wrapOuter } : {}),
         };
@@ -3393,21 +3315,22 @@ async function bootProduction(opts: {
       /**
        * Mount-or-update the single render slot. First call mounts the
        * React tree into `renderInto`; subsequent calls re-apply via
-       * `itemHandle.update` (same kind ⇒ in-place props update; kind
-       * transition ⇒ tear-down + remount via `StackItemHandle`'s own
+       * `renderHandle.update` (same kind ⇒ in-place props update; kind
+       * transition ⇒ tear-down + remount via `RenderItemHandle`'s own
        * lifecycle).
        *
-       * Shared by the push and props_update channel handlers; closes
-       * over `currentItem` + `itemHandle` so the channel layer just
-       * calls `applyItem(item)` without owning lifecycle state.
+       * Shared by the render-frame and props_update channel handlers;
+       * closes over `currentRender` + `renderHandle` so the channel
+       * layer just calls `applyRender(render)` without owning
+       * lifecycle state.
        */
-      const applyItem = async (item: SessionStackEntry): Promise<void> => {
-        currentItem = item;
-        if (itemHandle === null) {
-          itemHandle = await renderStackItem(renderInto, buildOpts(item));
+      const applyRender = async (render: Render): Promise<void> => {
+        currentRender = render;
+        if (renderHandle === null) {
+          renderHandle = await mountRender(renderInto, buildOpts(render));
           return;
         }
-        await itemHandle.update(buildOpts(item));
+        await renderHandle.update(buildOpts(render));
       };
 
       // Validator context — A2UI default for `_ggui:preview`; no
@@ -3418,22 +3341,21 @@ async function bootProduction(opts: {
         reservedValidators: mergeReservedValidators(undefined, undefined),
       };
 
-      // Per-channel transport router. Created here so it
-      // shares the buffered manager shim (and survives the
-      // pre-attachManager send buffering) + the same StreamBus the
-      // wire config emits onto. The router consults
-      // `bootstrap.streamWebSocketLocalTools` to decide WS-subscribe
-      // vs iframe-polling per channel; absent ⇒ universal polling
-      // fallback. Activated lazily by `handleRendererMessage`'s push
-      // case (which calls `channelTransport.applyStackItem` on every
-      // stack-fold).
+      // Per-channel transport router. Created here so it shares the
+      // buffered manager shim (and survives the pre-attachManager send
+      // buffering) + the same StreamBus the wire config emits onto.
+      // The router consults `bootstrap.streamWebSocketLocalTools` to
+      // decide WS-subscribe vs iframe-polling per channel; absent ⇒
+      // universal polling fallback. Activated lazily by the render-
+      // frame handler (which calls `channelTransport.applyRender` on
+      // every render fold).
       const channelTransport = createChannelTransportRouter({
-        sessionId: session.sessionId,
-        appId: session.appId,
-        ...(session.streamWebSocketLocalTools !== undefined
+        renderId: meta.renderId,
+        appId: meta.appId,
+        ...(meta.streamWebSocketLocalTools !== undefined
           ? {
               streamWebSocketLocalTools:
-                session.streamWebSocketLocalTools,
+                meta.streamWebSocketLocalTools,
             }
           : {}),
         send: (msg) => manager.send(msg),
@@ -3488,27 +3410,25 @@ async function bootProduction(opts: {
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
           payload: {
-            sessionId: session.sessionId,
-            appId: session.appId,
-            ...(session.wsToken !== undefined
-              ? { wsToken: session.wsToken }
+            renderId: meta.renderId,
+            appId: meta.appId,
+            ...(meta.wsToken !== undefined
+              ? { wsToken: meta.wsToken }
               : {}),
           },
         }),
       });
       channelRegistry.register(
-        createPushHandler({
+        createRenderHandler({
           statusRefs,
-          ...(stackItem?.stackItemId !== undefined
-            ? { pinnedItemId: stackItem.stackItemId }
-            : {}),
-          applyItem,
+          pinnedRenderId: meta.renderId,
+          applyRender,
           getChannelTransport: () => channelTransport,
         }),
       );
       channelRegistry.register(
         createDataHandler({
-          getCurrentItem: () => currentItem,
+          getCurrentRender: () => currentRender,
           streamBus,
           validatorCtx,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3516,8 +3436,8 @@ async function bootProduction(opts: {
       );
       channelRegistry.register(
         createPropsUpdateHandler({
-          getCurrentItem: () => currentItem,
-          applyItem,
+          getCurrentRender: () => currentRender,
+          applyRender,
         }),
       );
       channelRegistry.register(
@@ -3543,8 +3463,8 @@ async function bootProduction(opts: {
       return {
         rootWireConfig: rootConfig,
         streamBus,
-        applyItem,
-        getCurrentItem: () => currentItem,
+        applyRender,
+        getCurrentRender: () => currentRender,
         validatorCtx,
         manager,
         channelTransport,
@@ -3559,13 +3479,14 @@ async function bootProduction(opts: {
       }
     },
     teardown: (handle) => {
-      // The React mount lifecycle is owned by the per-setup `itemHandle`
-      // closure; it stays null until the first push lands. Today
-      // bootSequence's failure paths fire before any push (handshake
-      // errors arrive before the first ack), so unmounting the React
-      // tree from here is unnecessary. The only thing the teardown
-      // hook still owns is the per-channel polling timer + transport
-      // subscription registry — no-op when no channel was activated.
+      // The React mount lifecycle is owned by the per-setup
+      // `renderHandle` closure; it stays null until the first render
+      // frame lands. Today bootSequence's failure paths fire before
+      // any render frame (handshake errors arrive before the first
+      // ack), so unmounting the React tree from here is unnecessary.
+      // The only thing the teardown hook still owns is the per-channel
+      // polling timer + transport subscription registry — no-op when
+      // no channel was activated.
       handle.channelTransport.dispose();
     },
   };
