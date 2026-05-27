@@ -2,7 +2,7 @@
  * ProvisionalRenderer (RN) — behaviour tests covering the reducer +
  * catalog mapping end-to-end. Envelopes are injected through the
  * cross-platform `preview-bridge` emitter, exactly the path
- * `GguiSession.tsx` fans out in production.
+ * `GguiRender.tsx` fans out in production.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';
@@ -17,7 +17,7 @@ import {
 
 function sendPayload(payload: unknown, complete = false): void {
   const envelope: StreamEnvelope = {
-    sessionId: 'sess-1',
+    renderId: 'render-1',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],
