@@ -37,6 +37,13 @@ interface UseChatResult {
    * Anthropic SDK call). No-op when nothing is in flight.
    */
   readonly abort: () => void;
+  /**
+   * Mint a fresh chatSessionId and navigate the page to it — drives
+   * the "+ New" button in the header. Discards the current chat
+   * history's view (the persisted SQLite rows remain on the server,
+   * reachable by URL).
+   */
+  readonly newSession: () => void;
 }
 
 /**
