@@ -20,6 +20,14 @@ import {
 describe('fixtures catalog', () => {
   it('ships 14 fixtures across six materialized sub-modules', () => {
     expect(allFixtures.length).toBe(14);
+    // Sanity: confirm the deleted canvas-mode + host-context fixtures
+    // (retired alongside the Render-identity flatten in Phase A) are
+    // not in the catalog under their old slugs.
+    const names = new Set(allFixtures.map((f) => f.name));
+    expect(names.has('canvas-bootstrap-mutual-exclusion')).toBe(false);
+    expect(names.has('canvas-lifecycle-channel-emits-handshake-started')).toBe(false);
+    expect(names.has('canvas-navigated-updates-active-stack-item')).toBe(false);
+    expect(names.has('host-context-observed-persists')).toBe(false);
   });
 
   it('classifies every fixture into exactly one sub-module', () => {
@@ -97,10 +105,6 @@ describe('fixtures catalog', () => {
       'bootstrap-bundle-fetch-failed',
       'bootstrap-meta-missing',
       'bootstrap-success',
-      'canvas-bootstrap-mutual-exclusion',
-      'canvas-lifecycle-channel-emits-handshake-started',
-      'canvas-navigated-updates-active-stack-item',
-      'host-context-observed-persists',
       'observability-contract-error-emitted',
       'observability-wired-tool-invoked',
       'props-update-roundtrip',

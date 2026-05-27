@@ -93,7 +93,7 @@ export type { ContractSlug } from './fixtures/index.js';
 // Pure-function conformance catalogs — SPEC §7.7.2's gadget
 // obligations are deterministic validation functions, not transport-
 // observable behaviors. Each catalog grades a caller-supplied function
-// against authored accept/reject cases; no host, session, or wire.
+// against authored accept/reject cases; no host, render, or wire.
 //
 // Schema-conformance — which `DataContract.clientCapabilities`
 // payloads a conformant parser MUST accept / reject.

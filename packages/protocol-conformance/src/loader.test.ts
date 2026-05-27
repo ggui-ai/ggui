@@ -9,7 +9,7 @@ import { listFixtures, loadAllFixtures, loadFixture } from './loader.js';
 describe('loader', () => {
   it('listFixtures returns sorted names matching the catalog', () => {
     const names = listFixtures();
-    expect(names.length).toBe(18);
+    expect(names.length).toBe(14);
     expect([...names].sort()).toEqual(names); // already sorted
     expect(names).toContain('bootstrap-success');
     expect(names).toContain('wired-action-tool-threw');
@@ -34,7 +34,7 @@ describe('loader', () => {
 
   it('loadAllFixtures returns the full deterministic catalog', () => {
     const all = loadAllFixtures();
-    expect(all.length).toBe(18);
+    expect(all.length).toBe(14);
     const names = all.map((f) => f.name);
     expect([...names].sort()).toEqual(names);
   });

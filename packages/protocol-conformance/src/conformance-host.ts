@@ -73,7 +73,7 @@ export interface CreateRenderSetup {
 }
 
 /**
- * Register a tool on the session by symbolic handler name. Known
+ * Register a tool on the render by symbolic handler name. Known
  * handlers the reference implementation supports:
  *   - `'echo'`     — returns `{received: args}`.
  *   - `'throw'`    — rejects with `Error('tool_threw_for_fixture')`.

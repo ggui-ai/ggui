@@ -33,7 +33,7 @@
  * a parser accepts (`../schema-conformance`) and which `(contract,
  * appGadgets)` pairs the push-time registry gate accepts / rejects
  * (`../registration-conformance`). They are graded against a
- * caller-supplied function — there is no session, transport, or wire
+ * caller-supplied function — there is no render, transport, or wire
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
  */
