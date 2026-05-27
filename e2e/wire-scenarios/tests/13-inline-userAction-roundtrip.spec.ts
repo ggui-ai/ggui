@@ -336,8 +336,8 @@ describe.skip(
         // 10. Wire-level evidence. Read the SDK tape — collect tool
         //     calls from BOTH the first turn (render) and the second
         //     turn (act on the prepared prompt). The inline carrier
-        //     proof: NO `ggui_consume` call was issued for the popped
-        //     stackItemId on the second turn (the agent acted on the
+        //     proof: NO `ggui_consume` call was issued for the closed
+        //     renderId on the second turn (the agent acted on the
         //     text prompt, not by draining the pipe).
         interface AnthropicContent {
           readonly type?: string;

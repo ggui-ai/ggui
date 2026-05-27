@@ -7,13 +7,13 @@
  *   1. `ggui_list_gadgets` surfaces the STDLIB seed (one
  *      `@ggui-ai/protocol` `@ggui-ai/gadgets` package descriptor
  *      shipping the 7 first-party hook exports).
- *   2. A `ggui_push` whose contract declares a package-keyed
+ *   2. A `ggui_render` whose contract declares a package-keyed
  *      `clientCapabilities.gadgets` entry — `{ "@ggui-ai/gadgets":
  *      { useGeolocation: {} } }` — for a registered stdlib export
  *      succeeds: the `assertGadgetsRegistered` gate accepts the
  *      `(package, export)` reference and the descriptor lands on the
- *      stack item's `gadgetDescriptors` sidecar.
- *   3. A `ggui_push` whose contract references an UNREGISTERED export
+ *      render's `gadgetDescriptors` sidecar.
+ *   3. A `ggui_render` whose contract references an UNREGISTERED export
  *      (e.g. `useDoorDashCheckout`) is REJECTED with
  *      `gadget_not_registered`. The error payload carries
  *      did-you-mean suggestions when a close stdlib match exists.
@@ -21,10 +21,10 @@
  * Distinct from the Commit 3 unit tests in
  * `assert-gadgets.test.ts` — those exercise the validator
  * in isolation; this scenario exercises the wire path through
- * `ggui_push` so a regression at the seam (push.ts wiring,
+ * `ggui_render` so a regression at the seam (render.ts wiring,
  * appMetadataStore plumbing in server.ts) lights up here too.
  *
- * # Why every push uses `decision.kind: 'override'`
+ * # Why every render uses `decision.kind: 'override'`
  *
  * The default ggui server has the LLM-backed negotiator wired (real
  * `ANTHROPIC_API_KEY` from `.env.local`). Sending `kind: 'accept'`
@@ -72,10 +72,6 @@ interface ListGadgetsOut {
   gadgets: readonly GadgetDescriptor[];
 }
 
-interface NewSessionOut {
-  sessionId: string;
-}
-
 interface HandshakeOut {
   handshakeId: string;
 }
@@ -83,31 +79,32 @@ interface HandshakeOut {
 const SCENARIO_INTENT =
   'render a small status card — scenario 19 (gadget registry gate)';
 
-async function newSessionAndHandshake(args: {
+async function handshakeOnly(args: {
   contract: DataContract;
   idBase: string;
-}): Promise<{ handshakeId: string; sessionId: string }> {
-  const ns = unwrapStructured<NewSessionOut>(
-    await callTool(MCP_URL, 'ggui_new_session', { seed: args.idBase }),
-  );
+}): Promise<{ handshakeId: string }> {
+  // `idBase` retained on the call shape so cross-run traces remain
+  // distinguishable in the LLM provider's request log — handshake
+  // itself doesn't read it post-Phase-B (the prior `ggui_new_session`
+  // seed sink was deleted).
+  void args.idBase;
   const hs = unwrapStructured<HandshakeOut>(
     await callTool(MCP_URL, 'ggui_handshake', {
-      sessionId: ns.sessionId,
       intent: SCENARIO_INTENT,
       blueprintDraft: { contract: args.contract },
       // Hint synth to skip the rewrite path. Even with `forceCreate`
       // the cache fast-path can still fire, but `kind: 'override'` on
-      // push pins the effective contract regardless of suggestion
+      // render pins the effective contract regardless of suggestion
       // origin so the gate validates the agent's draft directly.
       forceCreate: true,
     }),
   );
-  return { handshakeId: hs.handshakeId, sessionId: ns.sessionId };
+  return { handshakeId: hs.handshakeId };
 }
 
 /**
- * Read the tool-level error message from a `tools/call` response. Push
- * validators throw → MCP wraps the throw as `result.isError: true`
+ * Read the tool-level error message from a `tools/call` response.
+ * Render validators throw → MCP wraps the throw as `result.isError: true`
  * with the message in `result.content[0].text`. Returns the message
  * string when present, or `null` when the response was a success.
  */
@@ -139,10 +136,10 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     ]);
   });
 
-  test('push with a registered hook succeeds (gate accepts stdlib reference)', async () => {
+  test('render with a registered hook succeeds (gate accepts stdlib reference)', async () => {
     const contract = {
       propsSpec: {
-        description: 'scenario 19 — registered-hook push',
+        description: 'scenario 19 — registered-hook render',
         properties: {
           location: {
             schema: { type: 'string' },
@@ -157,26 +154,26 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc19-registered',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    // Gate accepts → push completes. No tool-level error envelope,
-    // structuredContent carries the StackItemBootstrap shape.
-    expect(readToolErrorMessage(pushResp)).toBeNull();
-    const structured = (pushResp as { result?: { structuredContent?: { stackItemId?: string } } })
+    // Gate accepts → render completes. No tool-level error envelope,
+    // structuredContent carries the RenderBootstrap shape.
+    expect(readToolErrorMessage(renderResp)).toBeNull();
+    const structured = (renderResp as { result?: { structuredContent?: { renderId?: string } } })
       .result?.structuredContent;
-    expect(structured?.stackItemId).toBeTypeOf('string');
+    expect(structured?.renderId).toBeTypeOf('string');
   });
 
-  test('push with an unregistered hook is rejected with the gate error', async () => {
+  test('render with an unregistered hook is rejected with the gate error', async () => {
     const contract = {
       propsSpec: {
-        description: 'scenario 19 — unregistered-hook push',
+        description: 'scenario 19 — unregistered-hook render',
         properties: {
           status: {
             schema: { type: 'string' },
@@ -193,15 +190,15 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc19-unregistered',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    const message = readToolErrorMessage(pushResp);
+    const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
     expect(message ?? '').toMatch(/gadget_not_registered/i);
     expect(message ?? '').toMatch(/useDoorDashCheckout/);
@@ -213,12 +210,12 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     expect(message ?? '').not.toMatch(/did you mean/i);
   });
 
-  test('push with a typo of a registered hook surfaces the did-you-mean suggestion', async () => {
+  test('render with a typo of a registered hook surfaces the did-you-mean suggestion', async () => {
     // `useGeoLocation` (camelCase typo) is Levenshtein distance 1
     // from the registered `useGeolocation` — within the < 3 cutoff.
     const contract = {
       propsSpec: {
-        description: 'scenario 19 — typo-of-registered-hook push',
+        description: 'scenario 19 — typo-of-registered-hook render',
         properties: {
           location: { schema: { type: 'string' }, required: false },
         },
@@ -229,15 +226,15 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc19-typo',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    const message = readToolErrorMessage(pushResp);
+    const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
     expect(message ?? '').toMatch(/did you mean/i);
     expect(message ?? '').toMatch(/useGeolocation/);

@@ -1,5 +1,5 @@
 /**
- * Scenario 20 — Slice 2 public env channel: push gate + bootstrap
+ * Scenario 20 — Slice 2 public env channel: render gate + bootstrap
  * projection.
  *
  * Companion to Scenario 19 (gadget registry gate). Where 19
@@ -7,14 +7,14 @@
  * scenario pins the env-channel gate (`assertPublicEnvSatisfied`) and
  * the union-filtered bootstrap projection (`derivePublicEnvProjection`).
  *
- * The bootstrap on a successful push lands on
+ * The bootstrap on a successful render lands on
  * `result._meta.ggui.bootstrap` per the MCP Apps spec. Tests against
  * the `@ggui-samples/ggui-mapbox-demo` fixture server (port 6784):
  *
  *   - `app.gadgets` registers `useMapbox` with
  *     `requires: ['GGUI_PUBLIC_APP_MAPBOX_TOKEN']`.
  *   - `app.publicEnv.GGUI_PUBLIC_APP_MAPBOX_TOKEN` carries the
- *     placeholder `<set-me-before-running>` (committed). The push gate
+ *     placeholder `<set-me-before-running>` (committed). The render gate
  *     only checks key PRESENCE, not value validity — the placeholder
  *     is enough to exercise the channel; Mapbox's own SDK would
  *     surface "Invalid token" at first request in a real render. Tests
@@ -55,10 +55,6 @@ interface ListGadgetsOut {
   gadgets: readonly GadgetDescriptor[];
 }
 
-interface NewSessionOut {
-  sessionId: string;
-}
-
 interface HandshakeOut {
   handshakeId: string;
 }
@@ -66,9 +62,8 @@ interface HandshakeOut {
 const SCENARIO_INTENT =
   'render a small map preview — scenario 20 (public env channel gate)';
 
-interface PushResultBootstrap {
-  readonly stackItemId?: string;
-  readonly sessionId?: string;
+interface RenderResultBootstrap {
+  readonly renderId?: string;
   readonly appId?: string;
   // GG.8.2 — the bootstrap gadget channel is per-PACKAGE: one entry
   // per registered package, keyed by `package` (no per-hook entries).
@@ -76,31 +71,31 @@ interface PushResultBootstrap {
   readonly publicEnv?: Readonly<Record<string, string>>;
 }
 
-interface PushResultMeta {
-  readonly ggui?: { readonly bootstrap?: PushResultBootstrap };
+interface RenderResultMeta {
+  readonly ggui?: { readonly bootstrap?: RenderResultBootstrap };
 }
 
-async function newSessionAndHandshake(args: {
+async function handshakeOnly(args: {
   contract: DataContract;
   idBase: string;
   mcpUrl?: string;
-}): Promise<{ handshakeId: string; sessionId: string }> {
+}): Promise<{ handshakeId: string }> {
   const mcpUrl = args.mcpUrl ?? MCP_URL;
-  const ns = unwrapStructured<NewSessionOut>(
-    await callTool(mcpUrl, 'ggui_new_session', { seed: args.idBase }),
-  );
+  // `idBase` retained on the call shape so cross-run traces remain
+  // distinguishable in LLM provider logs — handshake itself doesn't
+  // read it post-Phase-B.
+  void args.idBase;
   const hs = unwrapStructured<HandshakeOut>(
     await callTool(mcpUrl, 'ggui_handshake', {
-      sessionId: ns.sessionId,
       intent: SCENARIO_INTENT,
       blueprintDraft: { contract: args.contract },
       // Hint synth to skip the rewrite path so the gate validates the
       // agent's draft directly (cache + cohort fast-paths can still
-      // fire but `kind: 'override'` on push pins effective contract).
+      // fire but `kind: 'override'` on render pins effective contract).
       forceCreate: true,
     }),
   );
-  return { handshakeId: hs.handshakeId, sessionId: ns.sessionId };
+  return { handshakeId: hs.handshakeId };
 }
 
 function readToolErrorMessage(resp: {
@@ -112,8 +107,8 @@ function readToolErrorMessage(resp: {
 
 function readBootstrap(resp: {
   result?: { _meta?: Record<string, unknown> };
-}): PushResultBootstrap | undefined {
-  const meta = resp.result?._meta as PushResultMeta | undefined;
+}): RenderResultBootstrap | undefined {
+  const meta = resp.result?._meta as RenderResultMeta | undefined;
   return meta?.ggui?.bootstrap;
 }
 
@@ -136,7 +131,7 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     expect(mapbox?.requires).toEqual(['GGUI_PUBLIC_APP_MAPBOX_TOKEN']);
   });
 
-  test('push with satisfied requires succeeds + bootstrap carries projected publicEnv', async () => {
+  test('render with satisfied requires succeeds + bootstrap carries projected publicEnv', async () => {
     // Contract uses useMapbox. The wrapper's `requires` is
     // GGUI_PUBLIC_APP_MAPBOX_TOKEN; the demo's App.publicEnv carries
     // that key (placeholder value). The gate accepts; the bootstrap
@@ -154,25 +149,25 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc20-happy',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
     // Gate accepts.
-    expect(readToolErrorMessage(pushResp)).toBeNull();
-    const structured = (pushResp as {
-      result?: { structuredContent?: { stackItemId?: string } };
+    expect(readToolErrorMessage(renderResp)).toBeNull();
+    const structured = (renderResp as {
+      result?: { structuredContent?: { renderId?: string } };
     }).result?.structuredContent;
-    expect(structured?.stackItemId).toBeTypeOf('string');
+    expect(structured?.renderId).toBeTypeOf('string');
     // Bootstrap carries the projected publicEnv. Slice 2.2 — the
     // server filters App.publicEnv to the union of declared wrappers'
     // `requires`, so only the Mapbox token is forwarded (any other
     // operator-stamped keys would be omitted here).
-    const bootstrap = readBootstrap(pushResp);
+    const bootstrap = readBootstrap(renderResp);
     expect(bootstrap).toBeDefined();
     expect(bootstrap?.publicEnv).toBeDefined();
     expect(Object.keys(bootstrap?.publicEnv ?? {})).toEqual([
@@ -197,7 +192,7 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
   // happy path's contract exactly; the only difference is the fixture
   // server's `app.publicEnv` is absent (operator forgot to stamp the
   // required key). Gate fires `gadget_public_env_missing`.
-  test('push against a server missing the required publicEnv key is rejected with gadget_public_env_missing', async () => {
+  test('render against a server missing the required publicEnv key is rejected with gadget_public_env_missing', async () => {
     const contract = {
       propsSpec: {
         description: 'scenario 20 — Mapbox missing-env negative path',
@@ -211,16 +206,16 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc20-missing-env',
       mcpUrl: MCP_URL_MISSING_ENV,
     });
-    const pushResp = await callTool(MCP_URL_MISSING_ENV, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL_MISSING_ENV, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    const message = readToolErrorMessage(pushResp);
+    const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
     expect(message ?? '').toMatch(/gadget_public_env_missing/i);
     // Error names the missing key + the wrapper that required it, so
@@ -229,11 +224,11 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     expect(message ?? '').toMatch(/GGUI_PUBLIC_APP_MAPBOX_TOKEN/);
     expect(message ?? '').toMatch(/useMapbox/);
     // Bootstrap is NOT emitted on rejection — no projection happens
-    // because the gate stops the push before resultMeta runs.
-    expect(readBootstrap(pushResp)).toBeUndefined();
+    // because the gate stops the render before resultMeta runs.
+    expect(readBootstrap(renderResp)).toBeUndefined();
   });
 
-  test('push referencing an unregistered hook surfaces the registry gate (not the env gate)', async () => {
+  test('render referencing an unregistered hook surfaces the registry gate (not the env gate)', async () => {
     // Defense-in-depth: the env gate runs ALONGSIDE the registry
     // gate, not in place of it. A contract using a hook that's not
     // in App.gadgets fails the registry check FIRST so the
@@ -252,15 +247,15 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc20-unregistered',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    const message = readToolErrorMessage(pushResp);
+    const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
     // Registry gate fires first — env gate never runs.
     expect(message ?? '').toMatch(/gadget_not_registered/i);

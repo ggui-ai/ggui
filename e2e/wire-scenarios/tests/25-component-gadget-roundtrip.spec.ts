@@ -5,7 +5,7 @@
  * A gadget package may export a COMPONENT (a chart, a map, a
  * date-picker) the generated UI renders as JSX — `<LeafletMap … />` —
  * instead of a hook it calls. This scenario pins the component-gadget
- * wire path end-to-end through `ggui_push`, against the
+ * wire path end-to-end through `ggui_render`, against the
  * `@ggui-samples/ggui-leaflet-demo` fixture server (port 6783).
  *
  * The demo's `ggui.json#app.gadgets` registers the
@@ -16,14 +16,14 @@
  *
  *   1. `ggui_list_gadgets` surfaces the `@ggui-samples/gadget-leaflet`
  *      package descriptor with its `LeafletMap` component export.
- *   2. A `ggui_push` whose contract declares a package-keyed
+ *   2. A `ggui_render` whose contract declares a package-keyed
  *      `clientCapabilities.gadgets` entry — `{ "@ggui-samples/gadget-leaflet":
  *      { LeafletMap: {} } }` — for that registered COMPONENT export
  *      succeeds: `assertGadgetsRegistered` resolves the
  *      `(package, export)` reference by identity, kind-agnostic. The
  *      export-name grammar (PascalCase) marks it a component; the gate
  *      never special-cases kind.
- *   3. A `ggui_push` referencing an UNREGISTERED component export is
+ *   3. A `ggui_render` referencing an UNREGISTERED component export is
  *      REJECTED with `gadget_not_registered` — the same gate, the same
  *      reject code as the hook path (scenario 19).
  *
@@ -31,7 +31,7 @@
  * the gate against the STDLIB hook catalog, this pins it against an
  * operator-registered COMPONENT package.
  *
- * Every push uses `decision.kind: 'override'` for the same reason
+ * Every render uses `decision.kind: 'override'` for the same reason
  * scenario 19 does — it pins the effective contract to the agent's
  * draft so the gate validates the exact `(package, export)` references
  * the test declares, regardless of any synth/cache fast-path.
@@ -58,10 +58,6 @@ interface ListGadgetsOut {
   gadgets: readonly GadgetDescriptor[];
 }
 
-interface NewSessionOut {
-  sessionId: string;
-}
-
 interface HandshakeOut {
   handshakeId: string;
 }
@@ -69,27 +65,27 @@ interface HandshakeOut {
 const SCENARIO_INTENT =
   'render a small map preview — scenario 25 (component gadget round-trip)';
 
-async function newSessionAndHandshake(args: {
+async function handshakeOnly(args: {
   contract: DataContract;
   idBase: string;
-}): Promise<{ handshakeId: string; sessionId: string }> {
-  const ns = unwrapStructured<NewSessionOut>(
-    await callTool(MCP_URL, 'ggui_new_session', { seed: args.idBase }),
-  );
+}): Promise<{ handshakeId: string }> {
+  // `idBase` retained on the call shape so cross-run traces remain
+  // distinguishable in LLM provider logs — handshake itself doesn't
+  // read it post-Phase-B.
+  void args.idBase;
   const hs = unwrapStructured<HandshakeOut>(
     await callTool(MCP_URL, 'ggui_handshake', {
-      sessionId: ns.sessionId,
       intent: SCENARIO_INTENT,
       blueprintDraft: { contract: args.contract },
       forceCreate: true,
     }),
   );
-  return { handshakeId: hs.handshakeId, sessionId: ns.sessionId };
+  return { handshakeId: hs.handshakeId };
 }
 
 /**
- * Read the tool-level error message from a `tools/call` response. Push
- * validators throw → MCP wraps the throw as `result.isError: true`
+ * Read the tool-level error message from a `tools/call` response.
+ * Render validators throw → MCP wraps the throw as `result.isError: true`
  * with the message in `result.content[0].text`. Returns the message
  * string when present, or `null` when the response was a success.
  */
@@ -118,10 +114,10 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
     expect(leaflet?.exports.map(gadgetExportName)).toContain('LeafletMap');
   });
 
-  test('push with a registered component gadget succeeds (gate accepts the component ref)', async () => {
+  test('render with a registered component gadget succeeds (gate accepts the component ref)', async () => {
     const contract = {
       propsSpec: {
-        description: 'scenario 25 — registered-component push',
+        description: 'scenario 25 — registered-component render',
         properties: {
           center: {
             schema: { type: 'array' },
@@ -136,26 +132,26 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc25-registered',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    // Gate accepts a component-gadget reference → push completes.
-    expect(readToolErrorMessage(pushResp)).toBeNull();
+    // Gate accepts a component-gadget reference → render completes.
+    expect(readToolErrorMessage(renderResp)).toBeNull();
     const structured = (
-      pushResp as { result?: { structuredContent?: { stackItemId?: string } } }
+      renderResp as { result?: { structuredContent?: { renderId?: string } } }
     ).result?.structuredContent;
-    expect(structured?.stackItemId).toBeTypeOf('string');
+    expect(structured?.renderId).toBeTypeOf('string');
   });
 
-  test('push with an unregistered component export is rejected with the gate error', async () => {
+  test('render with an unregistered component export is rejected with the gate error', async () => {
     const contract = {
       propsSpec: {
-        description: 'scenario 25 — unregistered-component push',
+        description: 'scenario 25 — unregistered-component render',
         properties: {
           center: { schema: { type: 'array' }, required: false },
         },
@@ -168,15 +164,15 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
         },
       },
     } satisfies DataContract;
-    const { handshakeId } = await newSessionAndHandshake({
+    const { handshakeId } = await handshakeOnly({
       contract,
       idBase: 'sc25-unregistered',
     });
-    const pushResp = await callTool(MCP_URL, 'ggui_push', {
+    const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
       decision: { kind: 'override', blueprintDraft: { contract } },
     });
-    const message = readToolErrorMessage(pushResp);
+    const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
     expect(message ?? '').toMatch(/gadget_not_registered/i);
     expect(message ?? '').toMatch(/MapboxGlobe/);
