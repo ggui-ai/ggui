@@ -3,9 +3,9 @@
  *
  * The agent has no built-in tools; the only tools it can call are
  * the ggui_* MCP tools exposed by the server it's pointed at. The
- * LLM decides when to call ggui_new_session / ggui_handshake /
- * ggui_push / ggui_update / ggui_consume on its own based on the
- * tool descriptions returned by `tools/list`.
+ * LLM decides when to call ggui_handshake / ggui_render / ggui_update /
+ * ggui_consume on its own based on the tool descriptions returned by
+ * `tools/list`.
  *
  * This is what "Zero Agent Code" looks like in practice — the only
  * ggui-specific thing here is the MCP server URL.
@@ -189,7 +189,7 @@ export interface RunAgentOptions {
    * Per-tab chat-session identifier from the browser's
    * `X-Chat-Session-Id` header (auto-minted server-side when absent).
    * Keys per-chat agent state — conversation history, resume tokens,
-   * ggui sessionId continuity — so multi-turn flows preserve context
+   * ggui renderId continuity — so multi-turn flows preserve context
    * across `/chat` POSTs. Threaded through today; consumed by the
    * multi-turn-resume slice that passes Claude Agent SDK's
    * `options.resume` keyed by this id.
@@ -217,9 +217,9 @@ const knownChatSessions = new Set<string>();
  * The canonical posture-only prompt for ggui-aware agents on raw SDK
  * hosts (Claude Agent SDK, OpenAI Assistants, etc.) where the host
  * lacks a built-in tool-use baseline. Posture-only by design: the
- * wire flow (new_session → handshake → push → consume → react, with
- * nextStep routing, etc.) is taught by the protocol's own
- * self-teaching surfaces:
+ * wire flow (handshake → render → consume → react, with nextStep
+ * routing, etc.) is taught by the protocol's own self-teaching
+ * surfaces:
  *
  *   - Per-tool `description` strings on every `ggui_*` MCP tool.
  *   - The server's `instructions` field on `InitializeResult` (set
@@ -236,15 +236,11 @@ export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
  * MCP tools are auto-namespaced by the SDK as `mcp__<server>__<tool>`.
  */
 const GGUI_ALLOWED_TOOLS = [
-  'mcp__ggui__ggui_new_session',
   'mcp__ggui__ggui_handshake',
-  'mcp__ggui__ggui_push',
+  'mcp__ggui__ggui_render',
   'mcp__ggui__ggui_update',
   'mcp__ggui__ggui_emit',
   'mcp__ggui__ggui_consume',
-  'mcp__ggui__ggui_close',
-  'mcp__ggui__ggui_get_session',
-  'mcp__ggui__ggui_get_stack',
 ];
 
 /**
@@ -267,25 +263,19 @@ export async function* runAgent(
     );
   }
 
-  const baseSystemPrompt =
+  const systemPrompt =
     opts.systemPrompt === null
       ? undefined
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
 
-  // Host-session directive — appended to whatever system prompt is
-  // active so the LLM stamps the chat's host-session onto every
-  // `ggui_new_session` call it makes. The Claude Agent SDK's MCP
-  // client can't set request `_meta` per-call, so we use the
-  // protocol's input-arg fallback path. Empty chatSessionId → no
-  // directive (agent runs in one-shot mode with no resume capability).
-  const hostSessionDirective = opts.chatSessionId
-    ? `\n\nThis chat conversation has hostName "sample" and hostSessionId "${opts.chatSessionId}". When you call \`ggui_new_session\`, pass \`hostSession: {hostName: "sample", hostSessionId: "${opts.chatSessionId}"}\` so the host can find this session later when the user revisits the conversation.`
-    : '';
-  const systemPrompt = baseSystemPrompt
-    ? baseSystemPrompt + hostSessionDirective
-    : hostSessionDirective.length > 0
-      ? hostSessionDirective.trim()
-      : undefined;
+  // Host-session metadata (the `ai.ggui/host-session` slice on each
+  // tools/call's request `_meta`) is the spec-canonical channel for
+  // chat-grouping continuity — the Claude Agent SDK's MCP client
+  // doesn't currently expose a per-call `_meta` hook for it, so the
+  // sample's `/chat/restore` uses the server-side `ggui_list_renders`
+  // tool (called directly from `server.ts`, not via the LLM) to
+  // rehydrate renders by `chatSessionId`. The LLM never needs to
+  // thread the host-session itself.
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
 
@@ -355,7 +345,7 @@ export async function* runAgent(
       strictMcpConfig: true,
       // 50 covers a handful of multi-turn user interactions per chat.
       // Each render+consume+react cycle is roughly 3-5 SDK turns
-      // (handshake + push + consume + handshake + push…).
+      // (handshake + render + consume + handshake + render…).
       maxTurns: opts.maxTurns ?? 50,
       env: { ANTHROPIC_API_KEY: apiKey },
       // Run the agent loop via the SDK's bundled portable `cli.js` — see
