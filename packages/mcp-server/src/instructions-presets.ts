@@ -101,8 +101,6 @@ const DEFAULT_PRESET_BODY = [
     '',
     '  • ggui_emit    — push frames to a streamSpec channel on a delivered UI. Use when the contract declared streamSpec (chat tokens, progress bars, live data). Frames must match the channel\'s declared `schema`. The live channel of the wire carries these.',
     '',
-    '  • ggui_close     — explicitly end a render. Optional; renders GC on their own. Use when the user has clearly finished and you want to free resources.',
-    '',
     '  • ggui_get_render / ggui_list_renders — inspect current render state if you\'ve lost track of what\'s on screen. ggui_get_render returns the render including its `contextSnapshot` — the canonical way to read contextSpec values from a raw MCP client. ggui_list_renders enumerates every render in the current host conversation (paired by `_meta["ai.ggui/host-session"]` on the inbound call).',
     '',
     '═══ HOST RENDERING ═══',

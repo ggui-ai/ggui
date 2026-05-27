@@ -1618,10 +1618,11 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   // session-lifecycle pack (get-session, get-stack, close, pop, stream)
   // collapsed to the render-shape equivalents: a render IS the addressable
   // row, so `ggui_get_session` + `ggui_get_stack` + `ggui_pop` all fold
-  // into the single `ggui_get_render` + `ggui_list_renders` pair. Closes
-  // the OSS surface gap: agents can now call the full lifecycle
-  // (handshake → render → consume → get_render / list_renders / close /
-  // emit) on `ggui serve` without hosting cloud.
+  // into the single `ggui_get_render` + `ggui_list_renders` pair, and
+  // `ggui_close` was deleted (no terminal write — renders decay via TTL).
+  // Closes the OSS surface gap: agents can now call the full lifecycle
+  // (handshake → render → consume → get_render / list_renders / emit)
+  // on `ggui serve` without hosting cloud.
   it('registers the full render-lifecycle suite alongside ggui_render', async () => {
     fx = await bootHandshake();
     const client = await connect(fx);
@@ -1630,8 +1631,10 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       const names = new Set(tools.map((t) => t.name));
       expect(names).toContain('ggui_get_render');
       expect(names).toContain('ggui_list_renders');
-      expect(names).toContain('ggui_close');
       expect(names).toContain('ggui_emit');
+      // `ggui_close` was retired alongside the terminal `session.closed`
+      // event; renders expire implicitly via TTL.
+      expect(names).not.toContain('ggui_close');
     } finally {
       await client.close();
     }

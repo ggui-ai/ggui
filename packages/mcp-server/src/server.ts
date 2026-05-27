@@ -239,7 +239,6 @@ import {
 } from './llm-backed-negotiator.js';
 import {
   clearGenerationCache,
-  createGguiCloseHandler,
   createGguiConsumeHandler,
   createGguiGetRenderHandler,
   createGguiListRendersHandler,
@@ -1297,10 +1296,11 @@ export function defaultHandlers(deps: {
     // `_meta.ggui.userAction.kind === 'queued'` immediately (carrying
     // a prepared `ggui_consume` nextStep). No timer, no rescue drain,
     // no race between two atomic-pop callers.
-    // ggui_get_render is a pure read off the RenderStore. ggui_close
-    // writes the terminal session.closed event. Both register
+    // ggui_get_render is a pure read off the RenderStore, registered
     // alongside the render-commit handler. (ggui_get_stack was deleted
-    // — a render IS the addressable unit; there is no stack to read.)
+    // — a render IS the addressable unit; there is no stack to read.
+    // The former companion `ggui_close` tool was also retired: renders
+    // decay implicitly via TTL, so there is no terminal write to make.)
     handlers.push(
       createGguiGetRenderHandler({
         renderStore: deps.push.renderStore,
@@ -1329,15 +1329,6 @@ export function defaultHandlers(deps: {
                 },
               },
             }
-          : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
-    );
-    handlers.push(
-      createGguiCloseHandler({
-        renderStore: deps.push.renderStore,
-        pendingEventConsumer,
-        ...(deps.push.shortCodeIndex
-          ? { shortCodeIndex: deps.push.shortCodeIndex }
           : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
