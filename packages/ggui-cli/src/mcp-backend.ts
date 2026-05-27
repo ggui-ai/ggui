@@ -20,12 +20,14 @@
  *     `/s/<shortCode>` viewer + same-origin HTTP-only cookie flow.
  *   - `shortCodeIndex: new InMemoryShortCodeIndex()` — required by
  *     the `sessionCookie` flow so `POST /ggui/console/session-cookie`
- *     can resolve a posted shortCode to `{sessionId, appId}`.
- *     In-memory is correct for the OSS first-run: session state lives
+ *     can resolve a posted shortCode to the bound `{sessionId,
+ *     appId}` legacy slot (post-flatten, `sessionId` IS the renderId
+ *     — the ShortCodeBinding field names are a cross-package punt).
+ *     In-memory is correct for the OSS first-run: render state lives
  *     in memory unless the operator opts into sqlite, so a matching
  *     index lifetime is what operators expect.
- *   - `mcpApps: { wsUrl }` — registers the `ggui_push` tool with
- *     MCP Apps `_meta.ui.*` declaration, serves `ui://ggui/session`,
+ *   - `mcpApps: { wsUrl }` — registers the `ggui_render` tool with
+ *     MCP Apps `_meta.ui.*` declaration, serves `ui://ggui/render`,
  *     and advertises the `io.modelcontextprotocol/ui` capability.
  *     `wsUrl` is the live-channel URL the spawned iframe subscribes
  *     to; resolved host + port are mandatory so it points back at
@@ -167,9 +169,9 @@ export interface BuildMcpServerBackendOptions {
   readonly themeWriter?: ThemeWriter;
   /**
    * Live theme getter — when set, supersedes the static `theme`
-   * resolution for every `ggui_push` bootstrap envelope. The CLI
+   * resolution for every `ggui_render` bootstrap envelope. The CLI
    * pairs this with `onThemeConfigChange` so a console save
-   * reaches the next push without a server restart.
+   * reaches the next render without a server restart.
    */
   readonly themeProvider?: () => {
     readonly id?: string;
@@ -189,10 +191,10 @@ export interface BuildMcpServerBackendOptions {
       | null,
   ) => void;
   /**
-   * Generation wiring for `ggui_push`. When present, the OSS push
+   * Generation wiring for `ggui_render`. When present, the OSS render
    * handler invokes the bound `UiGenerator` on every story-path
-   * call and appends real componentCode as a `StackItem`. Absent =
-   * placeholder mode: push creates sessions + shortCodes but does
+   * call and commits real componentCode as a `Render`. Absent =
+   * placeholder mode: render mints renderIds + shortCodes but does
    * not produce componentCode.
    *
    * The CLI resolves this from the operator's BYOK state at boot via
@@ -258,7 +260,7 @@ export interface BuildMcpServerBackendOptions {
    * (every bearer authenticates as builder) but additionally:
    *   - Wires a per-remote-IP `FixedWindowRateLimiter` over an
    *     `InMemoryQuotaStore` (default 30 generations / 10 minutes per
-   *     IP). The limiter binds at `ggui_push` so end-user generations
+   *     IP). The limiter binds at `ggui_render` so end-user generations
    *     can't burn the operator's BYOK budget.
    *   - The CLI banner displays "PUBLIC DEMO" copy with a cost-
    *     attribution + rate-limit note (vs. "DEV ALLOW-ALL" warning).
@@ -347,7 +349,7 @@ export interface BuildMcpServerBackendOptions {
    * `wsTokenSecret` is read from / minted into a 0600-mode file there
    * so the HMAC key survives `ggui serve` restart — claude.ai
    * chat-history revisits keep their cached
-   * `_meta["ai.ggui/session"].wsToken` valid across reboots.
+   * `_meta["ai.ggui/render"].wsToken` valid across reboots.
    *
    * Absent / undefined = the legacy ephemeral behavior (every restart
    * mints fresh secrets; cached tokens fail HMAC verify). The CLI sets
@@ -415,18 +417,18 @@ export interface BuildMcpServerBackendOptions {
    * `ggui.json#app.publicEnv`. Each key MUST match
    * `^GGUI_PUBLIC_APP_[A-Z0-9_]+$`. The server projects only the keys
    * that some registered wrapper's `requires` references, onto
-   * `_meta["ai.ggui/session"].publicEnv` and ultimately
+   * `_meta["ai.ggui/render"].publicEnv` and ultimately
    * `globalThis.__ggui__.publicEnv` for `getPublicEnv()` to read.
    *
    * Omitted ⇒ field absent on the App record (no values projected;
    * wrappers without `requires` still mount, wrappers with `requires`
-   * fail at push-gate validation).
+   * fail at render-gate validation).
    */
   readonly publicEnv?: Readonly<Record<string, string>>;
 
   /**
    * Per-app default display-mode hint from
-   * `ggui.json#app.defaultDisplayMode`. Stamped on every `ggui_push`
+   * `ggui.json#app.defaultDisplayMode`. Stamped on every `ggui_render`
    * via `_meta.ui.displayMode` so the host knows whether to present
    * the iframe inline, fullscreen, or picture-in-picture. See
    * `App.defaultDisplayMode` for the full semantics.
@@ -526,7 +528,7 @@ export function buildMcpServerBackend(
   });
   // Per-IP rate limiter — only bound under `--public-demo` so an
   // anonymous visitor can't burn the operator's BYOK budget by pumping
-  // ggui_push. Defaults: 30 generations / 10 minutes per IP. Operators
+  // ggui_render. Defaults: 30 generations / 10 minutes per IP. Operators
   // who need different ceilings construct their own backend
   // programmatically (calling `createGguiServer({ rateLimiter })`
   // directly). Skipped under `--dev-allow-all` because that's the
@@ -601,7 +603,7 @@ export function buildMcpServerBackend(
   // `render-signer-secret.hex` (32 bytes / 64 hex chars, 0600). Both
   // get threaded into `createGguiServer` below so the server stops
   // minting fresh process-local secrets every boot — the precondition
-  // for any cached `_meta["ai.ggui/session"].wsToken` surviving a
+  // for any cached `_meta["ai.ggui/render"].wsToken` surviving a
   // restart. Absent dir = legacy ephemeral behavior.
   let persistedWsTokenSecret: string | undefined;
   let persistedRenderSignerSecret: string | undefined;
@@ -769,8 +771,8 @@ export function buildMcpServerBackend(
     providerKeys,
     // Seeded per-app metadata store. Threaded so the in-process
     // singleton is shared across `ggui_list_gadgets`,
-    // `ggui_list_themes`, `ggui_new_session` (theme default
-    // resolution), and the handshake (gadgets lookup).
+    // `ggui_list_themes`, and the handshake (gadgets + theme default
+    // resolution).
     appMetadataStore,
     // Theme catalog resolver. Reads from `@ggui-ai/design`'s registry
     // each call so runtime additions surface without a restart.
@@ -805,7 +807,7 @@ export function buildMcpServerBackend(
     // so operators can paste credentials in advance.
     ...(opts.publicBaseUrl ? { publicBaseUrl: opts.publicBaseUrl } : {}),
     ...(rateLimiter ? { rateLimiter } : {}),
-    ...(storage.sessionStore ? { sessionStore: storage.sessionStore } : {}),
+    ...(storage.renderStore ? { renderStore: storage.renderStore } : {}),
     // Always pass the materialized vectorStore so the install bridge
     // and the matcher share state. Passing only `storage.vectors`
     // (set when the manifest declares sqlite) would, on an absent
@@ -945,8 +947,8 @@ export function buildMcpServerBackend(
     ...(opts.onThemeConfigChange
       ? { onThemeConfigChange: opts.onThemeConfigChange }
       : {}),
-    // Register `ggui_push` + serve `ui://ggui/session`. The `wsUrl`
-    // is the live-channel URL published on `_meta["ai.ggui/session"]`
+    // Register `ggui_render` + serve `ui://ggui/render`. The `wsUrl`
+    // is the live-channel URL published on `_meta["ai.ggui/render"]`
     // so iframes opened by an MCP Apps host (Claude Desktop, Claude
     // Code, claude.ai) can subscribe back to this same process.
     // First-party hosts (Studio, Portal, console) consume
@@ -955,7 +957,7 @@ export function buildMcpServerBackend(
       wsUrl: `${wsBaseUrl}/ws`,
     },
     // Task #382 — `runtimeUrl` MUST be absolute. The thin-shell HTML
-    // served from `ui://ggui/session` is mounted via `srcdoc` in most
+    // served from `ui://ggui/render` is mounted via `srcdoc` in most
     // consumers (`<McpAppIframe>` default path for inline text), which
     // gives the iframe `about:srcdoc` as its URL — a relative path
     // like `/_ggui/iframe-runtime.js` resolves against `about:` and the
@@ -963,16 +965,16 @@ export function buildMcpServerBackend(
     // URL built from the CLI's own known `baseUrl` makes srcdoc mount
     // work without operator action. The server still serves the bundle
     // at `/_ggui/iframe-runtime.js` under `runtimePath`; this overrides
-    // only the URL published on `_meta["ai.ggui/session"].runtimeUrl`.
+    // only the URL published on `_meta["ai.ggui/render"].runtimeUrl`.
     runtime: { url: `${baseUrl}${RUNTIME_BUNDLE_URL_PATH}` },
     // OSS first-run default: provisional A2UI preview is on. The
     // deterministic emitter from `@ggui-ai/preview-a2ui/emitters`
-    // adapts each push's `story.intent` into a small A2UI surface
+    // adapts each render's `story.intent` into a small A2UI surface
     // (heading → shell → teardown) and streams it on
     // `_ggui:preview`. Embedded-ui's `/s/<shortCode>` viewer mounts
     // `<ProvisionalRenderer>` to paint the frames as they arrive,
     // so operators see a live UI build-up the first time they
-    // invoke `ggui_push` — before any LLM generation lands on OSS.
+    // invoke `ggui_render` — before any LLM generation lands on OSS.
     //
     // Hosted + programmatic hosts opt-in by composing
     // `createGguiServer()` directly and supplying their own
@@ -983,8 +985,8 @@ export function buildMcpServerBackend(
       emitter: createDeterministicPreviewEmitter(),
     },
     // Generation wiring. Threaded through to
-    // `defaultHandlers.push.generation` → `createGguiPushHandler`.
-    // Absent = placeholder mode: push creates sessions + shortCodes
+    // `defaultHandlers.render.generation` → `createGguiRenderHandler`.
+    // Absent = placeholder mode: render mints renderIds + shortCodes
     // + preview but does NOT produce componentCode. The CLI's
     // `runServeCommand` probes BYOK (env → credentials file) at
     // boot and only supplies this opt on a hit. See
