@@ -43,7 +43,7 @@ export type PayloadTraceDirection = 'inbound-push' | 'outbound-update';
 
 /**
  * One payload trace entry. Emitted **after** the handler successfully
- * parses input and resolves the session — so `sessionId` and `appId`
+ * parses input and resolves the session — so `renderId` and `appId`
  * are always populated and the payload is the post-validation shape
  * the handler is about to act on. Pre-validation rejections (schema
  * shape, missing handshakeStore, etc.) never reach this sink.
@@ -54,8 +54,8 @@ export interface PayloadTraceEvent {
   /** Epoch ms when the handler accepted the payload. */
   readonly at: number;
   readonly direction: PayloadTraceDirection;
-  /** Resolved session id. Always populated. */
-  readonly sessionId: string;
+  /** Resolved render id. Always populated. */
+  readonly renderId: string;
   /** Resolved app/tenant id from `HandlerContext`. */
   readonly appId: string;
   /** Tool name (`'ggui_push'` | `'ggui_update'`). */
@@ -127,7 +127,7 @@ export function emitPayloadTraceEvent(
     id: input.id ?? newPayloadTraceId(),
     at: input.at ?? Date.now(),
     direction: input.direction,
-    sessionId: input.sessionId,
+    renderId: input.renderId,
     appId: input.appId,
     tool: input.tool,
     payload: input.payload,

@@ -1311,7 +1311,7 @@ export function createGguiRenderHandler(
       // console-payloads.ts.
       emitPayloadTraceEvent({
         direction: 'outbound-update',
-        sessionId: renderId,
+        renderId,
         appId: ctx.appId,
         tool: 'ggui_render',
         payload: { handshakeId: parsed.handshakeId, story },
@@ -1387,19 +1387,18 @@ export function createGguiRenderHandler(
           story,
           isMcpAppsPush: false,
         },
-        { appId: ctx.appId, sessionId: renderId },
+        { appId: ctx.appId, renderId },
       );
       if (previewGate.kind === 'skip') {
         deps.provisionalPreview?.onOutcome?.({
           status: 'skipped',
           reason: previewGate.reason,
-          sessionId: renderId,
+          renderId,
           appId: ctx.appId,
         });
       } else if (deps.provisionalPreview) {
         const handle = kickoffProvisionalPreview(deps.provisionalPreview, {
-          sessionId: renderId,
-          stackItemId: renderId,
+          renderId,
           appId: ctx.appId,
           story,
         });

@@ -71,8 +71,7 @@ function makeRunContext(
   overrides: Partial<ProvisionalPreviewRunContext> = {},
 ): ProvisionalPreviewRunContext {
   return {
-    sessionId: 'sess-1',
-    stackItemId: 'page-1',
+    renderId: 'sess-1',
     appId: 'app-1',
     story: { intent: 'build a dashboard' },
     ...overrides,
@@ -108,7 +107,7 @@ function makeDeps(overrides: {
 // ─── evaluateProvisionalPreviewGate ────────────────────────────────────
 
 describe('evaluateProvisionalPreviewGate', () => {
-  const ctx = { appId: 'app-1', sessionId: 'sess-1' };
+  const ctx = { appId: 'app-1', renderId: 'sess-1' };
   const storyInput = { story: { intent: 'go' }, isMcpAppsPush: false };
 
   it('skips when deps undefined (preview not wired)', () => {
@@ -191,7 +190,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     );
     expect(predicate).toHaveBeenCalledWith({
       appId: 'app-1',
-      sessionId: 'sess-1',
+      renderId: 'sess-1',
       story: { intent: 'specific' },
     });
   });
@@ -717,7 +716,7 @@ describe('finalizeProvisionalPreview', () => {
     expect(cancelled.reason).toBe('final-ready');
   });
 
-  it('is a no-op when no preview is registered under the stackItemId', async () => {
+  it('is a no-op when no preview is registered under the renderId', async () => {
     const reg = createInMemoryProvisionalPreviewRegistry();
     await expect(
       finalizeProvisionalPreview(reg, 'never-registered'),
