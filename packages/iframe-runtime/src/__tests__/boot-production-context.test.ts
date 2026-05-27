@@ -246,15 +246,22 @@ describe('bootProduction — getOuterWrapper composition (F4)', () => {
 describe('bootProduction — runtime.ts source pins F4 wiring', () => {
   /**
    * Code-property test: scan `runtime.ts` and assert `bootProduction`
-   * still calls `installContextRegistry` + `createContextStateHost` +
-   * exposes `getOuterWrapper` on the StackRenderContext. Catches the
-   * regression where a future refactor drops one of these calls (the
-   * exact silent-failure mode F4 was filed against).
+   * still calls `installContextRegistry` + `createContextStateHost`
+   * and threads an outer-wrapper builder into the per-mount React
+   * options. Catches the regression where a future refactor drops one
+   * of these calls (the exact silent-failure mode F4 was filed
+   * against).
    *
    * Brittle by design — when this wiring is intentionally relocated,
    * this test must be updated alongside the production code.
+   *
+   * Post-stack-removal (2026-05-27, Phase A): the old StackRenderContext
+   * exposed a `getOuterWrapper(item)` thunk; the single-item rewrite
+   * inlined that as a `buildOuterWrapper(item)` closure stamped into
+   * the `wrapOuter` field of each `applyItem(...)` call. The wiring
+   * is identical in effect.
    */
-  it('bootProduction body installs the context registry + builds ContextStateHost + provides getOuterWrapper', () => {
+  it('bootProduction body installs the context registry + builds ContextStateHost + threads a wrapOuter', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const runtimeSrc = readFileSync(
       resolve(here, '..', 'runtime.ts'),
@@ -269,7 +276,10 @@ describe('bootProduction — runtime.ts source pins F4 wiring', () => {
     // bootProduction's body.
     expect(bootProductionBody).toContain('installContextRegistry(');
     expect(bootProductionBody).toContain('createContextStateHost(');
-    expect(bootProductionBody).toContain('getOuterWrapper');
+    // Post-Phase-A: the per-mount wrap builder is named `buildOuterWrapper`
+    // and produces a `wrapOuter` field on the renderStackItem options.
+    expect(bootProductionBody).toContain('buildOuterWrapper');
+    expect(bootProductionBody).toContain('wrapOuter');
     // Slot input must come from the stack-item slice envelope, not a
     // hard-coded list.
     expect(bootProductionBody).toContain('stackItem.contextSlots');

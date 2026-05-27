@@ -10,7 +10,8 @@ import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
 
 /**
- * jsdom smoke for the renderer's full boot sequence.
+ * jsdom smoke for the renderer's full boot sequence (no-renderer
+ * placeholder mode).
  *
  * Approach: inject mocks for `callUiInitialize`, `connectFn`, and
  * `notifyParent` so the spec drives the orchestration directly without
@@ -18,20 +19,23 @@ import type { ConnectFn } from '../registry-subscribe.js';
  * covered by `registry-subscribe.test.ts`).
  *
  * What this spec verifies:
- *   - Renderer mounts a status DOM + an empty stack list on boot.
+ *   - Renderer mounts a status DOM on boot.
  *   - Posts `ggui:renderer-ready` to the parent.
  *   - Calls `ui/initialize` exactly once.
  *   - Parses the bootstrap from the response and feeds the parsed
  *     value into `connectFn`.
- *   - On a successful ack carrying initial stack, mounts a structural
- *     `<li data-ggui-stack-item="...">` per item.
- *   - On a subsequent push frame (delivered via the registry handler
- *     registered by the placeholder boot path), upserts the stack and
- *     re-renders.
+ *   - On a successful ack, `result.mountedItem` reflects the picked
+ *     entry — either the `pinnedItemId`-matching entry (single-item
+ *     resource) or the first entry (no pin).
+ *   - Negative paths (UI_INITIALIZE_FAILED, MISSING_META_GGUI_BOOTSTRAP,
+ *     UPGRADE_REQUIRED, WS_HANDSHAKE_FAILED) each surface a
+ *     `ggui:bootstrap-failed` envelope to the recorder.
  *
- * Negative paths (UI_INITIALIZE_FAILED, MISSING_META_GGUI_BOOTSTRAP,
- * UPGRADE_REQUIRED) each surface a `ggui:bootstrap-failed` envelope to
- * the recorder.
+ * Post-stack-removal (2026-05-27, Phase A): the placeholder mode no
+ * longer injects `<li data-ggui-stack-item>` rows. Push-handler
+ * behavior in placeholder mode is silent (status-log only); per-frame
+ * channel handler behavior is covered by channel-specific unit tests
+ * with a renderer mock.
  */
 
 const VALID_SESSION: McpAppAiGguiSessionMeta = {
@@ -105,13 +109,14 @@ function buildMockConnect(stack: SessionStackEntry[] | undefined): {
 }
 
 describe('bootSequence — happy path', () => {
-  it('boots from valid bootstrap, renders initial stack, and folds push frames', async () => {
+  it('boots from valid bootstrap and picks the first ack entry as mountedItem', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     const initial = makeStackItem('item_a', 'first item');
-    const pushed = makeStackItem('item_b', 'second item');
 
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
+    // No pin (bootstrap omits stackItem) → applyAck picks the first
+    // entry from the ack snapshot.
     const { connectFn, emitFrame } = buildMockConnect([initial]);
 
     const notifyParent = vi.fn();
@@ -131,24 +136,17 @@ describe('bootSequence — happy path', () => {
       expect.objectContaining({ type: 'ggui:renderer-ready' }),
     );
 
-    // Initial stack from the ack rendered.
-    const itemEls = dom.querySelectorAll('[data-ggui-stack-item]');
-    expect(itemEls).toHaveLength(1);
-    expect(itemEls[0]?.getAttribute('data-ggui-stack-item')).toBe('item_a');
+    // First ack entry promoted to mountedItem on the result.
+    expect(result.mountedItem?.id).toBe('item_a');
 
-    // A subsequent push frame folds into the stack via the registered
-    // push handler.
+    // Push-frame behavior in placeholder mode is silent (status-log
+    // only — no React mount, no DOM mutation). The emitFrame helper
+    // still confirms the push handler is registered and accepts the
+    // frame without throwing; the mount-once semantics under renderer
+    // mode are covered by channel-handler unit tests with a renderer
+    // mock.
+    const pushed = makeStackItem('item_b', 'second item');
     emitFrame('push', { stackItem: pushed, matchType: 'exact' });
-
-    const after = dom.querySelectorAll('[data-ggui-stack-item]');
-    expect(after).toHaveLength(2);
-    expect(after[1]?.getAttribute('data-ggui-stack-item')).toBe('item_b');
-
-    // Status surface is `console.log`-only now (no visible DOM banner);
-    // the boot succeeded if the stack rendered + `notifyParent` got
-    // `ggui:renderer-ready` (asserted above). No visible diagnostic to
-    // assert; the connected (N items) line is fired via setStatus →
-    // console.log and is captured by devtools only.
 
     // No failure message was sent.
     const failures = notifyParent.mock.calls
@@ -221,15 +219,16 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
     expect(notifyParent).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'ggui:renderer-ready' }),
     );
-    expect(dom.querySelector('[data-ggui-stack-item]')?.getAttribute('data-ggui-stack-item')).toBe('item_a');
+    expect(result.mountedItem?.id).toBe('item_a');
 
-    // Subsequent push folds normally — proves the WS handlers wired
-    // off the postMessage-delivered meta.
+    // Smoke that the push handler is registered after a postMessage-
+    // tier boot — placeholder mode accepts the frame without throwing
+    // (no DOM mutation to observe; renderer-mode coverage lives in
+    // channel handler unit tests).
     emitFrame('push', {
       stackItem: makeStackItem('item_b', 'after spec-canonical boot'),
       matchType: 'exact',
     });
-    expect(dom.querySelectorAll('[data-ggui-stack-item]')).toHaveLength(2);
   });
 
   /**
@@ -303,8 +302,8 @@ describe('bootSequence — spec-canonical postMessage tier (MCP-Apps SEP-1865)',
   });
 });
 
-describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
-  it('filters the initial stack to the bootstrap.stackItemId and ignores sibling pushes', async () => {
+describe('bootSequence — single-item mode (post-stack-removal)', () => {
+  it('picks the bootstrap.stackItemId-matching entry from the ack as mountedItem', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     const pinnedItem = makeStackItem('item_pinned', 'the pinned one');
@@ -328,9 +327,9 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     });
 
     // Ack carries both items — the server subscribe is session-scoped
-    // and delivers the full stack regardless of the renderer's per-item
-    // pin.
-    const { connectFn, emitFrame } = buildMockConnect([pinnedItem, otherItem]);
+    // and may deliver multiple entries even when the bootstrap pinned
+    // one. `applyAck` selects the entry whose id matches `pinnedItemId`.
+    const { connectFn } = buildMockConnect([pinnedItem, otherItem]);
 
     const result = await bootSequence({
       doc: dom,
@@ -340,26 +339,11 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
     });
     expect(result.ok).toBe(true);
 
-    // Initial ack filtered to the pinned item only.
-    const itemEls = dom.querySelectorAll('[data-ggui-stack-item]');
-    expect(itemEls).toHaveLength(1);
-    expect(itemEls[0]?.getAttribute('data-ggui-stack-item')).toBe('item_pinned');
-
-    // Subsequent sibling push is dropped (filter remains active).
-    emitFrame('push', { stackItem: otherItem, matchType: 'exact' });
-    expect(dom.querySelectorAll('[data-ggui-stack-item]')).toHaveLength(1);
-
-    // A push targeting the pinned id replaces it (still one entry).
-    emitFrame('push', {
-      stackItem: makeStackItem('item_pinned', 'updated'),
-      matchType: 'exact',
-    });
-    const after = dom.querySelectorAll('[data-ggui-stack-item]');
-    expect(after).toHaveLength(1);
-    expect(after[0]?.getAttribute('data-ggui-stack-item')).toBe('item_pinned');
+    // `applyAck` picked the pinned item out of the multi-entry ack.
+    expect(result.mountedItem?.id).toBe('item_pinned');
   });
 
-  it('renders an empty stack when the pinned id is absent from the ack', async () => {
+  it('leaves mountedItem null when the pinned id is absent from the ack', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     const ackOnlyItem = makeStackItem('item_only', 'unrelated');
@@ -386,10 +370,12 @@ describe('bootSequence — single-item mode (Phase 3 Wave 1 §S3)', () => {
       connectFn,
       notifyParent: vi.fn(),
     });
+    // Boot still succeeds — the pin missing from the snapshot is not
+    // a failure (server may have pruned the item or the snapshot is
+    // pre-push). mountedItem stays null until a subsequent push for
+    // the pinned id lands.
     expect(result.ok).toBe(true);
-
-    expect(dom.querySelectorAll('[data-ggui-stack-item]')).toHaveLength(0);
-    expect(dom.querySelector('[data-ggui-empty]')?.getAttribute('data-ggui-empty')).toBe('true');
+    expect(result.mountedItem).toBeNull();
   });
 });
 
