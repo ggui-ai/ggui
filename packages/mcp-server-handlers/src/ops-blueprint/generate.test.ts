@@ -56,7 +56,7 @@ function makeMockGenerator(opts: {
         };
       }
       const response: UIGenerationResponse = {
-        stackItemId: 'stack_mock',
+        renderId: 'render_mock',
         componentCode,
       };
       const metadata = {

@@ -356,7 +356,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       // 5. Dispatch through the generator.
       const generateInput: UiGenerateInput = {
         request: {
-          sessionId: `ops_gen_${randomUUID()}`,
+          renderId: `ops_gen_${randomUUID()}`,
           prompt:
             parsed.seedPrompt ??
             'Operator-authored blueprint variant',
