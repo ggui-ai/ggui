@@ -245,7 +245,7 @@ import {
   createGguiListRendersHandler,
   createGguiEmitHandler,
   createGguiHandshakeHandler,
-  createGguiPushHandler,
+  createGguiRenderHandler,
   createGguiUpdateHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
@@ -697,7 +697,7 @@ export function defaultHandlers(deps: {
      *
      * Callers compose the `GenerationDeps` directly via the
      * `@ggui-ai/mcp-server-handlers` export — `defaultHandlers`
-     * simply threads the bundle through to `createGguiPushHandler`.
+     * simply threads the bundle through to `createGguiRenderHandler`.
      */
     readonly generation?: GenerationDeps;
 
@@ -706,7 +706,7 @@ export function defaultHandlers(deps: {
      * When present, every successful `appendStackItem` inside `ggui_push`
      * fan-outs a `{type:'push', payload:{stackItem}}` live-channel frame to
      * every live subscriber on the affected session. Forwarded as-is
-     * to `createGguiPushHandler`.
+     * to `createGguiRenderHandler`.
      *
      * Hosts without a session channel (programmatic embedding, Lambda
      * one-shot) leave this absent — there are no live subscribers to
@@ -722,7 +722,7 @@ export function defaultHandlers(deps: {
      * `actionSpec` / `streamSpec` references a tool whose schemas
      * disagree, the hook throws `SchemaCompatError` and the handler
      * converts the rejection into an error stack-item + `codeReady:
-     * false`. Forwarded as-is to `createGguiPushHandler`.
+     * false`. Forwarded as-is to `createGguiRenderHandler`.
      *
      * `createGguiServer` binds this closure against the composed
      * `handlers` list + `opts.schemaCompatCheck` (default `'reject'`)
@@ -749,7 +749,7 @@ export function defaultHandlers(deps: {
      * routes ALSO mint `codeUrl` when `codeStore` is set — they derive
      * the base URL from `req.protocol + req.host` when `codeBaseUrl`
      * isn't explicit (works for local dev + tunnel deployments).
-     * Forwarded as-is to `createGguiPushHandler`.
+     * Forwarded as-is to `createGguiRenderHandler`.
      */
     readonly codeStore?: CodeStore;
 
@@ -757,7 +757,7 @@ export function defaultHandlers(deps: {
      * Base URL the code-blob route resolves to. Required when
      * `codeStore` is present so the handler can compose
      * `<base>/code/<hash>.js`. Forwarded as-is to
-     * `createGguiPushHandler`.
+     * `createGguiRenderHandler`.
      */
     readonly codeBaseUrl?: string;
     /**
@@ -1393,13 +1393,8 @@ export function defaultHandlers(deps: {
     const appCallableToolsProvider = (): readonly string[] =>
       collectAppCallableToolNames(handlers);
     handlers.push(
-      createGguiPushHandler({
-        // The push.ts handler factory's `sessionStore` parameter is
-        // owned by a sibling B.2d agent that will rename it to
-        // `renderStore` in the same Phase B slice. Until that lands,
-        // we route our renamed `deps.push.renderStore` through the
-        // pre-rename arg name to keep dist-shape parity.
-        sessionStore: deps.push.renderStore,
+      createGguiRenderHandler({
+        renderStore: deps.push.renderStore,
         // Plugin slice Commit 3 — push reads App.gadgets to
         // gate `clientCapabilities.gadgets[*].hook` references via
         // `assertGadgetsRegistered`. Same instance the
@@ -3952,7 +3947,7 @@ export function createGguiServer(
               // anyway, but providing the closure unconditionally
               // keeps the typecheck simple — no per-config branching.
               channelNotifier: {
-                notifyStackPush: (renderId, render, matchType) => {
+                notifyRenderCommit: (renderId, render, matchType) => {
                   if (!channelForHealth) return;
                   channelForHealth.notifyRenderPush(
                     renderId,
