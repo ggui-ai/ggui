@@ -1,6 +1,18 @@
 import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ConnectionStatus, WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { ActionEnvelope, ActionSpec, EventType, ReservedChannelValidator, SessionStackEntry, StreamEnvelope, StreamPayload, ProgressPayload, SystemPayload, JsonValue, JsonObject } from '@ggui-ai/protocol';
+import type {
+  ActionEnvelope,
+  ActionSpec,
+  EventType,
+  Render,
+  ReservedChannelValidator,
+  StreamEnvelope,
+  StreamPayload,
+  ProgressPayload,
+  SystemPayload,
+  JsonValue,
+  JsonObject,
+} from '@ggui-ai/protocol';
 import { BRIDGE_EVENTS, CLIENT_SUPPORTED_VERSIONS, UpgradeRequiredError } from '@ggui-ai/protocol';
 import {
   buildActionEnvelope,
@@ -9,7 +21,6 @@ import {
   validateInboundPropsPayload,
   validateInboundStreamPayload,
   validateOutboundActionEnvelope,
-  type LegacyScopableWireConfig,
   type StreamDelivery,
   type WireConfig,
 } from '@ggui-ai/wire';
@@ -21,10 +32,10 @@ import {
 } from '../internal/reserved-validators';
 
 /**
- * Minimal session metadata passed to lifecycle callbacks.
+ * Minimal render metadata passed to lifecycle callbacks.
  */
-export interface SessionInfo {
-  sessionId: string;
+export interface RenderInfo {
+  renderId: string;
 }
 
 /**
@@ -47,7 +58,7 @@ function surfaceContractViolation(
     return;
   }
   // Fallback path — `console.warn` rather than throw so host apps
-  // that didn't wire onError don't see the session blow up on a
+  // that didn't wire onError don't see the render blow up on a
   // single bad event.
   // eslint-disable-next-line no-console
   console.warn('[ggui:contract] ' + err.message, {
@@ -58,21 +69,26 @@ function surfaceContractViolation(
 
 
 /**
- * Props for the {@link GguiSession} component.
+ * Props for the {@link GguiRender} component.
  *
  * Provides lifecycle, data, interaction, progress, streaming, and error
- * hooks for fine-grained control over the session.
+ * hooks for fine-grained control over the mounted render.
  */
-export interface GguiSessionProps {
-  sessionId: string;
+export interface GguiRenderProps {
+  /**
+   * Render identity. Post-Phase-B this is the canonical key the server
+   * binds the WS subscriber to; envelopes with a mismatching renderId
+   * are rejected `RENDER_MISMATCH`.
+   */
+  renderId: string;
   userToken?: string;
   userId?: string;
 
   // Lifecycle hooks
-  onSessionStart?: (session: SessionInfo) => void;
-  onSessionEnd?: (session: SessionInfo, reason: string) => void;
-  onStackPush?: (stackItem: SessionStackEntry) => void;
-  onStackPop?: (stackItem: unknown) => void;
+  onRenderStart?: (render: RenderInfo) => void;
+  onRenderEnd?: (render: RenderInfo, reason: string) => void;
+  /** Fires on the initial subscribe ack carrying the current Render snapshot. */
+  onRenderReceived?: (render: Render) => void;
 
   // Data hooks
   onBeforeAction?: <T>(data: T, meta: ActionMeta) => T | undefined;
@@ -114,11 +130,22 @@ export interface GguiSessionProps {
    */
   extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
 
-  children: ReactNode | ((api: SessionApi) => ReactNode);
+  children: ReactNode | ((api: RenderApi) => ReactNode);
 }
 
 /**
- * API object exposed to child render functions of {@link GguiSession}.
+ * Minimal context passed to {@link GguiRenderProps.onBeforeAction}.
+ * Only fields real consumers use; the legacy `EventContext` diagnostic
+ * bag (deviceInfo / interfaceContext / user) was dropped when the
+ * emitter migrated to canonical {@link ActionEnvelope} — those fields
+ * live on the render, not per-delivery.
+ */
+export interface ActionMeta {
+  renderId: string;
+}
+
+/**
+ * API object exposed to child render functions of {@link GguiRender}.
  *
  * Two communication methods plus a raw sender:
  *
@@ -132,22 +159,9 @@ export interface GguiSessionProps {
  *
  * NOTE: The legacy `invoke(text)` method was retired with the v1.1
  * Streamable Invoke Protocol cutover. User text messages now flow through
- * `useInvoke().send()` at the consumer layer and are threaded into shells
- * via `activeSession.send` on `ShellContext` — not through this object.
+ * `useInvoke().send()` at the consumer layer.
  */
-/**
- * Minimal context passed to {@link GguiSessionProps.onBeforeAction}.
- * Only fields real consumers use; the legacy `EventContext` diagnostic
- * bag (deviceInfo / interfaceContext / user) was dropped when the
- * emitter migrated to canonical {@link ActionEnvelope} — those fields
- * live on the session, not per-delivery.
- */
-export interface ActionMeta {
-  sessionId: string;
-  stackIndex: number;
-}
-
-export interface SessionApi {
+export interface RenderApi {
   /**
    * Submit user interaction data from a rendered UI component.
    *
@@ -171,39 +185,47 @@ export interface SessionApi {
   /** Current WebSocket connection status. */
   connectionStatus: ConnectionStatus;
 
-  /** Current session stack (populated from ack on subscribe and updated on push). */
-  stack: SessionStackEntry[];
+  /** Current Render snapshot (populated from ack on subscribe and refreshed
+   *  on render frame). Absent until the first ack arrives. */
+  render: Render | undefined;
 
-  /** Session ID. */
-  sessionId: string;
+  /** Render ID. */
+  renderId: string;
 }
 
 /**
- * Manages a single ggui session lifecycle.
+ * Manages a single ggui render lifecycle.
  *
  * Opens a WebSocket connection (if `wsEndpoint` is set on the provider),
- * subscribes to the session, and handles incoming server messages (push,
- * progress, data, stream, error). Exposes a {@link SessionApi} via render
- * props or provides it implicitly to child components.
+ * subscribes to the render, and handles incoming server messages
+ * (render, progress, data, stream, error). Exposes a {@link RenderApi}
+ * via render props or provides it implicitly to child components.
+ *
+ * Post-Phase-B: a single render per component instance — no stack, no
+ * vessel, no compose. The renderer mounts the current render and applies
+ * `props_update` frames in place. If the agent decides to replace the
+ * render, the server emits a fresh `render` frame and this component
+ * swaps the in-memory snapshot.
  *
  * @example
  * ```tsx
  * // User text messages flow through `useInvoke()` at the consumer layer.
- * // `GguiSession` exposes stack + action + raw-send via its render prop.
+ * // `GguiRender` exposes the live render + action + raw-send via its
+ * // render prop.
  * const { send } = useInvoke();
  * return (
- *   <GguiSession sessionId={sid}>
- *     {({ stack, action, connectionStatus }) => (
- *       <MyUI stack={stack} onAction={action} onSend={send} status={connectionStatus} />
+ *   <GguiRender renderId={rid}>
+ *     {({ render, action, connectionStatus }) => (
+ *       <MyUI render={render} onAction={action} onSend={send} status={connectionStatus} />
  *     )}
- *   </GguiSession>
+ *   </GguiRender>
  * );
  * ```
  */
-export function GguiSession({
-  sessionId,
-  onSessionStart,
-  onSessionEnd,
+export function GguiRender({
+  renderId,
+  onRenderStart,
+  onRenderEnd,
   onBeforeAction,
   onAfterAction,
   onInteraction,
@@ -212,12 +234,12 @@ export function GguiSession({
   onSystemMessage,
   onValidationError: _onValidationError,
   onError,
-  onStackPush,
+  onRenderReceived,
   extraReservedValidators,
   children,
-}: GguiSessionProps) {
+}: GguiRenderProps) {
   const { appId, wsEndpoint, auth, appMetadata, appConfig } = useGguiContext();
-  const [stack, setStack] = useState<SessionStackEntry[]>([]);
+  const [render, setRender] = useState<Render | undefined>(undefined);
 
   // Stable refs for callbacks to avoid unnecessary effect re-runs
   const onErrorRef = useRef(onError);
@@ -228,12 +250,12 @@ export function GguiSession({
   onBeforeActionRef.current = onBeforeAction;
   const onAfterActionRef = useRef(onAfterAction);
   onAfterActionRef.current = onAfterAction;
-  const onSessionStartRef = useRef(onSessionStart);
-  onSessionStartRef.current = onSessionStart;
-  const onSessionEndRef = useRef(onSessionEnd);
-  onSessionEndRef.current = onSessionEnd;
-  const onStackPushRef = useRef(onStackPush);
-  onStackPushRef.current = onStackPush;
+  const onRenderStartRef = useRef(onRenderStart);
+  onRenderStartRef.current = onRenderStart;
+  const onRenderEndRef = useRef(onRenderEnd);
+  onRenderEndRef.current = onRenderEnd;
+  const onRenderReceivedRef = useRef(onRenderReceived);
+  onRenderReceivedRef.current = onRenderReceived;
   const onProgressRef = useRef(onProgress);
   onProgressRef.current = onProgress;
   const onStreamRef = useRef(onStream);
@@ -241,7 +263,7 @@ export function GguiSession({
   const onSystemMessageRef = useRef(onSystemMessage);
   onSystemMessageRef.current = onSystemMessage;
 
-  // Compose reserved-channel payload validators once per GguiSession
+  // Compose reserved-channel payload validators once per GguiRender
   // instance (Item 4 injection pattern — client side). Defaults ship
   // the A2UI `_ggui:preview` validator; caller-provided
   // `extraReservedValidators` merge on top with caller-override
@@ -255,10 +277,10 @@ export function GguiSession({
   const reservedValidatorsRef = useRef(reservedValidators);
   reservedValidatorsRef.current = reservedValidators;
 
-  // Always-current stack ref — wire dispatch reads this to look up active contract
-  // without forcing wireConfig re-creation on every push.
-  const stackRef = useRef<SessionStackEntry[]>(stack);
-  stackRef.current = stack;
+  // Always-current render ref — wire dispatch reads this to look up the
+  // active contract without forcing wireConfig re-creation on every frame.
+  const renderRef = useRef<Render | undefined>(render);
+  renderRef.current = render;
 
   // Handle incoming WebSocket messages from server
   const handleServerMessage = useCallback(
@@ -313,31 +335,22 @@ export function GguiSession({
             }),
           );
         }
-        // Subscribe response — populate initial stack
-        if (message.payload.stack) {
-          setStack(message.payload.stack);
+        // Subscribe response — populate initial render snapshot
+        if (message.payload.render) {
+          setRender(message.payload.render);
+          onRenderReceivedRef.current?.(message.payload.render);
         }
       }
-      if (message.type === 'push') {
-        const { stackItem, matchType } = message.payload;
-        if (stackItem) {
-          setStack((prev) => {
-            // Replace existing item with same ID, or append
-            const idx = prev.findIndex((item) => item.id === stackItem.id);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = stackItem;
-              return next;
-            }
-            return [...prev, stackItem];
-          });
-          onStackPushRef.current?.(stackItem);
+      if (message.type === 'render') {
+        const { render: nextRender, matchType } = message.payload;
+        if (nextRender) {
+          setRender(nextRender);
+          onRenderReceivedRef.current?.(nextRender);
           // Forward matchType info as a synthetic progress event
           if (matchType) {
             const isHit = matchType === 'cached' || matchType === 'predefined' || matchType === 'exact';
             onProgressRef.current?.({
-              sessionId: '',
-              stackItemId: stackItem.id,
+              renderId: nextRender.id,
               step: 'compiling',
               message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
             });
@@ -366,7 +379,7 @@ export function GguiSession({
           // fan-out via `assertStreamContract` (which includes the
           // Item 4 reserved-channel validator injection). The client
           // re-runs validation on receipt so server↔client drift
-          // (e.g. stack popped between emit and receipt, or a
+          // (e.g. render replaced between emit and receipt, or a
           // third-party server without Item 4 enforcement) still
           // gets caught here.
           //
@@ -384,14 +397,12 @@ export function GguiSession({
           // namespace (e.g. `_ggui:preveiw`) is NOT recognized and
           // falls through to the declared-channel check which
           // surfaces the typo as an "unknown channel" violation.
-          const currentStack = stackRef.current;
-          const activeIndex = currentStack.length - 1;
-          const activeItem = activeIndex >= 0 ? currentStack[activeIndex] : undefined;
+          const activeRender = renderRef.current;
           const streamSpec =
-            activeItem !== undefined &&
-            activeItem.type !== 'mcpApps' &&
-            activeItem.type !== 'system'
-              ? activeItem.streamSpec
+            activeRender !== undefined &&
+            activeRender.type !== 'mcpApps' &&
+            activeRender.type !== 'system'
+              ? activeRender.streamSpec
               : undefined;
           const result = validateInboundStreamPayload(
             streamSpec,
@@ -423,18 +434,20 @@ export function GguiSession({
         }
       }
       if (message.type === 'props_update') {
-        // ggui_update: replace props on an existing stack item (no re-generation)
-        const { stackItemId, props } = message.payload as { stackItemId: string; props: JsonObject };
-        if (stackItemId && props) {
+        // ggui_update: replace props on the active render (no re-generation)
+        const { renderId: targetRenderId, props } = message.payload;
+        if (targetRenderId && props) {
           // Defense-in-depth: server already validates props via
           // assertPropsContract on the ggui_update path; the client
-          // re-checks against the target item's cached propsSpec to
+          // re-checks against the active render's cached propsSpec to
           // catch spec-versioning drift before applying to React state.
-          const target = stackRef.current.find((item) => item.id === stackItemId);
+          const target = renderRef.current;
+          // Ignore frames targeting a different render — the server
+          // routes by subscription, but a sloppy implementation could
+          // fan out cross-render updates; reject locally.
+          if (!target || target.id !== targetRenderId) return;
           const propsSpec =
-            target !== undefined &&
-            target.type !== 'mcpApps' &&
-            target.type !== 'system'
+            target.type !== 'mcpApps' && target.type !== 'system'
               ? target.propsSpec
               : undefined;
           const result = validateInboundPropsPayload(propsSpec, props);
@@ -445,16 +458,14 @@ export function GguiSession({
             );
             return;
           }
-          setStack((prev) =>
-            prev.map((item) => {
-              if (item.id !== stackItemId) return item;
-              // `props` belongs to the component variant only; MCP
-              // Apps items have no props and aren't targeted by
-              // props_update frames.
-              if (item.type === 'mcpApps' || item.type === 'system') return item;
-              return { ...item, props } as SessionStackEntry;
-            }),
-          );
+          setRender((prev) => {
+            if (!prev || prev.id !== targetRenderId) return prev;
+            // `props` belongs to the component variant only; MCP
+            // Apps + system renders have no props and aren't targeted
+            // by props_update frames.
+            if (prev.type === 'mcpApps' || prev.type === 'system') return prev;
+            return { ...prev, props } as Render;
+          });
         }
       }
       if (message.type === 'system') {
@@ -467,7 +478,7 @@ export function GguiSession({
   // Initialize WebSocket connection (only if wsEndpoint is provided)
   const { sendAction, send, status: connectionStatus } = useWebSocket({
     url: wsEndpoint || '',
-    sessionId,
+    renderId,
     appId,
     onMessage: handleServerMessage,
   });
@@ -481,31 +492,16 @@ export function GguiSession({
   const clientSeqRef = useRef(0);
 
   /**
-   * Resolve the stack item an emission should target. Prefers the top
-   * of the stack (where the agent last pushed); falls back to index 0
-   * for an empty stack so callers get a stable numeric index regardless
-   * of timing. The resolved item's id (`stackItemId`) and actionSpec are
-   * used for contract validation + envelope routing.
+   * Resolve the actionSpec for outbound emissions. With a single-render
+   * mount there's no resolution beyond "read the render's actionSpec";
+   * the helper exists for symmetry with the legacy stack-resolving
+   * version and to centralize the mcpApps/system narrowing.
    */
-  const resolveActiveStack = useCallback((): {
-    stackIndex: number;
-    stackItemId: string | undefined;
-    actionSpec: ActionSpec | undefined;
-  } => {
-    const currentStack = stackRef.current;
-    const stackIndex = currentStack.length > 0 ? currentStack.length - 1 : 0;
-    const activeItem = currentStack[stackIndex];
-    const actionSpec =
-      activeItem !== undefined &&
-      activeItem.type !== 'mcpApps' &&
-      activeItem.type !== 'system'
-        ? activeItem.actionSpec
-        : undefined;
-    return {
-      stackIndex,
-      stackItemId: activeItem?.id,
-      actionSpec,
-    };
+  const resolveActiveActionSpec = useCallback((): ActionSpec | undefined => {
+    const active = renderRef.current;
+    if (!active) return undefined;
+    if (active.type === 'mcpApps' || active.type === 'system') return undefined;
+    return active.actionSpec;
   }, []);
 
   /**
@@ -534,36 +530,27 @@ export function GguiSession({
    * runs on ingress (saves the round-trip on locally-knowable
    * violations). On violation: surface via `onError` (or fall back to
    * console.warn) and skip the send.
-   *
-   * `ctx.tool` (from the spec's `ActionEntry.tool`) is surfaced on the
-   * envelope payload alongside `{action, data}` so the agent can
-   * dispatch directly to the MCP tool without a contract round-trip.
    */
   const dispatchAction = useCallback(
     (
       actionName: string,
       data: unknown,
-      ctx: {
-        stackItemId?: string;
-        stackIndex: number;
-        tool?: string;
-        actionSpec?: ActionSpec;
-      },
+      actionSpec: ActionSpec | undefined,
     ) => {
       clientSeqRef.current += 1;
+      const entry = actionSpec?.[actionName];
+      const tool = entry?.nextStep;
       const envelope = buildActionEnvelope({
-        sessionId,
+        renderId,
         type: 'data:submit',
         payload: {
           action: actionName,
           data: data as JsonValue,
-          ...(ctx.tool ? { tool: ctx.tool } : {}),
+          ...(tool ? { tool } : {}),
         },
-        stackIndex: ctx.stackIndex,
-        ...(ctx.stackItemId ? { stackItemId: ctx.stackItemId } : {}),
         clientSeq: clientSeqRef.current,
       });
-      const result = validateOutboundActionEnvelope(ctx.actionSpec, envelope);
+      const result = validateOutboundActionEnvelope(actionSpec, envelope);
       if (!result.valid) {
         const err = new ClientContractViolationError(
           'outbound-action',
@@ -574,7 +561,7 @@ export function GguiSession({
       }
       emitEnvelope(envelope);
     },
-    [sessionId, emitEnvelope],
+    [renderId, emitEnvelope],
   );
 
   /**
@@ -585,19 +572,16 @@ export function GguiSession({
    */
   const emitTyped = useCallback(
     (type: EventType, payload: JsonValue | undefined) => {
-      const active = resolveActiveStack();
       clientSeqRef.current += 1;
       const envelope = buildActionEnvelope({
-        sessionId,
+        renderId,
         type,
         ...(payload !== undefined ? { payload } : {}),
-        stackIndex: active.stackIndex,
-        ...(active.stackItemId ? { stackItemId: active.stackItemId } : {}),
         clientSeq: clientSeqRef.current,
       });
       emitEnvelope(envelope);
     },
-    [sessionId, resolveActiveStack, emitEnvelope],
+    [renderId, emitEnvelope],
   );
 
   // Forward user data from rendered components (via window CustomEvent)
@@ -616,15 +600,15 @@ export function GguiSession({
     return () => window.removeEventListener(BRIDGE_EVENTS.USER_DATA, handleUserData);
   }, [emitTyped]);
 
-  // Reset stack when sessionId changes
+  // Reset render when renderId changes
   useEffect(() => {
-    setStack([]);
-    onSessionStartRef.current?.({ sessionId });
+    setRender(undefined);
+    onRenderStartRef.current?.({ renderId });
 
     return () => {
-      onSessionEndRef.current?.({ sessionId }, 'unmount');
+      onRenderEndRef.current?.({ renderId }, 'unmount');
     };
-  }, [sessionId]);
+  }, [renderId]);
 
   // Action handler with middleware (component interactions → agent).
   // Builds a canonical data:submit ActionEnvelope via the shared
@@ -633,8 +617,7 @@ export function GguiSession({
   const action = useCallback(
     <T,>(data: T) => {
       try {
-        const active = resolveActiveStack();
-        const meta: ActionMeta = { sessionId, stackIndex: active.stackIndex };
+        const meta: ActionMeta = { renderId };
 
         // Call onBeforeAction middleware — may transform or cancel (by
         // returning undefined). Return-undefined remains the "drop"
@@ -651,7 +634,7 @@ export function GguiSession({
         onErrorRef.current?.(error instanceof Error ? error : new Error(String(error)));
       }
     },
-    [sessionId, resolveActiveStack, emitTyped]
+    [renderId, emitTyped]
   );
 
   // NOTE: The legacy `invoke(text)` method was retired with the v1.1
@@ -659,15 +642,15 @@ export function GguiSession({
   // server handler was deleted). User text messages now go through
   // `useInvoke().send` at the consumer layer.
 
-  const api = useMemo<SessionApi>(
+  const api = useMemo<RenderApi>(
     () => ({
       action,
       send,
       connectionStatus,
-      stack,
-      sessionId,
+      render,
+      renderId,
     }),
-    [action, send, connectionStatus, stack, sessionId]
+    [action, send, connectionStatus, render, renderId]
   );
 
   const wireConfig = useMemo<WireConfig>(() => ({
@@ -677,42 +660,22 @@ export function GguiSession({
       appDescription: appMetadata?.appDescription,
       appIcon: appMetadata?.appIcon,
     },
-    session: {
-      sessionId,
+    render: {
+      renderId,
       isConnected: connectionStatus === 'connected',
     },
     auth: {
       userId: auth?.userId,
       isAuthenticated: auth?.isAuthenticated ?? false,
     },
-    // Default dispatch — used when no scope is set. Resolves binding from top of stack.
-    // Note: StackItemRenderer wraps each card in a scoped wire (via `scope()` below)
-    // so this default path is rarely hit in practice. It's the fallback for
-    // standalone components not rendered through StackItemRenderer.
+    // Single render per mount — no scope factory. Every dispatch
+    // resolves the actionSpec from the active render snapshot at the
+    // moment of dispatch (renderRef.current), keeping spec edits
+    // observed on `props_update` (which doesn't replace the spec but
+    // does refresh the snapshot identity) in sync.
     dispatch: (actionName: string, data: unknown) => {
-      const currentStack = stackRef.current;
-      const activeItem = currentStack[currentStack.length - 1];
-      const activeIndex = currentStack.length > 0 ? currentStack.length - 1 : 0;
-      // McpApps + system items have no actionSpec — narrow before reading.
-      const activeActionSpec =
-        activeItem !== undefined &&
-        activeItem.type !== 'mcpApps' &&
-        activeItem.type !== 'system'
-          ? activeItem.actionSpec
-          : undefined;
-      const entry = activeActionSpec?.[actionName];
-      // Every action is agent-routed. The optional `nextStep` field on
-      // the action entry names the tool the agent SHOULD invoke on its
-      // next turn — surfaced here as advisory metadata for downstream
-      // telemetry / dev console.
-      const tool = entry?.nextStep;
-
-      dispatchAction(actionName, data, {
-        stackItemId: activeItem?.id,
-        stackIndex: activeIndex,
-        tool,
-        actionSpec: activeActionSpec,
-      });
+      const actionSpec = resolveActiveActionSpec();
+      dispatchAction(actionName, data, actionSpec);
     },
     subscribe: <T = unknown>(
       channelName: string,
@@ -736,48 +699,10 @@ export function GguiSession({
     // underlying tool. Cross-refs surface via `actionSpec[*].nextStep`
     // (event hint) and `streamSpec[*].source.tool` (channel data
     // source).
-  }), [appId, sessionId, connectionStatus, auth, appMetadata, appConfig, wsEndpoint, dispatchAction, send]);
-
-  // Attach `scope()` factory after wireConfig is built — avoids circular self-reference.
-  // Per-stack-item WireConfig so each rendered card emits actions tagged with its OWN
-  // stackItemId/tool — not the top of stack. This prevents wrong-tool
-  // dispatch in stacked / chat-style UIs.
-  //
-  // The `.scope(item)` method lives on `LegacyScopableWireConfig` and
-  // is retired alongside `<GguiSession>` itself. In the renderer-iframe
-  // model the iframe owns scoping; `<GguiSession>` is a legacy
-  // component kept during the migration overlap. The runtime shape is
-  // unchanged — only the interface that types it.
-  const wireConfigWithScope = useMemo<LegacyScopableWireConfig>(() => {
-    // Self-reference is factored out so the inner `scope()` return can
-    // carry `.scope` too — `LegacyScopableWireConfig` is recursive on
-    // its own return type by design.
-    const buildScopedFor = (
-      item: { stackItemId?: string; contractHash?: string; actionSpec?: import('@ggui-ai/protocol').ActionSpec },
-    ): LegacyScopableWireConfig => ({
-      ...wireConfig,
-      dispatch: (actionName: string, data: unknown) => {
-        const entry = item.actionSpec?.[actionName];
-        const tool = entry?.nextStep;
-        const currentStack = stackRef.current;
-        const stackIdx = currentStack.findIndex((s) => s.id === item.stackItemId);
-        dispatchAction(actionName, data, {
-          stackItemId: item.stackItemId,
-          stackIndex: stackIdx >= 0 ? stackIdx : 0,
-          tool,
-          actionSpec: item.actionSpec,
-        });
-      },
-      scope: buildScopedFor,
-    });
-    return {
-      ...wireConfig,
-      scope: buildScopedFor,
-    };
-  }, [wireConfig, dispatchAction]);
+  }), [appId, renderId, connectionStatus, auth, appMetadata, appConfig, dispatchAction, resolveActiveActionSpec]);
 
   return (
-    <GguiWireProvider config={wireConfigWithScope}>
+    <GguiWireProvider config={wireConfig}>
       {typeof children === 'function' ? children(api) : children}
     </GguiWireProvider>
   );

@@ -7,8 +7,8 @@ import { EventBuffer } from './EventBuffer';
  */
 export interface WebSocketManagerOptions {
   url: string;
-  /** Session ID — optional for start-invoke flow (platform assigns session). */
-  sessionId?: string;
+  /** Render ID — optional for start-invoke flow (platform assigns render). */
+  renderId?: string;
   appId: string;
   onMessage: (message: WebSocketMessage) => void;
   onStatusChange: (status: ConnectionStatus) => void;
@@ -39,33 +39,33 @@ export class WebSocketManager {
   /**
    * Open the WebSocket connection to the ggui platform.
    *
-   * If sessionId is provided, auto-subscribes on connect.
+   * If renderId is provided, auto-subscribes on connect.
    * If not (start-invoke flow), connects with appId only — call
-   * {@link subscribeToSession} after receiving the session assignment.
+   * {@link subscribeToRender} after receiving the render assignment.
    */
   connect(): void {
     if (this.disposed) return;
 
-    const { url, sessionId, appId, onStatusChange } = this.options;
+    const { url, renderId, appId, onStatusChange } = this.options;
     onStatusChange('connecting');
 
-    const wsUrl = sessionId
-      ? `${url}?sessionId=${sessionId}&appId=${appId}`
+    const wsUrl = renderId
+      ? `${url}?renderId=${renderId}&appId=${appId}`
       : `${url}?appId=${appId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       if (this.disposed) return;
       this.reconnectAttempts = 0;
-      if (sessionId) {
-        // Subscribe immediately when sessionId is known.
+      if (renderId) {
+        // Subscribe immediately when renderId is known.
         // `supportedVersions` opts into the protocol-version
         // handshake; servers that don't read the field silently
         // ignore it (older servers pass through unchanged).
         this.ws?.send(JSON.stringify({
           type: 'subscribe',
           payload: {
-            sessionId,
+            renderId,
             appId,
             supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
           },
@@ -102,11 +102,11 @@ export class WebSocketManager {
   }
 
   /**
-   * Subscribe to a session after the platform assigns one.
-   * Used in the start-invoke flow where sessionId isn't known at connect time.
+   * Subscribe to a render after the platform assigns one.
+   * Used in the start-invoke flow where renderId isn't known at connect time.
    */
-  subscribeToSession(sessionId: string): void {
-    this.options.sessionId = sessionId;
+  subscribeToRender(renderId: string): void {
+    this.options.renderId = renderId;
     if (this.ws?.readyState === WebSocket.OPEN) {
       // Include `supportedVersions` to opt into the protocol-version
       // handshake on the deferred-subscribe path too; older servers
@@ -114,7 +114,7 @@ export class WebSocketManager {
       this.ws.send(JSON.stringify({
         type: 'subscribe',
         payload: {
-          sessionId,
+          renderId,
           appId: this.options.appId,
           supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
         },

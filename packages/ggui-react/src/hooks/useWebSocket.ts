@@ -12,7 +12,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
  */
 export interface UseWebSocketOptions {
   url: string;
-  sessionId: string;
+  renderId: string;
   appId: string;
   onMessage?: (message: WebSocketMessage) => void;
 }
@@ -37,13 +37,13 @@ export interface UseWebSocketReturn {
  *
  * Creates a {@link WebSocketManager} instance, connects on mount, and
  * disconnects on unmount. Reconnects automatically when the `url`,
- * `sessionId`, or `appId` change.
+ * `renderId`, or `appId` change.
  *
  * @param options - Connection configuration and message handler
  * @returns Connection status, envelope sender, raw sender, and last error
  */
 export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
-  const { url, sessionId, appId, onMessage } = options;
+  const { url, renderId, appId, onMessage } = options;
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [lastError, setLastError] = useState<Error | null>(null);
   const managerRef = useRef<WebSocketManager | null>(null);
@@ -60,7 +60,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     const manager = new WebSocketManager({
       url,
-      sessionId,
+      renderId,
       appId,
       onMessage: (msg) => {
         if (msg.type === 'error') {
@@ -79,7 +79,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       manager.disconnect();
       managerRef.current = null;
     };
-  }, [url, sessionId, appId]);
+  }, [url, renderId, appId]);
 
   const sendAction = useCallback((envelope: ActionEnvelope) => {
     // Re-stamp via the central builder. Callers typically pass an
@@ -92,16 +92,10 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       envelope.schemaVersion !== undefined
         ? envelope
         : makeActionEnvelope({
-            sessionId: envelope.sessionId,
+            renderId: envelope.renderId,
             type: envelope.type,
             ...(envelope.payload !== undefined
               ? { payload: envelope.payload }
-              : {}),
-            ...(envelope.stackIndex !== undefined
-              ? { stackIndex: envelope.stackIndex }
-              : {}),
-            ...(envelope.stackItemId !== undefined
-              ? { stackItemId: envelope.stackItemId }
               : {}),
             ...(envelope.clientSeq !== undefined
               ? { clientSeq: envelope.clientSeq }
