@@ -144,9 +144,11 @@ describe('bootSequence — happy path', () => {
     expect(after).toHaveLength(2);
     expect(after[1]?.getAttribute('data-ggui-stack-item')).toBe('item_b');
 
-    // Status line shows connected with the correct count.
-    const statusEl = dom.querySelector('[data-ggui-status]');
-    expect(statusEl?.textContent).toMatch(/Connected \(2 items\)/);
+    // Status surface is `console.log`-only now (no visible DOM banner);
+    // the boot succeeded if the stack rendered + `notifyParent` got
+    // `ggui:renderer-ready` (asserted above). No visible diagnostic to
+    // assert; the connected (N items) line is fired via setStatus →
+    // console.log and is captured by devtools only.
 
     // No failure message was sent.
     const failures = notifyParent.mock.calls
@@ -415,9 +417,6 @@ describe('bootSequence — failure paths', () => {
         reason: 'UI_INITIALIZE_FAILED',
       }),
     );
-
-    const statusEl = dom.querySelector('[data-ggui-status]');
-    expect(statusEl?.getAttribute('data-ggui-status')).toBe('error');
   });
 
   it('surfaces MISSING_META_GGUI_BOOTSTRAP when toolOutput lacks _meta', async () => {
@@ -474,8 +473,6 @@ describe('bootSequence — failure paths', () => {
         reason: 'UPGRADE_REQUIRED',
       }),
     );
-    const statusEl = dom.querySelector('[data-ggui-status]');
-    expect(statusEl?.getAttribute('data-ggui-status')).toBe('upgrade-required');
   });
 
   it('surfaces WS_HANDSHAKE_FAILED on a generic connectFn rejection', async () => {

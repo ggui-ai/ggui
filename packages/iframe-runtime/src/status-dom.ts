@@ -1,41 +1,43 @@
 /**
- * In-iframe status DOM. Extracted from `runtime.ts` in B3b so the
- * live-channel handlers can import the `setStatus` + status-refs
- * helpers without a circular dep on the runtime module (which imports
- * the handlers for registration at boot).
+ * In-iframe runtime status surface.
  *
- * Operators see the boot state at a glance; failures land here with a
- * prefix that makes them grep-able in dev consoles.
+ * Used to inject a visible `<div data-ggui-status>` banner ("Initializing
+ * renderer…", "Connected (1 item)", etc.) into the iframe body alongside
+ * the user-rendered React tree. End users saw it as a stray label above
+ * their UI — production-unfriendly. As of the displayMode-divergence
+ * close-out we route status transitions to `console.log` and inject ONLY
+ * the React mount-target div (no banner, no list-item placeholder text).
  *
- * The status DOM is a `<div data-ggui-status>` + `<ul data-ggui-stack>`
- * pair built once at boot and reused for the iframe's lifetime. The
- * `data-ggui-status` attribute carries a {@link StatusKind} value so
- * operator stylesheets + e2e specs can pin assertions against the
- * narrow union rather than reading the text content.
+ * The exported names (`setStatus`, `setConnectedStatus`,
+ * `refreshStackDom`, `StatusRefs`) are preserved so the channel handlers
+ * + runtime keep their import shape; `setStatus` / `setConnectedStatus`
+ * are now `console.log` shims, and `refreshStackDom` is a no-op for the
+ * triad-wired (production) path. The placeholder render path —
+ * exercised by `boot.test.ts` without a triadWiring hook — still writes
+ * its `<li data-ggui-stack-item>` rows into the mount-target div for
+ * the spec assertions that count items on the stack.
  */
 import type { StackModel } from './stack.js';
 import { renderStackInto } from './stack.js';
 
 /**
- * Closed union of values the `data-ggui-status` attribute carries.
+ * Closed union of values the iframe's status surface carries. Kept on
+ * the runtime side as the canonical state vocabulary even though it no
+ * longer surfaces visibly.
  *
- *   - `idle` — initial state before any boot IO. Default text reads
- *     "Initializing renderer…"; set by {@link ensureStatusDom}.
- *   - `initializing` — same as `idle` (legacy alias kept for the rare
- *     external CSS hook in `e2e/`).
+ *   - `idle` — initial state before any boot IO.
+ *   - `initializing` — legacy alias for `idle`.
  *   - `connecting` — ui/initialize fired or WS handshake in flight.
  *   - `connected` — first ack landed + every subsequent successful
- *     push. Text shows the live stack count.
- *   - `reconnecting` — WS dropped; the reconnect ladder is running.
- *   - `disconnected` — terminal close + ladder exhausted, or a graceful
- *     stop. Authors may layer reload UX here.
- *   - `upgrade-required` — version handshake failed; operator should
- *     upgrade the client.
- *   - `error` — every other failure (ui/initialize, bootstrap parse,
- *     WS handshake non-version).
+ *     push.
+ *   - `reconnecting` — WS dropped; reconnect ladder running.
+ *   - `disconnected` — terminal close + ladder exhausted.
+ *   - `upgrade-required` — version handshake failed.
+ *   - `error` — every other failure.
  *
- * Closed at this layer; new values require a code change here PLUS
- * any e2e specs / CSS that pattern-match against the attribute.
+ * Surfaces on `console.log` prefixed `[ggui:<state>]`; consumers
+ * (operators, e2e specs) MAY install a `console.log` interceptor or
+ * read `notifyParent('ggui:bootstrap-failed', …)` for failure paths.
  */
 export type StatusKind =
   | 'idle'
@@ -48,9 +50,12 @@ export type StatusKind =
   | 'error';
 
 /**
- * Refs handed back from {@link ensureStatusDom}. Stays narrow (two
- * elements) so the channel handlers can close over them without
- * pulling other runtime state.
+ * Refs handed back from {@link ensureStatusDom}. `status` is a detached
+ * element kept for backward compatibility with channel handlers that
+ * still pass `refs.status` through; it is NEVER appended to the
+ * document, so production iframes carry no diagnostic banner. `stack`
+ * is the React mount target — appended to `document.body` so triad
+ * wiring + the placeholder render path both have a container.
  */
 export interface StatusRefs {
   readonly status: HTMLElement;
@@ -58,44 +63,52 @@ export interface StatusRefs {
 }
 
 /**
- * Build the minimum viable status DOM the runtime owns. Adopters can
- * style via the `data-ggui-status` / `data-ggui-stack` attributes; the
- * bundle ships zero CSS so hosts see only the structure.
+ * Build the React mount target. Reuses pre-existing `[data-ggui-stack]`
+ * if the shell already wrote one (cf. `buildSelfContainedShell`); else
+ * creates a fresh `<ul data-ggui-stack>` and appends it to `<body>`.
+ * The companion `status` element is created detached and never
+ * appended — consumers that still pass it through `StatusRefs` see no
+ * visible effect.
  */
 export function ensureStatusDom(doc: Document): StatusRefs {
-  // Reuse pre-existing nodes if the thin shell wrote them — lets the
-  // shell inline a status line if it wants to.
-  const existingStatus = doc.querySelector<HTMLElement>('[data-ggui-status]');
   const existingStack = doc.querySelector<HTMLElement>('[data-ggui-stack]');
-  if (existingStatus !== null && existingStack !== null) {
-    return { status: existingStatus, stack: existingStack };
-  }
-
-  const root = doc.body;
+  const stack =
+    existingStack ??
+    (() => {
+      const el = doc.createElement('ul');
+      el.setAttribute('data-ggui-stack', '');
+      doc.body.appendChild(el);
+      return el;
+    })();
+  // Detached placeholder so legacy `setStatus(refs, …)` calls have
+  // somewhere to write without touching the visible DOM. `aria-hidden`
+  // + zero size belt-and-braces in case any path appends it later.
   const status = doc.createElement('div');
   status.setAttribute('data-ggui-status', 'idle');
-  status.textContent = 'Initializing renderer…';
-  const stack = doc.createElement('ul');
-  stack.setAttribute('data-ggui-stack', '');
-  root.appendChild(status);
-  root.appendChild(stack);
+  status.setAttribute('aria-hidden', 'true');
   return { status, stack };
 }
 
 /**
- * Set the status text + the `data-ggui-status` attribute. Centralised
- * so every caller stays consistent across the runtime + the channel
- * handlers (push handler keeps the count fresh on every fold).
+ * Log a status transition. The element is mutated for backward compat
+ * (some tests still hold a `refs.status` reference), but production
+ * users never see it because the element is detached from `document`.
  */
-export function setStatus(refs: StatusRefs, text: string, state: StatusKind): void {
+export function setStatus(
+  refs: StatusRefs,
+  text: string,
+  state: StatusKind,
+): void {
   refs.status.textContent = text;
   refs.status.setAttribute('data-ggui-status', state);
+  // eslint-disable-next-line no-console
+  console.log(`[ggui:${state}]`, text);
 }
 
 /**
- * Convenience — render the `connected (N items)` status line based on
- * the current stack model size. Used by the push handler on every
- * successful upsert + by the boot sequence on first ack.
+ * Log the "connected (N items)" transition. Calculates the count from
+ * the live stack model so consumers (devtools, e2e specs intercepting
+ * `console.log`) get the up-to-date stack size on every fold.
  */
 export function setConnectedStatus(refs: StatusRefs, model: StackModel): void {
   const size = model.size();
@@ -107,10 +120,11 @@ export function setConnectedStatus(refs: StatusRefs, model: StackModel): void {
 }
 
 /**
- * Re-render the stack DOM into the placeholder element. Wraps the
- * standalone {@link renderStackInto} so callers can pass refs + model
- * without unpacking; the standalone export stays for the legacy
- * callers that have only the bare element in scope.
+ * Render the stack model's items into the mount-target as
+ * `<li data-ggui-stack-item>` rows. Only invoked on the placeholder
+ * path (no triad wired) — the triad-wired production path uses
+ * `<div data-ggui-stack-item-root>` containers via `containerFor` and
+ * never goes through here.
  */
 export function refreshStackDom(refs: StatusRefs, model: StackModel): void {
   renderStackInto(refs.stack, model);
