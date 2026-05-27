@@ -50,6 +50,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { parseMcpAppAiGguiHostSessionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AppMetadataStore,
   SessionStore,
@@ -70,6 +71,15 @@ const inputSchema = {
     .optional()
     .describe(
       "Set true to receive `availableThemes` in the output — the per-app catalog of theme presets with descriptions you can pass to `themeId` here or on later `ggui_push` calls. Use this when the user's intent suggests a visual style (calming, urgent, brand-specific) and you want to choose from the registered presets. Omit when themes aren't relevant — the response stays small.",
+    ),
+  hostSession: z
+    .object({
+      hostName: z.string().min(1),
+      hostSessionId: z.string().min(1),
+    })
+    .optional()
+    .describe(
+      'Host-supplied session-grouping slice. Spec-canonical path for hosts that can stamp `_meta["ai.ggui/host-session"]` on the inbound tools/call (claude.ai, ChatGPT, etc.) — pass it there and OMIT this input field. SDK-driven hosts whose MCP client cannot set request _meta (Claude Agent SDK, OpenAI Agents SDK) MAY pass the same shape here; the server reads from `_meta` first, falls back to this input. Captured ONCE at session creation, immutable thereafter. Omit on both paths to opt out of resume (session becomes one-shot).',
     ),
   // NOTE: previous `seed` option was retired because the LLM was passing
   // the same seed across user turns and getting back the same sessionId
@@ -126,12 +136,6 @@ interface NewSessionOutput {
     readonly tool: 'ggui_handshake';
     readonly example: string;
   };
-  /**
-   * Internal — not on outputSchema. Read by `resultMeta` to decide
-   * whether to stamp `_meta.ui.resourceUri = "ui://ggui/session/<id>"`
-   * on the tool result..
-   */
-  _mcpAppsMode?: 'inline' | 'canvas';
 }
 
 export interface GguiNewSessionHandlerDeps {
@@ -215,34 +219,42 @@ export function createGguiNewSessionHandler(
         // re-lookup of App on every push) AND captures the actual
         // active theme so the agent can echo it back in output.
         let resolvedThemeId: string | undefined = parsed.themeId;
-        // Cache app lookup so we read both
-        // theme + MCP-Apps mode in one pass.
-        let resolvedMcpAppsMode: 'inline' | 'canvas' | undefined;
         if (deps.appMetadataStore) {
           const app = await deps.appMetadataStore.get(ctx.appId);
           if (resolvedThemeId === undefined && app?.defaultThemeId !== undefined) {
             resolvedThemeId = app.defaultThemeId;
           }
-          if (app?.defaultMcpAppsMode !== undefined) {
-            resolvedMcpAppsMode = app.defaultMcpAppsMode;
-          }
         }
+        // Host-session capture — TWO paths, `_meta` wins:
+        //
+        //   1. `_meta["ai.ggui/host-session"]` on the inbound `tools/call`
+        //      — the spec-canonical path. Hosts whose MCP client supports
+        //      request `_meta` (claude.ai, ChatGPT, any first-party
+        //      wrapper) use this. Invisible to the LLM.
+        //   2. `input.hostSession` — fallback for SDK-driven hosts
+        //      (Claude Agent SDK, OpenAI Agents SDK) whose MCP client
+        //      cannot set request `_meta`. The sample-agent passes the
+        //      chatSessionId via system-prompt directive so the LLM
+        //      includes this field on every `ggui_new_session` call.
+        //
+        // Either path persists the slice on the session row so the
+        // end-user resume flow can find it later via
+        // `ggui_list_sessions(hostName, hostSessionId)`. Absent on
+        // BOTH ⇒ one-shot session (non-rehydratable, by design).
+        // Malformed `_meta` ⇒ silently degrades to checking input;
+        // malformed input is rejected by the zod schema above.
+        const hostSessionFromMeta = parseMcpAppAiGguiHostSessionMeta(
+          ctx.requestMeta,
+        );
+        const hostSession = hostSessionFromMeta.ok
+          ? (hostSessionFromMeta.hostSession ?? parsed.hostSession)
+          : parsed.hostSession;
         const created = await deps.sessionStore.create({
           id: sessionId,
           appId: ctx.appId,
           ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
+          ...(hostSession !== undefined ? { hostSession } : {}),
         });
-        // persist the resolved mode onto the session. The
-        // sessionStore.create() input doesn't carry this field yet
-        // (would require widening CreateSessionInput across every
-        // implementation); update() honors the patch field instead.
-        // Frozen for the session's life — mid-session app-config
-        // changes don't disrupt active sessions.
-        if (resolvedMcpAppsMode !== undefined) {
-          await deps.sessionStore.update(created.id, {
-            mcpAppsMode: resolvedMcpAppsMode,
-          });
-        }
         // Opt-in catalog projection. Only fires when the agent asked
         // (requestThemeList: true) AND a `themes` resolver is wired —
         // both required so the common-case new_session call stays tiny.
@@ -268,9 +280,6 @@ export function createGguiNewSessionHandler(
           ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
           ...(availableThemes !== undefined ? { availableThemes } : {}),
           nextStep: buildNextStep(created.id),
-          ...(resolvedMcpAppsMode !== undefined
-            ? { _mcpAppsMode: resolvedMcpAppsMode }
-            : {}),
         };
       } catch (err) {
         const errorClass =
@@ -287,29 +296,6 @@ export function createGguiNewSessionHandler(
         });
         throw err;
       }
-    },
-    /**
-     * When the resolved app mode is `'canvas'`,
-     * stamp `_meta.ui.resourceUri = "ui://ggui/session/<sessionId>"`
-     * on the tool result so the MCP host fetches the canvas iframe
-     * resource and mounts a session-scoped canvas (instead of waiting
-     * for the first `ggui_push` to mint a per-push iframe).
-     *
-     * Returns `undefined` for `'inline'` (or absent) mode — preserves
-     * legacy behavior (no resourceUri on new_session result).
-     *
-     * Bootstrap minting for the canvas iframe is the host's response
-     * to `ui/initialize` (separate concern — runtime-level seam, not
-     * this handler's surface).
-     */
-    resultMeta(output) {
-      if (output._mcpAppsMode !== 'canvas') return undefined;
-      return {
-        ui: {
-          resourceUri: `ui://ggui/session/${output.sessionId}`,
-        },
-        'ui/resourceUri': `ui://ggui/session/${output.sessionId}`,
-      };
     },
   };
 }

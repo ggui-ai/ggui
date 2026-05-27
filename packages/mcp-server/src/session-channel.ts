@@ -2336,36 +2336,6 @@ export function createSessionChannelServer(
       }
     }
 
-    // Canvas mode: flip `canvasLoaded`
-    // on the first session-wide subscribe so push.ts's resultMeta
-    // detects `canvasOwnsRender === true` for the next push. Until
-    // we flip this, push.ts falls back to the inline path (per-push
-    // resourceUri), which would defeat the canvas model.
-    //
-    // Idempotent — only writes when the flag isn't already true. The
-    // subscribe-ack semantics make this the canonical "canvas iframe
-    // is alive + subscribed" signal; a host that reconnects re-fires
-    // this no-op write.
-    if (
-      session.mcpAppsMode === 'canvas' &&
-      session.canvasLoaded !== true
-    ) {
-      try {
-        session = await opts.sessionStore.update(session.id, {
-          canvasLoaded: true,
-        });
-      } catch (err) {
-        opts.logger.warn('session_channel_canvas_loaded_flip_failed', {
-          sessionId: session.id,
-          appId: session.appId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        // Degraded mode — canvasLoaded stays false; push.ts continues
-        // the inline path until a future subscribe succeeds. NOT a
-        // fatal error — the subscribe itself is unaffected.
-      }
-    }
-
     // Snapshot the outbound-stream cursor BEFORE registering the
     // subscriber. Any concurrent producer that calls sendToSession
     // between here and registration gets seq > snapshotSeq, so the

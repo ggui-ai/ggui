@@ -98,14 +98,7 @@ function makeStackItem(): StackItem {
  * (stack mutation is gated behind OSS `ggui_push` extraction which is
  * its own slice); this shim fills the gap for test wire-level coverage.
  */
-interface SeededStoreOptions {
-  readonly mcpAppsMode?: 'inline' | 'canvas';
-}
-
-function makeSeededStore(
-  seedStack: StackItem[],
-  options: SeededStoreOptions = {},
-): SessionStore {
+function makeSeededStore(seedStack: StackItem[]): SessionStore {
   const seeded: Session = {
     id: TEST_SESSION_ID,
     appId: TEST_APP_ID,
@@ -116,9 +109,6 @@ function makeSeededStore(
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     expiresAt: Date.now() + 3_600_000,
-    ...(options.mcpAppsMode !== undefined
-      ? { mcpAppsMode: options.mcpAppsMode }
-      : {}),
   };
   const recordedEvents: SessionEvent[] = [];
 
@@ -143,10 +133,6 @@ function makeSeededStore(
       if (id !== seeded.id) throw new Error('unknown session');
       if (patch.lastActivityAt !== undefined) seeded.lastActivityAt = patch.lastActivityAt;
       if (patch.expiresAt !== undefined) seeded.expiresAt = patch.expiresAt;
-      // Honor canvas-mode patches so the
-      // session-channel canvasLoaded flip lands in the seeded store.
-      if (patch.mcpAppsMode !== undefined) seeded.mcpAppsMode = patch.mcpAppsMode;
-      if (patch.canvasLoaded !== undefined) seeded.canvasLoaded = patch.canvasLoaded;
       // Honor activeStackItemId patches;
       // `null` clears so the next consume falls back to top-of-stack.
       if (patch.activeStackItemId !== undefined) {
@@ -3364,66 +3350,12 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   });
 });
 
-describe('createSessionChannelServer — Integration 3 canvasLoaded flip', () => {
-  let fix: Fixture | null = null;
-
-  afterEach(async () => {
-    if (fix) {
-      await fix.server.close();
-      fix = null;
-    }
-  });
-
-  it('flips canvasLoaded=true on first subscribe-ack when session.mcpAppsMode === canvas', async () => {
-    const store = makeSeededStore([makeStackItem()], { mcpAppsMode: 'canvas' });
-    fix = await boot({ sessionStore: store });
-    // Pre-condition: canvasLoaded is not set yet.
-    const before = await store.get(TEST_SESSION_ID);
-    expect(before?.canvasLoaded).toBeUndefined();
-
-    const ws = await connectAuthed(fix.wsUrl);
-    sendMessage(ws, makeSubscribe());
-    const ack = await recvMessage(ws);
-    expect(ack.type).toBe('ack');
-
-    // Post-condition: canvasLoaded === true.
-    const after = await store.get(TEST_SESSION_ID);
-    expect(after?.canvasLoaded).toBe(true);
-    ws.close();
-  });
-
-  it('does NOT flip canvasLoaded for inline-mode sessions (default)', async () => {
-    const store = makeSeededStore([makeStackItem()]);
-    fix = await boot({ sessionStore: store });
-    const ws = await connectAuthed(fix.wsUrl);
-    sendMessage(ws, makeSubscribe());
-    const ack = await recvMessage(ws);
-    expect(ack.type).toBe('ack');
-
-    const after = await store.get(TEST_SESSION_ID);
-    expect(after?.canvasLoaded).toBeUndefined();
-    expect(after?.mcpAppsMode).toBeUndefined();
-    ws.close();
-  });
-
-  it('is idempotent — reconnect with canvasLoaded already true does not error', async () => {
-    const store = makeSeededStore([makeStackItem()], { mcpAppsMode: 'canvas' });
-    fix = await boot({ sessionStore: store });
-    // Subscribe once → flip.
-    const ws1 = await connectAuthed(fix.wsUrl);
-    sendMessage(ws1, makeSubscribe());
-    await recvMessage(ws1);
-    ws1.close();
-    // Reconnect — canvasLoaded already true.
-    const before = await store.get(TEST_SESSION_ID);
-    expect(before?.canvasLoaded).toBe(true);
-    const ws2 = await connectAuthed(fix.wsUrl);
-    sendMessage(ws2, makeSubscribe());
-    const ack2 = await recvMessage(ws2);
-    expect(ack2.type).toBe('ack');
-    ws2.close();
-  });
-});
+// Integration 3 (canvasLoaded subscribe-flip) retired in the
+// displayMode-unification slice. There is no longer a `canvasLoaded`
+// signal — every subscribe is just a subscribe. The mechanism that
+// gated push.ts's per-call resourceUri omission on `canvasOwnsRender`
+// has been deleted; every push now stamps its resourceUri regardless
+// of how the host presents the iframe.
 
 describe('createSessionChannelServer — Integration 5 canvas_navigated', () => {
   let fix: Fixture | null = null;
@@ -3436,7 +3368,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('updates activeStackItemId on canvas_navigated (forward)', async () => {
-    const store = makeSeededStore([makeStackItem()], { mcpAppsMode: 'canvas' });
+    const store = makeSeededStore([makeStackItem()]);
     fix = await boot({ sessionStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
@@ -3458,7 +3390,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('clears activeStackItemId when navigation pops to empty', async () => {
-    const store = makeSeededStore([makeStackItem()], { mcpAppsMode: 'canvas' });
+    const store = makeSeededStore([makeStackItem()]);
     fix = await boot({ sessionStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
@@ -3490,7 +3422,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('rejects cross-tenant canvas_navigated with SESSION_MISMATCH', async () => {
-    const store = makeSeededStore([makeStackItem()], { mcpAppsMode: 'canvas' });
+    const store = makeSeededStore([makeStackItem()]);
     fix = await boot({ sessionStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());

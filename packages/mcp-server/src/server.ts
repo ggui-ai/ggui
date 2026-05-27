@@ -246,6 +246,7 @@ import {
   createGguiConsumeHandler,
   createGguiGetSessionHandler,
   createGguiGetStackHandler,
+  createGguiListSessionsHandler,
   createGguiPopHandler,
   createGguiEmitHandler,
   createGguiHandshakeHandler,
@@ -1336,6 +1337,32 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiGetStackHandler({
         sessionStore: deps.push.sessionStore,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+    );
+    // ggui_list_sessions — host-scoped session enumeration for resume.
+    // Folds the ws-token mint into the same call so the host doesn't
+    // round-trip twice (list, then mint-per-session). Reuses the
+    // already-wired `deps.push.mintBootstrap` seam so both code paths
+    // share one HMAC secret and one TTL policy. Absent seam (rare —
+    // every deployment that has push wired also has mintBootstrap)
+    // ⇒ summaries omit wsToken and the caller must mint elsewhere.
+    const pushMintBootstrap = deps.push.mintBootstrap;
+    handlers.push(
+      createGguiListSessionsHandler({
+        sessionStore: deps.push.sessionStore,
+        ...(pushMintBootstrap !== undefined
+          ? {
+              mintWsToken: {
+                mint: ({ sessionId, appId }) => {
+                  const { token, expiresAt } = pushMintBootstrap(
+                    sessionId,
+                    appId,
+                  );
+                  return { token, expiresAt };
+                },
+              },
+            }
+          : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
     handlers.push(
@@ -3426,20 +3453,6 @@ export function createGguiServer(
         appId: string,
       ) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
-  // Async wrapper for the canvas-mode session-resource template (which
-  // expects `await mintBootstrap(...) -> {...} | null`). Declared at
-  // outer scope alongside `mintBootstrap` so the inner closure
-  // narrows correctly without a non-null assertion.
-  let canvasMintBootstrap:
-    | ((
-        sessionId: string,
-        appId: string,
-      ) => Promise<{
-        readonly wsUrl: string;
-        readonly token: string;
-        readonly expiresAt: string;
-      } | null>)
-    | undefined;
   let channelBootstrap:
     | import('./session-channel.js').SessionChannelBootstrap
     | undefined;
@@ -3473,18 +3486,6 @@ export function createGguiServer(
       };
     };
     mintBootstrap = syncMinter;
-    // Async wrapper consumed by the session-resource template's canvas
-    // branch. Const-captures `syncMinter` so the closure narrows
-    // without a non-null assertion at the call site. Returns `null`
-    // on throw — the resource handler degrades to the legacy single-
-    // item path rather than emitting a broken canvas shell.
-    canvasMintBootstrap = async (sessionId: string, appId: string) => {
-      try {
-        return syncMinter(sessionId, appId);
-      } catch {
-        return null;
-      }
-    };
     channelBootstrap = {
       verify: (token) => {
         const result = verifyToken(token, secret, 'ws');
@@ -4758,20 +4759,6 @@ export function createGguiServer(
                 // opts.appMetadataStore is undefined.
                 ...(opts.appMetadataStore
                   ? { appMetadataStore: opts.appMetadataStore }
-                  : {}),
-                // Thread the mintBootstrap closure into the canvas
-                // branch of the session-resource template. Without
-                // this, sessions with `mcpAppsMode === 'canvas'`
-                // silently fall back to the inline single-item path
-                // because the canvas resource handler requires
-                // live-mode credentials. The existing minter is sync;
-                // wrap so the resource handler's `await
-                // mintBootstrap(...)` signature is satisfied. Return
-                // `null` on throw — the handler catches that and
-                // falls through to legacy rather than emitting a
-                // broken canvas shell.
-                ...(canvasMintBootstrap !== undefined
-                  ? { mintBootstrap: canvasMintBootstrap }
                   : {}),
                 // Stamp `_meta.ui.csp.{connectDomains,resourceDomains}`
                 // on every per-call resource response. Symmetric with

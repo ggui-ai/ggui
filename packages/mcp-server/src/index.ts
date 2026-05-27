@@ -33,7 +33,7 @@ export type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers
 // dependency for the type alone.
 export type {
   GadgetDescriptor,
-  McpAppsMode,
+  McpUiDisplayMode,
   SessionStackEntry,
   StackItem,
   SystemStackItem,

@@ -268,67 +268,10 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
     }
   });
 
-  describe('Integration 2 — canvas-mode bootstrap', () => {
-    it('stamps canvasMode + omits stackItemId/codeUrl/systemKind', () => {
-      const html = buildSelfContainedShell({
-        sessionId: 'sess_canvas',
-        appId: 'app_canvas',
-        runtimeUrl: SAMPLE_RUNTIME_URL,
-        canvasMode: true,
-        wsUrl: 'wss://example.com/ws',
-        token: 'tok-1',
-        expiresAt: '2099-01-01T00:00:00Z',
-      });
-      const { session, stackItem } = extractInlineBootstrap(html);
-      expect(session?.canvasMode).toBe(true);
-      // Canvas mode emits no stack-item slice — the canvas iframe
-      // receives stack items via the live channel.
-      expect(stackItem).toBeUndefined();
-      expect(session?.wsUrl).toBe('wss://example.com/ws');
-      expect(session?.wsToken).toBe('tok-1');
-      expect(session?.sessionId).toBe('sess_canvas');
-    });
-
-    it('throws when canvasMode is combined with stackItemId', () => {
-      expect(() =>
-        buildSelfContainedShell({
-          sessionId: 'sess',
-          appId: 'app',
-          runtimeUrl: SAMPLE_RUNTIME_URL,
-          canvasMode: true,
-          stackItemId: 'stk-1',
-          wsUrl: 'wss://example.com/ws',
-          token: 'tok',
-          expiresAt: '2099-01-01T00:00:00Z',
-        }),
-      ).toThrow(/canvasMode is mutually exclusive/);
-    });
-
-    it('throws when canvasMode is combined with codeUrl', () => {
-      expect(() =>
-        buildSelfContainedShell({
-          sessionId: 'sess',
-          appId: 'app',
-          runtimeUrl: SAMPLE_RUNTIME_URL,
-          canvasMode: true,
-          codeUrl: SAMPLE_CODE_URL,
-          codeHash: SAMPLE_CODE_HASH,
-          wsUrl: 'wss://example.com/ws',
-          token: 'tok',
-          expiresAt: '2099-01-01T00:00:00Z',
-        }),
-      ).toThrow(/canvasMode is mutually exclusive/);
-    });
-
-    it('throws when canvasMode is set without live-mode trio', () => {
-      expect(() =>
-        buildSelfContainedShell({
-          sessionId: 'sess',
-          appId: 'app',
-          runtimeUrl: SAMPLE_RUNTIME_URL,
-          canvasMode: true,
-        }),
-      ).toThrow(/canvasMode requires the live-mode trio/);
-    });
-  });
+  // Fullscreen-mode bootstrap branch retired in the displayMode-unification
+  // slice. The shell builder no longer has a `canvasMode` discriminator;
+  // every push routes through the same code path regardless of how the
+  // host presents the iframe. `_meta.ui.displayMode` (spec-native MCP-Apps
+  // SEP-1865) is the only per-push hint and is stamped from
+  // `App.defaultDisplayMode` by `push.resultMeta`, not by this builder.
 });

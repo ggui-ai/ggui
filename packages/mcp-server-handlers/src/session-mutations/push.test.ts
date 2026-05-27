@@ -264,60 +264,17 @@ describe('createGguiPushHandler — MVB-5', () => {
     });
   });
 
-  describe('Slice E — canvas-mode resultMeta', () => {
-    it('returns undefined resultMeta when session is canvas + loaded', async () => {
+  describe('resultMeta — per-push resourceUri', () => {
+    // Post-displayMode-unification: every push stamps `_meta.ui.resourceUri`
+    // regardless of the app's display-mode hint. There is no longer a
+    // canvas-mode branch that omits `_meta` — the wire mechanism is
+    // identical inline vs fullscreen; `ui.displayMode` is the only
+    // presentation hint that differs (and is only stamped when the app
+    // declares a non-default `defaultDisplayMode`).
+    it('stamps per-push resourceUri on every push', async () => {
       const kvStore = new InMemoryKeyValueStore();
       const sessionStore = new InMemorySessionStore();
       const { handshakeId } = await seed(kvStore, sessionStore);
-      // Flip session into canvas-mode + already-loaded state. Push's
-      // resultMeta MUST omit `_meta` entirely — host has the canvas
-      // iframe already; the live channel delivers the stack item.
-      await sessionStore.update(SESS, {
-        mcpAppsMode: 'canvas',
-        canvasLoaded: true,
-      });
-      const handler = createGguiPushHandler({
-        sessionStore,
-        handshakeStore: kvStore,
-      });
-      const out = await handler.handler(
-        { handshakeId, decision: { kind: 'accept' } },
-        CTX,
-      );
-      const meta = await handler.resultMeta?.(out, {}, CTX);
-      expect(meta).toBeUndefined();
-    });
-
-    it('returns full resultMeta when session is canvas but NOT yet loaded', async () => {
-      const kvStore = new InMemoryKeyValueStore();
-      const sessionStore = new InMemorySessionStore();
-      const { handshakeId } = await seed(kvStore, sessionStore);
-      // Canvas mode but iframe hasn't completed ui/initialize handshake.
-      // Must still stamp resourceUri so the host mounts something.
-      await sessionStore.update(SESS, {
-        mcpAppsMode: 'canvas',
-        canvasLoaded: false,
-      });
-      const handler = createGguiPushHandler({
-        sessionStore,
-        handshakeStore: kvStore,
-      });
-      const out = await handler.handler(
-        { handshakeId, decision: { kind: 'accept' } },
-        CTX,
-      );
-      const meta = await handler.resultMeta?.(out, {}, CTX);
-      expect(meta).toBeDefined();
-      expect((meta as { ui?: { resourceUri?: string } }).ui?.resourceUri)
-        .toBeTruthy();
-    });
-
-    it('returns full resultMeta for inline-mode sessions (default)', async () => {
-      const kvStore = new InMemoryKeyValueStore();
-      const sessionStore = new InMemorySessionStore();
-      const { handshakeId } = await seed(kvStore, sessionStore);
-      // Default inline-mode session (no mcpAppsMode field). Must
-      // stamp resourceUri so each push mounts an inline iframe.
       const handler = createGguiPushHandler({
         sessionStore,
         handshakeStore: kvStore,

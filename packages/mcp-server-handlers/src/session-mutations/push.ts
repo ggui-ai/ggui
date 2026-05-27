@@ -2002,7 +2002,16 @@ export function createGguiPushHandler(
         ? `/${output.contractHash}`
         : '';
       const perCallResourceUri = `${GGUI_PUSH_UI_META.resourceUri}/${output.sessionId}${blueprintSegment}`;
-      const perCallUiMeta = { resourceUri: perCallResourceUri };
+      // `_meta.ui.displayMode` is the spec-native presentation hint
+      // (MCP-Apps SEP-1865). When the app declares a default, stamp it
+      // on every push so hosts can arrange this iframe accordingly
+      // (`'fullscreen'` → primary slot, `'inline'` → chat-log stack,
+      // `'pip'` → overlay). Absent ⇒ host falls back to its own default.
+      // Resolved alongside the publicEnv projection from
+      // `appMetadataStore.get()` below — one lookup feeds both.
+      let perCallDisplayMode:
+        | import('@ggui-ai/protocol').McpUiDisplayMode
+        | undefined;
 
       // Look up the just-appended stack item to embed renderable wire
       // shape on the `ai.ggui/stack-item` slice meta. Hosts whose iframe
@@ -2035,16 +2044,6 @@ export function createGguiPushHandler(
       // ordering happens below alongside `liveTheme` / `deps.themeId`.
       let stackItemThemeId: string | undefined;
       let sessionThemeId: string | undefined;
-      // When the session is in canvas mode AND
-      // the canvas iframe has completed its ui/initialize handshake
-      // (canvasLoaded === true), the canvas is already mounted and
-      // subscribed to the live channel — the push's stack item landed as a
-      // `push` envelope on the existing subscription. The tool
-      // result MUST NOT stamp a new ui.resourceUri (would cause the
-      // host to mount a second iframe per push, defeating the canvas
-      // model). Captured here from the same sessionStore.get() that
-      // powers the view/theme lookup to avoid a second read.
-      let canvasOwnsRender = false;
       // `lastSequence` — monotonic SessionEvent ledger cursor stamped on
       // every emit (R6). Polling clients use it to initialize the /events
       // cursor (R7) aligned with the WS stream.
@@ -2055,9 +2054,6 @@ export function createGguiPushHandler(
         if (session) {
           sessionThemeId = session.themeId;
           lastSequence = session.eventSequence;
-          if (session.mcpAppsMode === 'canvas' && session.canvasLoaded === true) {
-            canvasOwnsRender = true;
-          }
         }
         if (top) {
           view = deriveStackItemMeta(top);
@@ -2065,13 +2061,18 @@ export function createGguiPushHandler(
           // wrappers' `requires`. The push gate has already verified
           // every required key is satisfied, so this projection's
           // only filter is dropping App.publicEnv keys no wrapper
-          // asked for (minimum-disclosure).
+          // asked for (minimum-disclosure). Also reads
+          // `app.defaultDisplayMode` for the per-push `ui.displayMode`
+          // hint stamped below — one lookup covers both.
           if (deps.appMetadataStore) {
             const appRecord = await deps.appMetadataStore.get(ctx.appId);
             bootstrapPublicEnv = derivePublicEnvProjection(
               top,
               appRecord?.publicEnv,
             );
+            if (appRecord?.defaultDisplayMode !== undefined) {
+              perCallDisplayMode = appRecord.defaultDisplayMode;
+            }
           }
           // Per-stack-item theme override — only on the `component`
           // variant. McpAppsStackItem / SystemStackItem don't carry
@@ -2270,26 +2271,6 @@ export function createGguiPushHandler(
           ? { codeHash: outputWithCode.codeHash }
           : {}),
       };
-      // Canvas-mode + loaded path: the canvas
-      // iframe already exists, is subscribed to the live channel, and owns
-      // rendering for every push in this session. Return `undefined`
-      // to omit `_meta` entirely:
-      //
-      //   - ui.resourceUri stamp would cause the host to mount a
-      //     second iframe per push, defeating the canvas model.
-      //   - the stack-item slice carries this push's `stackItemId`, which
-      //     if forwarded via postMessage to the canvas iframe would
-      //     poison its parser into single-item mode and break the
-      //     session-wide subscription.
-      //
-      // The stack item still flows over the live channel via the existing
-      // `push` envelope (server-side appendStackItem path emits it
-      // unconditionally), so the canvas iframe gets the new item
-      // through the live subscription rather than the tool result.
-      if (canvasOwnsRender) {
-        return undefined;
-      }
-
       // Emit the two per-window `_meta` keys (#109). Hosts that
       // forward `_meta` to views may cache the `session` slice for the
       // session's lifetime; render-only deltas can emit just
@@ -2300,9 +2281,15 @@ export function createGguiPushHandler(
         session,
         ...(Object.keys(stackItem).length > 0 ? { stackItem } : {}),
       };
+      const uiMeta: Record<string, unknown> = {
+        resourceUri: perCallResourceUri,
+        ...(perCallDisplayMode !== undefined
+          ? { displayMode: perCallDisplayMode }
+          : {}),
+      };
       const meta: Record<string, unknown> = {
         ...toMcpAppEnvelope(ggui),
-        ui: perCallUiMeta,
+        ui: uiMeta,
         // Legacy flat key for hosts that read the unnested form.
         'ui/resourceUri': perCallResourceUri,
       };

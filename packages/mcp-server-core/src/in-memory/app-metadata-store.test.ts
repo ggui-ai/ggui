@@ -204,19 +204,19 @@ describe('InMemoryAppMetadataStore', () => {
     });
   });
 
-  describe('defaultMcpAppsMode (Slice B, 2026-05-17)', () => {
+  describe('defaultDisplayMode (Slice B, 2026-05-17)', () => {
     it('is undefined on apps registered without the field', async () => {
       const store = new InMemoryAppMetadataStore();
       store.register('app-1');
       const app = await store.get('app-1');
-      expect(app?.defaultMcpAppsMode).toBeUndefined();
+      expect(app?.defaultDisplayMode).toBeUndefined();
     });
 
-    it('preserves an explicit "canvas" setting', async () => {
+    it('preserves an explicit "fullscreen" setting', async () => {
       const store = new InMemoryAppMetadataStore();
-      store.register('app-1', { defaultMcpAppsMode: 'canvas' });
+      store.register('app-1', { defaultDisplayMode: 'fullscreen' });
       const app = await store.get('app-1');
-      expect(app?.defaultMcpAppsMode).toBe('canvas');
+      expect(app?.defaultDisplayMode).toBe('fullscreen');
     });
 
     it('preserves an explicit "inline" setting (still recorded, not stripped as no-op)', async () => {
@@ -224,18 +224,18 @@ describe('InMemoryAppMetadataStore', () => {
       // intent vs. an undefined-means-inline default. Keep it on the
       // record.
       const store = new InMemoryAppMetadataStore();
-      store.register('app-1', { defaultMcpAppsMode: 'inline' });
+      store.register('app-1', { defaultDisplayMode: 'inline' });
       const app = await store.get('app-1');
-      expect(app?.defaultMcpAppsMode).toBe('inline');
+      expect(app?.defaultDisplayMode).toBe('inline');
     });
 
     it('register() replaces the previous mode on re-register', async () => {
       const store = new InMemoryAppMetadataStore();
-      store.register('app-1', { defaultMcpAppsMode: 'canvas' });
+      store.register('app-1', { defaultDisplayMode: 'fullscreen' });
       store.register('app-1'); // re-register without the field
       const app = await store.get('app-1');
       // Re-register fully replaces — absent field ⇒ undefined.
-      expect(app?.defaultMcpAppsMode).toBeUndefined();
+      expect(app?.defaultDisplayMode).toBeUndefined();
     });
   });
 
