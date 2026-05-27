@@ -27,7 +27,7 @@ export {
   type HandshakeOutput,
   type HandshakeSuggestionView,
   type SuggestionBlueprintMeta,
-  type PushDecisionInput,
+  type RenderDecisionInput,
 } from './host-simulator.js';
 export { bootOssServer, type OssFixture } from './boot-oss.js';
 export {

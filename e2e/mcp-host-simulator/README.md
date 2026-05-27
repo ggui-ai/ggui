@@ -8,7 +8,7 @@ A reusable test fixture that mimics what an MCP-Apps-aware host (claude.ai, Clau
 
 1. **Initialize** the MCP session via Streamable HTTP
 2. **`tools/list`** with `_meta.ui.resourceUri` pre-fetch (the host fetches each declared bundle URL on tools/list, NOT lazily on first tool-call — the spec says hosts SHOULD pre-fetch)
-3. **`tools/call`** with bootstrap-token extraction from `resultMeta._meta.ggui.bootstrap`
+3. **`tools/call`** with bootstrap-token extraction from `resultMeta._meta["ai.ggui/render"]`
 4. **WebSocket subscribe** with the bootstrap token, validates the ack
 5. **Wired-action bridge** — when the iframe sends `ui/message`, the host responds with the documented 3-message bridge (`ggui_user_action` + `ui/update-model-context` + reply), per `docs/development/mcp-apps-wired-actions.md`
 6. **OAuth flow** — RFC 9728 + 8414 + 7591 + 7636 + 6749 + 8707 discovery + DCR + PKCE code-grant
@@ -38,21 +38,19 @@ This package also **owns the shared `HostSimulator` core** + `bootOssServer` fix
 import { describe, expect, it } from "vitest";
 import { HostSimulator, bootOssServer } from "@ggui-private/e2e-oss-mcp-host-simulator";
 
-it("happy path: tools/list → push → bootstrap → ws ack", async () => {
+it("happy path: tools/list → handshake → render → bootstrap → ws ack", async () => {
   const fixture = await bootOssServer();
   const host = new HostSimulator({ url: fixture.url });
   await host.connect();
 
   const tools = await host.listTools();
-  expect(tools.find((t) => t.name === "ggui_push")).toBeDefined();
+  expect(tools.find((t) => t.name === "ggui_render")).toBeDefined();
 
-  const result = await host.callTool("ggui_push", {
-    story: { intent: "render a hello world card" },
-  });
-  expect(result.bootstrap).toBeDefined();
+  const flow = await host.openRender({ intent: "render a hello world card" });
+  expect(flow.render.meta).toBeDefined();
 
-  const wsAck = await host.subscribeWith(result.bootstrap.token);
-  expect(wsAck.kind).toBe("ack");
+  const { ack } = await host.subscribeWith(flow.render.meta!);
+  expect(ack.kind).toBe("ack");
 
   await host.close();
   await fixture.close();
@@ -68,19 +66,17 @@ const fixture = await bootOssServer();
 const host = new HostSimulator({ url: fixture.url, bearer: "host-simulator-test" });
 await host.connect();
 
-// 1. Mint a bootstrap from ggui_push.
-const push = await host.callTool("ggui_push", {
-  story: { intent: "render a counter" },
-});
+// 1. Mint a bootstrap from ggui_render.
+const flow = await host.openRender({ intent: "render a counter" });
 
 // 2. Simulate a wired-action click. Drives:
-//    - tools/call ggui_user_action over MCP transport (real round-trip)
+//    - tools/call ggui_runtime_submit_action over MCP transport (real round-trip)
 //    - ui/update-model-context (captured into host.getModelContext())
 //    - ui/message (appended to host.getConsentLog())
 const result = await host.simulateWiredAction({
   intent: "submit",
   data: { name: "Wanseob" },
-  bootstrap: push.bootstrap!,
+  meta: flow.render.meta!,
 });
 
 console.log(result.actionId); // 8-hex FNV-1a id

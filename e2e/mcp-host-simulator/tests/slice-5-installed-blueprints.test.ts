@@ -26,7 +26,7 @@
  *      canonical hash the agent draft produces equals the bridge-
  *      written row's contractKey.
  *
- * No `ggui_push` follow-through is asserted here — that's covered
+ * No `ggui_render` follow-through is asserted here — that's covered
  * by `slice-16e-blueprint-registry.test.ts` which exercises the
  * same exact-key flow for synth-provenance rows. Slice 5 only
  * widens the cache-write origin; it doesn't change the consume side.
@@ -110,7 +110,7 @@ describe('host-simulator: Slice 5 installed-blueprints unification', () => {
             return {
               ok: true,
               response: {
-                stackItemId: 'ignored',
+                renderId: 'ignored',
                 componentCode: 'unused-cold-gen',
                 sourceCode: 'unused-cold-gen',
               },
@@ -158,9 +158,7 @@ describe('host-simulator: Slice 5 installed-blueprints unification', () => {
     await boot([counterEntry()]);
     if (!host) throw new Error('host not booted');
 
-    const session = await host.newSession();
     const handshake = await host.handshake({
-      sessionId: session.sessionId,
       intent: 'a counter widget',
       blueprintDraft: {
         contract: COUNTER_CONTRACT as unknown as Record<string, unknown>,
@@ -192,9 +190,7 @@ describe('host-simulator: Slice 5 installed-blueprints unification', () => {
     await boot([counterEntry()]);
     if (!host) throw new Error('host not booted');
 
-    const session1 = await host.newSession();
     const h1 = await host.handshake({
-      sessionId: session1.sessionId,
       intent: 'first counter',
       blueprintDraft: {
         contract: COUNTER_CONTRACT as unknown as Record<string, unknown>,
@@ -203,9 +199,7 @@ describe('host-simulator: Slice 5 installed-blueprints unification', () => {
     expect(h1.suggestion.origin).toBe('cache');
     expect(compileCalls.count).toBe(1);
 
-    const session2 = await host.newSession();
     const h2 = await host.handshake({
-      sessionId: session2.sessionId,
       intent: 'paraphrased counter request',
       blueprintDraft: {
         contract: COUNTER_CONTRACT as unknown as Record<string, unknown>,
@@ -231,11 +225,11 @@ describe('host-simulator: Slice 5 installed-blueprints unification', () => {
     await boot([]);
     if (!host) throw new Error('host not booted');
 
-    const session = await host.newSession();
     // Don't drive a handshake — the LLM-401 case is unstable. Just
-    // confirm the bridge construction didn't blow up at boot, and
-    // newSession works.
-    expect(session.sessionId).toBeTruthy();
+    // confirm the bridge construction didn't blow up at boot and
+    // the server is reachable via tools/list.
+    const tools = await host.listTools();
+    expect(tools.length).toBeGreaterThan(0);
     expect(compileCalls.count).toBe(0);
   });
 });

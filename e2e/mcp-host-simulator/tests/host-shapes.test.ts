@@ -61,7 +61,7 @@ describe('host-simulator: host-shape presets', () => {
       try {
         await host.connect();
         const tools = await host.listTools();
-        expect(tools.find((t) => t.name === 'ggui_push')).toBeDefined();
+        expect(tools.find((t) => t.name === 'ggui_render')).toBeDefined();
       } finally {
         await host.close();
       }

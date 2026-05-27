@@ -2,7 +2,7 @@
  * Slice 16e empirical proof — blueprint-first runtime registry behavior
  * over the wire. Boots an OSS `createGguiServer` with a fake generator
  * + `resolveLlm` so the cache wires automatically, then drives four
- * `ggui_push` calls through `HostSimulator` to validate the three-tier
+ * `ggui_render` calls through `HostSimulator` to validate the three-tier
  * matcher's load-bearing claim:
  *
  *   - **Paraphrase resilience**: same canonical contract under a
@@ -20,15 +20,15 @@
  * runs the matcher in isolation against a mock embedder + stub LLM).
  *
  * SKIPPED (2026-05-21) — pending migration. This over-the-wire test
- * was authored against an older blueprint-first / handshake / push
+ * was authored against an older blueprint-first / handshake / render
  * contract: its hand-rolled `generation` deps (notably the stub
  * `resolveLlm` with a placeholder `key: 'test-key'`) and the
- * `openSession`→push flow no longer yield the `{codeReady, cache}`
+ * `openRender`→render flow no longer yield the `{codeReady, cache}`
  * structuredContent the assertions expect — the handshake negotiator
  * now makes a real authenticated `[decision]` call. The same
- * push→cold-gen→cache behavior is covered green by `e2e/wire-scenarios`
+ * render→cold-gen→cache behavior is covered green by `e2e/wire-scenarios`
  * `08-cached-push` + `17-cold-path-then-cache`, so coverage is not
- * lost. Re-enable after rebuilding the fake-generator + push harness
+ * lost. Re-enable after rebuilding the fake-generator + render harness
  * against the current contract (real `ANTHROPIC_API_KEY` via a
  * `.env.local` loader; LLM-gate the suite). TODO(host-simulator):
  * migrate slice-16e.
@@ -60,7 +60,7 @@ const WEATHER_CONTRACT: DataContract = {
   },
 };
 
-interface PushCacheMarker {
+interface RenderCacheMarker {
   hit: boolean;
   llmCallsAvoided: number;
   similarity?: number;
@@ -68,9 +68,9 @@ interface PushCacheMarker {
   kind?: 'full-template' | 'composed' | 'cold';
 }
 
-interface PushStructured {
+interface RenderStructured {
   codeReady: boolean;
-  cache?: PushCacheMarker;
+  cache?: RenderCacheMarker;
 }
 
 describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
@@ -102,7 +102,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
             return {
               ok: true,
               response: {
-                stackItemId: 'ignored',
+                renderId: 'ignored',
                 componentCode: `export default function C() { return <div>gen:${input.request.prompt}</div>; }`,
                 sourceCode: `export default function C() { return <div>gen:${input.request.prompt}</div>; }`,
               },
@@ -135,13 +135,13 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
     await host.connect();
   }
 
-  async function pushOnce(args: {
+  async function renderOnce(args: {
     intent: string;
     contract?: DataContract;
     props?: Record<string, unknown>;
-  }): Promise<PushStructured> {
+  }): Promise<RenderStructured> {
     if (!host) throw new Error('host not booted');
-    const flow = await host.openSession({
+    const flow = await host.openRender({
       intent: args.intent,
       ...(args.contract !== undefined
         ? {
@@ -152,14 +152,14 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
         : {}),
       ...(args.props !== undefined ? { props: args.props } : {}),
     });
-    return flow.push.structuredContent as PushStructured;
+    return flow.render.structuredContent as RenderStructured;
   }
 
   it('paraphrase resilience: same contract under different intent prose hits Tier 1', async () => {
     await boot();
 
     // Case 1 — cold push with a contract → Tier 3 cold, generator runs.
-    const first = await pushOnce({
+    const first = await renderOnce({
       intent: 'live notepad for capturing thoughts',
       contract: NOTEPAD_CONTRACT,
     });
@@ -172,7 +172,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
     // Case 2 — same intent + same contract → Tier 1 hit, generator
     // does NOT run again. Similarity is 1 because the contract-key is
     // an exact deterministic hash collision.
-    const second = await pushOnce({
+    const second = await renderOnce({
       intent: 'live notepad for capturing thoughts',
       contract: NOTEPAD_CONTRACT,
     });
@@ -187,7 +187,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
     // is THE proof that the cache is keyed on canonical contract
     // structure, not intent text. If this flips to a Tier 3 cold,
     // the registry has regressed to intent-keyed matching.
-    const third = await pushOnce({
+    const third = await renderOnce({
       intent: 'a quick scratchpad widget so I can jot notes',
       contract: NOTEPAD_CONTRACT,
     });
@@ -202,7 +202,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
     await boot();
 
     // Warm the registry with the notepad contract.
-    await pushOnce({
+    await renderOnce({
       intent: 'live notepad',
       contract: NOTEPAD_CONTRACT,
     });
@@ -217,7 +217,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
     // Weather contract uses propsSpec → must supply props on push or
     // the contract-violation check fails before the cache lookup.
     const weatherProps = { city: 'Tokyo', temp: 22 };
-    const second = await pushOnce({
+    const second = await renderOnce({
       intent: 'weather card for Tokyo',
       contract: WEATHER_CONTRACT,
       props: weatherProps,
@@ -228,7 +228,7 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
 
     // And on second push of the weather contract, Tier 1 hits — proving
     // each contract has its own bucket and registry isolation is bidirectional.
-    const third = await pushOnce({
+    const third = await renderOnce({
       intent: 'show me Tokyo weather',
       contract: WEATHER_CONTRACT,
       props: weatherProps,
@@ -248,12 +248,12 @@ describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
   it.skip('§2.H: pushes WITHOUT contract are not registered (no Tier 1 hits possible)', async () => {
     await boot();
 
-    const first = await pushOnce({ intent: 'render a hello world card' });
+    const first = await renderOnce({ intent: 'render a hello world card' });
     expect(first.cache?.hit).toBe(false);
     expect(first.cache?.kind).toBe('cold');
     expect(calls.count).toBe(1);
 
-    const second = await pushOnce({ intent: 'render a hello world card' });
+    const second = await renderOnce({ intent: 'render a hello world card' });
     expect(
       second.cache?.hit,
       'contract-less push MUST NOT be registered, so MUST NOT hit',

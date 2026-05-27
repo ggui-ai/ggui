@@ -3,13 +3,13 @@
  * server through the full App-spec lifecycle without a browser.
  *
  * What this asserts:
- *   1. `tools/list` discovers `ggui_push` AND surfaces its declared
- *      `_meta.ui.resourceUri` (`ui://ggui/session`). The host pre-
+ *   1. `tools/list` discovers `ggui_render` AND surfaces its declared
+ *      `_meta.ui.resourceUri` (`ui://ggui/render`). The host pre-
  *      fetches it.
  *   2. The pre-fetched resource body is non-empty (the iframe shell
  *      HTML lives on this URI per `mcp-apps-outbound.ts`).
- *   3. `ggui_push` returns `_meta.ggui.bootstrap` carrying the WS
- *      URL + token + sessionId + appId + runtimeUrl.
+ *   3. `ggui_render` returns `_meta["ai.ggui/render"]` carrying the WS
+ *      URL + token + renderId + appId + runtimeUrl.
  *   4. WebSocket subscribe with the bootstrap token yields an `ack`
  *      with a reconnect `sessionToken`.
  *
@@ -35,7 +35,7 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     }
   });
 
-  it('discovers ggui_push, pre-fetches resourceUri, mints bootstrap, ws ack', async () => {
+  it('discovers ggui_render, pre-fetches resourceUri, mints bootstrap, ws ack', async () => {
     fixture = await bootOssServer();
     host = new HostSimulator({
       url: fixture.url,
@@ -49,26 +49,27 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
 
     // 1. tools/list with pre-fetch.
     const tools = await host.listTools();
-    const push = tools.find((t) => t.name === 'ggui_push');
-    expect(push, 'ggui_push must be in tools/list').toBeDefined();
+    const render = tools.find((t) => t.name === 'ggui_render');
+    expect(render, 'ggui_render must be in tools/list').toBeDefined();
     expect(
-      push?.resourceUri,
-      'ggui_push must declare _meta.ui.resourceUri = ui://ggui/session',
-    ).toBe('ui://ggui/session');
+      render?.resourceUri,
+      'ggui_render must declare _meta.ui.resourceUri = ui://ggui/render',
+    ).toBe('ui://ggui/render');
 
     // 2. Pre-fetched resource is non-empty (the iframe shell HTML).
-    const shell = host.getPrefetchedResource('ui://ggui/session');
+    const shell = host.getPrefetchedResource('ui://ggui/render');
     expect(shell, 'shell HTML body must be non-empty').toBeTruthy();
     expect(shell?.length ?? 0).toBeGreaterThan(100);
 
-    // 3. new_session → handshake → push (canonical three-step D10 flow).
+    // 3. handshake → render (canonical Phase-B two-step flow).
     //
-    // Post-MVB-5: agent posts a `blueprintDraft` on handshake, the
+    // Post-Phase-B: agent posts a `blueprintDraft` on handshake, the
     // server returns a `suggestion` with `origin: cache|agent|synth`,
-    // and the simulator accepts the suggestion verbatim on push.
-    const flow = await host.openSession({
+    // and the simulator accepts the suggestion verbatim on render.
+    // The prior `ggui_new_session` mint is gone — every render IS the
+    // addressable scope.
+    const flow = await host.openRender({
       intent: 'render a hello world card',
-      seed: 'host-simulator-happy-path',
       blueprintDraft: {
         contract: {
           contextSpec: {
@@ -77,15 +78,15 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
         },
       },
     });
-    expect(flow.push.meta, '_meta ai.ggui slices must be set').toBeDefined();
-    expect(flow.push.meta?.session?.wsUrl).toMatch(/^ws:\/\//);
-    expect(flow.push.meta?.session?.wsToken).toBeTruthy();
-    // OSS factory mints bare UUID; pod-side prefixes `sess_` (different
+    expect(flow.render.meta, '_meta ai.ggui/render slice must be set').toBeDefined();
+    expect(flow.render.meta?.wsUrl).toMatch(/^ws:\/\//);
+    expect(flow.render.meta?.wsToken).toBeTruthy();
+    // OSS factory mints bare UUID; pod-side prefixes (different
     // convention). Assert non-empty rather than format-specific.
-    expect(flow.push.meta?.session?.sessionId.length ?? 0).toBeGreaterThan(0);
+    expect(flow.render.meta?.renderId.length ?? 0).toBeGreaterThan(0);
 
     // 4. WS subscribe → ack.
-    const { ack } = await host.subscribeWith(flow.push.meta!);
+    const { ack } = await host.subscribeWith(flow.render.meta!);
     expect(ack.kind, `WS ack expected, got code=${ack.code ?? '(none)'}`).toBe(
       'ack',
     );

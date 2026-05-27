@@ -36,9 +36,9 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
-  parseMcpAppAiGguiMeta,
+  parseMcpAppAiGguiRenderMeta,
   MCP_APPS_UI_CAPABILITY,
-  type McpAppAiGguiMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import WebSocket from 'ws';
 import {
@@ -86,7 +86,7 @@ export interface HostSimulatorOptions {
 }
 
 /**
- * Result of `HostSimulator.callTool()` for a `ggui_push`-shaped
+ * Result of `HostSimulator.callTool()` for a `ggui_render`-shaped
  * tool: the structuredContent, optional bootstrap metadata, and
  * the resourceUri the host should have pre-fetched (declaration-
  * level meta from `tools/list`, surfaced here for assertions).
@@ -104,12 +104,12 @@ export interface CallToolResult {
    */
   readonly isError?: boolean;
   /**
-   * Parsed {@link McpAppAiGguiMeta} pair from the tool result's
-   * `_meta["ai.ggui/session"]` (and optional `_meta["ai.ggui/stack-item"]`).
-   * Absent when the tool result carries no `ai.ggui/*` slices (every
-   * non-push tool, or a session-resource result that omits them).
+   * Parsed {@link McpAppAiGguiRenderMeta} from the tool result's
+   * `_meta["ai.ggui/render"]`. Absent when the tool result carries
+   * no `ai.ggui/render` slice (every non-render tool, or a render-
+   * resource result that omits it).
    */
-  readonly meta?: McpAppAiGguiMeta;
+  readonly meta?: McpAppAiGguiRenderMeta;
   /**
    * The `_meta.ui.resourceUri` declared on the TOOL (from
    * tools/list), if any. Distinct from per-call `_meta.ui.resourceUri`
@@ -121,7 +121,7 @@ export interface CallToolResult {
 /**
  * WebSocket ack frame the iframe runtime expects after subscribe.
  * Mirrors the live-channel wire shape:
- *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, stack } }`
+ *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, render } }`
  *   - Error: `{ type: 'error', payload: { code } }`
  *
  * The simulator normalises both into a single discriminator on `kind`
@@ -182,7 +182,7 @@ export interface HandshakeSuggestionView {
 
 /**
  * Structural mirror of `handshakeOutputSchema`'s structuredContent.
- * The simulator exposes this on `handshake()` / `openSession()` so
+ * The simulator exposes this on `handshake()` / `openRender()` so
  * tests can branch on `suggestion.origin` without importing the
  * protocol schema directly.
  */
@@ -197,26 +197,25 @@ export interface HandshakeOutput {
     | 'declined';
   readonly reason: string;
   readonly target: {
-    readonly sessionId?: string;
-    readonly stackItemId?: string;
+    readonly renderId?: string;
   };
   readonly suggestion: HandshakeSuggestionView;
   readonly alternatives?: ReadonlyArray<unknown>;
   readonly contractHash: string;
   readonly nextStep?: {
-    readonly tool: 'ggui_push';
+    readonly tool: 'ggui_render';
     readonly description: string;
     readonly example: string;
   };
 }
 
 /**
- * Push input decision discriminator. Mirrors the protocol's
- * `PushDecision`. `accept` reuses the handshake suggestion's
+ * Render input decision discriminator. Mirrors the protocol's
+ * `RenderDecision`. `accept` reuses the handshake suggestion's
  * provisional `blueprintMeta` verbatim; `override` mints a fresh
  * `blueprintId` against a new draft.
  */
-export type PushDecisionInput =
+export type RenderDecisionInput =
   | { readonly kind: 'accept' }
   | {
       readonly kind: 'override';
@@ -241,12 +240,11 @@ export interface SimulateWiredActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
-   * {@link McpAppAiGguiMeta} pair from a prior
-   * {@link HostSimulator.callTool} `ggui_push` — supplies the
-   * sessionId + appId the action targets. The simulator pulls the
-   * fields it needs off `meta.session` / `meta.stackItem?`.
+   * {@link McpAppAiGguiRenderMeta} from a prior
+   * {@link HostSimulator.callTool} `ggui_render` — supplies the
+   * renderId + appId the action targets.
    */
-  readonly meta: McpAppAiGguiMeta;
+  readonly meta: McpAppAiGguiRenderMeta;
   /** Override `firedAt` for deterministic actionId tests. */
   readonly firedAt?: string;
 }
@@ -408,8 +406,8 @@ export class HostSimulator {
 
   /**
    * `tools/call` with bootstrap-token extraction. When the result's
-   * `_meta` matches the `ggui_push` bootstrap shape (per
-   * `hasPushBootstrapMeta`), the bootstrap object is surfaced on
+   * `_meta` matches the `ggui_render` bootstrap shape (per
+   * `parseMcpAppAiGguiRenderMeta`), the bootstrap object is surfaced on
    * the return — the test can pass it straight to
    * {@link subscribeWith} to open the WS without parsing meta itself.
    *
@@ -438,11 +436,9 @@ export class HostSimulator {
         : undefined,
     );
     const rawMeta = (result as { _meta?: unknown })._meta;
-    const parsed = parseMcpAppAiGguiMeta(rawMeta);
-    const meta: McpAppAiGguiMeta | undefined =
-      parsed.ok && (parsed.meta.session !== undefined || parsed.meta.stackItem !== undefined)
-        ? parsed.meta
-        : undefined;
+    const parsed = parseMcpAppAiGguiRenderMeta(rawMeta);
+    const meta: McpAppAiGguiRenderMeta | undefined =
+      parsed.ok && parsed.meta !== undefined ? parsed.meta : undefined;
     // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
     // to `true` on tool-handler throws via `createToolError` (server/mcp.js
     // §createToolError). Without surfacing it here, callers can't
@@ -465,32 +461,17 @@ export class HostSimulator {
   }
 
   /**
-   * Convenience wrapper for `ggui_new_session`. Returns the minted
-   * `sessionId`. Pass `seed` for deterministic IDs in tests.
-   */
-  async newSession(args: { seed?: string; label?: string } = {}): Promise<{
-    readonly sessionId: string;
-    readonly existing?: true;
-  }> {
-    const result = await this.callTool('ggui_new_session', {
-      ...(args.seed !== undefined ? { seed: args.seed } : {}),
-      ...(args.label !== undefined ? { label: args.label } : {}),
-    });
-    return result.structuredContent as { sessionId: string; existing?: true };
-  }
-
-  /**
-   * Convenience wrapper for `ggui_handshake` — post-MVB-5 three-step
-   * handshake input shape: `{sessionId, intent, blueprintDraft?,
-   * forceCreate?}`. Returns the structured handshake output
-   * (handshakeId, action, contractHash, suggestion, target, …).
+   * Convenience wrapper for `ggui_handshake` — post-Phase-B input shape:
+   * `{intent, blueprintDraft?, forceCreate?}`. Returns the structured
+   * handshake output (handshakeId, action, contractHash, suggestion,
+   * target, …). The prior `sessionId` parameter is gone — every render
+   * IS the addressable scope.
    *
    * The `blueprintDraft` carries the agent's contract draft + optional
    * variance + generator hint. Omit it entirely for the empty-draft
    * path (server falls through to fast-path search / cold gen).
    */
   async handshake(args: {
-    readonly sessionId: string;
     readonly intent: string;
     readonly blueprintDraft?: {
       readonly contract: Record<string, unknown>;
@@ -510,7 +491,6 @@ export class HostSimulator {
     const result = await this.callTool(
       'ggui_handshake',
       {
-        sessionId: args.sessionId,
         intent: args.intent,
         blueprintDraft,
         ...(args.forceCreate !== undefined
@@ -523,9 +503,9 @@ export class HostSimulator {
   }
 
   /**
-   * Convenience wrapper for `ggui_push` — post-MVB-5 input shape:
+   * Convenience wrapper for `ggui_render` — post-Phase-B input shape:
    * `{handshakeId, decision, props?}`. The `decision` discriminator
-   * routes the push:
+   * routes the render:
    *
    *   - `{kind: 'accept'}` — reuse the handshake suggestion's
    *     provisional blueprintId verbatim. Cache delivery (origin ===
@@ -536,17 +516,17 @@ export class HostSimulator {
    *     handshake's provisional id.
    *
    * The return mirrors {@link callTool}'s `CallToolResult`, with
-   * `bootstrap` populated when the push minted one.
+   * `meta` populated when the render minted bootstrap data.
    */
-  async push(args: {
+  async render(args: {
     readonly handshakeId: string;
-    readonly decision: PushDecisionInput;
+    readonly decision: RenderDecisionInput;
     readonly props?: unknown;
     /** Forwarded to {@link callTool} — see its `options.timeoutMs`. */
     readonly timeoutMs?: number;
   }): Promise<CallToolResult> {
     return this.callTool(
-      'ggui_push',
+      'ggui_render',
       {
         handshakeId: args.handshakeId,
         decision: args.decision,
@@ -557,22 +537,21 @@ export class HostSimulator {
   }
 
   /**
-   * One-shot helper for the canonical `new_session → handshake → push`
-   * flow. Returns everything a downstream assertion typically needs:
-   * the sessionId, handshakeId, the agent's draft contractHash, and
-   * the push result (bootstrap + structuredContent).
+   * One-shot helper for the canonical `handshake → render` flow.
+   * Returns everything a downstream assertion typically needs: the
+   * handshakeId, the agent's draft contractHash, and the render
+   * result (bootstrap + structuredContent).
    *
    * Default behavior: the simulator handshakes with the agent's
    * `blueprintDraft` (or `{contract: {}}` when none is provided), then
    * accepts the server's suggestion verbatim (`decision: 'accept'`).
    * Pass `decision: {kind: 'override', blueprintDraft: {...}}` to
-   * mint a fresh blueprintId on push instead. To skip blueprint-search
-   * on handshake and force the agent-mode suggestion path, set
-   * `forceCreate: true`.
+   * mint a fresh blueprintId on render instead. To skip blueprint-
+   * search on handshake and force the agent-mode suggestion path,
+   * set `forceCreate: true`.
    */
-  async openSession(args: {
+  async openRender(args: {
     readonly intent: string;
-    readonly seed?: string;
     readonly blueprintDraft?: {
       readonly contract: Record<string, unknown>;
       readonly variance?: {
@@ -584,20 +563,15 @@ export class HostSimulator {
       readonly generator?: string;
     };
     readonly forceCreate?: boolean;
-    readonly decision?: PushDecisionInput;
+    readonly decision?: RenderDecisionInput;
     readonly props?: unknown;
   }): Promise<{
-    readonly sessionId: string;
     readonly handshakeId: string;
     readonly contractHash: string;
     readonly handshake: HandshakeOutput;
-    readonly push: CallToolResult;
+    readonly render: CallToolResult;
   }> {
-    const session = await this.newSession(
-      args.seed !== undefined ? { seed: args.seed } : {},
-    );
     const handshakeArgs: Parameters<typeof this.handshake>[0] = {
-      sessionId: session.sessionId,
       intent: args.intent,
     };
     if (args.blueprintDraft !== undefined) {
@@ -609,20 +583,19 @@ export class HostSimulator {
     }
     const handshake = await this.handshake(handshakeArgs);
 
-    const pushArgs: Parameters<typeof this.push>[0] = {
+    const renderArgs: Parameters<typeof this.render>[0] = {
       handshakeId: handshake.handshakeId,
       decision: args.decision ?? { kind: 'accept' },
     };
     if (args.props !== undefined) {
-      (pushArgs as { props?: unknown }).props = args.props;
+      (renderArgs as { props?: unknown }).props = args.props;
     }
-    const pushResult = await this.push(pushArgs);
+    const renderResult = await this.render(renderArgs);
     return {
-      sessionId: session.sessionId,
       handshakeId: handshake.handshakeId,
       contractHash: handshake.contractHash,
       handshake,
-      push: pushResult,
+      render: renderResult,
     };
   }
 
@@ -636,25 +609,24 @@ export class HostSimulator {
    * `keepOpen: true` to retain the WS for streaming-event tests.
    */
   async subscribeWith(
-    meta: McpAppAiGguiMeta,
+    meta: McpAppAiGguiRenderMeta,
     opts: { keepOpen?: boolean } = {},
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
-    const session = meta.session;
-    if (!session?.wsUrl) {
+    if (!meta.wsUrl) {
       throw new Error(
-        'subscribeWith: meta.session.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
+        'subscribeWith: meta.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
       );
     }
-    // Thread the bootstrap token on the upgrade URL as `?bootstrap=`.
+    // Thread the bootstrap token on the upgrade URL as `?wsToken=`.
     // Servers that authenticate the WS upgrade (the cloud pod's
     // live-channel `resolveIdentityFromUpgrade`) read the token from
     // the query string — the post-connect `subscribe` frame below is
     // too late to gate the HTTP upgrade and would 401. Mirrors the
     // iframe-runtime's `composeWsUrl`; the token also stays in the
     // subscribe payload for servers that consume it there.
-    const upgradeUrl = session.wsToken
-      ? `${session.wsUrl}${session.wsUrl.includes('?') ? '&' : '?'}wsToken=${encodeURIComponent(session.wsToken)}`
-      : session.wsUrl;
+    const upgradeUrl = meta.wsToken
+      ? `${meta.wsUrl}${meta.wsUrl.includes('?') ? '&' : '?'}wsToken=${encodeURIComponent(meta.wsToken)}`
+      : meta.wsUrl;
     const ws = new WebSocket(upgradeUrl);
     // 15s ack budget — covers the cloud WS handler under bursty
     // 100-worker load (loadgen Phase 3b surfaced 5s as too tight).
@@ -711,14 +683,14 @@ export class HostSimulator {
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
-    //   { type: 'subscribe', payload: { sessionId, appId, wsToken } }
+    //   { type: 'subscribe', payload: { renderId, appId, wsToken } }
     ws.send(
       JSON.stringify({
         type: 'subscribe',
         payload: {
-          sessionId: session.sessionId,
-          appId: session.appId,
-          wsToken: session.wsToken,
+          renderId: meta.renderId,
+          appId: meta.appId,
+          wsToken: meta.wsToken,
         },
       }),
     );
@@ -756,19 +728,11 @@ export class HostSimulator {
     args: SimulateWiredActionArgs,
   ): Promise<SimulateWiredActionResult> {
     if (!this.client) throw new Error('connect() first');
-    const session = args.meta.session;
-    if (!session) {
-      throw new Error(
-        'simulateWiredAction: meta.session is required (no session slice on the input)',
-      );
-    }
-    const stackItemId = args.meta.stackItem?.stackItemId;
     const built: BuiltWiredAction = buildWiredAction({
       intent: args.intent,
       data: args.data,
-      sessionId: session.sessionId,
-      appId: session.appId,
-      ...(stackItemId !== undefined ? { stackItemId } : {}),
+      renderId: args.meta.renderId,
+      appId: args.meta.appId,
       ...(args.firedAt !== undefined ? { firedAt: args.firedAt } : {}),
     });
 

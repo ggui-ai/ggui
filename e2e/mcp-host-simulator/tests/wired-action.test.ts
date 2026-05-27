@@ -59,7 +59,7 @@ describe('host-simulator: wired-action bridge', () => {
     const built = buildWiredAction({
       intent: 'createEvent',
       data: { title: 'Team sync', when: '2026-05-04T15:00' },
-      sessionId: 'sess_abc',
+      renderId: 'rnd_abc',
       appId: 'app_xyz',
       firedAt: '2026-05-04T12:00:00.000Z',
       idSeed: [1, 2, 3],
@@ -83,7 +83,7 @@ describe('host-simulator: wired-action bridge', () => {
         actionData: { title: 'Team sync', when: '2026-05-04T15:00' },
         uiContext: {},
       },
-      sessionId: 'sess_abc',
+      renderId: 'rnd_abc',
       appId: 'app_xyz',
       firedAt: '2026-05-04T12:00:00.000Z',
     });
@@ -110,10 +110,10 @@ describe('host-simulator: wired-action bridge', () => {
     });
     await host.connect();
 
-    // Mint a real bootstrap — the wired-action needs a sessionId/appId
-    // pair from a `ggui_push` to be wire-faithful. Use the canonical
-    // new_session → handshake → push flow.
-    const flow = await host.openSession({
+    // Mint a real bootstrap — the wired-action needs a renderId/appId
+    // pair from a `ggui_render` to be wire-faithful. Use the canonical
+    // handshake → render flow.
+    const flow = await host.openRender({
       intent: 'render a hello world card',
       blueprintDraft: {
         contract: {
@@ -124,10 +124,10 @@ describe('host-simulator: wired-action bridge', () => {
       },
     });
     expect(
-      flow.push.meta,
+      flow.render.meta,
       'bootstrap is required for the wired action',
     ).toBeDefined();
-    const bootstrap = flow.push.meta!;
+    const bootstrap = flow.render.meta!;
 
     const result = await host.simulateWiredAction({
       intent: 'submit',
@@ -139,7 +139,7 @@ describe('host-simulator: wired-action bridge', () => {
     expect(result.actionId).toMatch(/^[0-9a-f]{8}$/);
 
     // (2) gateway round-trip: `ggui_runtime_submit_action` validates
-    // the envelope and appends it to the stackItem-keyed pending-events
+    // the envelope and appends it to the render-keyed pending-events
     // pipe, returning the minimal `{ok, consumerPresent?}` ack (the
     // verbatim-echo handler was retired with the submit_action rename).
     expect(result.gatewayResult).toMatchObject({ ok: true });
@@ -150,8 +150,8 @@ describe('host-simulator: wired-action bridge', () => {
     expect(result.pendingActionText).toContain(`"actionId":"${result.actionId}"`);
     expect(result.pendingActionText).toContain('"intent":"submit"');
     expect(result.pendingActionText).toContain('"name":"Wanseob"');
-    expect(result.pendingActionText).toContain(`"sessionId":"${bootstrap.session?.sessionId}"`);
-    expect(result.pendingActionText).toContain(`"appId":"${bootstrap.session?.appId}"`);
+    expect(result.pendingActionText).toContain(`"renderId":"${bootstrap.renderId}"`);
+    expect(result.pendingActionText).toContain(`"appId":"${bootstrap.appId}"`);
 
     // (4) Consent prompt has the human-readable summary + actionId stamp.
     expect(result.consentText).toContain('**submit**');
@@ -173,7 +173,7 @@ describe('host-simulator: wired-action bridge', () => {
     });
     await host.connect();
 
-    const flow = await host.openSession({
+    const flow = await host.openRender({
       intent: 'render a counter',
       blueprintDraft: {
         contract: {
@@ -183,7 +183,7 @@ describe('host-simulator: wired-action bridge', () => {
         },
       },
     });
-    const bootstrap = flow.push.meta!;
+    const bootstrap = flow.render.meta!;
 
     const first = await host.simulateWiredAction({
       intent: 'increment',
