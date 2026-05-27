@@ -2,8 +2,8 @@
  * Slice-meta extraction — three thin envelope extractors that all
  * funnel into one shared validator + projector.
  *
- * The runtime accepts slices from three envelope shapes, in
- * spec-canonical priority order:
+ * The runtime accepts the single `ai.ggui/render` slice from three
+ * envelope shapes, in spec-canonical priority order:
  *
  *   1. `ui/notifications/tool-result` postMessage — spec-canonical
  *      per MCP-Apps SEP-1865. `params` is a `CallToolResult` per the
@@ -17,53 +17,48 @@
  *   2. `globalThis.__GGUI_META__` — slice envelope inlined
  *      synchronously by `buildSelfContainedShell`. Same slice shape
  *      as the wire `_meta` (just hoisted out of the JSON-RPC frame).
- *      Used by self-contained shells (`/r/` shells pre-R5, console
- *      embeds, anywhere a per-session HTML shell can inline JSON
+ *      Used by self-contained shells (per-render HTML shells, console
+ *      embeds, anywhere a per-render HTML shell can inline JSON
  *      before this bundle loads). Fastest path — no async wait, no
  *      JSON-RPC round-trip.
- *   3. `ui/initialize` response Reading-B — slices under
- *      `result.toolOutput._meta["ai.ggui/session"]` /
- *      `_meta["ai.ggui/stack-item"]`. This is an OUR-CONVENTION
- *      echo on top of `McpUiInitializeResult` — the MCP-Apps spec
- *      `McpUiInitializeResult` type defines only
+ *   3. `ui/initialize` response Reading-B — slice under
+ *      `result.toolOutput._meta["ai.ggui/render"]`. This is an
+ *      OUR-CONVENTION echo on top of `McpUiInitializeResult` — the
+ *      MCP-Apps spec `McpUiInitializeResult` type defines only
  *      `{protocolVersion, hostInfo, hostCapabilities, hostContext}`
  *      and does NOT carry `toolOutput`. Kept here for back-compat
  *      with `<McpAppIframe>` (RN; web copy deleted in spec-mig P2)
  *      + claude.ai's bonus echo.
  *
  * Each extractor reaches the `_meta` object and calls the protocol's
- * {@link parseMcpAppAiGguiMeta} to partition into
- * {@link McpAppAiGguiMeta} (`session` + `stackItem`). The combiner
- * does STRUCTURAL slice-shape validation; this module's
- * {@link validateSlices} layers in cross-slice business rules
- * (mode discriminator, expiresAt expiration, stackItemId
- * mutual exclusion) and field-level defensive parsing for the
+ * {@link parseMcpAppAiGguiRenderMeta} to produce a typed slice.
+ * The combiner does STRUCTURAL slice-shape validation; this module's
+ * {@link validateMeta} layers in mode-discriminator + expiresAt
+ * expiration checks and field-level defensive parsing for the
  * optional containers (`contextSlots`, `gadgets`, `publicEnv`,
  * `permissionsPolicy`, `appCallableTools`, `actionNextSteps`,
  * `streamWebSocketLocalTools`).
  *
- * **Three boot modes** (discriminated across slices):
+ * **Three boot modes** (discriminated by which fields are present):
  *
- *   - **live** — session has `wsUrl` + `token`; runtime opens
+ *   - **live** — slice has `wsUrl` + `wsToken`; runtime opens
  *     live-channel WS and renders agent-driven frames.
- *   - **static-component** — stack-item has `codeUrl`; runtime fetches
+ *   - **static-component** — slice has `codeUrl`; runtime fetches
  *     the content-addressable URL, dynamic-imports the React
  *     component, mounts it, never opens WS.
- *   - **system-card** — stack-item has `kind`; runtime maps to a
+ *   - **system-card** — slice has `kind`; runtime maps to a
  *     built-in component via the system-card registry.
  *
- * At least one mode MUST be present. Half-live (wsUrl without token)
+ * At least one mode MUST be present. Half-live (wsUrl without wsToken)
  * is structurally rejected by the combiner.
  */
 import { PUBLIC_ENV_APP_KEY_RE, projectHostContext } from '@ggui-ai/protocol';
 import type {
-  McpAppAiGguiMeta,
-  McpAppAiGguiSessionMeta,
-  McpAppAiGguiStackItemMeta,
+  McpAppAiGguiRenderMeta,
   McpAppContextSlot,
   McpAppGadgetRef,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { parseMcpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppAiGguiMetaParseResult } from './types.js';
 
 /**
@@ -84,7 +79,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
- * Apply field-level defensive parsing to an optional stack-item
+ * Apply field-level defensive parsing to an optional render
  * `contextSlots` array. Malformed entries collapse the whole field to
  * `[]` rather than partially trusting it — a renderer with a corrupted
  * context registry is worse than a renderer with none.
@@ -124,7 +119,7 @@ function projectContextSlots(
 }
 
 /**
- * Apply field-level defensive parsing to the session-slice `gadgets`
+ * Apply field-level defensive parsing to the render-slice `gadgets`
  * catalog. Malformed entries collapse the WHOLE field to `undefined` —
  * an unreachable package at boot is better than a half-populated
  * registry with a corrupted entry.
@@ -158,7 +153,7 @@ function projectGadgets(
 }
 
 /**
- * Apply field-level defensive parsing to the session-slice `publicEnv`
+ * Apply field-level defensive parsing to the render-slice `publicEnv`
  * map. EVERY key MUST match {@link PUBLIC_ENV_APP_KEY_RE}; one bad
  * key (or non-string value, or non-object container) collapses the
  * WHOLE field to `undefined`. Matches the parser posture of
@@ -182,26 +177,27 @@ function projectPublicEnv(
 }
 
 /**
- * Apply field-level defensive parsing + business rules to the session
- * slice. Returns a freshly-projected session, OR a failure reason that
+ * Apply field-level defensive parsing + business rules to the render
+ * slice. Returns a freshly-projected slice, OR a failure reason that
  * the parser surfaces verbatim.
  *
  * Invariants enforced here that the combiner doesn't:
  *   - `expiresAt` (when present) MUST parse to a valid timestamp. If
- *     in the past AND the active stack-item carries static content
- *     (codeUrl / kind), DEGRADE to static-only (drop `wsUrl` / `token`
- *     / `expiresAt`); otherwise return EXPIRED_BOOTSTRAP.
+ *     in the past AND the slice carries static content (codeUrl / kind),
+ *     DEGRADE to static-only (drop `wsUrl` / `wsToken` / `expiresAt`);
+ *     otherwise return EXPIRED_BOOTSTRAP.
  *   - `gadgets` / `publicEnv` / `appCallableTools` /
- *     `permissionsPolicy` / `streamWebSocketLocalTools` get
- *     defensive entry-level validation; malformed → defaulted.
+ *     `permissionsPolicy` / `streamWebSocketLocalTools` /
+ *     `contextSlots` / `actionNextSteps` get defensive entry-level
+ *     validation; malformed → defaulted.
  */
-function projectSession(
-  session: McpAppAiGguiSessionMeta,
+function projectMeta(
+  meta: McpAppAiGguiRenderMeta,
   hasStaticContent: boolean,
 ):
-  | { ok: true; session: McpAppAiGguiSessionMeta }
+  | { ok: true; meta: McpAppAiGguiRenderMeta }
   | { ok: false; reason: 'MALFORMED_BOOTSTRAP' | 'EXPIRED_BOOTSTRAP' } {
-  let expiresAt = session.expiresAt;
+  let expiresAt = meta.expiresAt;
   let dropLiveCreds = false;
   if (expiresAt !== undefined) {
     const ts = Date.parse(expiresAt);
@@ -219,17 +215,17 @@ function projectSession(
     }
   }
 
-  const gadgets = projectGadgets(session.gadgets);
-  const publicEnv = projectPublicEnv(session.publicEnv);
+  const gadgets = projectGadgets(meta.gadgets);
+  const publicEnv = projectPublicEnv(meta.publicEnv);
 
-  const appCallableToolsRaw = session.appCallableTools;
+  const appCallableToolsRaw = meta.appCallableTools;
   const appCallableTools: readonly string[] =
     Array.isArray(appCallableToolsRaw) &&
     appCallableToolsRaw.every((s): s is string => typeof s === 'string')
       ? appCallableToolsRaw
       : [];
 
-  const permissionsPolicyRaw = session.permissionsPolicy;
+  const permissionsPolicyRaw = meta.permissionsPolicy;
   const permissionsPolicy: readonly string[] | undefined =
     Array.isArray(permissionsPolicyRaw) &&
     permissionsPolicyRaw.every(
@@ -238,7 +234,7 @@ function projectSession(
       ? permissionsPolicyRaw
       : undefined;
 
-  const streamRaw = session.streamWebSocketLocalTools;
+  const streamRaw = meta.streamWebSocketLocalTools;
   const streamWebSocketLocalTools: readonly string[] | undefined =
     Array.isArray(streamRaw) &&
     streamRaw.length > 0 &&
@@ -249,49 +245,14 @@ function projectSession(
   // themeMode is a closed `'light' | 'dark'` enum at the type level;
   // unknown values collapse to undefined (consumers fall back to the
   // host-context default).
-  const themeModeRaw = session.themeMode;
+  const themeModeRaw = meta.themeMode;
   const themeMode: 'light' | 'dark' | undefined =
     themeModeRaw === 'light' || themeModeRaw === 'dark'
       ? themeModeRaw
       : undefined;
 
-  const projected: McpAppAiGguiSessionMeta = {
-    sessionId: session.sessionId,
-    appId: session.appId,
-    runtimeUrl: session.runtimeUrl,
-    appCallableTools,
-    ...(dropLiveCreds
-      ? {}
-      : {
-          ...(session.wsUrl !== undefined && session.wsToken !== undefined
-            ? { wsUrl: session.wsUrl, wsToken: session.wsToken }
-            : {}),
-        }),
-    ...(expiresAt !== undefined ? { expiresAt } : {}),
-    ...(session.pollingUrl !== undefined
-      ? { pollingUrl: session.pollingUrl }
-      : {}),
-    ...(session.themeId !== undefined ? { themeId: session.themeId } : {}),
-    ...(themeMode !== undefined ? { themeMode } : {}),
-    ...(gadgets !== undefined ? { gadgets } : {}),
-    ...(publicEnv !== undefined ? { publicEnv } : {}),
-    ...(streamWebSocketLocalTools !== undefined
-      ? { streamWebSocketLocalTools }
-      : {}),
-    ...(permissionsPolicy !== undefined ? { permissionsPolicy } : {}),
-  };
-  return { ok: true, session: projected };
-}
-
-/**
- * Apply field-level defensive parsing to the stack-item slice.
- * `actionNextSteps` defaults to `{}`, `contextSlots` to `[]`.
- */
-function projectStackItem(
-  stackItem: McpAppAiGguiStackItemMeta,
-): McpAppAiGguiStackItemMeta {
-  const actionNextStepsRaw = stackItem.actionNextSteps;
-  let actionNextSteps: Readonly<Record<string, string>> = {};
+  const actionNextStepsRaw = meta.actionNextSteps;
+  let actionNextSteps: Readonly<Record<string, string>> | undefined;
   if (
     isPlainObject(actionNextStepsRaw) &&
     Object.values(actionNextStepsRaw).every(
@@ -301,100 +262,101 @@ function projectStackItem(
     actionNextSteps = actionNextStepsRaw as Record<string, string>;
   }
 
-  const contextSlots = projectContextSlots(stackItem.contextSlots) ?? [];
+  const contextSlots = projectContextSlots(meta.contextSlots);
 
-  return {
-    ...(stackItem.stackItemId !== undefined
-      ? { stackItemId: stackItem.stackItemId }
+  const projected: McpAppAiGguiRenderMeta = {
+    renderId: meta.renderId,
+    appId: meta.appId,
+    runtimeUrl: meta.runtimeUrl,
+    appCallableTools,
+    ...(dropLiveCreds
+      ? {}
+      : {
+          ...(meta.wsUrl !== undefined && meta.wsToken !== undefined
+            ? { wsUrl: meta.wsUrl, wsToken: meta.wsToken }
+            : {}),
+        }),
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
+    ...(meta.pollingUrl !== undefined
+      ? { pollingUrl: meta.pollingUrl }
       : {}),
-    ...(stackItem.propsJson !== undefined
-      ? { propsJson: stackItem.propsJson }
+    ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
+    ...(themeMode !== undefined ? { themeMode } : {}),
+    ...(gadgets !== undefined ? { gadgets } : {}),
+    ...(publicEnv !== undefined ? { publicEnv } : {}),
+    ...(streamWebSocketLocalTools !== undefined
+      ? { streamWebSocketLocalTools }
       : {}),
-    actionNextSteps,
-    contextSlots,
-    ...(stackItem.codeUrl !== undefined ? { codeUrl: stackItem.codeUrl } : {}),
-    ...(stackItem.codeHash !== undefined
-      ? { codeHash: stackItem.codeHash }
-      : {}),
-    ...(stackItem.kind !== undefined ? { kind: stackItem.kind } : {}),
-    ...(stackItem.contractHash !== undefined &&
-    stackItem.validatorsUrl !== undefined
+    ...(permissionsPolicy !== undefined ? { permissionsPolicy } : {}),
+    ...(meta.lastSequence !== undefined ? { lastSequence: meta.lastSequence } : {}),
+    ...(meta.propsJson !== undefined ? { propsJson: meta.propsJson } : {}),
+    ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
+    ...(contextSlots !== undefined ? { contextSlots } : {}),
+    ...(meta.contractHash !== undefined && meta.validatorsUrl !== undefined
       ? {
-          contractHash: stackItem.contractHash,
-          validatorsUrl: stackItem.validatorsUrl,
+          contractHash: meta.contractHash,
+          validatorsUrl: meta.validatorsUrl,
         }
       : {}),
+    ...(meta.codeUrl !== undefined ? { codeUrl: meta.codeUrl } : {}),
+    ...(meta.codeHash !== undefined ? { codeHash: meta.codeHash } : {}),
+    ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
   };
+  return { ok: true, meta: projected };
 }
 
 /**
- * Validate the {@link McpAppAiGguiMeta} pair coming out of the
- * combiner. Enforces cross-slice business rules + applies field-level
- * defensive parsing. Returns a discriminated
- * {@link McpAppAiGguiMetaParseResult} the caller surfaces verbatim.
+ * Validate an {@link McpAppAiGguiRenderMeta} slice. Enforces mode
+ * discriminator + applies field-level defensive parsing. Returns a
+ * discriminated {@link McpAppAiGguiMetaParseResult} the caller
+ * surfaces verbatim.
  *
- * Cross-slice invariants:
- *   - `session` MUST be present (no session = nothing to mount).
- *   - At least one of `{live mode (session.wsUrl+wsToken),
- *     stack-item codeUrl, stack-item kind}` MUST be present.
- *   - If session has neither live nor stack-item has static content,
- *     the envelope is unmountable.
+ * Invariants:
+ *   - `runtimeUrl` MUST be a non-empty string (re-asserted for
+ *     direct-call callers like `parseMetaFromGlobal` / tests; the
+ *     envelope-driven extractors already enforce this in the protocol-
+ *     level parser).
+ *   - At least one of `{live mode (wsUrl+wsToken), codeUrl, kind}` MUST
+ *     be present. Without any mode discriminator the iframe has nothing
+ *     to mount.
  */
 export function validateMeta(
-  meta: McpAppAiGguiMeta,
+  meta: McpAppAiGguiRenderMeta,
 ): McpAppAiGguiMetaParseResult {
-  const { session, stackItem } = meta;
-
-  if (!session) {
-    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
-  }
-
-  // `runtimeUrl` is a hard wire-required field on every session slice
+  // `runtimeUrl` is a hard wire-required field on every render slice
   // (no mode discriminator escapes this — the iframe needs to know
   // where to fetch the runtime bundle to mount anything at all). The
-  // protocol-level `parseMcpAppAiGguiMeta` already enforces this for
-  // the envelope-driven extractors, but `validateMeta` is also called
-  // directly with pre-built slices (tests, `parseMetaFromGlobal`),
+  // protocol-level `parseMcpAppAiGguiRenderMeta` already enforces this
+  // for the envelope-driven extractors, but `validateMeta` is also
+  // called directly with pre-built slices (tests, `parseMetaFromGlobal`),
   // so we re-assert here.
-  if (!isNonEmptyString(session.runtimeUrl)) {
+  if (!isNonEmptyString(meta.runtimeUrl)) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
 
   const hasLive =
-    isNonEmptyString(session.wsUrl) && isNonEmptyString(session.wsToken);
-  const hasCodeUrl =
-    stackItem !== undefined && isNonEmptyString(stackItem.codeUrl);
-  const hasKind = stackItem !== undefined && isNonEmptyString(stackItem.kind);
+    isNonEmptyString(meta.wsUrl) && isNonEmptyString(meta.wsToken);
+  const hasCodeUrl = isNonEmptyString(meta.codeUrl);
+  const hasKind = isNonEmptyString(meta.kind);
   const hasStaticContent = hasCodeUrl || hasKind;
 
   if (!hasLive && !hasStaticContent) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
 
-  const sessionResult = projectSession(session, hasStaticContent);
-  if (!sessionResult.ok) return sessionResult;
+  const result = projectMeta(meta, hasStaticContent);
+  if (!result.ok) return result;
 
-  const projectedStackItem =
-    stackItem !== undefined ? projectStackItem(stackItem) : undefined;
-
-  return {
-    ok: true,
-    meta: {
-      session: sessionResult.session,
-      ...(projectedStackItem !== undefined
-        ? { stackItem: projectedStackItem }
-        : {}),
-    } as const,
-  };
+  return { ok: true, meta: result.meta };
 }
 
 /**
- * Parse slices from a `ui/initialize` postMessage response — the
- * "Reading-B" extractor, an OUR-CONVENTION shape on top of
+ * Parse the render slice from a `ui/initialize` postMessage response —
+ * the "Reading-B" extractor, an OUR-CONVENTION shape on top of
  * `McpUiInitializeResult`.
  *
  * The argument is the JSON-RPC `result` field — typically
- * `{ toolOutput: { _meta: { "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} } } }`.
+ * `{ toolOutput: { _meta: { "ai.ggui/render": {...} } } }`.
  *
  * **Back-compat only.** The MCP-Apps spec
  * (`McpUiInitializeResult`) defines `{protocolVersion, hostInfo,
@@ -430,9 +392,12 @@ export function parseMetaFromUiInitialize(
   if (!isPlainObject(meta)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiMeta(meta);
+  const parsed = parseMcpAppAiGguiRenderMeta(meta);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
+  }
+  if (parsed.meta === undefined) {
+    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   const validated = validateMeta(parsed.meta);
   if (!validated.ok) return validated;
@@ -462,16 +427,15 @@ export function parseMetaFromUiInitialize(
 export const parseBootstrap = parseMetaFromUiInitialize;
 
 /**
- * Parse slices from `globalThis.__GGUI_META__` — the
+ * Parse the render slice from `globalThis.__GGUI_META__` — the
  * synchronous self-contained shell delivery channel.
  *
  * The global carries the SAME slice envelope shape as the wire `_meta`
- * (`{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`), so we
- * can defer to the same combiner.
+ * (`{ "ai.ggui/render": {...} }`), so we can defer to the same
+ * combiner.
  *
  * Used by the runtime's autostart resolver as the highest-priority
- * boot source: per-session shells (`/r/<shortCode>`,
- * `ui://ggui/session/<sessionId>`) populate this synchronously
+ * boot source: per-render shells populate this synchronously
  * BEFORE the runtime bundle's `<script type="module">` evaluates,
  * so the runtime can mount without any postMessage round-trip.
  */
@@ -484,19 +448,22 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
   if (!isPlainObject(raw)) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiMeta(raw);
+  const parsed = parseMcpAppAiGguiRenderMeta(raw);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
+  }
+  if (parsed.meta === undefined) {
+    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   return validateMeta(parsed.meta);
 }
 
 /**
- * Parse slices from a `ui/notifications/tool-result` postMessage
- * params payload. Looks at BOTH the spec-canonical location
- * (`params._meta`) and the Reading-B `<McpAppIframe>` convention
- * (`params.toolOutput._meta`) — Claude Desktop / claude.ai Connector
- * use the first; first-party hosts the second.
+ * Parse the render slice from a `ui/notifications/tool-result`
+ * postMessage params payload. Looks at BOTH the spec-canonical
+ * location (`params._meta`) and the Reading-B `<McpAppIframe>`
+ * convention (`params.toolOutput._meta`) — Claude Desktop / claude.ai
+ * Connector use the first; first-party hosts the second.
  *
  * Used by the runtime's autostart resolver as the second / third boot
  * source (drained from the pre-runtime-load buffer or caught by the
@@ -524,9 +491,12 @@ export function parseMetaFromToolResult(
   if (meta === undefined) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
-  const parsed = parseMcpAppAiGguiMeta(meta);
+  const parsed = parseMcpAppAiGguiRenderMeta(meta);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };
+  }
+  if (parsed.meta === undefined) {
+    return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
   return validateMeta(parsed.meta);
 }

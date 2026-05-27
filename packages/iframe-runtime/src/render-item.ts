@@ -1,11 +1,11 @@
 /**
- * Stack-item dispatcher — routes a single SessionStackEntry to the
+ * Render dispatcher — routes a single {@link Render} to the
  * appropriate renderer based on its discriminator.
  *
- * Post-stack-removal (2026-05-27): the iframe-runtime mounts EXACTLY
- * ONE stack entry per session, in a single container. This module
- * exposes one entry point — {@link renderStackItem} — that returns a
- * {@link StackItemHandle} the runtime uses to apply subsequent
+ * Post-render-identity-collapse (2026-05-27): the iframe-runtime mounts
+ * EXACTLY ONE render per iframe, in a single container. This module
+ * exposes one entry point — {@link mountRender} — that returns a
+ * {@link RenderItemHandle} the runtime uses to apply subsequent
  * patches (props_update) or unmount on teardown. The earlier
  * `StackRenderer` / `StackRenderContext` orchestrator (a stack-of-N
  * map keyed by item id) was retired along with `StackModel`.
@@ -17,12 +17,12 @@
  *     host; the recursive foreign-MCP-App path).
  *   - `componentCode` empty OR absent → `mountProvisional` (A2UI
  *     preview fed by the `_ggui:preview` reserved channel).
- *   - otherwise → `mountReactRoot` with a per-item `WireConfig`
+ *   - otherwise → `mountReactRoot` with a per-render `WireConfig`
  *     built by the caller. The mounted component is wrapped in
  *     `<GguiWireProvider config={scopedConfig}>` through the
  *     `renderWrapper` seam.
  *
- * Per-item lifecycle:
+ * Per-render lifecycle:
  *
  *   The handle's `update()` either transitions in-place (props-only,
  *   same kind) or tears down + remounts (kind changed — provisional
@@ -39,8 +39,8 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { SessionStackEntry } from '@ggui-ai/protocol';
-import type { McpAppsStackItem } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { Render } from '@ggui-ai/protocol';
+import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
@@ -57,20 +57,20 @@ import type { StreamBus } from './wire-config.js';
 // Types
 // =============================================================================
 
-export interface StackItemRendererOptions {
-  /** The stack item to render. */
-  readonly stackItem: SessionStackEntry;
-  /** Wire config for this item — caller pre-scopes via the runtime's
-   *  `buildScopedConfig(item)` (see
+export interface RenderItemOptions {
+  /** The render to mount. */
+  readonly render: Render;
+  /** Wire config for this render — caller pre-scopes via the runtime's
+   *  `buildScopedConfig(render)` (see
    *  `wire-config.ts::RootWireConfigBundle`). `null` ⇒ the component
    *  mounts without a wire provider (standalone — matches today's
    *  DynamicComponent fallback when no GguiSession parent is present). */
   readonly scopedWireConfig: WireConfig | null;
   /** Shared stream bus — provisional renderer subscribes to
-   *  `_ggui:preview` for this item. */
+   *  `_ggui:preview` for this render. */
   readonly streamBus: StreamBus;
-  /** Session id — used by the mcp-apps iframe host for proxy URLs. */
-  readonly sessionId: string;
+  /** Render id — used by the mcp-apps iframe host for proxy URLs. */
+  readonly renderId: string;
   /** ggui-server base URL (for mcp-apps proxy). Empty = same-origin. */
   readonly mcpAppsServerBaseUrl?: string;
   /** Theme id passed to ReactComponentRenderer for scoped CSS. */
@@ -95,7 +95,7 @@ export interface StackItemRendererOptions {
    * equivalent to the identity function (no extra wrapping). The
    * self-contained boot path inlines its own ContextStateHost via the
    * top-level `renderWrapper`; this seam exists for the WS-driven
-   * renderer path where the per-item React mount is the only mount
+   * renderer path where the per-render React mount is the only mount
    * surface.
    */
   readonly wrapOuter?: (mountedTree: ReactNode) => ReactNode;
@@ -103,21 +103,21 @@ export interface StackItemRendererOptions {
 
 /**
  * Discriminator for WHICH renderer is currently mounted under this
- * stack-item handle. Transitions: 'provisional' → 'react' when
+ * render handle. Transitions: 'provisional' → 'react' when
  * componentCode lands; 'react' → 'react' on code/prop updates;
- * 'mcpApps' is terminal for its lifetime (mcp-apps items never
+ * 'mcpApps' is terminal for its lifetime (mcp-apps renders never
  * become components + vice versa).
  */
 type MountedKind = 'provisional' | 'react' | 'mcpApps' | 'none';
 
-export interface StackItemHandle {
+export interface RenderItemHandle {
   /**
-   * Apply an update to the stack-item handle. Kind changes (e.g.
+   * Apply an update to the render handle. Kind changes (e.g.
    * provisional → react when componentCode lands) tear down the old
    * mount and stand up the replacement; same-kind updates route to
    * the inner renderer's `update()`.
    */
-  update(next: StackItemRendererOptions): Promise<void>;
+  update(next: RenderItemOptions): Promise<void>;
   /** Tear down the active mount + unsubscribe from the StreamBus. */
   unmount(): void;
   /** Current render kind. Test-only — not load-bearing. */
@@ -128,14 +128,14 @@ export interface StackItemHandle {
 // Kind detection
 // =============================================================================
 
-function detectKind(stackItem: SessionStackEntry): 'mcpApps' | 'react' | 'provisional' {
-  if (stackItem.type === 'mcpApps') return 'mcpApps';
-  // System items don't route through this stack-item dispatcher — the
+function detectKind(render: Render): 'mcpApps' | 'react' | 'provisional' {
+  if (render.type === 'mcpApps') return 'mcpApps';
+  // System renders don't route through this render dispatcher — the
   // self-contained boot path renders them via `SystemCardHost` directly.
   // If one accidentally lands here, fall through to provisional so the
   // user at least sees the A2UI placeholder rather than a crash.
-  if (stackItem.type === 'system') return 'provisional';
-  const code = stackItem.componentCode;
+  if (render.type === 'system') return 'provisional';
+  const code = render.componentCode;
   if (typeof code === 'string' && code.trim().length > 0) return 'react';
   return 'provisional';
 }
@@ -144,10 +144,10 @@ function detectKind(stackItem: SessionStackEntry): 'mcpApps' | 'react' | 'provis
 // Mount
 // =============================================================================
 
-export async function renderStackItem(
+export async function mountRender(
   container: HTMLElement,
-  opts: StackItemRendererOptions,
-): Promise<StackItemHandle> {
+  opts: RenderItemOptions,
+): Promise<RenderItemHandle> {
   let currentOpts = opts;
   let currentKind: MountedKind = 'none';
   let reactMount: ReactRootMount | null = null;
@@ -177,11 +177,11 @@ export async function renderStackItem(
 
   async function mountByKind(kind: 'mcpApps' | 'react' | 'provisional'): Promise<void> {
     if (kind === 'mcpApps') {
-      // SessionStackEntry narrows to McpAppsStackItem when type='mcpApps'.
-      const item = currentOpts.stackItem as McpAppsStackItem;
+      // Render narrows to McpAppsRender when type='mcpApps'.
+      const render = currentOpts.render as McpAppsRender;
       mcpMount = mountMcpAppIframe(container, {
-        stackItem: item,
-        sessionId: currentOpts.sessionId,
+        render,
+        renderId: currentOpts.renderId,
         ...(currentOpts.mcpAppsServerBaseUrl !== undefined
           ? { serverBaseUrl: currentOpts.mcpAppsServerBaseUrl }
           : {}),
@@ -201,21 +201,21 @@ export async function renderStackItem(
 
     // kind === 'react' — detectKind guarantees a generated component
     // variant (no mcpApps, no system) by this point.
-    const item = currentOpts.stackItem;
-    if (item.type === 'mcpApps' || item.type === 'system') return;
-    // GG.8.2 — gadget package names from the item's descriptor sidecar
+    const render = currentOpts.render;
+    if (render.type === 'mcpApps' || render.type === 'system') return;
+    // GG.8.2 — gadget package names from the render's descriptor sidecar
     // so the rewriter resolves each direct gadget import to its
     // per-package shim. STDLIB `@ggui-ai/gadgets` is always rewritten.
     const gadgetPackages =
-      'gadgetDescriptors' in item && item.gadgetDescriptors !== undefined
-        ? item.gadgetDescriptors.map((d) => d.package)
+      'gadgetDescriptors' in render && render.gadgetDescriptors !== undefined
+        ? render.gadgetDescriptors.map((d) => d.package)
         : undefined;
     reactMount = await mountReactRoot(container, {
-      stackItem: {
-        ...(item.id !== undefined ? { id: item.id } : {}),
-        componentCode: item.componentCode ?? '',
-        ...(item.props !== undefined
-          ? { props: item.props }
+      render: {
+        ...(render.id !== undefined ? { id: render.id } : {}),
+        componentCode: render.componentCode ?? '',
+        ...(render.props !== undefined
+          ? { props: render.props }
           : {}),
       },
       ...(gadgetPackages !== undefined ? { gadgetPackages } : {}),
@@ -245,7 +245,7 @@ export async function renderStackItem(
    *     wrapOuter(<GguiWireProvider><userComponent/></GguiWireProvider>)
    *
    * `wrapOuter` is supplied by `bootProduction` to install the
-   * `<ContextStateHost>` provider tree around the per-item React
+   * `<ContextStateHost>` provider tree around the per-render React
    * mount. When absent, the wire provider is the only wrapper.
    */
   function wrapInScopedProvider(mountedComponent: ReactNode): ReactNode {
@@ -262,7 +262,7 @@ export async function renderStackItem(
   }
 
   // Initial mount.
-  const initialKind = detectKind(opts.stackItem);
+  const initialKind = detectKind(opts.render);
   await mountByKind(initialKind);
 
   return {
@@ -272,7 +272,7 @@ export async function renderStackItem(
     async update(next) {
       const prevKind = currentKind;
       currentOpts = next;
-      const nextKind = detectKind(next.stackItem);
+      const nextKind = detectKind(next.render);
 
       if (nextKind !== prevKind) {
         // Kind changed — tear down old + mount new.
@@ -283,14 +283,14 @@ export async function renderStackItem(
 
       // Same-kind update — route to the inner renderer's update.
       if (nextKind === 'react' && reactMount !== null) {
-        const item = next.stackItem;
-        if (item.type === 'mcpApps' || item.type === 'system') return;
+        const render = next.render;
+        if (render.type === 'mcpApps' || render.type === 'system') return;
         await reactMount.update({
-          stackItem: {
-            ...(item.id !== undefined ? { id: item.id } : {}),
-            componentCode: item.componentCode ?? '',
-            ...(item.props !== undefined
-              ? { props: item.props }
+          render: {
+            ...(render.id !== undefined ? { id: render.id } : {}),
+            componentCode: render.componentCode ?? '',
+            ...(render.props !== undefined
+              ? { props: render.props }
               : {}),
           },
           ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),

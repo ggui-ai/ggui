@@ -6,7 +6,7 @@ export {
   createDrainAckHandler,
   type DrainAckHandlerDeps,
 } from './drain-ack.js';
-export { createPushHandler, type PushHandlerDeps } from './push.js';
+export { createRenderHandler, type RenderHandlerDeps } from './render-frame.js';
 export { createDataHandler, type DataHandlerDeps } from './data.js';
 export { createFeedbackHandler } from './feedback.js';
 export {
