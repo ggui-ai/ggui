@@ -6,7 +6,7 @@ import type {
   JsonObject,
   StreamSpec,
 } from '@ggui-ai/protocol';
-import type { StackItem, SystemStackItem } from '@ggui-ai/protocol';
+import type { ComponentRender, SystemRender } from '@ggui-ai/protocol';
 import {
   composeContentSecurityPolicy,
   deriveBundleOrigins,
@@ -16,28 +16,43 @@ import {
   derivePermissionsPolicy,
   derivePropsJson,
   derivePublicEnvProjection,
-  deriveStackItemMeta,
+  deriveRenderMeta,
   deriveWiredActionTools,
 } from './slice-meta-derivation';
 
 const NOW = '2026-05-09T00:00:00.000Z';
+const NOW_MS = Date.parse(NOW);
 
-function componentItem(over: Partial<StackItem> = {}): StackItem {
+/**
+ * Build a `ComponentRender` (replaces the pre-Phase-B `StackItem` helper).
+ * Post-flatten-render-identity: every render is the addressable unit;
+ * `RenderBase` carries the lifecycle fields (appId, eventSequence,
+ * createdAt, lastActivityAt, expiresAt) so the helpers expect them.
+ */
+function componentItem(over: Partial<ComponentRender> = {}): ComponentRender {
   return {
     id: 'page-1',
+    appId: 'app-test',
     type: 'component',
     componentCode: 'export default () => null;',
-    createdAt: NOW,
+    eventSequence: 0,
+    createdAt: NOW_MS,
+    lastActivityAt: NOW_MS,
+    expiresAt: NOW_MS + 60_000,
     ...over,
   };
 }
 
-function systemItem(over: Partial<SystemStackItem> = {}): SystemStackItem {
+function systemItem(over: Partial<SystemRender> = {}): SystemRender {
   return {
     id: 'page-1',
+    appId: 'app-test',
     type: 'system',
     kind: 'no-credentials',
-    createdAt: NOW,
+    eventSequence: 0,
+    createdAt: NOW_MS,
+    lastActivityAt: NOW_MS,
+    expiresAt: NOW_MS + 60_000,
     ...over,
   };
 }
@@ -124,7 +139,7 @@ describe('derivePropsJson', () => {
   });
 });
 
-describe('deriveStackItemMeta', () => {
+describe('deriveRenderMeta', () => {
   // T3-1 (2026-05-13) — the projection no longer carries componentCode.
   // Static-component bytes ride on the push handler's `codeUrl` channel
   // composed from its `codeStore` + `codeBaseUrl` deps. The view now
@@ -133,13 +148,13 @@ describe('deriveStackItemMeta', () => {
   // system variants.
 
   it('component variant: omits componentCode (delivered via codeUrl channel)', () => {
-    const view = deriveStackItemMeta(componentItem());
+    const view = deriveRenderMeta(componentItem());
     expect((view as Record<string, unknown>).componentCode).toBeUndefined();
     expect(view.kind).toBeUndefined();
   });
 
   it('component variant: includes propsJson when props are present', () => {
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       componentItem({ props: { city: 'Seoul' } }),
     );
     expect(view.propsJson).toBe('{"city":"Seoul"}');
@@ -150,7 +165,7 @@ describe('deriveStackItemMeta', () => {
       save: { label: 'Save', nextStep: 'save_note' },
       undo: { label: 'Undo' },
     };
-    const view = deriveStackItemMeta(componentItem({ actionSpec }));
+    const view = deriveRenderMeta(componentItem({ actionSpec }));
     // `save` has dispatch.kind='tool' → included. `undo` is agent-routed → excluded.
     expect(view.actionNextSteps).toEqual({ save: 'save_note' });
   });
@@ -159,7 +174,7 @@ describe('deriveStackItemMeta', () => {
     const contextSpec: ContextSpec = {
       count: { schema: { type: 'number' }, default: 0 },
     };
-    const view = deriveStackItemMeta(componentItem({ contextSpec }));
+    const view = deriveRenderMeta(componentItem({ contextSpec }));
     expect(view.contextSlots).toBeDefined();
     expect(view.contextSlots?.[0]?.name).toBe('count');
     expect(view.contextSlots?.[0]?.default).toBe(0);
@@ -169,14 +184,14 @@ describe('deriveStackItemMeta', () => {
     const streamSpec: StreamSpec = {
       ticks: { schema: { type: 'object' } },
     };
-    const view = deriveStackItemMeta(componentItem({ streamSpec }));
+    const view = deriveRenderMeta(componentItem({ streamSpec }));
     // No streamSpec field on the View today. If a future field is
     // added, update both the View interface AND this assertion.
     expect((view as Record<string, unknown>).streamSpec).toBeUndefined();
   });
 
   it('system variant: emits kind + propsJson', () => {
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       systemItem({ kind: 'no-credentials', props: { reason: 'demo' } }),
     );
     expect(view.kind).toBe('no-credentials');
@@ -187,12 +202,12 @@ describe('deriveStackItemMeta', () => {
   });
 
   it('system variant: omits kind when empty string', () => {
-    const view = deriveStackItemMeta(systemItem({ kind: '' }));
+    const view = deriveRenderMeta(systemItem({ kind: '' }));
     expect(view.kind).toBeUndefined();
   });
 
   it('mcpApps variant: returns empty View (separate shell wiring)', () => {
-    const view = deriveStackItemMeta({
+    const view = deriveRenderMeta({
       id: 'page-1',
       type: 'mcpApps',
       source: {
@@ -206,7 +221,7 @@ describe('deriveStackItemMeta', () => {
   });
 
   it('full component view: every field populated', () => {
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       componentItem({
         props: { city: 'Seoul' },
         actionSpec: { save: { label: 'Save', nextStep: 'save_note' } },
@@ -463,7 +478,7 @@ describe('derivePermissionsPolicy — clientCapabilities → Permissions-Policy 
     ).toEqual(['camera']);
   });
 
-  it('system items return undefined (no clientCapabilities field on SystemStackItem)', () => {
+  it('system items return undefined (no clientCapabilities field on SystemRender)', () => {
     expect(derivePermissionsPolicy(systemItem())).toBeUndefined();
   });
 
@@ -483,7 +498,7 @@ describe('derivePermissionsPolicy — clientCapabilities → Permissions-Policy 
   });
 });
 
-describe('deriveStackItemMeta — permissionsPolicy projection', () => {
+describe('deriveRenderMeta — permissionsPolicy projection', () => {
   // Single-entry-point projection. When clientCapabilities declares
   // permissions, the View MUST surface them so every transport
   // (public-render header, MCP Apps _meta, inline bootstrap) reads from
@@ -497,7 +512,7 @@ describe('deriveStackItemMeta — permissionsPolicy projection', () => {
         permission: 'microphone',
       }),
     ];
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.permissionsPolicy).toEqual(['microphone']);
@@ -511,7 +526,7 @@ describe('deriveStackItemMeta — permissionsPolicy projection', () => {
         version: '0.1.0-rc.1',
       }),
     ];
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.permissionsPolicy).toBeUndefined();
@@ -917,7 +932,7 @@ describe('deriveGadgetRegistrations — Slice 3.9 bundleSri threading', () => {
   });
 });
 
-describe('deriveStackItemMeta — contentSecurityPolicy projection', () => {
+describe('deriveRenderMeta — contentSecurityPolicy projection', () => {
   it('attaches contentSecurityPolicy when libraries declare external origins', () => {
     const gadgetDescriptors: readonly GadgetDescriptor[] = [
       gpkg({
@@ -927,7 +942,7 @@ describe('deriveStackItemMeta — contentSecurityPolicy projection', () => {
         bundleUrl: 'https://bundles.example.com/leaflet@1.0/bundle.js',
       }),
     ];
-    const view = deriveStackItemMeta(
+    const view = deriveRenderMeta(
       componentItem({ gadgetDescriptors }),
     );
     expect(view.contentSecurityPolicy).toContain(
@@ -936,7 +951,7 @@ describe('deriveStackItemMeta — contentSecurityPolicy projection', () => {
   });
 
   it('omits contentSecurityPolicy when libraries declare no external origins (regression for 8/16/17/18)', () => {
-    const view = deriveStackItemMeta(componentItem());
+    const view = deriveRenderMeta(componentItem());
     expect(view.contentSecurityPolicy).toBeUndefined();
   });
 });
@@ -974,7 +989,7 @@ describe('derivePublicEnvProjection', () => {
 
   function componentWithCaps(
     gadgetDescriptors: readonly GadgetDescriptor[],
-  ): StackItem {
+  ): ComponentRender {
     return componentItem({ gadgetDescriptors });
   }
 

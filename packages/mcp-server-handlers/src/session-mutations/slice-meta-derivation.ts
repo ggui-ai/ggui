@@ -524,7 +524,7 @@ export function composeContentSecurityPolicy(
  * mutation post-validation. Returning `undefined` keeps the renderer
  * on the fallback path instead of failing the whole bootstrap.
  */
-export function derivePropsJson(item: SessionStackEntry): string | undefined {
+export function derivePropsJson(item: Render): string | undefined {
   if (!('props' in item) || item.props === undefined) return undefined;
   try {
     return JSON.stringify(item.props);
