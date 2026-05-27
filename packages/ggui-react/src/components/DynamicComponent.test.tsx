@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import { DynamicComponent, StackItemRenderer, clearModuleCache } from './DynamicComponent';
+import { DynamicComponent, RenderRenderer, clearModuleCache } from './DynamicComponent';
 
 // Mock URL.createObjectURL/revokeObjectURL
 const mockUrls = new Map<string, string>();
@@ -161,11 +161,11 @@ describe('DynamicComponent', () => {
   });
 });
 
-describe('StackItemRenderer', () => {
+describe('RenderRenderer', () => {
   it('renders blueprint without controller', () => {
     const { container } = render(
-      <StackItemRenderer
-        stackItem={{
+      <RenderRenderer
+        render={{
           componentCode: 'export default function Template() { return "template"; }',
         }}
       />
@@ -177,8 +177,8 @@ describe('StackItemRenderer', () => {
 
   it('renders with props passed to blueprint', () => {
     const { container } = render(
-      <StackItemRenderer
-        stackItem={{
+      <RenderRenderer
+        render={{
           componentCode: 'export default function Template() { return "template"; }',
           props: { city: 'London' },
         }}
@@ -193,8 +193,8 @@ describe('StackItemRenderer', () => {
     const onError = vi.fn();
 
     render(
-      <StackItemRenderer
-        stackItem={{
+      <RenderRenderer
+        render={{
           componentCode: 'invalid',
         }}
         onError={onError}
@@ -207,8 +207,8 @@ describe('StackItemRenderer', () => {
 
   it('passes fallback to DynamicComponent', () => {
     render(
-      <StackItemRenderer
-        stackItem={{
+      <RenderRenderer
+        render={{
           componentCode: 'export default function() { return "hi"; }',
         }}
         fallback={<div data-testid="custom-fallback">Custom loading...</div>}

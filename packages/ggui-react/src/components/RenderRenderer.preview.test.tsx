@@ -1,21 +1,25 @@
 /**
- * StackItemRenderer — provisional-branch tests.
+ * RenderRenderer — provisional-branch tests.
  *
  * Verifies the small conditional added in
- * `DynamicComponent.tsx` that routes stack items with empty
+ * `DynamicComponent.tsx` that routes renders with empty
  * `componentCode` through `ProvisionalRenderer` instead of the
  * ESM-loading path. The goal is behavioural-preservation plus the
  * forward-compatible upgrade when `_ggui:preview` envelopes arrive.
+ *
+ * Post-Phase-B: `StackItemRenderer` was renamed to `RenderRenderer` and
+ * the prop shape collapsed from `{ stackItem: {...} }` to a flat
+ * `{ render: {...} }` carrying the single mounted render.
  */
 import { describe, it, expect } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { BRIDGE_EVENTS, PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { StackItemRenderer } from './DynamicComponent.js';
+import { RenderRenderer } from './DynamicComponent.js';
 
 function sendPreview(payload: unknown): void {
   const envelope: StreamEnvelope = {
-    sessionId: 's1',
+    renderId: 'render-preview',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],
@@ -27,11 +31,11 @@ function sendPreview(payload: unknown): void {
   });
 }
 
-describe('StackItemRenderer — provisional branching', () => {
+describe('RenderRenderer — provisional branching', () => {
   it('routes empty componentCode through ProvisionalRenderer and shows the caller fallback', () => {
     const { container } = render(
-      <StackItemRenderer
-        stackItem={{ id: 'pending', componentCode: '' }}
+      <RenderRenderer
+        render={{ id: 'pending', componentCode: '' }}
         fallback={<div data-testid="loading">loading…</div>}
       />,
     );
@@ -43,8 +47,8 @@ describe('StackItemRenderer — provisional branching', () => {
 
   it('paints the provisional surface once preview envelopes arrive', () => {
     const { container } = render(
-      <StackItemRenderer
-        stackItem={{ id: 'pending', componentCode: '' }}
+      <RenderRenderer
+        render={{ id: 'pending', componentCode: '' }}
       />,
     );
     sendPreview({
@@ -70,8 +74,8 @@ describe('StackItemRenderer — provisional branching', () => {
 
   it('does NOT route through the preview path when componentCode is present', () => {
     const { container } = render(
-      <StackItemRenderer
-        stackItem={{
+      <RenderRenderer
+        render={{
           id: 'ready',
           componentCode: 'export default function C() { return null; }',
         }}
