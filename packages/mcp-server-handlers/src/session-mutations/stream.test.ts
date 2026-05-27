@@ -1,5 +1,10 @@
 /**
- * Tests for `createGguiEmitHandler` — Phase 2.4 part 4.
+ * Tests for `createGguiEmitHandler`.
+ *
+ * Post-Phase-B (flatten-render-identity): the wire input collapsed
+ * from `{sessionId, channel, payload, complete?, stackItemId?}` to
+ * `{renderId, channel, payload, complete?}`. `SessionStore` →
+ * `RenderStore`. `SessionNotFoundError` → `RenderNotFoundError`.
  *
  * Focused on the factory's wrapping concerns: tenancy gate, the
  * sendEnvelope seam wiring, and the optional observer fan-out.
@@ -9,27 +14,51 @@
  * suite checks the factory plumbing, not the helper internals.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { InMemorySessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { ComponentRender } from '@ggui-ai/protocol';
+import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiEmitHandler,
   type StreamObserverNotifier,
 } from './stream.js';
-import { SessionNotFoundError } from './errors.js';
+import { RenderNotFoundError } from './errors.js';
 import type { SendEnvelopeFn } from './handle-stream.js';
 
 const CTX = { appId: 'app-1', requestId: 'r1' };
+const NOW_MS = Date.parse('2026-05-11T00:00:00.000Z');
+
+async function seedRender(
+  store: InMemoryRenderStore,
+  opts: { renderId?: string; appId?: string; streamSpec?: ComponentRender['streamSpec'] } = {},
+): Promise<{ renderId: string }> {
+  const renderId = opts.renderId ?? 'render-1';
+  const appId = opts.appId ?? 'app-1';
+  const render: ComponentRender = {
+    id: renderId,
+    appId,
+    type: 'component',
+    componentCode: '',
+    contentType: 'application/javascript+react',
+    eventSequence: 0,
+    createdAt: NOW_MS,
+    lastActivityAt: NOW_MS,
+    expiresAt: NOW_MS + 60_000,
+    ...(opts.streamSpec ? { streamSpec: opts.streamSpec } : {}),
+  };
+  await store.commit({ render, appId });
+  return { renderId };
+}
 
 describe('createGguiEmitHandler', () => {
-  let sessionStore: InMemorySessionStore;
+  let renderStore: InMemoryRenderStore;
 
   beforeEach(() => {
-    sessionStore = new InMemorySessionStore();
+    renderStore = new InMemoryRenderStore();
   });
 
   describe('declaration metadata', () => {
     it('exposes ggui_emit name + agent audience', () => {
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async () => ({}),
       });
       expect(handler.name).toBe('ggui_emit');
@@ -39,13 +68,7 @@ describe('createGguiEmitHandler', () => {
 
   describe('happy path', () => {
     it('routes through handleStream + sendEnvelope, returns accepted', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      await sessionStore.appendStackItem('sess-1', {
-        id: 'item-1',
-        type: 'component',
-        componentCode: '',
-        contentType: 'application/javascript+react',
-        createdAt: '2026-05-11T00:00:00.000Z',
+      const { renderId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'replace',
@@ -62,12 +85,12 @@ describe('createGguiEmitHandler', () => {
         return { seq: 42 };
       };
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope,
       });
       const out = await handler.handler(
         {
-          sessionId: 'sess-1',
+          renderId,
           channel: 'updates',
           payload: { tick: 1 },
         },
@@ -81,38 +104,38 @@ describe('createGguiEmitHandler', () => {
   });
 
   describe('tenancy + missing', () => {
-    it('cross-tenant session throws SessionNotFoundError (no leak)', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+    it('cross-tenant render throws RenderNotFoundError (no leak)', async () => {
+      const { renderId } = await seedRender(renderStore);
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async () => ({}),
       });
       await expect(
         handler.handler(
-          { sessionId: 'sess-1', channel: 'updates', payload: {} },
+          { renderId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
     });
 
-    it('unknown session throws SessionNotFoundError', async () => {
+    it('unknown render throws RenderNotFoundError', async () => {
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async () => ({}),
       });
       await expect(
         handler.handler(
-          { sessionId: 'never', channel: 'updates', payload: {} },
+          { renderId: 'never', channel: 'updates', payload: {} },
           CTX,
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
     });
 
     it('sendEnvelope NOT invoked when tenancy gate rejects', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
+      const { renderId } = await seedRender(renderStore);
       const sent: unknown[] = [];
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async (e) => {
           sent.push(e);
           return {};
@@ -120,23 +143,17 @@ describe('createGguiEmitHandler', () => {
       });
       await expect(
         handler.handler(
-          { sessionId: 'sess-1', channel: 'updates', payload: {} },
+          { renderId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(SessionNotFoundError);
+      ).rejects.toBeInstanceOf(RenderNotFoundError);
       expect(sent).toHaveLength(0);
     });
   });
 
   describe('observer notifier seam', () => {
     it('fires after successful emission with appId + channel + complete + accepted', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      await sessionStore.appendStackItem('sess-1', {
-        id: 'item-1',
-        type: 'component',
-        componentCode: '',
-        contentType: 'application/javascript+react',
-        createdAt: '2026-05-11T00:00:00.000Z',
+      const { renderId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'append',
@@ -150,7 +167,7 @@ describe('createGguiEmitHandler', () => {
       });
       const calls: Parameters<StreamObserverNotifier['notifyToolCall']>[0][] = [];
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async () => ({ seq: 1 }),
         observerNotifier: {
           notifyToolCall: (args) => {
@@ -160,7 +177,7 @@ describe('createGguiEmitHandler', () => {
       });
       await handler.handler(
         {
-          sessionId: 'sess-1',
+          renderId,
           channel: 'updates',
           payload: { x: 1 },
           complete: true,
@@ -170,7 +187,7 @@ describe('createGguiEmitHandler', () => {
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({
         appId: 'app-1',
-        sessionId: 'sess-1',
+        renderId,
         channel: 'updates',
         hasPayload: true,
         complete: true,
@@ -179,13 +196,7 @@ describe('createGguiEmitHandler', () => {
     });
 
     it('observer throw is swallowed — emission still succeeds', async () => {
-      await sessionStore.create({ id: 'sess-1', appId: 'app-1' });
-      await sessionStore.appendStackItem('sess-1', {
-        id: 'item-1',
-        type: 'component',
-        componentCode: '',
-        contentType: 'application/javascript+react',
-        createdAt: '2026-05-11T00:00:00.000Z',
+      const { renderId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'replace',
@@ -197,7 +208,7 @@ describe('createGguiEmitHandler', () => {
         },
       });
       const handler = createGguiEmitHandler({
-        sessionStore,
+        renderStore,
         sendEnvelope: async () => ({ seq: 7 }),
         observerNotifier: {
           notifyToolCall: () => {
@@ -206,7 +217,7 @@ describe('createGguiEmitHandler', () => {
         },
       });
       const out = await handler.handler(
-        { sessionId: 'sess-1', channel: 'updates', payload: { v: 1 } },
+        { renderId, channel: 'updates', payload: { v: 1 } },
         CTX,
       );
       expect(out.accepted).toBe(true);
