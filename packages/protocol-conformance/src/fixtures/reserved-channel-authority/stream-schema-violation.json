@@ -3,7 +3,7 @@
   "description": "Refresh-stream tool returns a shape that violates the declared channel schema. `assertStreamContract` rejects the payload BEFORE fanOut, emits `_ggui:contract-error` with code SCHEMA_VIOLATION + sourceAction `refresh-stream`. Channel's previous state is preserved — subscribers never see the corruption. Matches `runtime-contract.spec.ts::schema-violation-on-refresh`.",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-schema-violation-1" },
+    { "type": "create-render", "renderId": "ck-schema-violation-1" },
     { "type": "register-tool", "toolName": "tasks_list", "handler": "echo" },
     {
       "type": "register-tool",
@@ -24,7 +24,7 @@
   "inputEnvelope": {
     "type": "action",
     "channel": 0,
-    "sessionId": "ck-schema-violation-1",
+    "renderId": "ck-schema-violation-1",
     "action": {
       "name": "triggerMalformedRefresh",
       "data": {}
@@ -41,5 +41,5 @@
       "toolName": "tasks_malformed_list"
     }
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-schema-violation-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-schema-violation-1" }]
 }

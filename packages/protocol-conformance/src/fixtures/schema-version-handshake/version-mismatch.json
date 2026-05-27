@@ -3,18 +3,18 @@
   "description": "Server advertises a protocol schemaVersion outside the client's accepted set. Renderer emits `{type:'ggui:upgrade-required', server, client}` to the parent host + a matching `ProtocolError{kind:'version'}`. Host SHOULD render an inline upgrade prompt — NOT treat this as a terminal failure.",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-version-mismatch-1" },
+    { "type": "create-render", "renderId": "ck-version-mismatch-1" },
     {
       "type": "server-version-override",
-      "sessionId": "ck-version-mismatch-1",
+      "renderId": "ck-version-mismatch-1",
       "advertiseVersion": "99.99-unsupported"
     }
   ],
   "inputEnvelope": {
     "type": "render",
-    "sessionId": "ck-version-mismatch-1",
+    "renderId": "ck-version-mismatch-1",
     "resource": {
-      "uri": "ui://ggui/session"
+      "uri": "ui://ggui/render"
     }
   },
   "expectedBehavior": {
@@ -22,5 +22,5 @@
     "serverVersion": "99.99-unsupported",
     "clientAccepts": ["1.1"]
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-version-mismatch-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-version-mismatch-1" }]
 }

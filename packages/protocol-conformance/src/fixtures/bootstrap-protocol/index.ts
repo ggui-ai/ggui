@@ -3,8 +3,7 @@
  *
  * Exercises the MCP Apps bootstrap contract (SPEC §8):
  *   - `ui/initialize` tool-result must stamp the per-window
- *     `_meta["ai.ggui/session"]` (and optionally
- *     `_meta["ai.ggui/stack-item"]`) slices with well-formed payloads.
+ *     `_meta["ai.ggui/render"]` slice with a well-formed payload.
  *   - Renderer-bundle fetch must succeed (or surface a typed
  *     `BOOTSTRAP_FAILURE` protocol error).
  *   - Happy-path boot reaches `data-ggui-code-ready="true"` with no

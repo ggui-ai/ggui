@@ -1,17 +1,17 @@
 {
   "name": "bootstrap-success",
-  "description": "Happy-path boot: host reads `_meta.ui.resourceUri`, fetches `ui://ggui/session`, the thin shell loads the renderer bundle, `ui/initialize` returns valid `_meta.ggui.bootstrap.{wsUrl, token, sessionId, appId, runtimeUrl}`, WS handshake succeeds, first stack item renders with `data-ggui-code-ready=\"true\"`. No bootstrap-failed postMessage, no contract-error, no upgrade-required.",
+  "description": "Happy-path boot: host reads `_meta.ui.resourceUri`, fetches `ui://ggui/render`, the thin shell loads the renderer bundle, `ui/initialize` returns valid `_meta.ggui.bootstrap.{wsUrl, token, renderId, appId, runtimeUrl}`, WS handshake succeeds, the render mounts with `data-ggui-code-ready=\"true\"`. No bootstrap-failed postMessage, no contract-error, no upgrade-required.",
   "skipReason": null,
-  "setup": [{ "type": "create-session", "sessionId": "ck-bootstrap-success-1" }],
+  "setup": [{ "type": "create-render", "renderId": "ck-bootstrap-success-1" }],
   "inputEnvelope": {
     "type": "render",
-    "sessionId": "ck-bootstrap-success-1",
+    "renderId": "ck-bootstrap-success-1",
     "resource": {
-      "uri": "ui://ggui/session"
+      "uri": "ui://ggui/render"
     }
   },
   "expectedBehavior": {
     "kind": "bootstrap-success"
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-bootstrap-success-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-bootstrap-success-1" }]
 }

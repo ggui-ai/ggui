@@ -1,16 +1,16 @@
 {
   "name": "wired-action-tool-timeout",
-  "description": "Wired-action tool exceeds the router's configured timeout. Router emits `_ggui:contract-error` with code TOOL_TIMEOUT + sourceAction `wired-action` + a matching `contract-error-emitted` observability event. Session survives; no stream update fires.",
+  "description": "Wired-action tool exceeds the router's configured timeout. Router emits `_ggui:contract-error` with code TOOL_TIMEOUT + sourceAction `wired-action` + a matching `contract-error-emitted` observability event. Render survives; no stream update fires.",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-tool-timeout-1" },
+    { "type": "create-render", "renderId": "ck-tool-timeout-1" },
     { "type": "register-tool", "toolName": "hanging_tool", "handler": "timeout" },
     { "type": "register-actionspec", "name": "triggerTimeout", "tool": "hanging_tool" }
   ],
   "inputEnvelope": {
     "type": "action",
     "channel": 0,
-    "sessionId": "ck-tool-timeout-1",
+    "renderId": "ck-tool-timeout-1",
     "action": {
       "name": "triggerTimeout",
       "data": {}
@@ -28,5 +28,5 @@
       "toolName": "hanging_tool"
     }
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-tool-timeout-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-tool-timeout-1" }]
 }

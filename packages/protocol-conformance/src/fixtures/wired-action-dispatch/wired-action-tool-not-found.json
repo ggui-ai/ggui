@@ -1,15 +1,15 @@
 {
   "name": "wired-action-tool-not-found",
-  "description": "Wired-action dispatch names an action whose declared tool is not registered on the session. The router MUST emit a `_ggui:contract-error` envelope with code TOOL_NOT_FOUND and a matching `contract-error-emitted` observability event. Session stays alive.",
+  "description": "Wired-action dispatch names an action whose declared tool is not registered on the render. The router MUST emit a `_ggui:contract-error` envelope with code TOOL_NOT_FOUND and a matching `contract-error-emitted` observability event. Render stays alive.",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-tool-not-found-1" },
+    { "type": "create-render", "renderId": "ck-tool-not-found-1" },
     { "type": "register-tool", "toolName": "known-tool", "handler": "echo" }
   ],
   "inputEnvelope": {
     "type": "action",
     "channel": 0,
-    "sessionId": "ck-tool-not-found-1",
+    "renderId": "ck-tool-not-found-1",
     "action": {
       "name": "doesNotExist",
       "data": {}
@@ -27,5 +27,5 @@
       "toolName": "doesNotExist"
     }
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-tool-not-found-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-tool-not-found-1" }]
 }

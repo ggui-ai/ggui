@@ -3,14 +3,14 @@
   "description": "Standalone `contract-error-emitted` observability row. Every `_ggui:contract-error` envelope the server emits on the live channel MUST be mirrored as a `contract-error-emitted` observability event for host-side inspection without requiring the host to parse live-channel frames. Asserts the mirror-emission contract directly on the observability envelope.",
   "skipReason": null,
   "setup": [
-    { "type": "create-session", "sessionId": "ck-obs-ce-1" },
+    { "type": "create-render", "renderId": "ck-obs-ce-1" },
     { "type": "register-tool", "toolName": "broken_tool", "handler": "throw" },
     { "type": "register-actionspec", "name": "triggerBroken", "tool": "broken_tool" }
   ],
   "inputEnvelope": {
     "type": "action",
     "channel": 0,
-    "sessionId": "ck-obs-ce-1",
+    "renderId": "ck-obs-ce-1",
     "action": {
       "name": "triggerBroken",
       "data": {}
@@ -25,5 +25,5 @@
       "actionName": "triggerBroken"
     }
   },
-  "teardown": [{ "type": "close-session", "sessionId": "ck-obs-ce-1" }]
+  "teardown": [{ "type": "close-render", "renderId": "ck-obs-ce-1" }]
 }
