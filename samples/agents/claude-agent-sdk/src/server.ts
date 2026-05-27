@@ -24,6 +24,7 @@ import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
+import type { SessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { runAgent } from './agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,6 +104,90 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
+  // /chat/restore?chatSessionId=<id> — host-side resume endpoint. The
+  // frontend hits this on mount when a `?session=<id>` URL is present
+  // so the page can rehydrate iframes from prior conversation turns
+  // without re-prompting the agent. Implementation:
+  //
+  //   1. Call ggui_list_sessions({hostName:'sample', hostSessionId})
+  //      via the ggui MCP server. Server returns matching sessions
+  //      with fresh wsTokens + expiresAt (the mintWsToken seam fires
+  //      at the same call).
+  //   2. For each session id, fetch `/api/sessions/<id>/state?wsToken=`
+  //      against the ggui server to get the full bootstrap envelope
+  //      the iframe needs to mount.
+  //   3. Return [{sessionId, bootstrap}, ...] to the frontend.
+  //
+  // No per-process chat-message store yet — the iframe IS the
+  // conversation in ggui's worldview, and the page reload that
+  // triggers /chat/restore doesn't restart the server, so transient
+  // in-memory state isn't lost. Cross-restart durability is a
+  // separate slice.
+  if (req.method === 'GET' && url.pathname === '/chat/restore') {
+    const chatSessionId = url.searchParams.get('chatSessionId') ?? '';
+    if (chatSessionId.length === 0) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'chatSessionId query required' }));
+      return;
+    }
+    try {
+      const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_sessions', {
+        hostName: 'sample',
+        hostSessionId: chatSessionId,
+      });
+      const sessions = extractSessionSummaries(listed);
+      // Resolve each session's bootstrap envelope via the existing
+      // state endpoint. Fire concurrently so N sessions resolve in
+      // one network round-trip's worth of wall-clock time.
+      const bootstraps = await Promise.all(
+        sessions.map(async (s) => {
+          if (!s.wsToken) return { sessionId: s.sessionId, bootstrap: null };
+          try {
+            const mcpOrigin = new URL(opts.mcpUrl);
+            // Normalize `localhost` → `127.0.0.1` on the host we hit
+            // ggui with. The ggui server stamps `codeUrl` /
+            // `validatorsUrl` on the bootstrap envelope using the
+            // request's Host header, but the sandbox iframe's CSP
+            // is built from `runtimeUrl` (which is statically
+            // `127.0.0.1:<port>` per the CLI's default
+            // `runtime.url` config). A hostname mismatch between
+            // `localhost` and `127.0.0.1` is two distinct origins
+            // to the browser — CSP blocks the bundle imports and
+            // the iframe boots blank.
+            if (mcpOrigin.hostname === 'localhost') {
+              mcpOrigin.hostname = '127.0.0.1';
+            }
+            mcpOrigin.pathname = `/api/sessions/${encodeURIComponent(s.sessionId)}/state`;
+            mcpOrigin.search = `?wsToken=${encodeURIComponent(s.wsToken)}`;
+            const r = await fetch(mcpOrigin.toString(), {
+              headers: { Accept: 'application/json' },
+            });
+            if (!r.ok) return { sessionId: s.sessionId, bootstrap: null };
+            const bootstrap = (await r.json()) as Record<string, unknown>;
+            return { sessionId: s.sessionId, bootstrap };
+          } catch {
+            return { sessionId: s.sessionId, bootstrap: null };
+          }
+        }),
+      );
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          chatSessionId,
+          sessions: bootstraps.filter((b) => b.bootstrap !== null),
+        }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `restore failed: ${message}` }));
+    }
+    return;
+  }
+
   // R5 — `/api/sessions/:sessionId/state?wsToken=...` proxy to the ggui
   // MCP server. The state endpoint replaced the bearer-by-obscurity
   // `/r/<shortCode>` URL; the browser fetches state via this same-origin
@@ -131,6 +216,52 @@ async function handleRequest(
       const message = err instanceof Error ? err.message : String(err);
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: `state proxy error: ${message}` }));
+    }
+    return;
+  }
+
+  // Resources/read relay — forwards `resources/read` requests to the
+  // ggui MCP server over HTTP. Spec-canonical MCP-Apps hosts call
+  // `resources/read` when they see `_meta.ui.resourceUri` on a tool
+  // result; our React shell uses this to fetch the session-scoped
+  // canvas iframe HTML on `ggui_new_session` in fullscreen mode (see
+  // `docs/principles/resource-uri-by-tool.md`).
+  //
+  // Returns the spec-canonical `ReadResourceResult` envelope verbatim
+  // — `{contents: [{uri, mimeType, text, _meta?}]}` — so the client
+  // gets both the HTML payload and the `_meta.ui.csp` block the
+  // AppRenderer needs to wire up sandbox CSP.
+  if (req.method === 'POST' && url.pathname === '/relay/resources-read') {
+    const body = await readBody(req);
+    try {
+      const parsed = JSON.parse(body) as { readonly uri?: unknown };
+      if (typeof parsed.uri !== 'string' || parsed.uri.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'uri required' }));
+        return;
+      }
+      const rpcId = Math.floor(Math.random() * 1e9);
+      const mcpReq = await fetch(opts.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: rpcId,
+          method: 'resources/read',
+          params: { uri: parsed.uri },
+        }),
+      });
+      const text = await mcpReq.text();
+      const jsonRpc = parseMcpResponse(text);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(jsonRpc));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `resources/read relay error: ${message}` }));
     }
     return;
   }
@@ -387,6 +518,78 @@ function parseMcpResponse(text: string): unknown {
       error: { message: `JSON parse failed: ${(err as Error).message}` },
     };
   }
+}
+
+/**
+ * Server-side MCP `tools/call` against the ggui MCP server. Used by
+ * /chat/restore to call `ggui_list_sessions` without going through
+ * the agent loop. Skips the `/relay/tools-call` path (browser-facing)
+ * since we already have a server-side fetch primitive.
+ *
+ * Returns the parsed JSON-RPC envelope; caller inspects `.result` or
+ * `.error` per JSON-RPC convention.
+ */
+async function callGguiTool(
+  mcpUrl: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const r = await fetch(mcpUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${process.env.GGUI_MCP_BEARER ?? 'dev'}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: Math.floor(Math.random() * 1e9),
+      method: 'tools/call',
+      params: { name, arguments: args },
+    }),
+  });
+  const text = await r.text();
+  return parseMcpResponse(text);
+}
+
+/**
+ * Subset of `SessionSummaryWire` that `/chat/restore` consumes — the
+ * restore flow only needs the session id + the freshly-minted
+ * wsToken to gate the state-endpoint fetch. Derived from the
+ * canonical protocol type (`Pick<>`) so a field rename / addition
+ * upstream is a compile error here, not silent drift.
+ */
+type RestoreSessionSummary = Pick<SessionSummaryWire, 'sessionId' | 'wsToken'>;
+
+/**
+ * Pull the `sessions[]` array out of a `ggui_list_sessions` JSON-RPC
+ * response. Tolerates both the SSE-wrapped and raw-JSON shapes that
+ * `parseMcpResponse` returns. Defensive: an unexpected envelope
+ * shape returns `[]` so /chat/restore degrades to "no sessions to
+ * rehydrate" rather than a 5xx.
+ */
+function extractSessionSummaries(envelope: unknown): RestoreSessionSummary[] {
+  if (envelope === null || typeof envelope !== 'object') return [];
+  const result = (envelope as { result?: unknown }).result;
+  if (result === null || typeof result !== 'object') return [];
+  const content = (result as { structuredContent?: unknown }).structuredContent;
+  if (content === null || typeof content !== 'object') return [];
+  const sessionsRaw = (content as { sessions?: unknown }).sessions;
+  if (!Array.isArray(sessionsRaw)) return [];
+  const out: RestoreSessionSummary[] = [];
+  for (const entry of sessionsRaw) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const sessionId = (entry as { sessionId?: unknown }).sessionId;
+    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
+    const wsToken = (entry as { wsToken?: unknown }).wsToken;
+    out.push({
+      sessionId,
+      ...(typeof wsToken === 'string' && wsToken.length > 0
+        ? { wsToken }
+        : {}),
+    });
+  }
+  return out;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

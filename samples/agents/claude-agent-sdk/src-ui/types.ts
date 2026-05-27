@@ -10,8 +10,13 @@ export type LayoutMode = 'inline' | 'panel';
  *   - assistant text segment
  *   - tool-call (the agent invoked a tool; the result lands on the
  *     same entry asynchronously when the SDK forwards the tool_result)
- *   - rendered stack item (the actual MCP App iframe — these are the
- *     "live" surfaces, kept across turns regardless of layout mode)
+ *   - rendered stack item (the actual MCP App iframe in INLINE mode —
+ *     these are the "live" surfaces, kept across turns regardless of
+ *     layout mode)
+ *   - rendered session canvas (the session-scoped iframe in FULLSCREEN
+ *     mode — mounted ONCE on `ggui_new_session` per the
+ *     resourceUri-by-tool axiom, receives all subsequent stack items
+ *     via the live channel)
  *   - error
  *   - end marker
  */
@@ -20,6 +25,8 @@ export type ChatEntry =
   | { readonly id: string; readonly kind: 'assistant'; readonly text: string }
   | ToolCallEntry
   | { readonly id: string; readonly kind: 'stack-item'; readonly stackItem: StackItemRef }
+  | { readonly id: string; readonly kind: 'canvas'; readonly canvas: CanvasRef }
+  | { readonly id: string; readonly kind: 'push-marker'; readonly sessionId: string; readonly stackItemId: string; readonly action: string }
   | { readonly id: string; readonly kind: 'error'; readonly text: string }
   | { readonly id: string; readonly kind: 'end'; readonly subtype: string };
 
@@ -66,4 +73,36 @@ export interface StackItemRef {
   readonly contractHash?: string;
   /** Last-known meta slice pair. Updated on push + every update. */
   readonly meta?: McpAppAiGguiMeta;
+}
+
+/**
+ * A session-scoped canvas mount in FULLSCREEN mode.
+ *
+ * Per `docs/principles/resource-uri-by-tool.md`, when `ggui_new_session`
+ * stamps `_meta.ui.resourceUri = ui://ggui/session/<id>` (no shortcode
+ * suffix) the host is in fullscreen mode: ONE iframe is mounted for the
+ * whole session, and subsequent `ggui_push` results carry NO resourceUri
+ * — the server fans the new stack item out via the live channel (WS) to
+ * the existing canvas, which renders it inline.
+ *
+ * The host fetches the canvas HTML via spec-canonical MCP
+ * `resources/read` (proxied through `/relay/resources-read` on the
+ * sample-agent backend). The response carries:
+ *   - `text`     — the full iframe HTML with `__GGUI_META__` inlined
+ *   - `_meta.ui.csp` — connect+resource domains the AppRenderer's
+ *                     sandbox-proxy CSP needs (runtime + WS origins)
+ *
+ * The canvas iframe boots from `__GGUI_META__`, opens a WebSocket
+ * subscription, and renders stack items as they arrive. The host does
+ * NOT post `ui/notifications/tool-result` on subsequent pushes — that
+ * is the inline-mode update path.
+ */
+export interface CanvasRef {
+  readonly sessionId: string;
+  readonly resourceUri: string;
+  readonly html: string;
+  readonly csp?: {
+    readonly resourceDomains?: readonly string[];
+    readonly connectDomains?: readonly string[];
+  };
 }

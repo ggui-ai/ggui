@@ -431,7 +431,44 @@ export const GGUI_SESSION_SHELL_SCRIPT_HASH: string = `'sha256-${createHash(
  * back to the host's default CSP (fine for same-origin hosts;
  * restrictive for cross-origin claude.ai-style hosts).
  */
-function buildCspMeta(publicBaseUrl: string | undefined):
+/**
+ * Compose the polling-fallback URL stamped on
+ * `_meta["ai.ggui/session"].pollingUrl`. Origin is derived from the
+ * absolute `runtimeUrl` (same host as the WS, so cross-origin doesn't
+ * surprise us when WS dies and polling kicks in); endpoint is the
+ * R7 cursor-replay route. Returns `undefined` when the runtime URL
+ * is relative (no origin to derive from) — the bootstrap then ships
+ * without `pollingUrl` and the runtime stays in WS-only mode.
+ */
+function derivePollingUrl(
+  runtimeUrl: string,
+  sessionId: string,
+  wsToken: string,
+): string | undefined {
+  try {
+    const parsed = new URL(runtimeUrl);
+    return `${parsed.origin}/api/sessions/${encodeURIComponent(sessionId)}/events?wsToken=${encodeURIComponent(wsToken)}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildCspMeta(
+  publicBaseUrl: string | undefined,
+  /**
+   * Local-dev fallback: when `publicBaseUrl` is absent (first-party
+   * same-origin deployments, e.g. `ggui serve` on `127.0.0.1`), derive
+   * the CSP block from `runtimeUrl`. The runtime + WS + state endpoints
+   * all live on the runtime's origin in same-origin deployments, so
+   * declaring it covers every fetch the canvas iframe makes.
+   *
+   * Without this fallback, local dev with cross-origin sandbox proxies
+   * (sample-agent's `:7790/sandbox.html` writing the canvas HTML that
+   * references `:6786/_ggui/iframe-runtime.js`) trips a `script-src`
+   * violation that blanks the iframe — verified live 2026-05-27.
+   */
+  runtimeUrl?: string,
+):
   | {
       readonly ui: {
         readonly csp: {
@@ -441,9 +478,10 @@ function buildCspMeta(publicBaseUrl: string | undefined):
       };
     }
   | undefined {
-  if (!publicBaseUrl) return undefined;
+  const source = publicBaseUrl ?? runtimeUrl;
+  if (!source) return undefined;
   try {
-    const parsed = new URL(publicBaseUrl);
+    const parsed = new URL(source);
     const origin = parsed.origin;
     const wsScheme = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsOrigin = `${wsScheme}//${parsed.host}`;
@@ -763,6 +801,18 @@ export interface SelfContainedShellInputs {
    * present.
    */
   readonly lastSequence?: McpAppAiGguiSessionMeta['lastSequence'];
+  /**
+   * Wire-stamped polling fallback URL — `${base}/api/sessions/<id>/events?wsToken=<...>`.
+   * When the iframe-runtime's WS transport reaches `'failed'` (CSP
+   * blocks `ws://`, corporate firewall, etc.), `@ggui-ai/live-channel`
+   * fails over to cursor-based event polling against this URL using
+   * `{@link lastSequence}` as the initial cursor.
+   *
+   * Absent ⇒ runtime stays in WS-only mode. Operators that want the
+   * fallback path lit up MUST thread this through (the canvas/inline
+   * shell builders do; callers composing their own shells SHOULD).
+   */
+  readonly pollingUrl?: McpAppAiGguiSessionMeta['pollingUrl'];
 }
 
 /**
@@ -803,15 +853,15 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   const hasLive =
     typeof opts.wsUrl === 'string' && opts.wsUrl.length > 0
     && typeof opts.token === 'string' && opts.token.length > 0;
-  const isCanvas = opts.canvasMode === true;
-  if (isCanvas && (isSystem || hasCodeUrl || opts.stackItemId !== undefined)) {
+  const isFullscreen = opts.canvasMode === true;
+  if (isFullscreen && (isSystem || hasCodeUrl || opts.stackItemId !== undefined)) {
     throw new Error(
-      'buildSelfContainedShell: canvasMode is mutually exclusive with `systemKind`, `codeUrl`, and `stackItemId` — canvas iframes are session-scoped and render via the live channel, not a pre-pinned stack item',
+      "buildSelfContainedShell: fullscreen mode is mutually exclusive with `systemKind`, `codeUrl`, and `stackItemId` — the session-scoped canvas iframe renders via the live channel, not a pre-pinned stack item",
     );
   }
-  if (isCanvas && !hasLive) {
+  if (isFullscreen && !hasLive) {
     throw new Error(
-      'buildSelfContainedShell: canvasMode requires the live-mode trio (`wsUrl` + `token` + `expiresAt`) — the canvas iframe receives stack items via the live channel, not static inlining',
+      "buildSelfContainedShell: fullscreen mode requires the live-mode trio (`wsUrl` + `token` + `expiresAt`) — the canvas iframe receives stack items via the live channel, not static inlining",
     );
   }
   if (!isSystem && !hasCodeUrl && !hasLive) {
@@ -829,7 +879,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     sessionId: opts.sessionId,
     appId: opts.appId,
     runtimeUrl: opts.runtimeUrl,
-    ...(isCanvas ? { canvasMode: true } : {}),
+    ...(isFullscreen ? { displayMode: 'fullscreen' as const } : {}),
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
     ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
     ...(opts.appCallableTools !== undefined && opts.appCallableTools.length > 0
@@ -863,6 +913,11 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     ...(opts.wsUrl !== undefined ? { wsUrl: opts.wsUrl } : {}),
     ...(opts.token !== undefined ? { wsToken: opts.token } : {}),
     ...(opts.expiresAt !== undefined ? { expiresAt: opts.expiresAt } : {}),
+    // Polling fallback URL — lights up `@ggui-ai/live-channel`'s
+    // events-polling transport when WS is unavailable. Absent ⇒
+    // WS-only mode (legacy behavior). See SelfContainedShellInputs
+    // .pollingUrl for the URL shape.
+    ...(opts.pollingUrl !== undefined ? { pollingUrl: opts.pollingUrl } : {}),
     ...(opts.lastSequence !== undefined
       ? { lastSequence: opts.lastSequence }
       : {}),
@@ -874,7 +929,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // inlining). Static-content discriminators (codeUrl / kind) are
   // mutually exclusive — the iframe-runtime rejects the both-set mix.
   const stackItem: McpAppAiGguiStackItemMeta | undefined = (() => {
-    if (isCanvas) return undefined;
+    if (isFullscreen) return undefined;
     const si: McpAppAiGguiStackItemMeta = {
       ...(isSystem ? { kind: opts.systemKind! } : {}),
       ...(!isSystem && hasCodeUrl
@@ -1045,7 +1100,7 @@ export interface GguiSessionResourceTemplateOptions {
    * already used by /api/bootstrap/<shortCode>).
    *
    * When the resource handler observes `session.mcpAppsMode ===
-   * 'canvas'`, it calls this to obtain `wsUrl` + `token` + `expiresAt`
+   * 'fullscreen'`, it calls this to obtain `wsUrl` + `token` + `expiresAt`
    * and inlines them on the canvas shell's bootstrap. Without this
    * dep wired, the handler falls back to the legacy single-item path
    * (no canvas).
@@ -1216,7 +1271,7 @@ export function registerGguiSessionResourceTemplate(
   // fails with a generic "script error" since cross-origin script
   // loading is blocked. Same shape declared on the static
   // `ui://ggui/session` resource; this is the per-call mirror.
-  const templateCspMeta = buildCspMeta(opts.publicBaseUrl);
+  const templateCspMeta = buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl);
   type CspMeta = NonNullable<ReturnType<typeof buildCspMeta>>;
   type ShellContent = {
     readonly uri: string;
@@ -1311,19 +1366,19 @@ export function registerGguiSessionResourceTemplate(
         : Promise.resolve(null),
     ]);
 
-    // Canvas-mode branch: session-scoped
-    // iframe that renders {@link CanvasShell} and subscribes to
-    // the live channel for stack-item delivery. The bootstrap carries
-    // `canvasMode: true` + live-mode trio (wsUrl/token/expiresAt) and
-    // NO stackItemId / codeUrl / systemKind — the iframe-runtime
-    // mounts the canvas and waits for `push` envelopes rather than
-    // rendering a pinned static item.
+    // Fullscreen-mode branch: session-scoped canvas iframe that
+    // renders {@link CanvasShell} and subscribes to the live channel
+    // for stack-item delivery. The bootstrap carries
+    // `displayMode: 'fullscreen'` + live-mode trio
+    // (wsUrl/token/expiresAt) and NO stackItemId / codeUrl /
+    // systemKind — the iframe-runtime mounts the canvas and waits
+    // for `push` envelopes rather than rendering a pinned static item.
     //
     // Falls through to the legacy single-item path when `mintBootstrap`
     // isn't wired (canvas can't function without WS credentials, and
     // serving a pinned stack item is strictly better than a dead
     // loading shell).
-    if (session && session.mcpAppsMode === 'canvas' && opts.mintBootstrap) {
+    if (session && session.mcpAppsMode === 'fullscreen' && opts.mintBootstrap) {
       let creds: {
         readonly wsUrl: string;
         readonly token: string;
@@ -1347,6 +1402,11 @@ export function registerGguiSessionResourceTemplate(
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
           // R6 — ledger cursor stamp for polling-cursor alignment.
           lastSequence: session.eventSequence,
+          // R7 — polling fallback URL for @ggui-ai/live-channel's
+          // events-polling transport. Same wsToken authorises the
+          // /events read as the WS subscribe; iframe-runtime fails
+          // over to this URL when the WS transport reaches 'failed'.
+          pollingUrl: derivePollingUrl(opts.runtimeUrl, sessionId, creds.token),
         });
         return shellContents(uri, html);
       }

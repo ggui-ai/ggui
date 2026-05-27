@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useChat } from './useChat';
 import { StackItem } from './StackItem';
-import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
+import { CanvasItem } from './CanvasItem';
+import type { CanvasRef, ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
 
 /**
  * Sandbox-proxy URL injected by the server-rendered host page (see
@@ -26,11 +27,17 @@ function resolveSandboxUrl(): string {
 }
 
 export function Chat() {
-  const { entries, stackItems, sending, send, abort } = useChat();
+  const { entries, stackItems, canvases, sending, send, abort } = useChat();
   const [prompt, setPrompt] = useState('');
-  const [layout, setLayout] = useState<LayoutMode>('inline');
+  const [userLayout, setUserLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
   const sandboxUrl = resolveSandboxUrl();
+  // Fullscreen-mode sessions ALWAYS render in panel mode — the canvas
+  // owns the right pane and stack-item pushes become compact chat
+  // markers (no inline iframes). The toggle is force-disabled and
+  // visually pinned so the user understands why.
+  const fullscreen = canvases.length > 0;
+  const layout: LayoutMode = fullscreen ? 'panel' : userLayout;
 
   // Auto-scroll the chat log on new entries.
   useEffect(() => {
@@ -67,11 +74,14 @@ export function Chat() {
             className="layout-toggle"
             role="group"
             aria-label="Layout"
+            data-fullscreen={fullscreen ? 'true' : undefined}
+            title={fullscreen ? 'Fullscreen session — layout locked to panel' : undefined}
           >
             <button
               type="button"
               className={layout === 'inline' ? 'active' : ''}
-              onClick={() => setLayout('inline')}
+              onClick={() => setUserLayout('inline')}
+              disabled={fullscreen}
               data-testid="layout-inline"
             >
               Inline
@@ -79,7 +89,8 @@ export function Chat() {
             <button
               type="button"
               className={layout === 'panel' ? 'active' : ''}
-              onClick={() => setLayout('panel')}
+              onClick={() => setUserLayout('panel')}
+              disabled={fullscreen}
               data-testid="layout-panel"
             >
               Panel
@@ -147,10 +158,17 @@ export function Chat() {
       </aside>
 
       {/* Panel mode renders the right pane; inline mode is full-width
-       * chat (no panel at all). */}
+       * chat (no panel at all). Fullscreen-mode sessions force panel
+       * mode and the canvas takes precedence over per-push stack items
+       * (which are skipped on the wire anyway — see useChat's
+       * fullscreenSessions check). */}
       {layout === 'panel' ? (
         <main className="ui-pane">
-          <PanelView stackItems={stackItems} sandboxUrl={sandboxUrl} />
+          <PanelView
+            canvases={canvases}
+            stackItems={stackItems}
+            sandboxUrl={sandboxUrl}
+          />
         </main>
       ) : null}
     </div>
@@ -198,6 +216,25 @@ function ChatEntryView({
       <div className="msg tool">
         ← UI #{entry.stackItem.stackItemId.slice(0, 12)} ·{' '}
         {entry.stackItem.action}
+      </div>
+    );
+  }
+  if (entry.kind === 'canvas') {
+    // Compact marker only — the actual canvas iframe mounts ONCE in
+    // the right pane (PanelView) regardless of how many pushes land in
+    // the session. Inlining the canvas in the chat log would mount a
+    // SECOND iframe for the same session, defeating the fullscreen
+    // model.
+    return (
+      <div className="msg tool" data-testid="canvas-marker">
+        ← canvas · session {entry.canvas.sessionId.slice(0, 12)} · fullscreen
+      </div>
+    );
+  }
+  if (entry.kind === 'push-marker') {
+    return (
+      <div className="msg tool" data-testid="push-marker">
+        ← push #{entry.stackItemId.slice(0, 12)} · {entry.action} · into canvas
       </div>
     );
   }
@@ -273,17 +310,35 @@ function prettyJson(value: unknown): string {
 }
 
 /**
- * Panel mode: render the top-of-stack item large in the right pane.
- * Older stack items remain accessible via the chat-history compact
- * markers, but only one iframe is mounted at a time.
+ * Right-pane mount.
+ *
+ *   - Fullscreen mode (`canvases.length > 0`): mount the latest session
+ *     canvas. Per the resourceUri-by-tool axiom, there's only one
+ *     canvas per session (and typically one session per chat — see
+ *     `docs/principles/resource-uri-by-tool.md`). Pushes land on the
+ *     canvas via the WS subscription; no per-push iframes mount.
+ *   - Inline mode falling back to panel: mount the top-of-stack item
+ *     large. Earlier items stay accessible as chat-history markers
+ *     (only one iframe at a time).
+ *   - Empty: placeholder.
  */
 function PanelView({
+  canvases,
   stackItems,
   sandboxUrl,
 }: {
+  canvases: ReadonlyArray<CanvasRef>;
   stackItems: ReadonlyArray<StackItemRef>;
   sandboxUrl: string;
 }) {
+  const canvas = canvases[canvases.length - 1];
+  if (canvas) {
+    return (
+      <div className="panel-frame">
+        <CanvasItem canvas={canvas} sandboxUrl={sandboxUrl} fillContainer />
+      </div>
+    );
+  }
   const top = stackItems[stackItems.length - 1];
   if (!top) {
     return (
