@@ -19,10 +19,11 @@
  * Notifications (no `id`) return `null` — the caller MUST NOT post a
  * response back to the iframe.
  *
- * The `handleHostBridgeRequest` helper in the sibling
- * `components/McpAppsStackItemRenderer.tsx` stays in place for the
- * session-bound legacy host. Both retire together once every consumer
- * has migrated.
+ * The shared host-role switch (`handleHostBridgeRequest`) lives in the
+ * sibling `components/mcp-apps-bridge.ts`; it covers the same methods
+ * but bakes in the ggui-server `/mcp-apps/tools-call` proxy URL,
+ * whereas this dispatcher leaves `tools/call` to a caller-supplied
+ * handler so the iframe stays generic across hosts.
  */
 
 import {

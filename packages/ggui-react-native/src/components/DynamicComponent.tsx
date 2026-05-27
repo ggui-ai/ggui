@@ -18,10 +18,9 @@ import React, {
   type ComponentType,
 } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import type { SessionStackEntry } from '@ggui-ai/protocol';
-import { isMcpAppsStackItem } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { Render } from '@ggui-ai/protocol';
+import { isMcpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { WebViewRenderer, type BridgeEvent } from './WebViewRenderer';
-import { McpAppsStackItemRenderer } from './McpAppsStackItemRenderer';
 import { ProvisionalRenderer } from './ProvisionalRenderer';
 
 /**
@@ -206,66 +205,55 @@ export function DynamicComponent({
 }
 
 /**
- * Render a stack item with optional controller wrapping.
+ * Render a {@link Render} entry. Post-Phase-B every render arrives as a
+ * top-level Render rather than as a stacked session entry. This
+ * component handles the `ComponentRender` variant only — descriptor
+ * tree on native, WebView for compiled code.
  *
- * Accepts the full {@link SessionStackEntry} discriminated union and
- * dispatches on the variant:
- *   - `type: 'mcpApps'` → {@link McpAppsStackItemRenderer} (iframe on
- *     web, fallback on native).
- *   - default (component variant) → DynamicComponent (descriptor tree
- *     on native, WebView for compiled code).
+ * The `McpAppsRender` variant is the responsibility of `<McpAppIframe>`
+ * (exported from the root barrel); routing it through this component
+ * is a programming error and surfaces as `onError`.
  *
- * The component-variant shape extends {@link SessionStackEntry} with
- * ad-hoc `descriptor` — preserved for the existing RN-only descriptor
+ * The component-variant shape additionally accepts an ad-hoc
+ * `descriptor` field, preserved for the existing RN-only descriptor
  * rendering path until the descriptor tree moves into the protocol.
  */
-export interface StackItemRendererProps {
-  stackItem:
-    | SessionStackEntry
+export interface RenderRendererProps {
+  render:
+    | Render
     | {
         componentCode: string;
         props?: Record<string, unknown>;
         descriptor?: ComponentDescriptor;
       };
-  /**
-   * For MCP Apps items, the ggui server session id (threaded into the
-   * proxy URL). Optional on this signature to stay back-compat with
-   * component-only callers; MCP Apps rendering needs it.
-   */
-  sessionId?: string;
-  /**
-   * Base URL of the ggui server for MCP Apps proxy routes. Defaults to
-   * same-origin empty string.
-   */
-  serverBaseUrl?: string;
   fallback?: ReactNode;
   onError?: (error: Error) => void;
   onEvent?: (event: BridgeEvent) => void;
 }
 
-export function StackItemRenderer({
-  stackItem,
-  sessionId,
-  serverBaseUrl,
+export function RenderRenderer({
+  render,
   fallback,
   onError,
   onEvent,
-}: StackItemRendererProps): React.JSX.Element {
-  // MCP Apps variant: iframe on web, native fallback placeholder.
-  if (isMcpAppsStackItem(stackItem as unknown)) {
-    const mcp = stackItem as import('@ggui-ai/protocol/integrations/mcp-apps').McpAppsStackItem;
+}: RenderRendererProps): React.JSX.Element {
+  // MCP Apps variant belongs to <McpAppIframe>, not this component.
+  if (isMcpAppsRender(render as unknown)) {
+    const err = new Error(
+      'RenderRenderer received an McpAppsRender; route mcpApps renders ' +
+        'through <McpAppIframe> instead.',
+    );
+    onError?.(err);
     return (
-      <McpAppsStackItemRenderer
-        stackItem={mcp}
-        sessionId={sessionId ?? ''}
-        serverBaseUrl={serverBaseUrl ?? ''}
-        {...(onError ? { onError } : {})}
-      />
+      <View style={styles.error}>
+        <Text style={styles.errorTitle}>Routing error</Text>
+        <Text style={styles.errorMessage}>{err.message}</Text>
+      </View>
     );
   }
 
   // Component variant — treat as the loose local shape.
-  const componentItem = stackItem as {
+  const componentItem = render as {
     componentCode?: string;
     props?: Record<string, unknown>;
     descriptor?: ComponentDescriptor;

@@ -530,10 +530,10 @@ describe('<McpAppIframe> — imperative ref (RN)', () => {
   //       the ref shape post-mount.
   //
   // The actual `injectJavaScript(buildDeliveryScript(notif))` call
-  // is covered end-to-end by the legacy `McpAppsStackItemRenderer`
-  // tests (which exercise the same `buildDeliveryScript` with the
-  // same WebView mock). Adding a doMock variant here duplicates
-  // mock infrastructure for marginal coverage value.
+  // is covered at the helper level in `mcp-apps-bridge.test.ts` (which
+  // exercises `buildDeliveryScript` directly). Adding a doMock variant
+  // here would duplicate mock infrastructure for marginal coverage
+  // value.
   it('exposes a function-shaped dispatchAction on the forwarded ref', () => {
     const ref = createRef<McpAppIframeRef>();
     let tree!: ReactTestRenderer;

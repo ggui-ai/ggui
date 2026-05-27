@@ -10,7 +10,7 @@
  *     via an injected-before-content-loaded bridge script (wraps each
  *     page postMessage in the `__ggui_mcp_apps` envelope). Reuses the
  *     existing `buildInjectedBridgeScript` + `buildDeliveryScript`
- *     helpers from the sibling `components/McpAppsStackItemRenderer`.
+ *     helpers from the sibling `components/mcp-apps-bridge`.
  *   - Host → page delivery: `WebView.injectJavaScript` synthesising
  *     MessageEvents on `window`.
  *   - `ui/open-link` delegates to `Linking.openURL`.
@@ -59,7 +59,7 @@ import {
   buildDeliveryScript,
   buildInjectedBridgeScript,
   NATIVE_BRIDGE_ENVELOPE_KEY,
-} from '../components/McpAppsStackItemRenderer';
+} from '../components/mcp-apps-bridge';
 import {
   DEFAULT_HOST_THEME,
   buildDispatchActionNotification,
@@ -282,7 +282,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
     }, [mountSource]);
 
     // Teardown handshake on unmount. Reuses the existing effect-
-    // cleanup pattern from `McpAppsStackItemRenderer` — the WebView's
+    // cleanup pattern preserved from the original renderer — the WebView's
     // JS context is still live during cleanup, so the synthesised
     // MessageEvent reaches the embedded page.
     useEffect(() => {

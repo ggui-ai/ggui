@@ -107,14 +107,14 @@ export type { GguiSessionProps, SessionApi, SessionInfo } from './components/Ggu
 // Dynamic Component Rendering
 export {
   DynamicComponent,
-  StackItemRenderer,
+  RenderRenderer,
   registerComponent,
   getComponent,
   clearRegistry,
 } from './components/DynamicComponent';
 export type {
   DynamicComponentProps,
-  StackItemRendererProps,
+  RenderRendererProps,
   ComponentDescriptor,
 } from './components/DynamicComponent';
 
@@ -122,17 +122,7 @@ export type {
 export { WebViewRenderer } from './components/WebViewRenderer';
 export type { WebViewRendererProps, BridgeEvent } from './components/WebViewRenderer';
 
-// MCP Apps stack-item renderer (inbound third-party iframe hosting).
-// `@deprecated` — a session-bound legacy host. Prefer `<McpAppIframe>`
-// (exported below) for any new code; this export is retired once every
-// consumer has migrated.
-// Web (Expo Web) renders the iframe with the host postMessage bridge.
-// Native (iOS / Android) renders a `react-native-webview` loading the
-// same ggui server proxy URL with an injected shim that aliases
-// `window.parent.postMessage` → `ReactNativeWebView.postMessage`.
-export { McpAppsStackItemRenderer } from './components/McpAppsStackItemRenderer';
-export type { McpAppsStackItemRendererProps } from './components/McpAppsStackItemRenderer';
-// Shared host-role bridge helpers — exported for composition by
+// Shared host-role MCP-Apps bridge helpers — exported for composition by
 // callers that want to embed the bridge in a custom WebView wrapper
 // (e.g., custom error overlays, in-app navigation headers). The
 // switch implements the canonical set: ui/initialize, tools/call,
@@ -142,8 +132,8 @@ export {
   buildInjectedBridgeScript,
   buildDeliveryScript,
   NATIVE_BRIDGE_ENVELOPE_KEY,
-} from './components/McpAppsStackItemRenderer';
-export type { HostBridgeContext } from './components/McpAppsStackItemRenderer';
+} from './components/mcp-apps-bridge';
+export type { HostBridgeContext } from './components/mcp-apps-bridge';
 
 // `<McpAppIframe>` — generic MCP Apps iframe host for React Native.
 // Zero ggui-specific coupling; a mirror of the web host exported from

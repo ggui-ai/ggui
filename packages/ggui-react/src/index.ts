@@ -153,12 +153,6 @@ export type {
   StackItemRendererProps,
 } from './components/DynamicComponent';
 
-// MCP Apps stack-item renderer (inbound third-party iframe hosting).
-// `@deprecated` — a session-bound legacy host superseded by `<AppRenderer>`
-// (exported below). Retire once every consumer migrates.
-export { McpAppsStackItemRenderer } from './components/McpAppsStackItemRenderer';
-export type { McpAppsStackItemRendererProps } from './components/McpAppsStackItemRenderer';
-
 // Spec-canonical MCP Apps iframe host — re-exported from `@mcp-ui/client`.
 //
 // **Why a re-export, not our own component.** The MCP Apps spec mandates a
