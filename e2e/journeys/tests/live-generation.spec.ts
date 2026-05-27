@@ -49,7 +49,7 @@
  * ## What this spec does NOT prove (and why)
  *
  *   - Provisional preview VISIBILITY during the live path. By the
- *     time `ggui_push` returns (Slice 3 blocks on generation),
+ *     time `ggui_render` returns (Slice 3 blocks on generation),
  *     preview emission has finished. The browser subscribes AFTER
  *     push completes and sees the final stack directly. Preview
  *     visibility on the browser surface is proven by the sibling
@@ -99,7 +99,7 @@ const TEST_TIMEOUT_MS = 180_000;
 const GENERATION_BUDGET_MS = 120_000;
 
 /**
- * The intent we feed `ggui_push`. Kept short + unambiguous so the
+ * The intent we feed `ggui_render`. Kept short + unambiguous so the
  * generator produces a small component in one provider turn — faster
  * round-trip, less chance of hitting content-filter or length-cap.
  * The assertions don't depend on WHAT the UI says, only that a
@@ -147,7 +147,7 @@ test.describe.serial(
       if (perf) await perf.attach();
     });
 
-    test('ggui_push → generator runs → viewer mounts real componentCode', async ({
+    test('ggui_render → generator runs → viewer mounts real componentCode', async ({
       page,
     }) => {
       if (skipped) return;
@@ -172,30 +172,21 @@ test.describe.serial(
           `Expected a line like "generation: anthropic / claude-haiku-4-5 (env: ANTHROPIC_API_KEY)".`,
       ).toMatch(/generation:\s+anthropic\s+\/\s+\S+\s+\(env:\s+ANTHROPIC_API_KEY\)/);
 
-      // 3. Mint session + handshake. Post-Slice-5 push is handshake-
-      //    first; the agent calls ggui_new_session once per chat then
-      //    ggui_handshake to negotiate, then ggui_push with the
-      //    returned handshakeId. Slice 3's handler still blocks on the
-      //    real generator call; push returns once the stack is populated
-      //    with the compiled componentCode. On a healthy Anthropic path
-      //    this is ~5-15s; the 120s budget is tail-safe.
-      const sessEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
-        name: 'ggui_new_session',
-        arguments: {},
-      });
-      expect(sessEnv.error).toBeUndefined();
-      const sessionId = (
-        sessEnv.result as { structuredContent: { sessionId: string } }
-      ).structuredContent.sessionId;
-
+      // 3. Handshake → render. Post-Phase-B render is handshake-first;
+      //    the agent calls ggui_handshake to negotiate, then ggui_render
+      //    with the returned handshakeId. Slice 3's handler still blocks
+      //    on the real generator call; render returns once the render is
+      //    populated with the compiled componentCode. On a healthy
+      //    Anthropic path this is ~5-15s; the 120s budget is tail-safe.
+      //    The prior `ggui_new_session` mint is gone — every render IS
+      //    the addressable scope.
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_handshake',
         arguments: {
-          sessionId,
           intent: PUSH_INTENT,
           blueprintDraft: { contract: {} },
           // The OSS `ggui serve` ships a built-in blueprint catalog;
-          // a generic intent exact-key-matches it and the push would
+          // a generic intent exact-key-matches it and render would
           // reuse the cached blueprint in ~10ms instead of running the
           // generator. `forceCreate` bypasses the matcher — this spec
           // exists to prove the cold-generation path itself.
@@ -207,10 +198,10 @@ test.describe.serial(
         hsEnv.result as { structuredContent: { handshakeId: string } }
       ).structuredContent.handshakeId;
 
-      const pushStart = Date.now();
-      const pushEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
+      const renderStart = Date.now();
+      const renderEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
         mcpCallAs(handle.baseUrl, token, 'tools/call', {
-          name: 'ggui_push',
+          name: 'ggui_render',
           arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
         }),
         new Promise((_resolve, reject) =>
@@ -218,60 +209,57 @@ test.describe.serial(
             () =>
               reject(
                 new Error(
-                  `ggui_push did not return within ${GENERATION_BUDGET_MS}ms — the LLM call may be hanging. stderr:\n${handle.stderr()}`,
+                  `ggui_render did not return within ${GENERATION_BUDGET_MS}ms — the LLM call may be hanging. stderr:\n${handle.stderr()}`,
                 ),
               ),
             GENERATION_BUDGET_MS,
           ),
         ) as Promise<never>,
       ]);
-      const pushElapsedMs = Date.now() - pushStart;
+      const renderElapsedMs = Date.now() - renderStart;
       perf.recordAdvisory(
-        'push-cold-llm',
-        pushElapsedMs,
+        'render-cold-llm',
+        renderElapsedMs,
         'anthropic cold path — no cache, no handshake',
       );
-      expect(pushEnv.error).toBeUndefined();
+      expect(renderEnv.error).toBeUndefined();
 
-      // Post-Slice-5 the push handler's LLM-visible structuredContent is
-      // {stackItemId, url, action, nextStep?} — retired fields
-      // (sessionId, shortCode, codeReady, handshakeId, contractHash,
-      // decision) are gone. sessionId now lives on
-      // `_meta["ai.ggui/session"].sessionId` (R3/R4 slice envelope);
-      // shortCode is the tail of `url`'s `/r/<shortCode>` path.
-      const pushResult = pushEnv.result as {
+      // Post-Phase-B the render handler's LLM-visible structuredContent
+      // is {renderId, url, action, nextStep?} — retired fields
+      // (sessionId, stackItemId, shortCode, codeReady, handshakeId,
+      // contractHash, decision) are gone. `shortCode` is the tail of
+      // `url`'s `/r/<shortCode>` path.
+      const renderResult = renderEnv.result as {
         structuredContent?: {
-          stackItemId?: string;
+          renderId?: string;
           url?: string;
           action?: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
         };
-        _meta?: { 'ai.ggui/session'?: { sessionId?: string } };
         isError?: boolean;
       };
       expect(
-        pushResult.isError,
-        `ggui_push returned isError: true (check server stderr for generator failure reason).`,
+        renderResult.isError,
+        `ggui_render returned isError: true (check server stderr for generator failure reason).`,
       ).not.toBe(true);
-      const pushUrl = pushResult.structuredContent?.url;
-      expect(pushUrl, 'ggui_push returned no url').toBeTruthy();
-      const shortCodeMatch = new URL(pushUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
-      expect(shortCodeMatch, `push url is not /r/<shortCode>: ${pushUrl}`).not.toBeNull();
+      const renderUrl = renderResult.structuredContent?.url;
+      expect(renderUrl, 'ggui_render returned no url').toBeTruthy();
+      const shortCodeMatch = new URL(renderUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);
+      expect(shortCodeMatch, `render url is not /r/<shortCode>: ${renderUrl}`).not.toBeNull();
       const shortCode = shortCodeMatch![1]!;
       // Code-readiness is no longer surfaced via a `codeReady` boolean.
       // The structural proof that real generation ran is the latency
-      // floor below + the rendered stack-item assertions further down
-      // (data-ggui-stack-item-root visibility inside the iframe +
-      // ggui-rcr-* scope must mount, which only happens when
+      // floor below + the rendered assertions further down
+      // (ggui-rcr-* scope must mount, which only happens when
       // generation completed successfully).
-      expect(pushResult._meta?.['ai.ggui/session']?.sessionId).toBe(sessionId);
+      expect(typeof renderResult.structuredContent?.renderId).toBe('string');
       // Sanity: a real generator call takes noticeable time. If this
       // returns instantly, something is stubbing the provider (wrong
       // build pulled in, regression in probe wiring). 1s floor is
       // generous — every real Anthropic call ever observed has taken
       // longer.
       expect(
-        pushElapsedMs,
-        `ggui_push returned in ${pushElapsedMs}ms — too fast for a real LLM call. Stub regression?`,
+        renderElapsedMs,
+        `ggui_render returned in ${renderElapsedMs}ms — too fast for a real LLM call. Stub regression?`,
       ).toBeGreaterThan(1_000);
 
       // 4. Navigate to the viewer. The session cookie mint + /ws
@@ -283,62 +271,45 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 5. The console SessionViewer mounts the rendered session
-      //    inside a plain `<iframe srcDoc>` (read-only / visual-only
-      //    — post C1-fix it no longer carries the `<McpAppIframe>`
-      //    lifecycle-mirror attribute). Inner componentCard
-      //    data-attrs (`data-ggui-stack-entry`, `data-ggui-code-
-      //    ready`) live INSIDE the iframe child and are reachable
-      //    only via `frameLocator`. Readiness is gated by the inner
-      //    `[data-ggui-stack-item-root]` visibility check below — the
-      //    renderer emits that anchor when the bundle has mounted and
-      //    the first stack item is rendered.
+      // 5. The console RenderViewer mounts the rendered UI inside a
+      //    plain `<iframe srcDoc>` (read-only / visual-only — post
+      //    C1-fix it no longer carries the `<McpAppIframe>` lifecycle-
+      //    mirror attribute). Readiness is gated by the inner
+      //    `ggui-rcr-*` scope visibility check below — the renderer
+      //    React-mounts inside the iframe once the bundle has loaded.
       const liveIframe = page
         .locator('iframe[data-testid="session-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
-      // 6. The renderer mounts each stack item into a
-      //    `<div data-ggui-stack-item-root="<id>">` per
-      //    `iframe-runtime/src/runtime.ts::containerFor`. Same
-      //    observable purpose as the pre-C9.5 `data-ggui-stack-entry`
-      //    console wrapper (anchor for "real componentCode is mounted
-      //    on this stack item"), now emitted by the renderer itself
-      //    inside the iframe. Scoped through `frameLocator`.
+      // 6. Post-stack-removal (2026-05-27) the iframe-runtime mounts
+      //    the React tree directly into the root iframe body. The
+      //    React mount wraps its tree in a scope div whose class
+      //    starts with `ggui-rcr-` (see
+      //    `packages/iframe-runtime/src/react-renderer.ts::makeScopeClass`).
+      //    Presence of that class proves the esbuild-compiled ESM
+      //    actually loaded and a React component rendered — not the
+      //    loading fallback, not the error boundary.
       const frame = page
         .frameLocator('iframe[data-testid="session-viewer-iframe"]')
         .first();
-      const stackItemRoot = frame.locator('[data-ggui-stack-item-root]');
-      await expect(stackItemRoot).toBeVisible({ timeout: 30_000 });
-
-      // B2 regression — `/s/<shortCode>` must render the stack item
-      // exactly ONCE. A 2026-04-22 QA pass observed the viewer
-      // double-mounting the component (two identical <h1>s, no iframe
-      // separation) on a session with one stack entry. Pinning the
-      // count here means a future regression that re-introduces a
-      // duplicate-mount path (replay double-delivery, dev StrictMode
-      // sneaking into prod, double-subscribe race, etc.) flips this
-      // assertion immediately.
-      await expect(stackItemRoot).toHaveCount(1);
-
-      // 7. The preview card anchor MUST NOT appear inside the
-      //    stack-item slot — if it does, we're still in the
-      //    provisional path. (The empty-stack card IS allowed to
-      //    exist, but the populated-stack case we just asserted
-      //    proves the stack isn't empty.)
-      await expect(
-        stackItemRoot.locator('[data-ggui-preview="card"]'),
-      ).toHaveCount(0);
-
-      // 8. The iframe-runtime's React mount wraps its tree in a scope
-      //    div whose class starts with `ggui-rcr-` (see
-      //    `packages/iframe-runtime/src/react-renderer.ts::makeScopeClass`).
-      //    Presence of that class inside the stack-item root proves the
-      //    esbuild-compiled ESM actually loaded and a React component
-      //    rendered — not the loading fallback, not the error
-      //    boundary.
-      const rcrScope = stackItemRoot.locator('[class^="ggui-rcr-"]');
+      const rcrScope = frame.locator('[class^="ggui-rcr-"]');
       await expect(rcrScope).toBeVisible({ timeout: 30_000 });
+
+      // B2 regression — `/s/<shortCode>` must render exactly ONE
+      // React mount. A 2026-04-22 QA pass observed the viewer
+      // double-mounting the component (two identical <h1>s, no iframe
+      // separation). Pinning the count here means a future regression
+      // that re-introduces a duplicate-mount path (replay double-
+      // delivery, dev StrictMode sneaking into prod, double-subscribe
+      // race, etc.) flips this assertion immediately.
+      await expect(rcrScope).toHaveCount(1);
+
+      // 7. The preview card anchor MUST NOT appear inside the render
+      //    mount — if it does, we're still in the provisional path.
+      await expect(
+        frame.locator('[data-ggui-preview="card"]'),
+      ).toHaveCount(0);
 
       // 9. The scoped div must have rendered content — an empty
       //    mount would mean the component's default export returned

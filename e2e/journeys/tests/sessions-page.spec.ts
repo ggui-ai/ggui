@@ -17,11 +17,11 @@
  *      Cognito browser hits.
  *
  * Why not seed a populated-list case at Lane 1? Seeding a live
- * session requires either a real `ggui_push` round-trip (needs a
+ * render requires either a real `ggui_render` round-trip (needs a
  * BYOK LLM → Lane 2) or a privileged test-fixture endpoint to
- * inject sessions (new surface, out of Slice 3). Lane 3
+ * inject renders (new surface, out of Slice 3). Lane 3
  * (`console-sessions.test.ts`) covers the populated-list case with
- * an in-process `InMemorySessionStore` — faster, deterministic,
+ * an in-process `InMemoryRenderStore` — faster, deterministic,
  * same contract.
  */
 import { test, expect } from '@playwright/test';

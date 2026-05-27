@@ -14,7 +14,7 @@
  *
  *   1. A declared `mcpMounts: ["./contacts-mount.mjs"]` entry resolves
  *      through the REAL CLI binary (not the tests' custom launcher).
- *   2. `tools/list` surfaces `ggui_push` + three `contacts_*` tools.
+ *   2. `tools/list` surfaces `ggui_render` + three `contacts_*` tools.
  *   3. `tools/call contacts_list` reflects seeded state from the mount
  *      factory closure.
  *   4. `tools/call contacts_create` writes; the next `contacts_list`
@@ -79,7 +79,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('tools/list surfaces ggui_push + contacts_list + contacts_create + contacts_link through strict-auth /mcp', async () => {
+    test('tools/list surfaces ggui_render + contacts_list + contacts_create + contacts_link through strict-auth /mcp', async () => {
       if (!handle || !sharedToken) throw new Error('handle not ready');
 
       const listEnv = await mcpCallAs(handle.baseUrl, sharedToken, 'tools/list', {});
@@ -88,7 +88,7 @@ test.describe.serial(
         .tools;
       expect(tools).toBeDefined();
       const names = (tools ?? []).map((t) => t.name);
-      expect(names).toContain('ggui_push');
+      expect(names).toContain('ggui_render');
       expect(names).toContain('contacts_list');
       expect(names).toContain('contacts_create');
       expect(

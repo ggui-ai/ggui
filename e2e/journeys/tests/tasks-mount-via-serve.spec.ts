@@ -14,7 +14,7 @@
  *      `ggui.json` gets their mount loaded by the real CLI binary at
  *      boot — no custom launcher, no in-process compose.
  *   2. The mount's handlers surface through `/mcp tools/list`
- *      alongside ggui-native tools (`ggui_push`), under strict-auth.
+ *      alongside ggui-native tools (`ggui_render`), under strict-auth.
  *   3. `tools/call` dispatches to the mount's handler — `tasks_list`
  *      reflects the seed declared inside the mount's factory, and a
  *      subsequent `tasks_create` persists + is visible on the next
@@ -22,7 +22,7 @@
  *
  * ## What this spec is NOT
  *
- *   - Not a generation test: no LLM, no browser, no `ggui_push` call.
+ *   - Not a generation test: no LLM, no browser, no `ggui_render` call.
  *     That diagonal is covered by `tasks-backed-generation.spec.ts`
  *     (via the custom launcher) and `live-generation.spec.ts`.
  *   - Not a full-surface contract test: the mount exposes only 2
@@ -99,7 +99,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('tools/list surfaces ggui_push + tasks_list + tasks_create through strict-auth /mcp', async () => {
+    test('tools/list surfaces ggui_render + tasks_list + tasks_create through strict-auth /mcp', async () => {
       if (!handle || !sharedToken) throw new Error('handle not ready — beforeAll failed');
 
       const listEnv = await mcpCallAs(handle.baseUrl, sharedToken, 'tools/list', {});
@@ -112,8 +112,8 @@ test.describe.serial(
       // ggui-native:
       expect(
         names,
-        'ggui_push missing — without it the console viewer is orphaned',
-      ).toContain('ggui_push');
+        'ggui_render missing — without it the console viewer is orphaned',
+      ).toContain('ggui_render');
       // mounted:
       expect(
         names,

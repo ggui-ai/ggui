@@ -13,7 +13,7 @@
  *
  *   1. A declared `mcpMounts: ["./notes-mount.mjs"]` entry resolves
  *      through the REAL CLI binary (not the tests' custom launcher).
- *   2. `tools/list` surfaces `ggui_push` + three `notes_*` tools.
+ *   2. `tools/list` surfaces `ggui_render` + three `notes_*` tools.
  *   3. `tools/call notes_list` reflects seeded state from the mount
  *      factory closure.
  *   4. `tools/call notes_create` writes; the next `notes_list` sees it.
@@ -74,7 +74,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('tools/list surfaces ggui_push + notes_list + notes_create + notes_append through strict-auth /mcp', async () => {
+    test('tools/list surfaces ggui_render + notes_list + notes_create + notes_append through strict-auth /mcp', async () => {
       if (!handle || !sharedToken) throw new Error('handle not ready');
 
       const listEnv = await mcpCallAs(handle.baseUrl, sharedToken, 'tools/list', {});
@@ -83,7 +83,7 @@ test.describe.serial(
         .tools;
       expect(tools).toBeDefined();
       const names = (tools ?? []).map((t) => t.name);
-      expect(names).toContain('ggui_push');
+      expect(names).toContain('ggui_render');
       expect(names).toContain('notes_list');
       expect(names).toContain('notes_create');
       expect(

@@ -16,7 +16,7 @@
  *      serve` process. Earlier mount-via-serve specs all declared
  *      exactly one mount entry.
  *   2. `tools/list` carries BOTH tool families (`tasks_*` + `contacts_*`)
- *      alongside `ggui_push` on one session — the precondition for an
+ *      alongside `ggui_render` on one MCP surface — the precondition for an
  *      agent to decompose a cross-domain intent across both surfaces.
  *   3. **Relational truth holds ACROSS MCPs on seed**: the tasks whose
  *      `assigneeId === 'alice'` (as reported by `tasks_list`) are the
@@ -117,7 +117,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('tools/list surfaces ggui_push + tasks_* + contacts_* on one session from a two-entry mcpMounts array', async () => {
+    test('tools/list surfaces ggui_render + tasks_* + contacts_* on one MCP from a two-entry mcpMounts array', async () => {
       if (!handle || !sharedToken) throw new Error('handle not ready');
 
       const listEnv = await mcpCallAs(
@@ -132,7 +132,7 @@ test.describe.serial(
       expect(tools).toBeDefined();
       const names = (tools ?? []).map((t) => t.name);
 
-      expect(names).toContain('ggui_push');
+      expect(names).toContain('ggui_render');
       // Tasks mount (3 tools).
       expect(names).toContain('tasks_list');
       expect(names).toContain('tasks_get');
@@ -145,7 +145,7 @@ test.describe.serial(
         'contacts_link missing — the cross-ref mutation tool is the load-bearing op for the composition mutation claim.',
       ).toContain('contacts_link');
 
-      // Sanity lower bound — ggui-native (4: blueprint reads + ggui_push)
+      // Sanity lower bound — ggui-native (4: blueprint reads + ggui_render)
       // + tasks (3) + contacts (3) = 10.
       expect(names.length).toBeGreaterThanOrEqual(10);
     });
