@@ -27,28 +27,27 @@
  */
 
 export type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
-// `StackItem` is the canonical session stack-item shape the OSS CLI
-// composes when authoring no-credentials fallback cards. Re-exported
-// here so embedders don't need a separate `@ggui-ai/protocol`
-// dependency for the type alone.
+// `Render` is the canonical render shape the OSS CLI composes when
+// authoring no-credentials fallback cards. Re-exported here so
+// embedders don't need a separate `@ggui-ai/protocol` dependency
+// for the type alone.
 export type {
   GadgetDescriptor,
   McpUiDisplayMode,
-  SessionStackEntry,
-  StackItem,
-  SystemStackItem,
+  Render,
+  SystemRender,
 } from '@ggui-ai/protocol';
 export type {
   GenerationCredentials,
   GenerationDeps,
 } from '@ggui-ai/mcp-server-handlers';
 // No-credentials fallback helpers — re-exported so the OSS CLI can
-// build the no-credentials card stack item (pointing at the resolved
+// build the no-credentials card render (pointing at the resolved
 // `/settings` URL) without taking a direct `@ggui-ai/mcp-server-handlers`
 // dependency.
 export {
   NO_CREDENTIALS_SYSTEM_CARD_KIND,
-  buildNoCredentialsStackItem,
+  buildNoCredentialsRender,
 } from '@ggui-ai/mcp-server-handlers';
 export { createGguiServer, defaultHandlers } from './server.js';
 export type {
@@ -108,16 +107,16 @@ export {
 export { createConsoleLogger } from './logger.js';
 export type { Logger } from './logger.js';
 export {
-  createSessionChannelServer,
-  DEFAULT_SESSION_CHANNEL_PATH,
+  createRenderChannelServer,
+  DEFAULT_RENDER_CHANNEL_PATH,
   DEFAULT_WIRED_TOOL_TIMEOUT_MS,
-} from './session-channel.js';
+} from './render-channel.js';
 export type {
-  SessionChannelOptions,
-  SessionChannelServer,
+  RenderChannelOptions,
+  RenderChannelServer,
   WiredActionContext,
   WiredActionRouter,
-} from './session-channel.js';
+} from './render-channel.js';
 export { resolveStorageFromConfig } from './storage.js';
 export type {
   ResolveStorageFromConfigOptions,

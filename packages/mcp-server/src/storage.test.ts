@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 /**
- * SessionStore / VectorStore interfaces don't declare `close()` —
+ * RenderStore / VectorStore interfaces don't declare `close()` —
  * only the sqlite variants do. Duck-type close to release file
  * handles at test end without widening the public interface.
  */
@@ -69,7 +69,7 @@ describe('resolveStorageFromConfig — explicit memory driver', () => {
     const result = await resolveStorageFromConfig({
       sessions: { driver: 'memory' },
     });
-    expect(result.sessionStore).toBeUndefined();
+    expect(result.renderStore).toBeUndefined();
     expect(result.vectors).toBeUndefined();
   });
 });
@@ -87,7 +87,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
       vectors: { driver: 'sqlite', path: vectorsPath },
     });
 
-    expect(result.sessionStore).toBeDefined();
+    expect(result.renderStore).toBeDefined();
     expect(result.vectors).toBeDefined();
 
     // Sanity — each store is callable against its interface. We don't
@@ -102,7 +102,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
     expect(hits).toHaveLength(1);
 
     // Clean up the opened handles so the tmpdir rm at afterAll succeeds.
-    closeIfPossible(result.sessionStore);
+    closeIfPossible(result.renderStore);
     closeIfPossible(result.vectors);
   });
 
@@ -114,9 +114,9 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
         path: join(path, 'ggui-sessions.sqlite'),
       },
     });
-    expect(result.sessionStore).toBeDefined();
+    expect(result.renderStore).toBeDefined();
     expect(result.vectors).toBeUndefined();
-    closeIfPossible(result.sessionStore);
+    closeIfPossible(result.renderStore);
 
     const path2 = join(tmpRoot, 'vectors-only');
     const result2 = await resolveStorageFromConfig({
@@ -125,7 +125,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
         path: join(path2, 'ggui-vectors.sqlite'),
       },
     });
-    expect(result2.sessionStore).toBeUndefined();
+    expect(result2.renderStore).toBeUndefined();
     expect(result2.vectors).toBeDefined();
     closeIfPossible(result2.vectors);
   });
@@ -139,7 +139,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
         path: join(path, 'ggui-vectors.sqlite'),
       },
     });
-    expect(result.sessionStore).toBeUndefined();
+    expect(result.renderStore).toBeUndefined();
     expect(result.vectors).toBeDefined();
     closeIfPossible(result.vectors);
   });
@@ -203,8 +203,8 @@ describe('resolveStorageFromConfig — path resolution', () => {
       },
       { baseDir },
     );
-    expect(result.sessionStore).toBeDefined();
-    closeIfPossible(result.sessionStore);
+    expect(result.renderStore).toBeDefined();
+    closeIfPossible(result.renderStore);
   });
 
   it('passes absolute paths through unchanged', async () => {
@@ -220,8 +220,8 @@ describe('resolveStorageFromConfig — path resolution', () => {
     // have landed the file in the wrong spot; we assert the instance
     // opened the expected absolute path by reopening it via a fresh
     // resolver and writing + reading through both.
-    expect(result.sessionStore).toBeDefined();
-    closeIfPossible(result.sessionStore);
+    expect(result.renderStore).toBeDefined();
+    closeIfPossible(result.renderStore);
   });
 
   it('passes :memory: through as a power-user escape hatch', async () => {
@@ -232,8 +232,8 @@ describe('resolveStorageFromConfig — path resolution', () => {
     const result = await resolveStorageFromConfig({
       sessions: { driver: 'sqlite', path: ':memory:' },
     });
-    expect(result.sessionStore).toBeDefined();
-    closeIfPossible(result.sessionStore);
+    expect(result.renderStore).toBeDefined();
+    closeIfPossible(result.renderStore);
   });
 });
 
@@ -242,12 +242,12 @@ describe('resolveStorageFromConfig — path resolution', () => {
 describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
   it('absent config → createGguiServer boots cleanly with in-memory defaults', async () => {
     const { createGguiServer } = await import('./server.js');
-    const { sessionStore, vectors } =
+    const { renderStore, vectors } =
       await resolveStorageFromConfig(undefined);
     // Pass through — undefined fields mean createGguiServer uses its
     // in-memory defaults. Boot should succeed without better-sqlite3.
     const server = createGguiServer({
-      ...(sessionStore ? { sessionStore } : {}),
+      ...(renderStore ? { renderStore } : {}),
       ...(vectors ? { vectors } : {}),
       logger: {
         info: () => undefined,
@@ -287,7 +287,7 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     });
     // Don't bother actually booting a server here — the resolver's
     // output IS what we wire. Just close the handles.
-    closeIfPossible(round1.sessionStore);
+    closeIfPossible(round1.renderStore);
     closeIfPossible(round1.vectors);
 
     // Round 2 — re-resolve against the SAME config → we must see the
@@ -300,7 +300,7 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
 
     // Sanity — createGguiServer accepts the resolved bundle as-is.
     const server = createGguiServer({
-      ...(round2.sessionStore ? { sessionStore: round2.sessionStore } : {}),
+      ...(round2.renderStore ? { renderStore: round2.renderStore } : {}),
       ...(round2.vectors ? { vectors: round2.vectors } : {}),
       logger: {
         info: () => undefined,
@@ -315,7 +315,7 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     expect(server.toolCount).toBeGreaterThan(0);
     await server.close();
 
-    closeIfPossible(round2.sessionStore);
+    closeIfPossible(round2.renderStore);
     closeIfPossible(round2.vectors);
   });
 });

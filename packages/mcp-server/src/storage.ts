@@ -52,7 +52,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type {
-  SessionStore,
+  RenderStore,
   ThreadStore,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
@@ -82,9 +82,9 @@ export interface ResolveStorageFromConfigOptions {
 }
 
 export interface ResolvedStorageStores {
-  /** Concrete SessionStore, iff the config declared one. Undefined =
+  /** Concrete RenderStore, iff the config declared one. Undefined =
    * caller falls back to createGguiServer's in-memory default. */
-  readonly sessionStore?: SessionStore;
+  readonly renderStore?: RenderStore;
   /** Concrete VectorStore, iff the config declared one. Undefined =
    * caller falls back to createGguiServer's in-memory default. */
   readonly vectors?: VectorStore;
@@ -164,7 +164,7 @@ export async function resolveStorageFromConfig(
   const threadsMemory = config.threads?.driver === 'memory';
 
   const result: {
-    sessionStore?: SessionStore;
+    renderStore?: RenderStore;
     vectors?: VectorStore;
     threadStore?: ThreadStore;
     threadDurability?: 'durable' | 'ephemeral';
@@ -183,13 +183,13 @@ export async function resolveStorageFromConfig(
   // Single dynamic import serves every sqlite adapter — better-sqlite3's
   // N-API binding loads once even if the import lands twice; the
   // subpath barrel is cached by Node's module loader.
-  const { SqliteSessionStore, SqliteVectorStore, SqliteThreadStore } =
+  const { SqliteRenderStore, SqliteVectorStore, SqliteThreadStore } =
     await import('@ggui-ai/mcp-server-core/sqlite');
 
   if (config.sessions && config.sessions.driver === 'sqlite') {
     const filename = resolveStoragePath(config.sessions.path, opts.baseDir);
     ensureParentDir(filename);
-    result.sessionStore = new SqliteSessionStore({ filename });
+    result.renderStore = new SqliteRenderStore({ filename });
   }
   if (config.vectors && config.vectors.driver === 'sqlite') {
     const filename = resolveStoragePath(config.vectors.path, opts.baseDir);
