@@ -33,10 +33,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   type ConnectorRegistry,
   type RegisteredConnector,
-  type SessionStore,
+  type RenderStore,
 } from '@ggui-ai/mcp-server-core';
-import { isMcpAppsStackItem } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppsStackItem } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { isMcpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { Logger } from './logger.js';
 
 /** Default mount path for the MCP Apps inbound routes. */
@@ -44,7 +44,7 @@ export const DEFAULT_MCP_APPS_INBOUND_PATH = '/mcp-apps';
 
 export interface McpAppsInboundOptions {
   readonly connectors: ConnectorRegistry;
-  readonly sessionStore: SessionStore;
+  readonly renderStore: RenderStore;
   readonly logger: Logger;
   /** Override for the mount path prefix. Defaults to `/mcp-apps`. */
   readonly path?: string;
@@ -136,20 +136,25 @@ function readVisibility(toolDecl: unknown): Array<'model' | 'app'> {
 }
 
 /**
- * Resolve `{session, item}` from the ggui session store to a
- * {@link McpAppsStackItem}. Returns null if session or item is missing
- * or the target is not an mcpApps variant.
+ * Resolve `{render}` from the ggui render store to a
+ * {@link McpAppsRender}. Returns null if the render is missing or is
+ * not an mcpApps variant.
+ *
+ * Phase B: a render IS the addressable unit — no per-item lookup inside
+ * a stack vessel — so the render id alone resolves the McpAppsRender
+ * directly. The `itemId` parameter is preserved on the wire-facing
+ * query string for callsite stability but ignored when it matches the
+ * renderId (which is the only valid value post-collapse).
  */
 async function resolveMcpAppsItem(
-  store: SessionStore,
-  sessionId: string,
-  itemId: string,
-): Promise<McpAppsStackItem | null> {
-  const session = await store.get(sessionId);
-  if (!session) return null;
-  const entry = session.stack.find((e) => e.id === itemId);
-  if (!entry || !isMcpAppsStackItem(entry)) return null;
-  return entry;
+  store: RenderStore,
+  renderId: string,
+  _itemId: string,
+): Promise<McpAppsRender | null> {
+  const stored = await store.get(renderId);
+  if (!stored) return null;
+  if (!isMcpAppsRender(stored.render)) return null;
+  return stored.render;
 }
 
 /**
@@ -176,15 +181,15 @@ export function installMcpAppsInbound(
   const cache = new ToolsListCache();
 
   app.get(`${path}/resource`, async (req: Request, res: Response) => {
-    const sessionId = typeof req.query.session === 'string' ? req.query.session : '';
-    const itemId = typeof req.query.item === 'string' ? req.query.item : '';
-    if (!sessionId || !itemId) {
-      res.status(400).type('text/plain').send('Missing ?session and/or ?item');
+    const renderId = typeof req.query.render === 'string' ? req.query.render : '';
+    const itemId = typeof req.query.item === 'string' ? req.query.item : renderId;
+    if (!renderId) {
+      res.status(400).type('text/plain').send('Missing ?render');
       return;
     }
-    const item = await resolveMcpAppsItem(opts.sessionStore, sessionId, itemId);
+    const item = await resolveMcpAppsItem(opts.renderStore, renderId, itemId);
     if (!item) {
-      res.status(404).type('text/plain').send('Stack item not found');
+      res.status(404).type('text/plain').send('Render not found');
       return;
     }
     const connector = await opts.connectors.get(item.source.connectorId);
@@ -215,7 +220,7 @@ export function installMcpAppsInbound(
       res.status(200).type((first.mimeType as string) ?? 'text/html;profile=mcp-app').send(first.text);
     } catch (err) {
       opts.logger.error('mcp_apps_resource_proxy_failed', {
-        sessionId,
+        renderId,
         itemId,
         connectorId: item.source.connectorId,
         error: String(err),
@@ -228,19 +233,19 @@ export function installMcpAppsInbound(
 
   app.post(`${path}/tools-call`, async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as {
-      session?: unknown;
+      render?: unknown;
       item?: unknown;
       tool?: unknown;
       arguments?: unknown;
     };
-    const sessionId = typeof body.session === 'string' ? body.session : '';
-    const itemId = typeof body.item === 'string' ? body.item : '';
+    const renderId = typeof body.render === 'string' ? body.render : '';
+    const itemId = typeof body.item === 'string' ? body.item : renderId;
     const toolName = typeof body.tool === 'string' ? body.tool : '';
-    if (!sessionId || !itemId || !toolName) {
+    if (!renderId || !toolName) {
       res.status(400).json({ error: 'missing_fields' });
       return;
     }
-    const item = await resolveMcpAppsItem(opts.sessionStore, sessionId, itemId);
+    const item = await resolveMcpAppsItem(opts.renderStore, renderId, itemId);
     if (!item) {
       res.status(404).json({ error: 'item_not_found' });
       return;
@@ -292,7 +297,7 @@ export function installMcpAppsInbound(
       res.status(200).json(result);
     } catch (err) {
       opts.logger.error('mcp_apps_tools_call_proxy_failed', {
-        sessionId,
+        renderId,
         itemId,
         connectorId: item.source.connectorId,
         toolName,
@@ -313,7 +318,7 @@ export function installMcpAppsInbound(
  * Returns null when no CSP was declared (caller leaves the default
  * header in place).
  */
-function composeCsp(item: McpAppsStackItem): string | null {
+function composeCsp(item: McpAppsRender): string | null {
   const csp = item.csp;
   if (!csp) return null;
   const parts: string[] = [];

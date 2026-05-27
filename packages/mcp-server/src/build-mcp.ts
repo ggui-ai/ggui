@@ -18,7 +18,7 @@ import type {
 import type { Logger } from './logger.js';
 import {
   installMcpAppsOutbound,
-  type GguiSessionResourceTemplateOptions,
+  type GguiRenderResourceTemplateOptions,
 } from './mcp-apps-outbound.js';
 
 export interface ServerInfo {
@@ -31,7 +31,7 @@ export interface BuildMcpServerOptions {
   /**
    * When set, register the MCP Apps outbound wiring on every fresh
    * server instance — advertises the `io.modelcontextprotocol/ui`
-   * capability and serves `ui://ggui/session` via `resources/read`.
+   * capability and serves `ui://ggui/render` via `resources/read`.
    *
    * Tool-declaration `_meta.ui.*` is INDEPENDENT of this flag; it's
    * carried per-handler on `SharedHandler._meta`. A server can stamp
@@ -41,26 +41,26 @@ export interface BuildMcpServerOptions {
    */
   readonly mcpAppsOutbound?: boolean;
   /**
-   * Optional override for the `ui://ggui/session` shell body. Defaults
+   * Optional override for the `ui://ggui/render` shell body. Defaults
    * to whatever shell the server was built with — either a placeholder
    * or the real thin-shell HTML.
    */
   readonly shellHtml?: string;
   /**
-   * Per-session self-contained shell options. When supplied,
+   * Per-render self-contained shell options. When supplied,
    * `installMcpAppsOutbound` ALSO registers
-   * `ui://ggui/session/{sessionId}` as a resource template — the URI
-   * `ggui_push.resultMeta` stamps on per-call `_meta.ui.resourceUri`
+   * `ui://ggui/render/{renderId}` as a resource template — the URI
+   * `ggui_render.resultMeta` stamps on per-call `_meta.ui.resourceUri`
    * for third-party MCP Apps hosts (Claude Desktop, claude.ai web)
    * that don't speak ggui's custom postMessage protocol.
    *
    * Absent → only the legacy postMessage shell is registered (first-
    * party hosts only).
    */
-  readonly selfContained?: GguiSessionResourceTemplateOptions;
+  readonly selfContained?: GguiRenderResourceTemplateOptions;
   /**
    * Public origin the server is reachable at — forwarded to
-   * `installMcpAppsOutbound` so the static `ui://ggui/session`
+   * `installMcpAppsOutbound` so the static `ui://ggui/render`
    * resource declares `_meta.ui.csp.{connectDomains,resourceDomains}`.
    * Without this, spec-compliant hosts (Claude Desktop, claude.ai
    * Connector, Claude Code) apply their default CSP (`connect-src

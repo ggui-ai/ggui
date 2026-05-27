@@ -19,7 +19,7 @@ import {
   DEVTOOL_SECURITY_HEADERS,
   applyDevtoolSecurityHeaders,
 } from './console-headers.js';
-import { GGUI_SESSION_SHELL_SCRIPT_HASH } from './mcp-apps-outbound.js';
+import { GGUI_RENDER_SHELL_SCRIPT_HASH } from './mcp-apps-outbound.js';
 
 describe('DEVTOOL_CSP', () => {
   it('contains the load-bearing directives in the locked shape', () => {
@@ -29,7 +29,7 @@ describe('DEVTOOL_CSP', () => {
     // the design note and implementation stay in sync.
     expect(DEVTOOL_CSP).toBe(
       "default-src 'none'; " +
-        `script-src 'self' blob: data: ${GGUI_SESSION_SHELL_SCRIPT_HASH}; ` +
+        `script-src 'self' blob: data: ${GGUI_RENDER_SHELL_SCRIPT_HASH}; ` +
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
         "connect-src 'self'; " +
         "img-src 'self' data:; " +
@@ -48,7 +48,7 @@ describe('DEVTOOL_CSP', () => {
     // `script-src` lists a matching source expression — `'unsafe-inline'`
     // is forbidden, so we authorise the exact bytes by hash.
     //
-    // If `GGUI_SESSION_SHELL_SCRIPT_HASH` changes (its companion drift
+    // If `GGUI_RENDER_SHELL_SCRIPT_HASH` changes (its companion drift
     // test in `mcp-apps-outbound.test.ts` will catch a stale value),
     // this assertion follows because the hash is interpolated.
     const scriptPart = DEVTOOL_CSP
@@ -56,8 +56,8 @@ describe('DEVTOOL_CSP', () => {
       .map((s) => s.trim())
       .find((s) => s.startsWith('script-src '));
     expect(scriptPart).toBeDefined();
-    expect(scriptPart).toContain(GGUI_SESSION_SHELL_SCRIPT_HASH);
-    expect(GGUI_SESSION_SHELL_SCRIPT_HASH).toMatch(
+    expect(scriptPart).toContain(GGUI_RENDER_SHELL_SCRIPT_HASH);
+    expect(GGUI_RENDER_SHELL_SCRIPT_HASH).toMatch(
       /^'sha256-[A-Za-z0-9+/]+=*'$/,
     );
   });

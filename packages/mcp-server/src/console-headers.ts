@@ -32,7 +32,7 @@
  *     neither enables `eval` / `new Function` (that needs
  *     `'unsafe-eval'`, which is explicitly absent).
  *
- *     `<ggui-shell-hash>` is `GGUI_SESSION_SHELL_SCRIPT_HASH` from
+ *     `<ggui-shell-hash>` is `GGUI_RENDER_SHELL_SCRIPT_HASH` from
  *     `mcp-apps-outbound.ts` — the sha-256 source-expression
  *     authorising the inline `<script>` block of the production thin
  *     shell `<McpAppIframe>` mounts via `srcdoc`. `srcdoc` iframes
@@ -97,7 +97,7 @@
  */
 import type { Response } from 'express';
 import type { ServerResponse } from 'node:http';
-import { GGUI_SESSION_SHELL_SCRIPT_HASH } from './mcp-apps-outbound.js';
+import { GGUI_RENDER_SHELL_SCRIPT_HASH } from './mcp-apps-outbound.js';
 
 /**
  * The CSP directive string. Exported so tests can assert against the
@@ -107,7 +107,7 @@ import { GGUI_SESSION_SHELL_SCRIPT_HASH } from './mcp-apps-outbound.js';
  */
 export const DEVTOOL_CSP: string = [
   "default-src 'none'",
-  `script-src 'self' blob: data: ${GGUI_SESSION_SHELL_SCRIPT_HASH}`,
+  `script-src 'self' blob: data: ${GGUI_RENDER_SHELL_SCRIPT_HASH}`,
   // Google Fonts CDN allowlisted for the brand-kit Inter + Geist Mono
   // pair used by the public welcome page (`/`). The same allowlist
   // applies to every console-served HTML — every page may opt to load

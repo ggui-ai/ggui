@@ -1,101 +1,82 @@
 /**
- * Console-facing session-event timeline endpoints powering
- * `/devtools/timeline` in the @ggui-ai/console SPA.
+ * Console timeline routes — `GET /ggui/console/timeline/*`.
  *
- * Unlike `/devtools/llm-trace`, the timeline does NOT introduce a new
- * sink — every event the operator wants to step through already
- * exists in the {@link SessionStore} (inbound user
- * actions + tool calls + UI mutations) and the
- * {@link SessionStreamBuffer} (outbound stream cursor). This module is
- * a thin read-only window over both.
+ * Read-only event-log inspector. Lists rendered surfaces (renders) the
+ * server has materialized, drills into the per-render event ledger for
+ * a single id, and exposes the live-channel outbound cursor alongside
+ * for diagnostic context.
  *
- * **Two surfaces, both admin-gated:**
+ * Post-Phase-B (flatten-render-identity): renamed from the prior
+ * "sessions" terminology; the canonical addressable unit is now the
+ * render. The on-wire `renderId` path param replaces `sessionId`.
  *
- *   - `GET /ggui/console/timeline/sessions` — list of sessions visible
- *     to the timeline picker. All statuses (active / completed /
- *     expired) — operators frequently want to debug a session AFTER it
- *     terminated. Sorted most-recent-`lastActivityAt` first; defaults
- *     to 50 rows, clamped to [1, 200] via `?limit=`.
- *
- *   - `GET /ggui/console/timeline/:sessionId/events` — the full event
- *     log for one session, oldest-first, drained from
- *     `sessionStore.observe(id, { tail: false })`. Also reports the
- *     outbound stream cursor (`streamBuffer.currentSeq`) so the
- *     operator can see live-channel progress without a separate fetch.
- *
- * Why REST-only (no SSE): replay is a snapshot. The operator picks a
- * session and steps through what happened — they want a stable frozen
- * view, not a live tail. SSE would force the scrubber to keep chasing
- * a moving end-of-stream and complicate the UI without paying for it.
- *
- * Memory: bounded by whatever the underlying SessionStore retains.
- * `InMemorySessionStore` keeps everything for the process lifetime —
+ * Memory: bounded by whatever the underlying RenderStore retains.
+ * `InMemoryRenderStore` keeps everything for the process lifetime —
  * fine for OSS dev. A hosted closed runtime's persistent store is the
  * durability surface.
  */
 import type { Request, Response, Express } from 'express';
 import type {
-  SessionEvent,
-  SessionStore,
+  RenderEvent,
+  RenderStore,
   SessionStreamBuffer,
 } from '@ggui-ai/mcp-server-core';
 import { applyDevtoolSecurityHeaders } from './console-headers.js';
 
-/** One row in `GET /ggui/console/timeline/sessions`. */
-interface TimelineSessionSummary {
-  readonly sessionId: string;
+/** One row in `GET /ggui/console/timeline/renders`. */
+interface TimelineRenderSummary {
+  readonly renderId: string;
   readonly appId: string;
-  readonly stackSize: number;
   readonly createdAt: number;
   readonly lastActivityAt: number;
   readonly status: 'active' | 'completed' | 'expired';
   /**
    * Outbound stream cursor — number of envelopes the buffer has seen
-   * for this session. 0 when the session never produced live-channel
+   * for this render. 0 when the render never produced live-channel
    * traffic. Used in the picker's row-meta so an operator can pick the
-   * busiest session at a glance.
+   * busiest render at a glance.
    */
   readonly streamSeq: number;
 }
 
-/** Body of `GET /ggui/console/timeline/sessions`. */
-interface TimelineSessionsResponse {
-  readonly sessions: readonly TimelineSessionSummary[];
+/** Body of `GET /ggui/console/timeline/renders`. */
+interface TimelineRendersResponse {
+  readonly renders: readonly TimelineRenderSummary[];
   readonly total: number;
 }
 
-/** Body of `GET /ggui/console/timeline/:sessionId/events`. */
+/** Body of `GET /ggui/console/timeline/:renderId/events`. */
 interface TimelineEventsResponse {
-  readonly sessionId: string;
-  readonly events: readonly SessionEvent[];
+  readonly renderId: string;
+  readonly events: readonly RenderEvent[];
   /**
-   * Latest live-channel outbound seq for this session. Reported alongside
-   * the inbound event log so the operator UI can hint "this session
+   * Latest live-channel outbound seq for this render. Reported alongside
+   * the inbound event log so the operator UI can hint "this render
    * also produced N outbound stream frames" without a second fetch.
-   * 0 when the session never produced live-channel traffic.
+   * 0 when the render never produced live-channel traffic.
    */
   readonly streamSeq: number;
   /**
-   * `'unknown'` when the session has no events recorded (the store
-   * returned nothing). Otherwise mirrors the session's status as the
-   * store reports it. Helpful so the UI can render a "session expired"
+   * `'unknown'` when the render has no events recorded (the store
+   * returned nothing). Otherwise mirrors the render's status as the
+   * store reports it. Helpful so the UI can render a "render expired"
    * pill on the detail pane without a second list-fetch.
    */
   readonly status: 'active' | 'completed' | 'expired' | 'unknown';
 }
 
 /**
- * Drain {@link SessionStore.observe} into an array. The observe iterator
+ * Drain {@link RenderStore.observe} into an array. The observe iterator
  * with `{ tail: false }` resolves cleanly after replaying every stored
  * event, so this is a plain `for await`. Bound by the store's per-
- * session retention (in-memory: full history; hosted: store-defined).
+ * render retention (in-memory: full history; hosted: store-defined).
  */
-async function drainSessionEvents(
-  sessionStore: SessionStore,
-  sessionId: string,
-): Promise<SessionEvent[]> {
-  const out: SessionEvent[] = [];
-  for await (const event of sessionStore.observe(sessionId, {
+async function drainRenderEvents(
+  renderStore: RenderStore,
+  renderId: string,
+): Promise<RenderEvent[]> {
+  const out: RenderEvent[] = [];
+  for await (const event of renderStore.observe(renderId, {
     fromSeq: 1,
     tail: false,
   })) {
@@ -112,12 +93,12 @@ async function drainSessionEvents(
  */
 export function mountConsoleTimelineRoutes(
   app: Express,
-  sessionStore: SessionStore | undefined,
+  renderStore: RenderStore | undefined,
   streamBuffer: SessionStreamBuffer | undefined,
 ): void {
-  // GET /ggui/console/timeline/sessions?limit=<n>
+  // GET /ggui/console/timeline/renders?limit=<n>
   app.get(
-    '/ggui/console/timeline/sessions',
+    '/ggui/console/timeline/renders',
     async (req: Request, res: Response) => {
       applyDevtoolSecurityHeaders(res);
 
@@ -131,92 +112,91 @@ export function mountConsoleTimelineRoutes(
       }
 
       // Zero-config shape: no store wired (pure-MCP boot) → empty list.
-      if (!sessionStore) {
-        const body: TimelineSessionsResponse = { sessions: [], total: 0 };
+      if (!renderStore) {
+        const body: TimelineRendersResponse = { renders: [], total: 0 };
         res.json(body);
         return;
       }
 
       try {
         // No status filter — operators want to debug completed +
-        // expired sessions, not just live ones. Limit is post-filter
+        // expired renders, not just live ones. Limit is post-filter
         // so the response stays bounded.
-        const sessions = await sessionStore.list({});
-        const summaries: TimelineSessionSummary[] = [];
+        const stored = await renderStore.list({});
+        const summaries: TimelineRenderSummary[] = [];
         const now = Date.now();
-        for (const session of sessions) {
+        for (const row of stored) {
           let streamSeq = 0;
           if (streamBuffer) {
             try {
-              streamSeq = await streamBuffer.currentSeq(session.id);
+              streamSeq = await streamBuffer.currentSeq(row.id);
             } catch {
               // Stream-cursor lookup is best-effort metadata; an
               // adapter error must not blank the picker.
             }
           }
-          // Compute status from session state (the store doesn't
-          // surface its private `closed` flag on the Session type).
-          // We mirror the InMemorySessionStore's `computeStatus` rule:
+          // Compute status from render state (the store doesn't
+          // surface its private `closed` flag uniformly across impls).
+          // We mirror the InMemoryRenderStore's rule:
           // expired = expiresAt <= now, otherwise active. The
           // 'completed' state needs the closed flag to disambiguate;
           // we report 'active' until eviction. Operators reading the
           // detail pane get the authoritative status from the store.
-          const status: TimelineSessionSummary['status'] =
-            session.expiresAt <= now ? 'expired' : 'active';
+          const status: TimelineRenderSummary['status'] =
+            row.expiresAt <= now ? 'expired' : 'active';
           summaries.push({
-            sessionId: session.id,
-            appId: session.appId,
-            stackSize: session.stack.length,
-            createdAt: session.createdAt,
-            lastActivityAt: session.lastActivityAt,
+            renderId: row.id,
+            appId: row.appId,
+            createdAt: row.createdAt,
+            lastActivityAt: row.lastActivityAt,
             status,
             streamSeq,
           });
         }
-        // Most-recent activity first. Tiebreak on sessionId for
+        // Most-recent activity first. Tiebreak on renderId for
         // stable ordering across reloads.
         summaries.sort((a, b) => {
           const byRecency = b.lastActivityAt - a.lastActivityAt;
           if (byRecency !== 0) return byRecency;
-          return a.sessionId.localeCompare(b.sessionId);
+          return a.renderId.localeCompare(b.renderId);
         });
         const trimmed = summaries.slice(0, limit);
-        const body: TimelineSessionsResponse = {
-          sessions: trimmed,
+        const body: TimelineRendersResponse = {
+          renders: trimmed,
           total: summaries.length,
         };
         res.json(body);
       } catch (err) {
         res.status(500).json({
-          error: 'timeline_sessions_list_failed',
+          error: 'timeline_renders_list_failed',
           message:
             err instanceof Error
-              ? `Session store failed to list — ${err.message}`
-              : `Session store failed to list — ${String(err)}`,
+              ? `Render store failed to list — ${err.message}`
+              : `Render store failed to list — ${String(err)}`,
         });
       }
     },
   );
 
-  // GET /ggui/console/timeline/:sessionId/events
+  // GET /ggui/console/timeline/:renderId/events
   app.get(
-    '/ggui/console/timeline/:sessionId/events',
+    '/ggui/console/timeline/:renderId/events',
     async (req: Request, res: Response) => {
       applyDevtoolSecurityHeaders(res);
 
-      const sessionId = req.params['sessionId'];
-      if (!sessionId || sessionId.length === 0) {
+      const renderId = req.params['renderId'];
+      if (!renderId || renderId.length === 0) {
         res.status(400).json({
-          error: 'invalid_session_id',
-          message: 'sessionId path parameter is required',
+          error: 'invalid_render_id',
+          message: 'renderId path parameter is required',
         });
         return;
       }
 
       // Zero-config shape: no store wired → empty events.
-      if (!sessionStore) {
+      if (!renderStore) {
         const body: TimelineEventsResponse = {
-          sessionId,
+          renderId,
           events: [],
           streamSeq: 0,
           status: 'unknown',
@@ -226,14 +206,14 @@ export function mountConsoleTimelineRoutes(
       }
 
       try {
-        const session = await sessionStore.get(sessionId);
-        if (!session) {
+        const stored = await renderStore.get(renderId);
+        if (!stored) {
           // 404 is the right status — but we still return a well-
           // formed body so the SPA can render an "expired/dropped"
           // notice without a special-case branch. Body matches the
           // schema; status code disambiguates.
           const body: TimelineEventsResponse = {
-            sessionId,
+            renderId,
             events: [],
             streamSeq: 0,
             status: 'unknown',
@@ -242,20 +222,20 @@ export function mountConsoleTimelineRoutes(
           return;
         }
 
-        const events = await drainSessionEvents(sessionStore, sessionId);
+        const events = await drainRenderEvents(renderStore, renderId);
         let streamSeq = 0;
         if (streamBuffer) {
           try {
-            streamSeq = await streamBuffer.currentSeq(sessionId);
+            streamSeq = await streamBuffer.currentSeq(renderId);
           } catch {
             // Best-effort. Inbound events stand on their own.
           }
         }
         const now = Date.now();
         const status: TimelineEventsResponse['status'] =
-          session.expiresAt <= now ? 'expired' : 'active';
+          stored.expiresAt <= now ? 'expired' : 'active';
         const body: TimelineEventsResponse = {
-          sessionId,
+          renderId,
           events,
           streamSeq,
           status,
@@ -266,8 +246,8 @@ export function mountConsoleTimelineRoutes(
           error: 'timeline_events_drain_failed',
           message:
             err instanceof Error
-              ? `Session store failed to drain — ${err.message}`
-              : `Session store failed to drain — ${String(err)}`,
+              ? `Render store failed to drain — ${err.message}`
+              : `Render store failed to drain — ${String(err)}`,
         });
       }
     },

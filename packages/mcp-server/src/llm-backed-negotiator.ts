@@ -353,7 +353,7 @@ export function createLlmBackedHandshakeNegotiator(
     deps.estimatedGenerationLatencyMs ?? DEFAULT_GEN_LATENCY_MS;
 
   return {
-    async decide({ intent, blueprintDraft, gadgets, ctx, sessionId }): Promise<HandshakeNegotiatorResult> {
+    async decide({ intent, blueprintDraft, gadgets, ctx }): Promise<HandshakeNegotiatorResult> {
       const draftContract = blueprintDraft.contract;
 
       // Handshake-time exact-key fast path. Runs BEFORE the BYOK
@@ -449,7 +449,11 @@ export function createLlmBackedHandshakeNegotiator(
             },
             config: {
               appId: ctx.appId,
-              sessionId: sessionId ?? 'handshake',
+              // Handshake runs ahead of any concrete render — no renderId
+              // is bound yet. The negotiator only uses `renderId` to key
+              // its optional `readRenderState` callback, which the OSS
+              // path doesn't wire here, so a stable placeholder works.
+              renderId: 'handshake',
               includeSharedPool: false,
             },
           },
