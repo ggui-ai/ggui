@@ -86,7 +86,7 @@ export interface RenderEvent {
  *
  * No terminal event. Renders decay implicitly via TTL — there is no
  * `'session.closed'` / `'render.terminated'` literal because there is
- * no `ggui_close` tool to write one. Observers detect end-of-life by
+ * no terminal write to make. Observers detect end-of-life by
  * `expiresAt` elapsing relative to wall-clock.
  */
 export type RenderEventType =

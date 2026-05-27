@@ -152,8 +152,9 @@ describe('InMemoryShortCodeIndex', () => {
   });
 
   describe('revokeBySessionId', () => {
-    // Used by ggui_close — every /r/<code> URL bound to a closed
-    // session stops resolving the moment the session is marked done.
+    // Used when a session/render is forcibly torn down (e.g. operator
+    // GC or quota eviction) — every /r/<code> URL bound to that
+    // session stops resolving the moment the session is dropped.
     it('drops every binding for the session and returns the count', async () => {
       const idx = new InMemoryShortCodeIndex();
       await idx.put('aaaa1111', { sessionId: 's1', appId: 'app' });
