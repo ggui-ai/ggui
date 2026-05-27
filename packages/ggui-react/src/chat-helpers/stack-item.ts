@@ -1,44 +1,48 @@
 import type { ContentBlock } from '@ggui-ai/protocol';
 
 /**
- * Pull a durable StackItem-shaped object out of a `tool_result` block's
+ * Pull a durable Render-shaped object out of a `tool_result` block's
  * `content` payload. Tolerant of shapes:
- *   - Direct: { id, componentCode, props, ... }                (StackItem itself)
- *   - Wrapped: { stackItem: {...} }
- *   - Nested: { result: { stackItem: {...} } }
+ *   - Direct: { id, componentCode, props, ... }                (Render itself)
+ *   - Wrapped: { render: {...} }
+ *   - Nested: { result: { render: {...} } }
  *   - Nested direct: { result: { id, componentCode, ... } }
  *
- * Returns `null` if no StackItem can be found — caller falls back to
+ * Returns `null` if no Render can be found — caller falls back to
  * placeholder rendering.
+ *
+ * Post-Phase-B: the wrapper key was `stackItem` pre-collapse; now it's
+ * `render`. Stack item ID and session ID are gone — every render
+ * carries a single flat `renderId`.
  */
-export function extractStackItemFromToolResult(block: ContentBlock): unknown | null {
+export function extractRenderFromToolResult(block: ContentBlock): unknown | null {
   if (block.type !== 'tool_result') return null;
   const content = block.content as unknown;
   if (typeof content !== 'object' || content === null) return null;
   const rec = content as Record<string, unknown>;
-  if (rec.stackItem && typeof rec.stackItem === 'object') return rec.stackItem;
+  if (rec.render && typeof rec.render === 'object') return rec.render;
   if (typeof rec.id === 'string' && typeof rec.componentCode === 'string') return rec;
   for (const v of Object.values(rec)) {
     if (typeof v === 'object' && v !== null) {
       const inner = v as Record<string, unknown>;
-      if (inner.stackItem && typeof inner.stackItem === 'object') return inner.stackItem;
+      if (inner.render && typeof inner.render === 'object') return inner.render;
       if (typeof inner.id === 'string' && typeof inner.componentCode === 'string') return inner;
     }
   }
   return null;
 }
 
-/** Same traversal looking for just a sessionId field. */
-export function extractSessionIdFromToolResult(block: ContentBlock): string | null {
+/** Same traversal looking for just a renderId field. */
+export function extractRenderIdFromToolResult(block: ContentBlock): string | null {
   if (block.type !== 'tool_result') return null;
   const content = block.content as unknown;
   if (typeof content !== 'object' || content === null) return null;
   const rec = content as Record<string, unknown>;
-  if (typeof rec.sessionId === 'string') return rec.sessionId;
+  if (typeof rec.renderId === 'string') return rec.renderId;
   for (const v of Object.values(rec)) {
     if (typeof v === 'object' && v !== null) {
       const inner = v as Record<string, unknown>;
-      if (typeof inner.sessionId === 'string') return inner.sessionId;
+      if (typeof inner.renderId === 'string') return inner.renderId;
     }
   }
   return null;

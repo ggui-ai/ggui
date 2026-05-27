@@ -3,7 +3,7 @@
  * (mirror of `@ggui-ai/react::internal/reserved-validators.ts` + the
  * server-side composer in `@ggui-ai/mcp-server::reserved-validators.ts`).
  *
- * `GguiSession` composes this and threads it through
+ * `GguiRender` composes this and threads it through
  * `validateInboundStreamPayload`'s `extraReservedValidators`
  * parameter — so malformed `_ggui:preview` frames that sneak past the
  * server's outbound fan-out (or arrive from a third-party ggui

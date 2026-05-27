@@ -3,7 +3,7 @@
  * {@link StreamEnvelope} sequence from within React.
  *
  * The hook listens for `BRIDGE_EVENTS.AGENT_DATA` CustomEvents
- * dispatched by {@link GguiSession} when the WebSocket delivers a
+ * dispatched by {@link GguiRender} when the WebSocket delivers a
  * live-channel `data` message, filters them by channel name, and
  * accumulates the matching envelopes in arrival order.
  *

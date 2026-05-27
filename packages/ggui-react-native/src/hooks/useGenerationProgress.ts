@@ -47,14 +47,14 @@ export interface ProgressState {
 }
 
 /**
- * Hook that tracks real-time UI generation progress per stack item.
+ * Hook that tracks real-time UI generation progress per render.
  *
  * On web platform, listens for `ggui:logs` CustomEvents dispatched by
- * the session layer. On native platforms, this is a no-op (progress events
- * are delivered via the `onProgress` callback on GguiSession instead).
+ * the render layer. On native platforms, this is a no-op (progress events
+ * are delivered via the `onProgress` callback on GguiRender instead).
  *
- * @returns `getProgress(stackItemId)` for a specific item, and
- *          `getLatestProgress()` for the most recent event across all items
+ * @returns `getProgress(renderId)` for a specific render, and
+ *          `getLatestProgress()` for the most recent event across all renders
  */
 export function useGenerationProgress() {
   const [progressMap, setProgressMap] = useState<Map<string, ProgressState>>(new Map());
@@ -66,13 +66,13 @@ export function useGenerationProgress() {
       const detail = (event as CustomEvent).detail;
       if (!detail || typeof detail !== 'object') return;
 
-      const stackItemId = detail.stackItemId;
+      const renderId = detail.renderId;
       const { step, message } = detail;
-      if (!stackItemId || !step) return;
+      if (!renderId || !step) return;
 
       setProgressMap(prev => {
         const next = new Map(prev);
-        next.set(stackItemId, {
+        next.set(renderId, {
           step,
           message: message || '',
           label: STEP_LABELS[step] || step,
@@ -88,11 +88,11 @@ export function useGenerationProgress() {
   }, []);
 
   const getProgress = useCallback(
-    (stackItemId: string): ProgressState | undefined => progressMap.get(stackItemId),
+    (renderId: string): ProgressState | undefined => progressMap.get(renderId),
     [progressMap]
   );
 
-  /** Get the latest progress event across all stack items */
+  /** Get the latest progress event across all renders */
   const getLatestProgress = useCallback((): ProgressState | undefined => {
     let latest: ProgressState | undefined;
     for (const p of progressMap.values()) {

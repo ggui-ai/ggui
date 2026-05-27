@@ -3,7 +3,7 @@
  * (mirror of `@ggui-ai/mcp-server::reserved-validators.ts` on the
  * receive side).
  *
- * `GguiSession` composes this and threads it through
+ * `GguiRender` composes this and threads it through
  * `validateInboundStreamPayload`'s `extraReservedValidators`
  * parameter — so malformed `_ggui:preview` frames that sneak past the
  * server's outbound fan-out (or that arrive from a third-party ggui
@@ -69,7 +69,7 @@ export function composePreviewReservedValidator(): ReadonlyMap<
 /**
  * Merge two reserved-validator maps. `override` keys WIN on conflict.
  * Pattern: client supplies defaults (A2UI), caller may replace by key
- * via the `GguiSession.extraReservedValidators` prop.
+ * via the `GguiRender.extraReservedValidators` prop.
  */
 export function mergeReservedValidators(
   base: ReadonlyMap<string, ReservedChannelValidator> | undefined,

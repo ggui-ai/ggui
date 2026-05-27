@@ -176,7 +176,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   // Tracks the sessionId the agent surfaces via `tool_result` on turn 1 so
   // subsequent `send()` calls can carry `X-Ggui-Session-Id` — without this
   // the agent mints a new session per POST and turn-2 render events never
-  // reach the already-mounted `<GguiSession>`. Mirrors the web hook's fix.
+  // reach the already-mounted `<GguiRender>`. Mirrors the web hook's fix.
   const sessionIdRef = useRef<string | null>(options.sessionId ?? null);
 
   const send = useCallback(

@@ -13,7 +13,7 @@
  *
  *   - Internal-only. Not exported from the package root. Only the
  *     renderer's internal `useChannelStream` subscribes, and only
- *     `GguiSession` emits.
+ *     `GguiRender` emits.
  *   - Knows nothing about A2UI, preview surfaces, or channel naming
  *     policies. It's a dumb fan-out over `StreamEnvelope` — reserved
  *     channel semantics live in `@ggui-ai/protocol`.
@@ -23,7 +23,7 @@
  *     already has.
  *
  * The module-level `Set<Listener>` is intentional: React contexts
- * would force every GguiSession consumer into a subscription, and
+ * would force every GguiRender consumer into a subscription, and
  * we want the fan-out to be opt-in per renderer call. Keeping the
  * emitter as a JS singleton matches the one-WebSocket-per-app
  * reality on native and keeps cross-platform parity trivial.
@@ -37,7 +37,7 @@ const listeners = new Set<PreviewBridgeListener>();
 
 /**
  * Broadcast a delivery to every subscriber. Called from the
- * `GguiSession` data-message handler after any reserved-channel
+ * `GguiRender` data-message handler after any reserved-channel
  * bypass / streamSpec validation has run — subscribers see only
  * envelopes the session decided to forward.
  */
