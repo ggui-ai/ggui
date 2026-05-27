@@ -5,10 +5,10 @@
  * supplied componentCode bytes into BOTH the MVB BlueprintStore AND
  * the cache vectorStore. The agent-facing handshake matchBlueprint
  * fast path then finds the row on first contact — even with a
- * paraphrased intent — and push.accept reuses the cached bytes.
+ * paraphrased intent — and render.accept reuses the cached bytes.
  *
- * Distinct from scenario 17 (cold→warm via push.override priming):
- *   - Scenario 17 primes through the agent flow (push runs the LLM).
+ * Distinct from scenario 17 (cold→warm via render.override priming):
+ *   - Scenario 17 primes through the agent flow (render runs the LLM).
  *   - Scenario 18 primes through the ops flow with PRE-BUILT bytes
  *     (no LLM call on the priming side).
  *
@@ -20,12 +20,12 @@
  * Flow:
  *   1. POST `/ops` `ggui_ops_register_blueprint({contract, componentCode})`
  *      — no LLM, sub-second.
- *   2. Fresh `/mcp` session. `ggui_handshake({intent: paraphrased,
+ *   2. `/mcp` `ggui_handshake({intent: paraphrased,
  *      blueprintDraft: {contract: <same>}})`.
  *      Assert: `suggestion.origin === 'cache'`,
  *      `blueprintMeta.codeHash === sha256(componentCode)`.
- *   3. `ggui_push({handshakeId, decision: {kind: 'accept'}})`.
- *      Assert: `bootstrap.codeHash === <same sha256>`, push latency
+ *   3. `ggui_render({handshakeId, decision: {kind: 'accept'}})`.
+ *      Assert: `bootstrap.codeHash === <same sha256>`, render latency
  *      < 5s.
  *
  * Runs in seconds — no ANTHROPIC_API_KEY required for the priming
@@ -62,8 +62,8 @@ interface HandshakeOut {
   suggestion: HandshakeSuggestion;
 }
 
-interface PushOut {
-  stackItemId: string;
+interface RenderOut {
+  renderId: string;
   url?: string;
 }
 
@@ -99,20 +99,20 @@ const REGISTER_TEST_CONTRACT = {
 const REGISTER_TEST_COMPONENT_CODE =
   "export default function PreBuiltCard() { return null; }\n";
 
-function bootstrapUrlFromPushUrl(pushUrl: string | undefined): string {
-  if (typeof pushUrl !== 'string') {
-    throw new Error(`push output missing url: ${String(pushUrl)}`);
+function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
+  if (typeof renderUrl !== 'string') {
+    throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
-  const parsed = new URL(pushUrl);
+  const parsed = new URL(renderUrl);
   const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
   if (!codeMatch || typeof codeMatch[1] !== 'string') {
-    throw new Error(`url has no /r/<shortCode>: ${pushUrl}`);
+    throw new Error(`url has no /r/<shortCode>: ${renderUrl}`);
   }
   return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
 }
 
-async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl), {
+async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJson> {
+  const resp = await fetch(bootstrapUrlFromRenderUrl(renderUrl), {
     headers: { Accept: 'application/json' },
   });
   if (!resp.ok) {
@@ -120,23 +120,23 @@ async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJso
       `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
     );
   }
-  // R4: slice envelope — flatten the stack-item slice into the legacy
+  // R4: slice envelope — flatten the render slice into the legacy
   // shape the test consumes.
   const envelope = (await resp.json()) as Record<string, unknown>;
-  const stackItem =
-    (envelope['ai.ggui/stack-item'] as Record<string, unknown> | undefined) ??
+  const renderSlice =
+    (envelope['ai.ggui/render'] as Record<string, unknown> | undefined) ??
     {};
   const out: BootstrapJson = {};
-  if (typeof stackItem['codeUrl'] === 'string') out.codeUrl = stackItem['codeUrl'];
-  if (typeof stackItem['codeHash'] === 'string') out.codeHash = stackItem['codeHash'];
+  if (typeof renderSlice['codeUrl'] === 'string') out.codeUrl = renderSlice['codeUrl'];
+  if (typeof renderSlice['codeHash'] === 'string') out.codeHash = renderSlice['codeHash'];
   return out;
 }
 
 describe(
-  'Scenario 18 — warm path: /ops register (pre-built code) → handshake matches → push.accept',
+  'Scenario 18 — warm path: /ops register (pre-built code) → handshake matches → render.accept',
   () => {
     test(
-      'register tool lands componentCode in both registries; handshake + push.accept reuse it',
+      'register tool lands componentCode in both registries; handshake + render.accept reuse it',
       async () => {
         const expectedCodeHash = createHash('sha256')
           .update(REGISTER_TEST_COMPONENT_CODE)
@@ -156,14 +156,10 @@ describe(
         // negotiator + bootstrap will surface.
         expect(ops.codeHash).toBe(expectedCodeHash);
 
-        // ── 2. Fresh session, handshake with paraphrased intent ───
-        const session = unwrapStructured<{ sessionId: string }>(
-          await callTool(MCP_URL, 'ggui_new_session', {}),
-        );
+        // ── 2. Handshake with paraphrased intent ──────────────────
         const handshakeStart = Date.now();
         const handshake = unwrapStructured<HandshakeOut>(
           await callTool(MCP_URL, 'ggui_handshake', {
-            sessionId: session.sessionId,
             intent: 'a label badge — different phrasing than the priming side',
             blueprintDraft: { contract: REGISTER_TEST_CONTRACT },
           }),
@@ -175,19 +171,19 @@ describe(
         // Cache hit must skip the synth-LLM round-trip.
         expect(handshakeLatencyMs).toBeLessThan(3_000);
 
-        // ── 3. push.accept reuses the cached blueprint ────────────
-        const pushStart = Date.now();
-        const push = unwrapStructured<PushOut>(
-          await callTool(MCP_URL, 'ggui_push', {
+        // ── 3. render.accept reuses the cached blueprint ──────────
+        const renderStart = Date.now();
+        const render = unwrapStructured<RenderOut>(
+          await callTool(MCP_URL, 'ggui_render', {
             handshakeId: handshake.handshakeId,
             decision: { kind: 'accept' },
           }),
         );
-        const pushLatencyMs = Date.now() - pushStart;
-        const bootstrap = await fetchBootstrap(push.url);
+        const renderLatencyMs = Date.now() - renderStart;
+        const bootstrap = await fetchBootstrap(render.url);
 
         expect(bootstrap.codeHash).toBe(expectedCodeHash);
-        expect(pushLatencyMs).toBeLessThan(5_000);
+        expect(renderLatencyMs).toBeLessThan(5_000);
       },
       60_000,
     );

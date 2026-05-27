@@ -199,7 +199,7 @@ describe.skip(
           'When I click a checkbox, call the todo_toggle tool with that',
           'todo\'s id, then call ggui_emit on the "toast" channel with',
           '`{text: "Marked <todo text> done"}` (or "un-done") so I see a',
-          'confirmation banner. Use ggui_update or ggui_push to refresh',
+          'confirmation banner. Use ggui_update or ggui_render to refresh',
           'the list visually too.',
         ].join(' ');
         const promptBox = page.getByRole('textbox').first();

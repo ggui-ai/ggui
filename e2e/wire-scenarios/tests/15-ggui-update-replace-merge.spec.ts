@@ -138,7 +138,7 @@ for (const provider of PROVIDERS) {
 
           // ── PHASE 1 — kind: 'replace' ───────────────────────────────
           await callTool(MCP_URL, 'ggui_update', {
-            stackItemId: ref.stackItemId,
+            renderId: ref.renderId,
             kind: 'replace',
             props: {
               title: 'My Todos',
@@ -158,7 +158,7 @@ for (const provider of PROVIDERS) {
 
           // ── PHASE 2 — kind: 'merge' shallow ─────────────────────────
           await callTool(MCP_URL, 'ggui_update', {
-            stackItemId: ref.stackItemId,
+            renderId: ref.renderId,
             kind: 'merge',
             patch: { title: 'Updated Todos' },
           });
@@ -171,7 +171,7 @@ for (const provider of PROVIDERS) {
 
           // ── PHASE 3 — kind: 'merge' nested-deep ─────────────────────
           await callTool(MCP_URL, 'ggui_update', {
-            stackItemId: ref.stackItemId,
+            renderId: ref.renderId,
             kind: 'merge',
             patch: { summary: { completed: 2 } },
           });
@@ -184,7 +184,7 @@ for (const provider of PROVIDERS) {
 
           // ── PHASE 4 — kind: 'merge' contract violation ─────────────
           const violationResp = await callTool(MCP_URL, 'ggui_update', {
-            stackItemId: ref.stackItemId,
+            renderId: ref.renderId,
             kind: 'merge',
             patch: { todos: null },
           });

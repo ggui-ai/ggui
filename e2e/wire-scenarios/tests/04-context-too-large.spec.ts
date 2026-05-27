@@ -12,10 +12,10 @@
  *   - `CONTEXT_SNAPSHOT_MAX_BYTES`   = 64 KB total snapshot
  *   - `CONTEXT_SNAPSHOT_MAX_SLOTS`   = 50 entries
  *
- * The handler runs the size gate BEFORE the session-existence check,
- * so this scenario does NOT need a real handshake/push — any non-empty
- * sessionId/stackItemId/appId trio with an oversize snapshot trips
- * the rejection path. That's why this scenario runs without an LLM.
+ * The handler runs the size gate BEFORE the render-existence check,
+ * so this scenario does NOT need a real handshake/render — any non-empty
+ * renderId/appId pair with an oversize snapshot trips the rejection
+ * path. That's why this scenario runs without an LLM.
  */
 import { describe, expect, test } from 'vitest';
 import { callTool } from '../fixtures/mcp-client.js';
@@ -24,9 +24,8 @@ const MCP_URL = `http://localhost:${process.env.GGUI_PORT ?? 6781}/mcp`;
 
 function makeArgs(snapshot: Record<string, unknown>): Record<string, unknown> {
   return {
-    sessionId: 'sess-fake-for-size-check',
+    renderId: 'rnd-fake-for-size-check',
     appId: 'builder',
-    stackItemId: 'item-fake-for-size-check',
     snapshot,
   };
 }

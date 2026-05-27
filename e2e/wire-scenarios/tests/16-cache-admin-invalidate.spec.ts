@@ -6,19 +6,19 @@
  * against a live server that just did a real cold-gen.
  *
  * Flow:
- *   1. Push with a deterministic override-contract → cold-gen runs,
+ *   1. Render with a deterministic override-contract → cold-gen runs,
  *      registry writes a `template:${contractKey}` row.
  *   2. GET `/ggui/console/blueprints/cached` → row appears with the
  *      new-shape fields (`contractKey`, `kind`, `cachedIntent`,
  *      `cachedAt`).
- *   3. Second push with the SAME contract → exact-key hit (codeHash
+ *   3. Second render with the SAME contract → exact-key hit (codeHash
  *      matches, latency under cold-gen budget).
  *   4. DELETE the row via `/ggui/console/blueprints/cached/:id`.
  *   5. GET again → list is empty (defensive: filter-by-`contractKey`
  *      since other concurrent test scenarios may have left rows in
  *      the same scope, even though parallel suite runs are gated).
- *   6. Third push with the same contract → cold-gen fires again
- *      (different stackItemId guaranteed). The structural proof is
+ *   6. Third render with the same contract → cold-gen fires again
+ *      (different renderId guaranteed). The structural proof is
  *      that the registry row reappears at the same contractKey slot
  *      — cache writes only happen at the END of a successful gen
  *      pipeline, so a present row proves the cold path ran.
@@ -46,8 +46,8 @@ const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
-interface PushOut {
-  stackItemId: string;
+interface RenderOut {
+  renderId: string;
   url?: string;
 }
 
@@ -70,24 +70,24 @@ interface CachedListResponse {
   total: number;
 }
 
-function bootstrapUrlFromPushUrl(pushUrl: string | undefined): string {
-  if (typeof pushUrl !== 'string') {
-    throw new Error(`push output missing url: ${String(pushUrl)}`);
+function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
+  if (typeof renderUrl !== 'string') {
+    throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
-  // Push URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
+  // Render URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
   // host to the local dev port, preserve the signed query. R4 retired
   // `/api/bootstrap/:shortCode`; content-negotiated `/r/:shortCode`
   // covers the same surface.
-  const parsed = new URL(pushUrl);
+  const parsed = new URL(renderUrl);
   const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
   if (!codeMatch || typeof codeMatch[1] !== 'string') {
-    throw new Error(`url has no /r/<shortCode>: ${pushUrl}`);
+    throw new Error(`url has no /r/<shortCode>: ${renderUrl}`);
   }
   return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
 }
 
-async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromPushUrl(pushUrl), {
+async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJson> {
+  const resp = await fetch(bootstrapUrlFromRenderUrl(renderUrl), {
     headers: { Accept: 'application/json' },
   });
   if (!resp.ok) {
@@ -95,15 +95,15 @@ async function fetchBootstrap(pushUrl: string | undefined): Promise<BootstrapJso
       `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
     );
   }
-  // R4: slice envelope — flatten the stack-item slice into the legacy
+  // R4: slice envelope — flatten the render slice into the legacy
   // shape the test consumes.
   const envelope = (await resp.json()) as Record<string, unknown>;
-  const stackItem =
-    (envelope['ai.ggui/stack-item'] as Record<string, unknown> | undefined) ??
+  const renderSlice =
+    (envelope['ai.ggui/render'] as Record<string, unknown> | undefined) ??
     {};
   return {
-    codeUrl: typeof stackItem['codeUrl'] === 'string' ? stackItem['codeUrl'] : undefined,
-    codeHash: typeof stackItem['codeHash'] === 'string' ? stackItem['codeHash'] : undefined,
+    codeUrl: typeof renderSlice['codeUrl'] === 'string' ? renderSlice['codeUrl'] : undefined,
+    codeHash: typeof renderSlice['codeHash'] === 'string' ? renderSlice['codeHash'] : undefined,
   };
 }
 
@@ -132,24 +132,20 @@ async function deleteCacheEntry(id: string): Promise<void> {
   }
 }
 
-async function pushWithContract(): Promise<{
-  out: PushOut;
+async function renderWithContract(): Promise<{
+  out: RenderOut;
   bootstrap: BootstrapJson;
   latencyMs: number;
 }> {
-  const session = unwrapStructured<{ sessionId: string }>(
-    await callTool(MCP_URL, 'ggui_new_session', {}),
-  );
   const handshake = unwrapStructured<{ handshakeId: string }>(
     await callTool(MCP_URL, 'ggui_handshake', {
-      sessionId: session.sessionId,
       intent: CACHE_ADMIN_INTENT,
       blueprintDraft: { contract: CACHE_ADMIN_CONTRACT },
     }),
   );
   const start = Date.now();
-  const out = unwrapStructured<PushOut>(
-    await callTool(MCP_URL, 'ggui_push', {
+  const out = unwrapStructured<RenderOut>(
+    await callTool(MCP_URL, 'ggui_render', {
       handshakeId: handshake.handshakeId,
       decision: {
         kind: 'override',
@@ -167,11 +163,11 @@ describe.skipIf(!HAS_KEY)(
   'Scenario 16 — cache admin: list + invalidate + re-register',
   () => {
     test(
-      'cached push lands a registry row; DELETE clears it; next push re-registers',
+      'cached render lands a registry row; DELETE clears it; next render re-registers',
       async () => {
         // ── 1. cold-gen primes the registry ─────────────────────────
-        const cold = await pushWithContract();
-        expect(cold.out.stackItemId).toBeTruthy();
+        const cold = await renderWithContract();
+        expect(cold.out.renderId).toBeTruthy();
         expect(typeof cold.bootstrap.codeHash).toBe('string');
 
         // ── 2. /cached lists the new row in the new-shape projection
@@ -186,8 +182,8 @@ describe.skipIf(!HAS_KEY)(
         // Synthetic id = `${kind}:${contractKey}`.
         expect(ourEntry!.id).toBe(`template:${ourEntry!.contractKey}`);
 
-        // ── 3. second push with same contract = exact-key hit ──────
-        const warm = await pushWithContract();
+        // ── 3. second render with same contract = exact-key hit ────
+        const warm = await renderWithContract();
         expect(warm.bootstrap.codeHash).toBe(cold.bootstrap.codeHash);
         expect(warm.latencyMs).toBeLessThan(5_000);
 
@@ -200,15 +196,15 @@ describe.skipIf(!HAS_KEY)(
         );
         expect(stillThere).toBeUndefined();
 
-        // ── 5. third push re-runs cold-gen + re-registers the row ──
+        // ── 5. third render re-runs cold-gen + re-registers the row
         // We don't gate on latency — Haiku-class cold-gen for a small
         // contract can complete in <3s, which would false-positive a
         // "did cold-gen really run?" timing check. The structural
         // proof is that the registry row reappears: cache writes only
         // happen at the END of a successful gen pipeline, so a present
         // row proves the cold path ran.
-        const reCold = await pushWithContract();
-        expect(reCold.out.stackItemId).toBeTruthy();
+        const reCold = await renderWithContract();
+        expect(reCold.out.renderId).toBeTruthy();
 
         const listAfterReprime = await fetchCachedList();
         const repopulated = listAfterReprime.entries.find(
@@ -217,7 +213,7 @@ describe.skipIf(!HAS_KEY)(
         expect(repopulated).toBeDefined();
         // The re-registered row lives at the same `(scope, kind,
         // contractKey)` slot — identical id proves the cache key is
-        // contract-derived, not session/timestamp/random.
+        // contract-derived, not render/timestamp/random.
         expect(repopulated!.contractKey).toBe(ourEntry!.contractKey);
         expect(repopulated!.kind).toBe(ourEntry!.kind);
       },

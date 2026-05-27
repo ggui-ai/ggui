@@ -3,7 +3,7 @@
  *
  * PIPE-2 wire: button click inside the iframe → `tools/call
  * ggui_runtime_submit_action` via host postMessage relay → server
- * appends `ActionEnvelope` onto the stackItem-keyed pending-events
+ * appends `ActionEnvelope` onto the render-keyed pending-events
  * pipe → agent's `ggui_consume` long-poll drains it mid-turn.
  *
  * In this scenario the "agent" is the test runner: push a contract
@@ -36,10 +36,10 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
   test(
     'iframe button click → pipe append → ggui_consume drains the event',
     async () => {
-      // 1. Push a canonical "Save button + note slot" contract.
+      // 1. Render a canonical "Save button + note slot" contract.
       //    Shared verbatim with scenarios 02 + 03 so the OSS
       //    in-memory blueprint registry's exact-key matcher cache-
-      //    hits across them — first scenario to push cold-gens, the
+      //    hits across them — first scenario to render cold-gens, the
       //    other two cache-hit (sub-second). Saves 2 cold-gens per
       //    run and contains LLM flakiness to one cold path. The
       //    extra `contextSpec.note` slot is contract bloat from 01's
@@ -93,7 +93,7 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
         status: string;
       }>(
         await callTool(MCP_URL, 'ggui_consume', {
-          stackItemId: ref.stackItemId,
+          renderId: ref.renderId,
           timeout: 5,
         }),
       );

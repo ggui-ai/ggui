@@ -8,13 +8,13 @@
  *   1. Pre-seed the todo MCP with 3 todos via `tools/call todo_add`.
  *   2. Real user (Playwright) types a prompt in the sample agent's
  *      chat shell asking the agent to render the todos with a toggle.
- *   3. Real LLM agent calls `todo_list` → `ggui_new_session` →
- *      `ggui_handshake` → `ggui_push`, rendering an interactive list.
+ *   3. Real LLM agent calls `todo_list` → `ggui_handshake` →
+ *      `ggui_render`, rendering an interactive list.
  *   4. The sample agent's React shell embeds the resulting iframe via
  *      `<McpAppIframe>` (selector: `iframe[data-ggui-mcp-app-iframe]`).
  *   5. Real user clicks the todo labelled "buy milk" inside the iframe.
  *   6. The click → `submit_action` → host relay → pipe-append on the
- *      stackItem-keyed pending-events pipe.
+ *      render-keyed pending-events pipe.
  *   7. The mid-turn LLM agent drains `ggui_consume`, reads the toggle
  *      event, and calls `todo_toggle({id: <the buy-milk id>})` on the
  *      todo MCP.
@@ -256,7 +256,7 @@ describe.skipIf(!HAS_KEY)(
         // 2. Wait for the iframe to appear. `<McpAppIframe>` sets
         //    data-ggui-mcp-app-iframe on its <iframe>. This scenario
         //    chains TWO real LLM calls in series:
-        //      (a) the sample-agent's LLM picks `ggui_push` (5–30s),
+        //      (a) the sample-agent's LLM picks `ggui_render` (5–30s),
         //      (b) ggui-default's cold-gen produces the component
         //          (10–60s).
         //    Plus the iframe mount cascade (fetch codeUrl + dynamic
@@ -387,10 +387,10 @@ describe.skipIf(!HAS_KEY)(
         }
         const toolNames = toolUses.map((u) => u.name).filter(Boolean);
 
-        // The push wired the actionable UI into the wire.
+        // The render wired the actionable UI into the wire.
         expect(
-          toolNames.includes('mcp__ggui__ggui_push'),
-          `expected ggui_push tool call; saw [${toolNames.join(', ')}]`,
+          toolNames.includes('mcp__ggui__ggui_render'),
+          `expected ggui_render tool call; saw [${toolNames.join(', ')}]`,
         ).toBe(true);
 
         // The agent long-polled for the user's click via the pipe.

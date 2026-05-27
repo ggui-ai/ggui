@@ -1,8 +1,8 @@
 /**
  * Scenario 2 — `PIPE_NOT_FOUND` fall-through to `ui/message`.
  *
- * When `ggui_runtime_submit_action` fires for a stackItemId whose
- * pipe is closed/missing (popped, session closed, never opened), the
+ * When `ggui_runtime_submit_action` fires for a renderId whose
+ * pipe is closed/missing (render closed, never opened), the
  * server returns `{ok:false, code:'PIPE_NOT_FOUND'}` in
  * structuredContent. The iframe-runtime's `classifySubmitActionResponse`
  * reads `ok === false` → returns `'fallback'` → runtime posts a
@@ -10,9 +10,9 @@
  * agent on the next chat turn.
  *
  * Test choreography:
- *   1. Push a contract (pipe opens server-side via markCreated).
+ *   1. Render a contract (pipe opens server-side via markCreated).
  *   2. Open the renderer URL with a postMessage interceptor.
- *   3. Pop the stack item — closes the pipe (markDeleted).
+ *   3. Close the render — closes the pipe (markDeleted).
  *   4. Click the now-stale button.
  *   5. Verify a `ui/message` envelope appears on the parent.
  */
@@ -66,12 +66,12 @@ describe.skipIf(!HAS_KEY)('Scenario 2 — PIPE_NOT_FOUND fallback', () => {
       // (cache cleared between runs via GGUI_CODE_CACHE_DIR).
       await buttons.first().waitFor({ state: 'visible', timeout: 90_000 });
 
-      // Pop the stack item — closes the pipe. Iframe is still
+      // Close the render — closes the pipe. Iframe is still
       // mounted in the DOM; its next dispatch hits a missing pipe.
-      const popResult = unwrapStructured<{ poppedId: string | null }>(
-        await callTool(MCP_URL, 'ggui_pop', { sessionId: ref.sessionId }),
+      const closeResult = unwrapStructured<{ success: boolean }>(
+        await callTool(MCP_URL, 'ggui_close', { renderId: ref.renderId }),
       );
-      expect(popResult.poppedId).toBe(ref.stackItemId);
+      expect(closeResult.success).toBe(true);
 
       // Click. Robust to LLMs that wrap the action in a modal —
       // click the trigger then the inner Save. Up to 3 layers.
@@ -108,14 +108,14 @@ describe.skipIf(!HAS_KEY)('Scenario 2 — PIPE_NOT_FOUND fallback', () => {
       // envelope so ggui-aware SDKs can route it through their tool-
       // result loop. The action payload + uiContext travel inline so
       // the agent can react WITHOUT calling ggui_consume for this
-      // stack item (the pipe is gone).
+      // render (the pipe is gone).
       const first = uiMessageEnvelopes[0] as {
         params?: {
           _meta?: {
             ggui?: {
               userAction?: {
                 kind?: string;
-                stackItemId?: string;
+                renderId?: string;
                 actionId?: string;
                 submittedAt?: string;
                 intent?: string;
@@ -128,7 +128,7 @@ describe.skipIf(!HAS_KEY)('Scenario 2 — PIPE_NOT_FOUND fallback', () => {
       const userAction = first.params?._meta?.ggui?.userAction;
       expect(userAction).toBeDefined();
       expect(userAction?.kind).toBe('inline');
-      expect(userAction?.stackItemId).toBe(ref.stackItemId);
+      expect(userAction?.renderId).toBe(ref.renderId);
       expect(typeof userAction?.submittedAt).toBe('string');
       expect(typeof userAction?.intent).toBe('string');
       expect(userAction?.payload).toBeDefined();

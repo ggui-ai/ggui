@@ -82,7 +82,7 @@ for (const provider of PROVIDERS) {
             status: string;
           }>(
             await callTool(MCP_URL, 'ggui_consume', {
-              stackItemId: ref.stackItemId,
+              renderId: ref.renderId,
               timeout: 5,
             }),
           );

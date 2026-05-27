@@ -3,23 +3,23 @@
  *
  * Post-2026-05-14 pivot: the pipe is the single source of truth. When
  * the user fires a gesture inside the iframe but no `ggui_consume`
- * long-poll is registered for the targeted stack item, the server
+ * long-poll is registered for the targeted render, the server
  * returns `{ok:true, consumerPresent:false}` on submit_action and the
  * iframe-runtime emits a `ui/message` IMMEDIATELY with
  * `_meta.ggui.userAction.kind: 'queued'` so the agent's next turn
- * calls `ggui_consume({stackItemId})` to drain.
+ * calls `ggui_consume({renderId})` to drain.
  *
  * No 10s timer. No rescue drain. The pipe holds the data; the nudge
  * tells the agent where to look.
  *
  * Test choreography:
- *   1. Push a contract with `actionSpec.save` (no agent listening).
+ *   1. Render a contract with `actionSpec.save` (no agent listening).
  *   2. Open the renderer URL with a postMessage interceptor.
  *   3. Click the Save button. (No `ggui_consume` long-poll runs in
  *      this test, so the server reports `consumerPresent: false`.)
  *   4. Assert that a `ui/message` arrives with
  *      `_meta.ggui.userAction.kind === 'queued'`,
- *      `nextStep.tool === 'ggui_consume'`, and the right stackItemId.
+ *      `nextStep.tool === 'ggui_consume'`, and the right renderId.
  *   5. Drain via `ggui_consume` and assert the event carries
  *      `intent: 'save'` + per-event `actionData` + `uiContext`.
  */
@@ -109,13 +109,13 @@ describe.skipIf(!HAS_KEY)('Scenario 10 — no-consumer queued nudge', () => {
             ggui?: {
               userAction?: {
                 kind?: string;
-                stackItemId?: string;
+                renderId?: string;
                 intent?: string;
                 actionId?: string;
                 submittedAt?: string;
                 nextStep?: {
                   tool?: string;
-                  args?: { stackItemId?: string };
+                  args?: { renderId?: string };
                 };
               };
             };
@@ -125,11 +125,11 @@ describe.skipIf(!HAS_KEY)('Scenario 10 — no-consumer queued nudge', () => {
       const userAction = first.params?._meta?.ggui?.userAction;
       expect(userAction).toBeDefined();
       expect(userAction?.kind).toBe('queued');
-      expect(userAction?.stackItemId).toBe(ref.stackItemId);
+      expect(userAction?.renderId).toBe(ref.renderId);
       expect(typeof userAction?.intent).toBe('string');
       expect(typeof userAction?.submittedAt).toBe('string');
       expect(userAction?.nextStep?.tool).toBe('ggui_consume');
-      expect(userAction?.nextStep?.args?.stackItemId).toBe(ref.stackItemId);
+      expect(userAction?.nextStep?.args?.renderId).toBe(ref.renderId);
 
       // Drain via ggui_consume — the event IS on the pipe (the queued
       // nudge is a wake-up signal, not a fallback delivery). Each
@@ -143,7 +143,7 @@ describe.skipIf(!HAS_KEY)('Scenario 10 — no-consumer queued nudge', () => {
         status: string;
       }>(
         await callTool(MCP_URL, 'ggui_consume', {
-          stackItemId: ref.stackItemId,
+          renderId: ref.renderId,
           timeout: 5,
         }),
       );

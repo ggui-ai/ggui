@@ -3,7 +3,7 @@
  *
  * Scenario 7 covers the QUEUED path (pipe alive → consume drains
  * mid-turn). This scenario covers the INLINE path: the pipe is GONE
- * (popped) when the user clicks, so the iframe-runtime degrades to
+ * (closed) when the user clicks, so the iframe-runtime degrades to
  * `_meta.ggui.userAction.kind: 'inline'` on a `ui/message` envelope
  * carrying `{actionData, uiContext}`. The sample-agent's chat shell
  * intercepts the envelope, populates the prompt input, and the user
@@ -19,7 +19,7 @@
  *   1. Pre-seed todos via `todo_add`.
  *   2. Prompt the sample agent to render the list with checkboxes.
  *   3. Wait for the iframe to mount (cold-gen + paint).
- *   4. POP the stack item — closes the server-side pipe.
+ *   4. CLOSE the render — closes the server-side pipe.
  *   5. Click "buy milk" — iframe-runtime fires submit_action; server
  *      returns success but `consumerPresent` is moot (pipe gone) so
  *      classifySubmitActionResponse returns 'fallback', and the runtime
@@ -30,7 +30,7 @@
  *   7. Agent processes the prompt, calls `todo_toggle` with the
  *      buy-milk id, then re-renders.
  *   8. Assert: todo state mutated AND the agent did NOT call
- *      `ggui_consume` for the popped stack item (proving the inline
+ *      `ggui_consume` for the closed render (proving the inline
  *      payload was the carrier, not the pipe).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -214,7 +214,7 @@ describe.skip(
             'Show me my todo list. Render each todo as a row with a checkbox',
             "in front of the todo's text. When I click a checkbox, mark that",
             'todo as done (or un-done) using the todo_toggle tool, then',
-            're-render the list with ggui_update or ggui_push so I can see',
+            're-render the list with ggui_update or ggui_render so I can see',
             'the new state. No delete buttons, no other controls.',
           ].join(' '),
         );
@@ -230,30 +230,21 @@ describe.skip(
           .first()
           .waitFor({ state: 'visible', timeout: 120_000 });
 
-        // 3. Resolve the active session + stack item via ggui_get_session
-        //    so we can pop it externally. The sample agent runs in a
-        //    separate process; we can't read its in-memory session id
-        //    directly, but `ggui_get_session` on a known sessionId is
-        //    only useful if we knew it — we don't. Workaround: probe
+        // 3. Resolve the active renderId via the iframe's bootstrap
+        //    meta. The sample agent runs in a separate process; we
+        //    can't read its in-memory render id directly. Probe
         //    `_meta.ggui.bootstrap` from the iframe's window global.
-        const stackItemId = await iframeFrame.locator('html').evaluate(() => {
+        const renderId = await iframeFrame.locator('html').evaluate(() => {
           const w = window as unknown as {
-            __GGUI_META__?: { stackItemId?: string; sessionId?: string };
+            __GGUI_META__?: { renderId?: string };
           };
-          return w.__GGUI_META__?.stackItemId ?? null;
+          return w.__GGUI_META__?.renderId ?? null;
         });
-        const sessionId = await iframeFrame.locator('html').evaluate(() => {
-          const w = window as unknown as {
-            __GGUI_META__?: { stackItemId?: string; sessionId?: string };
-          };
-          return w.__GGUI_META__?.sessionId ?? null;
-        });
-        expect(stackItemId, 'iframe bootstrap missing stackItemId').toBeTruthy();
-        expect(sessionId, 'iframe bootstrap missing sessionId').toBeTruthy();
+        expect(renderId, 'iframe bootstrap missing renderId').toBeTruthy();
 
         // 4. Wait for the agent's first turn to end so its in-flight
-        //    `ggui_consume` long-poll terminates BEFORE we pop. If we
-        //    pop while consume is still long-polling, the pop's
+        //    `ggui_consume` long-poll terminates BEFORE we close. If we
+        //    close while consume is still long-polling, the close's
         //    markDeleted will short-circuit the poll and the agent
         //    will land back in the SDK loop ready for the next turn —
         //    but it ALSO blurs the "pipe-gone" assertion (the agent
@@ -264,13 +255,13 @@ describe.skip(
           timeout: 60_000,
         });
 
-        // 5. POP — this is the "pipe gone" setup. markDeleted fires
-        //    server-side, so the next submit_action for this stackItemId
+        // 5. CLOSE — this is the "pipe gone" setup. markDeleted fires
+        //    server-side, so the next submit_action for this renderId
         //    will land outside the active pipe window. The iframe is
-        //    still mounted in the DOM (the pop only affects server-side
+        //    still mounted in the DOM (the close only affects server-side
         //    routing, not iframe lifecycle).
-        await callTool(`http://localhost:${GGUI_PORT}/mcp`, 'ggui_pop', {
-          sessionId: sessionId!,
+        await callTool(`http://localhost:${GGUI_PORT}/mcp`, 'ggui_close', {
+          renderId: renderId!,
         });
 
         // 6. PRE-CLICK GUARD — state must still be untouched.
@@ -383,17 +374,17 @@ describe.skip(
         expect(toggleCall?.input?.id).toBe(buyMilkRow?.id);
 
         // Inline-carrier proof — the agent did NOT drain the pipe for
-        // the popped stack item. ggui_consume calls targeting the
-        // popped stackItemId would mean the agent fell back on the
-        // queued path instead of the inline payload.
-        const consumeCallsForPopped = toolUses.filter(
+        // the closed render. ggui_consume calls targeting the closed
+        // renderId would mean the agent fell back on the queued path
+        // instead of the inline payload.
+        const consumeCallsForClosed = toolUses.filter(
           (u) =>
             u.name === 'mcp__ggui__ggui_consume' &&
-            (u.input as { stackItemId?: string } | undefined)?.stackItemId === stackItemId,
+            (u.input as { renderId?: string } | undefined)?.renderId === renderId,
         );
         expect(
-          consumeCallsForPopped.length,
-          'agent drained the popped pipe — inline carrier was NOT the path taken',
+          consumeCallsForClosed.length,
+          'agent drained the closed pipe — inline carrier was NOT the path taken',
         ).toBe(0);
       },
       300_000,
