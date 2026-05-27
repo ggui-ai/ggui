@@ -1,6 +1,6 @@
 /**
  * `createDrainAckHandler` — unit coverage for the channel handler
- * factored out of `handleTriadMessage` in B2. The handler is a thin
+ * factored out of `handleRendererMessage` in B2. The handler is a thin
  * passthrough to the module-scoped dispatch fan-out; the tests pin
  * payload forwarding + handler-type identity.
  */

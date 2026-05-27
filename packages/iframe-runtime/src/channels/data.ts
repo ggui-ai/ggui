@@ -11,7 +11,7 @@
  * in `runtime.ts` as part of the B3b cleanup — the handler is now the
  * sole dispatch surface for `data` frames.
  *
- * Factored out of `handleTriadMessage` as part of the B3a handler
+ * Factored out of `handleRendererMessage` as part of the B3a handler
  * extraction; expanded in B3b to absorb the observability-axis
  * emission previously fired in parallel from `bootSequence`.
  */

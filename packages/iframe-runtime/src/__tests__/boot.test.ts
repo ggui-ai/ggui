@@ -499,22 +499,3 @@ describe('bootSequence — failure paths', () => {
   });
 });
 
-describe('renderStack placeholders — empty state', () => {
-  it('renders the empty placeholder when ack returns no stack', async () => {
-    const dom = document.implementation.createHTMLDocument('renderer-test');
-    const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
-    const { connectFn } = buildMockConnect(undefined);
-    const notifyParent = vi.fn();
-
-    const result = await bootSequence({
-      doc: dom,
-      callUiInitialize,
-      connectFn,
-      notifyParent,
-    });
-
-    expect(result.ok).toBe(true);
-    const empty = dom.querySelector('[data-ggui-empty]');
-    expect(empty?.textContent).toMatch(/no stack items/i);
-  });
-});

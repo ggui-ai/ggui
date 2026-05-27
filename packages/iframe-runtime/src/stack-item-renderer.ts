@@ -88,7 +88,7 @@ export interface StackItemRendererOptions {
    * equivalent to the identity function (no extra wrapping). The
    * self-contained boot path inlines its own ContextStateHost via the
    * top-level `renderWrapper`; this seam exists for the WS-driven
-   * triad path where the per-item React mount is the only mount
+   * renderer path where the per-item React mount is the only mount
    * surface.
    */
   readonly wrapOuter?: (mountedTree: ReactNode) => ReactNode;

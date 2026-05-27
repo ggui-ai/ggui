@@ -7,7 +7,7 @@
  * passthrough — the router parses the frame contents against its
  * subscription map and dispatches to the matching consumer.
  *
- * Factored out of `handleTriadMessage` as part of the B3a handler
+ * Factored out of `handleRendererMessage` as part of the B3a handler
  * extraction.
  */
 

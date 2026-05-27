@@ -232,7 +232,7 @@ export interface ChannelTransportRouter {
 
   /**
    * Tear down every active subscription + timer. Called on
-   * `triadWiring.teardown`.
+   * `renderer.teardown`.
    */
   readonly dispose: () => void;
 }
@@ -260,7 +260,7 @@ export function createChannelTransportRouter(
    * WS lifecycle flag. We start in `'connected'` because the router
    * is created AFTER the subscribe ack — the runtime's bootSequence
    * resolves `subscribeFn(...)` before threading the manager into
-   * triadWiring's `attachManager` (where the router is constructed).
+   * renderer's `attachManager` (where the router is constructed).
    * Status transitions update this; the router uses it to decide
    * whether to start WS subscribes or skip straight to polling.
    */

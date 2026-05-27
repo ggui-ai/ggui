@@ -12,8 +12,8 @@
  * `refreshStackDom`, `StatusRefs`) are preserved so the channel handlers
  * + runtime keep their import shape; `setStatus` / `setConnectedStatus`
  * are now `console.log` shims, and `refreshStackDom` is a no-op for the
- * triad-wired (production) path. The placeholder render path —
- * exercised by `boot.test.ts` without a triadWiring hook — still writes
+ * renderer-wired (production) path. The placeholder render path —
+ * exercised by `boot.test.ts` without a renderer hook — still writes
  * its `<li data-ggui-stack-item>` rows into the mount-target div for
  * the spec assertions that count items on the stack.
  */
@@ -54,7 +54,7 @@ export type StatusKind =
  * element kept for backward compatibility with channel handlers that
  * still pass `refs.status` through; it is NEVER appended to the
  * document, so production iframes carry no diagnostic banner. `stack`
- * is the React mount target — appended to `document.body` so triad
+ * is the React mount target — appended to `document.body` so renderer
  * wiring + the placeholder render path both have a container.
  */
 export interface StatusRefs {
@@ -122,7 +122,7 @@ export function setConnectedStatus(refs: StatusRefs, model: StackModel): void {
 /**
  * Render the stack model's items into the mount-target as
  * `<li data-ggui-stack-item>` rows. Only invoked on the placeholder
- * path (no triad wired) — the triad-wired production path uses
+ * path (no renderer wired) — the renderer-wired production path uses
  * `<div data-ggui-stack-item-root>` containers via `containerFor` and
  * never goes through here.
  */

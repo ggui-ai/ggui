@@ -13,7 +13,7 @@
  *     slices received via `ui/initialize`.
  *   - Open the WebSocket, run the subscribe handshake.
  *   - Render each stack item — either a structural placeholder or,
- *     when the triad hooks are wired, a React mount of `componentCode`.
+ *     when the renderer hooks are wired, a React mount of `componentCode`.
  *
  * The runtime advertises its build version via a post-`ui/initialize`
  * notification (`ggui:renderer-ready`).
@@ -142,7 +142,7 @@ const POSTMESSAGE_BOOT_TIMEOUT_MS = 30_000;
 
 /**
  * Drain-ack listener registry. Module-scoped so the dispatch path can
- * register a frame-listener without threading it through the triad.
+ * register a frame-listener without threading it through the renderer.
  * Listeners are called in registration order on every inbound
  * `{type:'drain_ack'}` WS frame; a listener returning `true` claims
  * the frame (no further listeners fire). The active listener dismisses
@@ -384,8 +384,8 @@ export interface BootSequenceOptions {
    */
   readonly onLifecycle?: LifecycleEmitter;
   /**
-   * Optional triad-wiring hook. When present, the boot sequence:
-   * (1) calls `triadWiring.setup()` after bootstrap parse;
+   * Optional renderer hook. When present, the boot sequence:
+   * (1) calls `renderer.setup()` after bootstrap parse;
    * (2) replaces the placeholder `renderStackInto` path with the
    * real `StackRenderer` on ack + subsequent pushes; (3) routes
    * inbound `data` / `props_update` / `feedback` frames through the
@@ -396,7 +396,7 @@ export interface BootSequenceOptions {
    * without pulling React + design + wire into the spec's import
    * graph.
    */
-  readonly triadWiring?: TriadWiringHooks;
+  readonly renderer?: RendererHooks;
   /**
    * Spec-canonical async slice-meta source — wraps a listener for the
    * inbound `ui/notifications/tool-result` postMessage defined by
@@ -439,19 +439,19 @@ export interface BootSequenceOptions {
 }
 
 /**
- * Renderer-triad wiring hooks. The real iframe boot plumbs these via
+ * Renderer hooks. The real iframe boot plumbs these via
  * `autoBootSequence` below; tests may pass their own fakes when
  * exercising the full flow.
  */
-export interface TriadWiringHooks {
+export interface RendererHooks {
   /**
    * Called after bootstrap parse succeeds. Return value threads the
    * root `WireConfig` + `StackRenderer` back into the runtime so the
    * server-message handler can route frames through them.
    *
    * `renderInto` — a DOM element the stack renderer owns. The
-   * placeholder `<ul data-ggui-stack>` is NOT reused; the triad
-   * renderer mounts React roots per stack item into dedicated
+   * placeholder `<ul data-ggui-stack>` is NOT reused; the renderer
+   * mounts React roots per stack item into dedicated
    * containers (see `containerFor` below).
    *
    * `onObserve` — optional observability emitter threaded down to
@@ -467,22 +467,22 @@ export interface TriadWiringHooks {
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
-  }): TriadHandle;
+  }): RendererHandle;
   /**
-   * Bind the real WS manager into the triad AFTER `connectFn` resolves.
+   * Bind the real WS manager into the renderer AFTER `connectFn` resolves.
    * The `setup()` step supplies a buffering shim — this hook flushes
-   * the buffer + swaps in the real send surface. Optional: a triad
+   * the buffer + swaps in the real send surface. Optional: a renderer
    * that doesn't emit outbound frames can skip.
    */
   attachManager?(
-    handle: TriadHandle,
+    handle: RendererHandle,
     realManager: { send: (msg: WebSocketMessage) => void },
   ): void;
   /** Optional cleanup — called on boot failure paths. */
-  teardown?(handle: TriadHandle): void;
+  teardown?(handle: RendererHandle): void;
 }
 
-export interface TriadHandle {
+export interface RendererHandle {
   readonly rootWireConfig: WireConfig;
   readonly streamBus: StreamBus;
   readonly stackRenderer: StackRenderer;
@@ -528,7 +528,7 @@ export interface BootSequenceResult {
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
-  const { doc, callUiInitialize, notifyParent, triadWiring, onProtocolError, onObserve, onLifecycle } = opts;
+  const { doc, callUiInitialize, notifyParent, renderer: rendererHooks, onProtocolError, onObserve, onLifecycle } = opts;
   const connectFn: ConnectFn = opts.connectFn ?? connectViaRegistry;
 
   // Emit typed {@link ProtocolError} for every bootstrap-failure site
@@ -570,9 +570,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // would write "(no stack items yet)" placeholder text into the
   // `<ul data-ggui-stack>` mount target, which (a) flashes user-
   // visible diagnostic text into every booting iframe and (b) gets
-  // wiped a moment later anyway when the triad's `containerFor`
+  // wiped a moment later anyway when the renderer's `containerFor`
   // appends its React mount divs. Both placeholder-only consumers
-  // (boot.test.ts) and triad consumers fold the actual stack via
+  // (boot.test.ts) and renderer consumers fold the actual stack via
   // `applyAckStack` after the ack lands; no early diagnostic write
   // is required.
   setStatus(refs, 'Negotiating with host…', 'connecting');
@@ -715,15 +715,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     stackModel = new StackModel({ filterToItemId: stackItem.stackItemId });
   }
 
-  // Triad wiring — when supplied, the handler routes frames through
+  // Renderer wiring — when supplied, the handler routes frames through
   // StackRenderer + WireConfig + StreamBus. When absent, the placeholder
   // path runs (boot.test.ts relies on the latter to keep its import
-  // graph tiny). The triad's channelRegistry is the dispatch surface
+  // graph tiny). The renderer's channelRegistry is the dispatch surface
   // for every WS frame; `connectFn` registers handshake handlers on
   // top of the existing registry then binds the transport.
-  const triad =
-    triadWiring !== undefined
-      ? triadWiring.setup({
+  const renderer =
+    rendererHooks !== undefined
+      ? rendererHooks.setup({
           meta: parsed.meta,
           stackModel,
           renderInto: refs.stack,
@@ -734,24 +734,24 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 
   setStatus(refs, `Connecting to ${session.sessionId}…`, 'connecting');
 
-  // Boot-without-triad path: we still need a ChannelRegistry to
+  // Boot-without-renderer path: we still need a ChannelRegistry to
   // receive frames, because the registry is the only dispatch
   // surface. Build a minimal one with just the `push` placeholder
-  // handler so non-triad consumers (boot.test.ts) see the
+  // handler so non-renderer consumers (boot.test.ts) see the
   // `data-ggui-stack-item` upserts.
   const placeholderRegistry =
-    triad === null
+    renderer === null
       ? createPlaceholderRegistry({
           session,
           stackModel,
           statusRefs: refs,
         })
       : null;
-  const activeRegistry = triad?.channelRegistry ?? placeholderRegistry!;
+  const activeRegistry = renderer?.channelRegistry ?? placeholderRegistry!;
 
   /**
    * Apply an ack's stack snapshot to the runtime — populates the model,
-   * refreshes status DOM, and (when triad is wired) re-renders the
+   * refreshes status DOM, and (when renderer is wired) re-renders the
    * stack + re-activates the top item's channel-transport entry. Used
    * by:
    *
@@ -770,15 +770,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }): Promise<void> => {
     if (ackPayload.stack === undefined) return;
     stackModel.setAll(ackPayload.stack);
-    // Placeholder DOM render only when triad is absent (boot.test.ts).
-    // Triad-mode iframes own the `<ul data-ggui-stack>` for React
+    // Placeholder DOM render only when renderer is absent (boot.test.ts).
+    // Renderer-mode iframes own the `<ul data-ggui-stack>` for React
     // mounts via `containerFor`; calling `refreshStackDom` here would
     // wipe React's mounts mid-flight.
-    if (triad === null) {
+    if (renderer === null) {
       refreshStackDom(refs, stackModel);
     }
-    if (triad !== null) {
-      await triad.stackRenderer.applyStack(stackModel.snapshot());
+    if (renderer !== null) {
+      await renderer.stackRenderer.applyStack(stackModel.snapshot());
       const snapshot = stackModel.snapshot();
       const top = snapshot[snapshot.length - 1];
       if (
@@ -786,7 +786,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         top.type !== 'mcpApps' &&
         top.type !== 'system'
       ) {
-        triad.channelTransport.applyStackItem({
+        renderer.channelTransport.applyStackItem({
           stackItemId: top.id,
           ...(top.streamSpec !== undefined
             ? { streamSpec: top.streamSpec }
@@ -812,9 +812,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         // Propagate WS status to the per-channel transport router so
         // it can flip WS-bound channels into polling
         // fallback (on disconnect) and re-send `channel_subscribe`
-        // on reconnect. No-op when triad wiring is absent.
-        if (triad !== null) {
-          triad.channelTransport.onWsStatusChange(status);
+        // on reconnect. No-op when renderer wiring is absent.
+        if (renderer !== null) {
+          renderer.channelTransport.onWsStatusChange(status);
         }
       },
       // Forward typed errors from subscribe through the runtime's
@@ -853,7 +853,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         : {}),
     });
   } catch (err) {
-    if (triad !== null) triadWiring?.teardown?.(triad);
+    if (renderer !== null) rendererHooks?.teardown?.(renderer);
     if (isUpgradeRequiredErrorLike(err)) {
       const message = err.message;
       setStatus(refs, message, 'upgrade-required');
@@ -870,12 +870,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, stack: stackModel };
   }
 
-  // Attach the live transport handle to the triad — flushes any
+  // Attach the live transport handle to the renderer — flushes any
   // buffered outbound frames (feedback / action) that were queued
   // while the subscribe handshake completed. `handle.handle.send` is
   // the canonical send surface for the bound WS transport.
-  if (triad !== null && triadWiring?.attachManager !== undefined) {
-    triadWiring.attachManager(triad, { send: (msg) => handle.handle.send(msg) });
+  if (renderer !== null && rendererHooks?.attachManager !== undefined) {
+    rendererHooks.attachManager(renderer, { send: (msg) => handle.handle.send(msg) });
   }
 
   // seed the host-context emitter with the
@@ -894,7 +894,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // First ack — populate the stack from the snapshot the server
-  // returned. Under triad mode, also hand the initial stack to the
+  // returned. Under renderer mode, also hand the initial stack to the
   // renderer so its mounts match the model on first frame.
   //
   // Reuses the same `applyAckStack` helper the reconnect-rebootstrap
@@ -921,12 +921,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 }
 
 /**
- * Build a minimal `ChannelRegistry` for boot paths without triad
+ * Build a minimal `ChannelRegistry` for boot paths without renderer
  * wiring (boot.test.ts + the C7a placeholder-only spec). The registry
  * carries just the `push` handler (which folds frames into the
  * placeholder DOM) — every other frame type silently drops. Production
  * boots through `bootProduction` which supplies a fully-populated
- * triad with the rich handler set.
+ * renderer with the rich handler set.
  */
 function createPlaceholderRegistry(params: {
   readonly session: McpAppAiGguiSessionMeta;
@@ -964,7 +964,7 @@ function createPlaceholderRegistry(params: {
  * (`contract-error-emitted`, `auth-required`) are now inside the
  * data + system handlers respectively.
  *
- * The pre-B3b helpers (`handleServerMessage`, `handleTriadMessage`,
+ * The pre-B3b helpers (`handleServerMessage`, `handleRendererMessage`,
  * `handleObservableMessage`, `emitContractErrorFromDataFrame`,
  * `emitAuthRequiredFromSystemFrame`, `BufferedManagerShim`) lived
  * here and have been retired — see commit message + plan B3b for the
@@ -1355,7 +1355,7 @@ function postToParent(envelope: unknown): void {
  *
  * Distinct from {@link makeJsonRpcCaller} which is a CLOSURE-scoped
  * caller bound to the bootstrap-mode `ui/initialize` flow. This one
- * is a top-level helper the triad setup uses for every `tools/call`
+ * is a top-level helper the renderer setup uses for every `tools/call`
  * — moving it here keeps the channel-transport router pure (no
  * `window.addEventListener` inside).
  */
@@ -3063,7 +3063,7 @@ if (shouldAutostart() && typeof window !== 'undefined') {
 }
 
 // =============================================================================
-// Production boot — triad-wired entrypoint. Dynamic-imports React +
+// Production boot — renderer-wired entrypoint. Dynamic-imports React +
 // ReactDOM + design + wire + preview-a2ui only on the iframe-
 // autostart path so `boot.test.ts` (which imports runtime.ts
 // directly) doesn't pull the heavy module graph into its test.
@@ -3137,9 +3137,9 @@ async function bootProduction(opts: {
     import('./gadget-loader.js'),
   ]);
 
-  // Triad wiring hook — constructs buses + stack renderer + wire
+  // Renderer wiring hook — constructs buses + stack renderer + wire
   // config on demand inside bootSequence.
-  const triadWiring: TriadWiringHooks = {
+  const renderer: RendererHooks = {
     setup: ({ meta, stackModel, renderInto, statusRefs, onObserve }) => {
       // Destructure once — session is guaranteed present on the
       // ok:true arm; stackItem may be absent (session-only).
@@ -3381,7 +3381,7 @@ async function bootProduction(opts: {
       // wire config emits onto. The router consults
       // `bootstrap.streamWebSocketLocalTools` to decide WS-subscribe
       // vs iframe-polling per channel; absent ⇒ universal polling
-      // fallback. Activated lazily by `handleTriadMessage`'s push
+      // fallback. Activated lazily by `handleRendererMessage`'s push
       // case (which calls `channelTransport.applyStackItem` on every
       // stack-fold).
       const channelTransport = createChannelTransportRouter({
@@ -3432,7 +3432,7 @@ async function bootProduction(opts: {
       });
 
       // B3b — live-channel registry owns dispatch for every routable
-      // WS frame type. Each handler closes over the triad state it
+      // WS frame type. Each handler closes over the renderer state it
       // needs. `bootSequence` calls `connectFn` (default
       // `connectViaRegistry`) which registers the `ack` + `error`
       // handshake handlers and binds the WS transport — frames then
@@ -3524,7 +3524,7 @@ async function bootProduction(opts: {
     doc: opts.doc,
     callUiInitialize: opts.callUiInitialize,
     notifyParent: opts.notifyParent,
-    triadWiring,
+    renderer,
     ...(opts.onObserve !== undefined ? { onObserve: opts.onObserve } : {}),
     ...(opts.onLifecycle !== undefined ? { onLifecycle: opts.onLifecycle } : {}),
     ...(opts.preResolvedMeta !== undefined

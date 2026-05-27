@@ -3,7 +3,7 @@
  *
  * Installs `globalThis.IS_REACT_ACT_ENVIRONMENT = true` so React 19
  * recognizes the jsdom test environment as act-capable. Without this
- * flag the renderer's triad specs see "The current testing
+ * flag the the renderer specs see "The current testing
  * environment is not configured to support act(...)" warnings on
  * every render cycle.
  */

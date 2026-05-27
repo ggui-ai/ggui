@@ -29,7 +29,7 @@
  * the real `installGlobalRegistry` / `installContextRegistry` /
  * `createContextStateHost` exports. A regression that broke the
  * helper composition (e.g. a future refactor that drops the
- * `installContextRegistry` call from `bootProduction.triadWiring.setup`)
+ * `installContextRegistry` call from `bootProduction.renderer.setup`)
  * is caught by the production-code-path scan in
  * `boot-production-source.test.ts`-style assertions below.
  */
@@ -60,7 +60,7 @@ afterEach(() => {
 
 describe('bootProduction — context registry installation (F4)', () => {
   it('installs one Context per declared slot under globalThis.__ggui__.contexts', () => {
-    // Mirror bootProduction.triadWiring.setup's first two install
+    // Mirror bootProduction.renderer.setup's first two install
     // steps: the global module registry, then the context registry.
     installGlobalRegistry({
       react: React,
@@ -133,7 +133,7 @@ describe('bootProduction — getOuterWrapper composition (F4)', () => {
 
   /**
    * Build the EXACT wrapper closure `bootProduction` produces inside
-   * its `triadWiring.setup`. Mirrors the F4 wiring verbatim — any
+   * its `renderer.setup`. Mirrors the F4 wiring verbatim — any
    * future refactor that diverges this from runtime.ts breaks the
    * test contract.
    */

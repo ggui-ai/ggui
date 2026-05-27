@@ -13,7 +13,7 @@
  * Composition:
  *
  *   1. Caller-supplied `ChannelRegistry` (populated by `runtime.ts`'s
- *      triad-wiring `setup()` with every handler the iframe routes).
+ *      renderer-hooks `setup()` with every handler the iframe routes).
  *   2. Compose the WS URL with the WS auth token threaded as a
  *      `?wsToken=<encoded>` query string (mirrors the pre-B3b
  *      `composeWsUrl` shape so server-side upgrade-path auth keeps
@@ -66,7 +66,7 @@ import type { ObservabilityEmitter } from './observability.js';
 /**
  * Result of a successful handshake — the live typed transport handle
  * plus the resolved `AckPayload` from the first ack frame. The caller
- * attaches `handle` to the triad's outbound send surface (via the
+ * attaches `handle` to the renderer's outbound send surface (via the
  * BufferedManagerShim flush) and applies `ack.stack` to the stack
  * model.
  */

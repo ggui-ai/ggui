@@ -9,7 +9,7 @@ export default defineConfig({
     // here; keeping a single environment avoids per-file banners.
     environment: 'jsdom',
     globals: true,
-    // C7b triad specs render with React 19's concurrent scheduler and
+    // C7b renderer specs render with React 19's concurrent scheduler and
     // use `act(...)` to flush initial render + effects. React 19
     // requires `globalThis.IS_REACT_ACT_ENVIRONMENT = true` to recognize
     // the test environment; vitest's `setupFiles` installs it once.

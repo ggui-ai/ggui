@@ -1,8 +1,8 @@
 /**
  * `createPropsUpdateHandler` — direct unit coverage for the channel
- * handler factored out of `handleTriadMessage` in B2.
+ * handler factored out of `handleRendererMessage` in B2.
  *
- * The triad-integration test exercises the full dispatch path
+ * The renderer-integration test exercises the full dispatch path
  * (handler routed via ChannelRegistry); these tests pin the handler
  * in isolation so a future refactor can reshape the registry without
  * losing coverage of the branches:

@@ -1,5 +1,5 @@
 /**
- * Triad integration — exercises the `bootSequence` + `triadWiring`
+ * Renderer integration — exercises the `bootSequence` + `renderer`
  * composition end-to-end against in-memory stubs.
  *
  * The test pins the renderer's load-bearing behavior:
@@ -17,7 +17,7 @@
  *   5. A `props_update` frame revalidates + patches the stack
  *      model.
  *
- * Post-B3b: the triad's `ChannelRegistry` is the dispatch surface for
+ * Post-B3b: the renderer's `ChannelRegistry` is the dispatch surface for
  * every WS frame. Tests drive frames by invoking the registered
  * handler directly through `inspectHandlers()` — no `messageHandler`
  * callback to thread through anymore.
@@ -31,7 +31,7 @@ import type {
   McpAppAiGguiMeta,
   McpAppAiGguiSessionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { bootSequence, type TriadHandle, type TriadWiringHooks } from '../runtime.js';
+import { bootSequence, type RendererHandle, type RendererHooks } from '../runtime.js';
 import {
   buildRootWireConfig,
   StreamBus,
@@ -143,14 +143,14 @@ function buildMockConnect(stack: SessionStackEntry[] | undefined): {
 }
 
 /**
- * Build a test-only `triadWiring` that mirrors `bootProduction`'s
+ * Build a test-only `renderer` that mirrors `bootProduction`'s
  * real wiring but uses fakes for the module handles (no need to
  * actually import React's 500 KB dependency graph for these tests).
  */
-function buildTestTriadWiring(
+function buildTestRendererHooks(
   renderInto: HTMLElement,
   managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null },
-): TriadWiringHooks {
+): RendererHooks {
   return {
     setup: ({ meta, stackModel, statusRefs }) => {
       const { session } = meta;
@@ -282,7 +282,7 @@ function buildTestTriadWiring(
   };
 }
 
-describe('triad boot — full flow', () => {
+describe('renderer boot — full flow', () => {
   it('installs globalThis.__ggui__ before first stack render + applies ack stack', async () => {
     const dom = document.implementation.createHTMLDocument('int-test');
     const initialItem = componentItem('a', '');
@@ -291,13 +291,13 @@ describe('triad boot — full flow', () => {
     const { connectFn } = buildMockConnect([initialItem]);
 
     const managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null } = { current: null };
-    const triadWiring = buildTestTriadWiring(dom.body, managerCapture);
+    const renderer = buildTestRendererHooks(dom.body, managerCapture);
 
-    const triadHandleBox: { value: TriadHandle | null } = { value: null };
-    const origSetup = triadWiring.setup;
-    triadWiring.setup = (params) => {
+    const rendererHandleBox: { value: RendererHandle | null } = { value: null };
+    const origSetup = renderer.setup;
+    renderer.setup = (params) => {
       const h = origSetup(params);
-      triadHandleBox.value = h;
+      rendererHandleBox.value = h;
       return h;
     };
 
@@ -307,7 +307,7 @@ describe('triad boot — full flow', () => {
         callUiInitialize,
         connectFn,
         notifyParent: vi.fn(),
-        triadWiring,
+        renderer,
       });
     });
 
@@ -323,23 +323,23 @@ describe('triad boot — full flow', () => {
     // `attachManager` ran — managerCapture populated by real send.
     expect(managerCapture.current).not.toBeNull();
 
-    expect(triadHandleBox.value).not.toBeNull();
-    expect(triadHandleBox.value?.streamBus).toBeInstanceOf(StreamBus);
+    expect(rendererHandleBox.value).not.toBeNull();
+    expect(rendererHandleBox.value?.streamBus).toBeInstanceOf(StreamBus);
   });
 });
 
-describe('triad — data envelope → stream bus fan-out', () => {
+describe('renderer — data envelope → stream bus fan-out', () => {
   it('fans out a validated data envelope to subscribers', async () => {
     const dom = document.implementation.createHTMLDocument('int-test');
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInit());
     const { connectFn, registryRef } = buildMockConnect([componentItem('a', '')]);
 
     const managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null } = { current: null };
-    const triadWiring = buildTestTriadWiring(dom.body, managerCapture);
+    const renderer = buildTestRendererHooks(dom.body, managerCapture);
 
-    let capturedHandle: TriadHandle | null = null;
-    const origSetup = triadWiring.setup;
-    triadWiring.setup = (p) => {
+    let capturedHandle: RendererHandle | null = null;
+    const origSetup = renderer.setup;
+    renderer.setup = (p) => {
       capturedHandle = origSetup(p);
       return capturedHandle;
     };
@@ -350,7 +350,7 @@ describe('triad — data envelope → stream bus fan-out', () => {
         callUiInitialize,
         connectFn,
         notifyParent: vi.fn(),
-        triadWiring,
+        renderer,
       });
     });
 
@@ -377,18 +377,18 @@ describe('triad — data envelope → stream bus fan-out', () => {
   });
 });
 
-describe('triad — late `_ggui:preview` subscriber receives buffered envelopes', () => {
+describe('renderer — late `_ggui:preview` subscriber receives buffered envelopes', () => {
   it('replays reserved-channel frames that arrived before the subscribe to the late subscriber', async () => {
     const dom = document.implementation.createHTMLDocument('int-test');
     const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInit());
     const { connectFn, registryRef } = buildMockConnect([componentItem('a', '')]);
 
     const managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null } = { current: null };
-    const triadWiring = buildTestTriadWiring(dom.body, managerCapture);
+    const renderer = buildTestRendererHooks(dom.body, managerCapture);
 
-    let capturedHandle: TriadHandle | null = null;
-    const origSetup = triadWiring.setup;
-    triadWiring.setup = (p) => {
+    let capturedHandle: RendererHandle | null = null;
+    const origSetup = renderer.setup;
+    renderer.setup = (p) => {
       capturedHandle = origSetup(p);
       return capturedHandle;
     };
@@ -399,7 +399,7 @@ describe('triad — late `_ggui:preview` subscriber receives buffered envelopes'
         callUiInitialize,
         connectFn,
         notifyParent: vi.fn(),
-        triadWiring,
+        renderer,
       });
     });
 
@@ -428,7 +428,7 @@ describe('triad — late `_ggui:preview` subscriber receives buffered envelopes'
   });
 });
 
-describe('triad — props_update applies patch', () => {
+describe('renderer — props_update applies patch', () => {
   it('updates stack-model props for target item on valid props_update', async () => {
     const dom = document.implementation.createHTMLDocument('int-test');
     const initialItem: SessionStackEntry = {
@@ -442,18 +442,18 @@ describe('triad — props_update applies patch', () => {
     const { connectFn, registryRef } = buildMockConnect([initialItem]);
 
     const managerCapture: { current: { send: ReturnType<typeof vi.fn> } | null } = { current: null };
-    const triadWiring = buildTestTriadWiring(dom.body, managerCapture);
+    const renderer = buildTestRendererHooks(dom.body, managerCapture);
 
-    let capturedHandle: TriadHandle | null = null;
-    const origSetup = triadWiring.setup;
-    triadWiring.setup = (p) => {
+    let capturedHandle: RendererHandle | null = null;
+    const origSetup = renderer.setup;
+    renderer.setup = (p) => {
       capturedHandle = origSetup(p);
       return capturedHandle;
     };
 
     let capturedStackModel: { snapshot: () => readonly SessionStackEntry[] } | null = null;
-    const origSetup2 = triadWiring.setup;
-    triadWiring.setup = (p) => {
+    const origSetup2 = renderer.setup;
+    renderer.setup = (p) => {
       capturedStackModel = p.stackModel;
       return origSetup2(p);
     };
@@ -464,7 +464,7 @@ describe('triad — props_update applies patch', () => {
         callUiInitialize,
         connectFn,
         notifyParent: vi.fn(),
-        triadWiring,
+        renderer,
       });
     });
 
