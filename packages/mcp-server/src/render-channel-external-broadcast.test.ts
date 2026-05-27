@@ -1,21 +1,21 @@
 /**
  * Focused unit coverage for the
- * {@link SessionChannelServer.externalBroadcast} seam +
- * {@link SessionChannelOptions.onFirstSubscriber} /
+ * {@link RenderChannelServer.externalBroadcast} seam +
+ * {@link RenderChannelOptions.onFirstSubscriber} /
  * `onLastSubscriberGone` hooks introduced for WS broadcast Phase 1A
  * (cross-pod broadcast via Redis pubsub).
  *
  * Coverage:
  *
- *   1. `externalBroadcast(sessionId, frame)` fans the frame to a live
- *      subscriber bound to `sessionId` AND skips replay/SessionStore
+ *   1. `externalBroadcast(renderId, frame)` fans the frame to a live
+ *      subscriber bound to `renderId` AND skips replay/RenderStore
  *      lookups (the publisher already validated).
  *   2. Cross-session isolation: an `externalBroadcast` to session A
  *      MUST NOT reach a subscriber on session B.
  *   3. `externalBroadcast` is a no-op when no local subscriber matches
- *      the sessionId.
+ *      the renderId.
  *   4. `onFirstSubscriber` fires synchronously on the 0 → 1 transition;
- *      a second subscriber for the SAME sessionId does NOT re-fire.
+ *      a second subscriber for the SAME renderId does NOT re-fire.
  *   5. `onLastSubscriberGone` fires synchronously on the 1 → 0
  *      transition; a partial close (one of two subs leaving) does NOT
  *      fire.
@@ -31,7 +31,7 @@ import { WebSocket, type RawData } from 'ws';
 import type { Server as HttpServer } from 'node:http';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
-  StackItem,
+  Render,
   Session,
   SubscribePayload,
 } from '@ggui-ai/protocol';
@@ -40,7 +40,7 @@ import type {
   SessionEvent,
   SessionFilter,
   SessionPatch,
-  SessionStore,
+  RenderStore,
   ObserveOptions,
   CreateSessionInput,
 } from '@ggui-ai/mcp-server-core';
@@ -50,7 +50,7 @@ const TEST_APP_ID = 'test-app';
 const SESSION_A = 'sess-broadcast-a';
 const SESSION_B = 'sess-broadcast-b';
 
-function makeStackItem(id: string = 'page-0'): StackItem {
+function makeRender(id: string = 'page-0'): Render {
   return {
     id,
     componentCode: '/* stub */',
@@ -61,13 +61,13 @@ function makeStackItem(id: string = 'page-0'): StackItem {
   };
 }
 
-function makeMultiSessionStore(sessionIds: readonly string[]): SessionStore {
+function makeMultiRenderStore(sessionIds: readonly string[]): RenderStore {
   const seededById = new Map<string, Session>();
   for (const id of sessionIds) {
     seededById.set(id, {
       id,
       appId: TEST_APP_ID,
-      stack: [makeStackItem('page-0')],
+      stack: [makeRender('page-0')],
       currentStackIndex: 0,
       adapterPermissions: {},
       eventSequence: 0,
@@ -108,17 +108,17 @@ function makeMultiSessionStore(sessionIds: readonly string[]): SessionStore {
     async delete(_id: string): Promise<void> {
       /* no-op */
     },
-    async appendStackItem(_id, _entry): Promise<Session> {
-      throw new Error('appendStackItem is not exercised by these tests');
+    async commit(_id, _entry): Promise<Session> {
+      throw new Error('commit is not exercised by these tests');
     },
-    async popStackItem(): Promise<{ readonly poppedId: string | null; readonly stackSize: number }> {
-      throw new Error('popStackItem is not exercised by these tests');
+    async popRender(): Promise<{ readonly poppedId: string | null; readonly stackSize: number }> {
+      throw new Error('popRender is not exercised by these tests');
     },
-    async getSessionByStackItemId(): Promise<{ readonly sessionId: string; readonly appId: string } | null> {
+    async getSessionByStackItemId(): Promise<{ readonly renderId: string; readonly appId: string } | null> {
       return null;
     },
     async appendEvent(input: AppendEventInput): Promise<number> {
-      const found = seededById.get(input.sessionId);
+      const found = seededById.get(input.renderId);
       if (!found) throw new Error('unknown session');
       found.eventSequence += 1;
       const ev: SessionEvent = {
@@ -131,8 +131,8 @@ function makeMultiSessionStore(sessionIds: readonly string[]): SessionStore {
       void ev;
       return found.eventSequence;
     },
-    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
-      const found = seededById.get(sessionId);
+    async listEventsSince(renderId: string, _sinceSeq: number, _limit: number) {
+      const found = seededById.get(renderId);
       if (!found) return null;
       return {
         events: [],
@@ -163,18 +163,18 @@ interface Fixture {
   onLast: Array<string>;
 }
 
-async function boot(sessionStore: SessionStore): Promise<Fixture> {
+async function boot(renderStore: RenderStore): Promise<Fixture> {
   const onFirst: Array<string> = [];
   const onLast: Array<string> = [];
   const server = createGguiServer({
     logger: silentLogger,
     sessionChannel: true,
-    sessionStore,
-    onFirstSubscriber: (sessionId) => {
-      onFirst.push(sessionId);
+    renderStore,
+    onFirstSubscriber: (renderId) => {
+      onFirst.push(renderId);
     },
-    onLastSubscriberGone: (sessionId) => {
-      onLast.push(sessionId);
+    onLastSubscriberGone: (renderId) => {
+      onLast.push(renderId);
     },
   });
   const httpServer = await server.listen(0, '127.0.0.1');
@@ -221,15 +221,15 @@ function sendMessage(ws: WebSocket, message: WebSocketMessage): void {
   ws.send(JSON.stringify(message));
 }
 
-function makeSubscribe(sessionId: string): WebSocketMessage & { type: 'subscribe' } {
+function makeSubscribe(renderId: string): WebSocketMessage & { type: 'subscribe' } {
   return {
     type: 'subscribe',
     payload: {
-      sessionId,
+      renderId,
       appId: TEST_APP_ID,
       role: 'user',
     } as SubscribePayload,
-    requestId: `sub-${sessionId}`,
+    requestId: `sub-${renderId}`,
   };
 }
 
@@ -245,11 +245,11 @@ async function waitForClose(ws: WebSocket): Promise<void> {
   });
 }
 
-describe('SessionChannelServer — externalBroadcast + subscription hooks', () => {
+describe('RenderChannelServer — externalBroadcast + subscription hooks', () => {
   let fix: Fixture | null = null;
 
   beforeEach(async () => {
-    fix = await boot(makeMultiSessionStore([SESSION_A, SESSION_B]));
+    fix = await boot(makeMultiRenderStore([SESSION_A, SESSION_B]));
   });
 
   afterEach(async () => {
@@ -267,13 +267,13 @@ describe('SessionChannelServer — externalBroadcast + subscription hooks', () =
 
     fix!.server.sessionChannel!.externalBroadcast(SESSION_A, {
       type: 'props_update',
-      payload: { stackItemId: 'page-0', props: { count: 42 } },
+      payload: { renderId: 'page-0', props: { count: 42 } },
     });
 
     const frame = await recvMessage(ws);
     expect(frame.type).toBe('props_update');
     if (frame.type === 'props_update') {
-      expect(frame.payload.stackItemId).toBe('page-0');
+      expect(frame.payload.renderId).toBe('page-0');
       expect(frame.payload.props).toEqual({ count: 42 });
     }
     ws.close();
@@ -288,12 +288,12 @@ describe('SessionChannelServer — externalBroadcast + subscription hooks', () =
     // Broadcast to OTHER session — must not reach this subscriber.
     fix!.server.sessionChannel!.externalBroadcast(SESSION_B, {
       type: 'props_update',
-      payload: { stackItemId: 'page-0', props: { count: 1 } },
+      payload: { renderId: 'page-0', props: { count: 1 } },
     });
     // Follow-up to the bound session — that one must arrive next.
     fix!.server.sessionChannel!.externalBroadcast(SESSION_A, {
       type: 'props_update',
-      payload: { stackItemId: 'page-0', props: { count: 2 } },
+      payload: { renderId: 'page-0', props: { count: 2 } },
     });
 
     const frame = await recvMessage(ws);
@@ -306,12 +306,12 @@ describe('SessionChannelServer — externalBroadcast + subscription hooks', () =
     await waitForClose(ws);
   });
 
-  it('is a no-op when no local subscriber is bound to sessionId', () => {
+  it('is a no-op when no local subscriber is bound to renderId', () => {
     // No subscribers at all yet — does not throw, returns void.
     expect(() =>
       fix!.server.sessionChannel!.externalBroadcast(SESSION_A, {
         type: 'props_update',
-        payload: { stackItemId: 'page-0', props: { count: 0 } },
+        payload: { renderId: 'page-0', props: { count: 0 } },
       }),
     ).not.toThrow();
   });
@@ -360,7 +360,7 @@ describe('SessionChannelServer — externalBroadcast + subscription hooks', () =
     expect(fix!.onLast).toEqual([SESSION_A]);
   });
 
-  it('fires hooks independently per sessionId', async () => {
+  it('fires hooks independently per renderId', async () => {
     const wsA = await connectAuthed(fix!.wsUrl);
     sendMessage(wsA, makeSubscribe(SESSION_A));
     await recvMessage(wsA); // ack

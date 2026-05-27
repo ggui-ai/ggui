@@ -1,6 +1,6 @@
 /**
  * Slice 14 (2026-05-08) — `buildSelfContainedShell` injects the full
- * bootstrap envelope, not just `{sessionId, appId, componentCode|kind}`.
+ * bootstrap envelope, not just `{renderId, appId, componentCode|kind}`.
  *
  * Pre-Slice-14 the inline `__GGUI_META__` global only carried the
  * minimum to mount a compiled component on the postMessage shell path.
@@ -20,8 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildSelfContainedShell } from './mcp-apps-outbound.js';
 import {
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
@@ -46,10 +45,10 @@ function extractInlineBootstrap(html: string): {
 } {
   const envelope = extractInlineSliceEnvelope(html);
   return {
-    session: envelope[MCP_APP_AI_GGUI_SESSION_META_KEY] as
+    session: envelope[MCP_APP_AI_GGUI_RENDER_META_KEY] as
       | Record<string, unknown>
       | undefined,
-    stackItem: envelope[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY] as
+    stackItem: envelope[MCP_APP_AI_GGUI_RENDER_META_KEY] as
       | Record<string, unknown>
       | undefined,
   };
@@ -59,7 +58,7 @@ function extractInlineBootstrap(html: string): {
  * Pull the raw slice envelope (slice keys intact:
  * `{"ai.ggui/session": {...}, "ai.ggui/stack-item": {...}}`) out of the
  * shell HTML's `window.__GGUI_META__` global. The slice-keyed
- * shape is what `parseMcpAppAiGguiMeta` (and any wire `_meta` consumer)
+ * shape is what `parseMcpAppAiGguiRenderMeta` (and any wire `_meta` consumer)
  * expects; the destructured-helper `extractInlineBootstrap` derives from
  * this and offers ergonomic field access for the other tests.
  */
@@ -85,7 +84,7 @@ const SAMPLE_CODE_HASH = 'sha256-abc123';
 describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   it('inlines runtimeUrl on the session slice (closes the blank-page bug)', () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -112,7 +111,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       },
     ];
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -125,7 +124,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines appCallableTools on the session slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -141,7 +140,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines actionNextSteps on the stack-item slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -156,7 +155,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
     // Empty arrays / records spread to "absent" so consumers see no
     // change vs an envelope built without these fields.
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -182,7 +181,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   // (Leaflet, Mapbox).
   it('inlines gadgets on the session slice when supplied (GG.8.2 — per-package channel)', () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -197,7 +196,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines publicEnv when supplied (Slice 2.2 forward)', () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -212,7 +211,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('emits a slice envelope that the iframe-runtime validator accepts (component mode)', async () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -230,11 +229,11 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
     // shape as the wire `_meta` — combine, then validate. Lazy imports
     // keep the iframe-runtime bundle off the package's other tests.
     const envelope = extractInlineSliceEnvelope(html);
-    const { parseMcpAppAiGguiMeta } = await import(
+    const { parseMcpAppAiGguiRenderMeta } = await import(
       '@ggui-ai/protocol/integrations/mcp-apps'
     );
     const { validateMeta } = await import('@ggui-ai/iframe-runtime');
-    const parsed = parseMcpAppAiGguiMeta(envelope);
+    const parsed = parseMcpAppAiGguiRenderMeta(envelope);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     const result = validateMeta(parsed.meta);
@@ -248,17 +247,17 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('emits a slice envelope that the iframe-runtime validator accepts (system-card mode)', async () => {
     const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
+      renderId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       systemKind: 'no-credentials',
     });
     const envelope = extractInlineSliceEnvelope(html);
-    const { parseMcpAppAiGguiMeta } = await import(
+    const { parseMcpAppAiGguiRenderMeta } = await import(
       '@ggui-ai/protocol/integrations/mcp-apps'
     );
     const { validateMeta } = await import('@ggui-ai/iframe-runtime');
-    const parsed = parseMcpAppAiGguiMeta(envelope);
+    const parsed = parseMcpAppAiGguiRenderMeta(envelope);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     const result = validateMeta(parsed.meta);

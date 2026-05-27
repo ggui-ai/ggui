@@ -3,13 +3,13 @@
  * try-live endpoint.
  *
  * What the endpoint ships:
- *   - Creates a session via the configured `SessionStore`.
+ *   - Creates a session via the configured `RenderStore`.
  *   - Resolves the blueprint via `UiRegistry.get` + `getBundle`.
  *   - Materializes the bundle code (string OR ReadableStream).
- *   - Pushes a `StackItem` with `componentCode` + manifest-backed
+ *   - Pushes a `Render` with `componentCode` + manifest-backed
  *     `propsSpec` / `actionSpec` / `streamSpec`.
  *   - Mints a fresh shortCode, binds it via `ShortCodeIndex`, returns
- *     `{sessionId, shortCode, url}`.
+ *     `{renderId, shortCode, url}`.
  *
  * Gate combinations covered:
  *   - Full wiring (uiRegistry + sessionChannel + shortCodeIndex) →
@@ -29,11 +29,11 @@ import type { Server as HttpServer } from 'node:http';
 import type {
   ActionSpec,
   PropsSpec,
-  StackItem,
+  Render,
   StreamSpec,
 } from '@ggui-ai/protocol';
 import {
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
@@ -56,7 +56,7 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  sessionStore: InMemorySessionStore;
+  renderStore: InMemoryRenderStore;
   shortCodeIndex: InMemoryShortCodeIndex;
 }
 
@@ -171,13 +171,13 @@ async function bootFull(
     >;
   },
 ): Promise<Fixture> {
-  const sessionStore = new InMemorySessionStore();
+  const renderStore = new InMemoryRenderStore();
   const shortCodeIndex = new InMemoryShortCodeIndex();
   const server = createGguiServer({
     logger: silentLogger,
     console: {},
     uiRegistry: makeRegistry(seeds),
-    sessionStore,
+    renderStore,
     shortCodeIndex,
     sessionChannel: true,
     // Default the existing pre-F4 tests to `schemaCompatCheck: 'off'`
@@ -197,7 +197,7 @@ async function bootFull(
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    sessionStore,
+    renderStore,
     shortCodeIndex,
   };
 }
@@ -212,7 +212,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     }
   });
 
-  it('creates a session + pushes StackItem with full contract + mints shortCode', async () => {
+  it('creates a session + pushes Render with full contract + mints shortCode', async () => {
     fx = await bootFull([
       {
         id: 'todo-list',
@@ -234,19 +234,19 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      sessionId: string;
+      renderId: string;
       shortCode: string;
       url: string;
     };
-    expect(body.sessionId).toMatch(/^try-[0-9a-f-]{36}$/);
+    expect(body.renderId).toMatch(/^try-[0-9a-f-]{36}$/);
     expect(body.shortCode).toMatch(/^[a-z0-9]{18}$/);
     expect(body.url).toBe(`/s/${body.shortCode}`);
 
-    // Session exists with our StackItem.
-    const session = await fx.sessionStore.get(body.sessionId);
+    // Session exists with our Render.
+    const session = await fx.renderStore.get(body.renderId);
     expect(session).not.toBeNull();
     expect(session!.stack).toHaveLength(1);
-    const item = session!.stack[0] as StackItem;
+    const item = session!.stack[0] as Render;
     expect(item.id).toBe('blueprint-todo-list');
     expect(item.componentCode).toBe(BUNDLE_CODE);
     expect(item.contentType).toBe('application/javascript+react');
@@ -258,11 +258,11 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     // ShortCode binding resolves to this session.
     const binding = await fx.shortCodeIndex.lookup(body.shortCode);
     expect(binding).not.toBeNull();
-    expect(binding!.sessionId).toBe(body.sessionId);
+    expect(binding!.renderId).toBe(body.renderId);
     expect(binding!.appId).toBe('builder');
   });
 
-  it('omits absent contract fields — a blueprint with no actionSpec produces a StackItem with no actionSpec', async () => {
+  it('omits absent contract fields — a blueprint with no actionSpec produces a Render with no actionSpec', async () => {
     fx = await bootFull([
       {
         id: 'static-card',
@@ -280,9 +280,9 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { sessionId: string };
-    const session = await fx.sessionStore.get(body.sessionId);
-    const item = session!.stack[0] as StackItem;
+    const body = (await res.json()) as { renderId: string };
+    const session = await fx.renderStore.get(body.renderId);
+    const item = session!.stack[0] as Render;
     expect(item.actionSpec).toBeUndefined();
     expect(item.streamSpec).toBeUndefined();
     expect(item.propsSpec).toBeUndefined();
@@ -290,7 +290,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
 
   it('materializes a ReadableStream bundle into a string componentCode', async () => {
     // Large-bundle path: registries can return code as a stream.
-    // The endpoint collapses to a string so the StackItem carries
+    // The endpoint collapses to a string so the Render carries
     // inline-renderable componentCode.
     const encoder = new TextEncoder();
     const streamCode = "// streamed bundle\n" + BUNDLE_CODE;
@@ -315,9 +315,9 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       method: 'POST',
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { sessionId: string };
-    const session = await fx.sessionStore.get(body.sessionId);
-    const item = session!.stack[0] as StackItem;
+    const body = (await res.json()) as { renderId: string };
+    const session = await fx.renderStore.get(body.renderId);
+    const item = session!.stack[0] as Render;
     expect(item.componentCode).toBe(streamCode);
   });
 
@@ -397,7 +397,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
           },
         },
       ]),
-      // sessionChannel omitted → sessionStore also inferred absent
+      // sessionChannel omitted → renderStore also inferred absent
       // shortCodeIndex omitted
     });
     const httpServer = await server.listen(0, '127.0.0.1');
@@ -483,8 +483,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { sessionId: string };
-    const session = await fx.sessionStore.get(body.sessionId);
+    const body = (await res.json()) as { renderId: string };
+    const session = await fx.renderStore.get(body.renderId);
     expect(session!.stack).toHaveLength(1);
   });
 
@@ -584,8 +584,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { sessionId: string };
-    const session = await fx.sessionStore.get(body.sessionId);
+    const body = (await res.json()) as { renderId: string };
+    const session = await fx.renderStore.get(body.renderId);
     expect(session!.stack).toHaveLength(1);
   });
 
@@ -620,7 +620,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     const server = createGguiServer({
       logger: silentLogger,
       console: {},
-      sessionStore: new InMemorySessionStore(),
+      renderStore: new InMemoryRenderStore(),
       shortCodeIndex: new InMemoryShortCodeIndex(),
       sessionChannel: true,
     });

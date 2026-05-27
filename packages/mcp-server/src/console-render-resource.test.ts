@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import {
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -38,7 +38,7 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  sessionId: string;
+  renderId: string;
   appId: string;
   cookiePair: string;
 }
@@ -50,8 +50,8 @@ interface Fixture {
  * so callers can ride it on subsequent requests.
  */
 async function bootAndMintCookie(): Promise<Fixture> {
-  const sessionStore = new InMemorySessionStore();
-  const session = await sessionStore.create({ appId: 'app-console' });
+  const renderStore = new InMemoryRenderStore();
+  const session = await renderStore.create({ appId: 'app-console' });
   const shortCodeIndex = new InMemoryShortCodeIndex();
   await shortCodeIndex.put('scode1234', {
     sessionId: session.id,
@@ -63,7 +63,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     sessionChannel: true,
-    sessionStore,
+    renderStore,
     shortCodeIndex,
     console: { sessionCookie: true },
     wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
@@ -88,7 +88,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     server,
     httpServer,
     url,
-    sessionId: session.id,
+    renderId: session.id,
     appId: session.appId,
     cookiePair,
   };
@@ -117,7 +117,7 @@ describe('GET /ggui/console/session-resource', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
@@ -127,7 +127,7 @@ describe('GET /ggui/console/session-resource', () => {
   it('returns 401 when the console cookie is invalid', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
       {
         headers: { cookie: 'ggui_console_session=bogus-token' },
       },
@@ -153,7 +153,7 @@ describe('GET /ggui/console/session-resource', () => {
   it('returns 200 with the PRODUCTION thin-shell ResourceContents on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -177,12 +177,12 @@ describe('GET /ggui/console/session-resource', () => {
     expect(content.text).toContain('data-ggui-shell="thin"');
     expect(content.text).not.toContain('data-ggui-shell="console"');
     // No inlined bootstrap on this route — console fetches it separately.
-    expect(content.text).not.toMatch(/"sessionId":"[^"]+"/);
+    expect(content.text).not.toMatch(/"renderId":"[^"]+"/);
     expect(content.text).not.toMatch(/"token":"[^"]+"/);
   });
 });
 
-describe('GET /ggui/console/sessions/:sessionId/meta', () => {
+describe('GET /ggui/console/sessions/:renderId/meta', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -195,7 +195,7 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
+      `${fx.url}/ggui/console/sessions/${fx.renderId}/meta`,
     );
     expect(res.status).toBe(401);
   });
@@ -216,7 +216,7 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
   it('returns 200 with a well-shaped slice envelope on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
+      `${fx.url}/ggui/console/sessions/${fx.renderId}/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -227,7 +227,7 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
       | Record<string, unknown>
       | undefined;
     expect(session).toBeDefined();
-    expect(session?.['sessionId']).toBe(fx.sessionId);
+    expect(session?.['renderId']).toBe(fx.renderId);
     expect(session?.['appId']).toBe(fx.appId);
     expect(typeof session?.['wsUrl']).toBe('string');
     expect((session?.['wsUrl'] as string).length).toBeGreaterThan(0);
@@ -256,8 +256,8 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
     // Same console + session-channel wiring but WITHOUT mcpApps —
     // the meta route must honestly 503 instead of minting a token the
     // subscribe path would reject at handshake.
-    const sessionStore = new InMemorySessionStore();
-    const session = await sessionStore.create({ appId: 'app-console' });
+    const renderStore = new InMemoryRenderStore();
+    const session = await renderStore.create({ appId: 'app-console' });
     const shortCodeIndex = new InMemoryShortCodeIndex();
     await shortCodeIndex.put('scode1234', {
       sessionId: session.id,
@@ -268,7 +268,7 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
       auth: new InMemoryAuthAdapter({ devAllowAll: true }),
       // NOTE: no mcpApps — this is the gate we're asserting.
       sessionChannel: true,
-      sessionStore,
+      renderStore,
       shortCodeIndex,
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-test-secret-' + 'x'.repeat(32),
@@ -332,7 +332,7 @@ describe('GET /ggui/console/session-stack', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-stack?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/session-stack?session=${fx.renderId}`,
     );
     expect(res.status).toBe(401);
   });
@@ -353,7 +353,7 @@ describe('GET /ggui/console/session-stack', () => {
   it('returns 200 with the stack snapshot on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-stack?session=${fx.sessionId}`,
+      `${fx.url}/ggui/console/session-stack?session=${fx.renderId}`,
       {
         headers: { cookie: fx.cookiePair },
       },

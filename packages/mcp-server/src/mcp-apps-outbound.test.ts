@@ -14,14 +14,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   MCP_APPS_UI_CAPABILITY,
-  GGUI_SESSION_RESOURCE_URI,
-  GGUI_SESSION_RESOURCE_MIME,
-  parseMcpAppAiGguiMeta,
+  GGUI_RENDER_RESOURCE_URI,
+  GGUI_RENDER_RESOURCE_MIME,
+  parseMcpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createHash } from 'node:crypto';
 import {
-  GGUI_SESSION_SHELL_HTML,
-  GGUI_SESSION_SHELL_SCRIPT_HASH,
+  GGUI_RENDER_SHELL_HTML,
+  GGUI_RENDER_SHELL_SCRIPT_HASH,
   advertiseMcpAppsUiCapability,
   registerGguiSessionResource,
 } from './mcp-apps-outbound.js';
@@ -78,13 +78,13 @@ async function handshakeAndPush(
   client: Client,
   intent: string,
 ): Promise<Awaited<ReturnType<Client['callTool']>>> {
-  // Mint a session first — post-CC handshake REQUIRES sessionId.
+  // Mint a session first — post-CC handshake REQUIRES renderId.
   const newSession = await client.callTool({
     name: 'ggui_new_session',
     arguments: {},
   });
-  const sessionId = (newSession.structuredContent as { sessionId: string })
-    .sessionId;
+  const renderId = (newSession.structuredContent as { renderId: string })
+    .renderId;
   // D10 three-step handshake: blueprintDraft replaces the pre-MVB-5
   // top-level `contract`. Paired push accepts the suggestion verbatim
   // via `decision: {kind: 'accept'}` — the effectiveContract is the
@@ -92,7 +92,7 @@ async function handshakeAndPush(
   const handshake = await client.callTool({
     name: 'ggui_handshake',
     arguments: {
-      sessionId,
+      renderId,
       intent,
       blueprintDraft: { contract: NOOP_CONTRACT },
     },
@@ -134,8 +134,8 @@ describe('advertiseMcpAppsUiCapability + registerGguiSessionResource', () => {
   });
 });
 
-describe('GGUI_SESSION_SHELL_HTML', () => {
-  it('GGUI_SESSION_SHELL_SCRIPT_HASH matches the recomputed hash of the actual inline `<script>` body', () => {
+describe('GGUI_RENDER_SHELL_HTML', () => {
+  it('GGUI_RENDER_SHELL_SCRIPT_HASH matches the recomputed hash of the actual inline `<script>` body', () => {
     // Drift catch — Reading B (`docs/principles/renderer-as-portable-
     // runtime.md` §6.2) mounts the shell via `srcdoc` from inside
     // `<McpAppIframe>`. The `about:srcdoc` iframe inherits the parent
@@ -147,14 +147,14 @@ describe('GGUI_SESSION_SHELL_HTML', () => {
     //
     // Re-extract the script body from the actual served HTML, hash
     // it, and compare. Match the same bytes the browser would.
-    const m = GGUI_SESSION_SHELL_HTML.match(/<script>([\s\S]*?)<\/script>/);
+    const m = GGUI_RENDER_SHELL_HTML.match(/<script>([\s\S]*?)<\/script>/);
     expect(m).not.toBeNull();
     const scriptBody = m![1]!;
     const recomputed = `'sha256-${createHash('sha256')
       .update(scriptBody)
       .digest('base64')}'`;
-    expect(GGUI_SESSION_SHELL_SCRIPT_HASH).toBe(recomputed);
-    expect(GGUI_SESSION_SHELL_SCRIPT_HASH).toMatch(
+    expect(GGUI_RENDER_SHELL_SCRIPT_HASH).toBe(recomputed);
+    expect(GGUI_RENDER_SHELL_SCRIPT_HASH).toMatch(
       /^'sha256-[A-Za-z0-9+/]+=*'$/,
     );
   });
@@ -163,12 +163,12 @@ describe('GGUI_SESSION_SHELL_HTML', () => {
     // `data-ggui-shell="thin"` replaces the pre-C8 "live" marker. Hosts
     // introspecting the resource body use this to confirm they're
     // seeing the thin-shell pivot, not a stale inline-JS shell.
-    expect(GGUI_SESSION_SHELL_HTML).toContain('data-ggui-shell="thin"');
+    expect(GGUI_RENDER_SHELL_HTML).toContain('data-ggui-shell="thin"');
   });
 
   it('sends `ui/initialize` to the parent host via postMessage (preflight)', () => {
-    expect(GGUI_SESSION_SHELL_HTML).toContain("'ui/initialize'");
-    expect(GGUI_SESSION_SHELL_HTML).toContain('window.parent.postMessage');
+    expect(GGUI_RENDER_SHELL_HTML).toContain("'ui/initialize'");
+    expect(GGUI_RENDER_SHELL_HTML).toContain('window.parent.postMessage');
   });
 
   it("loads the renderer bundle as <script type='module'> per `@ggui-ai/iframe-runtime`'s ESM contract", () => {
@@ -186,14 +186,14 @@ describe('GGUI_SESSION_SHELL_HTML', () => {
     // refactor that drops it fails this test loudly instead of
     // silently breaking every Lane 1 spec exercising the live
     // iframe path.
-    expect(GGUI_SESSION_SHELL_HTML).toContain("s.type='module'");
+    expect(GGUI_RENDER_SHELL_HTML).toContain("s.type='module'");
   });
 
   it('does NOT fish runtimeUrl (or any bootstrap field) out of structuredContent', () => {
     // The design rule locks bootstrap fields to _meta; structuredContent
     // is strictly model-facing. Any match of `structuredContent.<field>`
     // where <field> is a bootstrap key is a design regression.
-    expect(GGUI_SESSION_SHELL_HTML).not.toMatch(
+    expect(GGUI_RENDER_SHELL_HTML).not.toMatch(
       /structuredContent\s*[.[]\s*(wsUrl|token|bootstrap|runtimeUrl)/,
     );
   });
@@ -222,15 +222,15 @@ describe('end-to-end outbound flow', () => {
   });
 
   it('serves ui://ggui/session via resources/read with the right MIME', async () => {
-    const resp = await client.readResource({ uri: GGUI_SESSION_RESOURCE_URI });
+    const resp = await client.readResource({ uri: GGUI_RENDER_RESOURCE_URI });
     expect(resp.contents).toHaveLength(1);
     const c = resp.contents[0] as {
       uri: string;
       mimeType?: string;
       text?: string;
     };
-    expect(c.uri).toBe(GGUI_SESSION_RESOURCE_URI);
-    expect(c.mimeType).toBe(GGUI_SESSION_RESOURCE_MIME);
+    expect(c.uri).toBe(GGUI_RENDER_RESOURCE_URI);
+    expect(c.mimeType).toBe(GGUI_RENDER_RESOURCE_MIME);
     expect(typeof c.text).toBe('string');
     expect(c.text).toContain('data-ggui-shell="thin"');
   });
@@ -252,19 +252,19 @@ describe('end-to-end outbound flow', () => {
     ]) {
       expect(scKeys).not.toContain(bootstrapKey);
     }
-    expect(sc.stackItemId).toBeDefined();
+    expect(sc.renderId).toBeDefined();
     // Post-R5 cleanup: there is no `url` field on structuredContent.
     // The `/r/<shortCode>` route was deleted; every host either
     // mounts via `_meta.ui.resourceUri` or resolves the session
-    // resource from `{sessionId, stackItemId}` itself.
+    // resource from `{renderId, renderId}` itself.
     expect(scKeys).not.toContain('url');
 
     // The `ai.ggui/*` _meta slices decode to a well-shaped pair.
     expect(result._meta).toBeDefined();
-    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.meta.session?.sessionId).toBeDefined();
+    expect(parsed.meta.session?.renderId).toBeDefined();
     expect(parsed.meta.session?.appId).toBeDefined();
     expect(parsed.meta.session?.runtimeUrl).toBeDefined();
   });
@@ -277,13 +277,13 @@ describe('end-to-end outbound flow', () => {
     const meta = push?._meta as {
       ui?: { resourceUri?: string; visibility?: string[] };
     };
-    expect(meta.ui?.resourceUri).toBe(GGUI_SESSION_RESOURCE_URI);
+    expect(meta.ui?.resourceUri).toBe(GGUI_RENDER_RESOURCE_URI);
     expect(meta.ui?.visibility).toEqual(['model']);
   });
 
   it('ggui_push bootstrap carries runtimeUrl — the URL the thin shell dynamic-script-loads (C8)', async () => {
     const result = await handshakeAndPush(client, 'c8 renderer-url test');
-    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     // Default same-origin path published by `createGguiServer` when
@@ -375,7 +375,7 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     const client = await connectClient(fx.httpBase);
     try {
       const result = await handshakeAndPush(client, 'c8 cdn override');
-      const parsed = parseMcpAppAiGguiMeta(result._meta);
+      const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
       expect(parsed.ok).toBe(true);
       if (!parsed.ok) return;
       expect(parsed.meta.session?.runtimeUrl).toBe(
@@ -424,11 +424,11 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
   async function mintPushBootstrap(): Promise<{
     wsUrl: string;
     token: string;
-    sessionId: string;
+    renderId: string;
     appId: string;
   }> {
     const result = await handshakeAndPush(client, 'bootstrap-test');
-    const parsed = parseMcpAppAiGguiMeta(result._meta);
+    const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
     if (!parsed.ok) {
       throw new Error(`mintPushBootstrap: combiner failed (${parsed.reason})`);
     }
@@ -442,7 +442,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     return {
       wsUrl: session.wsUrl,
       token: session.wsToken, // local struct retains 'token' for downstream call sites
-      sessionId: session.sessionId,
+      renderId: session.renderId,
       appId: session.appId,
     };
   }
@@ -475,7 +475,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
       JSON.stringify({
         type: 'subscribe',
         payload: {
-          sessionId: bootstrap.sessionId,
+          renderId: bootstrap.renderId,
           appId: bootstrap.appId,
           wsToken: bootstrap.token,
         },
@@ -524,7 +524,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
           JSON.stringify({
             type: 'subscribe',
             payload: {
-              sessionId: bootstrap.sessionId,
+              renderId: bootstrap.renderId,
               appId: bootstrap.appId,
               wsToken: bootstrap.token,
             },
@@ -570,7 +570,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
         JSON.stringify({
           type: 'subscribe',
           payload: {
-            sessionId: bootstrap.sessionId,
+            renderId: bootstrap.renderId,
             appId: bootstrap.appId,
             wsToken: tampered,
           },
@@ -605,7 +605,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
         JSON.stringify({
           type: 'subscribe',
           payload: {
-            sessionId: 'different-session',
+            renderId: 'different-session',
             appId: bootstrap.appId,
             wsToken: bootstrap.token,
           },

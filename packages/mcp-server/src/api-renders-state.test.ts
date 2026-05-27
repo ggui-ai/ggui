@@ -1,5 +1,5 @@
 /**
- * Tests for `GET /api/sessions/:sessionId/state?wsToken=<token>` — the
+ * Tests for `GET /api/renders/:renderId/state?wsToken=<token>` — the
  * R6 wsToken-gated snapshot read of the current session state.
  *
  * # Auth surface
@@ -15,7 +15,7 @@
  *   - Auth gates: 401 on missing/invalid/wrong-scope wsToken, 410 on
  *     expired, 404 on missing session.
  *   - Slice projection: top renderable stack item flows through the
- *     same `deriveStackItemMeta` helper push uses, so polling clients
+ *     same `deriveRenderMeta` helper push uses, so polling clients
  *     see the same render shape regardless of entry point.
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser).
@@ -25,7 +25,7 @@ import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
   InMemoryCodeStore,
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import {
@@ -34,10 +34,8 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import type { JsonObject } from '@ggui-ai/protocol';
 import {
-  MCP_APP_AI_GGUI_SESSION_META_KEY,
-  MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
-  type McpAppAiGguiSessionMeta,
-  type McpAppAiGguiStackItemMeta,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { createGguiServer, type GguiServer } from './server.js';
 
@@ -55,27 +53,35 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  sessionId: string;
+  renderId: string;
   appId: string;
   validToken: string;
   validClaims: WsTokenClaims;
 }
 
 async function bootWithSession(opts?: {
-  readonly withStackItem?: boolean;
+  readonly withRender?: boolean;
   readonly componentCode?: string;
   readonly props?: JsonObject;
 }): Promise<Fixture> {
-  const sessionStore = new InMemorySessionStore();
-  const session = await sessionStore.create({ appId: 'app-state-test' });
-  if (opts?.withStackItem) {
-    await sessionStore.appendStackItem(session.id, {
-      id: 'item-1',
-      type: 'component',
-      componentCode:
-        opts.componentCode ?? 'export default function X(){return null}',
-      props: opts.props ?? { count: 0 },
-      createdAt: new Date().toISOString(),
+  const renderStore = new InMemoryRenderStore();
+  const session = await renderStore.create({ appId: 'app-state-test' });
+  if (opts?.withRender) {
+    const now = Date.now();
+    await renderStore.commit({
+      render: {
+        id: session.id,
+        appId: session.appId,
+        type: 'component',
+        componentCode:
+          opts.componentCode ?? 'export default function X(){return null}',
+        props: opts.props ?? { count: 0 },
+        eventSequence: session.eventSequence,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60_000,
+      },
+      appId: session.appId,
     });
   }
   const shortCodeIndex = new InMemoryShortCodeIndex();
@@ -84,7 +90,7 @@ async function bootWithSession(opts?: {
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     sessionChannel: true,
-    sessionStore,
+    renderStore,
     shortCodeIndex,
     wsTokenSecret: SECRET,
     codeStore: new InMemoryCodeStore(),
@@ -96,21 +102,21 @@ async function bootWithSession(opts?: {
     throw new Error('server.address() did not return AddressInfo');
   }
   const { token, claims } = mintWsToken(
-    { sessionId: session.id, appId: session.appId },
+    { renderId: session.id, appId: session.appId },
     SECRET,
   );
   return {
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    sessionId: session.id,
+    renderId: session.id,
     appId: session.appId,
     validToken: token,
     validClaims: claims,
   };
 }
 
-describe('GET /api/sessions/:sessionId/state', () => {
+describe('GET /api/renders/:renderId/state', () => {
   let fx: Fixture | null = null;
   afterEach(async () => {
     if (fx) {
@@ -120,31 +126,31 @@ describe('GET /api/sessions/:sessionId/state', () => {
   });
 
   it('returns 200 + slice envelope with lastSequence stamped on happy path', async () => {
-    fx = await bootWithSession({ withStackItem: true });
+    fx = await bootWithSession({ withRender: true });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
 
     const body = (await res.json()) as Record<string, unknown>;
-    const sessionSlice = body[MCP_APP_AI_GGUI_SESSION_META_KEY] as
-      | McpAppAiGguiSessionMeta
+    const sessionSlice = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+      | McpAppAiGguiRenderMeta
       | undefined;
     expect(sessionSlice).toBeDefined();
-    expect(sessionSlice?.sessionId).toBe(fx.sessionId);
+    expect(sessionSlice?.renderId).toBe(fx.renderId);
     expect(sessionSlice?.appId).toBe(fx.appId);
     expect(typeof sessionSlice?.runtimeUrl).toBe('string');
     // R6 contract — lastSequence MUST be stamped on every /state read.
     expect(typeof sessionSlice?.lastSequence).toBe('number');
     expect(sessionSlice?.lastSequence).toBeGreaterThanOrEqual(0);
 
-    const stackItem = body[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY] as
-      | McpAppAiGguiStackItemMeta
+    const stackItem = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+      | McpAppAiGguiRenderMeta
       | undefined;
     expect(stackItem).toBeDefined();
-    expect(stackItem?.stackItemId).toBe('item-1');
+    expect(stackItem?.renderId).toBe('item-1');
     // codeUrl wired via codeStore + publicBaseUrl.
     expect(stackItem?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
   });
@@ -152,24 +158,24 @@ describe('GET /api/sessions/:sessionId/state', () => {
   it('returns 200 + session slice only when stack is empty', async () => {
     fx = await bootWithSession();
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body[MCP_APP_AI_GGUI_SESSION_META_KEY]).toBeDefined();
-    expect(body[MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]).toBeUndefined();
+    expect(body[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeDefined();
+    expect(body[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeUndefined();
   });
 
   it('returns 401 when wsToken query is absent', async () => {
     fx = await bootWithSession();
-    const res = await fetch(`${fx.url}/api/sessions/${fx.sessionId}/state`);
+    const res = await fetch(`${fx.url}/api/renders/${fx.renderId}/state`);
     expect(res.status).toBe(401);
   });
 
   it('returns 401 when wsToken signature is invalid', async () => {
     fx = await bootWithSession();
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=tampered.payload`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=tampered.payload`,
     );
     expect(res.status).toBe(401);
   });
@@ -180,28 +186,28 @@ describe('GET /api/sessions/:sessionId/state', () => {
     // `exp <= now` (line 314 of ws-tokens.ts).
     const { token: expiredToken } = mintWsToken(
       {
-        sessionId: fx.sessionId,
+        renderId: fx.renderId,
         appId: fx.appId,
         ttlSec: -10,
       },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(expiredToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(expiredToken)}`,
     );
     expect(res.status).toBe(410);
   });
 
-  it('returns 401 when wsToken sessionId does not match URL sessionId', async () => {
+  it('returns 401 when wsToken renderId does not match URL renderId', async () => {
     fx = await bootWithSession();
-    // Mint a token for a different session; the URL targets fx.sessionId
-    // but the token claims a different sessionId — tenancy gate trips.
+    // Mint a token for a different session; the URL targets fx.renderId
+    // but the token claims a different renderId — tenancy gate trips.
     const { token: otherSessionToken } = mintWsToken(
-      { sessionId: 'other-session', appId: fx.appId },
+      { renderId: 'other-session', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(otherSessionToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherSessionToken)}`,
     );
     expect(res.status).toBe(401);
   });
@@ -209,24 +215,24 @@ describe('GET /api/sessions/:sessionId/state', () => {
   it('returns 401 when wsToken appId does not match session appId', async () => {
     fx = await bootWithSession();
     const { token: otherAppToken } = mintWsToken(
-      { sessionId: fx.sessionId, appId: 'other-app' },
+      { renderId: fx.renderId, appId: 'other-app' },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(otherAppToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherAppToken)}`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 when sessionId does not resolve', async () => {
+  it('returns 404 when renderId does not resolve', async () => {
     fx = await bootWithSession();
     // Mint a token for a session that does not exist in the store.
     const { token: ghostToken } = mintWsToken(
-      { sessionId: 'sess-ghost', appId: fx.appId },
+      { renderId: 'sess-ghost', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/sess-ghost/state?wsToken=${encodeURIComponent(ghostToken)}`,
+      `${fx.url}/api/renders/sess-ghost/state?wsToken=${encodeURIComponent(ghostToken)}`,
     );
     expect(res.status).toBe(404);
   });

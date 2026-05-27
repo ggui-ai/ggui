@@ -159,7 +159,7 @@ describe('createGguiServer — console opt-in', () => {
         generation: { wired: boolean; hasCredentials: boolean };
       };
       storage: {
-        sessionStore: 'memory' | 'custom';
+        renderStore: 'memory' | 'custom';
         vectorStore: 'memory' | 'custom';
       };
     };
@@ -173,7 +173,7 @@ describe('createGguiServer — console opt-in', () => {
       hasCredentials: false,
     });
     // Bare boot falls back to in-memory for both stores.
-    expect(body.storage.sessionStore).toBe('memory');
+    expect(body.storage.renderStore).toBe('memory');
     expect(body.storage.vectorStore).toBe('memory');
   });
 
@@ -582,7 +582,7 @@ describe('createGguiServer — console.sessionCookie', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { sessionId: 'sess-other', appId: 'app-1' },
+            payload: { renderId: 'sess-other', appId: 'app-1' },
             requestId: 'r1',
           }),
         );
@@ -902,7 +902,7 @@ describe('createGguiServer — console full ceremony integration', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { sessionId: 'sess-42', appId: 'app-42' },
+            payload: { renderId: 'sess-42', appId: 'app-42' },
             requestId: 'r1',
           }),
         );
@@ -943,7 +943,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     // injection). Use the smallest valid shape — `deleteSurface` — so
     // the test proves fan-out wiring without coupling to a fake payload.
     await fx.server.sessionChannel!.sendToSession({
-      sessionId: 'sess-42',
+      renderId: 'sess-42',
       channel: '_ggui:preview',
       mode: 'append',
       payload: { version: 'v0.9', deleteSurface: { surfaceId: 'surf-1' } },
@@ -1022,7 +1022,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       frames.push(JSON.parse(String(raw)));
     });
     await fx.server.sessionChannel!.sendToSession({
-      sessionId: 'sess-42', // the cookie's real session
+      renderId: 'sess-42', // the cookie's real session
       channel: '_ggui:preview',
       mode: 'append',
       // Valid A2UI shape (payload passes the injected validator) — the

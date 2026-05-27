@@ -1,6 +1,6 @@
 /**
  * Slice O — option B: focused unit coverage for the
- * `SessionChannelServer.sendPropsUpdate` seam.
+ * `RenderChannelServer.sendPropsUpdate` seam.
  *
  * Mirrors the `notifyStackPush` describe pattern in
  * `session-channel.test.ts` — boots a real `createGguiServer({
@@ -10,15 +10,15 @@
  * Coverage:
  *
  *   1. Live subscriber receives a `{type:'props_update', payload:{
- *      stackItemId, props}}` frame when `sendPropsUpdate` fires for its
- *      session + a known stackItemId on the stack.
- *   2. `stackItemId` that doesn't exist on the session's stack is a no-op
+ *      renderId, props}}` frame when `sendPropsUpdate` fires for its
+ *      session + a known renderId on the stack.
+ *   2. `renderId` that doesn't exist on the session's stack is a no-op
  *      (logs a warn but does not fan out, does not throw).
- *   3. `sessionId` that doesn't exist (orphan) is a no-op (logs a
+ *   3. `renderId` that doesn't exist (orphan) is a no-op (logs a
  *      warn, does not throw).
  *   4. Cross-session isolation: a `sendPropsUpdate` to session A MUST
  *      NOT reach a subscriber bound to session B, even when a follow-
- *      up call to session B's stackItemId proves the channel still works.
+ *      up call to session B's renderId proves the channel still works.
  *
  * Wiring: piggybacks on the existing channel test infrastructure
  * (`makeSeededStore`, `connectAuthed`, `recvMessage`, `makeSubscribe`)
@@ -39,7 +39,7 @@ import { WebSocket, type RawData } from 'ws';
 import type { Server as HttpServer } from 'node:http';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
-  StackItem,
+  Render,
   Session,
   SubscribePayload,
 } from '@ggui-ai/protocol';
@@ -48,7 +48,7 @@ import type {
   SessionEvent,
   SessionFilter,
   SessionPatch,
-  SessionStore,
+  RenderStore,
   ObserveOptions,
   CreateSessionInput,
 } from '@ggui-ai/mcp-server-core';
@@ -57,7 +57,7 @@ import { createGguiServer, type GguiServer } from './server.js';
 const TEST_APP_ID = 'test-app';
 const TEST_SESSION_ID = 'sess-props-update-test';
 
-function makeStackItem(id: string = 'page-0'): StackItem {
+function makeRender(id: string = 'page-0'): Render {
   return {
     id,
     componentCode: '/* stub */',
@@ -69,17 +69,17 @@ function makeStackItem(id: string = 'page-0'): StackItem {
 }
 
 /**
- * Test SessionStore — pre-seeds a single session with the given stack.
+ * Test RenderStore — pre-seeds a single session with the given stack.
  * Mirrors `session-channel.test.ts::makeSeededStore` minimally; the
  * channel-server unit tests don't need stack-mutation paths beyond
  * the seed.
  */
 function makeSeededStore(
-  sessionId: string,
-  seedStack: StackItem[],
-): SessionStore {
+  renderId: string,
+  seedStack: Render[],
+): RenderStore {
   const seeded: Session = {
-    id: sessionId,
+    id: renderId,
     appId: TEST_APP_ID,
     stack: seedStack,
     currentStackIndex: seedStack.length - 1,
@@ -119,17 +119,17 @@ function makeSeededStore(
     async delete(_id: string): Promise<void> {
       /* no-op */
     },
-    async appendStackItem(_id: string, _entry): Promise<Session> {
-      throw new Error('appendStackItem is not exercised by these tests');
+    async commit(_id: string, _entry): Promise<Session> {
+      throw new Error('commit is not exercised by these tests');
     },
-    async popStackItem(): Promise<{ readonly poppedId: string | null; readonly stackSize: number }> {
-      throw new Error('popStackItem is not exercised by these tests');
+    async popRender(): Promise<{ readonly poppedId: string | null; readonly stackSize: number }> {
+      throw new Error('popRender is not exercised by these tests');
     },
-    async getSessionByStackItemId(): Promise<{ readonly sessionId: string; readonly appId: string } | null> {
+    async getSessionByStackItemId(): Promise<{ readonly renderId: string; readonly appId: string } | null> {
       return null;
     },
     async appendEvent(input: AppendEventInput): Promise<number> {
-      if (input.sessionId !== seeded.id) throw new Error('unknown session');
+      if (input.renderId !== seeded.id) throw new Error('unknown session');
       seeded.eventSequence += 1;
       recorded.push({
         seq: seeded.eventSequence,
@@ -139,8 +139,8 @@ function makeSeededStore(
       });
       return seeded.eventSequence;
     },
-    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
-      if (sessionId !== seeded.id) return null;
+    async listEventsSince(renderId: string, _sinceSeq: number, _limit: number) {
+      if (renderId !== seeded.id) return null;
       return {
         events: [],
         lastSequence: seeded.eventSequence,
@@ -168,11 +168,11 @@ interface Fixture {
   wsUrl: string;
 }
 
-async function boot(sessionStore: SessionStore): Promise<Fixture> {
+async function boot(renderStore: RenderStore): Promise<Fixture> {
   const server = createGguiServer({
     logger: silentLogger,
     sessionChannel: true,
-    sessionStore,
+    renderStore,
   });
   const httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -219,12 +219,12 @@ function sendMessage(ws: WebSocket, message: WebSocketMessage): void {
 }
 
 function makeSubscribe(
-  sessionId: string = TEST_SESSION_ID,
+  renderId: string = TEST_SESSION_ID,
 ): WebSocketMessage & { type: 'subscribe' } {
   return {
     type: 'subscribe',
     payload: {
-      sessionId,
+      renderId,
       appId: TEST_APP_ID,
       role: 'user',
     } as SubscribePayload,
@@ -232,11 +232,11 @@ function makeSubscribe(
   };
 }
 
-describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
+describe('createRenderChannelServer — sendPropsUpdate (Slice O)', () => {
   let fix: Fixture | null = null;
 
   beforeEach(async () => {
-    fix = await boot(makeSeededStore(TEST_SESSION_ID, [makeStackItem('page-0')]));
+    fix = await boot(makeSeededStore(TEST_SESSION_ID, [makeRender('page-0')]));
   });
 
   afterEach(async () => {
@@ -246,7 +246,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
     }
   });
 
-  it('fans `{type:"props_update", payload:{stackItemId, props}}` to a live subscriber for the session', async () => {
+  it('fans `{type:"props_update", payload:{renderId, props}}` to a live subscriber for the session', async () => {
     // Closes the Slice O props_update emission gap — without this seam,
     // a wired-action mount that mutates server state has no honest path
     // to push new props to live subscribers (only refresh-stream tools
@@ -262,7 +262,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
     const msg = await recvMessage(ws);
     expect(msg.type).toBe('props_update');
     if (msg.type === 'props_update') {
-      expect(msg.payload.stackItemId).toBe('page-0');
+      expect(msg.payload.renderId).toBe('page-0');
       expect(msg.payload.props).toEqual({ count: 7 });
     }
     ws.close();
@@ -270,7 +270,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
 
   it('is a best-effort no-op when the session does not exist (orphan)', async () => {
     // Mirrors `notifyStackPush`'s orphan-no-op posture. The mount
-    // handler's path must not be made to fail by a stale sessionId
+    // handler's path must not be made to fail by a stale renderId
     // — the server logs a warn and returns.
     const channel = fix!.server.sessionChannel!;
     await expect(
@@ -278,8 +278,8 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('is a best-effort no-op when the stackItemId does not match any stack entry', async () => {
-    // Validation defense — a buggy mount that picks the wrong stackItemId
+  it('is a best-effort no-op when the renderId does not match any stack entry', async () => {
+    // Validation defense — a buggy mount that picks the wrong renderId
     // (e.g., an off-by-one against a popped stack) MUST NOT crash the
     // dispatch path. Logs a warn + returns.
     const ws = await connectAuthed(fix!.wsUrl);
@@ -294,14 +294,14 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
     ).resolves.toBeUndefined();
 
     // Subscriber MUST NOT have received a frame for the unknown
-    // stackItemId. We prove this by firing a follow-up call with a known
-    // stackItemId and asserting the next frame is the second one (no
+    // renderId. We prove this by firing a follow-up call with a known
+    // renderId and asserting the next frame is the second one (no
     // garbage in between).
     await channel.sendPropsUpdate(TEST_SESSION_ID, 'page-0', { count: 99 });
     const msg = await recvMessage(ws);
     expect(msg.type).toBe('props_update');
     if (msg.type === 'props_update') {
-      expect(msg.payload.stackItemId).toBe('page-0');
+      expect(msg.payload.renderId).toBe('page-0');
       expect(msg.payload.props).toEqual({ count: 99 });
     }
     ws.close();
@@ -310,7 +310,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
   it('does NOT cross-deliver to subscribers on a different session', async () => {
     // Same load-bearing isolation invariant `notifyStackPush` and
     // `sendToSession` enforce. The flat WS-subscriber set is filtered
-    // by `sub.sessionId !== sessionId`; without that guard, a
+    // by `sub.renderId !== renderId`; without that guard, a
     // wrong-session call would leak frames to every connected client
     // on the channel.
     const ws = await connectAuthed(fix!.wsUrl);
@@ -319,7 +319,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
 
     const channel = fix!.server.sessionChannel!;
     // First, an UNRELATED-session call. Even with a syntactically
-    // valid stackItemId, the orphan path triggers (the seeded store knows
+    // valid renderId, the orphan path triggers (the seeded store knows
     // only TEST_SESSION_ID).
     await channel.sendPropsUpdate('sess-OTHER', 'page-0', { count: 1 });
     // Then a notify for the bound session — the next frame the
@@ -330,7 +330,7 @@ describe('createSessionChannelServer — sendPropsUpdate (Slice O)', () => {
     const msg = await recvMessage(ws);
     expect(msg.type).toBe('props_update');
     if (msg.type === 'props_update') {
-      expect(msg.payload.stackItemId).toBe('page-0');
+      expect(msg.payload.renderId).toBe('page-0');
       expect(msg.payload.props).toEqual({ count: 2 });
     }
     ws.close();

@@ -1,5 +1,5 @@
 /**
- * Tests for `GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M`
+ * Tests for `GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M`
  * — the R7 wsToken-gated cursor-replay read from the SessionEvent
  * ledger.
  *
@@ -28,7 +28,7 @@ import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
   InMemoryCodeStore,
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { mintWsToken } from '@ggui-ai/mcp-server-core';
@@ -48,10 +48,10 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  sessionId: string;
+  renderId: string;
   appId: string;
   validToken: string;
-  store: InMemorySessionStore;
+  store: InMemoryRenderStore;
 }
 
 interface BootOpts {
@@ -59,15 +59,15 @@ interface BootOpts {
 }
 
 async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
-  const sessionStore = new InMemorySessionStore();
-  const session = await sessionStore.create({ appId: 'app-events-test' });
+  const renderStore = new InMemoryRenderStore();
+  const session = await renderStore.create({ appId: 'app-events-test' });
   // Seed N synthetic events so cursor / pagination scenarios have
   // something to walk. Type `'ui.created'` is one of the canonical
   // ledger types; the wire shape we project is opaque on payload.
   const seedCount = opts.eventCount ?? 0;
   for (let i = 0; i < seedCount; i += 1) {
-    await sessionStore.appendEvent({
-      sessionId: session.id,
+    await renderStore.appendEvent({
+      renderId: session.id,
       type: 'ui.created',
       data: { i, label: `event-${i}` },
     });
@@ -78,7 +78,7 @@ async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
     sessionChannel: true,
-    sessionStore,
+    renderStore,
     shortCodeIndex,
     wsTokenSecret: SECRET,
     codeStore: new InMemoryCodeStore(),
@@ -90,21 +90,21 @@ async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
     throw new Error('server.address() did not return AddressInfo');
   }
   const { token } = mintWsToken(
-    { sessionId: session.id, appId: session.appId },
+    { renderId: session.id, appId: session.appId },
     SECRET,
   );
   return {
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    sessionId: session.id,
+    renderId: session.id,
     appId: session.appId,
     validToken: token,
-    store: sessionStore,
+    store: renderStore,
   };
 }
 
-describe('GET /api/sessions/:sessionId/events', () => {
+describe('GET /api/renders/:renderId/events', () => {
   let fx: Fixture | null = null;
   afterEach(async () => {
     if (fx) {
@@ -116,7 +116,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 200 + full backlog when sinceSequence=0 on a session with events', async () => {
     fx = await bootWithSession({ eventCount: 3 });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
@@ -140,7 +140,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 200 + empty events page when sinceSequence equals lastSequence', async () => {
     fx = await bootWithSession({ eventCount: 2 });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -156,7 +156,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 200 + truncated page with hasMore=true when limit is hit', async () => {
     fx = await bootWithSession({ eventCount: 5 });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=2`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=2`,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -174,7 +174,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 200 + empty events on a session with no events (sinceSequence=0)', async () => {
     fx = await bootWithSession();
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -190,7 +190,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 401 when wsToken query is absent', async () => {
     fx = await bootWithSession();
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?sinceSequence=0`,
     );
     expect(res.status).toBe(401);
   });
@@ -198,7 +198,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 401 when wsToken signature is invalid', async () => {
     fx = await bootWithSession();
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=tampered.payload&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=tampered.payload&sinceSequence=0`,
     );
     expect(res.status).toBe(401);
   });
@@ -207,26 +207,26 @@ describe('GET /api/sessions/:sessionId/events', () => {
     fx = await bootWithSession();
     const { token: expiredToken } = mintWsToken(
       {
-        sessionId: fx.sessionId,
+        renderId: fx.renderId,
         appId: fx.appId,
         ttlSec: -10,
       },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(expiredToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(expiredToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(410);
   });
 
-  it('returns 401 when wsToken sessionId does not match URL sessionId', async () => {
+  it('returns 401 when wsToken renderId does not match URL renderId', async () => {
     fx = await bootWithSession();
     const { token: otherSessionToken } = mintWsToken(
-      { sessionId: 'other-session', appId: fx.appId },
+      { renderId: 'other-session', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(otherSessionToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(otherSessionToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(401);
   });
@@ -234,23 +234,23 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('returns 401 when wsToken appId does not match session appId', async () => {
     fx = await bootWithSession();
     const { token: otherAppToken } = mintWsToken(
-      { sessionId: fx.sessionId, appId: 'other-app' },
+      { renderId: fx.renderId, appId: 'other-app' },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(otherAppToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(otherAppToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 when sessionId does not resolve', async () => {
+  it('returns 404 when renderId does not resolve', async () => {
     fx = await bootWithSession();
     const { token: ghostToken } = mintWsToken(
-      { sessionId: 'sess-ghost', appId: fx.appId },
+      { renderId: 'sess-ghost', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/sessions/sess-ghost/events?wsToken=${encodeURIComponent(ghostToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/sess-ghost/events?wsToken=${encodeURIComponent(ghostToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(404);
   });
@@ -260,7 +260,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
     // cursor from a different deployment / reset session.
     fx = await bootWithSession({ eventCount: 2 });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=99`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=99`,
     );
     expect(res.status).toBe(410);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
@@ -276,17 +276,17 @@ describe('GET /api/sessions/:sessionId/events', () => {
     fx = await bootWithSession();
     // Missing.
     let res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}`,
     );
     expect(res.status).toBe(400);
     // Non-integer.
     res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=abc`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=abc`,
     );
     expect(res.status).toBe(400);
     // Negative.
     res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=-1`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=-1`,
     );
     expect(res.status).toBe(400);
   });
@@ -295,12 +295,12 @@ describe('GET /api/sessions/:sessionId/events', () => {
     fx = await bootWithSession();
     // Above max.
     let res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=501`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=501`,
     );
     expect(res.status).toBe(400);
     // Below min.
     res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=0`,
     );
     expect(res.status).toBe(400);
   });
@@ -308,7 +308,7 @@ describe('GET /api/sessions/:sessionId/events', () => {
   it('honors mid-cursor sinceSequence to return only newer events', async () => {
     fx = await bootWithSession({ eventCount: 4 });
     const res = await fetch(
-      `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {

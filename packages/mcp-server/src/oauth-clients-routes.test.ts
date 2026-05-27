@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -41,7 +41,7 @@ async function bootWithOAuth(opts: {
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     sessionChannel: true,
-    sessionStore: new InMemorySessionStore(),
+    renderStore: new InMemoryRenderStore(),
     shortCodeIndex: new InMemoryShortCodeIndex(),
     ...(opts.consoleEnabled !== false
       ? { console: { sessionCookie: true } }

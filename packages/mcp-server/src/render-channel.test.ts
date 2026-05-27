@@ -29,7 +29,7 @@ import type {
   EventType,
   JsonValue,
   Session,
-  StackItem,
+  Render,
   StreamSpec,
   SubscribePayload,
 } from '@ggui-ai/protocol';
@@ -39,7 +39,7 @@ import type {
   SessionEvent,
   SessionFilter,
   SessionPatch,
-  SessionStore,
+  RenderStore,
   ObserveOptions,
   CreateSessionInput,
 } from '@ggui-ai/mcp-server-core';
@@ -79,7 +79,7 @@ const STREAM_SPEC: StreamSpec = {
   },
 };
 
-function makeStackItem(): StackItem {
+function makeRender(): Render {
   return {
     id: 'page-0',
     componentCode: '/* stub */',
@@ -93,12 +93,12 @@ function makeStackItem(): StackItem {
 }
 
 /**
- * Test-only SessionStore that pre-seeds a session with a specific stack.
- * Production InMemorySessionStore exposes no stack-mutation path today
+ * Test-only RenderStore that pre-seeds a session with a specific stack.
+ * Production InMemoryRenderStore exposes no stack-mutation path today
  * (stack mutation is gated behind OSS `ggui_push` extraction which is
  * its own slice); this shim fills the gap for test wire-level coverage.
  */
-function makeSeededStore(seedStack: StackItem[]): SessionStore {
+function makeSeededStore(seedStack: Render[]): RenderStore {
   const seeded: Session = {
     id: TEST_SESSION_ID,
     appId: TEST_APP_ID,
@@ -147,21 +147,21 @@ function makeSeededStore(seedStack: StackItem[]): SessionStore {
     async delete(_id: string): Promise<void> {
       /* no-op for test shim */
     },
-    async appendStackItem(sessionId: string, entry): Promise<Session> {
-      if (sessionId !== seeded.id) throw new Error('unknown session');
+    async commit(renderId: string, entry): Promise<Session> {
+      if (renderId !== seeded.id) throw new Error('unknown session');
       seeded.stack.push(entry);
       seeded.currentStackIndex = seeded.stack.length - 1;
       return clone(seeded);
     },
-    async popStackItem() {
-      throw new Error('popStackItem is not exercised by session-channel tests');
+    async popRender() {
+      throw new Error('popRender is not exercised by session-channel tests');
     },
-    async getSessionByStackItemId(stackItemId: string) {
-      const hit = seeded.stack.find((item) => item.id === stackItemId);
-      return hit ? { sessionId: seeded.id, appId: seeded.appId } : null;
+    async getSessionByStackItemId(renderId: string) {
+      const hit = seeded.stack.find((item) => item.id === renderId);
+      return hit ? { renderId: seeded.id, appId: seeded.appId } : null;
     },
     async appendEvent(input: AppendEventInput): Promise<number> {
-      if (input.sessionId !== seeded.id) throw new Error('unknown session');
+      if (input.renderId !== seeded.id) throw new Error('unknown session');
       seeded.eventSequence += 1;
       recordedEvents.push({
         seq: seeded.eventSequence,
@@ -171,8 +171,8 @@ function makeSeededStore(seedStack: StackItem[]): SessionStore {
       });
       return seeded.eventSequence;
     },
-    async listEventsSince(sessionId: string, sinceSeq: number, limit: number) {
-      if (sessionId !== seeded.id) return null;
+    async listEventsSince(renderId: string, sinceSeq: number, limit: number) {
+      if (renderId !== seeded.id) return null;
       const filtered = recordedEvents.filter((e) => e.seq > sinceSeq);
       const hasMore = filtered.length > limit;
       return {
@@ -204,7 +204,7 @@ interface Fixture {
 
 async function boot(
   opts: Partial<Parameters<typeof createGguiServer>[0]> & {
-    sessionStore?: SessionStore;
+    renderStore?: RenderStore;
   } = {},
 ): Promise<Fixture> {
   const server = createGguiServer({
@@ -316,7 +316,7 @@ function makeSubscribe(): WebSocketMessage & { type: 'subscribe' } {
   return {
     type: 'subscribe',
     payload: {
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       appId: TEST_APP_ID,
       role: 'user',
     } as SubscribePayload,
@@ -325,11 +325,11 @@ function makeSubscribe(): WebSocketMessage & { type: 'subscribe' } {
 }
 
 
-describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
+describe('createRenderChannelServer — OSS live-channel end-to-end', () => {
   let fix: Fixture | null = null;
 
   beforeEach(async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
   });
 
   afterEach(async () => {
@@ -426,7 +426,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
 
     const channel = fix!.server.sessionChannel!;
     const result = await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'tick',
       mode: 'append',
       payload: { count: 7 },
@@ -438,7 +438,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
     const msg = await recvMessage(ws);
     expect(msg.type).toBe('data');
     if (msg.type === 'data') {
-      expect(msg.payload.sessionId).toBe(TEST_SESSION_ID);
+      expect(msg.payload.renderId).toBe(TEST_SESSION_ID);
       expect(msg.payload.channel).toBe('tick');
       expect(msg.payload.mode).toBe('append');
       expect(msg.payload.payload).toEqual({ count: 7 });
@@ -457,7 +457,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
     // streamSpec declares only 'tick' — 'garbage' is undeclared.
     await expect(
       channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'garbage',
         mode: 'append',
         payload: {},
@@ -468,7 +468,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
     // message and confirm that's the next frame — i.e., no garbage
     // slipped through ahead of it.
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'tick',
       mode: 'append',
       payload: { count: 99 },
@@ -492,7 +492,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
       makeActionEnvelope({
         type: 'data:submit',
         payload: { action: 'submit', data: { text: 'x' } },
-        sessionId: 'sess-OTHER',
+        renderId: 'sess-OTHER',
       }),
     );
     const err = await recvMessage(ws);
@@ -504,7 +504,7 @@ describe('createSessionChannelServer — OSS live-channel end-to-end', () => {
   });
 });
 
-describe('createSessionChannelServer — health introspection', () => {
+describe('createRenderChannelServer — health introspection', () => {
   let fix: Fixture | null = null;
 
   afterEach(async () => {
@@ -515,7 +515,7 @@ describe('createSessionChannelServer — health introspection', () => {
   });
 
   it('/ggui/health reports channel path + subscriber/session counts', async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const addr = fix.httpServer.address();
     if (!addr || typeof addr === 'string') throw new Error('no addr');
     const baseUrl = `http://127.0.0.1:${addr.port}`;
@@ -562,11 +562,11 @@ describe('createSessionChannelServer — health introspection', () => {
   });
 });
 
-describe('createSessionChannelServer — notifyStackPush (B1)', () => {
+describe('createRenderChannelServer — notifyStackPush (B1)', () => {
   let fix: Fixture | null = null;
 
   beforeEach(async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
   });
 
   afterEach(async () => {
@@ -579,7 +579,7 @@ describe('createSessionChannelServer — notifyStackPush (B1)', () => {
   it('fans a `{type:"push", payload:{stackItem}}` frame to live subscribers', async () => {
     // Closes the QA-observed B1 chat-inline-handoff hang. The chat
     // surface keeps one live subscription across turns; on the second
-    // turn the push handler appends to the SessionStore but the
+    // turn the push handler appends to the RenderStore but the
     // subscriber never hears unless the channel emits a delta.
     const ws = await connectAuthed(fix!.wsUrl);
     sendMessage(ws, makeSubscribe());
@@ -587,7 +587,7 @@ describe('createSessionChannelServer — notifyStackPush (B1)', () => {
     expect(ack.type).toBe('ack');
 
     const channel = fix!.server.sessionChannel!;
-    const newItem: StackItem = {
+    const newItem: Render = {
       id: 'page-second-turn',
       componentCode: '/* generated on turn 2 */',
       createdAt: new Date().toISOString(),
@@ -617,7 +617,7 @@ describe('createSessionChannelServer — notifyStackPush (B1)', () => {
     await recvMessage(ws);
 
     const channel = fix!.server.sessionChannel!;
-    const cachedItem: StackItem = {
+    const cachedItem: Render = {
       id: 'page-cache-hit',
       componentCode: '/* reused from cache */',
       createdAt: new Date().toISOString(),
@@ -681,7 +681,7 @@ describe('createSessionChannelServer — notifyStackPush (B1)', () => {
   });
 });
 
-describe('createSessionChannelServer — auth', () => {
+describe('createRenderChannelServer — auth', () => {
   let fix: Fixture | null = null;
 
   afterEach(async () => {
@@ -697,7 +697,7 @@ describe('createSessionChannelServer — auth', () => {
     // authenticated (claude.ai connector pre-OAuth probe semantics),
     // so this test must opt out to exercise the 401 path.
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItem()]),
+      renderStore: makeSeededStore([makeRender()]),
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
     });
     const ws = new WebSocket(fix.wsUrl); // no Authorization header
@@ -716,7 +716,7 @@ describe('createSessionChannelServer — auth', () => {
   });
 
   it('returns 404 on upgrade to a non-channel path', async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const addr = fix.httpServer.address();
     if (!addr || typeof addr === 'string') throw new Error('no addr');
     const wrongPath = `ws://127.0.0.1:${addr.port}/not-the-channel`;
@@ -755,8 +755,8 @@ describe('createSessionChannelServer — auth', () => {
  *  return a fresh subject per `it`, so each case gets a clean mutator
  *  without cross-test bleed. */
 function makeMutableStore(): {
-  store: SessionStore;
-  setStack: (stack: StackItem[]) => void;
+  store: RenderStore;
+  setStack: (stack: Render[]) => void;
 } {
   const session: Session = {
     id: TEST_SESSION_ID,
@@ -772,7 +772,7 @@ function makeMutableStore(): {
   function clone(s: Session): Session {
     return { ...s, stack: [...s.stack], adapterPermissions: { ...s.adapterPermissions } };
   }
-  const store: SessionStore = {
+  const store: RenderStore = {
     async get(id) {
       return id === session.id ? clone(session) : null;
     },
@@ -792,26 +792,26 @@ function makeMutableStore(): {
     async delete(_id: string) {
       /* no-op for test */
     },
-    async appendStackItem(sessionId: string, entry) {
-      if (sessionId !== session.id) throw new Error('unknown');
+    async commit(renderId: string, entry) {
+      if (renderId !== session.id) throw new Error('unknown');
       session.stack.push(entry);
       session.currentStackIndex = session.stack.length - 1;
       return clone(session);
     },
-    async popStackItem() {
-      throw new Error('popStackItem is not exercised by these tests');
+    async popRender() {
+      throw new Error('popRender is not exercised by these tests');
     },
-    async getSessionByStackItemId(stackItemId: string) {
-      const hit = session.stack.find((item) => item.id === stackItemId);
-      return hit ? { sessionId: session.id, appId: session.appId } : null;
+    async getSessionByStackItemId(renderId: string) {
+      const hit = session.stack.find((item) => item.id === renderId);
+      return hit ? { renderId: session.id, appId: session.appId } : null;
     },
     async appendEvent(input: AppendEventInput) {
-      if (input.sessionId !== session.id) throw new Error('unknown');
+      if (input.renderId !== session.id) throw new Error('unknown');
       session.eventSequence += 1;
       return session.eventSequence;
     },
-    async listEventsSince(sessionId: string, _sinceSeq: number, _limit: number) {
-      if (sessionId !== session.id) return null;
+    async listEventsSince(renderId: string, _sinceSeq: number, _limit: number) {
+      if (renderId !== session.id) return null;
       return {
         events: [],
         lastSequence: session.eventSequence,
@@ -825,7 +825,7 @@ function makeMutableStore(): {
   };
   return {
     store,
-    setStack(stack: StackItem[]) {
+    setStack(stack: Render[]) {
       session.stack = stack;
       session.currentStackIndex = stack.length - 1;
     },
@@ -848,7 +848,7 @@ describe('channel enforcement contract — OSS /ws consumer', () => {
     const server = createGguiServer({
       logger: silentLogger,
       sessionChannel: true,
-      sessionStore: mutable.store,
+      renderStore: mutable.store,
     });
     const httpServer = await server.listen(0, '127.0.0.1');
     servers.push(server);
@@ -881,14 +881,14 @@ describe('channel enforcement contract — OSS /ws consumer', () => {
         mutable.setStack(stackItem ? [stackItem] : []);
         const ws = await openSubscribed();
         try {
-          // Rewrite envelope.sessionId to match the subscriber's real
-          // session. The contract's fixture sessionId is a placeholder;
+          // Rewrite envelope.renderId to match the subscriber's real
+          // session. The contract's fixture renderId is a placeholder;
           // the harness owns consumer-specific session binding. Keeping
           // the rest of the envelope (type, payload, stackIndex) intact
           // is what makes the contract exercise the right behavior.
           const bound: ActionEnvelope = {
             ...envelope,
-            sessionId: TEST_SESSION_ID,
+            renderId: TEST_SESSION_ID,
           };
           sendMessage(ws, { type: 'action', payload: bound });
           const resp = await recvMessage(ws);
@@ -903,7 +903,7 @@ describe('channel enforcement contract — OSS /ws consumer', () => {
         try {
           try {
             await server.sessionChannel!.sendToSession({
-              sessionId: TEST_SESSION_ID,
+              renderId: TEST_SESSION_ID,
               channel,
               mode: 'append',
               payload,
@@ -949,7 +949,7 @@ describe('channel enforcement contract — OSS /ws consumer', () => {
 // test boots a fresh server with its own in-memory stream buffer so
 // seq counters start at 1.
 
-function makeStackItemWithStreamSpec(streamSpec: StreamSpec): StackItem {
+function makeStackItemWithStreamSpec(streamSpec: StreamSpec): Render {
   return {
     id: 'page-0',
     componentCode: '/* stub */',
@@ -1008,7 +1008,7 @@ function subscribeFrame(
   fromSeq: number | undefined,
 ): WebSocketMessage & { type: 'subscribe' } {
   const payload: SubscribePayload = {
-    sessionId: TEST_SESSION_ID,
+    renderId: TEST_SESSION_ID,
     appId: TEST_APP_ID,
     role: 'user',
     ...(fromSeq !== undefined ? { fromSeq } : {}),
@@ -1025,7 +1025,7 @@ function subscribeFrameWithSinceSequence(
   sinceSequence: number,
 ): WebSocketMessage & { type: 'subscribe' } {
   const payload: SubscribePayload = {
-    sessionId: TEST_SESSION_ID,
+    renderId: TEST_SESSION_ID,
     appId: TEST_APP_ID,
     role: 'user',
     sinceSequence,
@@ -1048,14 +1048,14 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     // Prime the buffer with 3 envelopes — a later fresh subscriber
     // should NOT see them.
     const channel = fix.server.sessionChannel!;
     for (let i = 1; i <= 3; i++) {
       await channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'feed',
         mode: 'append',
         payload: { i },
@@ -1082,17 +1082,17 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       silent: { schema: { type: 'object', additionalProperties: true }, replay: 'none' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'silent',
       mode: 'append',
       payload: { x: 1 },
     });
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'silent',
       mode: 'append',
       payload: { x: 2 },
@@ -1119,23 +1119,23 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       snap: { schema: { type: 'object', additionalProperties: true }, replay: 'latest' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'snap',
       mode: 'replace',
       payload: { v: 'a' },
     });
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'snap',
       mode: 'replace',
       payload: { v: 'b' },
     });
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'snap',
       mode: 'replace',
       payload: { v: 'c' },
@@ -1166,12 +1166,12 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
     for (let i = 1; i <= 3; i++) {
       await channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'feed',
         mode: 'append',
         payload: { i },
@@ -1206,12 +1206,12 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
     for (let i = 1; i <= 5; i++) {
       await channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'feed',
         mode: 'append',
         payload: { i },
@@ -1240,14 +1240,14 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
       // Tiny buffer so the 5-envelope producer overflows + evicts.
       streamBuffer: new InMemorySessionStreamBuffer({ maxPerSession: 2 }),
     });
     const channel = fix.server.sessionChannel!;
     for (let i = 1; i <= 5; i++) {
       await channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'feed',
         mode: 'append',
         payload: { i },
@@ -1280,15 +1280,15 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'silent', mode: 'append', payload: {} });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'a' } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'b' } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 3 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'silent', mode: 'append', payload: {} });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'a' } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'b' } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 3 } });
 
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
@@ -1320,14 +1320,14 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
 
     // Seed some envelopes BEFORE any subscribe.
     for (let i = 1; i <= 2; i++) {
       await channel.sendToSession({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         channel: 'feed',
         mode: 'append',
         payload: { i },
@@ -1349,7 +1349,7 @@ describe('OSS /ws — replay semantics end-to-end', () => {
     // NEW envelope after subscribe → live fan-out delivers once.
     // Subscriber's replayCompletedSeq is 2, so seq 3 is > that.
     await channel.sendToSession({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       channel: 'feed',
       mode: 'append',
       payload: { i: 3 },
@@ -1371,12 +1371,12 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       feed: { schema: { type: 'object', additionalProperties: true }, replay: 'all' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
     // Prior traffic seeds the buffer.
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
 
     // Fresh subscribe → ack streamSeq=2, no replay.
     const ws = await connectAuthed(fix.wsUrl);
@@ -1391,7 +1391,7 @@ describe('OSS /ws — replay semantics end-to-end', () => {
     }
 
     // New envelope → live fan-out reaches the fresh subscriber.
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 3 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 3 } });
     await inbox.waitFor(2);
     await inbox.waitIdle(50);
     expect(inbox.frames).toHaveLength(2);
@@ -1408,15 +1408,15 @@ describe('OSS /ws — replay semantics end-to-end', () => {
       snap: { schema: { type: 'object', additionalProperties: true }, replay: 'latest' },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
+      renderStore: makeSeededStore([makeStackItemWithStreamSpec(spec)]),
     });
     const channel = fix.server.sessionChannel!;
 
     // Interleaved producers — each envelope gets the next seq.
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'a' } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
-    await channel.sendToSession({ sessionId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'b' } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 1 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'a' } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'feed', mode: 'append', payload: { i: 2 } });
+    await channel.sendToSession({ renderId: TEST_SESSION_ID, channel: 'snap', mode: 'replace', payload: { v: 'b' } });
 
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
@@ -1446,7 +1446,7 @@ describe('OSS /ws — replay semantics end-to-end', () => {
 // ─────────────────────────────────────────────────────────────────────
 //
 // Distinct cursor model from `fromSeq` (per-stream-channel replay).
-// Same ledger the HTTP `/api/sessions/:id/events?sinceSequence=N`
+// Same ledger the HTTP `/api/renders/:id/events?sinceSequence=N`
 // endpoint reads from; the WS path emits each ledger entry as a
 // `session_event` wire frame BEFORE entering live-stream mode.
 //
@@ -1466,19 +1466,19 @@ describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
   });
 
   it("no sinceSequence — subscriber sees only ack, no session_event frames", async () => {
-    const store = makeSeededStore([makeStackItem()]);
+    const store = makeSeededStore([makeRender()]);
     // Seed two events directly via the store's appendEvent.
     await store.appendEvent({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       type: 'ui.created',
       data: { label: 'first' },
     });
     await store.appendEvent({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       type: 'ui.updated',
       data: { label: 'second' },
     });
-    fix = await boot({ sessionStore: store });
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
     sendMessage(ws, subscribeFrame(undefined));
@@ -1493,18 +1493,18 @@ describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
   });
 
   it("sinceSequence=0 — subscriber gets full ledger replayed as session_event frames before live tail", async () => {
-    const store = makeSeededStore([makeStackItem()]);
+    const store = makeSeededStore([makeRender()]);
     await store.appendEvent({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       type: 'ui.created',
       data: { label: 'one' },
     });
     await store.appendEvent({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       type: 'ui.updated',
       data: { label: 'two' },
     });
-    fix = await boot({ sessionStore: store });
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
     sendMessage(ws, subscribeFrameWithSinceSequence(0));
@@ -1528,15 +1528,15 @@ describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
   });
 
   it("sinceSequence=N — subscriber gets only events with seq > N", async () => {
-    const store = makeSeededStore([makeStackItem()]);
+    const store = makeSeededStore([makeRender()]);
     for (let i = 0; i < 4; i++) {
       await store.appendEvent({
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         type: 'ui.created',
         data: { i },
       });
     }
-    fix = await boot({ sessionStore: store });
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
     sendMessage(ws, subscribeFrameWithSinceSequence(2));
@@ -1557,13 +1557,13 @@ describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
   });
 
   it("sinceSequence past lastSequence — emits REPLAY_HORIZON_PASSED error", async () => {
-    const store = makeSeededStore([makeStackItem()]);
+    const store = makeSeededStore([makeRender()]);
     await store.appendEvent({
-      sessionId: TEST_SESSION_ID,
+      renderId: TEST_SESSION_ID,
       type: 'ui.created',
       data: { label: 'only' },
     });
-    fix = await boot({ sessionStore: store });
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     const inbox = attachInbox(ws);
     sendMessage(ws, subscribeFrameWithSinceSequence(99));
@@ -1588,32 +1588,32 @@ describe("OSS /ws — SessionEvent ledger replay (R7 sinceSequence)", () => {
 // Inbound ActionEnvelope — end-to-end
 // ─────────────────────────────────────────────────────────────────────
 //
-// Canonical `type: 'action'` ingress, including stackItemId routing and
+// Canonical `type: 'action'` ingress, including renderId routing and
 // cross-session spoof rejection. Shares enforcement helpers
 // (assertEventAllowed, assertActionContract) with the hosted ingress.
 
 function makeActionEnvelope(params: {
   type: EventType;
   payload?: JsonValue;
-  sessionId?: string;
+  renderId?: string;
   stackIndex?: number;
-  stackItemId?: string;
+  renderId?: string;
 }): WebSocketMessage & { type: 'action' } {
   const envelope: ActionEnvelope = {
-    sessionId: params.sessionId ?? TEST_SESSION_ID,
+    renderId: params.renderId ?? TEST_SESSION_ID,
     type: params.type,
     ...(params.payload !== undefined ? { payload: params.payload } : {}),
     ...(params.stackIndex !== undefined ? { stackIndex: params.stackIndex } : {}),
-    ...(params.stackItemId !== undefined ? { stackItemId: params.stackItemId } : {}),
+    ...(params.renderId !== undefined ? { renderId: params.renderId } : {}),
   };
   return { type: 'action', payload: envelope, requestId: 'act-1' };
 }
 
-describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () => {
+describe('createRenderChannelServer — inbound ActionEnvelope symmetry', () => {
   let fix: Fixture | null = null;
 
   beforeEach(async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
   });
 
   afterEach(async () => {
@@ -1688,7 +1688,7 @@ describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () =>
     ws.close();
   });
 
-  it("rejects an 'action' envelope whose envelope.sessionId doesn't match (SESSION_MISMATCH)", async () => {
+  it("rejects an 'action' envelope whose envelope.renderId doesn't match (SESSION_MISMATCH)", async () => {
     const ws = await connectAuthed(fix!.wsUrl);
     sendMessage(ws, makeSubscribe());
     await recvMessage(ws);
@@ -1698,7 +1698,7 @@ describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () =>
       makeActionEnvelope({
         type: 'data:submit',
         payload: { action: 'submit', data: { text: 'x' } },
-        sessionId: 'sess-OTHER',
+        renderId: 'sess-OTHER',
       }),
     );
     const err = await recvMessage(ws);
@@ -1727,9 +1727,9 @@ describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () =>
     ws.close();
   });
 
-  it("routes contract lookup by stackItemId when present, falling back to stackIndex", async () => {
-    // Custom server with two stack items. stackItemId='page-0' is the seeded
-    // item; envelope with stackItemId targets it explicitly regardless of
+  it("routes contract lookup by renderId when present, falling back to stackIndex", async () => {
+    // Custom server with two stack items. renderId='page-0' is the seeded
+    // item; envelope with renderId targets it explicitly regardless of
     // stackIndex.
     const ws = await connectAuthed(fix!.wsUrl);
     sendMessage(ws, makeSubscribe());
@@ -1739,8 +1739,8 @@ describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () =>
       ws,
       makeActionEnvelope({
         type: 'data:submit',
-        payload: { action: 'submit', data: { text: 'via-stackItemId' } },
-        stackItemId: 'page-0',
+        payload: { action: 'submit', data: { text: 'via-renderId' } },
+        renderId: 'page-0',
       }),
     );
     const ack = await recvMessage(ws);
@@ -1798,9 +1798,9 @@ describe('createSessionChannelServer — inbound ActionEnvelope symmetry', () =>
  *     seam once consume lands.
  *   - Cache / generation behavior. Orthogonal to the contract wire.
  */
-describe('createSessionChannelServer — interactive data-contract consequence loop', () => {
+describe('createRenderChannelServer — interactive data-contract consequence loop', () => {
   let fix: Fixture | null = null;
-  let store: SessionStore | null = null;
+  let store: RenderStore | null = null;
 
   beforeEach(async () => {
     // Keep a handle on the store so the test-driver-as-agent step can
@@ -1808,8 +1808,8 @@ describe('createSessionChannelServer — interactive data-contract consequence l
     // production). `makeSeededStore` closes over its own internal state,
     // so holding the same reference the server holds is the way to see
     // `appendEvent` results.
-    store = makeSeededStore([makeStackItem()]);
-    fix = await boot({ sessionStore: store });
+    store = makeSeededStore([makeRender()]);
+    fix = await boot({ renderStore: store });
   });
 
   afterEach(async () => {
@@ -1868,13 +1868,13 @@ describe('createSessionChannelServer — interactive data-contract consequence l
     // exactly the wire the push handler uses on B1 — the agent role
     // here calls it directly instead of routing through `ggui_push`
     // (which needs a generator/BYOK). The invariant is the same:
-    // appendStackItem + notifyStackPush, in that order.
-    const consequenceItem: StackItem = {
+    // commit + notifyStackPush, in that order.
+    const consequenceItem: Render = {
       id: 'page-consequence',
       componentCode: '/* consequence of user submission */',
       createdAt: new Date().toISOString(),
     };
-    await store!.appendStackItem(TEST_SESSION_ID, consequenceItem);
+    await store!.commit(TEST_SESSION_ID, consequenceItem);
     const channel = fix!.server.sessionChannel!;
     channel.notifyStackPush(TEST_SESSION_ID, consequenceItem);
 
@@ -1989,8 +1989,8 @@ function makeRouter(
   };
 }
 
-/** StackItem with Todo-style wired action + refresh-stream hint. */
-function makeWiredStackItem(): StackItem {
+/** Render with Todo-style wired action + refresh-stream hint. */
+function makeWiredRender(): Render {
   const actionSpec: ActionSpec = {
     toggleTask: {
       label: 'Toggle task',
@@ -2040,7 +2040,7 @@ function wiredActionEnvelope(data: Record<string, unknown>): WebSocketMessage & 
   });
 }
 
-describe('createSessionChannelServer — wiredActionRouter', () => {
+describe('createRenderChannelServer — wiredActionRouter', () => {
   let fix: Fixture | null = null;
   let queue: ReturnType<typeof makeMessageQueue> | null = null;
 
@@ -2079,7 +2079,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2111,7 +2111,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       // tasks_complete deliberately absent
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2144,7 +2144,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2190,7 +2190,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
     sendMessage(ws, wiredActionEnvelope({ id: 'task-1' }));
@@ -2224,7 +2224,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
       // Replace with a sentinel-emitting sanitizer so the test can prove
       // the plumbing reached the emission site.
@@ -2250,7 +2250,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
       wiredActionTimeoutMs: 40,
     });
@@ -2283,7 +2283,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2312,7 +2312,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2344,7 +2344,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     });
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
 
@@ -2377,7 +2377,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
 
   it('no router configured — falls through with plain ack, no synthetic frames', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       // wiredActionRouter omitted
     });
 
@@ -2394,7 +2394,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
         throw new Error('should not run — action has no tool hint');
       },
     });
-    const bareAction: StackItem = {
+    const bareAction: Render = {
       id: 'page-bare',
       componentCode: '/* bare */',
       createdAt: new Date().toISOString(),
@@ -2407,7 +2407,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
       },
     };
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([bareAction]),
+      renderStore: makeSeededStore([bareAction]),
       wiredActionRouter: router,
     });
 
@@ -2443,7 +2443,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
     });
     const telemetry = new InMemoryTelemetrySink();
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
       telemetry,
     });
@@ -2462,7 +2462,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
     const evt = events[0];
     expect(evt?.attributes?.toolName).toBe('tasks_complete');
     expect(evt?.attributes?.actionName).toBe('toggleTask');
-    expect(typeof evt?.attributes?.sessionId).toBe('string');
+    expect(typeof evt?.attributes?.renderId).toBe('string');
     // latencyMs MUST be a non-negative number (may be 0 on fast tools).
     expect(typeof evt?.attributes?.latencyMs).toBe('number');
     expect(
@@ -2479,7 +2479,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
     });
     const telemetry = new InMemoryTelemetrySink();
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
       telemetry,
     });
@@ -2500,7 +2500,7 @@ describe('createSessionChannelServer — wiredActionRouter', () => {
   });
 });
 
-describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => {
+describe('createRenderChannelServer — primeStreams (Gap 5 close-out)', () => {
   let fix: Fixture | null = null;
 
   afterEach(async () => {
@@ -2521,7 +2521,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
     // the default 'none' policy the prime would fire + drop (fan-out
     // only — no storage), which is useless for the try-live flow where
     // the viewer navigates to the URL after the endpoint returns.
-    const primedStackItem: StackItem = {
+    const primedRender: Render = {
       id: 'page-primed',
       componentCode: '/* primed */',
       createdAt: new Date().toISOString(),
@@ -2544,7 +2544,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
       },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([primedStackItem]),
+      renderStore: makeSeededStore([primedRender]),
       wiredActionRouter: router,
     });
     const channel = fix.server.sessionChannel;
@@ -2552,7 +2552,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
 
     // Prime the channel BEFORE any subscriber attaches. Because
     // replay: 'latest', the envelope stays in the buffer.
-    await channel.primeStreams(TEST_SESSION_ID, primedStackItem);
+    await channel.primeStreams(TEST_SESSION_ID, primedRender);
 
     // Subscribe with `fromSeq: 0` so the server replays buffered
     // envelopes up to the current seq. This matches the semantics a
@@ -2562,7 +2562,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         fromSeq: 0,
@@ -2591,15 +2591,15 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
       },
     });
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItem()]),
+      renderStore: makeSeededStore([makeRender()]),
       wiredActionRouter: router,
     });
     const channel = fix.server.sessionChannel;
     if (!channel) throw new Error('sessionChannel should be present');
 
-    // makeStackItem() has no streamSpec — primeStreams MUST skip
+    // makeRender() has no streamSpec — primeStreams MUST skip
     // entirely rather than call any router.
-    await channel.primeStreams(TEST_SESSION_ID, makeStackItem());
+    await channel.primeStreams(TEST_SESSION_ID, makeRender());
     expect(router.calls).toEqual([]);
   });
 
@@ -2609,7 +2609,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
         return { items: [] };
       },
     });
-    const stackItem: StackItem = {
+    const stackItem: Render = {
       id: 'multi-stream',
       componentCode: '/* */',
       createdAt: new Date().toISOString(),
@@ -2630,7 +2630,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
       },
     };
     fix = await boot({
-      sessionStore: makeSeededStore([stackItem]),
+      renderStore: makeSeededStore([stackItem]),
       wiredActionRouter: router,
     });
     const channel = fix.server.sessionChannel;
@@ -2649,7 +2649,7 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
       },
     });
     fix = await boot({
-      sessionStore: makeSeededStore([makeWiredStackItem()]),
+      renderStore: makeSeededStore([makeWiredRender()]),
       wiredActionRouter: router,
     });
     const channel = fix.server.sessionChannel;
@@ -2658,13 +2658,13 @@ describe('createSessionChannelServer — primeStreams (Gap 5 close-out)', () => 
     // Must not throw — a broken refresh tool MUST NOT fail the whole
     // prime call (per-channel isolation).
     await expect(
-      channel.primeStreams(TEST_SESSION_ID, makeWiredStackItem()),
+      channel.primeStreams(TEST_SESSION_ID, makeWiredRender()),
     ).resolves.toBeUndefined();
     expect(router.calls.map((c) => c.tool)).toEqual(['tasks_list']);
   });
 });
 
-describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2.2)', () => {
+describe('createRenderChannelServer — protocol-version handshake (SPEC §11.2.2)', () => {
   let fix: Fixture | null = null;
 
   afterEach(async () => {
@@ -2675,7 +2675,7 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
   });
 
   it('stamps AckPayload.serverVersion on every successful subscribe', async () => {
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
     const ack = await recvMessage(ws);
@@ -2688,12 +2688,12 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
   it('subscribes normally when supportedVersions contains PROTOCOL_SCHEMA_VERSION', async () => {
     // Client declares the matching version → server acks + subscribe
     // completes; no error frame in between.
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION, 'future-version-2'],
@@ -2713,7 +2713,7 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     // No `versionPolicy` option passed → mismatch emits UPGRADE_REQUIRED
     // AND tears down the WebSocket so a caller cannot accidentally
     // proceed against a version-mismatched session.
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const ws = await connectAuthed(fix.wsUrl);
 
     const closePromise = new Promise<void>((resolve) =>
@@ -2723,7 +2723,7 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         supportedVersions: ['ancient-version-only'],
@@ -2750,7 +2750,7 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     // (no ack, no stack). Clients that ignore the error code
     // continue exactly as pre-handshake.
     fix = await boot({
-      sessionStore: makeSeededStore([makeStackItem()]),
+      renderStore: makeSeededStore([makeRender()]),
       versionPolicy: 'advisory',
     });
     const ws = await connectAuthed(fix.wsUrl);
@@ -2765,7 +2765,7 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         supportedVersions: ['ancient-version-only'],
@@ -2792,12 +2792,12 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     // Clients that don't wire the handshake subscribe exactly as
     // pre-Phase-1 — no error, no special behavior. `serverVersion` is
     // still stamped on the ack (it's server-unconditional).
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         // NO supportedVersions — legacy payload shape
@@ -2818,12 +2818,12 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
     // or a proxy that stripped the list). Server treats identically
     // to absent — policy is "opt in by listing something." Skips
     // the mismatch check so the subscribe proceeds.
-    fix = await boot({ sessionStore: makeSeededStore([makeStackItem()]) });
+    fix = await boot({ renderStore: makeSeededStore([makeRender()]) });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, {
       type: 'subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
         role: 'user',
         supportedVersions: [],
@@ -2845,11 +2845,11 @@ describe('createSessionChannelServer — protocol-version handshake (SPEC §11.2
  * Build a stack item carrying a `streamSpec[ticker].source.tool` so the
  * channel_subscribe handler has something concrete to resolve against.
  */
-function makeSourceStackItem(opts: {
+function makeSourceRender(opts: {
   channelName: string;
   toolName: string;
   args?: import('@ggui-ai/protocol').JsonObject;
-}): StackItem {
+}): Render {
   return {
     id: 'page-source',
     componentCode: '/* source-fed */',
@@ -2871,7 +2871,7 @@ function makeSourceStackItem(opts: {
   };
 }
 
-describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
+describe('createRenderChannelServer — channel_subscribe (EE+ 1b)', () => {
   let fix: Fixture | null = null;
   let queue: ReturnType<typeof makeMessageQueue> | null = null;
 
@@ -2902,8 +2902,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   it('emits channel_payload frames at the clamped poll cadence when source.tool is in the allowlist', async () => {
     let invocations = 0;
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
           args: { symbol: 'ACME' },
@@ -2926,9 +2926,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
         pollIntervalMs: 50,
       },
@@ -2940,7 +2940,7 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     expect(first.type).toBe('channel_payload');
     if (first.type === 'channel_payload') {
       expect(first.payload.channelName).toBe('ticker');
-      expect(first.payload.stackItemId).toBe('page-source');
+      expect(first.payload.renderId).toBe('page-source');
       expect(first.payload.seq).toBe(1);
       expect(first.payload.mode).toBe('replace');
       expect(first.payload.payload).toEqual({ value: 1 });
@@ -2960,8 +2960,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
 
   it('rejects with CHANNEL_NOT_LOCAL when source.tool is not in the allowlist', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'unknown_tool',
         }),
@@ -2977,9 +2977,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
       },
       requestId: 'sub-disallowed',
@@ -2997,8 +2997,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
 
   it('rejects with CHANNEL_NOT_LOCAL when streamWebSocketLocalTools is unconfigured (OSS first-run path)', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3009,9 +3009,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
       },
       requestId: 'sub-no-allowlist',
@@ -3027,8 +3027,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
 
   it('rejects with CHANNEL_UNKNOWN when the channel is absent from streamSpec', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3044,9 +3044,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'nonexistent',
       },
       requestId: 'sub-unknown',
@@ -3063,8 +3063,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
 
   it('rejects with STACK_ITEM_NOT_FOUND when the stack item is absent', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3080,9 +3080,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-does-not-exist',
+        renderId: 'page-does-not-exist',
         channelName: 'ticker',
       },
       requestId: 'sub-no-stack-item',
@@ -3096,10 +3096,10 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     ws.close();
   });
 
-  it('rejects with SUBSCRIBE_UNAUTHORIZED when payload.sessionId does not match the bound subscriber session', async () => {
+  it('rejects with SUBSCRIBE_UNAUTHORIZED when payload.renderId does not match the bound subscriber session', async () => {
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3115,9 +3115,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: 'sess-other',
+        renderId: 'sess-other',
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
       },
       requestId: 'sub-spoofed',
@@ -3134,8 +3134,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   it('emits channel_error{POLL_FAILED} on tool throw but keeps the polling loop alive', async () => {
     let calls = 0;
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3154,9 +3154,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
         pollIntervalMs: 50,
       },
@@ -3184,8 +3184,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   it('idempotent re-subscribe replaces the existing interval on the same channelKey', async () => {
     let calls = 0;
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3206,9 +3206,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
       },
       requestId: 'sub-1',
@@ -3225,9 +3225,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
         pollIntervalMs: 50,
       },
@@ -3246,8 +3246,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   it('channel_unsubscribe stops payload emission for the targeted channel', async () => {
     let calls = 0;
     const { ws, q } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3265,9 +3265,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
         pollIntervalMs: 50,
       },
@@ -3281,9 +3281,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_unsubscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
       },
     });
@@ -3300,8 +3300,8 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
   it('WS close tears down all channel subscriptions', async () => {
     let calls = 0;
     const { ws } = await openSubscribed({
-      sessionStore: makeSeededStore([
-        makeSourceStackItem({
+      renderStore: makeSeededStore([
+        makeSourceRender({
           channelName: 'ticker',
           toolName: 'ticker_now',
         }),
@@ -3319,9 +3319,9 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
     sendMessage(ws, {
       type: 'channel_subscribe',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         appId: TEST_APP_ID,
-        stackItemId: 'page-source',
+        renderId: 'page-source',
         channelName: 'ticker',
         pollIntervalMs: 50,
       },
@@ -3357,7 +3357,7 @@ describe('createSessionChannelServer — channel_subscribe (EE+ 1b)', () => {
 // has been deleted; every push now stamps its resourceUri regardless
 // of how the host presents the iframe.
 
-describe('createSessionChannelServer — Integration 5 canvas_navigated', () => {
+describe('createRenderChannelServer — Integration 5 canvas_navigated', () => {
   let fix: Fixture | null = null;
 
   afterEach(async () => {
@@ -3368,8 +3368,8 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('updates activeStackItemId on canvas_navigated (forward)', async () => {
-    const store = makeSeededStore([makeStackItem()]);
-    fix = await boot({ sessionStore: store });
+    const store = makeSeededStore([makeRender()]);
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
     await recvMessage(ws);
@@ -3377,7 +3377,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
     sendMessage(ws, {
       type: 'canvas_navigated',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         previousActiveItemId: null,
         activeItemId: 'page-1',
       },
@@ -3390,8 +3390,8 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('clears activeStackItemId when navigation pops to empty', async () => {
-    const store = makeSeededStore([makeStackItem()]);
-    fix = await boot({ sessionStore: store });
+    const store = makeSeededStore([makeRender()]);
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
     await recvMessage(ws);
@@ -3400,7 +3400,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
     sendMessage(ws, {
       type: 'canvas_navigated',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         previousActiveItemId: null,
         activeItemId: 'page-1',
       },
@@ -3410,7 +3410,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
     sendMessage(ws, {
       type: 'canvas_navigated',
       payload: {
-        sessionId: TEST_SESSION_ID,
+        renderId: TEST_SESSION_ID,
         previousActiveItemId: 'page-1',
         activeItemId: null,
       },
@@ -3422,8 +3422,8 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
   });
 
   it('rejects cross-tenant canvas_navigated with SESSION_MISMATCH', async () => {
-    const store = makeSeededStore([makeStackItem()]);
-    fix = await boot({ sessionStore: store });
+    const store = makeSeededStore([makeRender()]);
+    fix = await boot({ renderStore: store });
     const ws = await connectAuthed(fix.wsUrl);
     sendMessage(ws, makeSubscribe());
     await recvMessage(ws);
@@ -3431,7 +3431,7 @@ describe('createSessionChannelServer — Integration 5 canvas_navigated', () => 
     sendMessage(ws, {
       type: 'canvas_navigated',
       payload: {
-        sessionId: 'someone-elses-session',
+        renderId: 'someone-elses-session',
         previousActiveItemId: null,
         activeItemId: 'page-1',
       },

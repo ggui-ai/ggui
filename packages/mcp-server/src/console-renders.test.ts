@@ -5,7 +5,7 @@
  * Covers the shape locked in
  * `docs/plans/2026-04-22-console-page-construction.md` §3.3:
  *
- *   - zero-config empty shape when no sessionStore is wired (pure
+ *   - zero-config empty shape when no renderStore is wired (pure
  *     MCP boot without sessionChannel / mcpApps)
  *   - populated shape reads sessionId / appId / stackSize /
  *     lastActivityAt / createdAt from each `Session`
@@ -15,7 +15,7 @@
  *   - ordering: most-recent `lastActivityAt` first, stable by id tie
  *   - `status: 'active'` hardcoded (we only filter for active)
  *   - console-disabled → 404 (route doesn't mount)
- *   - sessionStore.list() failure → 500 with structured error
+ *   - renderStore.list() failure → 500 with structured error
  *   - shortCodeIndex.findBySessionId() failure doesn't fail the
  *     whole request — the row lands without a shortCode
  *
@@ -25,11 +25,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import {
-  InMemorySessionStore,
+  InMemoryRenderStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
-  SessionStore,
+  RenderStore,
   ShortCodeIndex,
 } from '@ggui-ai/mcp-server-core';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -83,7 +83,7 @@ describe('GET /ggui/console/sessions', () => {
     }
   });
 
-  it('returns an empty shape when no sessionStore is wired', async () => {
+  it('returns an empty shape when no renderStore is wired', async () => {
     fx = await boot({ console: {} });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
@@ -93,9 +93,9 @@ describe('GET /ggui/console/sessions', () => {
   });
 
   it('surfaces sessionId + appId + stackSize from an active session', async () => {
-    const sessionStore: SessionStore = new InMemorySessionStore();
-    const created = await sessionStore.create({ appId: 'app-alpha' });
-    fx = await boot({ console: {}, sessionStore });
+    const renderStore: RenderStore = new InMemoryRenderStore();
+    const created = await renderStore.create({ appId: 'app-alpha' });
+    fx = await boot({ console: {}, renderStore });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as SessionsResponse;
@@ -115,14 +115,14 @@ describe('GET /ggui/console/sessions', () => {
   });
 
   it('enriches rows with shortCode via shortCodeIndex.findBySessionId', async () => {
-    const sessionStore: SessionStore = new InMemorySessionStore();
+    const renderStore: RenderStore = new InMemoryRenderStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
-    const created = await sessionStore.create({ appId: 'app-alpha' });
+    const created = await renderStore.create({ appId: 'app-alpha' });
     await shortCodeIndex.put('share12345', {
       sessionId: created.id,
       appId: 'app-alpha',
     });
-    fx = await boot({ console: {}, sessionStore, shortCodeIndex });
+    fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as SessionsResponse;
     expect(body.sessions).toHaveLength(1);
@@ -130,14 +130,14 @@ describe('GET /ggui/console/sessions', () => {
   });
 
   it('orders rows by lastActivityAt descending (most-recent first)', async () => {
-    const sessionStore: SessionStore = new InMemorySessionStore();
-    const s1 = await sessionStore.create({ appId: 'a' });
-    const s2 = await sessionStore.create({ appId: 'a' });
-    const s3 = await sessionStore.create({ appId: 'a' });
+    const renderStore: RenderStore = new InMemoryRenderStore();
+    const s1 = await renderStore.create({ appId: 'a' });
+    const s2 = await renderStore.create({ appId: 'a' });
+    const s3 = await renderStore.create({ appId: 'a' });
     // Bump s2's activity to the latest so it lands at the top.
-    await sessionStore.update(s2.id, { lastActivityAt: Date.now() + 10_000 });
-    await sessionStore.update(s3.id, { lastActivityAt: Date.now() + 5_000 });
-    fx = await boot({ console: {}, sessionStore });
+    await renderStore.update(s2.id, { lastActivityAt: Date.now() + 10_000 });
+    await renderStore.update(s3.id, { lastActivityAt: Date.now() + 5_000 });
+    fx = await boot({ console: {}, renderStore });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as SessionsResponse;
     expect(body.sessions.map((r) => r.sessionId)).toEqual([
@@ -148,12 +148,12 @@ describe('GET /ggui/console/sessions', () => {
   });
 
   it('honors ?limit= and clamps to [1, 100]', async () => {
-    const sessionStore: SessionStore = new InMemorySessionStore();
+    const renderStore: RenderStore = new InMemoryRenderStore();
     // Seed 3 sessions so we can verify a limit of 2 returns 2 rows.
-    await sessionStore.create({ appId: 'a' });
-    await sessionStore.create({ appId: 'a' });
-    await sessionStore.create({ appId: 'a' });
-    fx = await boot({ console: {}, sessionStore });
+    await renderStore.create({ appId: 'a' });
+    await renderStore.create({ appId: 'a' });
+    await renderStore.create({ appId: 'a' });
+    fx = await boot({ console: {}, renderStore });
 
     const res2 = await fetch(`${fx.url}/ggui/console/sessions?limit=2`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body2 = (await res2.json()) as SessionsResponse;
@@ -181,15 +181,15 @@ describe('GET /ggui/console/sessions', () => {
   it('shortCode absence for a specific row does NOT break the request', async () => {
     // A mixed case: one session has a shortCode, the other doesn't.
     // Row-wise enrichment; absent shortCode → absent key on the wire.
-    const sessionStore: SessionStore = new InMemorySessionStore();
+    const renderStore: RenderStore = new InMemoryRenderStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
-    const withCode = await sessionStore.create({ appId: 'a' });
-    const withoutCode = await sessionStore.create({ appId: 'a' });
+    const withCode = await renderStore.create({ appId: 'a' });
+    const withoutCode = await renderStore.create({ appId: 'a' });
     await shortCodeIndex.put('share0000', {
       sessionId: withCode.id,
       appId: 'a',
     });
-    fx = await boot({ console: {}, sessionStore, shortCodeIndex });
+    fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as SessionsResponse;
     const rowWith = body.sessions.find((r) => r.sessionId === withCode.id);
@@ -204,8 +204,8 @@ describe('GET /ggui/console/sessions', () => {
     // A reverse-index implementation could throw (misconfigured GSI,
     // backend hiccup). The row must still land — just without the
     // click-through link — rather than 500ing the whole list.
-    const sessionStore: SessionStore = new InMemorySessionStore();
-    await sessionStore.create({ appId: 'a' });
+    const renderStore: RenderStore = new InMemoryRenderStore();
+    await renderStore.create({ appId: 'a' });
     const flakyIndex: ShortCodeIndex = {
       async put() {
         /* no-op */
@@ -228,7 +228,7 @@ describe('GET /ggui/console/sessions', () => {
     };
     fx = await boot({
       console: {},
-      sessionStore,
+      renderStore,
       shortCodeIndex: flakyIndex,
     });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
@@ -239,15 +239,15 @@ describe('GET /ggui/console/sessions', () => {
   });
 
   it('404s when console is not enabled', async () => {
-    const sessionStore: SessionStore = new InMemorySessionStore();
-    await sessionStore.create({ appId: 'a' });
-    fx = await boot({ sessionStore });
+    const renderStore: RenderStore = new InMemoryRenderStore();
+    await renderStore.create({ appId: 'a' });
+    fx = await boot({ renderStore });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(404);
   });
 
-  it('500s with a structured error when sessionStore.list() throws', async () => {
-    const flakyStore: SessionStore = {
+  it('500s with a structured error when renderStore.list() throws', async () => {
+    const flakyStore: RenderStore = {
       async create() {
         throw new Error('not used');
       },
@@ -263,14 +263,8 @@ describe('GET /ggui/console/sessions', () => {
       async delete() {
         /* no-op */
       },
-      async appendStackItem() {
+      async commit() {
         throw new Error('not used');
-      },
-      async popStackItem() {
-        throw new Error('not used');
-      },
-      async getSessionByStackItemId() {
-        return null;
       },
       async appendEvent() {
         return 1;
@@ -282,7 +276,7 @@ describe('GET /ggui/console/sessions', () => {
         return { [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }) } as never;
       },
     };
-    fx = await boot({ console: {}, sessionStore: flakyStore });
+    fx = await boot({ console: {}, renderStore: flakyStore });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string; message: string };
