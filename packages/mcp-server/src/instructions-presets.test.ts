@@ -37,7 +37,7 @@ describe('resolveMcpInstructions', () => {
   });
 
   it('passes through arbitrary custom strings verbatim', () => {
-    const custom = 'Always render via ggui_push. No exceptions.';
+    const custom = 'Always render via ggui_render. No exceptions.';
     expect(resolveMcpInstructions(custom)).toBe(custom);
   });
 
@@ -51,7 +51,7 @@ describe('resolveMcpInstructions', () => {
     for (const key of ['default', 'aggressive', 'always'] as const) {
       const text = MCP_INSTRUCTIONS_PRESETS[key];
       expect(text).toContain('ggui_handshake');
-      expect(text).toContain('ggui_push');
+      expect(text).toContain('ggui_render');
       expect(text).toContain('ggui_update');
     }
   });
