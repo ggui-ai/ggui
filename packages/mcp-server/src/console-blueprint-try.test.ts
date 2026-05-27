@@ -28,8 +28,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import type {
   ActionSpec,
+  ComponentRender,
   PropsSpec,
-  Render,
   StreamSpec,
 } from '@ggui-ai/protocol';
 import {
@@ -242,11 +242,10 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(body.shortCode).toMatch(/^[a-z0-9]{18}$/);
     expect(body.url).toBe(`/s/${body.shortCode}`);
 
-    // Session exists with our Render.
-    const session = await fx.renderStore.get(body.renderId);
-    expect(session).not.toBeNull();
-    expect(session!.stack).toHaveLength(1);
-    const item = session!.stack[0] as Render;
+    // Stored render row exists with our Render payload.
+    const stored = await fx.renderStore.get(body.renderId);
+    expect(stored).not.toBeNull();
+    const item = stored!.render as ComponentRender;
     expect(item.id).toBe('blueprint-todo-list');
     expect(item.componentCode).toBe(BUNDLE_CODE);
     expect(item.contentType).toBe('application/javascript+react');
@@ -255,10 +254,13 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(item.streamSpec).toEqual(CONTRACT_STREAM);
     expect(item.propsSpec).toEqual(CONTRACT_PROPS);
 
-    // ShortCode binding resolves to this session.
+    // ShortCode binding resolves to this render row. The binding's
+    // `sessionId` field name is unchanged from the pre-Phase-B shape
+    // (the ShortCodeIndex schema is intentionally narrow + stable);
+    // the value it now carries IS a renderId post Phase B.
     const binding = await fx.shortCodeIndex.lookup(body.shortCode);
     expect(binding).not.toBeNull();
-    expect(binding!.renderId).toBe(body.renderId);
+    expect(binding!.sessionId).toBe(body.renderId);
     expect(binding!.appId).toBe('builder');
   });
 
@@ -281,8 +283,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { renderId: string };
-    const session = await fx.renderStore.get(body.renderId);
-    const item = session!.stack[0] as Render;
+    const stored = await fx.renderStore.get(body.renderId);
+    const item = stored!.render as ComponentRender;
     expect(item.actionSpec).toBeUndefined();
     expect(item.streamSpec).toBeUndefined();
     expect(item.propsSpec).toBeUndefined();
@@ -316,8 +318,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { renderId: string };
-    const session = await fx.renderStore.get(body.renderId);
-    const item = session!.stack[0] as Render;
+    const stored = await fx.renderStore.get(body.renderId);
+    const item = stored!.render as ComponentRender;
     expect(item.componentCode).toBe(streamCode);
   });
 
@@ -484,8 +486,9 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { renderId: string };
-    const session = await fx.renderStore.get(body.renderId);
-    expect(session!.stack).toHaveLength(1);
+    const stored = await fx.renderStore.get(body.renderId);
+    expect(stored).not.toBeNull();
+    expect(stored!.render.id).toBe('blueprint-todo-list');
   });
 
   it('schemaCompatCheck=reject: rejects on streamSpec tool ref too (inverse direction)', async () => {
@@ -585,8 +588,9 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { renderId: string };
-    const session = await fx.renderStore.get(body.renderId);
-    expect(session!.stack).toHaveLength(1);
+    const stored = await fx.renderStore.get(body.renderId);
+    expect(stored).not.toBeNull();
+    expect(stored!.render.id).toBe('blueprint-todo-list');
   });
 
   it('schemaCompatCheck=off: skips the check entirely (already exercised by the base tests)', async () => {
