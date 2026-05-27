@@ -1090,7 +1090,7 @@ export function createRenderChannelServer(
   function checkSubscriberTenancy(
     ws: WebSocket,
     sub: Subscriber | undefined,
-    payload: { readonly renderId?: string; readonly sessionId?: string },
+    payload: { readonly renderId?: string },
     messageType: string,
     requestId?: string,
   ): sub is Subscriber {
@@ -1103,16 +1103,11 @@ export function createRenderChannelServer(
       );
       return false;
     }
-    // Protocol wire shapes still emit `sessionId` on some payloads
-    // (HostContextObservedPayload at the time of this slice — see
-    // `oss/packages/protocol/src/types/host-context.ts`). Read either
-    // field for backwards-compat until the protocol-side rename lands.
-    const payloadId = payload.renderId ?? payload.sessionId;
-    if (payloadId !== sub.renderId) {
+    if (payload.renderId !== sub.renderId) {
       sendError(
         ws,
         'SESSION_MISMATCH',
-        `${messageType} payload id '${payloadId ?? '<missing>'}' does not match subscriber render '${sub.renderId}'`,
+        `${messageType} payload id '${payload.renderId ?? '<missing>'}' does not match subscriber render '${sub.renderId}'`,
         requestId,
       );
       return false;
