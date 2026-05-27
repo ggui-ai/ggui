@@ -58,18 +58,27 @@ export function createPushHandler(
   return {
     type: 'push',
     onMessage: async (payload) => {
-      // 1. Placeholder fold — unconditional. Mirrors the pre-B3b
-      //    handleServerMessage path so non-triad consumers see the
-      //    correct stack count + placeholder DOM.
+      // 1. Stack model upsert + status log — unconditional. Triad and
+      //    placeholder consumers both fold the new stackItem into the
+      //    model + bump the `[ggui:connected] Connected (N item)`
+      //    console log.
       deps.stackModel.upsert(payload.stackItem);
-      refreshStackDom(deps.statusRefs, deps.stackModel);
       setConnectedStatus(deps.statusRefs, deps.stackModel);
 
       // 2. Triad-mode work — only fires when the production runtime
       //    supplied the renderer + transport thunks.
       const stackRenderer = deps.getStackRenderer?.();
       const channelTransport = deps.getChannelTransport?.();
-      if (stackRenderer === undefined) return;
+
+      // 3. Placeholder DOM render — `<li data-ggui-stack-item>` rows
+      //    that boot.test.ts (no-triad path) asserts against. Triad-
+      //    mode iframes own the `<ul data-ggui-stack>` for React
+      //    mounts via `containerFor`; calling `refreshStackDom` there
+      //    would wipe React's mounts. Skip when a renderer is wired.
+      if (stackRenderer === undefined) {
+        refreshStackDom(deps.statusRefs, deps.stackModel);
+        return;
+      }
 
       const snapshot = deps.stackModel.snapshot();
       await stackRenderer.applyStack(snapshot);
