@@ -10,11 +10,11 @@ import type {
   CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { StackItemRef } from './types';
+import type { RenderRef } from './types';
 import { buildSelfContainedHtml } from './html';
 
-interface StackItemProps {
-  readonly item: StackItemRef;
+interface RenderProps {
+  readonly item: RenderRef;
   /**
    * Sandbox-proxy URL — second-origin host of `sandbox.html` served by
    * `startSandboxProxyServer` (from `@ggui-ai/dev-stack`). Required:
@@ -31,16 +31,16 @@ interface StackItemProps {
 }
 
 /**
- * Renders one ggui-pushed UI via the spec-canonical {@link AppRenderer}
+ * Renders one ggui render via the spec-canonical {@link AppRenderer}
  * host (re-exported from `@mcp-ui/client` per spec-migration P2).
  *
  * **How rendering bootstraps without an HTTP shortCode fetch (R5).**
  * Earlier samples mounted `<McpAppIframe resource={{uri: '/r/<code>'}}>`,
  * which fetched the HTML over HTTP via the bearer-by-obscurity
  * shortCode URL. R5 removed that path. Now the host builds the iframe
- * HTML CLIENT-SIDE from the {@link McpAppAiGguiMeta} slice pair we
+ * HTML CLIENT-SIDE from the {@link McpAppAiGguiRenderMeta} slice we
  * already have in hand (parsed off `_meta` on the tool_result, or
- * recovered via the wsToken-gated `/api/sessions/:id/state` polling
+ * recovered via the wsToken-gated `/api/renders/:id/state` polling
  * fallback when an MCP SDK stripped `_meta`). The HTML inlines
  * `window.__GGUI_META__` and a `<script type="module" src=runtimeUrl>`
  * — the iframe-runtime reads the global at boot and self-mounts.
@@ -57,12 +57,12 @@ interface StackItemProps {
  * (the spec-defined relay role for `_meta.ui.visibility: ['app']`
  * tools). Iframe holds no auth credential; the host owns auth.
  */
-export function StackItem({
+export function Render({
   item,
   sandboxUrl,
   fillContainer = false,
-}: StackItemProps) {
-  // Reconstruct the iframe HTML from the slice pair. The slice carries
+}: RenderProps) {
+  // Reconstruct the iframe HTML from the render meta. The meta carries
   // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
   // iframe-runtime reads everything off `window.__GGUI_META__` at
   // boot. When meta hasn't landed yet, fall back to a "loading" placeholder
@@ -75,7 +75,7 @@ export function StackItem({
     return buildSelfContainedHtml(envelope);
   }, [item.meta]);
 
-  // Build a CallToolResult from the slice pair so AppRenderer forwards
+  // Build a CallToolResult from the render meta so AppRenderer forwards
   // it to the inner iframe via `ui/notifications/tool-result` — the
   // post-mount path through which iframe-runtime re-applies state on
   // every `ggui_update`. Without this, prop changes after the first
@@ -98,7 +98,7 @@ export function StackItem({
       params: CallToolRequest['params'],
       _extra: RequestHandlerExtra,
     ): Promise<CallToolResult> => {
-      console.log('[StackItem] renderer tool_call', params);
+      console.log('[Render] renderer tool_call', params);
       try {
         const resp = await fetch('/relay/tools-call', {
           method: 'POST',
@@ -109,7 +109,7 @@ export function StackItem({
           }),
         });
         if (!resp.ok) {
-          console.warn('[StackItem] relay non-2xx', resp.status);
+          console.warn('[Render] relay non-2xx', resp.status);
           return { isError: true, content: [] };
         }
         const jsonRpc = (await resp.json()) as {
@@ -117,7 +117,7 @@ export function StackItem({
           readonly error?: { readonly message?: string };
         };
         if (jsonRpc.error !== undefined) {
-          console.warn('[StackItem] relay error envelope', jsonRpc.error);
+          console.warn('[Render] relay error envelope', jsonRpc.error);
           return {
             isError: true,
             content: [
@@ -130,7 +130,7 @@ export function StackItem({
         }
         return jsonRpc.result ?? { content: [] };
       } catch (err) {
-        console.warn('[StackItem] relay transport error', err);
+        console.warn('[Render] relay transport error', err);
         return { isError: true, content: [] };
       }
     },
@@ -138,28 +138,28 @@ export function StackItem({
   );
 
   return (
-    <div className="stack-item">
-      <div className="stack-item-chrome">
-        <span className="stack-item-id">#{item.stackItemId.slice(0, 12)}</span>
-        <span className="stack-item-action">{item.action}</span>
+    <div className="render">
+      <div className="render-chrome">
+        <span className="render-id">#{item.renderId.slice(0, 12)}</span>
+        <span className="render-action">{item.action}</span>
         {item.contractHash ? (
-          <span className="stack-item-hash" title={item.contractHash}>
+          <span className="render-hash" title={item.contractHash}>
             {item.contractHash.slice(0, 10)}
           </span>
         ) : null}
       </div>
       <div
-        className="stack-item-frame"
+        className="render-frame"
         style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
       >
         <AppRenderer
-          toolName="ggui_push"
+          toolName="ggui_render"
           sandbox={sandbox}
           html={html}
           {...(toolResult !== undefined ? { toolResult } : {})}
           onCallTool={onCallTool}
           onError={(err) =>
-            console.warn('[StackItem] AppRenderer error', err)
+            console.warn('[Render] AppRenderer error', err)
           }
         />
       </div>
@@ -171,7 +171,7 @@ export function StackItem({
  * Placeholder HTML rendered while the slice envelope is being
  * recovered (the meta refetch is async post-tool_result). Shows a tiny
  * loading marker so the iframe isn't fully blank; the next prop
- * transition swaps in the real shell HTML built from the slice pair.
+ * transition swaps in the real shell HTML built from the slice.
  */
 const LOADING_HTML = `<!doctype html>
 <html><body>

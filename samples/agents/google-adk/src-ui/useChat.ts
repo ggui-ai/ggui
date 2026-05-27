@@ -1,14 +1,14 @@
 /* eslint-disable no-console */
 import { useCallback, useRef, useState } from 'react';
 import {
-  parseMcpAppAiGguiMeta,
-  type McpAppAiGguiMeta,
+  parseMcpAppAiGguiRenderMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { ChatEntry, StackItemRef, ToolCallEntry } from './types';
+import type { ChatEntry, RenderRef, ToolCallEntry } from './types';
 
 interface UseChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
-  readonly stackItems: ReadonlyArray<StackItemRef>;
+  readonly renders: ReadonlyArray<RenderRef>;
   readonly sending: boolean;
   readonly send: (prompt: string) => Promise<void>;
   /**
@@ -26,31 +26,31 @@ interface UseChatResult {
  * State shape:
  *   - `entries[]`     — ordered chat log, includes user prompts,
  *                       assistant text, tool-call notation, embedded
- *                       stack-item entries (the actual MCP App
+ *                       render entries (the actual MCP App
  *                       iframes), errors, and end markers.
- *   - `stackItems[]`  — flat list of every UI the agent has rendered
- *                       this session. Latest at the end. Useful for
- *                       panel mode where we show only the top.
+ *   - `renders[]`     — flat list of every UI the agent has rendered
+ *                       this conversation. Latest at the end. Useful
+ *                       for panel mode where we show only the top.
  *   - `sending`       — true while an SSE stream is in progress.
  *
  * **R5 meta-recovery path.** The Anthropic SDK strips `_meta` from
  * `tool_result` blocks (the API spec only allows text content), so we
- * have to recover the `ai.ggui/*` slice envelope another way. R5
+ * have to recover the `ai.ggui/render` slice envelope another way. R5
  * dropped the `/r/<shortCode>` HTTP fallback (bearer-by-obscurity); the
- * replacement is the wsToken-gated `GET /api/sessions/:sessionId/state`
- * endpoint. We poll it once after each ggui_push / ggui_update result
- * lands and surface the parsed meta on the matching StackItemRef.
- * StackItem.tsx builds the iframe HTML from the meta on each render.
+ * replacement is the wsToken-gated `GET /api/renders/:renderId/state`
+ * endpoint. We poll it once after each ggui_render / ggui_update result
+ * lands and surface the parsed meta on the matching RenderRef.
+ * Render.tsx builds the iframe HTML from the meta on each render.
  */
 export function useChat(): UseChatResult {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [stackItems, setStackItems] = useState<StackItemRef[]>([]);
+  const [renders, setRenders] = useState<RenderRef[]>([]);
   const [sending, setSending] = useState(false);
-  // Mirror of the latest stackItems for the meta-refetch lookup.
+  // Mirror of the latest renders for the meta-refetch lookup.
   // Plain state would close over the snapshot at handleEvent-call time;
   // the ref always reads current.
-  const stackItemsRef = useRef<StackItemRef[]>([]);
-  stackItemsRef.current = stackItems;
+  const rendersRef = useRef<RenderRef[]>([]);
+  rendersRef.current = renders;
   // AbortController for the in-flight /chat stream. Replaced on every
   // `send`; consumed by `abort` to cancel. Ref (not state) because abort
   // is fire-and-forget — no re-render needed when it changes.
@@ -83,29 +83,29 @@ export function useChat(): UseChatResult {
     [],
   );
 
-  const addStackItem = useCallback((item: StackItemRef) => {
-    setStackItems((prev) => {
-      // Dedupe by stackItemId — re-renders / updates land on the same
+  const addRender = useCallback((item: RenderRef) => {
+    setRenders((prev) => {
+      // Dedupe by renderId — re-renders / updates land on the same
       // bucket rather than spawning a new iframe each time.
-      if (prev.some((p) => p.stackItemId === item.stackItemId)) return prev;
+      if (prev.some((p) => p.renderId === item.renderId)) return prev;
       return [...prev, item];
     });
   }, []);
 
   /**
-   * Patch the meta slice pair on an existing stack item by id. Used
-   * by the meta-refetch effect after every ggui_push and every
-   * ggui_update tool_result. StackItem.tsx rebuilds its inline HTML
+   * Patch the meta slice on an existing render by id. Used
+   * by the meta-refetch effect after every ggui_render and every
+   * ggui_update tool_result. Render.tsx rebuilds its inline HTML
    * (and the toolResult forwarded to AppRenderer) whenever this meta
    * field transitions, so the iframe-runtime sees fresh state
    * either as the initial `__GGUI_META__` global (first mount) or as a
    * spec-canonical `ui/notifications/tool-result` frame (subsequent
    * updates).
    */
-  const updateStackItemMeta = useCallback(
-    (stackItemId: string, meta: McpAppAiGguiMeta) => {
-      setStackItems((prev) => {
-        const idx = prev.findIndex((p) => p.stackItemId === stackItemId);
+  const updateRenderMeta = useCallback(
+    (renderId: string, meta: McpAppAiGguiRenderMeta) => {
+      setRenders((prev) => {
+        const idx = prev.findIndex((p) => p.renderId === renderId);
         if (idx < 0) return prev;
         const next = prev.slice();
         next[idx] = { ...next[idx]!, meta };
@@ -118,15 +118,15 @@ export function useChat(): UseChatResult {
   /**
    * Recover the slice envelope via the R6 wsToken-gated state endpoint.
    * The previous `/r/<shortCode>` HTTP path was retired in R5; the
-   * `/api/sessions/:sessionId/state` endpoint is the spec-canonical
-   * replacement and the only way to read session state via HTTP after
+   * `/api/renders/:renderId/state` endpoint is the spec-canonical
+   * replacement and the only way to read render state via HTTP after
    * R5.
    *
-   * The wsToken lives on the slice envelope itself (`session.wsToken`)
+   * The wsToken lives on the slice envelope itself (`meta.wsToken`)
    * — chicken-and-egg solved by the fact that the FIRST envelope arrives
    * inline on tool_result `_meta` (when the SDK doesn't strip it) or is
    * already cached from a previous tick. The hook holds the
-   * most-recently-known meta in `stackItemsRef`; the polling fetch
+   * most-recently-known meta in `rendersRef`; the polling fetch
    * carries forward the previously-seen wsToken.
    *
    * Returns null when no wsToken is reachable (first tick on a strip-
@@ -134,19 +134,19 @@ export function useChat(): UseChatResult {
    * until the next /state poll succeeds).
    */
   const refetchStateById = useCallback(
-    async (stackItemId: string, sessionId: string) => {
-      const existing = stackItemsRef.current.find(
-        (p) => p.stackItemId === stackItemId,
+    async (renderId: string) => {
+      const existing = rendersRef.current.find(
+        (p) => p.renderId === renderId,
       );
-      const wsToken = existing?.meta?.session?.wsToken;
-      if (!sessionId) return;
+      const wsToken = existing?.meta?.wsToken;
+      if (!renderId) return;
       const search =
         typeof wsToken === 'string' && wsToken.length > 0
           ? `?wsToken=${encodeURIComponent(wsToken)}`
           : '';
       try {
         const res = await fetch(
-          `/api/sessions/${encodeURIComponent(sessionId)}/state${search}`,
+          `/api/renders/${encodeURIComponent(renderId)}/state${search}`,
           { headers: { Accept: 'application/json' } },
         );
         if (!res.ok) {
@@ -157,7 +157,7 @@ export function useChat(): UseChatResult {
             // we have no credential to present. Iframe stays in the
             // loading state.
             console.warn(
-              '[useChat] /state 401 — no wsToken yet; iframe will retry on the next push/update.',
+              '[useChat] /state 401 — no wsToken yet; iframe will retry on the next render/update.',
             );
             return;
           }
@@ -165,14 +165,14 @@ export function useChat(): UseChatResult {
           return;
         }
         const envelope = (await res.json()) as unknown;
-        const parsedMeta = parseMcpAppAiGguiMeta(envelope);
-        if (!parsedMeta.ok) return;
-        updateStackItemMeta(stackItemId, parsedMeta.meta);
+        const parsedMeta = parseMcpAppAiGguiRenderMeta(envelope);
+        if (!parsedMeta.ok || !parsedMeta.meta) return;
+        updateRenderMeta(renderId, parsedMeta.meta);
       } catch (err) {
         console.warn('[useChat] /state refetch failed', err);
       }
     },
-    [updateStackItemMeta],
+    [updateRenderMeta],
   );
 
   const send = useCallback(
@@ -193,7 +193,7 @@ export function useChat(): UseChatResult {
             // refreshes via sessionStorage (cleared on tab close); a
             // new tab gets a fresh id. The server keys its per-chat
             // agent state on this header so multi-turn flows preserve
-            // conversation history, ggui sessionId, and stackItem
+            // conversation history, ggui renderId, and render
             // continuity. Missing header = server auto-mints
             // per-request → degrades to single-turn isolation.
             'X-Chat-Session-Id': getOrCreateChatSessionId(),
@@ -241,7 +241,7 @@ export function useChat(): UseChatResult {
               payload,
               `${turnId}.${counter}`,
               append,
-              addStackItem,
+              addRender,
               patchToolCall,
               refetchStateById,
             );
@@ -264,7 +264,7 @@ export function useChat(): UseChatResult {
     },
     [
       append,
-      addStackItem,
+      addRender,
       patchToolCall,
       refetchStateById,
     ],
@@ -274,7 +274,7 @@ export function useChat(): UseChatResult {
     abortControllerRef.current?.abort();
   }, []);
 
-  return { entries, stackItems, sending, send, abort };
+  return { entries, renders, sending, send, abort };
 }
 
 function handleEvent(
@@ -282,12 +282,12 @@ function handleEvent(
   payload: unknown,
   baseId: string,
   append: (e: ChatEntry) => void,
-  addStackItem: (s: StackItemRef) => void,
+  addRender: (s: RenderRef) => void,
   patchToolCall: (
     toolUseId: string,
     patch: { readonly result?: unknown; readonly isError?: boolean },
   ) => void,
-  refetchStateById: (stackItemId: string, sessionId: string) => Promise<void>,
+  refetchStateById: (renderId: string) => Promise<void>,
 ): void {
   if (eventType === 'error') {
     const err = (payload as { error?: string }).error ?? 'Unknown error';
@@ -322,11 +322,11 @@ function handleEvent(
     return;
   }
   if (msg.type === 'user') {
-    // tool_result replay — Anthropic forwards every tool's result as a
+    // tool_result replay — the SDK forwards every tool's result as a
     // user-role message after the SDK invokes the tool. We (a) attach
     // the result to the matching tool-call entry via toolUseId so the
     // expand UI shows full call+result side-by-side, and (b) sniff for
-    // a sessionId+stackItemId to spawn / update a stack-item entry.
+    // a renderId to spawn / update a render entry.
     const content = ((msg.message as { content?: unknown[] })?.content ?? []) as Array<
       Record<string, unknown>
     >;
@@ -367,10 +367,9 @@ function handleEvent(
           ...(block.is_error === true ? { isError: true } : {}),
         });
       }
-      // Sniff for ggui_push's session/stackItem ids to mount the iframe
-      // entry. Also handle ggui_update: result carries {sessionId,
-      // stackItemId, updated:true} — refresh the cached meta via
-      // /api/sessions/:id/state.
+      // Sniff for ggui_render's renderId to mount the iframe entry.
+      // Also handle ggui_update: result carries {renderId, updated:true}
+      // — refresh the cached meta via /api/renders/:id/state.
       for (const text of textBlocks) {
         let parsed: Record<string, unknown> | null = null;
         try {
@@ -379,45 +378,41 @@ function handleEvent(
           /* not JSON */
         }
         if (!parsed) continue;
-        // ggui_push branch — new stack item entering the chat log.
-        // Spec-canonical: prefer the session+stackItem ids over the
+        // ggui_render branch — new render entering the chat log.
+        // Spec-canonical: prefer the renderId over the
         // `url` field (R5 retired the public `/r/<shortCode>` URL).
         if (
-          typeof parsed.sessionId === 'string' &&
-          typeof parsed.stackItemId === 'string' &&
+          typeof parsed.renderId === 'string' &&
           parsed.updated !== true
         ) {
-          const sessionId = parsed.sessionId;
-          const stackItemId = parsed.stackItemId;
-          const item: StackItemRef = {
-            stackItemId,
-            sessionId,
+          const renderId = parsed.renderId;
+          const item: RenderRef = {
+            renderId,
             action: String(parsed.action ?? 'create'),
             ...(typeof parsed.contractHash === 'string'
               ? { contractHash: parsed.contractHash }
               : {}),
           };
-          addStackItem(item);
-          append({ id: `${baseId}.s${i}`, kind: 'stack-item', stackItem: item });
+          addRender(item);
+          append({ id: `${baseId}.s${i}`, kind: 'render', render: item });
           // R5: recover the slice envelope via the wsToken-gated state
           // endpoint. The Anthropic SDK has already stripped `_meta`.
           // First call typically 401s (no wsToken yet) — that's expected;
           // the iframe shows a loading placeholder until ggui_update or
-          // another push lands and a wsToken becomes available.
-          void refetchStateById(stackItemId, sessionId);
+          // another render lands and a wsToken becomes available.
+          void refetchStateById(renderId);
           continue;
         }
-        // ggui_update branch — existing stack item gets new props. The
-        // result envelope carries {sessionId, stackItemId, updated:true}.
+        // ggui_update branch — existing render gets new props. The
+        // result envelope carries {renderId, updated:true}.
         // Re-fetch /state so AppRenderer sees a fresh `toolResult` /
         // `_meta` prop and forwards it to the inner iframe via the
         // spec-compliant `ui/notifications/tool-result` postMessage.
         if (
           parsed.updated === true &&
-          typeof parsed.stackItemId === 'string' &&
-          typeof parsed.sessionId === 'string'
+          typeof parsed.renderId === 'string'
         ) {
-          void refetchStateById(parsed.stackItemId, parsed.sessionId);
+          void refetchStateById(parsed.renderId);
         }
       }
     }

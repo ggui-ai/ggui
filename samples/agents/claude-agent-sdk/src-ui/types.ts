@@ -1,6 +1,6 @@
 // Client-side types for the chat shell.
 
-import type { McpAppAiGguiMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 export type LayoutMode = 'inline' | 'panel';
 
@@ -10,7 +10,7 @@ export type LayoutMode = 'inline' | 'panel';
  *   - assistant text segment
  *   - tool-call (the agent invoked a tool; the result lands on the
  *     same entry asynchronously when the SDK forwards the tool_result)
- *   - rendered stack item (the actual MCP App iframe — one per push)
+ *   - rendered render (the actual MCP App iframe — one per ggui_render)
  *   - error
  *   - end marker
  */
@@ -18,7 +18,7 @@ export type ChatEntry =
   | { readonly id: string; readonly kind: 'user'; readonly text: string }
   | { readonly id: string; readonly kind: 'assistant'; readonly text: string }
   | ToolCallEntry
-  | { readonly id: string; readonly kind: 'stack-item'; readonly stackItem: StackItemRef }
+  | { readonly id: string; readonly kind: 'render'; readonly render: RenderRef }
   | { readonly id: string; readonly kind: 'error'; readonly text: string }
   | { readonly id: string; readonly kind: 'end'; readonly subtype: string };
 
@@ -41,28 +41,27 @@ export interface ToolCallEntry {
 }
 
 /**
- * A reference to a ggui-rendered stack item.
+ * A reference to a ggui render.
  *
  * **R5 shape change.** The old `url` field pointed at the public
  * `/r/<shortCode>` HTTP shell (bearer-by-obscurity). R5 retired that
  * surface; the host now reconstructs the iframe HTML CLIENT-SIDE from
- * the slice envelope (see `StackItem.tsx` + `html.ts`).
+ * the render meta envelope (see `Render.tsx` + `html.ts`).
  *
- * `meta` is the parsed `McpAppAiGguiMeta` pair (session + stackItem
- * slices). When non-undefined, `StackItem.tsx` builds the inline
+ * `meta` is the parsed `McpAppAiGguiRenderMeta` (single render slice
+ * post-Phase-B). When non-undefined, `Render.tsx` builds the inline
  * `__GGUI_META__` HTML and forwards a tool_result carrying the
  * envelope to AppRenderer so the inner iframe receives
  * `ui/notifications/tool-result` on every update.
  *
  * `meta` is initially undefined for SDKs that strip `_meta` from
  * tool_results (Anthropic). `useChat` re-fetches via the wsToken-gated
- * `/api/sessions/:sessionId/state` endpoint to populate / refresh it.
+ * `/api/renders/:renderId/state` endpoint to populate / refresh it.
  */
-export interface StackItemRef {
-  readonly stackItemId: string;
-  readonly sessionId: string;
+export interface RenderRef {
+  readonly renderId: string;
   readonly action: string;
   readonly contractHash?: string;
-  /** Last-known meta slice pair. Updated on push + every update. */
-  readonly meta?: McpAppAiGguiMeta;
+  /** Last-known render meta. Updated on render + every update. */
+  readonly meta?: McpAppAiGguiRenderMeta;
 }

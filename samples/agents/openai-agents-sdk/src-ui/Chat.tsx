@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useChat } from './useChat';
-import { StackItem } from './StackItem';
-import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
+import { Render } from './Render';
+import type { ChatEntry, LayoutMode, RenderRef, ToolCallEntry } from './types';
 
 /**
  * Sandbox-proxy URL injected by the server-rendered host page (see
@@ -26,7 +26,7 @@ function resolveSandboxUrl(): string {
 }
 
 export function Chat() {
-  const { entries, stackItems, sending, send, abort } = useChat();
+  const { entries, renders, sending, send, abort } = useChat();
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +93,7 @@ export function Chat() {
             <ChatEntryView
               key={entry.id}
               entry={entry}
-              renderStackInline={layout === 'inline'}
+              renderInline={layout === 'inline'}
               sandboxUrl={sandboxUrl}
             />
           ))}
@@ -150,7 +150,7 @@ export function Chat() {
        * chat (no panel at all). */}
       {layout === 'panel' ? (
         <main className="ui-pane">
-          <PanelView stackItems={stackItems} sandboxUrl={sandboxUrl} />
+          <PanelView renders={renders} sandboxUrl={sandboxUrl} />
         </main>
       ) : null}
     </div>
@@ -173,31 +173,31 @@ function EmptyState() {
 }
 
 /**
- * Render one chat entry. In inline mode, stack-item entries embed the
- * iframe directly between conversation turns. In panel mode, stack-item
+ * Render one chat entry. In inline mode, render entries embed the
+ * iframe directly between conversation turns. In panel mode, render
  * entries collapse to a compact marker.
  */
 function ChatEntryView({
   entry,
-  renderStackInline,
+  renderInline,
   sandboxUrl,
 }: {
   entry: ChatEntry;
-  renderStackInline: boolean;
+  renderInline: boolean;
   sandboxUrl: string;
 }) {
-  if (entry.kind === 'stack-item') {
-    if (renderStackInline) {
+  if (entry.kind === 'render') {
+    if (renderInline) {
       return (
-        <div className="msg stack-item-wrap">
-          <StackItem item={entry.stackItem} sandboxUrl={sandboxUrl} />
+        <div className="msg render-wrap">
+          <Render item={entry.render} sandboxUrl={sandboxUrl} />
         </div>
       );
     }
     return (
       <div className="msg tool">
-        ← UI #{entry.stackItem.stackItemId.slice(0, 12)} ·{' '}
-        {entry.stackItem.action}
+        ← UI #{entry.render.renderId.slice(0, 12)} ·{' '}
+        {entry.render.action}
       </div>
     );
   }
@@ -273,31 +273,31 @@ function prettyJson(value: unknown): string {
 }
 
 /**
- * Panel mode: render the top-of-stack item large in the right pane.
- * Older stack items remain accessible via the chat-history compact
+ * Panel mode: render the most-recent render large in the right pane.
+ * Older renders remain accessible via the chat-history compact
  * markers, but only one iframe is mounted at a time.
  */
 function PanelView({
-  stackItems,
+  renders,
   sandboxUrl,
 }: {
-  stackItems: ReadonlyArray<StackItemRef>;
+  renders: ReadonlyArray<RenderRef>;
   sandboxUrl: string;
 }) {
-  const top = stackItems[stackItems.length - 1];
+  const top = renders[renders.length - 1];
   if (!top) {
     return (
       <div className="ui-placeholder">
         <p>
           The rendered UI will appear here once the agent calls{' '}
-          <code>ggui_push</code>.
+          <code>ggui_render</code>.
         </p>
       </div>
     );
   }
   return (
     <div className="panel-frame">
-      <StackItem item={top} sandboxUrl={sandboxUrl} fillContainer />
+      <Render item={top} sandboxUrl={sandboxUrl} fillContainer />
     </div>
   );
 }

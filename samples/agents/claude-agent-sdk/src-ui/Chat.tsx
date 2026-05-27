@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useChat } from './useChat';
-import { StackItem } from './StackItem';
-import type { ChatEntry, LayoutMode, StackItemRef, ToolCallEntry } from './types';
+import { Render } from './Render';
+import type { ChatEntry, LayoutMode, RenderRef, ToolCallEntry } from './types';
 
 /**
  * Sandbox-proxy URL injected by the server-rendered host page (see
@@ -26,7 +26,7 @@ function resolveSandboxUrl(): string {
 }
 
 export function Chat() {
-  const { entries, stackItems, hostDisplayMode, sending, send, abort, newSession } =
+  const { entries, renders, hostDisplayMode, sending, send, abort, newSession } =
     useChat();
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
@@ -36,7 +36,7 @@ export function Chat() {
   // `ui/message` from an iframe component (MCP-Apps SEP-1865) → fire a
   // fresh chat turn. The iframe's emitted text appears in the chat log
   // as a user message and the agent processes it through the usual
-  // `/chat` SSE round-trip. Passed down through `<StackItem
+  // `/chat` SSE round-trip. Passed down through `<Render
   // onUiMessage>`.
   const onUiMessage = useCallback(
     (text: string) => {
@@ -46,12 +46,12 @@ export function Chat() {
   );
 
   // Host-side presentation hint pickup.
-  // `_meta.ui.displayMode` is the spec-native MCP-Apps SEP-1865 per-push
-  // hint, stamped from `App.defaultDisplayMode` (and/or per-push agent
+  // `_meta.ui.displayMode` is the spec-native MCP-Apps SEP-1865 per-render
+  // hint, stamped from `App.defaultDisplayMode` (and/or per-render agent
   // override) on the server side. We auto-switch our `Inline | Panel`
   // layout to match: `'fullscreen'` / `'pip'` → Panel, `'inline'` →
   // Inline. The user's manual toggle still wins (sticky until the next
-  // push that carries a hint).
+  // render that carries a hint).
   useEffect(() => {
     if (hostDisplayMode === undefined) return;
     setLayout(hostDisplayMode === 'inline' ? 'inline' : 'panel');
@@ -125,7 +125,7 @@ export function Chat() {
             <ChatEntryView
               key={entry.id}
               entry={entry}
-              renderStackInline={layout === 'inline'}
+              renderInline={layout === 'inline'}
               sandboxUrl={sandboxUrl}
               onUiMessage={onUiMessage}
             />
@@ -179,13 +179,13 @@ export function Chat() {
         </form>
       </aside>
 
-      {/* Panel mode renders the right pane with the top-of-stack item;
-       * inline mode is full-width chat with stack-items embedded
-       * between conversation turns. */}
+      {/* Panel mode renders the right pane with the most-recent render;
+       * inline mode is full-width chat with renders embedded between
+       * conversation turns. */}
       {layout === 'panel' ? (
         <main className="ui-pane">
           <PanelView
-            stackItems={stackItems}
+            renders={renders}
             sandboxUrl={sandboxUrl}
             onUiMessage={onUiMessage}
           />
@@ -211,27 +211,27 @@ function EmptyState() {
 }
 
 /**
- * Render one chat entry. In inline mode, stack-item entries embed the
- * iframe directly between conversation turns. In panel mode, stack-item
+ * Render one chat entry. In inline mode, render entries embed the
+ * iframe directly between conversation turns. In panel mode, render
  * entries collapse to a compact marker.
  */
 function ChatEntryView({
   entry,
-  renderStackInline,
+  renderInline,
   sandboxUrl,
   onUiMessage,
 }: {
   entry: ChatEntry;
-  renderStackInline: boolean;
+  renderInline: boolean;
   sandboxUrl: string;
   onUiMessage: (text: string) => void;
 }) {
-  if (entry.kind === 'stack-item') {
-    if (renderStackInline) {
+  if (entry.kind === 'render') {
+    if (renderInline) {
       return (
-        <div className="msg stack-item-wrap">
-          <StackItem
-            item={entry.stackItem}
+        <div className="msg render-wrap">
+          <Render
+            item={entry.render}
             sandboxUrl={sandboxUrl}
             onUiMessage={onUiMessage}
           />
@@ -240,8 +240,8 @@ function ChatEntryView({
     }
     return (
       <div className="msg tool">
-        ← UI #{entry.stackItem.stackItemId.slice(0, 12)} ·{' '}
-        {entry.stackItem.action}
+        ← UI #{entry.render.renderId.slice(0, 12)} ·{' '}
+        {entry.render.action}
       </div>
     );
   }
@@ -317,33 +317,33 @@ function prettyJson(value: unknown): string {
 }
 
 /**
- * Right-pane mount — shows the top-of-stack item large. Earlier items
- * stay accessible as chat-history markers; only one iframe lives in
- * the panel at a time. Empty stack ⇒ placeholder.
+ * Right-pane mount — shows the most-recent render large. Earlier
+ * renders stay accessible as chat-history markers; only one iframe
+ * lives in the panel at a time. No renders ⇒ placeholder.
  */
 function PanelView({
-  stackItems,
+  renders,
   sandboxUrl,
   onUiMessage,
 }: {
-  stackItems: ReadonlyArray<StackItemRef>;
+  renders: ReadonlyArray<RenderRef>;
   sandboxUrl: string;
   onUiMessage: (text: string) => void;
 }) {
-  const top = stackItems[stackItems.length - 1];
+  const top = renders[renders.length - 1];
   if (!top) {
     return (
       <div className="ui-placeholder">
         <p>
           The rendered UI will appear here once the agent calls{' '}
-          <code>ggui_push</code>.
+          <code>ggui_render</code>.
         </p>
       </div>
     );
   }
   return (
     <div className="panel-frame">
-      <StackItem
+      <Render
         item={top}
         sandboxUrl={sandboxUrl}
         onUiMessage={onUiMessage}

@@ -452,15 +452,15 @@ button {
   background: color-mix(in srgb, var(--fg) 30%, transparent);
 }
 
-.msg.stack-item-wrap {
+.msg.render-wrap {
   padding: 0;
   background: transparent;
   border: none;
   align-self: stretch;
-  animation: stack-in 0.42s var(--ease-out);
+  animation: render-in 0.42s var(--ease-out);
 }
 
-@keyframes stack-in {
+@keyframes render-in {
   0% {
     opacity: 0;
     transform: translateY(12px) scale(0.96);
@@ -593,14 +593,14 @@ form button:disabled {
   display: flex;
 }
 
-.panel-frame > .stack-item {
+.panel-frame > .render {
   width: 100%;
   height: 100%;
 }
 
 /* ── Stack item card ────────────────────────────────────── */
 
-.stack-item {
+.render {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
@@ -613,11 +613,11 @@ form button:disabled {
   transition: border-color 0.2s var(--ease-out);
 }
 
-.stack-item:hover {
+.render:hover {
   border-color: var(--border-strong);
 }
 
-.stack-item-chrome {
+.render-chrome {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -630,13 +630,13 @@ form button:disabled {
   flex-shrink: 0;
 }
 
-.stack-item-id {
+.render-id {
   font-weight: 600;
   color: var(--fg);
   letter-spacing: 0.02em;
 }
 
-.stack-item-action {
+.render-action {
   background: var(--accent-soft);
   color: var(--accent);
   padding: 1px 7px;
@@ -647,12 +647,12 @@ form button:disabled {
   letter-spacing: 0.06em;
 }
 
-.stack-item-hash {
+.render-hash {
   color: var(--fg-faint);
   font-size: 10px;
 }
 
-.stack-item-link {
+.render-link {
   margin-left: auto;
   text-decoration: none;
   color: var(--fg-muted);
@@ -666,12 +666,12 @@ form button:disabled {
   transition: all 0.15s var(--ease-out);
 }
 
-.stack-item-link:hover {
+.render-link:hover {
   background: var(--surface-strong);
   color: var(--fg);
 }
 
-.stack-item-frame {
+.render-frame {
   flex: 1;
   position: relative;
   background: var(--bg-card);
@@ -681,12 +681,12 @@ form button:disabled {
   flex-direction: column;
 }
 
-.stack-item-frame > div {
+.render-frame > div {
   flex: 1;
   min-height: 0;
 }
 
-.stack-item-frame iframe {
+.render-frame iframe {
   /* See styles.css history: F8 (`!important` to override @mcp-ui/client's
    * inline `style.height = '600px'`) + the slice's flex switch (the
    * AppRenderer wrapper's flex-stretched height isn't "definite" for
@@ -700,13 +700,13 @@ form button:disabled {
   display: block;
 }
 
-.layout-inline .stack-item-frame {
+.layout-inline .render-frame {
   min-height: 480px;
   height: 480px;
 }
 
-/* Loading shimmer for stack items before McpAppIframe paints */
-.stack-item-frame.loading::before {
+/* Loading shimmer for renders before McpAppIframe paints */
+.render-frame.loading::before {
   content: "";
   position: absolute;
   inset: 0;

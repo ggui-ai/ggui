@@ -1,10 +1,10 @@
 /**
  * Client-side iframe shell builder for AppRenderer.
  *
- * The sample-agent host receives the slice envelope (`{ "ai.ggui/session":
- * {...}, "ai.ggui/stack-item": {...} }`) either inline on the tool_result's
+ * The sample-agent host receives the render slice envelope
+ * (`{ "ai.ggui/render": {...} }`) either inline on the tool_result's
  * `_meta` field (Anthropic SDK strips `_meta` from result blocks today;
- * other SDKs may not) or recovered via `/api/sessions/:id/state`. Either
+ * other SDKs may not) or recovered via `/api/renders/:id/state`. Either
  * way, we mint the iframe HTML LOCALLY rather than fetching a public
  * shortCode URL (R5 retired `/r/<shortCode>`).
  *
@@ -14,17 +14,17 @@
  */
 
 /**
- * Compose the iframe HTML for one stack item from a slice envelope.
+ * Compose the iframe HTML for one render from a slice envelope.
  *
- * @param envelope - Wire-shape `{ "ai.ggui/session": {...}, "ai.ggui/stack-item": {...} }`
+ * @param envelope - Wire-shape `{ "ai.ggui/render": {...} }`
  *                   from `toMcpAppEnvelope(meta)`.
  */
 export function buildSelfContainedHtml(envelope: Record<string, unknown>): string {
-  const sessionSlice = envelope['ai.ggui/session'] as
+  const renderSlice = envelope['ai.ggui/render'] as
     | { runtimeUrl?: unknown }
     | undefined;
   const runtimeUrl =
-    typeof sessionSlice?.runtimeUrl === 'string' ? sessionSlice.runtimeUrl : '';
+    typeof renderSlice?.runtimeUrl === 'string' ? renderSlice.runtimeUrl : '';
   if (runtimeUrl.length === 0) {
     return `<!doctype html><html><body><pre style="font:14px system-ui,sans-serif;color:#c00;padding:24px">ggui meta missing runtimeUrl</pre></body></html>`;
   }
@@ -35,15 +35,15 @@ export function buildSelfContainedHtml(envelope: Record<string, unknown>): strin
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+    .replace(/ /g, '\\u2028')
+    .replace(/ /g, '\\u2029');
   const safeRuntimeUrl = runtimeUrl
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>ggui session</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>ggui render</title></head>
 <body>
 <div id="ggui-root" data-ggui-shell="self-contained"></div>
 <script>window.__GGUI_META__ = ${json};</script>
