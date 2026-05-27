@@ -274,7 +274,7 @@ function defaultParams(method: ProbeMethod): unknown {
             intent: 'probe-click',
             data: { note: 'hello from the protocol probe' },
           },
-          sessionId: 'probe-session',
+          renderId: 'probe-render',
           appId: 'probe-app',
           actionId: '00000000', // overwritten in onClick with real FNV-1a
           firedAt: new Date().toISOString(),
@@ -384,7 +384,7 @@ function ProbeButtonRow({
         const args = (params as { arguments?: Record<string, unknown> })
           .arguments ?? {};
         // New gesture-envelope shape (SPEC §4.6): `{kind, payload,
-        // sessionId, appId, actionId, firedAt}`. For Pattern β the
+        // renderId, appId, actionId, firedAt}`. For Pattern β the
         // `payload` carries `{intent, data}`.
         const payload = (args['payload'] as Record<string, unknown> | undefined) ?? {};
         const intent = String(payload['intent'] ?? '?');

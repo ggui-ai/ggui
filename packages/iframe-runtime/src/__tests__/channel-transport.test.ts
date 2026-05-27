@@ -532,7 +532,7 @@ describe('channel-transport router — dispose teardown', () => {
 });
 
 describe('channel-transport router — channel-only key match for channel_error', () => {
-  it('matches by channelName when payload does not carry stackItemId', () => {
+  it('routes channel_error to fallback via the (renderId, channelName) key', () => {
     const { router, observed } = makeRouter({
       streamWebSocketLocalTools: ['weather_now'],
     });

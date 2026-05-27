@@ -1,6 +1,6 @@
 /**
  * `buildEventsPolling` — registry-level events-polling composition for
- * the iframe-runtime (R7). Reads /api/sessions/:id/events with a
+ * the iframe-runtime (R7). Reads /api/renders/:renderId/events with a
  * SessionEvent ledger cursor; dispatches each event by `event.type` to
  * the registered channel handler.
  *
@@ -14,32 +14,32 @@ import { buildEventsPolling } from '../events-polling.js';
 describe('buildEventsPolling', () => {
   it('returns a descriptor with the cursor-aware URL and default interval', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/sessions/sess-1/events?wsToken=abc',
+      baseUrl: 'http://ggui.test/api/renders/rdr-1/events?wsToken=abc',
     });
     expect(desc.intervalMs).toBe(2000);
     // First access — cursor seeded at 0.
     expect(desc.url).toBe(
-      'http://ggui.test/api/sessions/sess-1/events?wsToken=abc&sinceSequence=0&limit=100',
+      'http://ggui.test/api/renders/rdr-1/events?wsToken=abc&sinceSequence=0&limit=100',
     );
   });
 
   it('honors initialSinceSequence + limit overrides on the composed URL', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/sessions/sess-1/events?wsToken=abc',
+      baseUrl: 'http://ggui.test/api/renders/rdr-1/events?wsToken=abc',
       initialSinceSequence: 12,
       limit: 50,
     });
     expect(desc.url).toBe(
-      'http://ggui.test/api/sessions/sess-1/events?wsToken=abc&sinceSequence=12&limit=50',
+      'http://ggui.test/api/renders/rdr-1/events?wsToken=abc&sinceSequence=12&limit=50',
     );
   });
 
   it('uses ? separator when baseUrl has no query string', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/sessions/sess-1/events',
+      baseUrl: 'http://ggui.test/api/renders/rdr-1/events',
     });
     expect(desc.url).toBe(
-      'http://ggui.test/api/sessions/sess-1/events?sinceSequence=0&limit=100',
+      'http://ggui.test/api/renders/rdr-1/events?sinceSequence=0&limit=100',
     );
   });
 
@@ -72,16 +72,16 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'push', payload: { stackItem: { id: 'a' } } },
-        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { stackItemId: 'a', props: { x: 1 } } },
+        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'render', payload: { render: { id: 'a' } } },
+        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { renderId: 'a', props: { x: 1 } } },
       ],
       lastSequence: 2,
       hasMore: false,
     };
     const frames = desc.parseSnapshot(body);
     expect(frames).not.toBeNull();
-    expect(Object.keys(frames!).sort()).toEqual(['props_update', 'push']);
-    expect(frames!['push']?.type).toBe('push');
+    expect(Object.keys(frames!).sort()).toEqual(['props_update', 'render']);
+    expect(frames!['render']?.type).toBe('render');
     expect(frames!['props_update']?.type).toBe('props_update');
     // Cursor advanced.
     expect(desc.url).toBe('http://x/events?sinceSequence=2&limit=100');
@@ -114,8 +114,8 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'props_update', payload: { stackItemId: 'a', props: { x: 1 } } },
-        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { stackItemId: 'a', props: { x: 2 } } },
+        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'props_update', payload: { renderId: 'a', props: { x: 1 } } },
+        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { renderId: 'a', props: { x: 2 } } },
       ],
       lastSequence: 2,
       hasMore: false,
