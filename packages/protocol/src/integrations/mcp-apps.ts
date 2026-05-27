@@ -9,7 +9,7 @@
  * ```ts
  * import {
  *   MCP_APPS_UI_CAPABILITY,
- *   GGUI_SESSION_RESOURCE_URI,
+ *   GGUI_RENDER_RESOURCE_URI,
  *   parseMcpAppAiGguiMeta,
  *   type McpAppAiGguiSessionMeta,
  *   type McpAppAiGguiStackItemMeta,
@@ -48,7 +48,7 @@ export const MCP_APPS_UI_CAPABILITY = 'io.modelcontextprotocol/ui' as const;
  * `_meta.ui.resourceUri`. No other ggui tool gets a resource URI —
  * `ggui_push` is the single outbound entry point.
  */
-export const GGUI_SESSION_RESOURCE_URI = 'ui://ggui/session' as const;
+export const GGUI_RENDER_RESOURCE_URI = 'ui://ggui/render' as const;
 
 /**
  * MIME type for the `ui://ggui/session` resource. Per MCP Apps spec, UI
@@ -56,16 +56,16 @@ export const GGUI_SESSION_RESOURCE_URI = 'ui://ggui/session' as const;
  * parameter so hosts that don't support MCP Apps don't accidentally
  * render them as plain HTML.
  */
-export const GGUI_SESSION_RESOURCE_MIME = 'text/html;profile=mcp-app' as const;
+export const GGUI_RENDER_RESOURCE_MIME = 'text/html;profile=mcp-app' as const;
 
 /**
  * The single `_meta.ui.resourceUri` value ggui uses across every MCP Apps
  * host surface. Exposed as a named constant so tool-declaration code,
  * resource-serving code, and tests all agree on one spelling.
  */
-export const GGUI_PUSH_UI_META = {
+export const GGUI_RENDER_UI_META = {
   /** Resource URI hosts fetch via `resources/read` on a `ggui_push` tool call. */
-  resourceUri: GGUI_SESSION_RESOURCE_URI,
+  resourceUri: GGUI_RENDER_RESOURCE_URI,
   /** Only `"model"` — outer agent can call, iframe views cannot. */
   visibility: ['model'] as const,
 } as const;
@@ -778,10 +778,10 @@ export interface McpAppsSource {
  * (generated / native component) variant are declared here as
  * `?: never` so consumers that access them via optional chaining on
  * `SessionStackEntry` still typecheck cleanly. Those fields semantically
- * DO NOT exist on McpAppsStackItem — the `?: never` typing encodes the
+ * DO NOT exist on McpAppsRender — the `?: never` typing encodes the
  * "structurally absent" guarantee.
  */
-export interface McpAppsStackItem {
+export interface McpAppsRender {
   /** Discriminator — required on this variant. */
   readonly type: 'mcpApps';
 
@@ -837,9 +837,9 @@ export interface McpAppsStackItem {
 
 /**
  * Type guard: narrows a `SessionStackEntry` (or unknown) to
- * {@link McpAppsStackItem}. Uses the discriminator.
+ * {@link McpAppsRender}. Uses the discriminator.
  */
-export function isMcpAppsStackItem(entry: unknown): entry is McpAppsStackItem {
+export function isMcpAppsRender(entry: unknown): entry is McpAppsRender {
   return (
     entry !== null &&
     typeof entry === 'object' &&
@@ -848,15 +848,15 @@ export function isMcpAppsStackItem(entry: unknown): entry is McpAppsStackItem {
 }
 
 /**
- * Structural validator for an `McpAppsStackItem` — not a Zod schema
+ * Structural validator for an `McpAppsRender` — not a Zod schema
  * so we don't force a Zod dependency here. Returns null on failure
  * (caller maps to an appropriate error code). Required when accepting
  * one over the wire from an agent: the discriminator alone isn't
  * enough.
  */
-export function validateMcpAppsStackItem(
+export function validateMcpAppsRender(
   input: unknown,
-): McpAppsStackItem | null {
+): McpAppsRender | null {
   if (input === null || typeof input !== 'object') return null;
   const item = input as Record<string, unknown>;
   if (item.type !== 'mcpApps') return null;
@@ -869,7 +869,7 @@ export function validateMcpAppsStackItem(
   if (typeof source.connectorId !== 'string' || source.connectorId.length === 0) return null;
   if (typeof source.toolName !== 'string' || source.toolName.length === 0) return null;
   if (typeof source.resourceUri !== 'string' || !source.resourceUri.startsWith('ui://')) return null;
-  return input as McpAppsStackItem;
+  return input as McpAppsRender;
 }
 
 // =============================================================================
