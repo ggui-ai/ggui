@@ -1,0 +1,79 @@
+import { describe, it, expect } from 'vitest';
+import type { ContentBlock } from '@ggui-ai/protocol';
+import {
+  extractRenderFromToolResult,
+  extractRenderIdFromToolResult,
+} from '../render';
+
+function toolResult(content: unknown): ContentBlock {
+  return {
+    type: 'tool_result',
+    tool_use_id: 'tu_1',
+    content,
+  } as ContentBlock;
+}
+
+describe('extractRenderFromToolResult', () => {
+  it('returns null for non-tool_result blocks', () => {
+    const text: ContentBlock = { type: 'text', text: 'hi' };
+    expect(extractRenderFromToolResult(text)).toBeNull();
+  });
+
+  it('returns null when content is not an object', () => {
+    expect(extractRenderFromToolResult(toolResult('string payload'))).toBeNull();
+    expect(extractRenderFromToolResult(toolResult(null))).toBeNull();
+  });
+
+  it('picks up the direct Render shape', () => {
+    const item = { id: 'cmp_1', componentCode: 'export default () => null', props: {} };
+    expect(extractRenderFromToolResult(toolResult(item))).toBe(item);
+  });
+
+  it('picks up the wrapped shape { render }', () => {
+    const item = { id: 'cmp_2', componentCode: 'x' };
+    expect(extractRenderFromToolResult(toolResult({ render: item }))).toBe(item);
+  });
+
+  it('picks up the nested wrapped shape { result: { render } }', () => {
+    const item = { id: 'cmp_3', componentCode: 'x' };
+    expect(
+      extractRenderFromToolResult(toolResult({ result: { render: item } })),
+    ).toBe(item);
+  });
+
+  it('picks up the nested direct shape { result: { id, componentCode } }', () => {
+    const item = { id: 'cmp_4', componentCode: 'x' };
+    expect(extractRenderFromToolResult(toolResult({ result: item }))).toBe(item);
+  });
+
+  it('returns null when no render-shaped object is present', () => {
+    expect(
+      extractRenderFromToolResult(toolResult({ renderId: 'r1', foo: 'bar' })),
+    ).toBeNull();
+  });
+});
+
+describe('extractRenderIdFromToolResult', () => {
+  it('returns null for non-tool_result blocks', () => {
+    const text: ContentBlock = { type: 'text', text: 'hi' };
+    expect(extractRenderIdFromToolResult(text)).toBeNull();
+  });
+
+  it('reads a top-level renderId', () => {
+    expect(extractRenderIdFromToolResult(toolResult({ renderId: 'render_42' }))).toBe(
+      'render_42',
+    );
+  });
+
+  it('reads a nested renderId one level deep', () => {
+    expect(
+      extractRenderIdFromToolResult(toolResult({ result: { renderId: 'render_7' } })),
+    ).toBe('render_7');
+  });
+
+  it('returns null when no renderId is anywhere', () => {
+    expect(
+      extractRenderIdFromToolResult(toolResult({ id: 'cmp_1', componentCode: 'x' })),
+    ).toBeNull();
+  });
+});

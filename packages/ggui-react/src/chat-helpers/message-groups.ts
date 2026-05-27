@@ -1,6 +1,6 @@
 import type { ContentBlock, InvokeTurn } from '@ggui-ai/protocol';
 import type { ConversationMessage } from '../invoke/useInvoke';
-import { extractRenderFromToolResult } from './stack-item';
+import { extractRenderFromToolResult } from './render';
 
 /**
  * A "content group" is one durable-renderable unit from an invoke message:

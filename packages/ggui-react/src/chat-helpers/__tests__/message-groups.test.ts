@@ -39,7 +39,7 @@ describe('invokeMessageToContentGroups', () => {
     const tu: ContentBlock = {
       type: 'tool_use',
       id: 'tu_1',
-      name: 'ggui_push',
+      name: 'ggui_render',
       input: {},
     } as ContentBlock;
     const tr: ContentBlock = {
@@ -72,7 +72,7 @@ describe('invokeMessageToContentGroups', () => {
     const tu: ContentBlock = {
       type: 'tool_use',
       id: 'tu_3',
-      name: 'ggui_push',
+      name: 'ggui_render',
       input: {},
     } as ContentBlock;
     const tr: ContentBlock = {
@@ -103,7 +103,7 @@ describe('contentGroupsToConversationMessages', () => {
     const tu: ContentBlock = {
       type: 'tool_use',
       id: 'tu_1',
-      name: 'ggui_push',
+      name: 'ggui_render',
       input: {},
     } as ContentBlock;
     const tr: ContentBlock = {
