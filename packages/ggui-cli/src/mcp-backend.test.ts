@@ -47,16 +47,19 @@ import type { ServeBackend } from './serve-command.js';
  * `buildMcpServerBackend` directly.
  */
 /**
- * Drive the canonical handshake-first push flow over MCP and return the
- * raw push result body. Performs `ggui_new_session` →
- * `ggui_handshake({sessionId, intent})` → `ggui_push({handshakeId,
- * contract})`, all under one bearer token. Tests that want the
- * structured push response or the bootstrap meta call this instead of
- * fabricating tools/call bodies inline (the legacy direct-push shape
- * was retired post-synth-authority; `ggui_push` REQUIRES a
- * handshakeId).
+ * Drive the canonical handshake-first render flow over MCP and return
+ * the raw render result body. Performs `ggui_handshake({intent,
+ * blueprintDraft})` → `ggui_render({handshakeId, decision})`, all
+ * under one bearer token. Tests that want the structured render
+ * response or the bootstrap meta call this instead of fabricating
+ * tools/call bodies inline (the direct-render shape was retired
+ * post-synth-authority; `ggui_render` REQUIRES a handshakeId).
+ *
+ * Post-flatten (Phase B): handshake no longer takes `sessionId` —
+ * the paired `ggui_render` auto-mints a renderId. The session-create
+ * step is gone entirely (`ggui_new_session` deleted).
  */
-async function pushOverMcp(args: {
+async function renderOverMcp(args: {
   readonly url: string;
   readonly token: string;
   readonly intent: string;
@@ -75,37 +78,26 @@ async function pushOverMcp(args: {
     });
     if (!r.ok) {
       throw new Error(
-        `pushOverMcp: ${method} HTTP ${r.status} — ${await r.text()}`,
+        `renderOverMcp: ${method} HTTP ${r.status} — ${await r.text()}`,
       );
     }
     return r;
   };
-  const idBase = args.id ?? 'push-flow';
-  const nsRes = await post(
-    'tools/call',
-    { name: 'ggui_new_session', arguments: { seed: idBase } },
-    `${idBase}-new-session`,
-  );
-  const nsBody = await readJsonOrSse(nsRes);
-  const sessionId = (
-    (nsBody.result as { structuredContent: { sessionId: string } })
-      .structuredContent
-  ).sessionId;
+  const idBase = args.id ?? 'render-flow';
   const contract = args.contract ?? {
     contextSpec: {
       smoke: { schema: { type: 'string' }, default: 'ok' },
     },
   };
-  // Handshake input requires blueprintDraft (commit 80c639338,
-  // 2026-05-14). Pass the contract here so the negotiator has
-  // something to validate; the test asserts wire-shape, not draft
-  // contents.
+  // Handshake input is {intent, blueprintDraft} post-flatten.
+  // blueprintDraft is required (commit 80c639338, 2026-05-14); pass the
+  // contract here so the negotiator has something to validate. The
+  // test asserts wire-shape, not draft contents.
   const hsRes = await post(
     'tools/call',
     {
       name: 'ggui_handshake',
       arguments: {
-        sessionId,
         intent: args.intent,
         blueprintDraft: { contract },
       },
@@ -117,16 +109,16 @@ async function pushOverMcp(args: {
     (hsBody.result as { structuredContent: { handshakeId: string } })
       .structuredContent
   ).handshakeId;
-  const pushRes = await post(
+  const renderRes = await post(
     'tools/call',
     {
-      name: 'ggui_push',
+      name: 'ggui_render',
       arguments: { handshakeId, decision: { kind: 'accept' } },
     },
-    `${idBase}-push`,
+    `${idBase}-render`,
   );
-  const body = await readJsonOrSse(pushRes);
-  return { body, res: pushRes };
+  const body = await readJsonOrSse(renderRes);
+  return { body, res: renderRes };
 }
 
 async function mintPairToken(
@@ -326,21 +318,20 @@ describe('buildMcpServerBackend', () => {
     ).toThrow(/concrete TCP port/);
   });
 
-  it('registers `ggui_push` with the MCP Apps entry-point stamp (tools/list)', async () => {
+  it('registers `ggui_render` with the MCP Apps entry-point stamp (tools/list)', async () => {
     // The single load-bearing invariant for the OSS first-run story:
-    // without `ggui_push`, nothing mints shortCodes → the console
+    // without `ggui_render`, nothing mints shortCodes → the console
     // `/s/<code>` viewer is orphaned. This test goes over the real
     // MCP wire to catch wiring regressions that a toolCount check
     // alone would miss.
     const { url } = await boot();
     // The OSS default surface grows over time as new lifecycle /
-    // observability tools land (Slice CC's `ggui_new_session`, Phase
-    // 3's `ggui_list_gadgets`, the various `ggui_get_*` /
-    // `ggui_consume` / `ggui_emit` queries, etc.). Pin a floor for
-    // catastrophic regressions but leave headroom for additive growth;
-    // the real wiring check lives below on the `ggui_push` `_meta`
-    // stamp. `ggui_render_blueprint` is still conditional on a wired
-    // `uiRegistry`.
+    // observability tools land (Phase 3's `ggui_list_gadgets`, the
+    // various `ggui_get_*` / `ggui_consume` / `ggui_emit` queries,
+    // etc.). Pin a floor for catastrophic regressions but leave
+    // headroom for additive growth; the real wiring check lives below
+    // on the `ggui_render` `_meta` stamp. `ggui_render_blueprint` is
+    // still conditional on a wired `uiRegistry`.
     expect(backend!.toolCount).toBeGreaterThanOrEqual(13);
 
     // Strict-auth: `Bearer dev` no longer authenticates — we mint a
@@ -365,24 +356,24 @@ describe('buildMcpServerBackend', () => {
     expect(listRes.ok).toBe(true);
     const body = await readJsonOrSse(listRes);
     const tools = (body.result as { tools: Array<{ name: string; _meta?: { ui?: { resourceUri?: string; visibility?: readonly string[] } } }> }).tools;
-    const push = tools.find((t) => t.name === 'ggui_push');
-    expect(push).toBeTruthy();
+    const render = tools.find((t) => t.name === 'ggui_render');
+    expect(render).toBeTruthy();
     // `_meta.ui.*` is the MCP Apps §2.4.1 "sole entry-point tool"
     // stamp — lost if the CLI ever reverts to the old bundle.
-    expect(push?._meta?.ui?.resourceUri).toBe('ui://ggui/session');
-    expect(push?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
+    expect(render?._meta?.ui?.resourceUri).toBe('ui://ggui/render');
+    expect(render?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
   });
 
-  it('the composed `ggui_push` structuredContent carries a stackItemId — and no dead `url` field', async () => {
+  it('the composed `ggui_render` structuredContent carries a renderId — and no dead `url` field', async () => {
     // End-to-end: drive the canonical handshake-first flow and assert
     // the LLM-visible surface. Post-R5 the `/r/<shortCode>` route was
     // deleted; the wire-output schema no longer ships a `url` (it was
     // hallucination bait — see fix-A 2026-05-26). Hosts mount via
-    // `_meta.ui.resourceUri` or resolve `{sessionId, stackItemId}`
-    // through their own session-resource endpoint.
+    // `_meta.ui.resourceUri` or resolve `{renderId}` through their own
+    // render-resource fetch.
     const { url } = await boot();
-    const token = await mintPairToken(backend!, url, 'ggui-push-smoke');
-    const { body } = await pushOverMcp({
+    const token = await mintPairToken(backend!, url, 'ggui-render-smoke');
+    const { body } = await renderOverMcp({
       url,
       token,
       intent: 'unit-test smoke',
@@ -391,11 +382,11 @@ describe('buildMcpServerBackend', () => {
     const result = body.result as {
       structuredContent: Record<string, unknown>;
     };
-    expect(typeof result.structuredContent.stackItemId).toBe('string');
+    expect(typeof result.structuredContent.renderId).toBe('string');
     expect(Object.keys(result.structuredContent)).not.toContain('url');
   });
 
-  it('publishes an absolute `runtimeUrl` on `_meta.ggui.bootstrap` (Task #382 — srcdoc posture)', async () => {
+  it('publishes an absolute `runtimeUrl` on `_meta["ai.ggui/render"]` (Task #382 — srcdoc posture)', async () => {
     // `<McpAppIframe>` mounts inline resource text via `srcdoc`, which
     // gives the iframe `about:srcdoc` as its URL. A relative
     // `runtimeUrl` (`/_ggui/iframe-runtime.js`) resolves against `about:`
@@ -404,21 +395,26 @@ describe('buildMcpServerBackend', () => {
     // srcdoc mount works without operator action.
     //
     // This test proves the CLI's `runtime: { url: baseUrl + path }`
-    // wire-up reaches the bootstrap metadata the shell reads — i.e.
-    // that Task #382's fix is actually in the push result, not just
-    // set on construction.
+    // wire-up reaches the slice metadata the shell reads — i.e.
+    // that Task #382's fix is actually in the render result, not just
+    // set on construction. Post-B.1 the carrier is the single
+    // `ai.ggui/render` slice (renderId + appId + runtimeUrl +
+    // wsToken + caps).
     const { url } = await boot();
     const token = await mintPairToken(backend!, url, 'renderer-url-smoke');
-    const { body } = await pushOverMcp({
+    const { body } = await renderOverMcp({
       url,
       token,
       intent: 'renderer-url smoke',
       id: 'renderer-url-smoke',
     });
     const result = body.result as {
-      _meta?: { ggui?: { bootstrap?: { runtimeUrl?: string } } };
+      _meta?: Record<string, unknown>;
     };
-    const runtimeUrl = result._meta?.ggui?.bootstrap?.runtimeUrl;
+    const renderSlice = result._meta?.['ai.ggui/render'] as
+      | { runtimeUrl?: string }
+      | undefined;
+    const runtimeUrl = renderSlice?.runtimeUrl;
     expect(runtimeUrl).toBeDefined();
     // Absolute URL: starts with the server's own `baseUrl`, NOT the
     // bare `/_ggui/iframe-runtime.js` relative path (which would fail in
@@ -619,7 +615,7 @@ describe('buildMcpServerBackend', () => {
     // covers: that a `McpServerMount` reaching `buildMcpServerBackend`
     // actually aggregates through `composeHandlersWithMounts` and
     // the mounted tools are visible on the real `/mcp` wire
-    // alongside `ggui_push` under strict-auth.
+    // alongside `ggui_render` under strict-auth.
     //
     // Uses 2 trivial tools (slice6_demo_ping + slice6_demo_echo) so
     // the assertion is shape-based + doesn't duplicate the Tasks
@@ -695,7 +691,7 @@ describe('buildMcpServerBackend', () => {
     const listBody = await readJsonOrSse(listRes);
     const tools = (listBody.result as { tools: Array<{ name: string }> }).tools;
     const names = tools.map((t) => t.name);
-    expect(names).toContain('ggui_push');
+    expect(names).toContain('ggui_render');
     expect(names).toContain('slice6_demo_ping');
     expect(names).toContain('slice6_demo_echo');
 
