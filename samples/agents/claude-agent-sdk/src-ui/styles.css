@@ -152,6 +152,33 @@ button {
   font-weight: 400;
 }
 
+/* ── Header actions ─────────────────────────────────────── */
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-session {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+  color: var(--fg-muted);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+}
+
+.new-session:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+}
+
 /* ── Layout toggle ──────────────────────────────────────── */
 
 .layout-toggle {

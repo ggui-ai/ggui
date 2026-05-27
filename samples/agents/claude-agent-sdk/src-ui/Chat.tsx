@@ -26,7 +26,7 @@ function resolveSandboxUrl(): string {
 }
 
 export function Chat() {
-  const { entries, stackItems, hostDisplayMode, sending, send, abort } =
+  const { entries, stackItems, hostDisplayMode, sending, send, abort, newSession } =
     useChat();
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
@@ -88,23 +88,34 @@ export function Chat() {
             <h1>Sample Agent</h1>
             <p className="subtitle">Claude Agent SDK · ggui MCP</p>
           </div>
-          <div className="layout-toggle" role="group" aria-label="Layout">
+          <div className="header-actions">
             <button
               type="button"
-              className={layout === 'inline' ? 'active' : ''}
-              onClick={() => setLayout('inline')}
-              data-testid="layout-inline"
+              className="new-session"
+              onClick={newSession}
+              title="Start a fresh conversation"
+              data-testid="new-session"
             >
-              Inline
+              + New
             </button>
-            <button
-              type="button"
-              className={layout === 'panel' ? 'active' : ''}
-              onClick={() => setLayout('panel')}
-              data-testid="layout-panel"
-            >
-              Panel
-            </button>
+            <div className="layout-toggle" role="group" aria-label="Layout">
+              <button
+                type="button"
+                className={layout === 'inline' ? 'active' : ''}
+                onClick={() => setLayout('inline')}
+                data-testid="layout-inline"
+              >
+                Inline
+              </button>
+              <button
+                type="button"
+                className={layout === 'panel' ? 'active' : ''}
+                onClick={() => setLayout('panel')}
+                data-testid="layout-panel"
+              >
+                Panel
+              </button>
+            </div>
           </div>
         </header>
 

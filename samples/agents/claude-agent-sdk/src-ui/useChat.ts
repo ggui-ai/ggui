@@ -300,6 +300,23 @@ export function useChat(): UseChatResult {
     abortControllerRef.current?.abort();
   }, []);
 
+  // Start a fresh conversation: mint a new chatSessionId, write it to
+  // both localStorage (so a future visit to `/` resumes here) AND the
+  // URL (so the user can copy-paste the link), then hard-reload so the
+  // React tree and every iframe boot fresh from scratch. Doing this
+  // in-place via setState would leak stale stack-item iframes + the
+  // restored chat history; a navigation is the cleanest reset.
+  const newSession = useCallback(() => {
+    const fresh = crypto.randomUUID();
+    try {
+      window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, fresh);
+    } catch {
+      // localStorage blocked — URL is still authoritative; the next
+      // mount reads it from the search param.
+    }
+    window.location.href = `/?${URL_SESSION_PARAM}=${encodeURIComponent(fresh)}`;
+  }, []);
+
   // On-mount rehydration. When the URL carries a `?session=<id>` the
   // user is opening a previously-visited conversation; ask the host
   // for the list of ggui sessions tied to that chatSessionId and
@@ -352,7 +369,7 @@ export function useChat(): UseChatResult {
     // page lifetime per getOrCreateChatSessionId's contract.
   }, []);
 
-  return { entries, stackItems, hostDisplayMode, sending, send, abort };
+  return { entries, stackItems, hostDisplayMode, sending, send, abort, newSession };
 }
 
 function handleEvent(
