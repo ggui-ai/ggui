@@ -683,8 +683,15 @@ form button:disabled {
 }
 
 .stack-item-frame iframe {
-  width: 100%;
-  height: 100%;
+  /* `!important` is the only override path: @mcp-ui/client's AppRenderer
+   * sets `style.height = '600px'` directly on the iframe element at mount
+   * (see node_modules/@mcp-ui/client/dist/index.mjs line ~5600), and the
+   * library exposes no prop to override. Without `!important` on `height`,
+   * the iframe stays at 600px regardless of how tall its flex container
+   * grew — which leaves dead space below the iframe in panel/fullscreen
+   * mode where the container is taller than 600px. */
+  width: 100% !important;
+  height: 100% !important;
   border: 0;
   display: block;
 }
