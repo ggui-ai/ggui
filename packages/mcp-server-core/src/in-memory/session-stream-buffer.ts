@@ -68,7 +68,7 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     input: StreamEnvelopeInput,
     spec?: StreamSpec,
   ): Promise<RecordResult> {
-    const bucket = this.bucketFor(input.sessionId);
+    const bucket = this.bucketFor(input.renderId);
     bucket.seq += 1;
     // Central stamp via makeStreamEnvelope. BufferedStreamEnvelope
     // narrows StreamEnvelope.seq?: number to required — re-assert seq
@@ -78,7 +78,7 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     // schemaVersion stamp.
     const seq = bucket.seq;
     const stamped = makeStreamEnvelope({
-      sessionId: input.sessionId,
+      renderId: input.renderId,
       seq,
       channel: input.channel,
       mode: input.mode,
@@ -139,11 +139,11 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
   }
 
   async replay(
-    sessionId: string,
+    renderId: string,
     fromSeq: number | undefined,
     spec?: StreamSpec,
   ): Promise<ReplayResult> {
-    const bucket = this.buckets.get(sessionId);
+    const bucket = this.buckets.get(renderId);
     const streamSeq = bucket?.seq ?? 0;
 
     // Fresh subscribe (no fromSeq) never pulls history — return the
@@ -225,12 +225,12 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     return { envelopes: collected, truncated, streamSeq };
   }
 
-  async currentSeq(sessionId: string): Promise<number> {
-    return this.buckets.get(sessionId)?.seq ?? 0;
+  async currentSeq(renderId: string): Promise<number> {
+    return this.buckets.get(renderId)?.seq ?? 0;
   }
 
-  async clear(sessionId: string): Promise<void> {
-    this.buckets.delete(sessionId);
+  async clear(renderId: string): Promise<void> {
+    this.buckets.delete(renderId);
   }
 
   async getSize(): Promise<number> {
@@ -241,8 +241,8 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     return n;
   }
 
-  private bucketFor(sessionId: string): SessionBucket {
-    let bucket = this.buckets.get(sessionId);
+  private bucketFor(renderId: string): SessionBucket {
+    let bucket = this.buckets.get(renderId);
     if (!bucket) {
       bucket = {
         seq: 0,
@@ -250,7 +250,7 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
         evictedAboveSeq: 0,
         latestByChannel: new Map(),
       };
-      this.buckets.set(sessionId, bucket);
+      this.buckets.set(renderId, bucket);
     }
     return bucket;
   }

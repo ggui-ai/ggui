@@ -39,7 +39,7 @@ export * from './blueprint-search.js';
 // ladder remains the load-bearing floor.
 export * from './variant-selection.js';
 export * from './variant-selector-with-llm.js';
-export * from './session-store.js';
+export * from './render-store.js';
 export * from './session-stream-buffer.js';
 export * from './stream-fanout.js';
 export * from './pending-event-consumer.js';

@@ -25,7 +25,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PendingEventConsumer } from '../pending-event-consumer.js';
-import type { SessionStatus } from '@ggui-ai/protocol';
+import type { RenderStatus } from '@ggui-ai/protocol';
 
 export interface PendingEventConsumerConformanceFactory {
   readonly create: () => Promise<{
@@ -35,7 +35,7 @@ export interface PendingEventConsumerConformanceFactory {
     /** Flip the observed status of `sessionId` (used by close tests). */
     readonly markStatus?: (
       sessionId: string,
-      status: SessionStatus,
+      status: RenderStatus,
     ) => void | Promise<void>;
   }>;
   readonly cleanup?: (consumer: PendingEventConsumer) => Promise<void> | void;
@@ -51,7 +51,7 @@ export function runPendingEventConsumerConformance(
       seed: (id: string) => Promise<void> | void;
       markStatus?: (
         sessionId: string,
-        status: SessionStatus,
+        status: RenderStatus,
       ) => Promise<void> | void;
     }) => Promise<T>,
   ): Promise<T> {

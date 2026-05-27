@@ -4,7 +4,7 @@
  * process restart.
  *
  * Scope:
- *   - {@link SqliteSessionStore}  — persistent sessions + event history.
+ *   - {@link SqliteRenderStore}   — persistent renders + event history.
  *   - {@link SqliteVectorStore}   — persistent RAG vector index.
  *   - {@link SqliteThreadStore}   — persistent chat threads + messages.
  *
@@ -14,8 +14,8 @@
  * package.json.
  */
 
-export { SqliteSessionStore } from './session-store.js';
-export type { SqliteSessionStoreOptions } from './session-store.js';
+export { SqliteRenderStore } from './render-store.js';
+export type { SqliteRenderStoreOptions } from './render-store.js';
 export { SqlitePendingEventConsumer } from './pending-event-consumer.js';
 export type { SqlitePendingEventConsumerOptions } from './pending-event-consumer.js';
 export { SqliteShortCodeIndex } from './short-code-index.js';

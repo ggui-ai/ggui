@@ -20,7 +20,7 @@
  *
  * **Obligations:**
  * - Producer MUST call `publish()` at most once per envelope per session.
- *   The envelope MUST carry a `sessionId` that matches the routing key
+ *   The envelope MUST carry a `renderId` that matches the routing key
  *   and a `seq` that is strictly increasing for the session (gap-free
  *   for a single writer; gaps across concurrent writers surface as
  *   sequence conflicts upstream at the `SessionStreamBuffer.record`
@@ -47,7 +47,7 @@
  *   upstream `close()`) MUST end the async iterator cleanly (return
  *   `{done: true}`). Consumers detect termination and reconnect via
  *   replay.
- * - `close(sessionId)` MUST cause all in-flight subscribers for that
+ * - `close(renderId)` MUST cause all in-flight subscribers for that
  *   session to terminate cleanly. It is idempotent.
  *
  * **Observable violation:**
@@ -62,7 +62,7 @@
  * - {@link SessionStreamBuffer} — stores envelopes for replay on reconnect.
  *   StreamFanout is the LIVE channel; replay is the HISTORY channel.
  *   A typical emitter path: `buffer.record(delivery)` → get
- *   BufferedStreamEnvelope → `fanout.publish({sessionId, envelope})`.
+ *   BufferedStreamEnvelope → `fanout.publish({renderId, envelope})`.
  * - {@link SessionStore} — durable session state. Orthogonal; fanout
  *   carries data to live subscribers, SessionStore persists it.
  *
@@ -71,7 +71,7 @@
  * OSS default: `InProcessStreamFanout` (from `@ggui-ai/mcp-server-core/in-memory`).
  *
  * Hosted binding (Path A): a Redis-backed implementation in a closed
- * adapter package. Key pattern: `ggui:stream:<sessionId>`; payload is
+ * adapter package. Key pattern: `ggui:stream:<renderId>`; payload is
  * the JSON-encoded {@link BufferedStreamEnvelope}; close fires a
  * close-marker record that subscribers recognize and unwind.
  */
@@ -82,8 +82,8 @@ import type { BufferedStreamEnvelope } from './session-stream-buffer.js';
  * extension (future fields would go here without breaking the signature).
  */
 export interface StreamFanoutPublishInput {
-  /** Session this frame belongs to. Routing key for fanout. */
-  readonly sessionId: string;
+  /** Render this frame belongs to. Routing key for fanout. */
+  readonly renderId: string;
   /**
    * The buffered envelope — already seq-stamped and schemaVersion-tagged
    * by {@link SessionStreamBuffer.record}. StreamFanout does NOT stamp or
@@ -121,7 +121,7 @@ export interface StreamFanout {
    *   - Implementation-detected error (Redis disconnect, etc.) —
    *     iterator throws; consumer reconnects via `SessionStreamBuffer.replay`.
    */
-  subscribe(sessionId: string): AsyncIterable<BufferedStreamEnvelope>;
+  subscribe(renderId: string): AsyncIterable<BufferedStreamEnvelope>;
 
   /**
    * Terminate all in-flight subscribers for this session. Typically
@@ -129,5 +129,5 @@ export interface StreamFanout {
    * don't leak across session lifecycles. Idempotent; calling `close`
    * on a session with no subscribers is a no-op.
    */
-  close(sessionId: string): Promise<void>;
+  close(renderId: string): Promise<void>;
 }

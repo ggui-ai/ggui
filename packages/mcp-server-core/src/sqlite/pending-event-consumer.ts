@@ -8,7 +8,7 @@
  * Dynamo adapter; this one stays in `@ggui-ai/mcp-server-core` for
  * dev / single-process / on-prem self-hosters.
  *
- * ## Storage layout (Model C, stackItemId-keyed)
+ * ## Storage layout (Model C, renderId-keyed)
  *
  * Two tables:
  *
@@ -49,7 +49,7 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
-import type { SessionStatus } from '@ggui-ai/protocol';
+import type { RenderStatus } from '@ggui-ai/protocol';
 import {
   type PendingEventConsumeResult,
   type PendingEventConsumer,
@@ -77,7 +77,7 @@ export interface SqlitePendingEventConsumerOptions {
 
 interface PipeRow {
   stack_item_id: string;
-  status: SessionStatus;
+  status: RenderStatus;
   last_activity_at: number;
   expires_at: number;
 }
@@ -169,18 +169,18 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
   }
 
   async consumeAndClear(
-    stackItemId: string,
+    renderId: string,
     ttlMs: number,
   ): Promise<PendingEventConsumeResult> {
     const txn = this.db.transaction(() => {
-      const pipe = this.stmts.getPipe.get(stackItemId);
+      const pipe = this.stmts.getPipe.get(renderId);
       if (!pipe) {
-        throw new PendingPipeNotFoundError(stackItemId);
+        throw new PendingPipeNotFoundError(renderId);
       }
-      const eventRows = this.stmts.selectEventsForPipe.all(stackItemId);
-      this.stmts.deleteEventsForPipe.run(stackItemId);
+      const eventRows = this.stmts.selectEventsForPipe.all(renderId);
+      this.stmts.deleteEventsForPipe.run(renderId);
       const t = this.now();
-      this.stmts.updateActivity.run(t, t + ttlMs, stackItemId);
+      this.stmts.updateActivity.run(t, t + ttlMs, renderId);
       return {
         events: eventRows.map((row) =>
           parseEventJson(row.event_json),
@@ -192,49 +192,49 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
   }
 
   async append(
-    stackItemId: string,
+    renderId: string,
     event: Record<string, unknown>,
   ): Promise<void> {
     const txn = this.db.transaction(() => {
-      const pipe = this.stmts.getPipe.get(stackItemId);
+      const pipe = this.stmts.getPipe.get(renderId);
       if (!pipe) {
-        throw new PendingPipeNotFoundError(stackItemId);
+        throw new PendingPipeNotFoundError(renderId);
       }
-      const seqRow = this.stmts.nextSeq.get(stackItemId);
+      const seqRow = this.stmts.nextSeq.get(renderId);
       const seq = seqRow?.next_seq ?? 1;
       const t = this.now();
       this.stmts.insertEvent.run(
-        stackItemId,
+        renderId,
         seq,
         JSON.stringify(event),
         t,
       );
-      this.stmts.updateActivity.run(t, pipe.expires_at, stackItemId);
+      this.stmts.updateActivity.run(t, pipe.expires_at, renderId);
     });
     txn();
   }
 
-  markCreated(stackItemId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
+  markCreated(renderId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
     const t = this.now();
     // INSERT OR IGNORE — idempotent on re-mark.
-    this.stmts.insertPipe.run(stackItemId, 'active', t, t + ttlMs);
+    this.stmts.insertPipe.run(renderId, 'active', t, t + ttlMs);
   }
 
-  markStatus(stackItemId: string, status: SessionStatus): void {
-    this.stmts.updateStatus.run(status, stackItemId);
+  markStatus(renderId: string, status: RenderStatus): void {
+    this.stmts.updateStatus.run(status, renderId);
   }
 
-  markDeleted(stackItemId: string): void {
+  markDeleted(renderId: string): void {
     const txn = this.db.transaction(() => {
-      this.stmts.deleteEventsForPipe.run(stackItemId);
-      this.stmts.deletePipe.run(stackItemId);
+      this.stmts.deleteEventsForPipe.run(renderId);
+      this.stmts.deletePipe.run(renderId);
     });
     txn();
   }
 
   /** Inspector for tests: how many events are queued? */
-  pendingCount(stackItemId: string): number {
-    const rows = this.stmts.selectEventsForPipe.all(stackItemId);
+  pendingCount(renderId: string): number {
+    const rows = this.stmts.selectEventsForPipe.all(renderId);
     return rows.length;
   }
 }

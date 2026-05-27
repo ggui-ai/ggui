@@ -2,30 +2,30 @@
  * `PendingEventConsumer` — atomic fetch-and-clear contract for the
  * pending-events buffer that backs `ggui_consume`.
  *
- * **Keying is `stackItemId`-scoped** (Model C, 2026-05-12). Each
- * pushed UI surface (`ggui_push` mints a `stackItemId`) gets its own
- * pipe: opened by `markCreated(stackItemId)` at push time, written
- * by `append(stackItemId, event)` from `ggui_runtime_submit_action`
- * dispatch envelopes, drained by `consumeAndClear(stackItemId)` from
- * `ggui_consume`, and closed by `markDeleted(stackItemId)` on
+ * **Keying is `renderId`-scoped** (Model C, 2026-05-12). Each
+ * pushed UI surface (`ggui_push` mints a `renderId`) gets its own
+ * pipe: opened by `markCreated(renderId)` at push time, written
+ * by `append(renderId, event)` from `ggui_runtime_submit_action`
+ * dispatch envelopes, drained by `consumeAndClear(renderId)` from
+ * `ggui_consume`, and closed by `markDeleted(renderId)` on
  * `ggui_pop` / `ggui_close`.
  *
- * Why stackItemId, not sessionId — two stack items in the same
+ * Why renderId, not sessionId — two renders in the same
  * session can each have unconsumed events; sessionId-keyed pipes
  * would let one consumer's drain swallow the other's events. The
- * stackItemId surface matches MCP Apps' "one back-channel per
+ * renderId surface matches MCP Apps' "one back-channel per
  * rendered widget" mental model and avoids cross-talk.
  *
  * **Lifecycle**:
  *
- *   1. `ggui_push` mints stackItemId → handler calls `markCreated`
+ *   1. `ggui_push` mints renderId → handler calls `markCreated`
  *      so events queued BEFORE the agent's first `ggui_consume`
  *      land in the pipe (the user can click before the agent
  *      starts polling).
  *   2. iframe-runtime fires `ggui_runtime_submit_action` (kind:'dispatch')
  *      → handler calls `append`. The runtime tags the envelope with
- *      `stackItemId` sourced from its `_meta.ggui.bootstrap`.
- *   3. `ggui_consume({stackItemId, timeout})` blocks; long-poll loop
+ *      `renderId` sourced from its `_meta.ggui.bootstrap`.
+ *   3. `ggui_consume({renderId, timeout})` blocks; long-poll loop
  *      calls `consumeAndClear` until events arrive OR status flips
  *      to `'completed'` OR `timeout` elapses.
  *   4. `ggui_pop` / `ggui_close` → `markDeleted` so subsequent ops
@@ -46,7 +46,7 @@
  * (queue semantics) while the event log is append-only retained.
  */
 
-import type { SessionStatus } from '@ggui-ai/protocol';
+import type { RenderStatus } from '@ggui-ai/protocol';
 
 /**
  * Result envelope from a single `consumeAndClear` call.
@@ -63,14 +63,14 @@ import type { SessionStatus } from '@ggui-ai/protocol';
  */
 export interface PendingEventConsumeResult {
   readonly events: ReadonlyArray<Record<string, unknown>>;
-  readonly status: SessionStatus;
+  readonly status: RenderStatus;
 }
 
 /**
  * The contract.
  *
  * Implementations MUST:
- *   - Serialize `consumeAndClear` per `stackItemId` so concurrent
+ *   - Serialize `consumeAndClear` per `renderId` so concurrent
  *     consumers can't each see the same buffered events. Cloud
  *     achieves this via DDB UpdateItem; in-memory uses a per-stack
  *     mutex; sqlite uses a transaction.
@@ -90,7 +90,7 @@ export interface PendingEventConsumeResult {
  */
 export interface PendingEventConsumer {
   /**
-   * Fetch every buffered pending event for `stackItemId`, clear the
+   * Fetch every buffered pending event for `renderId`, clear the
    * buffer, bump the pipe's last-activity heartbeat by `ttlMs`, and
    * return what was there at clear time. Atomic.
    *
@@ -98,28 +98,28 @@ export interface PendingEventConsumer {
    *   `PendingPipeNotFoundError`).
    */
   consumeAndClear(
-    stackItemId: string,
+    renderId: string,
     ttlMs: number,
   ): Promise<PendingEventConsumeResult>;
 
   /**
-   * Append `event` to a stack item's pending-events buffer.
+   * Append `event` to a render's pending-events buffer.
    *
    * Used by `ggui_runtime_submit_action` (and any other producer of
    * agent-bound events) to enqueue a row that the next
    * `consumeAndClear` will surface. Implementations MUST serialize
-   * appends per-`stackItemId` so concurrent producers don't lose
+   * appends per-`renderId` so concurrent producers don't lose
    * events; ordering within a single stackItem is FIFO.
    *
    * @throws when the pipe row doesn't exist.
    */
   append(
-    stackItemId: string,
+    renderId: string,
     event: Record<string, unknown>,
   ): Promise<void>;
 
   /**
-   * Open a pipe for `stackItemId` so subsequent `append` /
+   * Open a pipe for `renderId` so subsequent `append` /
    * `consumeAndClear` calls work. Optional on the interface because
    * the cloud Dynamo adapter implicitly opens via UpdateItem upsert
    * semantics and doesn't expose a separate creation path; OSS
@@ -127,25 +127,25 @@ export interface PendingEventConsumer {
    *
    * Idempotent — calling on an existing pipe is a no-op.
    *
-   * The `ggui_push` handler calls this at stackItemId mint time so
+   * The `ggui_push` handler calls this at renderId mint time so
    * gesture appends from `ggui_runtime_submit_action` (which can land
    * BEFORE the agent's first `ggui_consume`) don't get lost.
    */
-  markCreated?(stackItemId: string, ttlMs?: number): void;
+  markCreated?(renderId: string, ttlMs?: number): void;
 
   /**
    * Flip the pipe's observed status — typically to `'completed'` so
    * the consume long-poll loop short-circuits. Optional for the same
    * reason as `markCreated`.
    */
-  markStatus?(stackItemId: string, status: SessionStatus): void;
+  markStatus?(renderId: string, status: RenderStatus): void;
 
   /**
    * Close + remove the pipe. Subsequent ops throw
    * `PendingPipeNotFoundError`. Called by `ggui_pop` / `ggui_close`
    * to release pipe resources.
    */
-  markDeleted?(stackItemId: string): void;
+  markDeleted?(renderId: string): void;
 }
 
 /**
@@ -159,8 +159,8 @@ export interface PendingEventConsumer {
  * package.
  */
 export class PendingPipeNotFoundError extends Error {
-  constructor(stackItemId: string) {
-    super(`pending-event pipe not found for stack item: ${stackItemId}`);
+  constructor(renderId: string) {
+    super(`pending-event pipe not found for render: ${renderId}`);
     this.name = 'PendingPipeNotFoundError';
   }
 }

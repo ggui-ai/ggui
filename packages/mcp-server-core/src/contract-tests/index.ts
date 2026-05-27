@@ -26,11 +26,11 @@ export { kvStoreContract } from './kv-store.js';
 export type { KvContractClock, KvContractOptions } from './kv-store.js';
 export { embeddingProviderContract } from './embedding-provider.js';
 export { negotiatorContract } from './negotiator.js';
-export { sessionStoreContract } from './session-store.js';
+export { renderStoreContract } from './render-store.js';
 export type {
-  SessionStoreContractClock,
-  SessionStoreContractOptions,
-} from './session-store.js';
+  RenderStoreContractClock,
+  RenderStoreContractOptions,
+} from './render-store.js';
 export { threadStoreContract } from './thread-store.js';
 export { authAdapterContract } from './auth-adapter.js';
 export type { AuthAdapterContractOptions } from './auth-adapter.js';
@@ -41,24 +41,16 @@ export type {
 } from './pairing.js';
 export { blueprintProviderContract } from './blueprint-provider.js';
 export type { BlueprintProviderContractOptions } from './blueprint-provider.js';
-export {
-  channelEnforcementContract,
-} from './channel-enforcement.js';
-export type {
-  ChannelEnforcementHarness,
-  ChannelEnforcementOutcome,
-  ChannelRejectionCode,
-} from './channel-enforcement.js';
 export { streamFanoutContract } from './stream-fanout.js';
 export { scopedFileStoreContract } from './scoped-file-store.js';
 
 // Bug-class focused conformance suites. Sibling-but-narrower to the
-// existing `sessionStoreContract` / `pendingEventConsumerContract` —
+// existing `renderStoreContract` / `pendingEventConsumerContract` —
 // these pin known real bug classes plus the foundational lifecycle
 // invariants (event monotonicity, close surface). Plug into adapter
 // test suites alongside the basic contract to widen the drift net.
-export { runSessionStoreConformance } from './session-store.conformance.js';
-export type { SessionStoreConformanceFactory } from './session-store.conformance.js';
+export { runRenderStoreConformance } from './render-store.conformance.js';
+export type { RenderStoreConformanceFactory } from './render-store.conformance.js';
 export { runPendingEventConsumerConformance } from './pending-event-consumer.conformance.js';
 export type { PendingEventConsumerConformanceFactory } from './pending-event-consumer.conformance.js';
 
