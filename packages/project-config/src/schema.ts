@@ -136,15 +136,23 @@ const AppSchema = z.strictObject({
    */
   publicEnv: appPublicEnvSchema.optional(),
   /**
-   * MCP-Apps presentation mode (canvas slice). `'canvas'` makes
-   * `ggui_new_session` mint a session-scoped iframe
-   * (`ui://ggui/session/<sessionId>`) and route subsequent pushes
-   * through the session WebSocket channel instead of returning a
-   * per-push `ui://ggui/render/<shortCode>` resource. `'inline'`
-   * (default when omitted) preserves the per-push iframe behavior
-   * that flagship MCP-Apps hosts already expect.
+   * App-default display-mode hint stamped on every `ggui_push` from
+   * this app via `_meta.ui.displayMode`. Spec-aligned with MCP App
+   * display literals (`'inline' | 'fullscreen' | 'pip'`).
+   *
+   * Honored by hosts as a PRESENTATION preference — `'fullscreen'`
+   * says "render as a main view"; `'inline'` says "stack vertically in
+   * the chat log"; `'pip'` says "render as picture-in-picture overlay".
+   * The wire mechanism is identical regardless of mode (every push
+   * stamps its own `_meta.ui.resourceUri` and every iframe goes
+   * through the same runtime mount path); display mode controls ONLY
+   * how the host arranges the iframes it mounts. Agents can override
+   * per push via `ggui_push.input.displayMode`.
+   *
+   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * default, typically `'inline'`).
    */
-  defaultMcpAppsMode: z.enum(['inline', 'canvas']).optional(),
+  defaultDisplayMode: z.enum(['inline', 'fullscreen', 'pip']).optional(),
 });
 
 /**

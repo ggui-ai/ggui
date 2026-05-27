@@ -22,7 +22,7 @@ import {
   STDLIB_GADGETS,
   type AppBlueprintSearchConfig,
   type GadgetDescriptor,
-  type McpAppsMode,
+  type McpUiDisplayMode,
 } from '@ggui-ai/protocol';
 
 /**
@@ -79,22 +79,23 @@ export interface App {
    */
   readonly blueprintSearchConfig?: AppBlueprintSearchConfig;
   /**
-   * How this app surfaces in MCP-Apps-capable hosts. Absent ⇒
-   * `'inline'` (zero-config default; preserves all existing app
-   * behavior).
+   * App-default display-mode hint stamped on every `ggui_push` from this
+   * app via `_meta.ui.displayMode`. Honored by hosts as a PRESENTATION
+   * preference — `'fullscreen'` says "render as a main view, replacing
+   * the previous iframe in the primary slot"; `'inline'` says "stack
+   * vertically in the chat log"; `'pip'` says "render as
+   * picture-in-picture overlay" (reserved).
    *
-   * Read by:
-   *   - `ggui_new_session`: when `'canvas'`, stamps
-   *     `_meta.ui.resourceUri = "ui://ggui/session/<sessionId>"` on the
-   *     tool result so the host mints the canvas iframe.
-   *   - `ggui_push`: when `'canvas'` AND the session's
-   *     `canvasLoaded` is true, delivers state via live-channel WS instead
-   *     of returning a per-push resource.
+   * The wire mechanism is identical regardless of mode: every push
+   * stamps its own `_meta.ui.resourceUri` and every iframe goes through
+   * the same runtime mount path. Display mode controls ONLY how the
+   * host arranges the iframes it mounts. Per-push agents can override
+   * via `ggui_push.input.displayMode`.
    *
-   * Currently lands behind app config; a future release may surface
-   * it as an operator toggle in the console.
+   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * default, typically `'inline'`).
    */
-  readonly defaultMcpAppsMode?: McpAppsMode;
+  readonly defaultDisplayMode?: McpUiDisplayMode;
   /**
    * Public environment values the App makes available to registered
    * gadgets via `getPublicEnv()`. Each key
@@ -142,7 +143,7 @@ export interface ComposeAppInput {
   readonly defaultThemeId?: string;
   readonly availableThemeIds?: readonly string[];
   readonly blueprintSearchConfig?: AppBlueprintSearchConfig;
-  readonly defaultMcpAppsMode?: McpAppsMode;
+  readonly defaultDisplayMode?: McpUiDisplayMode;
   readonly publicEnv?: Readonly<Record<string, string>>;
 }
 
@@ -185,8 +186,8 @@ export function composeApp(input: ComposeAppInput): App {
     ...(input.blueprintSearchConfig !== undefined
       ? { blueprintSearchConfig: input.blueprintSearchConfig }
       : {}),
-    ...(input.defaultMcpAppsMode !== undefined
-      ? { defaultMcpAppsMode: input.defaultMcpAppsMode }
+    ...(input.defaultDisplayMode !== undefined
+      ? { defaultDisplayMode: input.defaultDisplayMode }
       : {}),
     ...(input.publicEnv !== undefined ? { publicEnv: input.publicEnv } : {}),
   };

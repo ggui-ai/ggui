@@ -51,7 +51,7 @@ import {
   selectEmailSenderFromEnv,
   type BlueprintProvider,
   type GadgetDescriptor,
-  type McpAppsMode,
+  type McpUiDisplayMode,
   type DiscoveredPrimitiveCatalog,
   type EmailSender,
   type GenerationDeps,
@@ -425,14 +425,13 @@ export interface BuildMcpServerBackendOptions {
   readonly publicEnv?: Readonly<Record<string, string>>;
 
   /**
-   * Per-app MCP-Apps presentation mode from
-   * `ggui.json#app.defaultMcpAppsMode`. `'canvas'` makes
-   * `ggui_new_session` mint a session-scoped iframe
-   * (`ui://ggui/session/<sessionId>`) and route subsequent pushes
-   * through the session channel; `'inline'` (or omitted) preserves
-   * the per-push-iframe legacy behavior.
+   * Per-app default display-mode hint from
+   * `ggui.json#app.defaultDisplayMode`. Stamped on every `ggui_push`
+   * via `_meta.ui.displayMode` so the host knows whether to present
+   * the iframe inline, fullscreen, or picture-in-picture. See
+   * `App.defaultDisplayMode` for the full semantics.
    */
-  readonly defaultMcpAppsMode?: McpAppsMode;
+  readonly defaultDisplayMode?: McpUiDisplayMode;
 }
 
 /**
@@ -671,11 +670,10 @@ export function buildMcpServerBackend(
     ...(opts.publicEnv !== undefined && Object.keys(opts.publicEnv).length > 0
       ? { defaultPublicEnv: opts.publicEnv }
       : {}),
-    // `ggui.json#app.defaultMcpAppsMode`. `'canvas'` makes
-    // `ggui_new_session` mint a session-scoped iframe + route
-    // subsequent pushes through the session channel; absent ⇒ inline.
-    ...(opts.defaultMcpAppsMode !== undefined
-      ? { defaultMcpAppsMode: opts.defaultMcpAppsMode }
+    // `ggui.json#app.defaultDisplayMode`. Stamped per-push as
+    // `_meta.ui.displayMode`; controls only host-side presentation.
+    ...(opts.defaultDisplayMode !== undefined
+      ? { defaultDisplayMode: opts.defaultDisplayMode }
       : {}),
   });
 

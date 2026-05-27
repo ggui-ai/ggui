@@ -772,8 +772,8 @@ async function runServeCommand(args: string[]): Promise<number> {
           Object.keys(plan.manifest.app.publicEnv).length > 0
             ? { publicEnv: plan.manifest.app.publicEnv }
             : {}),
-          ...(plan.manifest?.app?.defaultMcpAppsMode !== undefined
-            ? { defaultMcpAppsMode: plan.manifest.app.defaultMcpAppsMode }
+          ...(plan.manifest?.app?.defaultDisplayMode !== undefined
+            ? { defaultDisplayMode: plan.manifest.app.defaultDisplayMode }
             : {}),
           generation: generationBinding.generation,
           ...(mcpMounts.length > 0 ? { mcpMounts } : {}),

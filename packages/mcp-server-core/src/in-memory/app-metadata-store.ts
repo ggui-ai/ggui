@@ -17,7 +17,7 @@ import {
   lintGadgetCatalog,
   strictGadgetDescriptorSchema,
   type GadgetDescriptor,
-  type McpAppsMode,
+  type McpUiDisplayMode,
 } from '@ggui-ai/protocol';
 import {
   composeApp,
@@ -99,11 +99,10 @@ export interface InMemoryAppRegisterInput {
   readonly defaultThemeId?: string;
   readonly availableThemeIds?: readonly string[];
   /**
-   * MCP-Apps presentation mode for this app. Absent ⇒ `'inline'`
-   * (zero-config default). See `App.defaultMcpAppsMode` for semantics.
-   * 
+   * Default display-mode hint stamped on every push from this app.
+   * See `App.defaultDisplayMode` for semantics.
    */
-  readonly defaultMcpAppsMode?: McpAppsMode;
+  readonly defaultDisplayMode?: McpUiDisplayMode;
   /**
    * Public env channel values. Stamped on `App.publicEnv` for
    * `getPublicEnv()` to read via the bootstrap projection. Omitted ⇒
@@ -136,12 +135,12 @@ export interface InMemoryAppMetadataStoreDefaults {
    */
   readonly defaultPublicEnv?: Readonly<Record<string, string>>;
   /**
-   * Canvas slice — operator-declared MCP-Apps presentation mode from
-   * `ggui.json#app.defaultMcpAppsMode`. Apps the store hasn't seen
-   * inherit this value on `App.defaultMcpAppsMode`. Omitted ⇒ field
-   * absent (consumers treat as `'inline'`).
+   * Operator-declared display-mode hint from
+   * `ggui.json#app.defaultDisplayMode`. Apps the store hasn't seen
+   * inherit this value on `App.defaultDisplayMode`. Omitted ⇒ field
+   * absent (no per-push hint stamped; host picks its own default).
    */
-  readonly defaultMcpAppsMode?: McpAppsMode;
+  readonly defaultDisplayMode?: McpUiDisplayMode;
 }
 
 export class InMemoryAppMetadataStore implements AppMetadataStore {
@@ -183,8 +182,8 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
     // free to do per-instance default-merging while every other call
     // site composes from a single source of truth.
     assertGadgetsValid(input.gadgets, 'register-input');
-    const resolvedMcpAppsMode =
-      input.defaultMcpAppsMode ?? this.defaults.defaultMcpAppsMode;
+    const resolvedDisplayMode =
+      input.defaultDisplayMode ?? this.defaults.defaultDisplayMode;
     const composed = composeApp({
       id: appId,
       gadgets:
@@ -193,8 +192,8 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
         input.defaultThemeId ?? this.defaults.defaultThemeId,
       availableThemeIds:
         input.availableThemeIds ?? this.defaults.availableThemeIds,
-      ...(resolvedMcpAppsMode !== undefined
-        ? { defaultMcpAppsMode: resolvedMcpAppsMode }
+      ...(resolvedDisplayMode !== undefined
+        ? { defaultDisplayMode: resolvedDisplayMode }
         : {}),
       publicEnv: input.publicEnv ?? this.defaults.defaultPublicEnv,
     });
@@ -229,15 +228,15 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
       (this.defaults.defaultGadgets &&
         this.defaults.defaultGadgets.length > 0) ||
       this.defaults.defaultPublicEnv !== undefined ||
-      this.defaults.defaultMcpAppsMode !== undefined;
+      this.defaults.defaultDisplayMode !== undefined;
     if (!hasAnyDefault) return null;
     return composeApp({
       id: appId,
       gadgets: this.defaults.defaultGadgets,
       defaultThemeId: this.defaults.defaultThemeId,
       availableThemeIds: this.defaults.availableThemeIds,
-      ...(this.defaults.defaultMcpAppsMode !== undefined
-        ? { defaultMcpAppsMode: this.defaults.defaultMcpAppsMode }
+      ...(this.defaults.defaultDisplayMode !== undefined
+        ? { defaultDisplayMode: this.defaults.defaultDisplayMode }
         : {}),
       publicEnv: this.defaults.defaultPublicEnv,
     });

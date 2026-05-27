@@ -13,7 +13,6 @@
  */
 import type {
   HostContextProjection,
-  McpAppsMode,
   Session,
   SessionStackEntry,
 } from '@ggui-ai/protocol';
@@ -100,6 +99,23 @@ export interface CreateSessionInput {
    * reference.
    */
   themeId?: string;
+  /**
+   * Host-supplied session-grouping slice, parsed from the inbound
+   * `tools/call` request's `_meta["ai.ggui/host-session"]`. Set ONCE
+   * at session creation (the first call materializing this row);
+   * subsequent calls naming the same session id MUST NOT update it.
+   *
+   * Captures opt-in host identity for later rehydration via
+   * `ggui_list_sessions(hostName, hostSessionId)`. Implementations
+   * MUST persist both fields together on stores that survive restart;
+   * the in-memory reference holds it for the process lifetime only.
+   * Absent on legacy rows (pre-slice) — those sessions are
+   * non-rehydratable by design.
+   */
+  hostSession?: {
+    readonly hostName: string;
+    readonly hostSessionId: string;
+  };
 }
 
 /**
@@ -113,6 +129,21 @@ export interface SessionFilter {
   createdBefore?: number;
   limit?: number;
   cursor?: string;
+  /**
+   * Filter by the host that created the session — paired with
+   * {@link hostSessionId} for full-key lookups, or used alone to list
+   * every session a given host has ever opened against this app.
+   * Powers the `ggui_list_sessions` tool's host-scoped resume flow.
+   */
+  hostName?: string;
+  /**
+   * Filter by the host-supplied grouping key. Typically paired with
+   * {@link hostName} so the same host-side id across two different
+   * hosts cannot alias. Matches the persisted slice from
+   * {@link CreateSessionInput.hostSession}; sessions without a host
+   * slice never match (one-shot rows are non-rehydratable).
+   */
+  hostSessionId?: string;
 }
 
 /**
@@ -133,20 +164,6 @@ export interface SessionPatch {
    * client-side in `host-context-emitter`.
    */
   hostContext?: HostContextProjection;
-  /**
-   * Set at `ggui_new_session` time from the
-   * app's `defaultMcpAppsMode`. Frozen for the session's life; mid-
-   * session app-config changes don't disrupt active sessions.
-   */
-  mcpAppsMode?: McpAppsMode;
-  /**
-   * Flipped to `true` by the session-channel
-   * handler when the canvas iframe's `ui/initialize` completes AND
-   * its live-channel subscription opens. `ggui_push` reads this to
-   * decide WS-delivery (canvas loaded) vs. inline fallback (canvas
-   * not yet up).
-   */
-  canvasLoaded?: boolean;
   /**
    * Updated on every `canvas_navigated`
    * inbound envelope to the new top of the iframe's NavStackModel.

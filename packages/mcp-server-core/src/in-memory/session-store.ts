@@ -92,6 +92,9 @@ export class InMemorySessionStore implements SessionStore {
         ? { endUserIdentity: input.endUserIdentity }
         : {}),
       ...(input.themeId !== undefined ? { themeId: input.themeId } : {}),
+      ...(input.hostSession !== undefined
+        ? { hostSession: input.hostSession }
+        : {}),
       stack: [],
       currentStackIndex: -1,
       adapterPermissions: {},
@@ -124,6 +127,14 @@ export class InMemorySessionStore implements SessionStore {
       if (filter.status !== undefined) {
         if (computeStatus(s, bucket.closed, now) !== filter.status) continue;
       }
+      if (
+        filter.hostName !== undefined
+        && s.hostSession?.hostName !== filter.hostName
+      ) continue;
+      if (
+        filter.hostSessionId !== undefined
+        && s.hostSession?.hostSessionId !== filter.hostSessionId
+      ) continue;
       out.push(cloneSession(s));
     }
     // Stable, predictable ordering for test assertions: createdAt ASC, id tiebreak.
@@ -147,8 +158,6 @@ export class InMemorySessionStore implements SessionStore {
     // patch parameter accepted so the contract test can exercise the
     // write path without failing for unknown-field reasons.
     if (patch.hostContext !== undefined) bucket.session.hostContext = patch.hostContext;
-    if (patch.mcpAppsMode !== undefined) bucket.session.mcpAppsMode = patch.mcpAppsMode;
-    if (patch.canvasLoaded !== undefined) bucket.session.canvasLoaded = patch.canvasLoaded;
     // `null` clears the field — used when
     // the user pops to an empty navStack so the next ggui_consume
     // falls back to the legacy active-item resolution (currentStackIndex).

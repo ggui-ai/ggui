@@ -114,10 +114,10 @@ interface SessionRow {
   connection_id: string | null;
   closed: number;
   theme_id: string | null;
-  mcp_apps_mode: string | null;
-  canvas_loaded: number | null;
   host_context: string | null;
   active_stack_item_id: string | null;
+  host_name: string | null;
+  host_session_id: string | null;
 }
 
 /** Shape of a raw `session_events` row as stored in SQLite. */
@@ -152,8 +152,6 @@ export class SqliteSessionStore implements SessionStore {
     listAll: SqliteStatement<unknown[], SessionRow>;
     updateTimestamps: SqliteStatement<unknown[]>;
     updateStack: SqliteStatement<unknown[]>;
-    updateMcpAppsMode: SqliteStatement<unknown[]>;
-    updateCanvasLoaded: SqliteStatement<unknown[]>;
     updateHostContext: SqliteStatement<unknown[]>;
     updateActiveStackItemId: SqliteStatement<unknown[]>;
     deleteSession: SqliteStatement<unknown[]>;
@@ -204,12 +202,6 @@ export class SqliteSessionStore implements SessionStore {
     if (!hasCol('theme_id')) {
       this.db.exec(`ALTER TABLE sessions ADD COLUMN theme_id TEXT`);
     }
-    if (!hasCol('mcp_apps_mode')) {
-      this.db.exec(`ALTER TABLE sessions ADD COLUMN mcp_apps_mode TEXT`);
-    }
-    if (!hasCol('canvas_loaded')) {
-      this.db.exec(`ALTER TABLE sessions ADD COLUMN canvas_loaded INTEGER`);
-    }
     if (!hasCol('host_context')) {
       this.db.exec(`ALTER TABLE sessions ADD COLUMN host_context TEXT`);
     }
@@ -218,6 +210,20 @@ export class SqliteSessionStore implements SessionStore {
         `ALTER TABLE sessions ADD COLUMN active_stack_item_id TEXT`,
       );
     }
+    if (!hasCol('host_name')) {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN host_name TEXT`);
+    }
+    if (!hasCol('host_session_id')) {
+      this.db.exec(`ALTER TABLE sessions ADD COLUMN host_session_id TEXT`);
+    }
+    // Composite index for host-scoped lookups. `CREATE INDEX IF NOT
+    // EXISTS` is idempotent — same statement as in SCHEMA_SQL above
+    // (which doesn't run on already-migrated databases that already had
+    // the table). Repeating here covers the upgrade path on DBs that
+    // existed before the index was introduced.
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_sessions_host ON sessions(host_name, host_session_id)`,
+    );
 
     this.stmts = {
       insertSession: this.db.prepare<unknown[]>(INSERT_SESSION_SQL),
@@ -232,12 +238,6 @@ export class SqliteSessionStore implements SessionStore {
       ),
       updateStack: this.db.prepare<unknown[]>(
         `UPDATE sessions SET stack = ?, current_stack_index = ?, last_activity_at = ? WHERE id = ?`,
-      ),
-      updateMcpAppsMode: this.db.prepare<unknown[]>(
-        `UPDATE sessions SET mcp_apps_mode = ? WHERE id = ?`,
-      ),
-      updateCanvasLoaded: this.db.prepare<unknown[]>(
-        `UPDATE sessions SET canvas_loaded = ? WHERE id = ?`,
       ),
       updateHostContext: this.db.prepare<unknown[]>(
         `UPDATE sessions SET host_context = ? WHERE id = ?`,
@@ -312,6 +312,9 @@ export class SqliteSessionStore implements SessionStore {
         ? { endUserIdentity: input.endUserIdentity }
         : {}),
       ...(input.themeId !== undefined ? { themeId: input.themeId } : {}),
+      ...(input.hostSession !== undefined
+        ? { hostSession: input.hostSession }
+        : {}),
       stack: [],
       currentStackIndex: -1,
       adapterPermissions: {},
@@ -335,6 +338,8 @@ export class SqliteSessionStore implements SessionStore {
       null, // connection_id
       0, // closed
       session.themeId ?? null,
+      session.hostSession?.hostName ?? null,
+      session.hostSession?.hostSessionId ?? null,
     );
     return cloneSession(session);
   }
@@ -361,6 +366,8 @@ export class SqliteSessionStore implements SessionStore {
       if (filter.status !== undefined) {
         if (computeRowStatus(row, now) !== filter.status) continue;
       }
+      if (filter.hostName !== undefined && row.host_name !== filter.hostName) continue;
+      if (filter.hostSessionId !== undefined && row.host_session_id !== filter.hostSessionId) continue;
       filtered.push(rowToSession(row));
     }
     const offset = parseCursor(filter.cursor);
@@ -380,16 +387,10 @@ export class SqliteSessionStore implements SessionStore {
       patch.expiresAt ?? null,
       id,
     );
-    // Canvas-mode + host-context session fields. Each column is
-    // updated independently so partial patches don't disturb fields
-    // the caller didn't pass. `null` on `activeStackItemId` clears
-    // the column (matches the in-memory reference's clear semantics).
-    if (patch.mcpAppsMode !== undefined) {
-      this.stmts.updateMcpAppsMode.run(patch.mcpAppsMode, id);
-    }
-    if (patch.canvasLoaded !== undefined) {
-      this.stmts.updateCanvasLoaded.run(patch.canvasLoaded ? 1 : 0, id);
-    }
+    // Each column is updated independently so partial patches don't
+    // disturb fields the caller didn't pass. `null` on
+    // `activeStackItemId` clears the column (matches the in-memory
+    // reference's clear semantics).
     if (patch.hostContext !== undefined) {
       this.stmts.updateHostContext.run(JSON.stringify(patch.hostContext), id);
     }
@@ -690,14 +691,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   connection_id TEXT,
   closed INTEGER NOT NULL DEFAULT 0,
   theme_id TEXT,
-  mcp_apps_mode TEXT,
-  canvas_loaded INTEGER,
   host_context TEXT,
-  active_stack_item_id TEXT
+  active_stack_item_id TEXT,
+  host_name TEXT,
+  host_session_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_app_id ON sessions(app_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+-- Composite index for ggui_list_sessions(hostName, hostSessionId).
+-- Rows without a host slice (legacy / opt-out hosts) carry NULL on both
+-- columns and so never appear in host-scoped queries — which is the
+-- correct semantics (those sessions are non-rehydratable by design).
+CREATE INDEX IF NOT EXISTS idx_sessions_host
+  ON sessions(host_name, host_session_id);
 
 CREATE TABLE IF NOT EXISTS session_events (
   session_id TEXT NOT NULL,
@@ -728,8 +735,9 @@ const INSERT_SESSION_SQL = `
 INSERT INTO sessions (
   id, app_id, user_id, stack, current_stack_index, adapter_permissions,
   event_sequence, created_at, last_activity_at, expires_at,
-  end_user_identity, connection_id, closed, theme_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  end_user_identity, connection_id, closed, theme_id,
+  host_name, host_session_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 // ─────────────────────────────────────────────────────────────────────
@@ -771,12 +779,6 @@ function rowToSession(row: SessionRow): Session {
     if (identity) session.endUserIdentity = identity;
   }
   if (row.theme_id) session.themeId = row.theme_id;
-  if (row.mcp_apps_mode === 'inline' || row.mcp_apps_mode === 'canvas') {
-    session.mcpAppsMode = row.mcp_apps_mode;
-  }
-  if (row.canvas_loaded !== null && row.canvas_loaded !== undefined) {
-    session.canvasLoaded = row.canvas_loaded === 1;
-  }
   if (row.host_context) {
     const ctx = parseJson<NonNullable<Session['hostContext']> | null>(
       row.host_context,
@@ -786,6 +788,16 @@ function rowToSession(row: SessionRow): Session {
   }
   if (row.active_stack_item_id) {
     session.activeStackItemId = row.active_stack_item_id;
+  }
+  // Host-session slice — both columns required together. A row with
+  // only one populated indicates writer-side corruption (or a partial
+  // hand-migration); treat as absent so the consumer's "is rehydratable"
+  // check stays a single null check.
+  if (row.host_name && row.host_session_id) {
+    session.hostSession = {
+      hostName: row.host_name,
+      hostSessionId: row.host_session_id,
+    };
   }
   return session;
 }

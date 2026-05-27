@@ -1,15 +1,20 @@
 # Sample ggui — `canvas-demo`
 
-`ggui serve` configured with `defaultMcpAppsMode: 'canvas'`.
+`ggui serve` configured with `defaultDisplayMode: 'fullscreen'`.
 
-When a host calls `ggui_new_session` against this sample, the MCP host receives `_meta.ui.resourceUri = "ui://ggui/session/<sessionId>"` and mints **one** session-scoped iframe. Subsequent `ggui_push` calls route state through the session WebSocket channel — they do NOT mint a new per-push iframe (`canvasOwnsRender`).
-
-Contrast with `@ggui-samples/ggui-default`, where every `ggui_push` returns its own `ui://ggui/render/<shortCode>` and the host mounts a fresh iframe per push.
+Every `ggui_push` from this app carries `_meta.ui.displayMode: 'fullscreen'`
+as a host hint, in addition to its per-push `_meta.ui.resourceUri`. The
+hint tells hosts to render the iframe as a main view (replacing the
+previous one in the primary slot) rather than stacking it inline in
+the chat log. The wire mechanism is identical to inline mode — every
+push stamps its own resource URI and every iframe goes through the
+same runtime mount path; the only difference is how the host arranges
+the iframes it mounts.
 
 ## What's in here
 
 ```
-ggui.json          { app.defaultMcpAppsMode: 'canvas' }
+ggui.json          { app.defaultDisplayMode: 'fullscreen' }
 package.json       declares `start` script that runs `ggui serve --port 6786`
 ```
 
@@ -19,11 +24,12 @@ package.json       declares `start` script that runs `ggui serve --port 6786`
 pnpm --filter @ggui-samples/ggui-canvas-demo start
 ```
 
-Then call `ggui_new_session` against `http://localhost:6786/mcp` — the response carries `_meta.ui.resourceUri` pointing at the canvas iframe.
+Then call `ggui_new_session` against `http://localhost:6786/mcp` and
+follow up with `ggui_push` — each push response carries
+`_meta.ui.resourceUri` plus `_meta.ui.displayMode: 'fullscreen'`.
 
 ## Used by
 
-The end-to-end suite uses this sample to verify canvas-mode behavior:
-`_meta.ui.resourceUri` minting on `ggui_new_session`, and that subsequent
-pushes route through the session channel rather than minting a new
-per-push `ui://` resource.
+The end-to-end suite uses this sample to verify that the fullscreen
+hint propagates through the push pipeline unchanged regardless of how
+many pushes a session emits.
