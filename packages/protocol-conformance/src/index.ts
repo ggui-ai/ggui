@@ -82,7 +82,6 @@ export {
   allFixtures,
   fixturesByContract,
   bootstrapProtocolFixtures,
-  canvasModeWireShapesFixtures,
   observabilityEventsFixtures,
   refreshSemanticsFixtures,
   reservedChannelAuthorityFixtures,

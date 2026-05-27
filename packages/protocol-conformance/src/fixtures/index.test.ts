@@ -9,7 +9,6 @@ import { describe, expect, it } from 'vitest';
 import {
   allFixtures,
   bootstrapProtocolFixtures,
-  canvasModeWireShapesFixtures,
   fixturesByContract,
   observabilityEventsFixtures,
   refreshSemanticsFixtures,
@@ -19,8 +18,8 @@ import {
 } from './index.js';
 
 describe('fixtures catalog', () => {
-  it('ships 18 fixtures across seven materialized sub-modules', () => {
-    expect(allFixtures.length).toBe(18);
+  it('ships 14 fixtures across six materialized sub-modules', () => {
+    expect(allFixtures.length).toBe(14);
   });
 
   it('classifies every fixture into exactly one sub-module', () => {
@@ -37,10 +36,9 @@ describe('fixtures catalog', () => {
     expect(names.size).toBe(allFixtures.length);
   });
 
-  it('materializes the seven expected sub-modules', () => {
+  it('materializes the six expected sub-modules', () => {
     expect(Object.keys(fixturesByContract).sort()).toEqual([
       'bootstrap-protocol',
-      'canvas-mode-wire-shapes',
       'observability-events',
       'refresh-semantics',
       'reserved-channel-authority',
@@ -51,7 +49,6 @@ describe('fixtures catalog', () => {
 
   it('each sub-module has its documented fixture count', () => {
     expect(bootstrapProtocolFixtures.length).toBe(3);
-    expect(canvasModeWireShapesFixtures.length).toBe(4);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
     expect(wiredActionDispatchFixtures.length).toBe(4);
     expect(observabilityEventsFixtures.length).toBe(2);

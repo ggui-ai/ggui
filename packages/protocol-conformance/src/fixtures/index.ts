@@ -26,14 +26,6 @@
  * expansion and not yet materialized — adding fixtures there is a
  * kit minor version.
  *
- * `canvas-mode-wire-shapes` (4 fixtures) ships the canvas-mode wire
- * contract intent: `canvasMode` bootstrap discriminator,
- * `_ggui:lifecycle` channel + payload, `canvas_navigated` +
- * `host_context_observed` C→S WS messages. Runner activation is a
- * follow-up kit minor once the reference `ConformanceHost` exposes
- * `set-app-mode` + `assert-session-field` + `assert-channel-envelope`
- * directives.
- *
  * ## What is NOT here — the gadget pure-function obligations
  *
  * SPEC §7.7.2's gadget obligations are pure-function obligations, not
@@ -47,7 +39,6 @@
  */
 
 export { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
-export { canvasModeWireShapesFixtures } from './canvas-mode-wire-shapes/index.js';
 export { observabilityEventsFixtures } from './observability-events/index.js';
 export { refreshSemanticsFixtures } from './refresh-semantics/index.js';
 export { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
@@ -56,7 +47,6 @@ export { wiredActionDispatchFixtures } from './wired-action-dispatch/index.js';
 
 import type { TestCase } from '../types.js';
 import { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
-import { canvasModeWireShapesFixtures } from './canvas-mode-wire-shapes/index.js';
 import { observabilityEventsFixtures } from './observability-events/index.js';
 import { refreshSemanticsFixtures } from './refresh-semantics/index.js';
 import { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
@@ -71,7 +61,6 @@ import { wiredActionDispatchFixtures } from './wired-action-dispatch/index.js';
  */
 export type ContractSlug =
   | 'bootstrap-protocol'
-  | 'canvas-mode-wire-shapes'
   | 'observability-events'
   | 'refresh-semantics'
   | 'reserved-channel-authority'
@@ -89,7 +78,6 @@ export type ContractSlug =
  */
 export const fixturesByContract: Readonly<Record<ContractSlug, readonly TestCase[]>> = {
   'bootstrap-protocol': bootstrapProtocolFixtures,
-  'canvas-mode-wire-shapes': canvasModeWireShapesFixtures,
   'observability-events': observabilityEventsFixtures,
   'refresh-semantics': refreshSemanticsFixtures,
   'reserved-channel-authority': reservedChannelAuthorityFixtures,

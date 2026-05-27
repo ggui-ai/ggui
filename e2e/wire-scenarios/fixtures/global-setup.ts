@@ -149,10 +149,11 @@ const SERVICES: readonly ServiceSpec[] = [
     port: Number.parseInt(process.env.GGUI_LEAFLET_PORT ?? '6783', 10),
     healthPath: '/healthz',
   },
-  // Canvas slice — `ggui.json#app.defaultMcpAppsMode: 'canvas'`. Used
-  // by scenarios 23 + 24 to verify `ggui_new_session` mints a
-  // session-scoped iframe resourceUri and subsequent `ggui_push` calls
-  // route through the session channel (no per-push `ui://` minting).
+  // Fullscreen-mode sample — `ggui.json#app.defaultDisplayMode:
+  // 'fullscreen'`. Every push stamps `_meta.ui.displayMode:
+  // 'fullscreen'` so MCP-Apps-spec-compliant hosts arrange the
+  // resulting iframes as a primary panel rather than stacking in
+  // the chat log; the wire mechanism is identical to inline mode.
   {
     name: 'ggui-canvas-demo',
     pkg: '@ggui-samples/ggui-canvas-demo',
