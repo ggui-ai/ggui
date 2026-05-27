@@ -5169,10 +5169,39 @@ export function createGguiServer(
           // Silent — wrappers calling getPublicEnv throw clearly.
         }
       }
+      // Live-mode credential trio. Always minted fresh on /state reads
+      // so the iframe-runtime gets a long-TTL token + the host learns
+      // `wsUrl` (the CSP-permitted WebSocket origin). Without this,
+      // any caller of /state — including the restore-bootstrap path in
+      // every host (claude.ai, ChatGPT, our sample-agent) — receives a
+      // session slice missing `wsUrl`. CSP `connect-src` then omits the
+      // `ws://` scheme, the browser blocks the upgrade, and props_update
+      // never reaches the iframe. ggui_push already stamps this trio
+      // on its resultMeta; mirroring here closes the drift.
+      const liveTrio = mintBootstrap
+        ? mintBootstrap(session.id, session.appId)
+        : undefined;
+      // Polling URL — the iframe-runtime's R6 polling-fallback path
+      // composes its fetch URL from `session.pollingUrl`. The /state
+      // endpoint IS that URL, so we stamp it here; without it the
+      // iframe-runtime can't fall back when the WS upgrade fails.
+      const requestHostForPolling = req.get('host') ?? '';
+      const pollingBase = opts.publicBaseUrl
+        ? opts.publicBaseUrl.replace(/\/$/, '')
+        : `${req.protocol}://${requestHostForPolling}`;
+      const pollingUrl = `${pollingBase}/api/sessions/${encodeURIComponent(session.id)}/state`;
       const sessionMeta: McpAppAiGguiSessionMeta = {
         sessionId: session.id,
         appId: session.appId,
         runtimeUrl: resolveRuntimeUrlForResultMeta(),
+        ...(liveTrio !== undefined
+          ? {
+              wsUrl: liveTrio.wsUrl,
+              wsToken: liveTrio.token,
+              expiresAt: liveTrio.expiresAt,
+            }
+          : {}),
+        pollingUrl,
         ...(stateThemeId !== undefined ? { themeId: stateThemeId } : {}),
         ...(stateThemeMode !== undefined
           ? { themeMode: stateThemeMode }
