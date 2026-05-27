@@ -149,12 +149,12 @@ export type { GguiRenderProps, RenderApi, RenderInfo } from './components/GguiRe
 // Dynamic Component Rendering
 export {
   DynamicComponent,
-  StackItemRenderer,
+  RenderRenderer,
   clearModuleCache,
 } from './components/DynamicComponent';
 export type {
   DynamicComponentProps,
-  StackItemRendererProps,
+  RenderRendererProps,
 } from './components/DynamicComponent';
 
 // Spec-canonical MCP Apps iframe host — re-exported from `@mcp-ui/client`.
@@ -229,8 +229,6 @@ export {
   extractUiMoments,
 } from './invoke/index';
 export type { UiMoment, ExtractUiMomentsOptions } from './invoke/index';
-export { useGenerate } from './hooks/useGenerate';
-export type { UseGenerateOptions, UseGenerateReturn, GenerateOptions, GenerateResult } from './hooks/useGenerate';
 
 // WebSocket
 export { WebSocketManager } from './websocket/WebSocketManager';

@@ -22,12 +22,12 @@
  *      (resolved from `useGguiContext().appConfig.endpointUrl`) and reads
  *      the Anthropic-style SSE stream. Messages accumulate in the hook's
  *      `messages: ConversationMessage[]` state.
- *   2. `extractUiMoments(messages, {sessionResourceOrigin})` scans
+ *   2. `extractUiMoments(messages, {renderResourceOrigin})` scans
  *      `tool_result` blocks and returns the set of `<McpAppIframe>` mounts
  *      the shell should render. See `../invoke/ui-moments.ts`.
  *   3. Render loop interleaves text bubbles (from `text` blocks) with
  *      `<McpAppIframe>` cards (from UiMoments) in content-block order.
- *      Session-resource URL moments render directly; bootstrap-inline
+ *      Render-resource URL moments render directly; bootstrap-inline
  *      moments are supported by the helper but not yet rendered here
  *      (they need a client-side thin-shell HTML builder).
  *
@@ -77,15 +77,15 @@ export interface ChatShellProps {
    */
   endpointUrl?: string;
   /**
-   * Origin to prefix session-resource URLs with — the host's Lambda /
-   * `ggui serve` endpoint serving `/ggui/session-resource/item/<sid>/<stackItemId>`.
+   * Origin to prefix render-resource URLs with — the host's Lambda /
+   * `ggui serve` endpoint serving `/api/renders/<renderId>/resource`.
    * When absent, defaults to:
    *   (1) `useGguiContext().apiBaseUrl` if the provider supplies one;
    *   (2) otherwise, the origin component of the resolved `endpointUrl`.
    * Option (b) UI moments without a valid origin are dropped silently by
    * {@link extractUiMoments}.
    */
-  sessionResourceOrigin?: string;
+  renderResourceOrigin?: string;
 }
 
 /* ── Row types (presentation-only; distinct from invoke-SSE shapes) ── */
@@ -160,8 +160,8 @@ export function buildRows(
   return rows;
 }
 
-/** Derive session-resource origin from explicit prop → context apiBaseUrl → endpointUrl origin. */
-function resolveSessionResourceOrigin(
+/** Derive render-resource origin from explicit prop → context apiBaseUrl → endpointUrl origin. */
+function resolveRenderResourceOrigin(
   explicit: string | undefined,
   apiBaseUrl: string | undefined,
   endpointUrl: string | undefined,
@@ -178,7 +178,7 @@ function resolveSessionResourceOrigin(
 
 /** Map a UiMoment to the `resource` prop `<McpAppIframe>` consumes. */
 function momentToResource(moment: UiMoment): ResourceContents | null {
-  if (moment.source.kind === 'session-resource') {
+  if (moment.source.kind === 'render-resource') {
     return {
       uri: moment.source.url,
       mimeType: 'text/html',
@@ -320,13 +320,13 @@ function buildChatCss(t: ShellTheme): string {
 
 /* ── ChatShell ── */
 
-export function ChatShell({ primaryColor, endpointUrl, sessionResourceOrigin }: ChatShellProps) {
+export function ChatShell({ primaryColor, endpointUrl, renderResourceOrigin }: ChatShellProps) {
   const gguiCtx = useGguiContext();
   const appThemeId = gguiCtx.appConfig?.themeId;
   const resolvedEndpoint = endpointUrl ?? gguiCtx.appConfig?.endpointUrl;
   const resolvedOrigin = useMemo(
-    () => resolveSessionResourceOrigin(sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
-    [sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
+    () => resolveRenderResourceOrigin(renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
+    [renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
   );
 
   // Invoke-SSE transport. useInvoke reads the endpoint from context when
@@ -351,7 +351,7 @@ export function ChatShell({ primaryColor, endpointUrl, sessionResourceOrigin }: 
 
   // Derive UI moments + render rows from the invoke-SSE stream.
   const uiMoments = useMemo(
-    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { sessionResourceOrigin: resolvedOrigin } : {}),
+    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { renderResourceOrigin: resolvedOrigin } : {}),
     [messages, resolvedOrigin],
   );
   const rows = useMemo(() => buildRows(messages, uiMoments), [messages, uiMoments]);

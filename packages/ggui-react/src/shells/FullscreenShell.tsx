@@ -57,10 +57,10 @@ export interface FullscreenShellProps {
    */
   endpointUrl?: string;
   /**
-   * Origin for session-resource URLs. Defaults to `apiBaseUrl` on the
+   * Origin for render-resource URLs. Defaults to `apiBaseUrl` on the
    * context, or the origin component of the resolved `endpointUrl`.
    */
-  sessionResourceOrigin?: string;
+  renderResourceOrigin?: string;
 }
 
 /* ── Constants ── */
@@ -75,7 +75,7 @@ const FALLBACK_STAGES: readonly { at: number; text: string }[] = [
 
 /* ── Helpers ── */
 
-function resolveSessionResourceOrigin(
+function resolveRenderResourceOrigin(
   explicit: string | undefined,
   apiBaseUrl: string | undefined,
   endpointUrl: string | undefined,
@@ -92,7 +92,7 @@ function resolveSessionResourceOrigin(
 
 function momentToResource(moment: UiMoment | null | undefined): ResourceContents | null {
   if (!moment) return null;
-  if (moment.source.kind === 'session-resource') {
+  if (moment.source.kind === 'render-resource') {
     return { uri: moment.source.url, mimeType: 'text/html' };
   }
   return null;
@@ -242,13 +242,13 @@ function buildStyles(t: ShellTheme): Record<string, React.CSSProperties> {
 export function FullscreenShell({
   primaryColor,
   endpointUrl,
-  sessionResourceOrigin,
+  renderResourceOrigin,
 }: FullscreenShellProps) {
   const gguiCtx = useGguiContext();
   const resolvedEndpoint = endpointUrl ?? gguiCtx.appConfig?.endpointUrl;
   const resolvedOrigin = useMemo(
-    () => resolveSessionResourceOrigin(sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
-    [sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
+    () => resolveRenderResourceOrigin(renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
+    [renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
   );
 
   const { messages, send, isStreaming, error } = useInvoke({
@@ -258,7 +258,7 @@ export function FullscreenShell({
   });
 
   const uiMoments = useMemo(
-    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { sessionResourceOrigin: resolvedOrigin } : {}),
+    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { renderResourceOrigin: resolvedOrigin } : {}),
     [messages, resolvedOrigin],
   );
   const cards = useMemo(

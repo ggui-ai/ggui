@@ -98,8 +98,8 @@ export interface AgentShellProps {
    */
   endpointUrl?: string;
   /**
-   * Origin for session-resource URLs. Defaults to `apiBaseUrl` on the
+   * Origin for render-resource URLs. Defaults to `apiBaseUrl` on the
    * context, or the origin component of the resolved `endpointUrl`.
    */
-  sessionResourceOrigin?: string;
+  renderResourceOrigin?: string;
 }

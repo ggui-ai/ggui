@@ -25,7 +25,7 @@ export interface ConsentRequest {
   consentUrl?: string;
   message: string;
   appId?: string;
-  sessionId?: string;
+  renderId?: string;
 }
 
 export interface ConsentOverlayProps {
@@ -42,7 +42,7 @@ export function systemPayloadToConsentRequest(payload: SystemPayload): ConsentRe
     consentUrl: payload.consentUrl,
     message: payload.message ?? `This agent needs access to your ${payload.displayName ?? payload.serviceId} account.`,
     appId: payload.appId,
-    sessionId: payload.sessionId,
+    renderId: payload.renderId,
   };
 }
 
@@ -87,7 +87,7 @@ function ConsentCard({
       const url = new URL(req.consentUrl);
       url.searchParams.set('mode', mode);
       openOrFallback(url.toString());
-    } else if (req.appId && req.sessionId) {
+    } else if (req.appId && req.renderId) {
       // request-credential path — no consentUrl, construct via /api/oauth/connect
       try {
         const resp = await fetch('/api/oauth/connect', {
@@ -97,7 +97,7 @@ function ConsentCard({
             serviceId: req.serviceId,
             mode,
             appId: req.appId,
-            sessionId: req.sessionId,
+            renderId: req.renderId,
           }),
         });
         if (resp.ok) {
@@ -112,11 +112,11 @@ function ConsentCard({
         setConnecting(false);
       }
     }
-  }, [req.consentUrl, req.appId, req.sessionId, req.serviceId, openOrFallback]);
+  }, [req.consentUrl, req.appId, req.renderId, req.serviceId, openOrFallback]);
 
   const handleDeny = useCallback(async () => {
     // Persist denied grant so the agent's polling stops immediately
-    if (req.appId && req.sessionId) {
+    if (req.appId && req.renderId) {
       fetch('/api/oauth/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,12 +124,12 @@ function ConsentCard({
           serviceId: req.serviceId,
           mode: 'denied',
           appId: req.appId,
-          sessionId: req.sessionId,
+          renderId: req.renderId,
         }),
       }).catch(() => {});
     }
     onDismiss(req.serviceId);
-  }, [req.serviceId, req.appId, req.sessionId, onDismiss]);
+  }, [req.serviceId, req.appId, req.renderId, onDismiss]);
 
   return (
     <div style={styles.card}>
@@ -283,7 +283,7 @@ function ClaudePassthroughCard({
           code,
           codeVerifier: codeVerifierRef.current,
           state: stateRef.current,
-          sessionId: req.sessionId,
+          renderId: req.renderId,
           appId: req.appId,
         }),
       });
@@ -301,7 +301,7 @@ function ClaudePassthroughCard({
       setErrorMsg('Network error. Please try again.');
       setStep('waiting');
     }
-  }, [pastedCode, req.sessionId, req.appId, req.serviceId, onDismiss]);
+  }, [pastedCode, req.renderId, req.appId, req.serviceId, onDismiss]);
 
   return (
     <div style={styles.card}>

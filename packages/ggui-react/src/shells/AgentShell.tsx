@@ -9,7 +9,7 @@
  * Data flow mirrors ChatShell:
  *   1. `useInvoke()` reads the agent's `/invoke` SSE endpoint from
  *      `useGguiContext().appConfig.endpointUrl`.
- *   2. `extractUiMoments(messages, {sessionResourceOrigin})` projects
+ *   2. `extractUiMoments(messages, {renderResourceOrigin})` projects
  *      tool_result blocks into `<McpAppIframe>` mount coordinates.
  *   3. `deriveAgentState({messages, isStreaming, uiMoments})` computes
  *      `idle`/`thinking`/`presenting` + the latest assistant text
@@ -183,7 +183,7 @@ function HistoryToggle({ open, onClick }: { open: boolean; onClick: () => void }
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function resolveSessionResourceOrigin(
+function resolveRenderResourceOrigin(
   explicit: string | undefined,
   apiBaseUrl: string | undefined,
   endpointUrl: string | undefined,
@@ -200,7 +200,7 @@ function resolveSessionResourceOrigin(
 
 function momentToResource(moment: UiMoment | null): ResourceContents | null {
   if (!moment) return null;
-  if (moment.source.kind === 'session-resource') {
+  if (moment.source.kind === 'render-resource') {
     return { uri: moment.source.url, mimeType: 'text/html' };
   }
   // Inline-bootstrap moments — rendering them needs a client-side
@@ -217,13 +217,13 @@ export function AgentShell({
   primaryColor: _primaryColor,
   onStateChange,
   endpointUrl,
-  sessionResourceOrigin,
+  renderResourceOrigin,
 }: AgentShellProps) {
   const gguiCtx = useGguiContext();
   const resolvedEndpoint = endpointUrl ?? gguiCtx.appConfig?.endpointUrl;
   const resolvedOrigin = useMemo(
-    () => resolveSessionResourceOrigin(sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
-    [sessionResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
+    () => resolveRenderResourceOrigin(renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint),
+    [renderResourceOrigin, gguiCtx.apiBaseUrl, resolvedEndpoint],
   );
 
   const { messages, send, isStreaming, error } = useInvoke({
@@ -233,7 +233,7 @@ export function AgentShell({
   });
 
   const uiMoments = useMemo(
-    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { sessionResourceOrigin: resolvedOrigin } : {}),
+    () => extractUiMoments(messages, resolvedOrigin !== undefined ? { renderResourceOrigin: resolvedOrigin } : {}),
     [messages, resolvedOrigin],
   );
 

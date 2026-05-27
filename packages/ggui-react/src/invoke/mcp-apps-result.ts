@@ -1,14 +1,13 @@
 /**
- * Extractors for MCP-Apps-shaped `ggui_push` tool_result content on the
- * invoke SSE wire — the consumer side of the `@ggui-ai/server`
+ * Extractors for MCP-Apps-shaped `ggui_render` tool_result content on
+ * the invoke SSE wire — the consumer side of the `@ggui-ai/server`
  * ({@link import('@ggui-ai/server').InvokeStream.toolResultPush}) ↔
  * `@ggui-ai/react` package-API contract.
  *
- * **This is not protocol.** The wire shape (the two `ai.ggui/*` keys on
+ * **This is not protocol.** The wire shape (the `ai.ggui/render` key on
  * `_meta`) lives in `@ggui-ai/protocol/integrations/mcp-apps`
- * (`McpAppAiGguiSessionMeta` + `McpAppAiGguiStackItemMeta`, grouped as
- * {@link McpAppAiGguiMeta}). These helpers are the ergonomic seam the
- * `@ggui-ai/react` consumer uses to pull the slice pair out of a
+ * ({@link McpAppAiGguiRenderMeta}). These helpers are the ergonomic
+ * seam the `@ggui-ai/react` consumer uses to pull the slice out of a
  * `tool_result` content payload without duplicating the type-narrowing
  * logic in every shell.
  *
@@ -17,42 +16,47 @@
  * MUST parse back cleanly through `parseSseStream` + {@link
  * extractMcpAppAiGguiMeta} on the client with the original meta
  * recovered bit-for-bit.
+ *
+ * Post-Phase-B: the two-slice `{session, stackItem}` shape collapses
+ * into a single flat `McpAppAiGguiRenderMeta` slice keyed by
+ * `renderId`.
  */
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
-  parseMcpAppAiGguiMeta,
+  parseMcpAppAiGguiRenderMeta,
   toMcpAppEnvelope,
-  type McpAppAiGguiMeta,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
- * Extract the {@link McpAppAiGguiMeta} pair from a `tool_result.content`
- * payload emitted by a server that called
+ * Extract the {@link McpAppAiGguiRenderMeta} slice from a
+ * `tool_result.content` payload emitted by a server that called
  * {@link import('@ggui-ai/server').InvokeStream.toolResultPush}.
  *
  * Returns `null` when the content is missing / malformed / carries no
- * `ai.ggui/*` keys. Consumers MUST handle the `null` path — a
- * tool_result of the non-bootstrap class (`ggui_update`, `ggui_pop`,
+ * `ai.ggui/render` key. Consumers MUST handle the `null` path — a
+ * tool_result of the non-bootstrap class (`ggui_update`,
  * `ggui_request_credential`, raw text, etc.) legitimately carries no
- * `ai.ggui/*` slices, and the shell should ignore it without throwing.
+ * `ai.ggui/render` slice, and the shell should ignore it without
+ * throwing.
  *
  * @example
  * ```tsx
  * const meta = extractMcpAppAiGguiMeta(toolResultBlock.content);
- * if (meta?.session) {
- *   return <AppRenderer session={meta.session} stackItem={meta.stackItem} />;
+ * if (meta) {
+ *   return <AppRenderer toolResult={buildAppRendererToolResult(meta)} />;
  * }
  * ```
  */
 export function extractMcpAppAiGguiMeta(
   content: unknown,
-): McpAppAiGguiMeta | null {
+): McpAppAiGguiRenderMeta | null {
   if (content === null || typeof content !== 'object') return null;
   const meta = (content as { _meta?: unknown })._meta;
-  const parsed = parseMcpAppAiGguiMeta(meta);
+  const parsed = parseMcpAppAiGguiRenderMeta(meta);
   if (!parsed.ok) return null;
-  // Both slices absent ⇒ no `ai.ggui/*` meta on this tool_result.
-  if (parsed.meta.session === undefined && parsed.meta.stackItem === undefined) {
+  // Key absent ⇒ no `ai.ggui/render` slice on this tool_result.
+  if (parsed.meta === undefined) {
     return null;
   }
   return parsed.meta;
@@ -65,11 +69,12 @@ export function extractMcpAppAiGguiMeta(
 export const extractBootstrapMeta = extractMcpAppAiGguiMeta;
 
 /**
- * Build a {@link CallToolResult} carrying the `ai.ggui/*` slice envelope
- * on `_meta`, ready to hand to `<AppRenderer toolResult={...}>` so it
- * forwards the envelope to the inner iframe via the spec-canonical
- * `ui/notifications/tool-result` postMessage. iframe-runtime re-applies
- * state from this envelope on every `ggui_update` after first mount.
+ * Build a {@link CallToolResult} carrying the `ai.ggui/render` slice
+ * envelope on `_meta`, ready to hand to
+ * `<AppRenderer toolResult={...}>` so it forwards the envelope to the
+ * inner iframe via the spec-canonical `ui/notifications/tool-result`
+ * postMessage. iframe-runtime re-applies state from this envelope on
+ * every `ggui_update` after first mount.
  *
  * The lone `as CallToolResult` cast in this helper bridges Zod's
  * `$loose` mode on the MCP SDK's `CallToolResultSchema._meta`: the
@@ -82,14 +87,14 @@ export const extractBootstrapMeta = extractMcpAppAiGguiMeta;
  * @example
  * ```tsx
  * const toolResult = useMemo(() =>
- *   item.meta ? buildAppRendererToolResult(item.meta) : undefined,
- *   [item.meta],
+ *   render.meta ? buildAppRendererToolResult(render.meta) : undefined,
+ *   [render.meta],
  * );
  * return <AppRenderer toolResult={toolResult} ... />;
  * ```
  */
 export function buildAppRendererToolResult(
-  meta: McpAppAiGguiMeta,
+  meta: McpAppAiGguiRenderMeta,
 ): CallToolResult {
   return {
     content: [],

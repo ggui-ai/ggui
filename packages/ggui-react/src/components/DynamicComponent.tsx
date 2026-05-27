@@ -1,9 +1,17 @@
 /**
- * DynamicComponent - Alias for ReactComponentRenderer.
+ * DynamicComponent — alias for ReactComponentRenderer.
  *
- * Preserves the DynamicComponent and StackItemRenderer public API so
- * existing consumers (ChatShell, FullscreenShell, GguiNavigator, etc.)
- * continue to work without changes.
+ * Preserves the DynamicComponent public API so existing consumers
+ * (ChatShell, FullscreenShell, etc.) continue to work after the
+ * Phase B render-identity collapse.
+ *
+ * Post-Phase-B: the old `StackItemRenderer` (which scoped a wire
+ * provider per stack item via `LegacyScopableWireConfig.scope()`) is
+ * retired. Renders mount one-at-a-time inside `<GguiRender>`; the
+ * scoping factory it composed against is gone. The replacement
+ * `<RenderRenderer>` is a leaf — it consumes the ambient wire context
+ * established by `<GguiRender>` directly. The provisional path (empty
+ * `componentCode`, A2UI preview channel) is preserved unchanged.
  */
 
 import React, { type ReactNode } from 'react';
@@ -11,7 +19,6 @@ import type { CapabilityPermissions, ActionSpec } from '@ggui-ai/protocol';
 import {
   GguiWireProvider,
   useWireContext,
-  type LegacyScopableWireConfig,
   type WireConfig,
 } from '@ggui-ai/wire';
 import { ReactComponentRenderer } from './ReactComponentRenderer';
@@ -28,30 +35,37 @@ import { ProvisionalRenderer } from './ProvisionalRenderer';
 export type DynamicComponentProps = ReactComponentRendererProps;
 
 /**
- * DynamicComponent - Renders a compiled ESM component directly in the React tree.
+ * DynamicComponent — Renders a compiled ESM component directly in the
+ * React tree.
  *
  * @example
  * ```tsx
- * <DynamicComponent code={stackItem.componentCode} />
+ * <DynamicComponent code={render.componentCode} />
  * ```
  */
 export const DynamicComponent = ReactComponentRenderer;
 
 // ---------------------------------------------------------------------------
-// StackItemRenderer
+// RenderRenderer
 // ---------------------------------------------------------------------------
 
 /**
- * Render a stack item with optional controller wrapping
+ * Render a single component-variant render.
+ *
+ * Loose input shape (id + componentCode + props + caps + actionSpec +
+ * contractHash) because callers — preview routes, ad-hoc viewers, the
+ * shells — historically passed a fragment of {@link ComponentRender}
+ * rather than the full type. The shape is internally a superset of the
+ * fields the renderer actually reads.
  *
  * @example
  * ```tsx
- * <StackItemRenderer stackItem={item} />
+ * <RenderRenderer render={render} />
  * ```
  */
-export interface StackItemRendererProps {
-  /** The stack item to render */
-  stackItem: {
+export interface RenderRendererProps {
+  /** The render to display (component variant). */
+  render: {
     id?: string;
     componentCode: string;
     prompt?: string;
@@ -74,105 +88,84 @@ export interface StackItemRendererProps {
   themeId?: string;
 }
 
-export function StackItemRenderer({
-  stackItem,
+export function RenderRenderer({
+  render,
   fallback,
   onError,
   cssOverrides,
   themeId,
-}: StackItemRendererProps): React.JSX.Element {
+}: RenderRendererProps): React.JSX.Element {
   const handleRepair = React.useCallback((error: Error) => {
-    // Dispatch repair request — BaseShell picks this up and sends a
-    // WebSocket 'generate' message to re-generate with error context.
-    if (typeof window !== 'undefined' && stackItem.id) {
+    // Dispatch repair request — picked up by host shells which forward
+    // it to the agent so it can re-generate with error context.
+    if (typeof window !== 'undefined' && render.id) {
       window.dispatchEvent(new CustomEvent('ggui:request-repair', {
         detail: {
-          stackItemId: stackItem.id,
-          prompt: stackItem.prompt,
+          renderId: render.id,
+          prompt: render.prompt,
           error: error.message,
-          componentCode: stackItem.componentCode,
+          componentCode: render.componentCode,
         },
       }));
     }
-  }, [stackItem.id, stackItem.prompt, stackItem.componentCode]);
+  }, [render.id, render.prompt, render.componentCode]);
 
-  // Empty componentCode → the stack item is still being generated.
+  // Empty componentCode → the render is still being generated.
   // Route through `<ProvisionalRenderer>` so the reserved
   // `_ggui:preview` channel's A2UI envelopes (when the server preamble
   // emits them) paint the assembling surface in place of the raw
   // loading fallback. Without an active preamble, the renderer itself
   // falls back to the caller's `fallback` prop — so current consumers
   // keep today's "Spinner while empty" UX with no behavioural change.
-  if (!stackItem.componentCode || stackItem.componentCode.length === 0) {
+  if (!render.componentCode || render.componentCode.length === 0) {
     return (
-      <ScopedWireProvider stackItem={stackItem}>
+      <EnsureWireContext>
         <ProvisionalRenderer fallback={fallback} />
-      </ScopedWireProvider>
+      </EnsureWireContext>
     );
   }
 
   return (
-    <ScopedWireProvider stackItem={stackItem}>
+    <EnsureWireContext>
       <ReactComponentRenderer
-        code={stackItem.componentCode}
-        props={stackItem.props}
+        code={render.componentCode}
+        props={render.props}
         cssOverrides={cssOverrides}
         themeId={themeId}
         onError={onError}
         onRequestRepair={handleRepair}
         fallback={fallback}
       />
-    </ScopedWireProvider>
+    </EnsureWireContext>
   );
 }
 
 /**
- * Wire scope for a single stack item.
+ * Ensure a WireConfig is present in context.
  *
- * If the parent WireConfig provides a `scope(stackItem)` factory (GguiSession does),
- * we build a per-item WireConfig whose dispatch is bound to THIS stack item's
- * stackItemId, contractHash, and actionSpec. Otherwise we render through the parent as-is.
+ * If a parent `<GguiRender>` already provided one (the production
+ * path), pass through. Otherwise — preview / standalone mounts e.g.
+ * BlueprintViewer at `/preview/<id>` — inject a no-op WireConfig so
+ * generated components calling `useAction` / `useStream` don't throw.
  *
- * Without this scoping, an action emitted by an older card in a chat stack would be
- * cross-validated against the top item's contract — wrong tool, wrong page.
+ * Standalone semantics: dispatch is a no-op, subscribe never fires.
+ * Matches the documented "static preview renders without a live
+ * channel" contract authored components depend on.
+ *
+ * Post-Phase-B: there is no per-render scoping factory. `<GguiRender>`
+ * provides one WireConfig keyed by the single mounted renderId; this
+ * leaf either consumes that or provides the standalone fallback.
  */
-function ScopedWireProvider({
-  stackItem,
+function EnsureWireContext({
   children,
 }: {
-  stackItem: StackItemRendererProps['stackItem'];
   children: ReactNode;
 }): React.JSX.Element {
   const parent = useWireContextOrNull();
-
-  const scopedConfig = React.useMemo<WireConfig | null>(() => {
-    // The `scope()` factory lives on `LegacyScopableWireConfig` (a
-    // legacy intersection type), NOT on the base `WireConfig`
-    // interface. `<GguiSession>` / `<BaseShell>` still build legacy
-    // configs during the migration overlap; this narrows via a
-    // presence-check rather than `instanceof`. In the renderer-iframe
-    // model (`<McpAppIframe>` + `@ggui-ai/iframe-runtime`), scoping
-    // happens in the renderer's standalone `scopeWireConfig` function
-    // before `<GguiWireProvider>` mounts — nothing reaches this path.
-    const legacy = parent as LegacyScopableWireConfig | null;
-    if (!legacy || typeof legacy.scope !== 'function') return null;
-    return legacy.scope({
-      stackItemId: stackItem.id,
-      contractHash: stackItem.contractHash,
-      actionSpec: stackItem.actionSpec,
-    });
-  }, [parent, stackItem.id, stackItem.contractHash, stackItem.actionSpec]);
-
-  if (scopedConfig) {
-    return <GguiWireProvider config={scopedConfig}>{children}</GguiWireProvider>;
+  if (parent) {
+    // Production path — ambient context is sufficient.
+    return <>{children}</>;
   }
-  // No parent context (preview / standalone mount — e.g.
-  // BlueprintViewer at `/preview/<id>`). Provide a no-op WireConfig so
-  // generated components calling `useAction` / `useStream` don't
-  // throw `useWireContext must be used within a WireProvider`.
-  // Standalone semantics: dispatch is a no-op, subscribe never fires.
-  // This matches the documented "static preview renders without a
-  // session" contract that authored components depend on.
   return (
     <GguiWireProvider config={STANDALONE_WIRE_CONFIG}>{children}</GguiWireProvider>
   );
@@ -180,7 +173,7 @@ function ScopedWireProvider({
 
 const STANDALONE_WIRE_CONFIG: WireConfig = {
   app: { appId: 'preview', appName: 'preview' },
-  session: { sessionId: 'preview', isConnected: false },
+  render: { renderId: 'preview', isConnected: false },
   auth: { isAuthenticated: false },
   dispatch: () => {
     /* no-op — preview mounts have no host to route actions to */
