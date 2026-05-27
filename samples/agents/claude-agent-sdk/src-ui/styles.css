@@ -680,18 +680,40 @@ form button:disabled {
   background: var(--bg-2);
   min-height: 320px;
   overflow: auto;
+  /* @mcp-ui/client's AppRenderer inserts an anonymous wrapper `<div
+   * style="height:100%">` between this element and the `<iframe>`.
+   * Percent heights on that wrapper don't reliably resolve against
+   * the flex-item height set below (`.layout-inline .stack-item-frame
+   * { height: 480px }`) because flex-item heights are not "definite"
+   * for `%` resolution in all browsers. Making this a column flex
+   * container + stretching the wrapper as flex:1 forces the wrapper
+   * (and therefore the iframe) to fill the full vertical space. */
+  display: flex;
+  flex-direction: column;
+}
+
+.stack-item-frame > div {
+  flex: 1;
+  min-height: 0;
 }
 
 .stack-item-frame iframe {
-  /* `!important` is the only override path: @mcp-ui/client's AppRenderer
-   * sets `style.height = '600px'` directly on the iframe element at mount
-   * (see node_modules/@mcp-ui/client/dist/index.mjs line ~5600), and the
-   * library exposes no prop to override. Without `!important` on `height`,
-   * the iframe stays at 600px regardless of how tall its flex container
-   * grew — which leaves dead space below the iframe in panel/fullscreen
-   * mode where the container is taller than 600px. */
+  /* Override @mcp-ui/client AppRenderer's inline `style.height = '600px'`
+   * (set directly on the iframe at mount; the library exposes no prop
+   * to override). Using `flex: 1` instead of `height: 100%` because
+   * the iframe's flex parent (the AppRenderer wrapper div) gets ITS
+   * height via flex-stretch — a percentage child resolves against
+   * "definite" heights only, and flex-stretched heights aren't
+   * universally treated as definite. `flex: 1` lets the iframe grow
+   * via the same flex algorithm that sized its parent. `height: auto
+   * !important` clears the inline 600px so the flex-basis 0% takes
+   * effect instead. `min-height: 0 !important` lets the iframe shrink
+   * past its intrinsic 150px browser-default when the container is
+   * smaller. */
   width: 100% !important;
-  height: 100% !important;
+  flex: 1 1 0% !important;
+  height: auto !important;
+  min-height: 0 !important;
   border: 0;
   display: block;
 }

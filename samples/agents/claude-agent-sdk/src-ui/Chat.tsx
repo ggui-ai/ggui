@@ -26,11 +26,24 @@ function resolveSandboxUrl(): string {
 }
 
 export function Chat() {
-  const { entries, stackItems, sending, send, abort } = useChat();
+  const { entries, stackItems, hostDisplayMode, sending, send, abort } =
+    useChat();
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
   const sandboxUrl = resolveSandboxUrl();
+
+  // Host-side presentation hint pickup.
+  // `_meta.ui.displayMode` is the spec-native MCP-Apps SEP-1865 per-push
+  // hint, stamped from `App.defaultDisplayMode` (and/or per-push agent
+  // override) on the server side. We auto-switch our `Inline | Panel`
+  // layout to match: `'fullscreen'` / `'pip'` → Panel, `'inline'` →
+  // Inline. The user's manual toggle still wins (sticky until the next
+  // push that carries a hint).
+  useEffect(() => {
+    if (hostDisplayMode === undefined) return;
+    setLayout(hostDisplayMode === 'inline' ? 'inline' : 'panel');
+  }, [hostDisplayMode]);
 
   // Auto-scroll the chat log on new entries.
   useEffect(() => {

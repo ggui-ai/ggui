@@ -6,9 +6,28 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ChatEntry, StackItemRef, ToolCallEntry } from './types';
 
+/**
+ * Host-display-mode hint, parsed from the most-recent push's
+ * `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865). Drives the
+ * sample's `Inline | Panel` layout when present: `'fullscreen'` /
+ * `'pip'` → Panel; `'inline'` → Inline; absent → no auto-switch.
+ *
+ * Sample-agent's `App.defaultDisplayMode` (set in `ggui.json`) stamps
+ * this on every push from the server side; agents can also override
+ * per-push via `ggui_push.input.displayMode`.
+ */
+type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
+
 interface UseChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
   readonly stackItems: ReadonlyArray<StackItemRef>;
+  /**
+   * Most-recent host-side presentation hint stamped on a push, or
+   * `undefined` when no push has yet carried one (or the app omitted
+   * `defaultDisplayMode`). `Chat.tsx` reads this to auto-switch its
+   * `Inline | Panel` layout.
+   */
+  readonly hostDisplayMode: HostDisplayMode | undefined;
   readonly sending: boolean;
   readonly send: (prompt: string) => Promise<void>;
   /**
@@ -45,6 +64,9 @@ interface UseChatResult {
 export function useChat(): UseChatResult {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [stackItems, setStackItems] = useState<StackItemRef[]>([]);
+  const [hostDisplayMode, setHostDisplayMode] = useState<
+    HostDisplayMode | undefined
+  >(undefined);
   const [sending, setSending] = useState(false);
   // Mirror of the latest stackItems for the meta-refetch lookup.
   // Plain state would close over the snapshot at handleEvent-call time;
@@ -243,6 +265,7 @@ export function useChat(): UseChatResult {
               `${turnId}.${counter}`,
               append,
               addStackItem,
+              setHostDisplayMode,
               updateStackItemMeta,
               patchToolCall,
               refetchStateById,
@@ -329,7 +352,7 @@ export function useChat(): UseChatResult {
     // page lifetime per getOrCreateChatSessionId's contract.
   }, []);
 
-  return { entries, stackItems, sending, send, abort };
+  return { entries, stackItems, hostDisplayMode, sending, send, abort };
 }
 
 function handleEvent(
@@ -338,6 +361,7 @@ function handleEvent(
   baseId: string,
   append: (e: ChatEntry) => void,
   addStackItem: (s: StackItemRef) => void,
+  setHostDisplayMode: (mode: HostDisplayMode | undefined) => void,
   updateStackItemMeta: (stackItemId: string, meta: McpAppAiGguiMeta) => void,
   patchToolCall: (
     toolUseId: string,
@@ -413,6 +437,21 @@ function handleEvent(
           parsedMeta.meta.stackItem !== undefined)
       ) {
         initialMeta = parsedMeta.meta;
+      }
+    }
+
+    // Host-display-mode hint pickup. `_meta.ui.displayMode` is the
+    // spec-native MCP-Apps SEP-1865 per-push presentation hint —
+    // stamped from `App.defaultDisplayMode` (or `ggui_push.input
+    // .displayMode` override) by the server. Drives the
+    // sample's Inline | Panel layout auto-switch in `Chat.tsx`.
+    if (tmRaw !== null && typeof tmRaw === 'object') {
+      const uiBlock = (tmRaw as { ui?: unknown }).ui;
+      if (uiBlock !== null && typeof uiBlock === 'object') {
+        const raw = (uiBlock as { displayMode?: unknown }).displayMode;
+        if (raw === 'inline' || raw === 'fullscreen' || raw === 'pip') {
+          setHostDisplayMode(raw);
+        }
       }
     }
 
