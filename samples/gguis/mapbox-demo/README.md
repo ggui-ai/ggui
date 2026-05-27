@@ -6,7 +6,7 @@ A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-mapb
 - `ggui.json#app.publicEnv` carries the operator's value for that key.
 - The CLI seeds the app-metadata store with both.
 - Push-time validation refuses to push a contract using `useMapbox` unless the key is present in `App.publicEnv`.
-- The server projects the union of every declared wrapper's `requires` and inlines that subset into the session-meta slice (`_meta["ai.ggui/session"].publicEnv`).
+- The server projects the union of every declared wrapper's `requires` and inlines that subset into the render-meta slice (`_meta["ai.ggui/render"].publicEnv`).
 - The iframe runtime installs the subset on `globalThis.__ggui__.publicEnv`.
 - Inside the wrapper's hook body, `getPublicEnv('GGUI_PUBLIC_APP_MAPBOX_TOKEN')` reads the value at first render — never at module top (the runtime hasn't booted yet).
 

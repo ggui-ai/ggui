@@ -24,7 +24,7 @@ import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
-import type { SessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { RenderSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { runAgent } from './agent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -109,14 +109,14 @@ async function handleRequest(
   // so the page can rehydrate iframes from prior conversation turns
   // without re-prompting the agent. Implementation:
   //
-  //   1. Call ggui_list_sessions({hostName:'sample', hostSessionId})
-  //      via the ggui MCP server. Server returns matching sessions
+  //   1. Call ggui_list_renders({hostName:'sample', hostSessionId})
+  //      via the ggui MCP server. Server returns matching renders
   //      with fresh wsTokens + expiresAt (the mintWsToken seam fires
   //      at the same call).
-  //   2. For each session id, fetch `/api/sessions/<id>/state?wsToken=`
+  //   2. For each render id, fetch `/api/renders/<id>/state?wsToken=`
   //      against the ggui server to get the full bootstrap envelope
   //      the iframe needs to mount.
-  //   3. Return [{sessionId, bootstrap}, ...] to the frontend.
+  //   3. Return [{renderId, bootstrap}, ...] to the frontend.
   //
   // No per-process chat-message store yet — the iframe IS the
   // conversation in ggui's worldview, and the page reload that
@@ -131,17 +131,17 @@ async function handleRequest(
       return;
     }
     try {
-      const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_sessions', {
+      const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_renders', {
         hostName: 'sample',
         hostSessionId: chatSessionId,
       });
-      const sessions = extractSessionSummaries(listed);
-      // Resolve each session's bootstrap envelope via the existing
-      // state endpoint. Fire concurrently so N sessions resolve in
+      const renders = extractRenderSummaries(listed);
+      // Resolve each render's bootstrap envelope via the existing
+      // state endpoint. Fire concurrently so N renders resolve in
       // one network round-trip's worth of wall-clock time.
       const bootstraps = await Promise.all(
-        sessions.map(async (s) => {
-          if (!s.wsToken) return { sessionId: s.sessionId, bootstrap: null };
+        renders.map(async (s) => {
+          if (!s.wsToken) return { renderId: s.renderId, bootstrap: null };
           try {
             const mcpOrigin = new URL(opts.mcpUrl);
             // Normalize `localhost` → `127.0.0.1` on the host we hit
@@ -157,16 +157,16 @@ async function handleRequest(
             if (mcpOrigin.hostname === 'localhost') {
               mcpOrigin.hostname = '127.0.0.1';
             }
-            mcpOrigin.pathname = `/api/sessions/${encodeURIComponent(s.sessionId)}/state`;
+            mcpOrigin.pathname = `/api/renders/${encodeURIComponent(s.renderId)}/state`;
             mcpOrigin.search = `?wsToken=${encodeURIComponent(s.wsToken)}`;
             const r = await fetch(mcpOrigin.toString(), {
               headers: { Accept: 'application/json' },
             });
-            if (!r.ok) return { sessionId: s.sessionId, bootstrap: null };
+            if (!r.ok) return { renderId: s.renderId, bootstrap: null };
             const bootstrap = (await r.json()) as Record<string, unknown>;
-            return { sessionId: s.sessionId, bootstrap };
+            return { renderId: s.renderId, bootstrap };
           } catch {
-            return { sessionId: s.sessionId, bootstrap: null };
+            return { renderId: s.renderId, bootstrap: null };
           }
         }),
       );
@@ -177,7 +177,7 @@ async function handleRequest(
       res.end(
         JSON.stringify({
           chatSessionId,
-          sessions: bootstraps.filter((b) => b.bootstrap !== null),
+          renders: bootstraps.filter((b) => b.bootstrap !== null),
         }),
       );
     } catch (err) {
@@ -188,18 +188,18 @@ async function handleRequest(
     return;
   }
 
-  // R5 — `/api/sessions/:sessionId/state?wsToken=...` proxy to the ggui
+  // R5 — `/api/renders/:renderId/state?wsToken=...` proxy to the ggui
   // MCP server. The state endpoint replaced the bearer-by-obscurity
   // `/r/<shortCode>` URL; the browser fetches state via this same-origin
   // path so we don't have to CORS-enable the MCP server.
-  const stateMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/state$/);
+  const stateMatch = url.pathname.match(/^\/api\/renders\/([^/]+)\/state$/);
   if (req.method === 'GET' && stateMatch) {
-    const sessionId = stateMatch[1] ?? '';
+    const renderId = stateMatch[1] ?? '';
     try {
       const mcpOrigin = new URL(opts.mcpUrl);
-      mcpOrigin.pathname = `/api/sessions/${encodeURIComponent(sessionId)}/state`;
+      mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
       // Forward the browser's wsToken query verbatim — the MCP server
-      // gates this endpoint on token signature, session ownership, and
+      // gates this endpoint on token signature, render ownership, and
       // appId match; dropping the query forces 401.
       mcpOrigin.search = url.search;
       const upstream = await fetch(mcpOrigin.toString(), {
@@ -293,7 +293,7 @@ async function handleRequest(
 
     // Per-tab chat-session id from the browser's `X-Chat-Session-Id`
     // header — keys per-chat agent state (conversation history,
-    // resume tokens, ggui sessionId continuity) so multi-turn flows
+    // resume tokens, ggui renderId continuity) so multi-turn flows
     // preserve context across `/chat` POSTs. Auto-mint when missing
     // (non-browser callers like curl get single-turn isolation).
     const chatSessionHeader = req.headers['x-chat-session-id'];
@@ -476,7 +476,7 @@ function parseMcpResponse(text: string): unknown {
 
 /**
  * Server-side MCP `tools/call` against the ggui MCP server. Used by
- * /chat/restore to call `ggui_list_sessions` without going through
+ * /chat/restore to call `ggui_list_renders` without going through
  * the agent loop. Skips the `/relay/tools-call` path (browser-facing)
  * since we already have a server-side fetch primitive.
  *
@@ -507,37 +507,37 @@ async function callGguiTool(
 }
 
 /**
- * Subset of `SessionSummaryWire` that `/chat/restore` consumes — the
- * restore flow only needs the session id + the freshly-minted
+ * Subset of `RenderSummaryWire` that `/chat/restore` consumes — the
+ * restore flow only needs the render id + the freshly-minted
  * wsToken to gate the state-endpoint fetch. Derived from the
  * canonical protocol type (`Pick<>`) so a field rename / addition
  * upstream is a compile error here, not silent drift.
  */
-type RestoreSessionSummary = Pick<SessionSummaryWire, 'sessionId' | 'wsToken'>;
+type RestoreRenderSummary = Pick<RenderSummaryWire, 'renderId' | 'wsToken'>;
 
 /**
- * Pull the `sessions[]` array out of a `ggui_list_sessions` JSON-RPC
+ * Pull the `renders[]` array out of a `ggui_list_renders` JSON-RPC
  * response. Tolerates both the SSE-wrapped and raw-JSON shapes that
  * `parseMcpResponse` returns. Defensive: an unexpected envelope
- * shape returns `[]` so /chat/restore degrades to "no sessions to
+ * shape returns `[]` so /chat/restore degrades to "no renders to
  * rehydrate" rather than a 5xx.
  */
-function extractSessionSummaries(envelope: unknown): RestoreSessionSummary[] {
+function extractRenderSummaries(envelope: unknown): RestoreRenderSummary[] {
   if (envelope === null || typeof envelope !== 'object') return [];
   const result = (envelope as { result?: unknown }).result;
   if (result === null || typeof result !== 'object') return [];
   const content = (result as { structuredContent?: unknown }).structuredContent;
   if (content === null || typeof content !== 'object') return [];
-  const sessionsRaw = (content as { sessions?: unknown }).sessions;
-  if (!Array.isArray(sessionsRaw)) return [];
-  const out: RestoreSessionSummary[] = [];
-  for (const entry of sessionsRaw) {
+  const rendersRaw = (content as { renders?: unknown }).renders;
+  if (!Array.isArray(rendersRaw)) return [];
+  const out: RestoreRenderSummary[] = [];
+  for (const entry of rendersRaw) {
     if (entry === null || typeof entry !== 'object') continue;
-    const sessionId = (entry as { sessionId?: unknown }).sessionId;
-    if (typeof sessionId !== 'string' || sessionId.length === 0) continue;
+    const renderId = (entry as { renderId?: unknown }).renderId;
+    if (typeof renderId !== 'string' || renderId.length === 0) continue;
     const wsToken = (entry as { wsToken?: unknown }).wsToken;
     out.push({
-      sessionId,
+      renderId,
       ...(typeof wsToken === 'string' && wsToken.length > 0
         ? { wsToken }
         : {}),

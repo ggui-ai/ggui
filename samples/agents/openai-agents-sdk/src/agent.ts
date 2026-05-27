@@ -326,7 +326,7 @@ export async function* runAgent(
  * envelope's `text` as a JSON-encoded `{type:'text', text:'<payload>'}`,
  * so the actual ggui payload sits TWO wraps deep. Without recursive
  * unwrap the chat UI saw `{"type":"text","text":"…"}` and never
- * recognized the inner ggui_push envelope (no iframe mounted). Peel
+ * recognized the inner ggui_render envelope (no iframe mounted). Peel
  * every `{type:'text', text}` layer until the payload surfaces, with a
  * depth bound that defends against pathological inputs.
  */
@@ -338,7 +338,7 @@ function stringifyToolOutput(output: unknown, depth: number = 0): string {
     // envelopes — that's exactly what OpenAI's MCP adapter ships as
     // the inner `text` field. Peel one more layer when we recognize
     // the shape; otherwise return the string verbatim so non-envelope
-    // payloads (the actual ggui_push JSON, for example) pass through.
+    // payloads (the actual ggui_render JSON, for example) pass through.
     try {
       const parsed: unknown = JSON.parse(output);
       if (

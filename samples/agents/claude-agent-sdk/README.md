@@ -2,7 +2,7 @@
 
 Reference implementation of an MCP-host agent built with the Anthropic Claude Agent SDK, pointed at a ggui MCP server.
 
-**The agent core is a small, readable amount of TypeScript.** No ggui agent-side wrapper, no `defineAgent` helper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_push`, `ggui_update`, `ggui_consume`, etc.) is discovered by the LLM via the standard MCP `tools/list` handshake.
+**The agent core is a small, readable amount of TypeScript.** No ggui agent-side wrapper, no `defineAgent` helper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_render`, `ggui_update`, `ggui_consume`, etc.) is discovered by the LLM via the standard MCP `tools/list` handshake.
 
 This is "Zero Agent Code" made concrete.
 
@@ -11,16 +11,16 @@ This is "Zero Agent Code" made concrete.
 Boots a small HTTP server (default port 6790) that serves a chat UI with:
 
 - **Left pane** — chat textarea + history of agent turns (assistant text, tool calls, errors).
-- **Right pane** — iframe that loads the rendered ggui UI as soon as the agent calls `ggui_push`.
+- **Right pane** — iframe that loads the rendered ggui UI as soon as the agent calls `ggui_render`.
 
 ```
 ┌──────────────────────────┬────────────────────────────────┐
 │ Chat                     │                                │
 │                          │     ggui-rendered UI           │
 │ user: show weather…      │     (LLM-generated React,      │
-│ → ggui_new_session(...)  │      served from ggui serve    │
+│ → ggui_handshake(...)  │      served from ggui serve    │
 │ → ggui_handshake(...)    │      at /r/<shortCode>)        │
-│ → ggui_push(...)         │                                │
+│ → ggui_render(...)         │                                │
 │ ← UI ready               │                                │
 │ assistant: Here's the…   │                                │
 │                          │                                │
@@ -109,8 +109,8 @@ src/
   index.ts      boot entry
 src-ui/         React chat client (built with Vite)
   main.tsx      entry
-  Chat.tsx      chat shell + StackItem panel
-  StackItem.tsx <McpAppIframe> host for each pushed UI
+  Chat.tsx      chat shell + Render panel
+  Render.tsx    <AppRenderer> host for each rendered UI
   useChat.ts    SSE client + bootstrap forwarding
   types.ts      shared UI types
   styles.css    styling

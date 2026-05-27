@@ -2,7 +2,7 @@
 
 Reference implementation of an MCP-host agent built with the OpenAI Agents SDK (`@openai/agents`), pointed at a ggui MCP server.
 
-**The agent core is a small amount of TypeScript.** No ggui agent-side wrapper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_push`, `ggui_update`, `ggui_consume`, etc.) is discovered by the LLM via the standard MCP `tools/list` handshake.
+**The agent core is a small amount of TypeScript.** No ggui agent-side wrapper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_render`, `ggui_update`, `ggui_consume`, etc.) is discovered by the LLM via the standard MCP `tools/list` handshake.
 
 This is "Zero Agent Code" with GPT-5.5 as the driver.
 
@@ -11,7 +11,7 @@ This is "Zero Agent Code" with GPT-5.5 as the driver.
 Boots a small HTTP server (default port `6791`) that serves a chat UI with:
 
 - **Left pane** — chat textarea + history of agent turns (assistant text, tool calls, errors).
-- **Right pane** — iframe that loads the rendered ggui UI as soon as the agent calls `ggui_push`.
+- **Right pane** — iframe that loads the rendered ggui UI as soon as the agent calls `ggui_render`.
 
 Identical UX to the Claude sample — the chat shell, iframe host, and event log are shared code; only `src/agent.ts` differs.
 

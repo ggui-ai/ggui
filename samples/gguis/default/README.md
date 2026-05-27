@@ -36,7 +36,7 @@ pnpm --filter @ggui-samples/agent-claude-sdk start
 # → chat UI at http://localhost:6790
 ```
 
-The chat UI's iframe will render whatever UI the LLM emits via `ggui_push`.
+The chat UI's iframe will render whatever UI the LLM emits via `ggui_render`.
 
 ## Used by
 

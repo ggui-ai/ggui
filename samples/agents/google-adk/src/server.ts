@@ -103,18 +103,18 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // R5 — `/api/sessions/:sessionId/state?wsToken=...` proxy to the ggui
+  // R5 — `/api/renders/:renderId/state?wsToken=...` proxy to the ggui
   // MCP server. The state endpoint replaced the bearer-by-obscurity
   // `/r/<shortCode>` URL; the browser fetches state via this same-origin
   // path so we don't have to CORS-enable the MCP server.
-  const stateMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/state$/);
+  const stateMatch = url.pathname.match(/^\/api\/renders\/([^/]+)\/state$/);
   if (req.method === 'GET' && stateMatch) {
-    const sessionId = stateMatch[1] ?? '';
+    const renderId = stateMatch[1] ?? '';
     try {
       const mcpOrigin = new URL(opts.mcpUrl);
-      mcpOrigin.pathname = `/api/sessions/${encodeURIComponent(sessionId)}/state`;
+      mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
       // Forward the browser's wsToken query verbatim — the MCP server
-      // gates this endpoint on token signature, session ownership, and
+      // gates this endpoint on token signature, render ownership, and
       // appId match; dropping the query forces 401.
       mcpOrigin.search = url.search;
       const upstream = await fetch(mcpOrigin.toString(), {
@@ -208,7 +208,7 @@ async function handleRequest(
 
     // Per-tab chat-session id from the browser's `X-Chat-Session-Id`
     // header — keys per-chat agent state (conversation history,
-    // resume tokens, ggui sessionId continuity) so multi-turn flows
+    // resume tokens, ggui renderId continuity) so multi-turn flows
     // preserve context across `/chat` POSTs. Auto-mint when missing
     // (non-browser callers like curl get single-turn isolation).
     const chatSessionHeader = req.headers['x-chat-session-id'];
