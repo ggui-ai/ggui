@@ -276,12 +276,13 @@ describe('bootProduction — runtime.ts source pins F4 wiring', () => {
     // bootProduction's body.
     expect(bootProductionBody).toContain('installContextRegistry(');
     expect(bootProductionBody).toContain('createContextStateHost(');
-    // Post-Phase-A: the per-mount wrap builder is named `buildOuterWrapper`
-    // and produces a `wrapOuter` field on the renderStackItem options.
+    // Post-render-identity-collapse: the per-mount wrap builder is
+    // named `buildOuterWrapper` and produces a `wrapOuter` field on
+    // the mountRender options.
     expect(bootProductionBody).toContain('buildOuterWrapper');
     expect(bootProductionBody).toContain('wrapOuter');
-    // Slot input must come from the stack-item slice envelope, not a
+    // Slot input must come from the render slice envelope, not a
     // hard-coded list.
-    expect(bootProductionBody).toContain('stackItem.contextSlots');
+    expect(bootProductionBody).toContain('meta.contextSlots');
   });
 });
