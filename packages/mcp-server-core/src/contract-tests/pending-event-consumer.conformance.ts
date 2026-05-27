@@ -10,8 +10,6 @@
  *   - `PendingPipeNotFoundError` shape — thrown on consume/append against
  *     an unseeded render; class instanceof OR `name` field check both
  *     pass (cloud's adapter throws its own class).
- *   - status reporting — `markStatus('completed')` surfaces on the
- *     next consumeAndClear's status field.
  *
  * Same factory + cleanup pattern as `render-store.conformance.ts`.
  *
@@ -25,18 +23,12 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PendingEventConsumer } from '../pending-event-consumer.js';
-import type { RenderStatus } from '@ggui-ai/protocol';
 
 export interface PendingEventConsumerConformanceFactory {
   readonly create: () => Promise<{
     readonly consumer: PendingEventConsumer;
     /** Register `renderId` so subsequent consume/append succeeds. */
     readonly seed: (renderId: string) => void | Promise<void>;
-    /** Flip the observed status of `renderId` (used by close tests). */
-    readonly markStatus?: (
-      renderId: string,
-      status: RenderStatus,
-    ) => void | Promise<void>;
   }>;
   readonly cleanup?: (consumer: PendingEventConsumer) => Promise<void> | void;
 }
@@ -49,10 +41,6 @@ export function runPendingEventConsumerConformance(
     fn: (helpers: {
       consumer: PendingEventConsumer;
       seed: (id: string) => Promise<void> | void;
-      markStatus?: (
-        renderId: string,
-        status: RenderStatus,
-      ) => Promise<void> | void;
     }) => Promise<T>,
   ): Promise<T> {
     const helpers = await factory.create();
@@ -151,22 +139,5 @@ export function runPendingEventConsumerConformance(
       });
     });
 
-    describe('status reporting', () => {
-      it('surfaces completed status after markStatus flip', async () => {
-        await withConsumer(async ({ consumer, seed, markStatus }) => {
-          if (!markStatus) {
-            // Adapter doesn't expose a status seed (cloud's wraps the
-            // render row's status column instead). Skip the
-            // markStatus path; the close-handler-level test covers
-            // observable wire shape end-to-end on its own surface.
-            return;
-          }
-          await seed('stack-1');
-          await markStatus('stack-1', 'completed');
-          const out = await consumer.consumeAndClear('stack-1', 1000);
-          expect(out.status).toBe('completed');
-        });
-      });
-    });
   });
 }

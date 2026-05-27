@@ -234,7 +234,7 @@ function mountTree(
    */
   const wireConfig: Wire.WireConfig = {
     app: { appId: 'vt-app', appName: 'vt-app' },
-    session: { sessionId: 'vt-session', isConnected: true },
+    render: { renderId: 'vt-render', isConnected: true },
     auth: { isAuthenticated: false },
     dispatch: (actionName, data) => {
       dispatches.push({ actionName, data, t: Date.now() });

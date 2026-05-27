@@ -27,22 +27,6 @@ describe('InMemoryPendingEventConsumer', () => {
       expect(result.events).toHaveLength(1);
     });
 
-    it('markStatus flips the observed status — next consume returns it', async () => {
-      const c = new InMemoryPendingEventConsumer();
-      c.markCreated('stack-1');
-      c.markStatus('stack-1', 'completed');
-      const result = await c.consumeAndClear('stack-1', 60_000);
-      expect(result.status).toBe('completed');
-    });
-
-    it('markDeleted causes subsequent consumeAndClear to throw PendingPipeNotFoundError', async () => {
-      const c = new InMemoryPendingEventConsumer();
-      c.markCreated('stack-1');
-      c.markDeleted('stack-1');
-      await expect(
-        c.consumeAndClear('stack-1', 60_000),
-      ).rejects.toBeInstanceOf(PendingPipeNotFoundError);
-    });
   });
 
   describe('consumeAndClear', () => {

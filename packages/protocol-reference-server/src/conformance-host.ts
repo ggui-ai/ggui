@@ -4,7 +4,7 @@
  * `ReferenceServer` instance.
  *
  * Directive-kind naming note: the conformance kit still spells its
- * render-lifecycle directives `create-session` / `close-session` (and
+ * render-lifecycle directives `create-render` / `close-render` (and
  * carries the value on a field named `sessionId`). The reference
  * server honors the kit's wire field names verbatim, then binds the
  * value to a `renderId` on the internal {@link Render} record — the
@@ -14,13 +14,13 @@
  * Directives split into "implement" and "throw":
  *
  *   Implement:
- *     - create-session            → `renders.create()`
+ *     - create-render            → `renders.create()`
  *     - register-tool             → `tools.register(name, handler)`
  *     - register-actionspec       → `renders.registerActionSpec()`
  *     - register-streamspec       → `renders.registerStreamSpec()`
  *     - server-version-override   → `renders.setVersionOverride()`
  *     - emit-envelope             → `renders.injectFrame()`
- *     - close-session             → `renders.close()`
+ *     - close-render             → `renders.close()`
  *     - unregister-tool           → `tools.unregister()`
  *
  *   Throw (kit records SKIP, not FAIL):
@@ -34,9 +34,9 @@
  * with the error message as the skip reason.
  */
 import type {
-  CloseSessionTeardown,
+  CloseRenderTeardown,
   ConformanceHost,
-  CreateSessionSetup,
+  CreateRenderSetup,
   EmitEnvelopeSetup,
   HostSetupStep,
   HostTeardownStep,
@@ -55,7 +55,7 @@ export interface CreateReferenceConformanceHostInput {
  * drive the kit against the server.
  *
  * The server MUST be `start()`-ed before the first dispatch — the
- * kit calls `create-session` via `dispatchSetup` before any subscribe,
+ * kit calls `create-render` via `dispatchSetup` before any subscribe,
  * so the render store must be reachable. The caller owns the
  * server lifecycle (`start()` + `stop()`).
  */
@@ -67,10 +67,9 @@ export function createReferenceConformanceHost({
       // Discriminant-narrow via explicit casts — the extensibly-closed
       // `HostUnknownSetupStep` arm (`kind: string & {}`) widens the
       // discriminant and blocks literal-narrowing on the union.
-      if (step.kind === 'create-session') {
-        const s = step as CreateSessionSetup;
-        // Kit field name: `sessionId`. Canonical identity: `renderId`.
-        serverInstance.renders.create(s.sessionId, s.appId ?? 'conformance');
+      if (step.kind === 'create-render') {
+        const s = step as CreateRenderSetup;
+        serverInstance.renders.create(s.renderId, s.appId ?? 'conformance');
         return;
       }
       if (step.kind === 'register-tool') {
@@ -98,12 +97,12 @@ export function createReferenceConformanceHost({
         // register-actionspec doesn't carry a renderId in the
         // directive shape — it's scoped to the most-recently-created
         // render, matching the fixture-authoring convention that
-        // create-session → register-tool → register-actionspec all
+        // create-render → register-tool → register-actionspec all
         // land in order on the same render.
         const lastRenderId = serverInstance.renders.lastCreatedRenderId();
         if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: register-actionspec invoked before create-session — no render scope to bind to',
+            'reference-server: register-actionspec invoked before create-render — no render scope to bind to',
           );
         }
         serverInstance.renders.registerActionSpec(lastRenderId, {
@@ -138,7 +137,7 @@ export function createReferenceConformanceHost({
         const lastRenderId = serverInstance.renders.lastCreatedRenderId();
         if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: register-streamspec invoked before create-session — no render scope to bind to',
+            'reference-server: register-streamspec invoked before create-render — no render scope to bind to',
           );
         }
         serverInstance.renders.registerStreamSpec(lastRenderId, {
@@ -174,7 +173,7 @@ export function createReferenceConformanceHost({
         const lastRenderId = serverInstance.renders.lastCreatedRenderId();
         if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: emit-envelope invoked before create-session — no render scope to bind to',
+            'reference-server: emit-envelope invoked before create-render — no render scope to bind to',
           );
         }
         const fanned = serverInstance.renders.injectFrame(lastRenderId, {
@@ -187,7 +186,7 @@ export function createReferenceConformanceHost({
         if (!fanned) {
           // No subscribers attached — the directive's emission is
           // unobservable. Surface for fixture-authoring debuggability
-          // (the canonical sequence is create-session → subscribe →
+          // (the canonical sequence is create-render → subscribe →
           // emit-envelope; fixtures that swap order silently lose the
           // injection). Not a throw — the directive itself succeeded;
           // the unobservability is a fixture concern.
@@ -229,7 +228,7 @@ export function createReferenceConformanceHost({
         }
         // Same most-recently-created render scope as register-
         // actionspec / register-streamspec — the fixture authoring
-        // convention is `create-session` immediately precedes this
+        // convention is `create-render` immediately precedes this
         // directive, and the kit's narrowSetupStep doesn't surface a
         // renderId on the directive object even when the fixture
         // JSON includes one (only `type → kind` is renamed; the rest
@@ -240,7 +239,7 @@ export function createReferenceConformanceHost({
         const lastRenderId = serverInstance.renders.lastCreatedRenderId();
         if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: server-version-override invoked before create-session — no render scope to bind to',
+            'reference-server: server-version-override invoked before create-render — no render scope to bind to',
           );
         }
         serverInstance.renders.setVersionOverride(lastRenderId, advertise);
@@ -255,10 +254,9 @@ export function createReferenceConformanceHost({
     },
 
     async dispatchTeardown(step: HostTeardownStep): Promise<void> {
-      if (step.kind === 'close-session') {
-        const s = step as CloseSessionTeardown;
-        // Kit field name: `sessionId`. Canonical identity: `renderId`.
-        serverInstance.renders.close(s.sessionId);
+      if (step.kind === 'close-render') {
+        const s = step as CloseRenderTeardown;
+        serverInstance.renders.close(s.renderId);
         return;
       }
       if (step.kind === 'unregister-tool') {

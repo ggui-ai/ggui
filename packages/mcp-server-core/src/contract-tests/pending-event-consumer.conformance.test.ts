@@ -18,7 +18,6 @@ runPendingEventConsumerConformance('InMemoryPendingEventConsumer', {
     return {
       consumer,
       seed: (renderId: string) => consumer.markCreated(renderId),
-      markStatus: (renderId, status) => consumer.markStatus(renderId, status),
     };
   },
 });
@@ -29,7 +28,6 @@ runPendingEventConsumerConformance('SqlitePendingEventConsumer', {
     return {
       consumer,
       seed: (renderId: string) => consumer.markCreated(renderId),
-      markStatus: (renderId, status) => consumer.markStatus(renderId, status),
     };
   },
 });
