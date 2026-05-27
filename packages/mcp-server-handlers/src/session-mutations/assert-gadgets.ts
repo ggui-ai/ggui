@@ -67,7 +67,7 @@ import { levenshtein } from '../ops-blueprint/persona-normalization.js';
 // Re-export the canonical resolver. The previous
 // `enrichContractGadgets` (which overlaid descriptors onto the
 // contract) is retired — the wire stays the wire; descriptors land
-// on `SessionStackEntry.gadgetDescriptors` as a sidecar. Keeps the
+// on `Render.gadgetDescriptors` as a sidecar. Keeps the
 // existing `from '../session-mutations/assert-gadgets'` import path
 // stable for downstream callers.
 export { filterDescriptorsToContract };

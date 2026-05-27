@@ -24,7 +24,7 @@
  * Anthropic adapter that emits.
  *
  * **Why module-level registry instead of constructor injection.** The
- * matcher is invoked from inside `ggui_push`'s safely-wrapped lookup
+ * matcher is invoked from inside `ggui_render`'s safely-wrapped lookup
  * helper + the cache-backed handshake negotiator. Threading a sink
  * through both call paths (handler factories, deps records) for a
  * devtools-only surface isn't worth the churn. The hosted runtime isolates
@@ -73,7 +73,7 @@
  *     `match-exact` events to measure synth-output reuse rate.
  *
  *   - `push-classify` — paired-push classification event. Fires on
- *     every `ggui_push` consume. The `agentClassification` field
+ *     every `ggui_render` consume. The `agentClassification` field
  *     carries `'confirm'` (decision.kind === 'accept' — agent reused
  *     the suggestion's provisional blueprintId) or `'override'`
  *     (decision.kind === 'override' — agent minted fresh against a

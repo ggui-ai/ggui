@@ -21,7 +21,7 @@
  * ## Why the factory shape (vs. the old deprecation shim)
  *
  * The pre-2026-04-22 handler was a always-throws deprecation shim with
- * the explanation "use ggui_push — the generator will render it". That
+ * the explanation "use ggui_render — the generator will render it". That
  * collapsed the registered-blueprint path onto generation, which in
  * turn required BYOK + an LLM round-trip even for authored UIs that
  * were already fully compiled. This factory restores the direct path:

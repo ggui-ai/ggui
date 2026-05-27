@@ -42,7 +42,7 @@
  * Post-Phase-B (flatten-render-identity): the prior
  * `{sessionId, stackItemId}` pair collapsed to a single `renderId`. The
  * outbound `_meta` collapsed from two slices
- * (`ai.ggui/session` + `ai.ggui/stack-item`) to one (`ai.ggui/render`).
+ * (`ai.ggui/render` + `ai.ggui/render`) to one (`ai.ggui/render`).
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -770,7 +770,7 @@ export interface GguiRenderHandlerDeps {
  * `matchType` into a synthetic progress event). OSS today omits it.
  *
  * Post-Phase-B (flatten-render-identity): collapsed from the prior
- * `notifyStackPush(sessionId, stackItem, matchType?)` to
+ * `notifyRenderCommit(sessionId, stackItem, matchType?)` to
  * `notifyRenderCommit(renderId, render, matchType?)` — the render IS
  * the addressable row.
  */

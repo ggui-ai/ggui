@@ -56,7 +56,7 @@ const inputSchema = {
     .string()
     .min(1, 'envelope is required')
     .describe(
-      'The current WS auth envelope (e.g. `_meta["ai.ggui/session"].token` from the original `ggui_push` result). May be expired (within the refresh window). MUST NOT be tampered with — the server HMAC-verifies the signature against the same secret used at mint.',
+      'The current WS auth envelope (e.g. `_meta["ai.ggui/render"].token` from the original `ggui_render` result). May be expired (within the refresh window). MUST NOT be tampered with — the server HMAC-verifies the signature against the same secret used at mint.',
     ),
 } as const;
 

@@ -4,7 +4,7 @@
  *
  * Sibling of the console's Apps → System Prompt editor. Same column,
  * MCP surface. Empty-string input clears the override (the pod's
- * `ggui_new_session` resolution chain falls back to the universal
+ * `ggui_render` resolution chain falls back to the universal
  * default when this field is absent or empty).
  *
  * Tenancy: cross-tenant probes throw `app_not_found` (uniform with

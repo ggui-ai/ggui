@@ -47,10 +47,10 @@ export interface HandlerContext {
    * whose adapters don't produce one. Handlers MUST treat it as
    * optional. Today's two production uses, both on a hosted server:
    *
-   *   1. Bring-your-own-key propagation — `ggui_push` threads it to
+   *   1. Bring-your-own-key propagation — `ggui_render` threads it to
    *      the Generator as `connectorApiKeyHash` for downstream
    *      credential lookup on platform traffic.
-   *   2. Playground traffic-class gate — `ggui_push` + `ggui_update`
+   *   2. Playground traffic-class gate — `ggui_render` + `ggui_update`
    *      bypass the non-playground billing check when this field
    *      equals the hardcoded `"playground"` sentinel.
    *
@@ -106,7 +106,7 @@ export interface HandlerContext {
    * request. The MCP SDK extracts this from `params._meta` and the
    * transport layer threads it onto the context for handlers that
    * need to read host-channel slices (today: the
-   * `ai.ggui/host-session` slice consumed by `ggui_new_session` to
+   * `ai.ggui/host-session` slice consumed by `ggui_render` to
    * group sessions for end-user resume).
    *
    * `undefined` when the request carried no `_meta` (most calls) and
@@ -173,7 +173,7 @@ export interface SharedHandler<
    *
    * Examples:
    *   - `allowedFor: ['app']` — agent-builder MCP-caller-only (e.g.
-   *     `ggui_push`, `ggui_handshake`). Used on hosted kind=app deployments.
+   *     `ggui_render`, `ggui_handshake`). Used on hosted kind=app deployments.
    *   - `allowedFor: ['user']` — end-user-only (e.g. a future
    *     `ggui_render` exposed by the user-pod posture to Claude Desktop).
    *   - `allowedFor: ['user', 'builder']` — both Connector users and
@@ -190,7 +190,7 @@ export interface SharedHandler<
    *
    *   - `'agent'` — runtime agent-callable tools on the canonical agent
    *     route (`/mcp`, or a cloud server's bare-root + `/apps/{appId}`).
-   *     Examples: `ggui_new_session`, `ggui_handshake`, `ggui_push`,
+   *     Examples: `ggui_render`, `ggui_handshake`, `ggui_render`,
    *     `ggui_update`, `ggui_consume`, `ggui_search_blueprints`.
    *   - `'runtime'` — iframe-runtime-callable tools (visibility-tagged
    *     `'app'`). Hidden from agent's tools/list but routed on the same
@@ -228,7 +228,7 @@ export interface SharedHandler<
    * and `content`), NOT merged into `structuredContent`.
    *
    * This is the canonical seam for attaching APP-FACING metadata — e.g.
-   * the `ai.ggui/session` + `ai.ggui/stack-item` slice pair carrying
+   * the `ai.ggui/render` + `ai.ggui/render` slice pair carrying
    * the WebSocket bootstrap credentials the MCP Apps iframe needs.
    * Because `_meta` is not described by `outputSchema`, agents that
    * typecheck against the tool signature never see these fields; only

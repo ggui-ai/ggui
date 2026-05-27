@@ -65,7 +65,7 @@ export type BlueprintKind = 'template' | 'organism' | 'molecule' | 'atom';
  * three distinct cache-write paths on the unified matcher pool —
  * same read surface, different lifecycles upstream.
  *
- *   - `'synth'`    — produced by `ggui_push` cold-gen + cached for reuse.
+ *   - `'synth'`    — produced by `ggui_render` cold-gen + cached for reuse.
  *   - `'register'` — operator-written via the `ggui_ops_blueprint_*`
  *                    admin surface (hand-curated or imported).
  *   - `'install'`  — materialized from a marketplace artifact via

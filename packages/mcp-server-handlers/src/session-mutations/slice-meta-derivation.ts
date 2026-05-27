@@ -6,8 +6,8 @@
  * The protocol has more than one transport that ships the `ai.ggui/*`
  * slice meta to the iframe-runtime:
  *
- *   - **MCP Apps** — `_meta["ai.ggui/session"]` +
- *     `_meta["ai.ggui/stack-item"]` on the `ggui_push` tool result,
+ *   - **MCP Apps** — `_meta["ai.ggui/render"]` +
+ *     `_meta["ai.ggui/render"]` on the `ggui_render` tool result,
  *     delivered via the host's tool-call → result postMessage path
  *     (Claude.ai, Claude Desktop).
  *   - **Public-render `/r/<shortCode>`** — inline
@@ -82,7 +82,7 @@ import {
  * Pure helper; no I/O. Exported for tests + callers that need the
  * resolved URLs outside `deriveBundleOrigins` (e.g., the iframe
  * runtime's per-gadget `bundleUrl` projection on the
- * `ai.ggui/session.gadgets[*]` slice).
+ * `ai.ggui/render.gadgets[*]` slice).
  *
  * @public
  */
@@ -236,7 +236,7 @@ export function deriveContextSlots(
   debounceMs?: number;
 }> | undefined {
   // Both `contextSpec` and `contextSnapshot` live on the `component`
-  // variant of SessionStackEntry (StackItem) — narrowing via the
+  // variant of Render (StackItem) — narrowing via the
   // discriminator gives typed access without casts. mcpApps and
   // system variants don't carry these fields.
   if (item.type === 'mcpApps' || item.type === 'system') return undefined;
@@ -572,7 +572,7 @@ export interface RenderMetaView {
    *     response header on the shell document (browser-enforced gate
    *     for the iframe content).
    *   - MCP Apps host-mounted iframe → `_meta.ui.permissions` on the
-   *     ggui_push tool result, which the host translates to an
+   *     ggui_render tool result, which the host translates to an
    *     `allow=""` attribute on the iframe element.
    *   - Inline `__GGUI_META__` global ⇒ `permissionsPolicy` field
    *     on the operator-owned credential payload for in-renderer surface
@@ -621,7 +621,7 @@ export interface RenderMetaView {
   }>;
   // `compiledValidators` removed in #109 — validators are now served
   // via a content-addressable URL surfaced on the stack-item slice
-  // (`_meta["ai.ggui/stack-item"].validatorsUrl`). Producers call
+  // (`_meta["ai.ggui/render"].validatorsUrl`). Producers call
   // {@link deriveContractBundle} to compute
   // `{contractHash, bundleSource}`, write `bundleSource` to their
   // `CodeStore` at `contractHash`, then emit
@@ -764,7 +764,7 @@ export function deriveGadgetRegistrations(
  *
  * The push handler writes `bundleSource` to its `CodeStore` at
  * `contractHash`, then emits `contractHash` + `validatorsUrl` on the
- * `_meta["ai.ggui/stack-item"]` slice — the iframe-runtime fetches the
+ * `_meta["ai.ggui/render"]` slice — the iframe-runtime fetches the
  * URL + dynamic-imports to resolve validators.
  *
  * Delegates to `@ggui-ai/protocol`'s {@link computeContractBundle} —

@@ -1,7 +1,7 @@
 /**
  * Provisional preview orchestration — seam types + pure gating.
  *
- * This module owns the protocol-neutral SEAM the `ggui_push` handler
+ * This module owns the protocol-neutral SEAM the `ggui_render` handler
  * uses to drive a provisional-preview stream on `_ggui:preview`. The
  * runner + cancellation plumbing land in a follow-up commit; this one
  * pins the surface so downstream callers (hosted pod, OSS dev mode)
@@ -18,7 +18,7 @@
  *     inject a Haiku-backed streaming emitter; an OSS dev build can
  *     inject a deterministic skeleton emitter; tests inject a fake.
  *     The handler knows none of them.
- *   - **Fire-and-forget at the push layer.** `ggui_push` returns
+ *   - **Fire-and-forget at the push layer.** `ggui_render` returns
  *     synchronously; the preview runs on a background task the
  *     runner owns. Gating decisions happen BEFORE the background
  *     task starts so no useless promise is allocated on skipped
@@ -63,7 +63,7 @@ export type ProvisionalPreviewEmit = (
  *     store. Emitters that need more pull from whatever DI they
  *     were constructed with.
  *   - `signal` fires on cancellation (handoff to final UI, external
- *     `ggui_pop`, server shutdown). Emitters MUST check it between
+ *     `ggui_close`, server shutdown). Emitters MUST check it between
  *     async awaits and abort cleanly.
  *   - `now` is a clock override for tests.
  */
@@ -71,7 +71,7 @@ export interface ProvisionalPreviewContext {
   readonly renderId: string;
   readonly appId: string;
   /**
-   * The `story` block from the `ggui_push` input. `intent` is
+   * The `story` block from the `ggui_render` input. `intent` is
    * guaranteed non-empty (filtered in the gate); other fields are
    * passthrough so emitters can read typed hints the agent
    * supplied.
@@ -214,7 +214,7 @@ export type ProvisionalPreviewSkipReason =
   | 'predicate';
 
 /**
- * Deps the `ggui_push` handler accepts when provisional preview is
+ * Deps the `ggui_render` handler accepts when provisional preview is
  * wired in. Absence of this dep is itself the "preview off" signal —
  * no code path in the handler ever surfaces preview without it.
  */
@@ -574,7 +574,7 @@ async function finalizePreviewChannel(
 
 /**
  * Kick off {@link runProvisionalPreview} as a background task. Call
- * from within `ggui_push` after the gate passes; the caller can
+ * from within `ggui_render` after the gate passes; the caller can
  * then return the push response without awaiting the preview.
  *
  * Returns a {@link ProvisionalPreviewHandle} carrying the

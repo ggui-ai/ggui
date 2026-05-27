@@ -5,7 +5,7 @@
  * Symmetric defender for the two seams where an agent can pin which
  * generator the server uses:
  *   - `ggui_handshake` input — agent-side hint on draft creation.
- *   - `ggui_push` override decision — agent revises after seeing
+ *   - `ggui_render` override decision — agent revises after seeing
  *     the suggestion.
  *
  * Zod schema (input layer) already enforces shape (length +

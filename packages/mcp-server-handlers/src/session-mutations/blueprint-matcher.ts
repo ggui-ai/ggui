@@ -1,6 +1,6 @@
 /**
  * Blueprint matcher — the unified decision engine for `ggui_handshake`
- * and `ggui_push` direct-story paths.
+ * and `ggui_render` direct-story paths.
  *
  * One function — `matchBlueprint(deps, scope, query)` — that selects
  * a lookup strategy by request shape and returns a structured decision
@@ -22,7 +22,7 @@
  * produced blueprint is registered into the scope post-gen.
  *
  * The matcher is the single source of truth for the decision; both
- * `ggui_handshake` and `ggui_push` route through it. Without
+ * `ggui_handshake` and `ggui_render` route through it. Without
  * unification the two surfaces would drift, leaving "did this hit
  * via handshake or push?" as a debug pain point.
  *

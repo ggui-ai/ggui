@@ -11,13 +11,13 @@
  *     devtools-only ring buffer of every LLM call's full prompt /
  *     completion / token counts.
  *   - **Payload trace** (this) = devtools-only ring buffer of every
- *     `ggui_push` / `ggui_update` MCP tool call payload as it lands
+ *     `ggui_render` / `ggui_update` MCP tool call payload as it lands
  *     on the handler. Answers "what JSON did the agent actually send
  *     me?" — invaluable when debugging contract drift.
  *
  * **Why module-level registry instead of constructor injection.** The
  * push + update handlers are constructed once per server boot via
- * `createGguiPushHandler` / `createGguiUpdateHandler` factories.
+ * `createGguiRenderHandler` / `createGguiUpdateHandler` factories.
  * Threading a sink through every handler dep struct + every test that
  * builds them would touch ~30 callsites for a devtools-only surface.
  * The OSS ggui server is a single process per CLI invocation — global
@@ -29,7 +29,7 @@
  * immediately without copying or stringifying the payload — zero hot-
  * path cost. Passing `null` removes a previously registered sink.
  *
- * **Direction labelling.** `inbound-push` for `ggui_push` invocations,
+ * **Direction labelling.** `inbound-push` for `ggui_render` invocations,
  * `outbound-update` for `ggui_update` invocations. From the agent's
  * perspective both are inbound MCP tool calls, but viewed from the
  * end-user UI: a push delivers a new surface (in to the UI), and an
@@ -58,7 +58,7 @@ export interface PayloadTraceEvent {
   readonly renderId: string;
   /** Resolved app/tenant id from `HandlerContext`. */
   readonly appId: string;
-  /** Tool name (`'ggui_push'` | `'ggui_update'`). */
+  /** Tool name (`'ggui_render'` | `'ggui_update'`). */
   readonly tool: string;
   /**
    * The post-validation payload the handler is about to act on. Shape
@@ -102,7 +102,7 @@ export function getPayloadTraceSink(): PayloadTraceSink | null {
 }
 
 /**
- * Internal — called from `ggui_push` + `ggui_update` handlers. No-op
+ * Internal — called from `ggui_render` + `ggui_update` handlers. No-op
  * when no sink is registered, so the byte-size compute + JSON.stringify
  * are skipped on the no-sink hot path. Swallows sink-thrown errors (a
  * broken devtools sink must not break tool dispatch).

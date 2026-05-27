@@ -33,7 +33,7 @@ const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 /**
  * Seed a single render in the store. Phase-B: the render IS the
  * addressable unit — no vessel-with-stack to navigate, no
- * `appendStackItem` round-trip. `commit` upserts the render row.
+ * `renderStore.commit` round-trip. `commit` upserts the render row.
  */
 async function seedRender(opts: {
   store: InMemoryRenderStore;

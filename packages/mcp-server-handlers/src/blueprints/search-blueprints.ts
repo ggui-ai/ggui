@@ -15,7 +15,7 @@
  *      add for this source.
  *
  *   2. **Semantic source** — the `VectorStore` / `EmbeddingProvider`
- *      pair. Covers prior `ggui_push` cache entries + any other
+ *      pair. Covers prior `ggui_render` cache entries + any other
  *      producer that has written into the scope. Continues to honor
  *      `MIN_SIMILARITY_SCORE`.
  *

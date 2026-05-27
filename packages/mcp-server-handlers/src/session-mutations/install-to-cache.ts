@@ -5,7 +5,7 @@
  * The `matchBlueprint` matcher reads the runtime cache, which is fed
  * by three writers:
  *
- *   1. `ggui_push` cold-gen — synth-time, `provenance: 'synth'`.
+ *   1. `ggui_render` cold-gen — synth-time, `provenance: 'synth'`.
  *   2. `ggui_ops_blueprint_register` / `_generate` — operator hand-
  *      writes a blueprint, `provenance: 'register'`.
  *   3. This bridge — marketplace-installed blueprints,

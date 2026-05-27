@@ -181,7 +181,7 @@ describe('createSearchBlueprintsHandler', () => {
 describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
   it('returns a manifest blueprint even when the semantic index is empty', async () => {
     // Load-bearing happy-path assertion. An OSS server that declared
-    // a blueprint in ggui.json but has never run `ggui_push` yet has
+    // a blueprint in ggui.json but has never run `ggui_render` yet has
     // an empty VectorStore — the only path that can surface the
     // manifest entry is the BlueprintProvider branch.
     const { embedding, vectors } = makeDeps();
