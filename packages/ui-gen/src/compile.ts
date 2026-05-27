@@ -159,8 +159,8 @@ export async function compileComponentCode(source: string): Promise<string> {
  *
  * Compile failures are funnelled into the generator's
  * `PRODUCTION_FAILED` error channel, NOT thrown. Consumers (the OSS
- * push handler) already classify generator failures and commit an
- * error-only stack item — so a compile failure shows up in the viewer
+ * render handler) already classify generator failures and commit an
+ * error-only render — so a compile failure shows up in the viewer
  * with the same "couldn't render" ergonomics as a provider failure.
  * Throwing out of `generate()` would break the handler's invariant that
  * the generator never rejects.

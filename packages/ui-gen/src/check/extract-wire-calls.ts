@@ -40,9 +40,9 @@ import type { DataContract } from "@ggui-ai/protocol";
  *
  * `'context'` covers `useGguiContext` calls. The iframe-runtime mounts
  * Contexts only when the bootstrap envelope carries `contextSlots`,
- * which fires only when the persisted StackItem has `contextSpec`,
+ * which fires only when the persisted Render has `contextSpec`,
  * which happens only when the agent authored
- * `story.contract.contextSpec` AND push.ts plumbed it to the
+ * `story.contract.contextSpec` AND render.ts plumbed it to the
  * generator. The symptom of a missing slot is a blank `/r/<id>` direct
  * preview when the LLM emitted `useGguiContext('X')` without a
  * declared slot. The undeclared-wire-call check (tier-0

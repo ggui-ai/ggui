@@ -3,7 +3,7 @@
 // Shared validation utilities for data-contract conformance —
 // deterministic tier-0 gate for `PropsSpec` / `StreamSpec` / `ActionSpec`
 // agreement between the LLM-emitted componentCode and the contract the
-// agent handed to `ggui_push`.
+// agent handed to `ggui_render`.
 //
 // Used by:
 //   (1) Self-check soft gate in the coding agent

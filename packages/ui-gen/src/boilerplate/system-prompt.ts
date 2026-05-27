@@ -330,11 +330,11 @@ Renaming a binding is fine — the wiring is the string-literal argument, not th
 
 ## Contract surface — four specs + two catalogs
 
-A \`DataContract\` declares everything a stack item exchanges with the outside world. **Four typed specs** for the four data-flow directions, **two reference catalogs** for tool / hook lookups:
+A \`DataContract\` declares everything a render exchanges with the outside world. **Four typed specs** for the four data-flow directions, **two reference catalogs** for tool / hook lookups:
 
 | Surface              | Direction                  | Role                                                                 |
 | -------------------- | -------------------------- | -------------------------------------------------------------------- |
-| \`propsSpec\`         | server → UI (one-shot)     | Initial render values pushed once at \`ggui_push\`                     |
+| \`propsSpec\`         | server → UI (one-shot)     | Initial render values delivered once at \`ggui_render\`              |
 | \`streamSpec\`        | agent → UI (many)          | Typed channels for live updates via \`ggui_emit\`                    |
 | \`actionSpec\`        | UI → agent (events)        | Discrete events driving the agent's next turn (consumed via \`ggui_consume\`) |
 | \`contextSpec\`       | UI → server (state mirror) | UI state the agent observes between turns                            |
@@ -445,7 +445,7 @@ ${gadgetsSection}
 
 Each hook conforms to \`GadgetHook<TOutput, TOptions>\`: call \`start(opts?)\` to fire, read \`{value, status, error, stop?}\`. \`status\` walks through \`idle → prompting → active|completed\` or routes to \`denied\` / \`error\` on failure.
 
-3rd-party plugins (Leaflet maps, Mapbox, Stripe, Chart.js, …) are registered via \`createGguiGadget\` from \`@ggui-ai/gadgets\` and surface in this same table when the operator has added them to \`App.gadgets\`. Reference any registered hook by name — push validation rejects hooks not in this catalog with \`gadget_not_registered\`.
+3rd-party plugins (Leaflet maps, Mapbox, Stripe, Chart.js, …) are registered via \`createGguiGadget\` from \`@ggui-ai/gadgets\` and surface in this same table when the operator has added them to \`App.gadgets\`. Reference any registered hook by name — render validation rejects hooks not in this catalog with \`gadget_not_registered\`.
 
 ## Observable state via \`contextSpec\`
 

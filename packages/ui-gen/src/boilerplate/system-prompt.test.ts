@@ -328,7 +328,7 @@ describe('buildSystemPrompt — clientCapabilities section integration', () => {
   it("preserves the `gadget_not_registered` enforcement nudge", () => {
     // Plugin slice 1.2.1 carries the gate awareness into the code-gen
     // prompt so the LLM doesn't author a contract the gate would
-    // reject at push time.
+    // reject at render time.
     const prompt = buildSystemPrompt({ userRequest: 'show a counter' });
     expect(prompt).toContain('`gadget_not_registered`');
   });

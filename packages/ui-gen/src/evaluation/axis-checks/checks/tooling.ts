@@ -247,14 +247,14 @@ const RETIRED_IDENTIFIERS: readonly RetiredIdentifier[] = [
     id: "PushStory",
     label: "`PushStory` type / `pushStorySchema` schema",
     replacement:
-      "`PushStory` was retired when the handshake input was flattened. The MVB-5 wire is `ggui_handshake({sessionId, intent, blueprintDraft: {contract, variance?, generator?}})` + `ggui_push({handshakeId, decision: {kind: 'accept' | 'override', blueprintDraft?}, props?})`.",
+      "`PushStory` was retired when the handshake input was flattened. The post-Phase-B wire is `ggui_handshake({intent, blueprintDraft: {contract, variance?, generator?}})` + `ggui_render({handshakeId, decision: {kind: 'accept' | 'override', blueprintDraft?}, props?})`.",
   },
   {
     pattern: /\bpushStorySchema\b/,
     id: "pushStorySchema",
     label: "`pushStorySchema` zod schema",
     replacement:
-      "`pushStorySchema` was retired alongside `PushStory`. MVB-5 schemas: `handshakeInputSchema` + `pushInputSchema` (with the `decision` discriminator) in `@ggui-ai/protocol`.",
+      "`pushStorySchema` was retired alongside `PushStory`. Current schemas: `handshakeInputSchema` + `renderInputSchema` (with the `decision` discriminator) in `@ggui-ai/protocol`.",
   },
   {
     pattern: /\bstory\s*\.\s*adapters\b/,
@@ -275,7 +275,7 @@ const RETIRED_IDENTIFIERS: readonly RetiredIdentifier[] = [
     id: "assertAdaptersDeclared",
     label: "`assertAdaptersDeclared(...)` runtime call",
     replacement:
-      "The runtime adapter-gate function is retired. Permissions-Policy is derived per-contract at push commit time and threaded through the bootstrap projection.",
+      "The runtime adapter-gate function is retired. Permissions-Policy is derived per-contract at render commit time and threaded through the bootstrap projection.",
   },
   {
     pattern: /\bHandshakeStoredStory\b/,

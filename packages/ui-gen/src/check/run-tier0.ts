@@ -269,7 +269,7 @@ const HOOK_NAME_FOR: Readonly<Record<WireKind, string>> = {
 
 /**
  * Map wire kind to the contract field the agent must declare on the
- * `contract` input to `ggui_push` (post-Phase-2 flat handshake input)
+ * `contract` input to `ggui_render` (post-Phase-2 flat handshake input)
  * to make the `useX('<name>')` call legal.
  *
  * Drives the remediation message on the `wire_undeclared` fail.
@@ -980,7 +980,7 @@ export async function runTier0Checks(
           `mounts/registers wire surfaces from the contract, not from the code. ` +
           (contract === undefined
             ? 'No contract authored at all — describing the contract in the prompt text is NOT enough; ' +
-              'the agent MUST pass a structured `contract` field on the ggui_push call.'
+              'the agent MUST pass a structured `contract` field on the ggui_render call.'
             : ''),
         fix:
           `Either (a) declare \`${field}.${site.name}\` on the \`contract\` input so the ` +

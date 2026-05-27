@@ -14,7 +14,7 @@ export type ClassifierInput = {
   /**
    * Flat `Record<actionName, ActionEntry>`. Mirrors
    * {@link DataContract.actionSpec} exactly — the classifier accepts
-   * the same shape callers pass through the push path.
+   * the same shape callers pass through the render path.
    */
   actionSpec?: unknown;
   /**
