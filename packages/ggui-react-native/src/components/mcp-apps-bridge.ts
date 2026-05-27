@@ -2,9 +2,9 @@
  * Generic MCP-Apps host-role bridge helpers — the transport-agnostic
  * JSON-RPC dispatcher plus the native WebView shim builders.
  *
- * Extracted from the (now-deleted) `McpAppsStackItemRenderer` component
+ * Extracted from the (now-deleted) `McpAppsRenderRenderer` component
  * so the spec-canonical `<McpAppIframe>` can still reuse the bridge
- * surface without dragging in the session-bound legacy renderer.
+ * surface without dragging in the render-bound legacy renderer.
  *
  * Both transports — the web iframe postMessage bridge and the native
  * `react-native-webview` `onMessage`/`injectJavaScript` bridge —

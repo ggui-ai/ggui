@@ -366,7 +366,7 @@ function extractFirstCardSnapshot(
       const content = b.content as unknown;
       if (typeof content !== 'object' || content === null) continue;
       const rec = content as Record<string, unknown>;
-      if (rec.stackItem && typeof rec.stackItem === 'object') return rec.stackItem;
+      if (rec.render && typeof rec.render === 'object') return rec.render;
       if (typeof rec.id === 'string' && typeof rec.componentCode === 'string') {
         return rec;
       }

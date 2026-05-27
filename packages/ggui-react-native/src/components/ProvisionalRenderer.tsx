@@ -32,7 +32,7 @@
  *
  * Nothing in this file knows that the final render will be a React
  * component bundle or a descriptor tree or anything else. Handoff is
- * driven externally by the StackItemRenderer branch.
+ * driven externally by the RenderRenderer branch.
  */
 import { useMemo, type ReactNode } from 'react';
 import {

@@ -1,6 +1,6 @@
 import type { ContentBlock, InvokeTurn } from '@ggui-ai/protocol';
 import type { ConversationMessage } from '../invoke/useInvoke';
-import { extractStackItemFromToolResult } from './stack-item';
+import { extractRenderFromToolResult } from './render';
 
 /**
  * A "content group" is one durable-renderable unit from an invoke message:
@@ -16,7 +16,7 @@ export interface ContentGroup {
   kind: 'text' | 'card' | 'other';
   authorRole: 'user' | 'agent';
   blocks: ContentBlock[];
-  /** For kind='card' only — a frozen StackItem extracted from the tool_result. */
+  /** For kind='card' only — a frozen Render extracted from the tool_result. */
   cardSnapshot: unknown | null;
   /** Human-readable ~160-char preview (for chat-list lastMessagePreview). */
   textPreview: string;
@@ -59,11 +59,11 @@ export function invokeMessageToContentGroups(message: ConversationMessage): Cont
         (x) => x.type === 'tool_result' && x.tool_use_id === b.id,
       );
       const resultBlock = paired ?? null;
-      const cardSnapshot = resultBlock ? extractStackItemFromToolResult(resultBlock) : null;
+      const cardSnapshot = resultBlock ? extractRenderFromToolResult(resultBlock) : null;
       const blocks: ContentBlock[] = resultBlock ? [b, resultBlock] : [b];
       groups.push({
         key: `${message.id}-${i}`,
-        kind: b.name === 'ggui_push' || b.name === 'ggui_update' ? 'card' : 'other',
+        kind: b.name === 'ggui_render' || b.name === 'ggui_update' ? 'card' : 'other',
         authorRole,
         blocks,
         cardSnapshot,

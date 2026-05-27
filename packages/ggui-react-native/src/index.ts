@@ -41,9 +41,8 @@ export type {
 export type {
   ActionEnvelope,
   EventType,
-  // Post-Phase-B render shape — replaces the deleted Session/StackItem
-  // pair with a single Render union (ComponentRender, SystemRender,
-  // McpAppsRender) keyed by the flat `renderId`.
+  // Single Render union (ComponentRender, SystemRender, McpAppsRender)
+  // keyed by the flat `renderId`.
   Render,
   ComponentRender,
   SystemRender,
