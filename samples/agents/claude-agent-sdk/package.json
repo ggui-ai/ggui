@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.76",
+    "@ggui-ai/design": "workspace:*",
     "@ggui-ai/dev-stack": "workspace:*",
     "@ggui-ai/react": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",

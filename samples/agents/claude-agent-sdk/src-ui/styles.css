@@ -1,34 +1,49 @@
-/* Sample agent chat shell — dark, refined, animation-aware.
- * Aesthetic baseline: claude.ai meets cursor — generous spacing, soft
- * glass panels, brand-blue accents, deliberate motion. */
+/* Sample agent chat shell.
+ *
+ * Sourced from `@ggui-ai/design` tokens via the `<ThemeProvider>` in
+ * `main.tsx`. The provider injects `--ggui-color-*`, `--ggui-font-*`,
+ * `--ggui-spacing-*`, `--ggui-radius-*`, etc. as CSS variables on
+ * `:root`; the rules below reference those so the chat shell shares
+ * one design language with every generated iframe (canvas-demo's
+ * `ggui.json` picks the same `claudic / dark` preset, so the
+ * outer chat + inner iframe content render in one cohesive palette).
+ *
+ * Local aliases (--bg-app, --user-bubble, --tool-bg, etc.) below map
+ * semantic chat-shell roles onto ggui tokens. They're kept LOCAL so
+ * a single shell tweak doesn't pollute the design system. If a value
+ * recurs across samples, lift it to a token in `@ggui-ai/design`.
+ */
 
 :root {
-  /* Surfaces */
-  --bg-0: #0a0a0c;
-  --bg-1: #131318;
-  --bg-2: #1a1a22;
-  --surface: rgba(255, 255, 255, 0.04);
-  --surface-strong: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  /* Surfaces — sample-agent shell semantics over ggui tokens. */
+  --bg-app: var(--ggui-color-background, #0a0a0c);
+  --bg-chat: var(--ggui-color-surface, #1a1a22);
+  --bg-card: var(--ggui-color-surfaceVariant, #2d2c2a);
+  --surface-subtle: color-mix(in srgb, var(--ggui-color-onSurface, #faf9f5) 4%, transparent);
+  --surface-strong: color-mix(in srgb, var(--ggui-color-onSurface, #faf9f5) 7%, transparent);
+
+  /* Borders */
+  --border-subtle: color-mix(in srgb, var(--ggui-color-onSurface, #faf9f5) 10%, transparent);
+  --border-strong: color-mix(in srgb, var(--ggui-color-onSurface, #faf9f5) 18%, transparent);
 
   /* Text */
-  --fg: #ececf1;
-  --fg-muted: #8e8e98;
-  --fg-faint: #5a5a64;
+  --fg: var(--ggui-color-onSurface, #faf9f5);
+  --fg-muted: var(--ggui-color-onSurfaceVariant, #a8a59f);
+  --fg-faint: color-mix(in srgb, var(--ggui-color-onSurface, #faf9f5) 40%, transparent);
 
-  /* Accent */
-  --accent: #7c5cff;
-  --accent-soft: rgba(124, 92, 255, 0.16);
-  --accent-glow: 0 0 0 1px rgba(124, 92, 255, 0.4), 0 0 24px rgba(124, 92, 255, 0.18);
+  /* Accent — Claudic terracotta primary (or whatever the active theme exposes). */
+  --accent: var(--ggui-color-primary-500, #cc785c);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 0 24px color-mix(in srgb, var(--accent) 18%, transparent);
 
-  /* Semantic */
-  --user: #5b8def;
-  --user-bg: linear-gradient(135deg, #5b8def, #7c5cff);
-  --tool: #d7b04a;
-  --tool-bg: rgba(215, 176, 74, 0.08);
-  --error: #ff6675;
-  --error-bg: rgba(255, 102, 117, 0.1);
+  /* Semantic roles */
+  --user-bubble: var(--accent);
+  --user-bubble-fg: var(--ggui-color-onPrimary, #ffffff);
+  --tool-fg: var(--ggui-color-primary-300, #d4a594);
+  --tool-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+  --error: var(--ggui-color-error, #ff6675);
+  --error-bg: color-mix(in srgb, var(--error) 10%, transparent);
 
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -51,19 +66,15 @@ body,
 }
 
 body {
-  font-family:
-    "Inter",
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Display",
-    "Segoe UI",
-    system-ui,
-    sans-serif;
-  font-feature-settings: "cv11", "ss01", "ss03";
-  background: var(--bg-0);
+  /* `<ThemeProvider>` already wires `font-family`, `background`, and
+   * `color` onto html/body using ggui tokens. We layer the
+   * sample-agent's signature ambient gradient on top of the token
+   * surface to give the chat shell a subtle depth that the iframe
+   * content (a flat card surface) doesn't compete with. */
+  background-color: var(--bg-app);
   background-image:
-    radial-gradient(at 12% 8%, rgba(124, 92, 255, 0.12) 0px, transparent 50%),
-    radial-gradient(at 88% 92%, rgba(91, 141, 239, 0.08) 0px, transparent 50%);
+    radial-gradient(at 12% 8%, color-mix(in srgb, var(--accent) 12%, transparent) 0px, transparent 50%),
+    radial-gradient(at 88% 92%, color-mix(in srgb, var(--accent) 8%, transparent) 0px, transparent 50%);
   color: var(--fg);
   overflow: hidden;
   font-size: 14px;
@@ -91,7 +102,6 @@ button {
 }
 
 .layout-inline {
-  /* Inline mode = full-width chat. No panel. */
   grid-template-columns: 1fr;
 }
 
@@ -100,15 +110,13 @@ button {
 .chat {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--bg-1), var(--bg-0));
-  border-right: 1px solid var(--border);
+  background: var(--bg-chat);
+  border-right: 1px solid var(--border-subtle);
   gap: 0;
   min-width: 0;
 }
 
 .layout-inline .chat {
-  /* In inline mode, the chat IS the whole surface — center it with
-   * a max-width so it doesn't feel infinite. */
   border-right: none;
   align-items: center;
 }
@@ -119,8 +127,8 @@ button {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
   backdrop-filter: blur(20px);
   flex-shrink: 0;
 }
@@ -148,8 +156,8 @@ button {
 
 .layout-toggle {
   display: inline-flex;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 2px;
   gap: 1px;
@@ -171,24 +179,19 @@ button {
 .layout-toggle button.active {
   background: var(--accent-soft);
   color: var(--fg);
-  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.4);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
   font-weight: 600;
 }
 
 .layout-toggle button:not(.active):hover {
   color: var(--fg);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-subtle);
 }
 
 /* ── History ────────────────────────────────────────────── */
 
 .history {
   flex: 1 1 0;
-  /* `min-height: 0` is the classic flex-scroll fix — without it, the
-   * flex child's natural content size wins over `flex: 1` and the
-   * container never bounds, so `overflow-y: auto` is structurally
-   * dead. With it, the flex container can actually shrink below the
-   * intrinsic content size, and overflow kicks in. */
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -212,9 +215,9 @@ button {
   background: transparent;
 }
 .history::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-subtle);
   border-radius: 5px;
-  border: 3px solid var(--bg-1);
+  border: 3px solid var(--bg-chat);
 }
 .history::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
@@ -230,10 +233,6 @@ button {
   word-break: break-word;
   animation: msg-in 0.32s var(--ease-out);
   transform-origin: center bottom;
-  /* History is a flex column; without flex-shrink:0 the text/tool rows
-   * collapse to 0 height when a tall sibling (the iframe stack-item)
-   * lands and the container has a bounded max-height. Lock in their
-   * natural content height. */
   flex-shrink: 0;
 }
 
@@ -249,19 +248,19 @@ button {
 }
 
 .msg.user {
-  background: var(--user-bg);
-  color: white;
+  background: var(--user-bubble);
+  color: var(--user-bubble-fg);
   align-self: flex-end;
   max-width: 78%;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.2),
-    0 4px 16px rgba(91, 141, 239, 0.2);
+    0 4px 16px color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: 14px 14px 4px 14px;
 }
 
 .msg.assistant {
   background: var(--surface-strong);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   color: var(--fg);
   align-self: flex-start;
   white-space: pre-wrap;
@@ -271,15 +270,10 @@ button {
 
 .msg.tool {
   background: var(--tool-bg);
-  border: 1px solid rgba(215, 176, 74, 0.18);
-  font-family:
-    "JetBrains Mono",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  font-family: var(--ggui-font-family-mono, ui-monospace, "SF Mono", Menlo, monospace);
   font-size: 11px;
-  color: var(--tool);
+  color: var(--tool-fg);
   align-self: stretch;
   padding: 6px 10px;
   border-radius: 8px;
@@ -289,7 +283,7 @@ button {
 
 .msg.error {
   background: var(--error-bg);
-  border: 1px solid rgba(255, 102, 117, 0.25);
+  border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
   color: var(--error);
   align-self: stretch;
   border-radius: 8px;
@@ -298,27 +292,22 @@ button {
 /* ─── tool-call row (expandable) ─────────────────────────────── */
 .msg.tool-call {
   background: var(--tool-bg);
-  border: 1px solid rgba(215, 176, 74, 0.22);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
   align-self: stretch;
   padding: 0;
   border-radius: 10px;
-  font-family:
-    "JetBrains Mono",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  font-family: var(--ggui-font-family-mono, ui-monospace, "SF Mono", Menlo, monospace);
   font-size: 12px;
-  color: var(--tool);
+  color: var(--tool-fg);
   overflow: hidden;
 }
 
 .msg.tool-call-error {
-  border-color: rgba(255, 102, 117, 0.35);
+  border-color: color-mix(in srgb, var(--error) 35%, transparent);
 }
 
 .msg.tool-call-pending {
-  border-color: rgba(215, 176, 74, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   border-style: dashed;
 }
 
@@ -338,7 +327,7 @@ button {
 }
 
 .tool-call-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-subtle);
 }
 
 .tool-call-chevron {
@@ -350,7 +339,7 @@ button {
 
 .tool-call-name {
   font-weight: 600;
-  color: var(--tool);
+  color: var(--tool-fg);
   flex-shrink: 0;
   letter-spacing: 0.01em;
 }
@@ -364,23 +353,23 @@ button {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-subtle);
   opacity: 0.9;
 }
 
 .tool-call-status-ok {
-  color: #6db86d;
-  background: rgba(109, 184, 109, 0.12);
+  color: var(--ggui-color-success, #6db86d);
+  background: color-mix(in srgb, var(--ggui-color-success, #6db86d) 14%, transparent);
 }
 
 .tool-call-status-pending {
-  color: var(--tool);
+  color: var(--tool-fg);
   opacity: 0.6;
 }
 
 .tool-call-status-error {
   color: var(--error);
-  background: rgba(255, 102, 117, 0.16);
+  background: color-mix(in srgb, var(--error) 18%, transparent);
 }
 
 .tool-call-body {
@@ -388,7 +377,7 @@ button {
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .tool-call-section {
@@ -416,12 +405,9 @@ button {
   max-height: 420px;
   font-size: 12px;
   line-height: 1.55;
-  color: rgba(255, 255, 255, 0.82);
-  /* Visible scrollbar on the dark background so users discover the
-   * scrolling affordance — default chromium scrollbars over a dark bg
-   * are nearly invisible. */
+  color: color-mix(in srgb, var(--fg) 84%, transparent);
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .tool-call-json::-webkit-scrollbar {
@@ -432,11 +418,11 @@ button {
   background: transparent;
 }
 .tool-call-json::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--border-strong);
   border-radius: 4px;
 }
 .tool-call-json::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--fg) 30%, transparent);
 }
 
 .msg.stack-item-wrap {
@@ -463,10 +449,10 @@ button {
 form {
   display: flex;
   gap: 10px;
-  align-items: flex-end; /* button + textarea bottoms align when textarea grows */
+  align-items: flex-end;
   padding: 16px 20px 20px;
-  border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, transparent, var(--bg-0));
+  border-top: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, transparent, var(--bg-app));
   flex-shrink: 0;
   width: 100%;
 }
@@ -476,18 +462,15 @@ form {
   margin: 0 auto;
 }
 
-/* Locked input row height: textarea + button stay aligned at 52px
- * when empty; textarea grows to its max-height when content overflows
- * one line, button stays anchored to the bottom-right corner. */
 :root {
   --composer-h: 52px;
 }
 
 textarea {
   flex: 1;
-  padding: 15px 14px; /* (52 - 14*1.5 - 2)/2 ≈ 15px so 1-line content is vertically centered */
-  border: 1px solid var(--border);
-  background: var(--surface);
+  padding: 15px 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
   border-radius: 12px;
   resize: none;
   font-family: inherit;
@@ -518,7 +501,7 @@ textarea:focus {
 form button {
   padding: 0 22px;
   background: var(--accent);
-  color: white;
+  color: var(--user-bubble-fg);
   border: none;
   border-radius: 12px;
   font-size: 13px;
@@ -530,9 +513,9 @@ form button {
 }
 
 form button:hover:not(:disabled) {
-  background: #8a6dff;
+  background: color-mix(in srgb, var(--accent) 90%, white);
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.35);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 form button:active:not(:disabled) {
@@ -548,7 +531,7 @@ form button:disabled {
 
 .ui-pane {
   position: relative;
-  background: var(--bg-0);
+  background: var(--bg-app);
   overflow: hidden;
   padding: 20px;
 }
@@ -569,17 +552,12 @@ form button:disabled {
 }
 
 .ui-placeholder code {
-  background: var(--surface);
+  background: var(--surface-subtle);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
   color: var(--fg);
-  font-family:
-    "JetBrains Mono",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  font-family: var(--ggui-font-family-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }
 
 .panel-frame {
@@ -596,15 +574,15 @@ form button:disabled {
 /* ── Stack item card ────────────────────────────────────── */
 
 .stack-item {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.02) inset,
-    0 8px 32px rgba(0, 0, 0, 0.32);
+    0 1px 0 color-mix(in srgb, var(--fg) 2%, transparent) inset,
+    0 8px 32px color-mix(in srgb, var(--accent) 12%, transparent);
   transition: border-color 0.2s var(--ease-out);
 }
 
@@ -617,16 +595,11 @@ form button:disabled {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 11px;
   color: var(--fg-muted);
-  font-family:
-    "JetBrains Mono",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  font-family: var(--ggui-font-family-mono, ui-monospace, "SF Mono", Menlo, monospace);
   flex-shrink: 0;
 }
 
@@ -674,20 +647,9 @@ form button:disabled {
 .stack-item-frame {
   flex: 1;
   position: relative;
-  /* Match the surrounding dark surface — generated UIs almost always
-   * carry their own background; the rare ones that don't shouldn't
-   * burn a white rectangle into the dark shell. */
-  background: var(--bg-2);
+  background: var(--bg-card);
   min-height: 320px;
   overflow: auto;
-  /* @mcp-ui/client's AppRenderer inserts an anonymous wrapper `<div
-   * style="height:100%">` between this element and the `<iframe>`.
-   * Percent heights on that wrapper don't reliably resolve against
-   * the flex-item height set below (`.layout-inline .stack-item-frame
-   * { height: 480px }`) because flex-item heights are not "definite"
-   * for `%` resolution in all browsers. Making this a column flex
-   * container + stretching the wrapper as flex:1 forces the wrapper
-   * (and therefore the iframe) to fill the full vertical space. */
   display: flex;
   flex-direction: column;
 }
@@ -698,18 +660,11 @@ form button:disabled {
 }
 
 .stack-item-frame iframe {
-  /* Override @mcp-ui/client AppRenderer's inline `style.height = '600px'`
-   * (set directly on the iframe at mount; the library exposes no prop
-   * to override). Using `flex: 1` instead of `height: 100%` because
-   * the iframe's flex parent (the AppRenderer wrapper div) gets ITS
-   * height via flex-stretch — a percentage child resolves against
-   * "definite" heights only, and flex-stretched heights aren't
-   * universally treated as definite. `flex: 1` lets the iframe grow
-   * via the same flex algorithm that sized its parent. `height: auto
-   * !important` clears the inline 600px so the flex-basis 0% takes
-   * effect instead. `min-height: 0 !important` lets the iframe shrink
-   * past its intrinsic 150px browser-default when the container is
-   * smaller. */
+  /* See styles.css history: F8 (`!important` to override @mcp-ui/client's
+   * inline `style.height = '600px'`) + the slice's flex switch (the
+   * AppRenderer wrapper's flex-stretched height isn't "definite" for
+   * percent children, so we use the flex algorithm instead).
+   */
   width: 100% !important;
   flex: 1 1 0% !important;
   height: auto !important;
@@ -718,8 +673,6 @@ form button:disabled {
   display: block;
 }
 
-/* Inline mode: stack items get more vertical room since the panel
- * isn't competing for space. */
 .layout-inline .stack-item-frame {
   min-height: 480px;
   height: 480px;
@@ -732,9 +685,9 @@ form button:disabled {
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(124, 92, 255, 0.06) 50%,
-    rgba(255, 255, 255, 0) 100%
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 8%, transparent) 50%,
+    transparent 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
@@ -751,17 +704,12 @@ form button:disabled {
 }
 
 code {
-  background: var(--surface);
+  background: var(--surface-subtle);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
   color: var(--fg);
-  font-family:
-    "JetBrains Mono",
-    ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
+  font-family: var(--ggui-font-family-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }
 
 /* ── Empty state ────────────────────────────────────────── */
@@ -783,14 +731,14 @@ code {
   height: 56px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--accent), var(--user));
+  background: var(--accent);
   border-radius: 16px;
   font-size: 28px;
-  color: white;
+  color: var(--user-bubble-fg);
   font-weight: 300;
   box-shadow:
-    0 8px 32px rgba(124, 92, 255, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    0 8px 32px color-mix(in srgb, var(--accent) 32%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
 }
 
 .empty-state h2 {
@@ -818,8 +766,8 @@ code {
 .empty-state-examples code {
   font-size: 12px;
   padding: 5px 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   color: var(--fg-muted);
   transition: all 0.2s var(--ease-out);
@@ -829,12 +777,6 @@ code {
   color: var(--fg);
   border-color: var(--accent);
   background: var(--accent-soft);
-}
-
-/* Tone down [turn ended] chip — it's a system marker, not a tool call */
-.msg.tool:has-text("[turn ended") {
-  /* :has-text doesn't exist; we use a class workaround in Chat.tsx
-   * via the entry.kind === 'end' branch — see .msg.turn-end below. */
 }
 
 .msg.turn-end {

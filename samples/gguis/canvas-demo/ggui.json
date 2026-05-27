@@ -6,6 +6,10 @@
     "name": "Sample ggui — fullscreen-mode canvas demo",
     "defaultDisplayMode": "fullscreen"
   },
+  "theme": {
+    "preset": "indigo",
+    "mode": "dark"
+  },
   "generation": {
     "model": "anthropic:claude-haiku-4-5-20251001"
   }
