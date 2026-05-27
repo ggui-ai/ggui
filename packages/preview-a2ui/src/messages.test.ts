@@ -14,7 +14,7 @@ describe('parseServerMessage — createSurface', () => {
     const result = parseServerMessage({
       version: V,
       createSurface: {
-        surfaceId: 'stack-item-1',
+        surfaceId: 'render-1',
         catalogId: 'ggui.preview.v1',
       },
     });

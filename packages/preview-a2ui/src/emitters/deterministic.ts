@@ -64,10 +64,10 @@ type JsonPayload =
  */
 export interface DeterministicPreviewContext {
   /**
-   * A2UI surface id. Defaults to `ctx.stackItemId` when
+   * A2UI surface id. Defaults to `ctx.renderId` when
    * {@link DeterministicPreviewOptions.surfaceId} is absent.
    */
-  readonly stackItemId: string;
+  readonly renderId: string;
   /**
    * Push story. `intent` is the primary signal the producer reads;
    * additional fields are accepted but ignored.
@@ -90,9 +90,9 @@ export interface DeterministicPreviewContext {
 
 export interface DeterministicPreviewOptions {
   /**
-   * Override the surface id. Defaults to `ctx.stackItemId` — keeping the
-   * surface id aligned with the stackItemId makes the registry's
-   * stackItemId-keyed cancellation reach the right client surface when
+   * Override the surface id. Defaults to `ctx.renderId` — keeping the
+   * surface id aligned with the renderId makes the registry's
+   * renderId-keyed cancellation reach the right client surface when
    * the renderer buffers on `createSurface.surfaceId`.
    */
   readonly surfaceId?: string;
@@ -147,7 +147,7 @@ export async function produceDeterministicPreview(
   ctx: DeterministicPreviewContext,
   options?: DeterministicPreviewOptions,
 ): Promise<void> {
-  const surfaceId = options?.surfaceId ?? ctx.stackItemId;
+  const surfaceId = options?.surfaceId ?? ctx.renderId;
   const catalogId = options?.catalogId ?? DEFAULT_CATALOG_ID;
 
   // Frame 1 — surface creation.
