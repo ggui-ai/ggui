@@ -35,8 +35,8 @@ export function buildSelfContainedHtml(envelope: Record<string, unknown>): strin
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026')
-    .replace(/ /g, '\\u2028')
-    .replace(/ /g, '\\u2029');
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
   const safeRuntimeUrl = runtimeUrl
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
