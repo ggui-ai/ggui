@@ -10,7 +10,7 @@
  * Concrete reservations today:
  *
  *   - {@link PREVIEW_CHANNEL} — provisional A2UI assembly stream
- *     emitted during fresh-gen `ggui_push` flows. The integration
+ *     emitted during fresh-gen `ggui_render` flows. The integration
  *     surface (A2UI message types, catalog, validators) lives in the
  *     dedicated boundary package `@ggui-ai/preview-a2ui`; this module
  *     owns only the protocol-level naming rule so `@ggui-ai/protocol`
@@ -42,7 +42,7 @@ export const RESERVED_CHANNEL_PREFIX = '_ggui:';
 
 /**
  * Reserved channel for provisional A2UI assembly streams emitted by
- * the server during fresh-gen `ggui_push` flows. The agent never
+ * the server during fresh-gen `ggui_render` flows. The agent never
  * authors messages on this channel; the renderer subscribes implicitly
  * and dispatches the A2UI payload through its preview surface.
  */
@@ -428,12 +428,12 @@ export function validateCanvasLifecyclePayload(
         });
       }
       break;
-    case 'push_started':
-      requireString('stackItemId');
+    case 'render_started':
+      requireString('renderId');
       requireString('intent');
       break;
     case 'consume_polling':
-      requireString('stackItemId');
+      requireString('renderId');
       if (p.state !== 'open') {
         violations.push({
           field: 'state',
@@ -447,7 +447,7 @@ export function validateCanvasLifecyclePayload(
       violations.push({
         field: 'kind',
         message: `Unknown lifecycle kind '${p.kind}'. Closed union; new kinds bump protocol version.`,
-        expected: "'handshake_started' | 'handshake_completed' | 'push_started' | 'consume_polling'",
+        expected: "'handshake_started' | 'handshake_completed' | 'render_started' | 'consume_polling'",
         received: p.kind,
       });
   }

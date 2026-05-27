@@ -45,7 +45,7 @@ import type { DataContract, JsonValue } from './data-contract.js';
  *
  *   - `cache`  — an existing blueprint matched at or above the per-app
  *                threshold. `blueprintMeta.codeHash` is present; the
- *                paired `ggui_push({decision: {kind: 'accept'}})`
+ *                paired `ggui_render({decision: {kind: 'accept'}})`
  *                short-circuits to cache delivery.
  *   - `agent`  — no cache hit, but the agent's draft validated cleanly.
  *                `codeHash` absent; gen runs on push against the

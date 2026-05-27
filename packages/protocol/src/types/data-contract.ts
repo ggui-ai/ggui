@@ -508,7 +508,7 @@ export type ActionSpec = Record<string, ActionEntry>;
  *
  *   1. Call sites are grep-able — producers and consumers that need to
  *      reason about the refresh-input contract can find each other.
- *   2. v2 evolution (e.g., passing `{sessionId}` / `{actor}` context on
+ *   2. v2 evolution (e.g., passing `{renderId}` / `{actor}` context on
  *      refresh) has a single point to widen; today's `{}` literal
  *      wouldn't trip any compile error if the wire expectation
  *      changed.
@@ -1146,8 +1146,8 @@ export function deriveContextDefault(entry: ContextEntry): JsonValue | undefined
  * Data contract that bind a generated component to its consumers.
  *
  * Seven parts:
- * - **intent**: WHY this UI exists — concise purpose capturing user goal, data shown, and interaction pattern (NOT a contract field; threaded externally on `ggui_handshake({sessionId, intent})`)
- * - **propsSpec**: WHAT data the UI renders initially (set on push, mutated via ggui_update) — agent → client one-shot
+ * - **intent**: WHY this UI exists — concise purpose capturing user goal, data shown, and interaction pattern (NOT a contract field; threaded externally on `ggui_handshake({renderId, intent})`)
+ * - **propsSpec**: WHAT data the UI renders initially (set on render, mutated via ggui_update) — agent → client one-shot
  * - **streamSpec**: WHAT live data the UI accepts — flat map keyed by channel name (agent → client live)
  * - **contextSpec**: WHAT observable client state the LLM sees — flat map keyed by slot name (client → agent live, last-write-wins state)
  * - **actionSpec**: WHAT user interactions the UI emits — flat map keyed by action name (client → agent, discrete events that drive turns)
@@ -1227,7 +1227,7 @@ export interface DataContract {
    */
   /**
    * Props spec — declaration of the initial-render props shape. Values
-   * arrive on the wire via `ggui_push.input.props` / `ggui_update.input.props`
+   * arrive on the wire via `ggui_render.input.props` / `ggui_update.input.props`
    * (those wire fields stay named `props` — they carry values, not the
    * spec). Naming aligns with the other three typed surfaces
    * (`actionSpec` / `streamSpec` / `contextSpec`).
@@ -1372,8 +1372,8 @@ export type ContractErrorCode =
   | 'INVALID_ACTION_KIND'
   /**
    * `'PIPE_NOT_FOUND'` — surfaced when `ggui_runtime_submit_action`
-   * receives a `kind:"dispatch"` envelope referencing a `stackItemId`
-   * whose pending-events pipe is closed/missing (popped, session
+   * receives a `kind:"dispatch"` envelope referencing a `renderId`
+   * whose pending-events pipe is closed/missing (drained, render
    * closed, or never opened). The handler returns `{ok:false, code:
    * 'PIPE_NOT_FOUND'}` in structuredContent; the iframe-runtime
    * inspects the response (via the host's postMessage relay) and

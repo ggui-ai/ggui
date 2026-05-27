@@ -35,7 +35,7 @@ export const toolUseBlockSchema = z.object({
  * Tool execution result (Protocol v1.1).
  *
  * Emitted inline on the assistant turn when the server executed a tool on
- * the agent's behalf (e.g. `ggui_push`, `ggui_handshake`). Clients pair this
+ * the agent's behalf (e.g. `ggui_render`, `ggui_handshake`). Clients pair this
  * with the matching `tool_use` by `tool_use_id` and render — no second
  * round-trip through a `ggui_render` client tool is needed.
  *

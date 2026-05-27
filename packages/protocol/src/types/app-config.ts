@@ -19,27 +19,27 @@ export interface AppDisplayConfig {
    * `@ggui-ai/ggui-react-native` — the hook POSTs the user's message +
    * history to `{endpointUrl}/invoke` and streams back the agent's
    * response (Streamable Invoke Protocol). NOT used by the
-   * `ggui_handshake` → `ggui_push` mint path, which flows through MCP.
+   * `ggui_handshake` → `ggui_render` mint path, which flows through MCP.
    *
    * Absent for apps without a deployed agent endpoint; `useInvoke`
    * surfaces a clear error in that case.
    */
   endpointUrl?: string;
   /**
-   * App-default display-mode hint stamped on every `ggui_push` from this
+   * App-default display-mode hint stamped on every `ggui_render` from this
    * app via `_meta.ui.displayMode`. Honored by hosts as a PRESENTATION
    * preference — `'fullscreen'` says "render this as a main view,
    * replacing the previous iframe in the primary slot"; `'inline'` says
    * "stack vertically in the chat log"; `'pip'` says "render as
    * picture-in-picture overlay" (reserved).
    *
-   * The wire mechanism is identical regardless of mode: every push
+   * The wire mechanism is identical regardless of mode: every render
    * stamps its own `_meta.ui.resourceUri`, every iframe goes through
    * the same runtime mount path. Display mode controls ONLY how the
-   * host arranges the iframes it mounts. Per-push agents can override
-   * via `ggui_push.input.displayMode`.
+   * host arranges the iframes it mounts. Per-render agents can override
+   * via `ggui_render.input.displayMode`.
    *
-   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * Absent ⇒ no per-render hint stamped (host falls back to its own
    * default, typically `'inline'`).
    */
   defaultDisplayMode?: McpUiDisplayMode;

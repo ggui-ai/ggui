@@ -23,7 +23,7 @@
  * Designed to slot at:
  *   - `ggui_handshake` entry — validates `blueprintDraft.contract`
  *     before the negotiator runs.
- *   - `ggui_push` entry — validates the `effectiveContract` (either
+ *   - `ggui_render` entry — validates the `effectiveContract` (either
  *     synth-amended or override) before any state mutation.
  *
  * Both call sites already run cross-reference and name-invariant
@@ -61,7 +61,7 @@ export class ContractSchemaMetaError extends Error {
       'Fix the JSON Schema at the named field. Common causes: ' +
       'missing `items` on an array schema, a properties entry that ' +
       'is not itself a JSON Schema object, or an unknown keyword. ' +
-      'Re-call ggui_push (or ggui_handshake) once corrected.';
+      'Re-call ggui_render (or ggui_handshake) once corrected.';
   }
 }
 

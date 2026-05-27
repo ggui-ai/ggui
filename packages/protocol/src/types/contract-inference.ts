@@ -287,16 +287,16 @@ export type InferGadgetNames<T> =
 /**
  * Discriminated union of all stream emissions in a contract.
  *
- * Each member has `{ channel: ChannelName; payload: PayloadType; complete?: boolean; stackItemId?: string }`
- * — the agent-supplied fields of {@link GguiEmitInput} minus `sessionId`
+ * Each member has `{ channel: ChannelName; payload: PayloadType; complete?: boolean }`
+ * — the agent-supplied fields of {@link GguiEmitInput} minus `renderId`
  * (which is caller context, not per-delivery).
  *
  * `mode` / `seq` / transport details are intentionally NOT on this union:
  * `mode` is derived from `streamSpec[channel].mode` server-side,
- * and `seq` is server-assigned via `SessionStreamBuffer`. Producers that
+ * and `seq` is server-assigned via `RenderStreamBuffer`. Producers that
  * try to set either are drifting against the streamSpec design lock.
  *
- * Falls back to `{ channel: string; payload: JsonValue; complete?: boolean; stackItemId?: string }`
+ * Falls back to `{ channel: string; payload: JsonValue; complete?: boolean }`
  * when the contract has no `streamSpec` declared.
  */
 export type TypedStreamEvent<T> =
@@ -307,17 +307,16 @@ export type TypedStreamEvent<T> =
   // `HandlerContext.stream()` with `T = DataContract`) keep ergonomic
   // runtime-data types.
   [InferStreamNames<T>] extends [never]
-    ? { channel: string; payload: JsonValue; complete?: boolean; stackItemId?: string }
+    ? { channel: string; payload: JsonValue; complete?: boolean }
     : InferStreamNames<T> extends infer Names extends string
       ? {
           [N in Names]: {
             channel: N;
             payload: InferStreamPayload<T, N>;
             complete?: boolean;
-            stackItemId?: string;
           };
         }[Names]
-      : { channel: string; payload: JsonValue; complete?: boolean; stackItemId?: string };
+      : { channel: string; payload: JsonValue; complete?: boolean };
 
 /**
  * Discriminated union of all action events in a contract.

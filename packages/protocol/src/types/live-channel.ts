@@ -139,10 +139,10 @@ export interface SubscribePayload {
   supportedVersions?: string[];
   /**
    * Optional bootstrap credential for transports that mint a one-time
-   * opaque token at handshake (e.g. MCP Apps `_meta`-delivered short-
+   * opaque token at handshake (e.g. an MCP Apps `_meta`-delivered short-
    * lived bootstrap). Generic string slot, not coupled to any specific
-   * integration — see the module-level docstring on
-   * `@ggui-ai/protocol/integrations/mcp-apps` for the canonical use case.
+   * integration — host adapters interpret the value per their own
+   * bootstrap contract.
    */
   bootstrap?: string;
 }

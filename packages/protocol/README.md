@@ -27,13 +27,13 @@ Here is what happens when a user clicks "Add" on a generated todo UI:
 
 ## Implementer guide
 
-Building a third-party MCP host that renders ggui sessions, a non-React viewer, or any runtime that speaks the ggui wire contract? The implementer guide at [docs.ggui.ai](https://docs.ggui.ai) covers the three-way quickstart (React via `<McpAppIframe>` / vanilla iframe + postMessage / MCP-host install), the full `ProtocolError` recipe with suggested UX per variant, `ObservabilityEvent` kinds, and version negotiation.
+Building a third-party MCP host that renders ggui UIs, a non-React viewer, or any runtime that speaks the ggui wire contract? The implementer guide at [docs.ggui.ai](https://docs.ggui.ai) covers the three-way quickstart (React via `<McpAppIframe>` / vanilla iframe + postMessage / MCP-host install), the full `ProtocolError` recipe with suggested UX per variant, `ObservabilityEvent` kinds, and version negotiation.
 
 ## What this package exports
 
 | Surface                                     | What it is                                                       |
 | ------------------------------------------- | ---------------------------------------------------------------- |
-| `@ggui-ai/protocol`                         | Root barrel — envelope types, `StackItem`, `StreamSpec`, actions |
+| `@ggui-ai/protocol`                         | Root barrel — envelope types, `Render`, `StreamSpec`, actions    |
 | `@ggui-ai/protocol/content-hash`            | Deterministic hashing for cache keys                             |
 | `@ggui-ai/protocol/blueprint-key`           | Server-only blueprint cache-key derivation (uses `node:crypto`)  |
 | `@ggui-ai/protocol/transport/websocket`     | Live-channel WS binding — subscribe / ack / resume types         |

@@ -9,9 +9,9 @@
  *   - `handshake_started` / `handshake_completed`: bracket each
  *     `ggui_handshake` call so the animator can render "negotiating"
  *     during the gap.
- *   - `push_started`: emitted at the gen gate of `ggui_push`, before
- *     the final `push` envelope lands. Drives the animator's
- *     `constructing` state. The eventual `push` envelope (existing
+ *   - `render_started`: emitted at the gen gate of `ggui_render`, before
+ *     the final `render` envelope lands. Drives the animator's
+ *     `constructing` state. The eventual `render` envelope (existing
  *     wire type) signals completion → animator transitions to
  *     `content`.
  *   - `consume_polling`: signals that `ggui_consume` opened a long-
@@ -70,8 +70,8 @@ export interface HandshakeCompletedPayload extends JsonObject {
 }
 
 /**
- * Emitted when the server starts a `ggui_push` cold-gen (or
- * blueprint-cache hit). The eventual `push` envelope on the existing
+ * Emitted when the server starts a `ggui_render` cold-gen (or
+ * blueprint-cache hit). The eventual `render` envelope on the existing
  * wire signals completion.
  */
 export interface RenderStartedPayload extends JsonObject {

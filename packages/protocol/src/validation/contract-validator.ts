@@ -930,7 +930,7 @@ function validateSchemaStructure(
  * Thrown by commit/update/stream handlers when agent data doesn't match
  * the negotiated contract. The MCP handler catches this and returns a
  * structured error response with violations + hint so the agent can
- * self-correct (fix data or propose a new contract via ggui_push).
+ * self-correct (fix data or propose a new contract via ggui_render).
  */
 function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event'): string {
   if (tool === 'ggui_event') {

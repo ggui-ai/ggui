@@ -91,9 +91,9 @@ export interface UIGenerationRequest<TContext = JsonObject> {
 /**
  * Internal response from UI generation. This is the GENERATOR-OUTPUT
  * shape — `componentCode` is the freshly produced ESM string. Before
- * the stack item commits to the wire, the slice-meta derivation
+ * the render commits to the wire, the slice-meta derivation
  * uploads the code body and projects `codeUrl` (a fetchable URL) onto
- * the `ai.ggui/stack-item` slice instead of inlining the source.
+ * the `ai.ggui/render` slice instead of inlining the source.
  * Iframe runtimes fetch the code from `codeUrl`; they never see this
  * field.
  */
@@ -108,8 +108,8 @@ export interface UIGenerationResponse {
    * Populated by the generator when the component calls wire hooks
    * (`useAction('name')`, `useStream('channel')`) — the generator
    * extracts the call sites and emits a matching authoring-side
-   * envelope so downstream consumers (`ggui_push` → StackItem, console
-   * inspectors, session-channel router) have the contract available.
+   * envelope so downstream consumers (`ggui_render` → Render, console
+   * inspectors, render-channel router) have the contract available.
    *
    * - When the caller supplied `UiGenerateInput.contract` that
    *   envelope is passed through as-is (already authoritative).
