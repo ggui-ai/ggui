@@ -133,7 +133,7 @@ export interface UiGenerateInput {
   /**
    * Operator-registered gadget catalog (`App.gadgets`)
    * to surface in the code-gen system prompt's `clientCapabilities —
-   * registered catalog` table. Threaded by the push handler from the
+   * registered catalog` table. Threaded by the render handler from the
    * bound `AppMetadataStore` so the code-gen LLM sees the same plugin
    * set as the synth + decision LLMs (via the negotiator's
    * `composeAvailableGadgetsSection`).
@@ -164,7 +164,7 @@ export interface UiGenerateInput {
   appId?: string;
   /**
    * `package → .d.ts content` map for the non-stdlib
-   * gadgets this contract uses. The push handler parallel-fetches
+   * gadgets this contract uses. The render handler parallel-fetches
    * each registered descriptor's `typesUrl` (SRI-verified) via
    * `fetchGadgetTypes` and threads the result here.
    *

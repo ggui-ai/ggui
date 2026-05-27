@@ -8,9 +8,11 @@
  * Dynamo adapter; this one stays in `@ggui-ai/mcp-server-core` for
  * dev / single-process / on-prem self-hosters.
  *
- * ## Storage layout (Model C, renderId-keyed)
+ * ## Storage layout (renderId-keyed)
  *
- * Two tables:
+ * Two tables. The on-disk column is `stack_item_id` for back-compat
+ * with already-deployed sqlite databases; semantically it stores a
+ * `renderId`.
  *
  *   - `pending_event_pipes(stack_item_id PK, status, last_activity_at,
  *     expires_at)` — per-pipe lifecycle row. Created via
@@ -29,7 +31,7 @@
  *
  * ## Honest behavior notes
  *
- *   - `consumeAndClear` is atomic per-stackItem: SELECT events,
+ *   - `consumeAndClear` is atomic per-render: SELECT events,
  *     DELETE them, UPDATE the pipe activity row — all inside one
  *     transaction. Two racing consumers can't both see the same
  *     events; one sees all of them, the other sees empty.

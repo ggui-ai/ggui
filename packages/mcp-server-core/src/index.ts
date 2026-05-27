@@ -43,7 +43,7 @@ export * from './render-store.js';
 export * from './session-stream-buffer.js';
 export * from './stream-fanout.js';
 export * from './pending-event-consumer.js';
-// Optional active-consumer awareness seam. Tracks which stack items
+// Optional active-consumer awareness seam. Tracks which renders
 // currently have an in-flight `ggui_consume` long-poll so
 // `submit-action.ts` can surface `consumerPresent` on its response.
 // Absent → graceful degradation (iframe falls back to 10s claim timer).
@@ -105,8 +105,8 @@ export * from './audit-sink.js';
 export * from './rate-limiter.js';
 export * from './quota-store.js';
 
-// shortCode → session binding store. Narrow-purpose lookup for
-// same-origin `/s/<shortCode>` viewer resolution; the push handler
+// shortCode → render binding store. Narrow-purpose lookup for
+// same-origin `/r/<shortCode>` viewer resolution; the render handler
 // in `@ggui-ai/mcp-server-handlers` is the only writer today.
 export * from './short-code-index.js';
 

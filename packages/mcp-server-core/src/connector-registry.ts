@@ -2,7 +2,7 @@
  * ConnectorRegistry — stable-identity resolver for external MCP servers.
  *
  * Introduced for inbound MCP Apps hosting. Today's only consumer
- * is MCP Apps outbound-host wiring — the inbound MCP Apps stack item
+ * is MCP Apps outbound-host wiring — the inbound MCP Apps render
  * carries a `source.connectorId` (stable id), and the ggui proxy layer
  * resolves that id to an actual endpoint via this registry. Future
  * features that need to reference external MCP servers by stable id
@@ -30,8 +30,8 @@
 export interface RegisteredConnector {
   /**
    * Stable, URL-safe connector id. Persisted as
-   * `McpAppsStackItem.source.connectorId`. Changing this id IS a
-   * breaking operational change for stack items that reference it.
+   * `McpAppsRender.source.connectorId`. Changing this id IS a
+   * breaking operational change for renders that reference it.
    */
   readonly id: string;
   /** MCP server endpoint (absolute HTTP(S) URL). */
@@ -61,7 +61,7 @@ export interface ConnectorRegistry {
 }
 
 /**
- * Typed error thrown by consumers when a stack item references an
+ * Typed error thrown by consumers when a render references an
  * unknown `connectorId`. Distinct class so transports can map to the
  * right error code; not thrown from inside the registry itself (the
  * registry just returns `null`).

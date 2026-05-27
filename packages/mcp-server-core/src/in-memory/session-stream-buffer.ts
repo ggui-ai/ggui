@@ -93,8 +93,8 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     // would fall back to `DEFAULT_STREAM_REPLAY_POLICY` (`'none'`).
     // That is wrong for recognized reserved channels — `_ggui:preview`
     // frames must replay to a late-subscribing viewer (the user's
-    // browser navigates to `/s/<shortCode>` AFTER the agent's
-    // `ggui_push` returns, so the WS attaches after the preamble
+    // browser navigates to `/r/<shortCode>` AFTER the agent's
+    // `ggui_render` returns, so the WS attaches after the preamble
     // has fired). Force `'all'` for KNOWN reserved channels so the
     // late subscriber sees the assembling surface.
     //

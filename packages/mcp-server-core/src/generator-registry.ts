@@ -9,9 +9,9 @@
  * dispatch target; the LLM variant selector picks among candidates
  * whose generators all live in this registry.
  *
- * The single-generator path (every push routes to one factory-built
+ * The single-generator path (every render routes to one factory-built
  * generator) is the default: the registry holds one entry whose slug
- * is `ui-gen-default-haiku-4-5` and the OSS push handler reads from
+ * is `ui-gen-default-haiku-4-5` and the OSS render handler reads from
  * `generation.uiGenerator` directly. This interface is the seam that
  * multi-generator dispatch builds on.
  *

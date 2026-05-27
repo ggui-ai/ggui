@@ -1,15 +1,15 @@
 /**
  * ShortCodeIndex — shortCode → sessionId/appId lookup.
  *
- * Scope. Single narrow purpose: the console session viewer (and
- * future same-origin share-link consumers) resolve `/s/<shortCode>`
- * back to the session the push handler minted the code for. The
- * hosted cloud has its own DynamoDB record path for this;
- * OSS needs a parallel in-process store because nothing else in the
- * OSS server's interfaces owns the mapping.
+ * Scope. Single narrow purpose: the console render viewer (and
+ * future same-origin share-link consumers) resolve `/r/<shortCode>`
+ * back to the render the handler minted the code for. The hosted
+ * cloud has its own DynamoDB record path for this; OSS needs a
+ * parallel in-process store because nothing else in the OSS server's
+ * interfaces owns the mapping.
  *
  * Ownership / writers.
- *   - `@ggui-ai/mcp-server-handlers/session-mutations/push` is the
+ *   - `@ggui-ai/mcp-server-handlers/session-mutations/render` is the
  *     only writer today. After minting a `shortCode` it calls
  *     `index.put(shortCode, { sessionId, appId })` — best-effort, no
  *     throw on failure, since the tool result is already constructed
@@ -47,14 +47,15 @@ export interface ShortCodeBinding {
   readonly sessionId: string;
   readonly appId: string;
   /**
-   * Head stack-item id at the moment of the bind. OSS readers don't
-   * use this; hosted DDB impls record it onto the rich row so the
-   * render endpoint can deep-link directly to the originating
-   * stack item without a follow-up session read. The mint happens
-   * upstream of the placeholder stack-item write, so the value
-   * isn't observable on `sessionStore.get` yet — passing it through
-   * the binding lifts the dependency from "read session" to "read
-   * binding."
+   * Render id at the moment of the bind (`stackItemId` field name
+   * preserved for back-compat with already-deployed adapters that
+   * persist the binding). OSS readers don't use this; hosted DDB
+   * impls record it onto the rich row so the render endpoint can
+   * deep-link directly to the originating render without a follow-up
+   * `renderStore.get`. The mint happens upstream of the placeholder
+   * render write, so the value isn't observable on `renderStore.get`
+   * yet — passing it through the binding lifts the dependency from
+   * "read render" to "read binding."
    *
    * Optional + ignored by the in-memory reference impl. Adding a new
    * field here is intentionally rare; this one was load-bearing for
@@ -111,9 +112,9 @@ export interface ShortCodeIndex {
 
   /**
    * Bulk revoke — drop every binding tied to `sessionId`. Used by
-   * `ggui_close`: after the session is marked completed, no
-   * outstanding render URL for any of its stack items should still
-   * resolve.
+   * conversation-wide teardown paths: after every render in a host
+   * conversation is closed, no outstanding render URL bound to that
+   * host should still resolve.
    *
    * Semantics:
    *   - Both forward + reverse entries cleared.

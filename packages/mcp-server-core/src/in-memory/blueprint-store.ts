@@ -12,7 +12,7 @@
  * project the same indexes into DDB GSIs.
  *
  * The `putCode` / `getCode` helpers are the in-memory equivalent of
- * S3 upload + S3 GetObject. The push handler treats them as an
+ * S3 upload + S3 GetObject. The render handler treats them as an
  * interchangeable seam: `code?: string` resolved by `codeHash` is the
  * wire-side abstraction; the storage shape behind it is the adapter's
  * choice.

@@ -26,13 +26,13 @@
  * `GET /code/<hash>.js` with `Cache-Control: public, max-age=31536000,
  * immutable`. Hosted cloud already converged on this with S3 +
  * CloudFront; OSS adopts the same wire format with a different storage
- * adapter so consumers (iframe runtime, push handler) cannot tell the
+ * adapter so consumers (iframe runtime, render handler) cannot tell the
  * difference between OSS and hosted.
  *
  * ## Protocol & Contract Bar
  *
  * **Parties:**
- * - Producer / writer: `mcp-server-handlers/session-mutations/push.ts` —
+ * - Producer / writer: `mcp-server-handlers/session-mutations/render.ts` —
  *   after `runGenerationIntoSession` produces componentCode, the handler
  *   computes `sha256(code)` and `put`s the (hash, code) pair before
  *   minting the bootstrap envelope.
@@ -133,7 +133,7 @@ export interface CodeStore {
 /**
  * Default hash derivation. SHA-256 hex over UTF-8 bytes of `code`.
  *
- * Exported separately so the push handler can compute the hash without
+ * Exported separately so the render handler can compute the hash without
  * holding a {@link CodeStore} reference (e.g. when emitting the URL
  * onto a tool result before the put has completed).
  */

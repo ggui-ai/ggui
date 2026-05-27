@@ -176,9 +176,9 @@ describe('InMemoryShortCodeIndex', () => {
   });
 
   describe('revokeByStackItemId', () => {
-    // Used by ggui_pop — the URL pointing at the popped stack item
-    // stops resolving, but OTHER stack items on the same session keep
-    // their URLs valid.
+    // Used by per-render close paths — the URL pointing at the closed
+    // render stops resolving, but OTHER renders sharing the same host
+    // conversation keep their URLs valid.
     it('drops only the binding(s) tied to the stackItemId', async () => {
       const idx = new InMemoryShortCodeIndex();
       await idx.put('aaaa1111', {
@@ -193,8 +193,8 @@ describe('InMemoryShortCodeIndex', () => {
       });
       expect(await idx.revokeByStackItemId('stk_a')).toBe(1);
       expect(await idx.lookup('aaaa1111')).toBeNull();
-      // The OTHER stack item's URL stays valid — the session is
-      // still alive.
+      // The OTHER render's URL stays valid — the host conversation
+      // is still alive.
       expect(await idx.lookup('bbbb2222')).not.toBeNull();
       // Reverse pointer falls back to the surviving code if it had
       // been pointing at the revoked one; the test above ordered the

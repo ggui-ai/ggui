@@ -2,7 +2,7 @@
  * `BlueprintSelector` — variant-pick seam. When the handshake handler
  * resolves a contract hash to a candidate list via
  * {@link BlueprintStore.list}, the selector decides which variant the
- * push handler renders.
+ * render handler renders.
  *
  * The default implementation is a deterministic fallback ladder. An
  * LLM-driven selector can layer ahead of step (1) — when the LLM
@@ -17,7 +17,7 @@
  *   4. else sort by `blueprintId` asc (deterministic tiebreaker)
  *
  * The ladder always picks one variant when the candidate list is
- * non-empty; an empty list resolves to `null` (the push handler
+ * non-empty; an empty list resolves to `null` (the render handler
  * branches on this and triggers fresh generation against a freshly
  * minted blueprintId).
  */
