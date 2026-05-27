@@ -2,7 +2,7 @@
  * `emit-envelope` ConformanceHost directive — Slice gap-6.
  *
  * Asserts that the directive injects a wire-format-wrapped envelope
- * into the named session's subscriber set, and that the receiving WS
+ * into the named render's subscriber set, and that the receiving WS
  * client observes the canonical `{type:'stream', payload:{channel,
  * value}}` shape.
  *
@@ -14,7 +14,12 @@
  * lands on the directive — the host-level contract is package-internal
  * and should be testable without round-tripping through the kit.
  *
- * Mirrors the test-helper pattern from `session-version-override.test.ts`.
+ * Mirrors the test-helper pattern from `render-version-override.test.ts`.
+ *
+ * Wire-field note: subscribes still carry `sessionId` on the wire
+ * (the conformance kit's spelling, not yet migrated to `renderId`);
+ * the reference server reads either spelling and treats both as the
+ * render identity.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
@@ -34,17 +39,19 @@ describe('emit-envelope ConformanceHost directive', () => {
     await server.stop();
   });
 
-  it('injects a stream frame into a subscribed session and the WS client observes it', async () => {
-    const sessionId = 'emit-target';
+  it('injects a stream frame into a subscribed render and the WS client observes it', async () => {
+    const renderId = 'emit-target';
     const host = createReferenceConformanceHost({ serverInstance: server });
 
     // Fixture-canonical order: create-session → (client subscribes) →
-    // emit-envelope. The `lastCreatedSessionId()` scoping convention
-    // requires create-session before the directive lands.
-    await host.dispatchSetup({ kind: 'create-session', sessionId });
+    // emit-envelope. The `lastCreatedRenderId()` scoping convention
+    // requires create-session before the directive lands. Directive
+    // kind name is `create-session` because the conformance kit still
+    // spells it that way; the value binds to a `renderId` internally.
+    await host.dispatchSetup({ kind: 'create-session', sessionId: renderId });
 
     // Subscribe a real WS client + capture frames after the ack.
-    const observed = await captureFramesAfterAck(server.baseUrl, sessionId, async () => {
+    const observed = await captureFramesAfterAck(server.baseUrl, renderId, async () => {
       // Triggered AFTER the subscribe ack lands so the subscriber set
       // is populated when the directive fans out.
       await host.dispatchSetup({
@@ -68,6 +75,8 @@ describe('emit-envelope ConformanceHost directive', () => {
   it('rejects directive without channel', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-channel' });
+    // `sessionId` field name comes from the kit's directive shape; the
+    // value binds to a renderId on the internal RenderStore.
     await expect(
       host.dispatchSetup({
         // Channel deliberately empty — directive must reject.
@@ -78,7 +87,7 @@ describe('emit-envelope ConformanceHost directive', () => {
     ).rejects.toThrow(/missing channel/);
   });
 
-  it('rejects directive when no session has been created yet', async () => {
+  it('rejects directive when no render has been created yet', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     await expect(
       host.dispatchSetup({
@@ -89,7 +98,7 @@ describe('emit-envelope ConformanceHost directive', () => {
     ).rejects.toThrow(/before create-session/);
   });
 
-  it('no-ops (warns) when the session has no subscribers — directive resolves, no throw', async () => {
+  it('no-ops (warns) when the render has no subscribers — directive resolves, no throw', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-subs' });
 
@@ -129,7 +138,7 @@ describe('emit-envelope ConformanceHost directive', () => {
  */
 async function captureFramesAfterAck(
   baseUrl: string,
-  sessionId: string,
+  renderId: string,
   afterAck: () => Promise<void>,
 ): Promise<readonly unknown[]> {
   const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
@@ -152,10 +161,13 @@ async function captureFramesAfterAck(
     };
 
     ws.on('open', () => {
+      // Wire field name `sessionId` is the kit's spelling for what
+      // the protocol now calls `renderId`; the reference server reads
+      // either spelling.
       ws.send(
         JSON.stringify({
           type: 'subscribe',
-          payload: { sessionId, appId: 'conformance', role: 'user' },
+          payload: { sessionId: renderId, appId: 'conformance', role: 'user' },
           requestId: 'capture-req',
         }),
       );

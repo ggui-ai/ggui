@@ -1,18 +1,23 @@
 /**
- * Per-session `versionOverride` semantics — Slice K.
+ * Per-render `versionOverride` semantics — Slice K.
  *
- * Asserts that {@link SessionStore.setVersionOverride} scoped a
- * version mismatch to one session without leaking to another, and
- * that the WS subscribe handler advertises the per-session value
+ * Asserts that {@link RenderStore.setVersionOverride} scoped a
+ * version mismatch to one render without leaking to another, and
+ * that the WS subscribe handler advertises the per-render value
  * (not the instance-level default) when emitting UPGRADE_REQUIRED.
  *
  * Why this is a separate test file from `conformance.test.ts`: the
  * kit-driven test boots the full conformance catalog (~30s with
  * default observation windows). This file proves the narrow per-
- * session contract directly via the WS wire, runs in <2s, and stays
+ * render contract directly via the WS wire, runs in <2s, and stays
  * green even if a future kit/fixture change breaks the catalog
- * driver — the per-session contract is package-internal and should
+ * driver — the per-render contract is package-internal and should
  * be testable without round-tripping through the kit.
+ *
+ * Wire-field note: the subscribe payload still spells the render
+ * identity `sessionId` (the conformance kit's wire shape that the
+ * reference server honors for backwards-compat). The reference
+ * server reads it and binds it to a `renderId` internally.
  */
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -20,7 +25,7 @@ import { WebSocket } from 'ws';
 
 import { ReferenceServer } from './server.js';
 
-describe('per-session versionOverride', () => {
+describe('per-render versionOverride', () => {
   let server: ReferenceServer;
 
   beforeEach(async () => {
@@ -32,15 +37,15 @@ describe('per-session versionOverride', () => {
     await server.stop();
   });
 
-  it('subscribe to a session with overridden version emits UPGRADE_REQUIRED carrying the override', async () => {
-    const sessionId = 'override-target';
-    server.sessions.create(sessionId, 'conformance');
-    server.sessions.setVersionOverride(sessionId, '99.99-unsupported');
+  it('subscribe to a render with overridden version emits UPGRADE_REQUIRED carrying the override', async () => {
+    const renderId = 'override-target';
+    server.renders.create(renderId, 'conformance');
+    server.renders.setVersionOverride(renderId, '99.99-unsupported');
 
     const frame = await firstFrame(server.baseUrl, {
       type: 'subscribe',
       payload: {
-        sessionId,
+        sessionId: renderId,
         appId: 'conformance',
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION],
@@ -58,11 +63,11 @@ describe('per-session versionOverride', () => {
     });
   });
 
-  it('does NOT leak to a parallel session — that one still gets the canonical advertised version', async () => {
+  it('does NOT leak to a parallel render — that one still gets the canonical advertised version', async () => {
     const overriddenId = 'parallel-override';
     const cleanId = 'parallel-clean';
-    server.sessions.create(overriddenId, 'conformance');
-    server.sessions.setVersionOverride(overriddenId, '99.99-unsupported');
+    server.renders.create(overriddenId, 'conformance');
+    server.renders.setVersionOverride(overriddenId, '99.99-unsupported');
     // No override on `cleanId` — it should ack the canonical version.
 
     const frame = await firstFrame(server.baseUrl, {
@@ -99,7 +104,7 @@ async function firstFrame(baseUrl: string, send: unknown): Promise<unknown> {
     const ws = new WebSocket(wsUrl);
     const timer = setTimeout(() => {
       ws.close();
-      reject(new Error('per-session-override test: no frame received within 2s'));
+      reject(new Error('per-render-override test: no frame received within 2s'));
     }, 2000);
     ws.on('open', () => {
       ws.send(JSON.stringify(send));

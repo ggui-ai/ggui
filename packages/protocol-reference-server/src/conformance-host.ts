@@ -3,16 +3,24 @@
  * setup/teardown directive dispatcher onto this package's
  * `ReferenceServer` instance.
  *
+ * Directive-kind naming note: the conformance kit still spells its
+ * render-lifecycle directives `create-session` / `close-session` (and
+ * carries the value on a field named `sessionId`). The reference
+ * server honors the kit's wire field names verbatim, then binds the
+ * value to a `renderId` on the internal {@link Render} record — the
+ * directive kind is the consumer's field name, the binding is the
+ * protocol-canonical identity.
+ *
  * Directives split into "implement" and "throw":
  *
  *   Implement:
- *     - create-session            → `sessions.create()`
+ *     - create-session            → `renders.create()`
  *     - register-tool             → `tools.register(name, handler)`
- *     - register-actionspec       → `sessions.registerActionSpec()`
- *     - register-streamspec       → `sessions.registerStreamSpec()`
- *     - server-version-override   → `sessions.setVersionOverride()`
- *     - emit-envelope             → `sessions.injectFrame()`
- *     - close-session             → `sessions.close()`
+ *     - register-actionspec       → `renders.registerActionSpec()`
+ *     - register-streamspec       → `renders.registerStreamSpec()`
+ *     - server-version-override   → `renders.setVersionOverride()`
+ *     - emit-envelope             → `renders.injectFrame()`
+ *     - close-session             → `renders.close()`
  *     - unregister-tool           → `tools.unregister()`
  *
  *   Throw (kit records SKIP, not FAIL):
@@ -48,7 +56,7 @@ export interface CreateReferenceConformanceHostInput {
  *
  * The server MUST be `start()`-ed before the first dispatch — the
  * kit calls `create-session` via `dispatchSetup` before any subscribe,
- * so the session store must be reachable. The caller owns the
+ * so the render store must be reachable. The caller owns the
  * server lifecycle (`start()` + `stop()`).
  */
 export function createReferenceConformanceHost({
@@ -61,7 +69,8 @@ export function createReferenceConformanceHost({
       // discriminant and blocks literal-narrowing on the union.
       if (step.kind === 'create-session') {
         const s = step as CreateSessionSetup;
-        serverInstance.sessions.create(s.sessionId, s.appId ?? 'conformance');
+        // Kit field name: `sessionId`. Canonical identity: `renderId`.
+        serverInstance.renders.create(s.sessionId, s.appId ?? 'conformance');
         return;
       }
       if (step.kind === 'register-tool') {
@@ -86,18 +95,18 @@ export function createReferenceConformanceHost({
       }
       if (step.kind === 'register-actionspec') {
         const s = step as RegisterActionSpecSetup;
-        // register-actionspec doesn't carry a sessionId in the
+        // register-actionspec doesn't carry a renderId in the
         // directive shape — it's scoped to the most-recently-created
-        // session, matching the fixture-authoring convention that
+        // render, matching the fixture-authoring convention that
         // create-session → register-tool → register-actionspec all
-        // land in order on the same session.
-        const lastSession = serverInstance.sessions.lastCreatedSessionId();
-        if (lastSession === undefined) {
+        // land in order on the same render.
+        const lastRenderId = serverInstance.renders.lastCreatedRenderId();
+        if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: register-actionspec invoked before create-session — no session scope to bind to',
+            'reference-server: register-actionspec invoked before create-session — no render scope to bind to',
           );
         }
-        serverInstance.sessions.registerActionSpec(lastSession, {
+        serverInstance.renders.registerActionSpec(lastRenderId, {
           name: s.name,
           tool: s.tool,
         });
@@ -111,7 +120,7 @@ export function createReferenceConformanceHost({
         // Slice I refresh-stream support); the runtime shape is
         // narrowed locally, matching the same convention as the
         // pre-existing `register-tool` branch above. Same most-
-        // recently-created session scoping as register-actionspec.
+        // recently-created render scoping as register-actionspec.
         const raw = step as unknown as {
           readonly channel?: string;
           readonly tool?: string;
@@ -126,13 +135,13 @@ export function createReferenceConformanceHost({
             `register-streamspec directive missing tool: ${JSON.stringify(step)}`,
           );
         }
-        const lastSession = serverInstance.sessions.lastCreatedSessionId();
-        if (lastSession === undefined) {
+        const lastRenderId = serverInstance.renders.lastCreatedRenderId();
+        if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: register-streamspec invoked before create-session — no session scope to bind to',
+            'reference-server: register-streamspec invoked before create-session — no render scope to bind to',
           );
         }
-        serverInstance.sessions.registerStreamSpec(lastSession, {
+        serverInstance.renders.registerStreamSpec(lastRenderId, {
           channel: raw.channel,
           tool: raw.tool,
         });
@@ -140,11 +149,11 @@ export function createReferenceConformanceHost({
       }
       if (step.kind === 'emit-envelope') {
         // The directive carries `channel` + `payload` but no
-        // sessionId — it's scoped to the most-recently-created
-        // session, matching the same fixture-authoring convention as
+        // renderId — it's scoped to the most-recently-created
+        // render, matching the same fixture-authoring convention as
         // register-actionspec / register-streamspec / server-version-
         // override (the kit's `narrowSetupStep` is a flat `type → kind`
-        // rename pass-through, so any sessionId on the directive JSON
+        // rename pass-through, so any renderId on the directive JSON
         // would survive, but the canonical EmitEnvelopeSetup shape
         // doesn't declare one).
         //
@@ -162,13 +171,13 @@ export function createReferenceConformanceHost({
             `emit-envelope directive missing channel: ${JSON.stringify(step)}`,
           );
         }
-        const lastSession = serverInstance.sessions.lastCreatedSessionId();
-        if (lastSession === undefined) {
+        const lastRenderId = serverInstance.renders.lastCreatedRenderId();
+        if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: emit-envelope invoked before create-session — no session scope to bind to',
+            'reference-server: emit-envelope invoked before create-session — no render scope to bind to',
           );
         }
-        const fanned = serverInstance.sessions.injectFrame(lastSession, {
+        const fanned = serverInstance.renders.injectFrame(lastRenderId, {
           type: 'stream',
           payload: {
             channel: s.channel,
@@ -184,7 +193,7 @@ export function createReferenceConformanceHost({
           // the unobservability is a fixture concern.
           // eslint-disable-next-line no-console
           console.warn(
-            `[@ggui-ai/protocol-reference-server] emit-envelope on session '${lastSession}' channel '${s.channel}' had no subscribers — frame dropped`,
+            `[@ggui-ai/protocol-reference-server] emit-envelope on render '${lastRenderId}' channel '${s.channel}' had no subscribers — frame dropped`,
           );
         }
         return;
@@ -218,23 +227,23 @@ export function createReferenceConformanceHost({
             `server-version-override directive missing advertiseVersion/version: ${JSON.stringify(step)}`,
           );
         }
-        // Same most-recently-created session scope as register-
+        // Same most-recently-created render scope as register-
         // actionspec / register-streamspec — the fixture authoring
         // convention is `create-session` immediately precedes this
         // directive, and the kit's narrowSetupStep doesn't surface a
-        // sessionId on the directive object even when the fixture
+        // renderId on the directive object even when the fixture
         // JSON includes one (only `type → kind` is renamed; the rest
-        // is a flat passthrough, so a `sessionId` field WOULD survive
+        // is a flat passthrough, so a `renderId` field WOULD survive
         // — but the canonical ServerVersionOverrideSetup type doesn't
         // declare one, so fixtures may omit it. Falling back to
-        // `lastCreatedSessionId()` keeps the host robust to either.
-        const lastSession = serverInstance.sessions.lastCreatedSessionId();
-        if (lastSession === undefined) {
+        // `lastCreatedRenderId()` keeps the host robust to either.
+        const lastRenderId = serverInstance.renders.lastCreatedRenderId();
+        if (lastRenderId === undefined) {
           throw new Error(
-            'reference-server: server-version-override invoked before create-session — no session scope to bind to',
+            'reference-server: server-version-override invoked before create-session — no render scope to bind to',
           );
         }
-        serverInstance.sessions.setVersionOverride(lastSession, advertise);
+        serverInstance.renders.setVersionOverride(lastRenderId, advertise);
         return;
       }
       // Unknown kind — extensibly-closed. Throw so the kit records
@@ -248,7 +257,8 @@ export function createReferenceConformanceHost({
     async dispatchTeardown(step: HostTeardownStep): Promise<void> {
       if (step.kind === 'close-session') {
         const s = step as CloseSessionTeardown;
-        serverInstance.sessions.close(s.sessionId);
+        // Kit field name: `sessionId`. Canonical identity: `renderId`.
+        serverInstance.renders.close(s.sessionId);
         return;
       }
       if (step.kind === 'unregister-tool') {

@@ -22,10 +22,16 @@
  * `{toolName, actionName}` so an iframe-host kit can match the same
  * tool invocation signal from either side. Pure WS kit currently
  * treats this as SKIP.
+ *
+ * Wire-field note: the inbound action frame names the render
+ * identity `sessionId` on the wire (consumer field name from
+ * `@ggui-ai/protocol-conformance`, which has not yet renamed to
+ * `renderId`). The type-guard accepts both spellings and surfaces
+ * the value as `renderId` for the rest of the dispatcher.
  */
 import { makeContractErrorPayload } from '@ggui-ai/protocol';
 
-import type { Session } from './session.js';
+import type { Render } from './render.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 /** Timeout the `timeout` handler exceeds; the kit's matcher
@@ -35,12 +41,15 @@ const TIMEOUT_MS = 500;
 /**
  * One inbound action frame shape. Matches the fixtures' authored
  * `inputEnvelope` for `wired-action-*` cases — the runner sends the
- * envelope verbatim.
+ * envelope verbatim. The wire spelling of the render-identity field
+ * is normalized to `renderId` by {@link isActionFrame} (it accepts
+ * either the canonical `renderId` or the kit's still-legacy
+ * `sessionId`).
  */
 interface IncomingActionFrame {
   readonly type: 'action';
   readonly channel?: number;
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly action: {
     readonly name: string;
     readonly data?: unknown;
@@ -48,31 +57,50 @@ interface IncomingActionFrame {
 }
 
 /**
- * Type-guard the action frame shape before dispatching. Anything
- * malformed is dropped with a `no-op` warning — the matcher for
+ * Parse + validate an inbound action frame. Returns the normalized
+ * shape on success, `undefined` on any malformed input (matcher for
  * `no-op` fixtures expects silence, so loud rejection would break
- * them.
+ * them).
+ *
+ * Accepts both `renderId` (canonical) and `sessionId` (the kit's
+ * legacy spelling that has not yet been migrated); the returned
+ * shape always surfaces the value as `renderId`.
  */
-export function isActionFrame(frame: unknown): frame is IncomingActionFrame {
-  if (frame === null || typeof frame !== 'object') return false;
+export function parseActionFrame(frame: unknown): IncomingActionFrame | undefined {
+  if (frame === null || typeof frame !== 'object') return undefined;
   const f = frame as Record<string, unknown>;
-  if (f['type'] !== 'action') return false;
-  if (typeof f['sessionId'] !== 'string') return false;
+  if (f['type'] !== 'action') return undefined;
+  const renderId =
+    typeof f['renderId'] === 'string'
+      ? f['renderId']
+      : typeof f['sessionId'] === 'string'
+        ? f['sessionId']
+        : undefined;
+  if (renderId === undefined) return undefined;
   const action = f['action'];
-  if (action === null || typeof action !== 'object') return false;
+  if (action === null || typeof action !== 'object') return undefined;
   const a = action as Record<string, unknown>;
-  return typeof a['name'] === 'string';
+  const name = a['name'];
+  if (typeof name !== 'string') return undefined;
+  const data = 'data' in a ? a['data'] : undefined;
+  const channelValue = f['channel'];
+  return {
+    type: 'action',
+    ...(typeof channelValue === 'number' ? { channel: channelValue } : {}),
+    renderId,
+    action: { name, ...(data !== undefined ? { data } : {}) },
+  };
 }
 
 export interface DispatchContext {
-  readonly session: Session;
+  readonly render: Render;
   readonly tools: ToolRegistry;
 }
 
 /**
  * Dispatch one action frame. Runs asynchronously; contract-error
- * emissions are broadcast to every subscriber on the session via
- * `session.subscribers`.
+ * emissions are broadcast to every subscriber on the render via
+ * `render.subscribers`.
  *
  * Returns when the dispatch's observable outcome has been emitted
  * (either a happy-path observability frame or a contract-error).
@@ -83,11 +111,11 @@ export async function dispatchAction(
   frame: IncomingActionFrame,
   context: DispatchContext,
 ): Promise<void> {
-  const { session, tools } = context;
+  const { render, tools } = context;
   const actionName = frame.action.name;
 
   // Action → tool resolution, in priority order:
-  //   1. Explicit `register-actionspec` directive on this session.
+  //   1. Explicit `register-actionspec` directive on this render.
   //   2. Tool whose name equals the action name (1:1 convention).
   //
   // A real ggui server uses a blueprint's declared `actionSpec` to
@@ -97,14 +125,14 @@ export async function dispatchAction(
   // with `toolName = actionName` — the error payload names the
   // missing tool by the identifier the dispatcher was asked to
   // resolve, which is the action name itself.
-  const actionSpec = session.actionSpecs.get(actionName);
+  const actionSpec = render.actionSpecs.get(actionName);
   let toolName: string | undefined = actionSpec?.tool;
   if (toolName === undefined && tools.has(actionName)) {
     toolName = actionName;
   }
 
   if (toolName === undefined) {
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'TOOL_NOT_FOUND',
       toolName: actionName,
       actionName,
@@ -115,7 +143,7 @@ export async function dispatchAction(
 
   const tool = tools.get(toolName);
   if (tool === undefined) {
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'TOOL_NOT_FOUND',
       toolName,
       actionName,
@@ -127,7 +155,7 @@ export async function dispatchAction(
   // Malformed handler is defined to return the wrong shape — emit
   // SCHEMA_VIOLATION instead of passing the bad return through.
   if (tool.kind === 'malformed') {
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'SCHEMA_VIOLATION',
       toolName: tool.name,
       actionName,
@@ -159,7 +187,7 @@ export async function dispatchAction(
     ]);
   } catch (err) {
     // Promise.race never rejects since we catch inside; defensive.
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'TOOL_THREW',
       toolName: tool.name,
       actionName,
@@ -170,7 +198,7 @@ export async function dispatchAction(
   }
 
   if (handlerOutcome.kind === 'timeout') {
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'TOOL_TIMEOUT',
       toolName: tool.name,
       actionName,
@@ -180,7 +208,7 @@ export async function dispatchAction(
   }
 
   if (handlerOutcome.kind === 'rejected') {
-    emitContractError(session, {
+    emitContractError(render, {
       code: 'TOOL_THREW',
       toolName: tool.name,
       actionName,
@@ -195,7 +223,7 @@ export async function dispatchAction(
   // `unmatchable-on-ws` for `observability-event`, which the runner
   // maps to SKIP (not FAIL). That's the intended behavior per the
   // kit's design note at the top of `match-behavior.ts`.
-  broadcast(session, {
+  broadcast(render, {
     type: 'stream',
     payload: {
       channel: '_ggui:wired-tool-invoked',
@@ -205,7 +233,7 @@ export async function dispatchAction(
 
   // Refresh-stream fan-out (SPEC §2.3 StreamSpec refresh triggers).
   // After a successful wired-action dispatch, every streamSpec
-  // declared on the session fires its refresh tool and emits a
+  // declared on the render fires its refresh tool and emits a
   // stream-update on the bound channel. This is the wire-level
   // proof of the refresh-after-action contract the kit's
   // `stream-refresh-success` fixture asserts.
@@ -215,7 +243,7 @@ export async function dispatchAction(
   // distinguish action-path failures from refresh-path failures
   // (and so `stream-schema-violation` has a path forward when its
   // fixture flips off the known-failures list).
-  await dispatchRefreshStreams(session, tools);
+  await dispatchRefreshStreams(render, tools);
 }
 
 /**
@@ -228,13 +256,13 @@ export async function dispatchAction(
  * preserves that contract.
  */
 async function dispatchRefreshStreams(
-  session: Session,
+  render: Render,
   tools: ToolRegistry,
 ): Promise<void> {
-  for (const spec of session.streamSpecs.values()) {
+  for (const spec of render.streamSpecs.values()) {
     const refreshTool = tools.get(spec.tool);
     if (refreshTool === undefined) {
-      emitContractError(session, {
+      emitContractError(render, {
         code: 'TOOL_NOT_FOUND',
         toolName: spec.tool,
         actionName: spec.channel,
@@ -244,7 +272,7 @@ async function dispatchRefreshStreams(
       continue;
     }
     if (refreshTool.kind === 'malformed' || refreshTool.kind === 'malformed-stream') {
-      emitContractError(session, {
+      emitContractError(render, {
         code: 'SCHEMA_VIOLATION',
         toolName: refreshTool.name,
         actionName: spec.channel,
@@ -258,7 +286,7 @@ async function dispatchRefreshStreams(
       value = await refreshTool.handler(undefined);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      emitContractError(session, {
+      emitContractError(render, {
         code: 'TOOL_THREW',
         toolName: refreshTool.name,
         actionName: spec.channel,
@@ -268,7 +296,7 @@ async function dispatchRefreshStreams(
       });
       continue;
     }
-    broadcast(session, {
+    broadcast(render, {
       type: 'stream',
       payload: {
         channel: spec.channel,
@@ -292,7 +320,7 @@ interface EmitContractErrorInput {
   readonly sourceActionType?: 'wired-action' | 'refresh-stream';
 }
 
-function emitContractError(session: Session, input: EmitContractErrorInput): void {
+function emitContractError(render: Render, input: EmitContractErrorInput): void {
   // Canonical SPEC §4.4 `ContractErrorPayload` via the central
   // builder. Nested `error: {code, message, causedBy}` alongside
   // flat `toolName` / `actionName` / `sourceAction` / `timestamp`.
@@ -312,7 +340,7 @@ function emitContractError(session: Session, input: EmitContractErrorInput): voi
     },
     timestamp: new Date().toISOString(),
   });
-  broadcast(session, {
+  broadcast(render, {
     type: 'stream',
     payload: {
       channel: '_ggui:contract-error',
@@ -321,8 +349,8 @@ function emitContractError(session: Session, input: EmitContractErrorInput): voi
   });
 }
 
-function broadcast(session: Session, frame: unknown): void {
-  for (const subscriber of session.subscribers) {
+function broadcast(render: Render, frame: unknown): void {
+  for (const subscriber of render.subscribers) {
     try {
       subscriber.send(frame);
     } catch {

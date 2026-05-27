@@ -12,7 +12,7 @@ kit grounds the claim empirically rather than by assertion.
 ## Scope
 
 - WebSocket transport matching the ggui live-channel wire.
-- In-memory session store (no persistence).
+- In-memory render store (no persistence).
 - `schemaVersion` handshake with `UPGRADE_REQUIRED` on mismatch.
 - A 4-handler wired-action registry:
   - `echo` — returns `{received: args}`.

@@ -8,14 +8,21 @@
  * separation claim (Protocol #6) is empirically grounded — if this
  * server passes `@ggui-ai/protocol-conformance`, the protocol has
  * no implicit `@ggui-ai/mcp-server` coupling.
+ *
+ * Wire-field note: the consumer (`@ggui-ai/protocol-conformance`)
+ * still names the render identity field `sessionId` on the wire (its
+ * fixtures have not yet been renamed). The reference server honors
+ * the consumer contract by reading that field name verbatim, then
+ * binds the value to a `renderId` internally — see {@link Render}
+ * for the canonical identity name used throughout this package.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
 
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { dispatchAction, isActionFrame } from './action-router.js';
-import { SessionStore, type Subscriber } from './session.js';
+import { dispatchAction, parseActionFrame } from './action-router.js';
+import { RenderStore, type Subscriber } from './render.js';
 import { ToolRegistry } from './tool-registry.js';
 
 export interface ReferenceServerOptions {
@@ -50,7 +57,7 @@ export interface ReferenceServerOptions {
 }
 
 export class ReferenceServer {
-  readonly sessions = new SessionStore();
+  readonly renders = new RenderStore();
   readonly tools = new ToolRegistry();
 
   private readonly options: Required<ReferenceServerOptions>;
@@ -142,8 +149,8 @@ export class ReferenceServer {
 
   private handleConnection(socket: WebSocket): void {
     // Subscribe state is per-connection — one WS may subscribe to
-    // one session at a time. Re-subscribe overwrites.
-    let subscribedSessionId: string | null = null;
+    // one render at a time. Re-subscribe overwrites.
+    let subscribedRenderId: string | null = null;
     const subscriber: Subscriber = {
       send: (frame: unknown) => {
         try {
@@ -158,20 +165,20 @@ export class ReferenceServer {
       void this.handleMessage(raw.toString('utf8'), {
         socket,
         subscriber,
-        onSubscribed: (sessionId) => {
-          // If previously subscribed to a different session, unsub
+        onSubscribed: (renderId) => {
+          // If previously subscribed to a different render, unsub
           // from it first.
-          if (subscribedSessionId !== null && subscribedSessionId !== sessionId) {
-            this.sessions.removeSubscriber(subscribedSessionId, subscriber);
+          if (subscribedRenderId !== null && subscribedRenderId !== renderId) {
+            this.renders.removeSubscriber(subscribedRenderId, subscriber);
           }
-          subscribedSessionId = sessionId;
+          subscribedRenderId = renderId;
         },
       });
     });
 
     socket.on('close', () => {
-      if (subscribedSessionId !== null) {
-        this.sessions.removeSubscriber(subscribedSessionId, subscriber);
+      if (subscribedRenderId !== null) {
+        this.renders.removeSubscriber(subscribedRenderId, subscriber);
       }
     });
   }
@@ -181,7 +188,7 @@ export class ReferenceServer {
     ctx: {
       readonly socket: WebSocket;
       readonly subscriber: Subscriber;
-      readonly onSubscribed: (sessionId: string) => void;
+      readonly onSubscribed: (renderId: string) => void;
     },
   ): Promise<void> {
     let frame: unknown;
@@ -205,10 +212,12 @@ export class ReferenceServer {
       });
       return;
     }
-    if (f['type'] === 'action' && isActionFrame(frame)) {
-      const session = this.sessions.get(frame.sessionId);
-      if (session === undefined) return; // drop actions for unknown sessions
-      await dispatchAction(frame, { session, tools: this.tools });
+    if (f['type'] === 'action') {
+      const parsed = parseActionFrame(frame);
+      if (parsed === undefined) return; // malformed — silently drop
+      const render = this.renders.get(parsed.renderId);
+      if (render === undefined) return; // drop actions for unknown renders
+      await dispatchAction(parsed, { render, tools: this.tools });
       return;
     }
     // Unrecognized type — silently drop (extensibly-closed; third
@@ -219,15 +228,24 @@ export class ReferenceServer {
     frame: Record<string, unknown>,
     ctx: {
       readonly subscriber: Subscriber;
-      readonly onSubscribed: (sessionId: string) => void;
+      readonly onSubscribed: (renderId: string) => void;
       readonly socket: WebSocket;
     },
   ): void {
     const payload = frame['payload'];
     if (payload === null || typeof payload !== 'object') return;
     const p = payload as Record<string, unknown>;
-    const sessionId = p['sessionId'];
-    if (typeof sessionId !== 'string') return;
+    // Wire-field acceptance: the conformance kit currently sends
+    // `sessionId`; the canonical SPEC field is `renderId`. Read both
+    // so the reference server is forward-compatible with the kit's
+    // eventual rename without breaking today's fixtures.
+    const renderId =
+      typeof p['renderId'] === 'string'
+        ? p['renderId']
+        : typeof p['sessionId'] === 'string'
+          ? p['sessionId']
+          : undefined;
+    if (renderId === undefined) return;
     const appId = typeof p['appId'] === 'string' ? p['appId'] : 'conformance';
     const requestId = typeof frame['requestId'] === 'string' ? frame['requestId'] : undefined;
     const supportedVersions = Array.isArray(p['supportedVersions'])
@@ -243,13 +261,13 @@ export class ReferenceServer {
     //   - `strictVersionPolicy: false` (advisory opt-out): emit +
     //     keep the connection open.
     //
-    // Per-session override precedence: if the `server-version-override`
-    // directive set a `versionOverride` on this session BEFORE the
+    // Per-render override precedence: if the `server-version-override`
+    // directive set a `versionOverride` on this render BEFORE the
     // subscribe landed, advertise that value instead of the instance-
     // level default. Lets parallel kit fixtures share one server while
-    // mismatching version on exactly one session.
-    const existingSession = this.sessions.get(sessionId);
-    const advertised = existingSession?.versionOverride ?? this.options.versionOverride;
+    // mismatching version on exactly one render.
+    const existingRender = this.renders.get(renderId);
+    const advertised = existingRender?.versionOverride ?? this.options.versionOverride;
     if (supportedVersions !== undefined && !supportedVersions.includes(advertised)) {
       ctx.subscriber.send({
         type: 'error',
@@ -271,11 +289,11 @@ export class ReferenceServer {
     }
 
     // Add the subscriber + emit ack.
-    this.sessions.addSubscriber(sessionId, ctx.subscriber);
+    this.renders.addSubscriber(renderId, ctx.subscriber);
     // Preserve appId on first subscribe — create() is no-op if the
-    // session already exists from an earlier directive.
-    this.sessions.create(sessionId, appId);
-    ctx.onSubscribed(sessionId);
+    // render already exists from an earlier directive.
+    this.renders.create(renderId, appId);
+    ctx.onSubscribed(renderId);
     ctx.subscriber.send({
       type: 'ack',
       payload: { serverVersion: advertised },

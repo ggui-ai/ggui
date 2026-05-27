@@ -20,8 +20,8 @@
  *     returns a shape that fails `assertStreamContract`, producing the
  *     SCHEMA_VIOLATION envelope on `_ggui:contract-error` — drift fixes
  *     `03462b99` + `c243d4e3`), `version-mismatch` (Slice K added the
- *     per-session `server-version-override` directive —
- *     `setVersionOverride()` on the session store, consulted by the WS
+ *     per-render `server-version-override` directive —
+ *     `setVersionOverride()` on the render store, consulted by the WS
  *     subscribe handler before falling back to the instance-level
  *     advertised version), and the two standalone `observability-event`
  *     fixtures (`observability-contract-error-emitted` +
@@ -70,17 +70,17 @@ import { ReferenceServer } from './server.js';
  *     asserts the `{items:[]}` shape arrived — proves the refresh-
  *     after-action contract is observable on pure WS.
  *
- *   - `version-mismatch`: declares a per-session
+ *   - `version-mismatch`: declares a per-render
  *     `server-version-override` of `'99.99-unsupported'` via the
  *     Slice-K directive. The kit's subscribe carries
  *     `supportedVersions: ['1.1']`; the WS handler reads the
- *     session-scoped override (set on the `Session` record by
+ *     render-scoped override (set on the `Render` record by
  *     `setVersionOverride()`), notices `'99.99-unsupported'` is not
  *     in the client's accepted set, and emits the canonical
  *     `error{payload.code:'UPGRADE_REQUIRED', serverVersion}` frame.
  *     Proves the version-handshake half of Protocol #3 is observable
  *     end-to-end on the reference server with parallel-fixture
- *     isolation (other sessions on the same server still advertise
+ *     isolation (other renders on the same server still advertise
  *     the canonical default).
  *
  *   - `observability-contract-error-emitted` /

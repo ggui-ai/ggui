@@ -101,9 +101,9 @@ export function buildHandler(kind: ToolHandlerKind): ToolHandler {
 }
 
 /**
- * In-memory tool registry. Scoped to a session via the action router
+ * In-memory tool registry. Scoped to a render via the action router
  * (the plan's register-tool directive wires a handler under the
- * session's tool namespace). No-persistence by design.
+ * render's tool namespace). No-persistence by design.
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, RegisteredTool>();
