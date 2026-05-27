@@ -1560,6 +1560,22 @@
  *      reducer (`stackNavigationReducer`, `initialNavigationState`,
  *      `StackNavigationState`, `StackNavigationAction`) deleted — no
  *      stack of N to navigate.
+ *
+ *   b7. **`ggui_close` tool deleted.** Matches the earlier deletion of
+ *      `ggui_new_session`: with the Session vessel gone, there is no
+ *      entry-and-exit ceremony to bracket a render. Renders decay
+ *      implicitly via TTL — created → active → expired. The
+ *      `RenderStatus` union collapses from
+ *      `'active' | 'completed' | 'expired'` to `'active' | 'expired'`;
+ *      the `'session.closed'` `RenderEventType` literal is gone (no
+ *      terminal ledger event); `GguiCloseInput` / `GguiCloseOutput`
+ *      types + `closeInputSchema` Zod schema deleted from the protocol
+ *      surface. `notifyRenderClosed` observer-notifier seam, the
+ *      `RenderStore`-side `closed` bucket flag + per-render-close revoke
+ *      paths (`shortCodeIndex.revokeByStackItemId`,
+ *      `pendingEventConsumer.markDeleted`) all retire alongside.
+ *      Agent-side: the long-poll loop terminates on TTL expiry rather
+ *      than on an explicit terminal status.
  */
 export const PROTOCOL_VERSION = 'draft-2026-05-27';
 

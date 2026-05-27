@@ -164,14 +164,6 @@ export interface GguiGetRenderInput {
  */
 export type GguiGetRenderOutput = Render;
 
-/**
- * Input for ggui_close tool - terminates render
- */
-export interface GguiCloseInput {
-  /** Render ID to close */
-  renderId: string;
-}
-
 // =============================================================================
 // Negotiator Types (V3)
 // =============================================================================
@@ -266,7 +258,8 @@ export interface ConsumeEventEntry {
 export interface GguiConsumeOutput {
   /** Buffered consume-entries (cleared after return). */
   events: ConsumeEventEntry[];
-  /** Render status - 'completed' means no more events will arrive */
+  /** Render status — `'expired'` means the render's TTL elapsed and
+   *  no more events will arrive; the agent's long-poll loop terminates. */
   status: RenderStatus;
   /**
    * Client-side observations echoed back to the agent. Same shape
@@ -278,14 +271,6 @@ export interface GguiConsumeOutput {
   client?: {
     readonly hostContext?: import('./host-context.js').HostContextProjection;
   };
-}
-
-/**
- * Output from ggui_close tool
- */
-export interface GguiCloseOutput {
-  /** Whether the render was successfully closed */
-  success: boolean;
 }
 
 /**

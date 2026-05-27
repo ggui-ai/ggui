@@ -63,10 +63,6 @@ export const getRenderInputSchema = z.object({
   renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
 }).strict();
 
-export const closeInputSchema = z.object({
-  renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
-}).strict();
-
 export const listFeaturedBlueprintsInputSchema = z.object({
   level: z.enum(['primitive', 'component', 'composite', 'template']).optional(),
   category: z.string().optional(),

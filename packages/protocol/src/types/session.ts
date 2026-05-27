@@ -83,8 +83,18 @@ export type AdapterPermissions = {
 /**
  * Lifecycle status of a {@link Render}. RenderStore implementations MAY
  * populate this on `get`; absent ⇒ caller treats as `'active'`.
+ *
+ * Two states only:
+ *   - `'active'` — within TTL, agent may still write/read.
+ *   - `'expired'` — TTL elapsed; no further writes accepted, reads return
+ *     a historical snapshot.
+ *
+ * There is no explicit terminal state. Renders decay implicitly via TTL.
+ * The dropped `'completed'` state (and the `ggui_close` tool that wrote
+ * it) was a vestige of the deleted Session vessel — kept symmetrical with
+ * `ggui_new_session`, which was deleted in the earlier handshake collapse.
  */
-export type RenderStatus = 'active' | 'completed' | 'expired';
+export type RenderStatus = 'active' | 'expired';
 
 /**
  * Common base for every {@link Render} variant. Carries identity,
