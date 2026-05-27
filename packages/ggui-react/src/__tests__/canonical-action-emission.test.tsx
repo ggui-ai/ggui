@@ -5,12 +5,16 @@
  * valid-vs-invalid action semantics. This file asserts the WIRE SHAPE
  * of outbound messages: that the emitter produces the
  * {@link ActionEnvelope} form (`type: 'action'`) with the expected
- * fields (sessionId / type / payload / stackIndex / stackItemId / clientSeq).
+ * fields (renderId / type / payload / clientSeq).
  *
  * Structural locks that catch regressions:
  *   - every outbound submit is a `type: 'action'` message.
  *   - clientSeq increments monotonically across multiple submissions.
- *   - stackItemId is populated from the active stack item's id.
+ *   - renderId is populated from the active render's `id`.
+ *
+ * Post-Phase-B: the legacy `{sessionId, stackIndex, stackItemId}` triple
+ * on the envelope collapsed to a single flat `renderId`. There is no
+ * stack vessel — one render per mount.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -19,11 +23,11 @@ import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
   ActionEnvelope,
   ActionSpec,
-  StackItem,
+  ComponentRender,
 } from '@ggui-ai/protocol';
 import { useAction } from '@ggui-ai/wire';
 import { GguiProvider } from '../components/GguiProvider';
-import { GguiSession } from '../components/GguiSession';
+import { GguiRender } from '../components/GguiRender';
 
 // ── MockWebSocket (shared shape with client-contract-symmetry) ───────
 
@@ -81,9 +85,10 @@ const ACTION_SPEC: ActionSpec = {
   },
 };
 
-function makeStackItem(): StackItem {
+function makeRender(id: string): ComponentRender {
   return {
-    id: 'page-0',
+    id,
+    type: 'component',
     componentCode: '/* stub */',
     createdAt: new Date().toISOString(),
     actionSpec: ACTION_SPEC,
@@ -102,16 +107,16 @@ function ActionFireHelper({
   return null;
 }
 
-async function bootSession(): Promise<{
+async function bootRender(renderId = 'render-0'): Promise<{
   socket: MockWebSocket;
   fire: (data: unknown) => void;
 }> {
   let fire!: (data: unknown) => void;
   render(
     <GguiProvider appId="test-app" wsEndpoint="wss://example.test">
-      <GguiSession sessionId="sess-test">
+      <GguiRender renderId={renderId}>
         <ActionFireHelper onReady={(f) => { fire = f; }} />
-      </GguiSession>
+      </GguiRender>
     </GguiProvider>,
   );
   await act(async () => {
@@ -126,7 +131,7 @@ async function bootSession(): Promise<{
       payload: {
         sequence: 0,
         timestamp: Date.now(),
-        stack: [makeStackItem()],
+        render: makeRender(renderId),
       },
     });
   });
@@ -148,7 +153,7 @@ describe('canonical action envelope emission — web', () => {
   });
 
   it("emits a `type: 'action'` message carrying ActionEnvelope shape", async () => {
-    const { socket, fire } = await bootSession();
+    const { socket, fire } = await bootRender('render-emit');
 
     await act(async () => {
       fire({ text: 'hello' });
@@ -162,10 +167,8 @@ describe('canonical action envelope emission — web', () => {
     if (frame.type !== 'action') throw new Error('narrowing');
     const envelope: ActionEnvelope = frame.payload;
 
-    expect(envelope.sessionId).toBe('sess-test');
+    expect(envelope.renderId).toBe('render-emit');
     expect(envelope.type).toBe('data:submit');
-    expect(envelope.stackIndex).toBe(0);
-    expect(envelope.stackItemId).toBe('page-0');
     expect(typeof envelope.clientSeq).toBe('number');
     expect(envelope.payload).toEqual({
       action: 'submit',
@@ -174,7 +177,7 @@ describe('canonical action envelope emission — web', () => {
   });
 
   it('clientSeq increments monotonically across multiple submissions', async () => {
-    const { socket, fire } = await bootSession();
+    const { socket, fire } = await bootRender();
 
     await act(async () => {
       fire({ text: 'one' });
@@ -196,46 +199,5 @@ describe('canonical action envelope emission — web', () => {
     expect(seqs[0]).toBeGreaterThan(0);
     expect(seqs[1]).toBeGreaterThan(seqs[0]!);
     expect(seqs[2]).toBeGreaterThan(seqs[1]!);
-  });
-
-  it('envelope.stackItemId tracks the active stack item when it changes', async () => {
-    const { socket, fire } = await bootSession();
-
-    // First action against page-0.
-    await act(async () => {
-      fire({ text: 'first' });
-    });
-
-    // Agent pushes a new page.
-    await act(async () => {
-      socket.simulateMessage({
-        type: 'push',
-        payload: {
-          stackItem: {
-            id: 'page-1',
-            componentCode: '/* stub */',
-            createdAt: new Date().toISOString(),
-            actionSpec: ACTION_SPEC,
-          },
-        },
-      });
-    });
-
-    // Second action now targets page-1.
-    await act(async () => {
-      fire({ text: 'second' });
-    });
-
-    const actionFrames = socket.sentMessages.filter((m) => m.type === 'action');
-    expect(actionFrames).toHaveLength(2);
-    const firstEnv = actionFrames[0];
-    const secondEnv = actionFrames[1];
-    if (firstEnv.type !== 'action' || secondEnv.type !== 'action') {
-      throw new Error('narrowing');
-    }
-    expect(firstEnv.payload.stackItemId).toBe('page-0');
-    expect(firstEnv.payload.stackIndex).toBe(0);
-    expect(secondEnv.payload.stackItemId).toBe('page-1');
-    expect(secondEnv.payload.stackIndex).toBe(1);
   });
 });

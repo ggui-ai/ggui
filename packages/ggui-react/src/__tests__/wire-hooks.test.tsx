@@ -2,18 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import React, { act } from 'react';
 import { renderHook } from '@testing-library/react';
 import { GguiWireProvider, type StreamDelivery, type WireConfig } from '@ggui-ai/wire';
-import { useAction, useStream, useAuth, useApp, useSession } from '@ggui-ai/wire';
+import { useAction, useStream, useAuth, useApp, useRender } from '@ggui-ai/wire';
 
 // ── Mock WireConfig ──────────────────────────────────────────
 
 function createMockConfig(overrides?: Partial<WireConfig>): WireConfig {
   return {
     app: { appId: 'test-app', appName: 'Test App', appDescription: 'A test', appIcon: undefined },
-    session: { sessionId: 'sess-123', isConnected: true },
+    render: { renderId: 'render-123', isConnected: true },
     auth: { userId: 'user-alice', isAuthenticated: true },
     dispatch: vi.fn(),
     subscribe: vi.fn(() => vi.fn()), // returns unsubscribe
-    callWiredTool: vi.fn(async () => ({ result: 'mock' })),
     ...overrides,
   };
 }
@@ -46,11 +45,11 @@ describe('Wire hooks inside GguiWireProvider', () => {
     });
   });
 
-  describe('useSession', () => {
-    it('returns session info', () => {
+  describe('useRender', () => {
+    it('returns render info', () => {
       const config = createMockConfig();
-      const { result } = renderHook(() => useSession(), { wrapper: createWrapper(config) });
-      expect(result.current.sessionId).toBe('sess-123');
+      const { result } = renderHook(() => useRender(), { wrapper: createWrapper(config) });
+      expect(result.current.renderId).toBe('render-123');
       expect(result.current.isConnected).toBe(true);
     });
   });
