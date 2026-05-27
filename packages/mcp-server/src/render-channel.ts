@@ -14,15 +14,15 @@
  *   - `action` → inbound user action carried as an {@link ActionEnvelope}.
  *     Gated through `assertEventAllowed` (allowlist) +
  *     `assertActionContract` (payload, for data:submit). Persisted to
- *     SessionStore as a typed session event.
+ *     RenderStore as a typed session event.
  *   - `ping`/`pong` → heartbeat parity with hosted.
  *   - `close`/socket-close → clean subscriber teardown.
- *   - `sendToSession(sessionId, data)` → outbound fan-out API for
+ *   - `sendToSession(renderId, data)` → outbound fan-out API for
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
  * `props_update`: mount handlers dispatched through the wired-action
- * router can call `ctx.sendPropsUpdate(stackItemId, props)` to fan a
+ * router can call `ctx.sendPropsUpdate(renderId, props)` to fan a
  * `{type:'props_update'}` frame to live subscribers without going
  * through a refresh-stream path. Reaches the renderer's existing
  * `props_update` branch in `iframe-runtime` and applies new props
@@ -51,10 +51,9 @@ import type {
   ErrorPayload,
   JsonObject,
   RefreshInput,
+  Render,
   ReservedChannelValidator,
   SanitizeCausedBy,
-  SessionStackEntry,
-  StackItem,
   StreamSpec,
   SubscribePayload,
 } from '@ggui-ai/protocol';
@@ -71,8 +70,8 @@ import type {
   AuthAdapter,
   AuthResult,
   BufferedStreamEnvelope,
-  SessionPatch,
-  SessionStore,
+  RenderPatch,
+  RenderStore,
   SessionStreamBuffer,
   StreamEnvelopeInput,
   StreamFanout,
@@ -85,10 +84,32 @@ import {
 } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   assertActionContract,
-  assertEventAllowed,
   assertStreamContract,
-  EventNotAllowedError,
 } from '@ggui-ai/mcp-server-handlers/session-mutations';
+
+// `assertEventAllowed` + `EventNotAllowedError` were removed from
+// `@ggui-ai/mcp-server-handlers/session-mutations` in Phase B alongside
+// the session-stack collapse — the event-allowlist concept on a
+// `StackItem.subscription` no longer has a wire shape to bind to.
+// Local stand-ins keep the inbound-action allowlist call sites
+// compiling until the event-allowlist semantics are re-thought in a
+// follow-up slice (see "B.2d render-channel inbound-action allowlist
+// deferred" in the report).
+class EventNotAllowedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventNotAllowedError';
+  }
+}
+function assertEventAllowed(
+  _subscription: unknown,
+  _type: string,
+): void {
+  // No-op: pre-Phase-B this read `StackItem.subscription` and rejected
+  // event types not on the allowlist. Post-collapse there's no
+  // subscription field on `Render`; the gate is deferred to a follow-up
+  // slice that defines per-render event policy on the new wire shape.
+}
 import {
   resolveIdentityFromHeaders,
   UnauthenticatedError,
@@ -96,7 +117,7 @@ import {
 import type { Logger } from './logger.js';
 
 /** Default URL path for the channel endpoint. Operators can override. */
-export const DEFAULT_SESSION_CHANNEL_PATH = '/ws';
+export const DEFAULT_RENDER_CHANNEL_PATH = '/ws';
 
 /**
  * A single connected subscriber (one client, one session). Held live in
@@ -105,7 +126,7 @@ export const DEFAULT_SESSION_CHANNEL_PATH = '/ws';
  */
 interface Subscriber {
   readonly ws: WebSocket;
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
   readonly identity: AuthResult;
   readonly connectedAt: number;
@@ -130,7 +151,7 @@ interface Subscriber {
   readonly iter: AsyncIterator<BufferedStreamEnvelope>;
   /**
    * Active `channel_subscribe` polling loops for this subscriber.
-   * Keyed by `${stackItemId}:${channelName}` so a reconnect that
+   * Keyed by `${renderId}:${channelName}` so a reconnect that
    * re-subscribes to the same (stackItem, channel) pair replaces the
    * existing timer rather than minting a duplicate (idempotent
    * semantics on the wire). Torn down en masse by `unregister(ws)` on
@@ -144,7 +165,7 @@ interface Subscriber {
 }
 
 /**
- * Per-(subscriber, stackItemId, channelName) polling-loop state.
+ * Per-(subscriber, renderId, channelName) polling-loop state.
  * Created on `channel_subscribe` accept, torn down on `channel_unsubscribe`
  * / WS close / re-subscribe-replace.
  *
@@ -160,7 +181,7 @@ interface ChannelSubscriptionState {
   /** Source tool name resolved from `streamSpec[channelName].source.tool`. */
   readonly toolName: string;
   /** Stack item this subscription is bound to (for fan-out scoping). */
-  readonly stackItemId: string;
+  readonly renderId: string;
   /** Channel name (key into `streamSpec`). */
   readonly channelName: string;
   /**
@@ -184,7 +205,7 @@ interface ChannelSubscriptionState {
  * Server-authoritative: clients propose `pollIntervalMs` on
  * `channel_subscribe`, server clamps to [floorMs, ceilingMs] and
  * defaults to `defaultMs` when absent. Conservative defaults — operators
- * tune via {@link SessionChannelLocalToolsOptions.pollCadence}.
+ * tune via {@link RenderChannelLocalToolsOptions.pollCadence}.
  */
 const DEFAULT_CHANNEL_POLL_FLOOR_MS = 1_000;
 const DEFAULT_CHANNEL_POLL_CEILING_MS = 60_000;
@@ -192,13 +213,13 @@ const DEFAULT_CHANNEL_POLL_DEFAULT_MS = 10_000;
 
 /**
  * Opt-in plumbing for the `channel_subscribe` polling loop. When this
- * field is set on {@link SessionChannelOptions}, channel subscribes
+ * field is set on {@link RenderChannelOptions}, channel subscribes
  * whose `source.tool` is in {@link allowlist} are accepted and the
  * server begins polling. When absent, every `channel_subscribe`
  * returns `CHANNEL_NOT_LOCAL` so the iframe falls back to direct
  * polling via the MCP host proxy.
  */
-export interface SessionChannelLocalToolsOptions {
+export interface RenderChannelLocalToolsOptions {
   /**
    * Whitelist of `source.tool` names this channel can poll. Must mirror
    * the value the host advertises on
@@ -240,12 +261,12 @@ export interface SessionChannelLocalToolsOptions {
  * message (`SubscribePayload.bootstrap`). When present:
  *
  *   1. `verify(token)` is called. Must return the bound
- *      `{sessionId, appId}` on success, or `null` on any failure
+ *      `{renderId, appId}` on success, or `null` on any failure
  *      (invalid sig, expired, wrong kind, replayed, etc.).
- *   2. The bound `sessionId` MUST match the one on the subscribe
+ *   2. The bound `renderId` MUST match the one on the subscribe
  *      payload. Mismatches are rejected with a clean error.
  *   3. On success, the server mints a reconnect credential via
- *      `issueSessionToken(sessionId, appId)` and returns it in
+ *      `issueSessionToken(renderId, appId)` and returns it in
  *      `AckPayload.sessionToken`. The iframe stores this for WS
  *      reconnects via the normal bearer path.
  *
@@ -266,16 +287,16 @@ export interface SessionChannelLocalToolsOptions {
  * handshake. Past expiry, the iframe MAY refresh via the
  * {@link refresh} surface; past the refresh window, fresh handshake.
  */
-export type SessionChannelBootstrapVerifyResult =
+export type RenderChannelBootstrapVerifyResult =
   | {
       readonly ok: true;
-      readonly sessionId: string;
+      readonly renderId: string;
       readonly appId: string;
     }
   | { readonly ok: false; readonly reason: 'expired' | 'invalid' };
 
 /**
- * Result of {@link SessionChannelBootstrap.refresh}.
+ * Result of {@link RenderChannelBootstrap.refresh}.
  *
  *   - `ok: true`: caller swaps the old envelope for `token` and resumes.
  *   - `ok: false`: caller MUST re-handshake (refresh window closed,
@@ -289,7 +310,7 @@ export type SessionChannelBootstrapRefreshResult =
     }
   | { readonly ok: false; readonly reason: 'window_closed' | 'invalid' };
 
-export interface SessionChannelBootstrap {
+export interface RenderChannelBootstrap {
   /**
    * Verify a `SubscribePayload.bootstrap` token.
    *
@@ -299,13 +320,13 @@ export interface SessionChannelBootstrap {
    * `BOOTSTRAP_INVALID` for tamper / format / kind failures (no
    * refresh on those).
    */
-  verify(token: string): SessionChannelBootstrapVerifyResult;
+  verify(token: string): RenderChannelBootstrapVerifyResult;
   /**
    * Mint a longer-lived reconnect credential to return in
    * `AckPayload.sessionToken`. Called only after a successful
    * `verify()` on a bootstrap subscribe.
    */
-  issueSessionToken(sessionId: string, appId: string): string;
+  issueSessionToken(renderId: string, appId: string): string;
   /**
    * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
    * into a new envelope with a fresh TTL. Used by the
@@ -315,7 +336,7 @@ export interface SessionChannelBootstrap {
    *
    * Stateless: verifies HMAC against the same secret used at mint,
    * checks the refresh window against the ORIGINAL `iat`, and mints
-   * a fresh bootstrap envelope bound to the SAME `(sessionId, appId)`.
+   * a fresh bootstrap envelope bound to the SAME `(renderId, appId)`.
    * Past the refresh window the result is `{ok:false, reason:
    * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
    * 'invalid'}`.
@@ -325,7 +346,7 @@ export interface SessionChannelBootstrap {
 
 /**
  * Default timeout for a single wired-tool invocation, in ms. Operators
- * override via {@link SessionChannelOptions.wiredActionTimeoutMs}; the
+ * override via {@link RenderChannelOptions.wiredActionTimeoutMs}; the
  * 30 s ceiling is a honest non-promise: long-running tools MUST design
  * their own completion path (streaming, polling).
  */
@@ -371,7 +392,7 @@ export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
  * shape every shared handler — ggui-native AND mounted — accepts. It
  * stays narrow on purpose (`appId`, `requestId`, optional `apiKeyHash`)
  * so the surface a host implements is stable. Wired-action runtime
- * fields (`sessionId`, `stackItemId`, `sendPropsUpdate`) are dispatcher-
+ * fields (`renderId`, `renderId`, `sendPropsUpdate`) are dispatcher-
  * specific — only mount tools invoked through the wired-action router
  * see them, only at dispatch time. Passing them as a third arg to
  * `invoke` keeps the canonical handler shape untouched and makes
@@ -380,32 +401,24 @@ export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
  * The composer in `mcp-mounts.ts::composeWiredActionRouterFromMounts`
  * synthesizes a runtime ctx for the mount handler that satisfies
  * `HandlerContext` AND structurally carries these wired fields, so a
- * mount fixture can read `ctx.sendPropsUpdate` / `ctx.stackItemId` from the
+ * mount fixture can read `ctx.sendPropsUpdate` / `ctx.renderId` from the
  * same `ctx` argument the canonical `HandlerContext` sig types — no
  * cast, no widening of the static type.
  */
 export interface WiredActionContext {
-  /** The session this dispatch is bound to. Sourced from the live
-   * subscriber + the action envelope's spoof-guarded `sessionId`. */
-  readonly sessionId: string;
-  /** The active stack item's stackItemId at dispatch time. Mounts that
-   * fire `sendPropsUpdate` typically pass this verbatim — only a
-   * mount that intentionally targets a sibling stack entry would
-   * pick a different value. */
-  readonly stackItemId: string;
+  /** The render this dispatch is bound to. Sourced from the live
+   * subscriber + the action envelope's spoof-guarded `renderId`. */
+  readonly renderId: string;
   /**
-   * Push a `{type:'props_update', payload:{stackItemId, props}}` frame to
-   * every live subscriber bound to this dispatcher's `sessionId`. The
-   * call closes over the `SessionChannelServer.sendPropsUpdate` method,
-   * scoped to the active session for safety — even if a buggy mount
-   * picks a `stackItemId` that doesn't exist on the session, the channel
-   * server's own validation no-ops the fan-out (same posture as
-   * `notifyStackPush` orphan handling).
+   * Push a `{type:'props_update', payload:{renderId, props}}` frame to
+   * every live subscriber bound to this dispatcher's `renderId`. The
+   * call closes over the `RenderChannelServer.sendPropsUpdate` method,
+   * scoped to the active render for safety.
    *
    * Best-effort: per-subscriber send failures are swallowed; a closed
    * socket is a no-op.
    */
-  sendPropsUpdate(stackItemId: string, props: JsonObject): void;
+  sendPropsUpdate(props: JsonObject): void;
 }
 
 export interface WiredActionRouter {
@@ -434,9 +447,9 @@ export interface WiredActionRouter {
   ): Promise<unknown>;
 }
 
-export interface SessionChannelOptions {
-  /** Required — the session backing store (typically `InMemorySessionStore`). */
-  readonly sessionStore: SessionStore;
+export interface RenderChannelOptions {
+  /** Required — the render backing store (typically `InMemoryRenderStore`). */
+  readonly renderStore: RenderStore;
   /**
    * Required — the same `AuthAdapter` the `/mcp` endpoint uses. Any
    * failure during `subscribe` rejects the upgrade with HTTP 401.
@@ -478,14 +491,14 @@ export interface SessionChannelOptions {
    * credentials in `AckPayload.sessionToken`. When absent, bootstrap
    * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
    */
-  readonly bootstrap?: SessionChannelBootstrap;
+  readonly bootstrap?: RenderChannelBootstrap;
 
   /**
    * Optional console cookie-auth plumbing. When present, the
    * channel upgrade looks for the configured cookie on the incoming
    * request. A valid cookie binds the identity as a `builder` and
-   * scopes the subscriber to the cookie's `sessionId` — any
-   * `subscribe.sessionId` mismatch is rejected with
+   * scopes the subscriber to the cookie's `renderId` — any
+   * `subscribe.renderId` mismatch is rejected with
    * `DEVTOOL_COOKIE_SESSION_MISMATCH`.
    *
    * Absent = cookie auth disabled on this channel. Cookies are never
@@ -496,7 +509,7 @@ export interface SessionChannelOptions {
    * bootstrap path (via `?bootstrap=` query) wins; cookie is only
    * consulted for standard upgrades.
    */
-  readonly cookieAuth?: SessionChannelCookieAuth;
+  readonly cookieAuth?: RenderChannelCookieAuth;
   /**
    * Opt-in wired-action dispatch router. When present, validated
    * `data:submit` envelopes whose declared `actionSpec[name]
@@ -582,7 +595,7 @@ export interface SessionChannelOptions {
    * `handshake.serverCapabilities.streamWebSocketLocalTools` so iframe
    * + server agree on which channels use the WS fan-out path.
    */
-  readonly streamWebSocketLocalTools?: SessionChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: RenderChannelLocalToolsOptions;
   /**
    * Protocol-version handshake policy. Governs server behavior when a
    * subscribe declares a `supportedVersions` list that does NOT
@@ -611,13 +624,13 @@ export interface SessionChannelOptions {
   readonly versionPolicy?: 'advisory' | 'reject';
   /**
    * Optional hook fired synchronously when the local subscriber count
-   * for `sessionId` transitions 0 → 1 (the first subscriber for that
+   * for `renderId` transitions 0 → 1 (the first subscriber for that
    * session connects to this server instance).
    *
    * Hosted deployments use this to lazily SUBSCRIBE to the per-session
    * cross-pod broadcast channel (e.g. Redis pub/sub); OSS has no use
    * for it (in-process broadcasts already route via
-   * {@link SessionChannelServer.sendPropsUpdate}). Bounding pubsub
+   * {@link RenderChannelServer.sendPropsUpdate}). Bounding pubsub
    * fan-in to only sessions a pod actually holds connections for is a
    * correctness requirement, not an optimization — without it every
    * pod receives every other pod's broadcast for every active session.
@@ -627,20 +640,20 @@ export interface SessionChannelOptions {
    * `wsSubscribers` set would drift out of sync with the real socket
    * lifecycle.
    *
-   * Concurrent register/unregister for the same sessionId are serialized
+   * Concurrent register/unregister for the same renderId are serialized
    * by the channel's single-threaded WS event loop; hook implementations
    * do not need their own mutex for the 0↔1 transition.
    */
-  readonly onFirstSubscriber?: (sessionId: string) => void;
+  readonly onFirstSubscriber?: (renderId: string) => void;
   /**
    * Optional hook fired synchronously when the local subscriber count
-   * for `sessionId` transitions 1 → 0 (the last subscriber for that
+   * for `renderId` transitions 1 → 0 (the last subscriber for that
    * session disconnects).
    *
    * Symmetric with {@link onFirstSubscriber}; same best-effort posture
    * and single-threaded serialization guarantee.
    */
-  readonly onLastSubscriberGone?: (sessionId: string) => void;
+  readonly onLastSubscriberGone?: (renderId: string) => void;
 }
 
 /**
@@ -648,7 +661,7 @@ export interface SessionChannelOptions {
  * exclusively by the same-origin console viewer; see
  * `console-auth.ts` for the single consumer today.
  */
-export interface SessionChannelCookieAuth {
+export interface RenderChannelCookieAuth {
   /**
    * Read the raw cookie value for THIS server's console cookie
    * from the incoming request headers. Returns `null` when the
@@ -663,7 +676,7 @@ export interface SessionChannelCookieAuth {
   verify(cookieValue: string): { renderId: string; appId: string } | null;
 }
 
-export interface SessionChannelServer {
+export interface RenderChannelServer {
   /** The URL path the channel accepts upgrade requests on. */
   readonly path: string;
   /**
@@ -677,7 +690,7 @@ export interface SessionChannelServer {
     head: Buffer,
   ): void;
   /**
-   * Deliver a stream envelope to every subscriber of `delivery.sessionId`.
+   * Deliver a stream envelope to every subscriber of `delivery.renderId`.
    *
    * Outbound fan-out enforcement point — the delivery's `payload` is
    * validated against the active stack item's streamSpec via
@@ -707,7 +720,7 @@ export interface SessionChannelServer {
   sendToSession(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
   /**
    * Fan a `{type:'push', payload:{stackItem, matchType?}}` wire frame
-   * to every subscriber currently bound to `sessionId`. Use this to
+   * to every subscriber currently bound to `renderId`. Use this to
    * notify already-subscribed clients about a stack mutation that
    * happened AFTER they subscribed — the initial `ack.stack` snapshot
    * covers state at subscribe time only, so without an explicit notify
@@ -731,12 +744,12 @@ export interface SessionChannelServer {
    * `subscribersBySession`; this helper iterates the bound set and
    * skips closed sockets via the `send()` helper's existing guard.
    * Callers ARE responsible for ordering — call after the underlying
-   * `sessionStore.appendStackItem` resolves so the snapshot a
+   * `renderStore.appendStackItem` resolves so the snapshot a
    * concurrent fresh subscriber observes still includes the entry.
    */
-  notifyStackPush(
-    sessionId: string,
-    stackItem: SessionStackEntry,
+  notifyRenderPush(
+    renderId: string,
+    render: Render,
     matchType?: string,
   ): void;
   /**
@@ -765,10 +778,10 @@ export interface SessionChannelServer {
    * the viewer SPA subscribes with the initial envelope already
    * buffered on the session's stream-buffer replay state.
    */
-  primeStreams(sessionId: string, stackItem: SessionStackEntry): Promise<void>;
+  primeStreams(renderId: string, stackItem: Render): Promise<void>;
   /**
-   * Fan a `{type:'props_update', payload:{stackItemId, props}}` wire frame
-   * to every subscriber currently bound to `sessionId`. Mount tools
+   * Fan a `{type:'props_update', payload:{renderId, props}}` wire frame
+   * to every subscriber currently bound to `renderId`. Mount tools
    * dispatched through {@link WiredActionRouter} call this via
    * `WiredActionContext.sendPropsUpdate` so a wired action that
    * mutates server-side state can replace renderer props in-place
@@ -776,15 +789,15 @@ export interface SessionChannelServer {
    *
    * Validation posture (mirrors `notifyStackPush`'s "best-effort orphan
    * no-op"):
-   *   1. Look up the session via `sessionStore.get`. Absent → log
+   *   1. Look up the session via `renderStore.get`. Absent → log
    *      `session_channel_props_update_orphan` and return — the wire
    *      validator on the renderer side would reject a frame for an
    *      unknown session anyway.
-   *   2. Look up the target stack entry by `stackItemId` in the loaded
+   *   2. Look up the target stack entry by `renderId` in the loaded
    *      session's stack. Absent → log
    *      `session_channel_props_update_pageid_unknown` and return.
    *   3. Iterate the flat WS-subscriber set, filter to subscribers
-   *      whose `sessionId` matches, and `send()` the frame. Closed
+   *      whose `renderId` matches, and `send()` the frame. Closed
    *      sockets are skipped silently by `send()`.
    *
    * NOT routed through StreamFanout — `type: 'props_update'` is a
@@ -805,14 +818,13 @@ export interface SessionChannelServer {
    * boundary as ggui-native handlers).
    */
   sendPropsUpdate(
-    sessionId: string,
-    stackItemId: string,
+    renderId: string,
     props: JsonObject,
   ): Promise<void>;
   /**
-   * Fan a `{type:'drain_ack', payload:{sessionId, appId, stackItemId,
+   * Fan a `{type:'drain_ack', payload:{renderId, appId, renderId,
    * eventId, drainedAt}}` wire frame to every subscriber currently
-   * bound to `sessionId`.
+   * bound to `renderId`.
    *
    * Fired by `createGguiConsumeHandler` once per drained
    * `PendingEvent` so the iframe-runtime can cancel the matching
@@ -827,15 +839,14 @@ export interface SessionChannelServer {
    * any frame loss.
    */
   sendDrainAck(args: {
-    readonly sessionId: string;
+    readonly renderId: string;
     readonly appId: string;
-    readonly stackItemId: string;
     readonly eventId: string;
     readonly drainedAt: string;
   }): void;
   /**
    * Fan a server-frame to every local WS subscriber bound to
-   * `sessionId`. Skips replay-buffer stamping, SessionStore lookups,
+   * `renderId`. Skips replay-buffer stamping, RenderStore lookups,
    * and contract validation — the caller is the one that originally
    * validated + persisted the underlying mutation. This surface is the
    * cloud adapter's path for delivering already-validated frames that
@@ -846,12 +857,12 @@ export interface SessionChannelServer {
    * callers. The publisher is responsible for ensuring `frame` is
    * wire-valid; this method does not re-validate.
    *
-   * No-op when no local subscriber is bound to `sessionId`. Closed
+   * No-op when no local subscriber is bound to `renderId`. Closed
    * sockets are skipped silently by the underlying `send()` helper —
    * same posture as `sendPropsUpdate` / `notifyStackPush`. Per-
    * subscriber send failures are logged but never propagated.
    */
-  externalBroadcast(sessionId: string, frame: WebSocketMessage): void;
+  externalBroadcast(renderId: string, frame: WebSocketMessage): void;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
   /** Number of distinct sessions with at least one subscriber. */
@@ -883,10 +894,10 @@ class WiredToolTimeoutError extends Error {
  * Build an OSS live-channel server. The returned object is designed to be
  * composed into `createGguiServer` — see `server.ts` for the wire-up.
  */
-export function createSessionChannelServer(
-  opts: SessionChannelOptions,
-): SessionChannelServer {
-  const path = opts.path ?? DEFAULT_SESSION_CHANNEL_PATH;
+export function createRenderChannelServer(
+  opts: RenderChannelOptions,
+): RenderChannelServer {
+  const path = opts.path ?? DEFAULT_RENDER_CHANNEL_PATH;
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
   const streamBuffer: SessionStreamBuffer =
@@ -909,7 +920,7 @@ export function createSessionChannelServer(
   // at composition so the `channel_subscribe` handler doesn't pay the
   // option-spread cost per request. Absent ⇒ all channel subscribes
   // reject with `CHANNEL_NOT_LOCAL`.
-  const localTools: SessionChannelLocalToolsOptions | undefined =
+  const localTools: RenderChannelLocalToolsOptions | undefined =
     opts.streamWebSocketLocalTools;
   const localToolsAllowlist: ReadonlySet<string> = localTools
     ? new Set(localTools.allowlist)
@@ -936,7 +947,7 @@ export function createSessionChannelServer(
   const subscribersByWs = new WeakMap<WebSocket, Subscriber>();
   /**
    * Per-session local subscriber count. Drives the {@link
-   * SessionChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
+   * RenderChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
    * 0↔1 transition hooks used by cloud adapters for per-session
    * cross-pod pub/sub channel scoping. Distinct from the
    * `sessionCount` getter — that walks `wsSubscribers` on demand;
@@ -973,7 +984,7 @@ export function createSessionChannelServer(
       }
     } catch (err) {
       opts.logger.warn('session_channel_pump_failed', {
-        sessionId: sub.sessionId,
+        renderId: sub.renderId,
         error: String(err),
       });
     }
@@ -985,16 +996,16 @@ export function createSessionChannelServer(
     // Per-session count bookkeeping + 0→1 hook for cloud pubsub
     // adapter scoping. Increment FIRST so the hook sees the up-to-date
     // state; hook fires only on the transition (prevCount === 0).
-    const prevCount = sessionCountById.get(sub.sessionId) ?? 0;
-    sessionCountById.set(sub.sessionId, prevCount + 1);
+    const prevCount = sessionCountById.get(sub.renderId) ?? 0;
+    sessionCountById.set(sub.renderId, prevCount + 1);
     if (prevCount === 0 && opts.onFirstSubscriber) {
       try {
-        opts.onFirstSubscriber(sub.sessionId);
+        opts.onFirstSubscriber(sub.renderId);
       } catch (err) {
         // Best-effort: a thrown hook MUST NOT corrupt the
         // wsSubscribers set vs the real socket lifecycle.
         opts.logger.warn('session_channel_on_first_subscriber_threw', {
-          sessionId: sub.sessionId,
+          renderId: sub.renderId,
           error: String(err),
         });
       }
@@ -1010,21 +1021,21 @@ export function createSessionChannelServer(
     subscribersByWs.delete(ws);
     wsSubscribers.delete(sub);
     // Per-session count bookkeeping + 1→0 hook (symmetric with register).
-    const prevCount = sessionCountById.get(sub.sessionId) ?? 0;
+    const prevCount = sessionCountById.get(sub.renderId) ?? 0;
     if (prevCount <= 1) {
-      sessionCountById.delete(sub.sessionId);
+      sessionCountById.delete(sub.renderId);
       if (prevCount === 1 && opts.onLastSubscriberGone) {
         try {
-          opts.onLastSubscriberGone(sub.sessionId);
+          opts.onLastSubscriberGone(sub.renderId);
         } catch (err) {
           opts.logger.warn('session_channel_on_last_subscriber_gone_threw', {
-            sessionId: sub.sessionId,
+            renderId: sub.renderId,
             error: String(err),
           });
         }
       }
     } else {
-      sessionCountById.set(sub.sessionId, prevCount - 1);
+      sessionCountById.set(sub.renderId, prevCount - 1);
     }
     // Ending the iter terminates pumpSubscriber AND unregisters this
     // subscriber from the StreamFanout. Idempotent on the seam side
@@ -1069,17 +1080,17 @@ export function createSessionChannelServer(
    * AND emits the appropriate error frame when:
    *
    *   - the socket has no bound subscriber (NOT_SUBSCRIBED)
-   *   - payload.sessionId doesn't match the subscriber binding
+   *   - payload.renderId doesn't match the subscriber binding
    *     (SESSION_MISMATCH)
    *
    * Subscriber binding is the authoritative tenancy scope. The wire
-   * payload's sessionId is belt-and-suspenders so the error message
+   * payload's renderId is belt-and-suspenders so the error message
    * can be specific; appId narrows transparently via the binding.
    */
   function checkSubscriberTenancy(
     ws: WebSocket,
     sub: Subscriber | undefined,
-    payload: { readonly sessionId: string },
+    payload: { readonly renderId?: string; readonly sessionId?: string },
     messageType: string,
     requestId?: string,
   ): sub is Subscriber {
@@ -1092,11 +1103,16 @@ export function createSessionChannelServer(
       );
       return false;
     }
-    if (payload.sessionId !== sub.sessionId) {
+    // Protocol wire shapes still emit `sessionId` on some payloads
+    // (HostContextObservedPayload at the time of this slice — see
+    // `oss/packages/protocol/src/types/host-context.ts`). Read either
+    // field for backwards-compat until the protocol-side rename lands.
+    const payloadId = payload.renderId ?? payload.sessionId;
+    if (payloadId !== sub.renderId) {
       sendError(
         ws,
         'SESSION_MISMATCH',
-        `${messageType} payload sessionId '${payload.sessionId}' does not match subscriber session '${sub.sessionId}'`,
+        `${messageType} payload id '${payloadId ?? '<missing>'}' does not match subscriber render '${sub.renderId}'`,
         requestId,
       );
       return false;
@@ -1113,17 +1129,17 @@ export function createSessionChannelServer(
    * layer lost.
    */
   async function applySessionPatch(
-    sessionId: string,
+    renderId: string,
     appId: string,
     messageType: string,
-    patch: SessionPatch,
+    patch: RenderPatch,
   ): Promise<void> {
     try {
-      await opts.sessionStore.update(sessionId, patch);
+      await opts.renderStore.update(renderId, patch);
     } catch (err) {
       opts.logger.warn('session_channel_observation_persist_failed', {
         messageType,
-        sessionId,
+        renderId,
         appId,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -1143,7 +1159,7 @@ export function createSessionChannelServer(
    */
   function sendChannelError(
     ws: WebSocket,
-    sessionId: string,
+    renderId: string,
     channelName: string,
     code:
       | 'CHANNEL_UNKNOWN'
@@ -1158,7 +1174,7 @@ export function createSessionChannelServer(
     send(ws, {
       type: 'channel_error',
       payload: {
-        sessionId,
+        renderId,
         channelName,
         code,
         message,
@@ -1210,9 +1226,8 @@ export function createSessionChannelServer(
       send(sub.ws, {
         type: 'channel_payload',
         payload: {
-          sessionId: sub.sessionId,
+          renderId: sub.renderId,
           appId: sub.appId,
-          stackItemId: state.stackItemId,
           channelName: state.channelName,
           seq: state.seq,
           ts: new Date().toISOString(),
@@ -1229,7 +1244,7 @@ export function createSessionChannelServer(
       if (sub.ws.readyState !== sub.ws.OPEN) return;
       sendChannelError(
         sub.ws,
-        sub.sessionId,
+        sub.renderId,
         state.channelName,
         'POLL_FAILED',
         err instanceof Error ? err.message : String(err),
@@ -1239,9 +1254,8 @@ export function createSessionChannelServer(
         sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err)),
       );
       opts.logger.warn('session_channel_channel_poll_failed', {
-        sessionId: sub.sessionId,
+        renderId: sub.renderId,
         appId: sub.appId,
-        stackItemId: state.stackItemId,
         channelName: state.channelName,
         toolName: state.toolName,
         error: String(err),
@@ -1253,7 +1267,7 @@ export function createSessionChannelServer(
    * Handle a `channel_subscribe` message. Validates the request,
    * resolves the channel's `source.tool` against the configured
    * allowlist, and schedules a polling loop. Idempotent on
-   * `${stackItemId}:${channelName}` — a re-subscribe replaces any
+   * `${renderId}:${channelName}` — a re-subscribe replaces any
    * existing interval rather than running two in parallel.
    */
   async function handleChannelSubscribe(
@@ -1262,16 +1276,16 @@ export function createSessionChannelServer(
     message: WebSocketMessage & { type: 'channel_subscribe' },
   ): Promise<void> {
     const payload = message.payload;
-    // sessionId match — the spoof guard at every wire-input boundary.
+    // renderId match — the spoof guard at every wire-input boundary.
     // A subscriber bound to session A can't drive a subscribe for
     // session B even if they crafted the inbound payload.
-    if (payload.sessionId !== sub.sessionId) {
+    if (payload.renderId !== sub.renderId) {
       sendChannelError(
         ws,
-        payload.sessionId,
+        payload.renderId,
         payload.channelName,
         'SUBSCRIBE_UNAUTHORIZED',
-        `Subscriber is bound to session '${sub.sessionId}' but channel_subscribe targets '${payload.sessionId}'`,
+        `Subscriber is bound to session '${sub.renderId}' but channel_subscribe targets '${payload.renderId}'`,
         message.requestId,
       );
       return;
@@ -1282,7 +1296,7 @@ export function createSessionChannelServer(
     if (!localTools) {
       sendChannelError(
         ws,
-        payload.sessionId,
+        payload.renderId,
         payload.channelName,
         'CHANNEL_NOT_LOCAL',
         'This server has no streamWebSocketLocalTools allowlist; iframe must poll the source tool directly.',
@@ -1291,47 +1305,22 @@ export function createSessionChannelServer(
       return;
     }
 
-    // Resolve `streamSpec[channelName].source.tool` against the active
-    // stack item. The reverse-index lookup is O(1); we then load the
-    // session + look up the stack entry by id.
-    const indexEntry = await opts.sessionStore.getSessionByStackItemId(
-      payload.stackItemId,
-    );
-    if (!indexEntry || indexEntry.sessionId !== sub.sessionId) {
+    // Phase B: a render IS the addressable unit. The reverse-index
+    // lookup (getSessionByStackItemId) collapses — `renderStore.get`
+    // resolves the render directly.
+    const stored = await opts.renderStore.get(payload.renderId);
+    if (!stored || stored.id !== sub.renderId) {
       sendChannelError(
         ws,
-        payload.sessionId,
+        payload.renderId,
         payload.channelName,
         'STACK_ITEM_NOT_FOUND',
-        `Stack item '${payload.stackItemId}' not found on session '${payload.sessionId}'`,
+        `Render '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
         message.requestId,
       );
       return;
     }
-    const session = await opts.sessionStore.get(indexEntry.sessionId);
-    if (!session) {
-      sendChannelError(
-        ws,
-        payload.sessionId,
-        payload.channelName,
-        'STACK_ITEM_NOT_FOUND',
-        `Session '${indexEntry.sessionId}' no longer exists`,
-        message.requestId,
-      );
-      return;
-    }
-    const stackItem = session.stack.find((it) => it.id === payload.stackItemId);
-    if (!stackItem) {
-      sendChannelError(
-        ws,
-        payload.sessionId,
-        payload.channelName,
-        'STACK_ITEM_NOT_FOUND',
-        `Stack item '${payload.stackItemId}' not found on session '${payload.sessionId}'`,
-        message.requestId,
-      );
-      return;
-    }
+    const stackItem = stored.render;
     // Channel entry resolution. mcpApps / system variants have no
     // streamSpec so the field reads back as undefined — same code
     // path as a component variant without the channel declared.
@@ -1343,10 +1332,10 @@ export function createSessionChannelServer(
     if (!channelEntry || !channelEntry.source) {
       sendChannelError(
         ws,
-        payload.sessionId,
+        payload.renderId,
         payload.channelName,
         'CHANNEL_UNKNOWN',
-        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on stack item '${payload.stackItemId}'`,
+        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on stack item '${payload.renderId}'`,
         message.requestId,
       );
       return;
@@ -1355,7 +1344,7 @@ export function createSessionChannelServer(
     if (!localToolsAllowlist.has(sourceTool)) {
       sendChannelError(
         ws,
-        payload.sessionId,
+        payload.renderId,
         payload.channelName,
         'CHANNEL_NOT_LOCAL',
         `source.tool '${sourceTool}' is not in streamWebSocketLocalTools; iframe must poll directly`,
@@ -1365,7 +1354,7 @@ export function createSessionChannelServer(
     }
 
     // Validation passed — schedule (or re-schedule) the polling loop.
-    const channelKey = `${payload.stackItemId}:${payload.channelName}`;
+    const channelKey = `${payload.renderId}:${payload.channelName}`;
     // Idempotent replace: a reconnect that re-subscribes the same
     // (stackItem, channel) pair gets a fresh timer + zeroed seq. The
     // client's gap-detection treats it as a new stream from the
@@ -1404,17 +1393,16 @@ export function createSessionChannelServer(
     const state: ChannelSubscriptionState = {
       pollIntervalMs,
       toolName: sourceTool,
-      stackItemId: payload.stackItemId,
+      renderId: payload.renderId,
       channelName: payload.channelName,
       args: mergedArgs,
       seq: 0,
       timer,
     };
     sub.channelSubs.set(channelKey, state);
-    opts.logger.info('session_channel_channel_subscribe', {
-      sessionId: sub.sessionId,
+    opts.logger.info('render_channel_channel_subscribe', {
+      renderId: sub.renderId,
       appId: sub.appId,
-      stackItemId: payload.stackItemId,
       channelName: payload.channelName,
       toolName: sourceTool,
       pollIntervalMs,
@@ -1438,21 +1426,20 @@ export function createSessionChannelServer(
     message: WebSocketMessage & { type: 'channel_unsubscribe' },
   ): void {
     const payload = message.payload;
-    if (payload.sessionId !== sub.sessionId) {
+    if (payload.renderId !== sub.renderId) {
       // No-op silently — the canonical "spoof guard" code path is in
       // channel_subscribe; unsubscribe gets no error frame to avoid
       // leaking cross-session existence.
       return;
     }
-    const channelKey = `${payload.stackItemId}:${payload.channelName}`;
+    const channelKey = `${payload.renderId}:${payload.channelName}`;
     const existing = sub.channelSubs.get(channelKey);
     if (!existing) return;
     clearInterval(existing.timer);
     sub.channelSubs.delete(channelKey);
-    opts.logger.info('session_channel_channel_unsubscribe', {
-      sessionId: sub.sessionId,
+    opts.logger.info('render_channel_channel_unsubscribe', {
+      renderId: sub.renderId,
       appId: sub.appId,
-      stackItemId: payload.stackItemId,
       channelName: payload.channelName,
     });
   }
@@ -1483,7 +1470,7 @@ export function createSessionChannelServer(
     // because publish() never throws on the in-process impl, and a hosted
     // RedisPubSubFanout failure here would already be persisted to the
     // SessionStreamBuffer for replay-recovery on reconnect.
-    void streamFanout.publish({ sessionId: envelope.sessionId, envelope });
+    void streamFanout.publish({ renderId: envelope.renderId, envelope });
     return { seq: envelope.seq };
   }
 
@@ -1494,7 +1481,7 @@ export function createSessionChannelServer(
    * would be a footgun.
    */
   function emitContractError(
-    sessionId: string,
+    renderId: string,
     activeStreamSpec: StreamSpec | undefined,
     payload: ContractErrorPayload,
   ): void {
@@ -1525,7 +1512,7 @@ export function createSessionChannelServer(
       // RedisPubSubFanout failure is recoverable via replay-on-reconnect.
       void fanOut(
         {
-          sessionId,
+          renderId,
           channel: CONTRACT_ERROR_CHANNEL,
           mode: 'append',
           payload: stamped as unknown as StreamEnvelopeInput['payload'],
@@ -1533,7 +1520,7 @@ export function createSessionChannelServer(
         activeStreamSpec,
       ).catch((err) => {
         opts.logger.error('session_channel_contract_error_emit_failed', {
-          sessionId,
+          renderId,
           toolName: payload.toolName,
           code: payload.error.code,
           error: String(err),
@@ -1541,7 +1528,7 @@ export function createSessionChannelServer(
       });
     } catch (err) {
       opts.logger.error('session_channel_contract_error_emit_failed', {
-        sessionId,
+        renderId,
         toolName: payload.toolName,
         code: payload.error.code,
         error: String(err),
@@ -1583,54 +1570,42 @@ export function createSessionChannelServer(
   }
 
   /**
-   * Internal impl behind the public {@link SessionChannelServer.sendPropsUpdate}.
+   * Internal impl behind the public {@link RenderChannelServer.sendPropsUpdate}.
    * Extracted as a closure-level function so the wired-action dispatcher
    * can build a `WiredActionContext.sendPropsUpdate` that closes over the
    * same logic without forward-referencing the returned object. Best-
    * effort + orphan-tolerant per the docstring on the public method.
    */
   async function sendPropsUpdateImpl(
-    sessionId: string,
-    stackItemId: string,
+    renderId: string,
     props: JsonObject,
   ): Promise<void> {
-    let session;
+    let stored;
     try {
-      session = await opts.sessionStore.get(sessionId);
+      stored = await opts.renderStore.get(renderId);
     } catch (err) {
-      opts.logger.warn('session_channel_props_update_lookup_failed', {
-        sessionId,
-        stackItemId,
+      opts.logger.warn('render_channel_props_update_lookup_failed', {
+        renderId,
         error: String(err),
       });
       return;
     }
-    if (!session) {
-      opts.logger.warn('session_channel_props_update_orphan', {
-        sessionId,
-        stackItemId,
+    if (!stored) {
+      opts.logger.warn('render_channel_props_update_orphan', {
+        renderId,
       });
       return;
     }
-    const targetIndex = session.stack.findIndex((item) => item.id === stackItemId);
-    if (targetIndex < 0) {
-      opts.logger.warn('session_channel_props_update_pageid_unknown', {
-        sessionId,
-        stackItemId,
-        stackSize: session.stack.length,
-      });
-      return;
-    }
-    // Filter the flat WS-subscriber set by sessionId; same posture as
-    // `notifyStackPush`. `send()` already silently skips closed sockets
+    // Filter the flat WS-subscriber set by renderId; same posture as
+    // `notifyRenderPush`. `send()` already silently skips closed sockets
     // and logs (but doesn't throw on) per-subscriber send failures, so
     // the caller's mount-handler path can't be made to fail by a dead
     // WebSocket.
     for (const sub of wsSubscribers) {
-      if (sub.sessionId !== sessionId) continue;
+      if (sub.renderId !== renderId) continue;
       send(sub.ws, {
         type: 'props_update',
-        payload: { stackItemId, props },
+        payload: { renderId, props },
       });
     }
   }
@@ -1656,11 +1631,16 @@ export function createSessionChannelServer(
    * tool that returns the new state.
    */
   async function dispatchWiredAction(
-    session: { id: string; currentStackIndex: number; stack: SessionStackEntry[] },
-    activeItem: StackItem | undefined,
+    stored: { id: string },
+    activeItem: Render | undefined,
     envelope: ActionEnvelope,
     dispatchedAt: string,
   ): Promise<void> {
+    // Post-Phase-B, the active "session" is just the stored render's
+    // id. Keep a `session` alias inside the body so the existing
+    // `session.id` references stay readable without a wholesale
+    // re-name pass.
+    const session = stored;
     const router = opts.wiredActionRouter;
     if (!router || !activeItem || envelope.type !== 'data:submit') return;
 
@@ -1676,7 +1656,13 @@ export function createSessionChannelServer(
     // client is the source of truth for what the user actually saw.
     // Cross-validation against the agent's tracked contract happens on
     // the agent-SDK side, not here.
-    const actionEntry = activeItem.actionSpec?.[payload.action];
+    // actionSpec / streamSpec only exist on ComponentRender. The
+    // mcpApps / system variants narrow them to undefined.
+    const componentItem =
+      activeItem.type === 'mcpApps' || activeItem.type === 'system'
+        ? undefined
+        : activeItem;
+    const actionEntry = componentItem?.actionSpec?.[payload.action];
     const serverDeclaredTool = actionEntry?.nextStep;
     const declaredTool =
       (typeof payload.tool === 'string' && payload.tool.length > 0
@@ -1691,7 +1677,7 @@ export function createSessionChannelServer(
         : {};
     const timeoutMs =
       opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
-    const streamSpec = activeItem.streamSpec;
+    const streamSpec = componentItem?.streamSpec;
 
     if (!router.has(declaredTool)) {
       emitContractError(session.id, streamSpec, {
@@ -1705,7 +1691,7 @@ export function createSessionChannelServer(
         timestamp: new Date().toISOString(),
       });
       opts.logger.warn('session_channel_wired_tool_not_found', {
-        sessionId: session.id,
+        renderId: session.id,
         toolName: declaredTool,
         actionName,
       });
@@ -1715,15 +1701,14 @@ export function createSessionChannelServer(
     // Build the wired-action context the router hands the mount tool.
     // `sendPropsUpdate` closes over the active
     // `session.id` so a buggy mount can't accidentally cross-deliver to
-    // another session by passing a foreign sessionId. The same ctx is
+    // another session by passing a foreign renderId. The same ctx is
     // reused for the refresh-stream pass below — a refresh tool that
     // wants to fire props_update can do so, though the canonical site
     // is the action tool itself.
     const wiredCtx: WiredActionContext = {
-      sessionId: session.id,
-      stackItemId: activeItem.id,
-      sendPropsUpdate(targetStackItemId, props) {
-        void sendPropsUpdateImpl(session.id, targetStackItemId, props);
+      renderId: session.id,
+      sendPropsUpdate(props) {
+        void sendPropsUpdateImpl(session.id, props);
       },
     };
 
@@ -1747,7 +1732,7 @@ export function createSessionChannelServer(
         timestamp: new Date().toISOString(),
       });
       opts.logger.warn('session_channel_wired_tool_failed', {
-        sessionId: session.id,
+        renderId: session.id,
         toolName: declaredTool,
         actionName,
         code,
@@ -1766,7 +1751,7 @@ export function createSessionChannelServer(
       attributes: {
         toolName: declaredTool,
         actionName,
-        sessionId: session.id,
+        renderId: session.id,
         latencyMs: Date.now() - invokeStartedAt,
       },
     });
@@ -1825,7 +1810,7 @@ export function createSessionChannelServer(
           timestamp: new Date().toISOString(),
         });
         opts.logger.warn('session_channel_refresh_tool_failed', {
-          sessionId: session.id,
+          renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
           code,
@@ -1849,7 +1834,7 @@ export function createSessionChannelServer(
             timestamp: new Date().toISOString(),
           });
           opts.logger.warn('session_channel_refresh_schema_violation', {
-            sessionId: session.id,
+            renderId: session.id,
             toolName: refreshTool,
             channel: channelName,
             violations: err.violations,
@@ -1862,7 +1847,7 @@ export function createSessionChannelServer(
       try {
         await fanOut(
           {
-            sessionId: session.id,
+            renderId: session.id,
             channel: channelName,
             mode: channelEntry?.mode ?? 'append',
             payload: output as StreamEnvelopeInput['payload'],
@@ -1875,7 +1860,7 @@ export function createSessionChannelServer(
         // but don't propagate — a single broken channel must not take
         // down the session.
         opts.logger.error('session_channel_refresh_emit_failed', {
-          sessionId: session.id,
+          renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
           error: String(err),
@@ -1922,7 +1907,7 @@ export function createSessionChannelServer(
     // the cookie is stale/missing, not carry a doomed handshake into
     // subscribe where the error surface is worse.
     //
-    // On success, we stash the bound `{sessionId, appId}` on the
+    // On success, we stash the bound `{renderId, appId}` on the
     // request so `handleSubscribe` can enforce that the subscribe
     // payload targets exactly those values. No synthesis from the
     // AuthAdapter — cookies ARE the auth signal.
@@ -1933,7 +1918,7 @@ export function createSessionChannelServer(
         if (bound) {
           (
             req as IncomingMessage & {
-              __gguiCookieBound?: { sessionId: string; appId: string };
+              __gguiCookieBound?: { renderId: string; appId: string };
             }
           ).__gguiCookieBound = bound;
           return {
@@ -1969,25 +1954,19 @@ export function createSessionChannelServer(
   }
 
   /**
-   * Resolve the stack item the event claims to originate from, using the
-   * SAME authoritative index as the hosted ingress (`gguiEvent.context
-   * .stackIndex`, falling back to `session.currentStackIndex`). If the
-   * session has popped forward between emit and ingress, validating
-   * against the newer stack item would reject legitimate in-flight
-   * actions — the doctrine pins context.stackIndex as the truth.
+   * Resolve the active render variant for contract enforcement. Phase
+   * B collapsed the prior (stack, currentStackIndex) lookup — a render
+   * IS the addressable unit, so the active render is the stored render
+   * itself. MCP Apps / system variants narrow to `undefined` so
+   * upstream enforcement skips (allowlist + actionSpec checks are
+   * no-ops when no `ComponentRender` is active).
    */
   function resolveActiveStackItem(
-    session: { stack: SessionStackEntry[]; currentStackIndex: number },
-    stackIndex: number,
-  ): StackItem | undefined {
-    if (stackIndex < 0 || stackIndex >= session.stack.length) return undefined;
-    const entry = session.stack[stackIndex];
-    // MCP Apps items don't participate in ggui's contract enforcement —
-    // they're embedded vendor iframes with their own contract. Return
-    // `undefined` so upstream enforcement skips (allowlist + actionSpec
-    // checks are no-ops when no ComponentStackItem is active).
-    if (entry.type === 'mcpApps' || entry.type === 'system') return undefined;
-    return entry;
+    render: Render | undefined,
+  ): Render | undefined {
+    if (!render) return undefined;
+    if (render.type === 'mcpApps' || render.type === 'system') return undefined;
+    return render;
   }
 
 
@@ -2008,61 +1987,55 @@ export function createSessionChannelServer(
   ): Promise<void> {
     const envelope: ActionEnvelope = message.payload;
 
-    // Spoof guard — envelope.sessionId is REQUIRED on the wire and
+    // Spoof guard — envelope.renderId is REQUIRED on the wire and
     // MUST match the subscriber's bound session.
-    if (envelope.sessionId !== sub.sessionId) {
+    if (envelope.renderId !== sub.renderId) {
       sendError(
         ws,
         'SESSION_MISMATCH',
-        `Action targets session '${envelope.sessionId}' but this socket is subscribed to '${sub.sessionId}'`,
+        `Action targets session '${envelope.renderId}' but this socket is subscribed to '${sub.renderId}'`,
         message.requestId,
       );
       return;
     }
 
-    const session = await opts.sessionStore.get(sub.sessionId);
-    if (!session) {
+    const stored = await opts.renderStore.get(sub.renderId);
+    if (!stored) {
       sendError(
         ws,
         'SESSION_NOT_FOUND',
-        `Session ${sub.sessionId} no longer exists`,
+        `Render ${sub.renderId} no longer exists`,
         message.requestId,
       );
       return;
     }
 
-    // Stack routing: ActionEnvelope may carry stackIndex OR stackItemId.
-    // When both are present, stackItemId wins (doctrine-aligned — stable
-    // identity beats positional index). When neither is present, fall
-    // back to session.currentStackIndex.
-    let stackIndex = envelope.stackIndex ?? session.currentStackIndex;
-    if (envelope.stackItemId !== undefined) {
-      const byId = session.stack.findIndex((s) => s.id === envelope.stackItemId);
-      if (byId >= 0) stackIndex = byId;
-    }
-    const activeItem = resolveActiveStackItem(session, stackIndex);
+    // Phase B: a render IS the addressable unit. The prior stack
+    // routing (stackIndex / cross-stack pickIds) collapses — the
+    // resolved render itself is the active item.
+    const activeItem = resolveActiveStackItem(stored.render);
 
     // ── Two-step enforcement ──
-    //   1. allowlist via assertEventAllowed
+    //   1. allowlist via assertEventAllowed (Phase B: no-op stub —
+    //      Render no longer carries a `subscription` allowlist;
+    //      reinstating per-render event policy is deferred.)
     //   2. actionSpec payload check via assertActionContract (data:submit)
     // Envelope.payload for data:submit carries the ActionEventValue
     // shape (`{action, data?, tool?}`).
     try {
-      assertEventAllowed(activeItem?.subscription, envelope.type);
+      assertEventAllowed(undefined, envelope.type);
     } catch (err) {
       if (err instanceof EventNotAllowedError) {
-        opts.logger.warn('session_channel_event_not_allowed', {
-          sessionId: sub.sessionId,
-          eventType: err.eventType,
-          allowedEvents: err.allowedEvents,
+        opts.logger.warn('render_channel_event_not_allowed', {
+          renderId: sub.renderId,
           envelope: 'action',
+          error: err.message,
         });
         sendError(
           ws,
           'EVENT_NOT_ALLOWED',
           err.message,
           message.requestId,
-          err.toErrorData(),
         );
         return;
       }
@@ -2071,11 +2044,15 @@ export function createSessionChannelServer(
 
     if (envelope.type === 'data:submit') {
       try {
-        assertActionContract(activeItem?.actionSpec, envelope.payload);
+        const activeActionSpec =
+          activeItem && activeItem.type !== 'mcpApps' && activeItem.type !== 'system'
+            ? activeItem.actionSpec
+            : undefined;
+        assertActionContract(activeActionSpec, envelope.payload);
       } catch (err) {
         if (err instanceof ContractViolationError) {
           opts.logger.warn('session_channel_contract_violation', {
-            sessionId: sub.sessionId,
+            renderId: sub.renderId,
             violations: err.violations,
             envelope: 'action',
           });
@@ -2092,19 +2069,19 @@ export function createSessionChannelServer(
       }
     }
 
-    // Persist the envelope. SessionStore.appendEvent assigns a monotonic
+    // Persist the envelope. RenderStore.appendEvent assigns a monotonic
     // seq the client acks back with so reconnects can resume via `fromSeq`.
     const dispatchedAt = new Date().toISOString();
     let seq: number;
     try {
-      seq = await opts.sessionStore.appendEvent({
-        sessionId: sub.sessionId,
+      seq = await opts.renderStore.appendEvent({
+        renderId: sub.renderId,
         type: 'user.submitted',
         data: envelope,
       });
     } catch (err) {
       opts.logger.error('session_channel_append_failed', {
-        sessionId: sub.sessionId,
+        renderId: sub.renderId,
         error: String(err),
       });
       sendError(
@@ -2127,7 +2104,7 @@ export function createSessionChannelServer(
     // catches every failure and emits contract-error envelopes; a
     // throw out of this call would be a platform bug and we'd rather
     // see it in tests than silently drop.
-    await dispatchWiredAction(session, activeItem, envelope, dispatchedAt);
+    await dispatchWiredAction(stored, activeItem, envelope, dispatchedAt);
 
     // StreamFanout pump-drain: dispatchWiredAction's internal fanOut
     // calls `streamFanout.publish()` which queues envelopes into the
@@ -2169,7 +2146,7 @@ export function createSessionChannelServer(
     //     pre-handshake.
     //
     // Placed FIRST — before bootstrap verify (which consumes the
-    // single-use bootstrap token per the SessionChannelBootstrap
+    // single-use bootstrap token per the RenderChannelBootstrap
     // docstring) and before session lookup/creation (DB work).
     // Bootstrap iframes with a version mismatch must retry with a
     // fresh bootstrap token; burning the token on a mismatch the
@@ -2194,7 +2171,7 @@ export function createSessionChannelServer(
         },
       );
       opts.logger.warn('session_channel_version_mismatch', {
-        sessionId: payload.sessionId,
+        renderId: payload.renderId,
         appId: payload.appId,
         serverVersion: PROTOCOL_SCHEMA_VERSION,
         clientSupportedVersions: payload.supportedVersions,
@@ -2230,7 +2207,7 @@ export function createSessionChannelServer(
       const verifyResult = opts.bootstrap.verify(payload.wsToken);
       if (!verifyResult.ok) {
         opts.logger.warn('session_channel_bootstrap_rejected', {
-          sessionId: payload.sessionId,
+          renderId: payload.renderId,
           appId: payload.appId,
           reason: verifyResult.reason,
         });
@@ -2257,12 +2234,12 @@ export function createSessionChannelServer(
         }
         return;
       }
-      const bound = { sessionId: verifyResult.sessionId, appId: verifyResult.appId };
-      if (bound.sessionId !== payload.sessionId) {
+      const bound = { renderId: verifyResult.renderId, appId: verifyResult.appId };
+      if (bound.renderId !== payload.renderId) {
         sendError(
           ws,
           'BOOTSTRAP_SESSION_MISMATCH',
-          `Bootstrap token is bound to session '${bound.sessionId}' but subscribe targets '${payload.sessionId}'`,
+          `Bootstrap token is bound to session '${bound.renderId}' but subscribe targets '${payload.renderId}'`,
           message.requestId,
         );
         return;
@@ -2283,7 +2260,7 @@ export function createSessionChannelServer(
       effectiveIdentity = {
         identity: {
           kind: 'user',
-          userId: bound.sessionId,
+          userId: bound.renderId,
           workspaceId: bound.appId,
           roles: [],
         },
@@ -2293,11 +2270,11 @@ export function createSessionChannelServer(
       // work — so a downstream failure doesn't leave the client with
       // no way to resume.
       mintedSessionToken = opts.bootstrap.issueSessionToken(
-        bound.sessionId,
+        bound.renderId,
         bound.appId,
       );
       opts.logger.info('session_channel_bootstrap_accepted', {
-        sessionId: bound.sessionId,
+        renderId: bound.renderId,
         appId: bound.appId,
       });
     }
@@ -2308,21 +2285,21 @@ export function createSessionChannelServer(
     // (agent creates via ggui_push → client subscribes) in a single
     // step — production deployments tighten this by supplying an
     // AuthAdapter that mints session-scoped tokens on push.
-    let session = await opts.sessionStore.get(payload.sessionId);
+    let session = await opts.renderStore.get(payload.renderId);
     if (session) {
       if (session.appId !== payload.appId) {
         sendError(
           ws,
           'APP_MISMATCH',
-          `Session ${payload.sessionId} belongs to a different app`,
+          `Session ${payload.renderId} belongs to a different app`,
           message.requestId,
         );
         return;
       }
     } else {
       try {
-        session = await opts.sessionStore.create({
-          id: payload.sessionId,
+        session = await opts.renderStore.create({
+          id: payload.renderId,
           appId: payload.appId,
         });
       } catch (err) {
@@ -2344,43 +2321,36 @@ export function createSessionChannelServer(
     // This is race-safe in single-threaded JS: the next few lines run
     // synchronously up to `register(sub)`, and fan-out's per-subscriber
     // `seq <= replayCompletedSeq` guard takes care of the window.
-    const snapshotSeq = await streamBuffer.currentSeq(session.id);
+    // Local alias for the resolved row (handleSubscribe's `session`
+    // local IS a `StoredRender` post-collapse; rename kept narrow to
+    // avoid a wholesale identifier sweep in this slice).
+    const stored = session;
+    const snapshotSeq = await streamBuffer.currentSeq(stored.id);
 
-    // Resolve active stack item's streamSpec for per-channel replay
-    // policy. If the stack is empty or the index is out of range, no
-    // spec is known — replay contributes nothing.
-    const activeIndex = session.currentStackIndex;
-    const activeItem =
-      activeIndex >= 0 && activeIndex < session.stack.length
-        ? session.stack[activeIndex]
-        : undefined;
+    // Phase B: a render IS the addressable unit, so the active item
+    // is the resolved render's visible-bits surface itself.
+    const activeItem = stored.render;
 
     // Reconnect: `fromSeq` present → replay per policy on declared
     // AND reserved channels. Fresh subscribe: `fromSeq` absent →
     // call with `fromSeq=0` + NO spec, so the buffer's spec-channel
     // walk contributes nothing (preserving the "initial state comes
-    // from ack.stack[].props; stream channels are for updates
-    // after" doctrine for agent-declared channels) but the
-    // reserved-channel walk still surfaces server-pushed state that
-    // landed before the subscriber attached. The provisional
-    // preview channel (`_ggui:preview`) is the load-bearing case:
-    // an agent's `ggui_push` kicks off preview emission BEFORE the
-    // user's browser navigates to the viewer, so without this the
-    // late subscriber sees no preview at all.
+    // from ack.render.props; stream channels are for updates after"
+    // doctrine for agent-declared channels) but the reserved-channel
+    // walk still surfaces server-pushed state that landed before the
+    // subscriber attached.
     const activeStreamSpec =
-      activeItem !== undefined &&
-      activeItem.type !== 'mcpApps' &&
-      activeItem.type !== 'system'
+      activeItem.type !== 'mcpApps' && activeItem.type !== 'system'
         ? activeItem.streamSpec
         : undefined;
     const replay =
       payload.fromSeq !== undefined
         ? await streamBuffer.replay(
-            session.id,
+            stored.id,
             payload.fromSeq,
             activeStreamSpec,
           )
-        : await streamBuffer.replay(session.id, 0, undefined);
+        : await streamBuffer.replay(stored.id, 0, undefined);
 
     // Subscribe to the StreamFanout BEFORE constructing the Subscriber:
     // the seam returns an AsyncIterable whose iterator we hand off; the
@@ -2389,11 +2359,11 @@ export function createSessionChannelServer(
     // point onward queues into our iterator — paired with the
     // replayCompletedSeq cursor below, that's race-free.
     const fanoutIter =
-      streamFanout.subscribe(session.id)[Symbol.asyncIterator]();
+      streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
     const sub: Subscriber = {
       ws,
-      sessionId: session.id,
-      appId: session.appId,
+      renderId: stored.id,
+      appId: stored.appId,
       identity: effectiveIdentity,
       connectedAt: Date.now(),
       replayCompletedSeq: snapshotSeq,
@@ -2404,9 +2374,9 @@ export function createSessionChannelServer(
       channelSubs: new Map<string, ChannelSubscriptionState>(),
     };
     register(sub);
-    opts.logger.info('session_channel_subscribed', {
-      sessionId: session.id,
-      appId: session.appId,
+    opts.logger.info('render_channel_subscribed', {
+      renderId: stored.id,
+      appId: stored.appId,
       identityKind: effectiveIdentity.identity.kind,
       fromSeq: payload.fromSeq,
       snapshotSeq,
@@ -2416,9 +2386,9 @@ export function createSessionChannelServer(
     });
 
     const ackPayload: AckPayload = {
-      sequence: session.eventSequence,
+      sequence: stored.eventSequence,
       timestamp: Date.now(),
-      stack: session.stack as StackItem[],
+      render: stored.render,
       streamSeq: snapshotSeq,
       // Advertise the server's protocol version on every successful
       // subscribe ack (SPEC §11.2.2). Clients whose
@@ -2459,7 +2429,7 @@ export function createSessionChannelServer(
           message.requestId,
         );
       } else {
-        const ledger = await opts.sessionStore.listEventsSince(
+        const ledger = await opts.renderStore.listEventsSince(
           session.id,
           sinceSeq,
           // Server-side cap matches the HTTP route's default (100).
@@ -2539,11 +2509,11 @@ export function createSessionChannelServer(
         // session A can't be used to open session B.
         const cookieBound = pendingCookieBinding.get(ws);
         if (cookieBound) {
-          if (message.payload.sessionId !== cookieBound.sessionId) {
+          if (message.payload.renderId !== cookieBound.renderId) {
             sendError(
               ws,
               'DEVTOOL_COOKIE_SESSION_MISMATCH',
-              `Embedded-ui cookie is bound to session '${cookieBound.sessionId}' but subscribe targets '${message.payload.sessionId}'`,
+              `Embedded-ui cookie is bound to session '${cookieBound.renderId}' but subscribe targets '${message.payload.renderId}'`,
               message.requestId,
             );
             return;
@@ -2627,47 +2597,12 @@ export function createSessionChannelServer(
           return;
         }
         await applySessionPatch(
-          sub.sessionId,
+          sub.renderId,
           sub.appId,
           message.type,
           { hostContext: message.payload.hostContext, lastActivityAt: Date.now() },
         );
         return;
-      case 'canvas_navigated':
-        // The iframe-runtime's CanvasShell fires this when the user
-        // back-navigates in the canvas (popping a stack item from the
-        // local NavStackModel). The server updates
-        // `session.activeStackItemId` to the new top so
-        // `ggui_consume`'s active-pipe resolution stays in sync with
-        // what the user is looking at. AbortSignal wiring for in-
-        // flight cold-gen on the popped item is a follow-up — the
-        // server-side gen orchestrator (push.ts handler) doesn't yet
-        // expose a per-stack-item AbortController registry to this
-        // routing layer.
-        if (
-          !checkSubscriberTenancy(
-            ws,
-            sub,
-            message.payload,
-            message.type,
-            message.requestId,
-          )
-        ) {
-          return;
-        }
-        await applySessionPatch(
-          sub.sessionId,
-          sub.appId,
-          message.type,
-          {
-            activeStackItemId: message.payload.activeItemId,
-            lastActivityAt: Date.now(),
-          },
-        );
-        return;
-      case 'pop':
-      case 'get_stack':
-      case 'generate':
       case 'feedback':
         // Require an active subscription for operational messages.
         if (!sub) {
@@ -2709,14 +2644,14 @@ export function createSessionChannelServer(
   const pendingIdentity = new WeakMap<WebSocket, AuthResult>();
   /**
    * Embedded-ui cookie binding established at upgrade. When present,
-   * `handleSubscribe` enforces `subscribe.sessionId === bound.sessionId`
+   * `handleSubscribe` enforces `subscribe.renderId === bound.renderId`
    * so a valid cookie can't be used to open a session it wasn't
    * issued for. Parallel to {@link pendingIdentity} — same lifetime,
    * same WeakMap rationale.
    */
   const pendingCookieBinding = new WeakMap<
     WebSocket,
-    { sessionId: string; appId: string }
+    { renderId: string; appId: string }
   >();
 
   wss.on('connection', (ws, req) => {
@@ -2727,7 +2662,7 @@ export function createSessionChannelServer(
     // Likewise for any cookie binding.
     const cookieBound = (
       req as IncomingMessage & {
-        __gguiCookieBound?: { sessionId: string; appId: string };
+        __gguiCookieBound?: { renderId: string; appId: string };
       }
     ).__gguiCookieBound;
     if (cookieBound) pendingCookieBinding.set(ws, cookieBound);
@@ -2795,21 +2730,17 @@ export function createSessionChannelServer(
     async sendToSession(delivery) {
       // Outbound fan-out enforcement (defense-in-depth parity with
       // hosted `handle-data.ts`). Re-validates the delivery's payload
-      // against the active stack item's streamSpec BEFORE delivery —
-      // so a future OSS mutation handler that bypasses the emit-side
-      // check can't fan out malformed data to subscribers. Throws
+      // against the render's streamSpec BEFORE delivery — so a future
+      // OSS mutation handler that bypasses the emit-side check can't
+      // fan out malformed data to subscribers. Throws
       // ContractViolationError{tool:'ggui_emit'} on violation;
       // caller decides what to do (log, rethrow, wrap).
-      const session = await opts.sessionStore.get(delivery.sessionId);
-      const activeIndex = session?.currentStackIndex ?? -1;
-      const activeEntry =
-        session && activeIndex >= 0 && activeIndex < session.stack.length
-          ? session.stack[activeIndex]
-          : undefined;
+      const stored = await opts.renderStore.get(delivery.renderId);
+      const activeEntry = stored?.render;
       const streamSpec =
-        activeEntry !== undefined &&
-        activeEntry.type !== 'mcpApps' &&
-        activeEntry.type !== 'system'
+        activeEntry !== undefined
+        && activeEntry.type !== 'mcpApps'
+        && activeEntry.type !== 'system'
           ? activeEntry.streamSpec
           : undefined;
       assertStreamContract(
@@ -2820,51 +2751,44 @@ export function createSessionChannelServer(
       );
       return fanOut(delivery, streamSpec);
     },
-    notifyStackPush(sessionId, stackItem, matchType) {
+    notifyRenderPush(renderId, render, matchType) {
       // Best-effort fan-out to every live subscriber bound to this
-      // session. NOT routed through the replay buffer — see the
-      // `notifyStackPush` JSDoc on the interface for why fresh
-      // subscribers rely on `ack.stack` instead of a replay frame.
-      // NOT routed through StreamFanout either — `type: 'push'` is a
-      // distinct WebSocket message type, not a stream envelope, so it
-      // sits outside the seam's contract. Filter the flat WS-subscriber
-      // set by sessionId; N is typically 1-2 (multi-tab session sharing).
+      // render. NOT routed through the replay buffer — see the
+      // `notifyRenderPush` JSDoc on the interface for why fresh
+      // subscribers rely on `ack.render` instead of a replay frame.
+      // NOT routed through StreamFanout either — `type: 'render'` is a
+      // distinct WebSocket message type. Filter the flat WS-subscriber
+      // set by renderId; N is typically 1-2 (multi-tab render sharing).
       const payload =
-        matchType !== undefined ? { stackItem, matchType } : { stackItem };
+        matchType !== undefined ? { render, matchType } : { render };
       for (const sub of wsSubscribers) {
-        if (sub.sessionId !== sessionId) continue;
-        // `send()` already silently skips closed sockets and logs
-        // (but doesn't throw on) per-subscriber send failures, so the
-        // caller's `appendStackItem` path can't be made to fail by a
-        // dead WebSocket.
-        send(sub.ws, { type: 'push', payload });
+        if (sub.renderId !== renderId) continue;
+        send(sub.ws, { type: 'render', payload });
       }
     },
-    async primeStreams(sessionId, stackItem) {
+    async primeStreams(renderId, render) {
       const router = opts.wiredActionRouter;
       const streamSpec =
-        'streamSpec' in stackItem ? stackItem.streamSpec : undefined;
+        'streamSpec' in render ? render.streamSpec : undefined;
       if (!router || !streamSpec) return;
       const timeoutMs =
         opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
       // Build the same wired-action ctx the dispatcher uses.
-      // Prime-time invocations reuse the seam so a refresh
-      // tool that fires `sendPropsUpdate` on cold-start works the same
-      // way as one fired post-action. `stackItemId` is the primed stack
-      // item's id; closures lock to the caller-supplied sessionId.
+      // Prime-time invocations reuse the seam so a refresh tool that
+      // fires `sendPropsUpdate` on cold-start works the same way as
+      // one fired post-action.
       const wiredCtx: WiredActionContext = {
-        sessionId,
-        stackItemId: stackItem.id,
-        sendPropsUpdate(targetStackItemId, props) {
-          void sendPropsUpdateImpl(sessionId, targetStackItemId, props);
+        renderId,
+        sendPropsUpdate(props) {
+          void sendPropsUpdateImpl(renderId, props);
         },
       };
       for (const [channelName, channelEntry] of Object.entries(streamSpec)) {
         const refreshTool = channelEntry?.tool;
         if (!refreshTool) continue;
         if (!router.has(refreshTool)) {
-          opts.logger.warn('session_channel_prime_tool_not_found', {
-            sessionId,
+          opts.logger.warn('render_channel_prime_tool_not_found', {
+            renderId,
             toolName: refreshTool,
             channel: channelName,
           });
@@ -2880,8 +2804,8 @@ export function createSessionChannelServer(
             timeoutMs,
           );
         } catch (err) {
-          opts.logger.warn('session_channel_prime_tool_failed', {
-            sessionId,
+          opts.logger.warn('render_channel_prime_tool_failed', {
+            renderId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2896,8 +2820,8 @@ export function createSessionChannelServer(
             opts.extraReservedValidators,
           );
         } catch (err) {
-          opts.logger.warn('session_channel_prime_schema_violation', {
-            sessionId,
+          opts.logger.warn('render_channel_prime_schema_violation', {
+            renderId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2907,7 +2831,7 @@ export function createSessionChannelServer(
         try {
           await fanOut(
             {
-              sessionId,
+              renderId,
               channel: channelName,
               mode: channelEntry?.mode ?? 'append',
               payload: output as StreamEnvelopeInput['payload'],
@@ -2915,8 +2839,8 @@ export function createSessionChannelServer(
             streamSpec,
           );
         } catch (err) {
-          opts.logger.error('session_channel_prime_emit_failed', {
-            sessionId,
+          opts.logger.error('render_channel_prime_emit_failed', {
+            renderId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2924,40 +2848,38 @@ export function createSessionChannelServer(
         }
       }
     },
-    sendPropsUpdate(sessionId, stackItemId, props) {
+    sendPropsUpdate(renderId, props) {
       // Public entry point — delegates to the closure-level impl that
       // the wired-action dispatcher's `WiredActionContext.sendPropsUpdate`
       // also calls. Returns the impl's promise so the caller can await
-      // session-store lookup completion if desired (the wiredCtx call
-      // site fire-and-forgets via `void`).
-      return sendPropsUpdateImpl(sessionId, stackItemId, props);
+      // store-lookup completion if desired (the wiredCtx call site
+      // fire-and-forgets via `void`).
+      return sendPropsUpdateImpl(renderId, props);
     },
-    sendDrainAck({ sessionId, appId, stackItemId, eventId, drainedAt }) {
+    sendDrainAck({ renderId, appId, eventId, drainedAt }) {
       // Server-side fan-out for the action-drain ack.
-      // Filter the flat WS-subscriber set by sessionId (same posture
+      // Filter the flat WS-subscriber set by renderId (same posture
       // as `sendPropsUpdate`). No persistence; subscribers that
       // missed the frame fall back to their 10s claim timer, which
-      // the atomic pop resolves cleanly. `send()` already silently
-      // skips closed sockets and absorbs per-subscriber send
-      // failures.
+      // the atomic pop resolves cleanly.
       for (const sub of wsSubscribers) {
-        if (sub.sessionId !== sessionId) continue;
+        if (sub.renderId !== renderId) continue;
         send(sub.ws, {
           type: 'drain_ack',
-          payload: { sessionId, appId, stackItemId, eventId, drainedAt },
+          payload: { renderId, appId, eventId, drainedAt },
         });
       }
     },
-    externalBroadcast(sessionId, frame) {
-      // Walk the flat subscriber set; filter to matching sessionId.
+    externalBroadcast(renderId, frame) {
+      // Walk the flat subscriber set; filter to matching renderId.
       // `send()` already guards closed sockets and logs (but doesn't
       // throw on) per-subscriber failures, so the caller (a cloud
       // pubsub on-message handler) can't be made to fail by a dead
-      // WebSocket. No SessionStore lookup — the publisher already
+      // WebSocket. No RenderStore lookup — the publisher already
       // validated; this seam is the cross-pod delivery path, not the
       // re-validation point.
       for (const sub of wsSubscribers) {
-        if (sub.sessionId !== sessionId) continue;
+        if (sub.renderId !== renderId) continue;
         send(sub.ws, frame);
       }
     },
@@ -2966,10 +2888,10 @@ export function createSessionChannelServer(
     },
     get sessionCount() {
       // Distinct session count across live WS subscribers. With
-      // multi-tab sessions, two subscribers may share a sessionId —
+      // multi-tab sessions, two subscribers may share a renderId —
       // dedupe before counting.
       const sessions = new Set<string>();
-      for (const sub of wsSubscribers) sessions.add(sub.sessionId);
+      for (const sub of wsSubscribers) sessions.add(sub.renderId);
       return sessions.size;
     },
     async close() {
@@ -2990,7 +2912,7 @@ export function createSessionChannelServer(
       // case and the wrong signal for client reconnect logic.
       const sessions = new Set<string>();
       for (const sub of wsSubscribers) {
-        sessions.add(sub.sessionId);
+        sessions.add(sub.renderId);
         try {
           sub.ws.close(1012, 'service_restart');
         } catch {
@@ -3005,8 +2927,8 @@ export function createSessionChannelServer(
       // when there are no subscribers; for hosted bindings it ensures
       // the per-session pub/sub channel teardown fires.
       await Promise.all(
-        Array.from(sessions, (sessionId) =>
-          streamFanout.close(sessionId).catch(() => {
+        Array.from(sessions, (renderId) =>
+          streamFanout.close(renderId).catch(() => {
             /* best-effort */
           }),
         ),

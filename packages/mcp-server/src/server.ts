@@ -343,10 +343,10 @@ import {
   type ThreadOwnerResolver,
 } from './thread-transport.js';
 import {
-  createSessionChannelServer,
-  type SessionChannelServer,
+  createRenderChannelServer,
+  type RenderChannelServer,
   type WiredActionRouter,
-} from './session-channel.js';
+} from './render-channel.js';
 import {
   composeHandlersWithMounts,
   type McpServerMount,
@@ -681,7 +681,7 @@ export function defaultHandlers(deps: {
      * channel traffic.
      *
      * Constructed by `createGguiServer` from `opts.provisionalPreview`
-     * plus the late-bound `SessionChannelServer.sendToSession`
+     * plus the late-bound `RenderChannelServer.sendToSession`
      * closure; callers threading their own handler set can build
      * `ProvisionalPreviewDeps` directly.
      */
@@ -812,7 +812,7 @@ export function defaultHandlers(deps: {
     readonly renderStore: RenderStore;
     /**
      * Optional live-subscriber `props_update` notifier — typically a
-     * thin closure over `SessionChannelServer.sendPropsUpdate`.
+     * thin closure over `RenderChannelServer.sendPropsUpdate`.
      * Forwarded as-is to `createGguiUpdateHandler`. Hosts without a
      * session channel leave this absent; the handler still persists
      * via `renderStore.appendStackItem` on every successful patch.
@@ -867,7 +867,7 @@ export function defaultHandlers(deps: {
    * Stream channel wiring for `ggui_emit`. When `push` is bound, the
    * handler registers automatically; its `sendEnvelope` closes over
    * `stream.channelProvider`, a lazy getter that resolves the
-   * `SessionChannelServer` at emit time (the channel is constructed
+   * `RenderChannelServer` at emit time (the channel is constructed
    * AFTER `defaultHandlers` runs, so a static reference would always
    * be null on the OSS in-process boot).
    *
@@ -876,10 +876,10 @@ export function defaultHandlers(deps: {
    * cloud's `ggui_emit_accepted_no_receiver` posture.
    *
    * The getter pattern lets the OSS server bind once at boot, then
-   * mutate the cell after `createSessionChannelServer` runs.
+   * mutate the cell after `createRenderChannelServer` runs.
    */
   readonly stream?: {
-    readonly channelProvider?: () => SessionChannelServer | null;
+    readonly channelProvider?: () => RenderChannelServer | null;
   };
   /**
    * Structured-event logger threaded into handlers that emit
@@ -1152,7 +1152,7 @@ export function defaultHandlers(deps: {
   // Canvas-mode lifecycle emitter — shared by handshake/push/consume so
   // the three handlers publish to the reserved `_ggui:lifecycle`
   // channel through one binding. Lazy-resolves the channel provider
-  // because `createSessionChannelServer` runs after `defaultHandlers`;
+  // because `createRenderChannelServer` runs after `defaultHandlers`;
   // a static reference would always be null on first emit. Mirrors the
   // pattern `ggui_emit`'s `sendEnvelope` uses below.
   //
@@ -1341,13 +1341,13 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>,
     );
     // `ggui_emit` routes outbound stream envelopes through the active
-    // `SessionChannelServer.sendToSession`
+    // `RenderChannelServer.sendToSession`
     // (which records into the bound `SessionStreamBuffer` + fans out
     // to subscribers). When no channel is bound, the handler accepts
     // the envelope and returns silently — mirrors cloud's
     // `ggui_emit_accepted_no_receiver` posture.
     //
-    // `channelProvider` is lazy because `createSessionChannelServer`
+    // `channelProvider` is lazy because `createRenderChannelServer`
     // runs AFTER `defaultHandlers`; a static reference would always
     // be null on first emit. The OSS server's outer scope mutates
     // `channelForHealth` on listen() and points the provider at it.
@@ -2136,7 +2136,7 @@ export interface CreateGguiServerOptions {
   /**
    * Per-call timeout for wired-tool invocations, in ms. Defaults to
    * `DEFAULT_WIRED_TOOL_TIMEOUT_MS` (30 s) when omitted. Forwarded
-   * verbatim to `createSessionChannelServer`.
+   * verbatim to `createRenderChannelServer`.
    */
   readonly wiredActionTimeoutMs?: number;
   /**
@@ -2154,27 +2154,27 @@ export interface CreateGguiServerOptions {
    * agrees with the server on which channels use WS fan-out.
    *
    * Only consulted when `sessionChannel` is enabled. Forwarded
-   * verbatim to `createSessionChannelServer` (see
-   * `SessionChannelOptions.streamWebSocketLocalTools`).
+   * verbatim to `createRenderChannelServer` (see
+   * `RenderChannelOptions.streamWebSocketLocalTools`).
    */
-  readonly streamWebSocketLocalTools?: import('./session-channel.js').SessionChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: import('./render-channel.js').RenderChannelLocalToolsOptions;
   /**
    * Hook fired when the local subscriber count for `sessionId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
-   * `createSessionChannelServer`. Used by cloud adapters for per-session
+   * `createRenderChannelServer`. Used by cloud adapters for per-session
    * cross-pod pubsub channel scoping; OSS callers leave this undefined.
    *
    * Only consulted when `sessionChannel` is enabled. See
-   * `SessionChannelOptions.onFirstSubscriber` for the full contract.
+   * `RenderChannelOptions.onFirstSubscriber` for the full contract.
    */
   readonly onFirstSubscriber?: (sessionId: string) => void;
   /**
    * Hook fired when the local subscriber count for `sessionId`
    * transitions 1 → 0 on the live channel. Forwarded verbatim to
-   * `createSessionChannelServer`.
+   * `createRenderChannelServer`.
    *
    * Only consulted when `sessionChannel` is enabled. See
-   * `SessionChannelOptions.onLastSubscriberGone` for the full contract.
+   * `RenderChannelOptions.onLastSubscriberGone` for the full contract.
    */
   readonly onLastSubscriberGone?: (sessionId: string) => void;
   /**
@@ -2183,7 +2183,7 @@ export interface CreateGguiServerOptions {
    * `@ggui-ai/protocol::sanitizeCausedBy` when omitted — redacts
    * Bearer tokens, query-param secrets, common env-var dumps, and
    * truncates at 2 KB. Forwarded verbatim to
-   * `createSessionChannelServer`. See `SessionChannelOptions
+   * `createRenderChannelServer`. See `RenderChannelOptions
    * .sanitizeCausedBy` for the contract.
    */
   readonly sanitizeCausedBy?: import('@ggui-ai/protocol').SanitizeCausedBy;
@@ -2211,8 +2211,8 @@ export interface CreateGguiServerOptions {
 
   /**
    * Protocol-version handshake policy for the session channel. Forwarded
-   * verbatim to `createSessionChannelServer` (see
-   * `SessionChannelOptions.versionPolicy`). Defaults to `'reject'` —
+   * verbatim to `createRenderChannelServer` (see
+   * `RenderChannelOptions.versionPolicy`). Defaults to `'reject'` —
    * mismatched `SubscribePayload.supportedVersions` emits
    * UPGRADE_REQUIRED and closes the connection. Legacy opt-out
    * `'advisory'` keeps the connection open after the error frame for
@@ -3136,7 +3136,7 @@ export interface GguiServer {
    * composition with future mutation handlers that want to fan out
    * via `sessionChannel.sendToSession(sessionId, data)`.
    */
-  readonly sessionChannel: SessionChannelServer | null;
+  readonly sessionChannel: RenderChannelServer | null;
   /**
    * The pairing service bound to this server, when the `pairing` option
    * was enabled. `null` when pairing is disabled. In-process hosts
@@ -3416,7 +3416,7 @@ export function createGguiServer(
       ) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
   let channelBootstrap:
-    | import('./session-channel.js').SessionChannelBootstrap
+    | import('./render-channel.js').RenderChannelBootstrap
     | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
   // session tokens, console cookies). Distinct `kind` claims
@@ -3497,7 +3497,7 @@ export function createGguiServer(
   // during the session-channel factory run further down. Safe because
   // `ggui_push` can only fire after `listen()` binds HTTP, which is
   // strictly after that factory runs.
-  let channelForHealth: SessionChannelServer | null = null;
+  let channelForHealth: RenderChannelServer | null = null;
 
   // Provisional preview wiring. Must precede the default-handlers
   // construction so `push.provisionalPreview` is threaded through at
@@ -3729,7 +3729,7 @@ export function createGguiServer(
           : {}),
       },
       emitter: opts.provisionalPreview.emitter,
-      // Late-binds to the SessionChannelServer created further down.
+      // Late-binds to the RenderChannelServer created further down.
       // `ggui_push` can only fire after `listen()` binds the HTTP
       // server, by which point `channelForHealth` is assigned.
       sendEnvelope: async (envelope) => {
@@ -3937,7 +3937,7 @@ export function createGguiServer(
                   }
                 : {}),
               // Live-subscriber notifier. Late-binds to the
-              // SessionChannelServer created further down (`channel`
+              // RenderChannelServer created further down (`channel`
               // / `channelForHealth`) — the channel doesn't exist yet
               // at handler-factory time, so we hand the push handler
               // a thin closure that forwards to whatever channel ends
@@ -3952,11 +3952,11 @@ export function createGguiServer(
               // anyway, but providing the closure unconditionally
               // keeps the typecheck simple — no per-config branching.
               channelNotifier: {
-                notifyStackPush: (sessionId, stackItem, matchType) => {
+                notifyStackPush: (renderId, render, matchType) => {
                   if (!channelForHealth) return;
-                  channelForHealth.notifyStackPush(
-                    sessionId,
-                    stackItem,
+                  channelForHealth.notifyRenderPush(
+                    renderId,
+                    render,
                     matchType,
                   );
                 },
@@ -4050,7 +4050,7 @@ export function createGguiServer(
             update: {
               renderStore,
               propsUpdateNotifier: {
-                sendPropsUpdate: async (renderId: string, props: Record<string, unknown>) => {
+                sendPropsUpdate: async (renderId, props) => {
                   if (!channelForHealth) return;
                   await channelForHealth.sendPropsUpdate(
                     renderId,
@@ -4155,7 +4155,7 @@ export function createGguiServer(
       // ggui_emit resolves the channel via
       // a lazy getter so the handler captures whatever
       // `channelForHealth` ends up pointing at after
-      // createSessionChannelServer runs (which is AFTER
+      // createRenderChannelServer runs (which is AFTER
       // defaultHandlers). Same late-bind posture as channelNotifier /
       // provisionalPreviewDeps.sendEnvelope.
       stream: {
@@ -5801,10 +5801,10 @@ export function createGguiServer(
     opts.console !== undefined && opts.console !== false;
   // Cookie-auth binding into the session-channel. Populated inside
   // the console block below when `sessionCookie` is enabled, then
-  // threaded into createSessionChannelServer. Declared `let` here so
+  // threaded into createRenderChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
   let consoleCookieAuth:
-    | import('./session-channel.js').SessionChannelCookieAuth
+    | import('./render-channel.js').RenderChannelCookieAuth
     | undefined;
   // Admin token resolution. Surfaced on `GguiServer.adminToken` when
   // console is on; `null` when it's off (no consumer for the gate).
@@ -7674,7 +7674,7 @@ export function createGguiServer(
       );
 
       // Bind cookieAuth into the session channel. Declared `let`
-      // above so createSessionChannelServer can reference it below.
+      // above so createRenderChannelServer can reference it below.
       consoleCookieAuth = {
         readCookie: readDevtoolCookieFromHeaders,
         verify: (cookieValue: string) =>
@@ -8721,8 +8721,8 @@ export function createGguiServer(
     composePreviewReservedValidator(),
     opts.extraReservedValidators,
   );
-  const channel: SessionChannelServer | null = opts.sessionChannel
-    ? createSessionChannelServer({
+  const channel: RenderChannelServer | null = opts.sessionChannel
+    ? createRenderChannelServer({
         renderStore: renderStore ?? new InMemoryRenderStore(),
         auth,
         logger: logger.child({ component: 'session-channel' }),

@@ -28,7 +28,7 @@ import type {
 import type {
   WiredActionContext,
   WiredActionRouter,
-} from './session-channel.js';
+} from './render-channel.js';
 
 /**
  * Runtime ctx the mount-router hands the mount handler. Structurally a
@@ -65,7 +65,7 @@ import type {
  * + `stackItemId: string` (no `| undefined`) + every `HandlerContext` field
  * (`appId`, `requestId`, optional `apiKeyHash`).
  */
-export type WiredMountContext = Omit<HandlerContext, 'sessionId' | 'stackItemId'> &
+export type WiredMountContext = Omit<HandlerContext, 'renderId'> &
   WiredActionContext;
 
 /**
@@ -406,10 +406,14 @@ export function composeWiredActionRouterFromMounts(
     }
   }
   return {
-    has(toolName) {
+    has(toolName: string): boolean {
       return byName.has(toolName);
     },
-    async invoke(toolName, input, wiredCtx) {
+    async invoke(
+      toolName: string,
+      input: Record<string, unknown>,
+      wiredCtx: WiredActionContext,
+    ): Promise<unknown> {
       const handler = byName.get(toolName);
       if (!handler) {
         // Unreachable in normal use — the session channel has()-gates
@@ -427,8 +431,7 @@ export function composeWiredActionRouterFromMounts(
       const baseCtx = resolveContext();
       const ctx: WiredMountContext = {
         ...baseCtx,
-        sessionId: wiredCtx.sessionId,
-        stackItemId: wiredCtx.stackItemId,
+        renderId: wiredCtx.renderId,
         sendPropsUpdate: wiredCtx.sendPropsUpdate,
       };
       return handler.handler(input, ctx);
