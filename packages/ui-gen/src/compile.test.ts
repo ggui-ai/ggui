@@ -22,7 +22,7 @@ import {
 
 function fakeInput(): UiGenerateInput {
   return {
-    request: { sessionId: 's1', prompt: 'weather card' },
+    request: { renderId: 's1', prompt: 'weather card' },
     llm: { provider: 'anthropic', model: 'claude-opus-4-7' },
     providerKey: { provider: 'anthropic', key: 'ignored' },
     blueprints: {
@@ -104,7 +104,7 @@ describe('withBrowserCompile', () => {
     const upstream = fakeGenerator(async () => ({
       ok: true as const,
       response: {
-        stackItemId: 'p-1',
+        renderId: 'p-1',
         componentCode: rawSource,
         sourceCode: rawSource,
       },
@@ -153,7 +153,7 @@ describe('withBrowserCompile', () => {
     const upstream = fakeGenerator(async () => ({
       ok: true as const,
       response: {
-        stackItemId: 'p-bad',
+        renderId: 'p-bad',
         componentCode: rawSource,
         sourceCode: rawSource,
       },
@@ -192,7 +192,7 @@ describe('withBrowserCompile', () => {
         return {
           ok: true as const,
           response: {
-            stackItemId: 'p-s',
+            renderId: 'p-s',
             componentCode: `export default () => null;`,
             sourceCode: `export default () => null;`,
           },

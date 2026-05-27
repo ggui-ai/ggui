@@ -3,8 +3,8 @@
  *
  * Returns a {@link UiGenerator} backed by `dispatchGeneration` — the
  * same multi-turn coding-agent path the benchmark validates. OSS
- * production (`ggui serve`, hosted `ggui_push`) all route through this
- * seam, so bench == prod by construction.
+ * production (`ggui serve`, hosted `ggui_render`) all route through
+ * this seam, so bench == prod by construction.
  *
  * Pipeline:
  *
@@ -290,7 +290,7 @@ export function createUiGenerator(
         return {
           ok: true,
           response: {
-            stackItemId: `page_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            renderId: `render_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             componentCode: result.compiledCode,
             ...(result.sourceCode ? { sourceCode: result.sourceCode } : {}),
             ...(input.contract ? { contract: input.contract } : {}),

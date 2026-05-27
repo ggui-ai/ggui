@@ -44,7 +44,7 @@ const FAKE_PLAYWRIGHT = {
 const NULL_INPUT: UiGenerateInput = {
   request: {
     prompt: 'a counter',
-    sessionId: 'session-test',
+    renderId: 'render-test',
   },
   llm: { provider: 'anthropic', model: 'claude-opus-4-7' },
   providerKey: { provider: 'anthropic', key: 'sk-test' },
@@ -113,7 +113,7 @@ function makeStubResult(opts: {
   return {
     ok: true,
     response: {
-      stackItemId: 'item-test',
+      renderId: 'item-test',
       componentCode: opts.compiled,
       sourceCode: opts.source,
     },
