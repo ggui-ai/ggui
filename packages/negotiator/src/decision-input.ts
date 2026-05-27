@@ -10,10 +10,14 @@
  * those five fields are the only projection `makeDecision` reads
  * from a `NegotiatorOption`; extracting a named type here would
  * grow public surface for no consumer.
+ *
+ * **Post-Phase-B field rename.** `sessionState` is now `renderState`
+ * — the `Session` vessel is gone and the decision engine reads at
+ * most ONE current render via {@link RenderState.currentRender}.
  */
 
 import type { GadgetDescriptor, DataContract } from '@ggui-ai/protocol';
-import type { SessionState } from './session.js';
+import type { RenderState } from './session.js';
 
 /** Input to the decision engine. */
 export interface NegotiatorDecisionInput {
@@ -38,7 +42,7 @@ export interface NegotiatorDecisionInput {
    * partial LLM output with canonical entries from the catalog).
    */
   gadgets?: readonly GadgetDescriptor[];
-  sessionState: SessionState;
+  renderState: RenderState;
   blueprintCandidates: Array<{
     blueprintId: string;
     description: string;

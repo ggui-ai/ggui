@@ -18,12 +18,13 @@
 export interface ComponentErrorReport {
   /** Unique error ID for tracking */
   errorId: string;
-  /** Session that experienced the error */
-  sessionId: string;
+  /** Render that experienced the error. Post-Phase-B the old
+   *  `sessionId` + `stackItemId` pair collapses to one `renderId` —
+   *  every stack item is now a top-level render and the values were
+   *  always identical anyway. */
+  renderId: string;
   /** App ID */
   appId: string;
-  /** Stack item ID of the failing component */
-  stackItemId: string;
   /** Error details */
   error: {
     /** Error message */
@@ -64,8 +65,8 @@ export interface ComponentRepairResult {
   success: boolean;
   /** The error ID this repairs */
   errorId: string;
-  /** Stack item ID */
-  stackItemId: string;
+  /** Render ID — the failing component's render identity. */
+  renderId: string;
   /** Repaired compiled code (if successful) */
   repairedCode?: string;
   /** Repaired source code (if available) */
@@ -121,9 +122,9 @@ export type SelfRepairEventType =
  */
 export interface SelfRepairEvents {
   'component:error': ComponentErrorReport;
-  'component:repairing': { errorId: string; stackItemId: string };
+  'component:repairing': { errorId: string; renderId: string };
   'component:repaired': ComponentRepairResult;
-  'component:repair-failed': { errorId: string; stackItemId: string; reason: string };
+  'component:repair-failed': { errorId: string; renderId: string; reason: string };
 }
 
 /**
@@ -134,8 +135,8 @@ export interface RepairHistoryEntry {
   errorId: string;
   /** App ID */
   appId: string;
-  /** Session ID */
-  sessionId: string;
+  /** Render ID */
+  renderId: string;
   /** Error type */
   errorType: string;
   /** Error message */

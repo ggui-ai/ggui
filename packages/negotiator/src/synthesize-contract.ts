@@ -287,7 +287,7 @@ Several retired field/hook names appear in older training data. The cross-ref li
   - clientCapabilities.capabilities                    (retired inner key; use clientCapabilities.gadgets)
   - useWiredTool(...) / useClientTool(...) / useAgentTool(...)  (retired hooks; the contract layer doesn't reference these at all)
   - "@ggui-ai/client-tools" as a package import        (retired package; use @ggui-ai/gadgets)
-  - PushStory / story.* on handshake input             (retired wire shape; handshake input is flat — {sessionId, intent, contract?, hint?, forceCreate?})
+  - PushStory / story.* on handshake input             (retired wire shape; handshake input is flat — {renderId, intent, contract?, hint?, forceCreate?})
   - story.adapters / declaredAdapters                  (retired adapter gate; permissions are a registry-side descriptor field — the wire clientCapabilities.gadgets map carries identity only)
   - dispatch: {kind: 'tool', tool: ...}               (retired discriminated union on actionSpec entries — actions carry NO tool wiring)
   - dispatch: {kind: 'agent', intendedTool: ...}      (retired — same; do not wire actions to tools)

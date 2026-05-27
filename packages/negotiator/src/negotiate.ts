@@ -6,10 +6,10 @@
  *   1. RAG search (per-scope + optional shared pool) via
  *      {@link ragSearch} — composes `EmbeddingProvider.embed` +
  *      `VectorStore.query` from `@ggui-ai/mcp-server-core`.
- *   2. Read session state (optional injectable).
+ *   2. Read render state (optional injectable).
  *   3. Fast-path for exact blueprint hits — skip the decision LLM.
  *   4. Otherwise call {@link makeDecision} with the RAG candidates and
- *      session stack; fold the picked blueprint's pool provenance into
+ *      current render; fold the picked blueprint's pool provenance into
  *      the return value.
  *
  * Timing logs (stable format — consumed by benchmarks):
@@ -51,14 +51,13 @@ import type {
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import type { LLMCaller } from './llm-caller.js';
-import type { SessionState } from './session.js';
+import type { RenderState } from './session.js';
 import type { NegotiatorDecisionInput } from './decision-input.js';
 import { ragSearch } from './rag-search.js';
 import { makeDecision } from './decision.js';
 
-/** Empty session state for cold starts and benchmarks. */
-const EMPTY_SESSION: SessionState = {
-  stack: [],
+/** Empty render state for cold starts and benchmarks. */
+const EMPTY_RENDER_STATE: RenderState = {
   conversationHistory: [],
 };
 
@@ -66,14 +65,14 @@ const EMPTY_SESSION: SessionState = {
  * Minimum config the orchestrator reads.
  *
  * `appId` is the primary RAG scope (per-app registered UIs live
- * here). `sessionId` keys the optional `readSessionState` callback.
+ * here). `renderId` keys the optional `readRenderState` callback.
  * `includeSharedPool` (default `false`) gates whether to also search
  * the global `"shared"` pool in parallel and fold its hits into the
  * candidate set.
  */
 export interface NegotiateConfig {
   appId: string;
-  sessionId: string;
+  renderId: string;
   /** Also search the shared (global) pool in parallel. Default `false`. */
   includeSharedPool?: boolean;
 }
@@ -132,8 +131,8 @@ export interface NegotiateDeps {
   embedding?: EmbeddingProvider;
   vectors?: VectorStore;
   llm: LLMCaller;
-  /** Optional: read current session state for stack-aware decisions. */
-  readSessionState?: (sessionId: string) => Promise<SessionState | null>;
+  /** Optional: read current render state for reuse-aware decisions. */
+  readRenderState?: (renderId: string) => Promise<RenderState | null>;
   /** Optional: surface pipeline progress to consumers. */
   onProgress?: (phase: string, summary: string) => void;
 }
@@ -218,20 +217,22 @@ export async function negotiate(
       : 'No blueprints found',
   );
 
-  // Step 2: Read session state (falls back to EMPTY_SESSION).
-  const sessionState = deps.readSessionState
-    ? ((await deps.readSessionState(config.sessionId)) ?? EMPTY_SESSION)
-    : EMPTY_SESSION;
+  // Step 2: Read render state (falls back to EMPTY_RENDER_STATE).
+  const renderState = deps.readRenderState
+    ? ((await deps.readRenderState(config.renderId)) ?? EMPTY_RENDER_STATE)
+    : EMPTY_RENDER_STATE;
 
   // Step 3: Fast-path for high-confidence exact matches — skip decision LLM.
   const exactOpt = ragResult.options.find((opt) =>
     opt.description.includes('exact'),
   );
   if (exactOpt) {
-    const stackHasSameType = sessionState.stack.some(
-      (item) => item.prompt && agent.prompt && item.prompt === agent.prompt,
+    const currentMatches = Boolean(
+      renderState.currentRender?.prompt &&
+        agent.prompt &&
+        renderState.currentRender.prompt === agent.prompt,
     );
-    const action = stackHasSameType ? ('update' as const) : ('create' as const);
+    const action = currentMatches ? ('update' as const) : ('create' as const);
     const totalMs = Date.now() - negotiateStart;
 
     // eslint-disable-next-line no-console
@@ -270,7 +271,7 @@ export async function negotiate(
     ...(agent.gadgets
       ? { gadgets: agent.gadgets }
       : {}),
-    sessionState,
+    renderState,
     blueprintCandidates: ragResult.options.map((opt) => ({
       blueprintId: opt.blueprintId ?? opt.id,
       description: opt.description,

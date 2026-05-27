@@ -2,10 +2,16 @@
  * Decision Engine — one LLM call, one UI decision.
  *
  * Replaces the V2 brainstorm/option-picker pattern with a single
- * opinionated decision: `create` / `update` / `compose` / `replace`.
- * The LLM sees the agent's data, the current session stack, any
+ * opinionated decision: `create` / `update` / `replace`. The LLM
+ * sees the agent's data, the current render (if any), any
  * `blueprintCandidates` from `ragSearch`, and returns a
  * {@link NegotiatorDecision} with a full {@link DataContract} payload.
+ *
+ * **Post-Phase-B decision space.** The pre-flatten `compose` action
+ * (multi-item push onto a session stack) is retired — there is at
+ * most ONE current render per scope, so composition collapses into
+ * `replace` / `update`. Only three actions remain in the decision
+ * space.
  *
  * Contract shape — the returned `contract` always includes an
  * `intent` (semantic identity — same intent = cached component).
@@ -58,14 +64,14 @@ import type { NegotiatorDecisionInput } from './decision-input.js';
 import type { LLMCaller } from './llm-caller.js';
 import { composeAvailableGadgetsSection } from './synthesize-contract.js';
 
-export const DECISION_SYSTEM_PROMPT = `You are a UI strategist for ggui, a generative UI platform. Given the agent's data, current session state, and blueprint candidates, decide the best way to show this information.
+export const DECISION_SYSTEM_PROMPT = `You are a UI strategist for ggui, a generative UI platform. Given the agent's data, current render state, and blueprint candidates, decide the best way to show this information.
 
 Respond with a JSON object:
 {
-  "action": "create" | "update" | "compose" | "replace",
+  "action": "create" | "update" | "replace",
   "reasoning": "1-2 sentences explaining why",
   "blueprintId": "matched blueprint ID or null",
-  "targetStackItemId": "existing page to update/compose/replace, or null",
+  "targetRenderId": "existing render to update/replace, or null",
   "contract": {
     "intent": "Concise purpose — e.g. 'Display current weather conditions for a quick daily check'",
     "propsSpec": {
@@ -99,9 +105,8 @@ INTENT RULES (most important):
 
 DECISION RULES:
 - "create": No existing UI or blueprint matches this intent. Show something new.
-- "update": An existing UI on the stack has the same intent. Update its props.
-- "compose": An existing UI could incorporate this data as a section.
-- "replace": Two or more related UIs would be better as a single unified view.
+- "update": The current render has the same intent. Update its props in place.
+- "replace": The current render does NOT match this intent — swap it for a different UI.
 
 REUSE BIAS (critical for performance):
 - Reusing a blueprint = INSTANT render (cached code, <1 second).
@@ -164,22 +169,19 @@ export function buildDecisionUserMessage(input: NegotiatorDecisionInput): string
     parts.push(`Agent's context: ${ctx}`);
   }
 
-  // Session state
-  const { sessionState } = input;
-  if (sessionState.stack.length > 0) {
-    const stackSummary = sessionState.stack
-      .map(
-        (item) =>
-          `  [${item.id}] ${item.prompt ?? 'no prompt'}`,
-      )
-      .join('\n');
-    parts.push(`Current UI stack (${sessionState.stack.length} items):\n${stackSummary}`);
+  // Render state
+  const { renderState } = input;
+  const current = renderState.currentRender;
+  if (current) {
+    parts.push(
+      `Current render: [${current.id}] ${current.prompt ?? 'no prompt'}`,
+    );
   } else {
-    parts.push('Current UI stack: empty');
+    parts.push('Current render: none (cold start)');
   }
 
-  if (sessionState.conversationHistory.length > 0) {
-    const recent = sessionState.conversationHistory.slice(-5);
+  if (renderState.conversationHistory.length > 0) {
+    const recent = renderState.conversationHistory.slice(-5);
     parts.push(
       `Recent conversation:\n${recent.map((t) => `  ${t.role}: ${t.content}`).join('\n')}`,
     );
@@ -269,9 +271,9 @@ const DECISION_TOOL = {
     properties: {
       action: {
         type: 'string',
-        enum: ['create', 'update', 'compose', 'replace'],
+        enum: ['create', 'update', 'replace'],
         description:
-          'What to do: create (new UI), update (swap data), compose (add to stack), replace (swap UI type)',
+          'What to do: create (new UI when nothing on screen), update (swap data on the current render), replace (swap the current render for a different UI)',
       },
       reasoning: { type: 'string', description: 'Brief explanation' },
       blueprintId: {
@@ -335,9 +337,9 @@ const DECISION_TOOL = {
         },
         required: ['intent'],
       },
-      targetStackItemId: {
+      targetRenderId: {
         type: 'string',
-        description: 'Page to target (update/replace actions)',
+        description: 'Render to target (update/replace actions)',
       },
       adaptations: {
         type: 'object',
@@ -381,7 +383,7 @@ export async function makeDecision(
             ),
             input.gadgets,
           ),
-          targetStackItemId: parsed.targetStackItemId ?? undefined,
+          targetRenderId: parsed.targetRenderId ?? undefined,
           adaptations: parsed.adaptations ?? undefined,
         },
         alternatives: [],
@@ -415,7 +417,7 @@ export async function makeDecision(
           ),
           input.gadgets,
         ),
-        targetStackItemId: parsed.targetStackItemId ?? undefined,
+        targetRenderId: parsed.targetRenderId ?? undefined,
         adaptations: parsed.adaptations ?? undefined,
       },
       alternatives: [],

@@ -27,7 +27,7 @@ export type {
 } from './rag-search.js';
 export type { NegotiatorOption } from './types.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
-export type { SessionState, SessionStackEntry } from './session.js';
+export type { RenderState, RenderEntry } from './session.js';
 export type { NegotiatorDecisionInput } from './decision-input.js';
 export {
   DECISION_SYSTEM_PROMPT,

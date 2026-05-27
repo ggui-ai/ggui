@@ -54,13 +54,13 @@ export function detectDataPatterns(text: string): Array<{ pattern: string; uiTyp
 
 /** Build a suggestion event from detected patterns. */
 export function buildSuggestion(
-  sessionId: string,
+  renderId: string,
   detections: Array<{ pattern: string; uiType: string; confidence: number }>,
   activeIntentIds: Set<string>,
 ): NegotiatorSuggestion | null {
   if (detections.length === 0) return null;
   const best = detections.reduce((a, b) => (a.confidence > b.confidence ? a : b));
-  const intentId = computeIntentId(sessionId, { detectedPattern: best.pattern }, 'create');
+  const intentId = computeIntentId(renderId, { detectedPattern: best.pattern }, 'create');
   if (activeIntentIds.has(intentId)) return null;
   return {
     type: 'negotiator:suggest',

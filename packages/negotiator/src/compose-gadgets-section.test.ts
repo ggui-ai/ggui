@@ -135,14 +135,13 @@ describe('composeAvailableGadgetsSection — synth-prompt teaching text plumb', 
 describe('buildDecisionUserMessage — uses composeAvailableGadgetsSection', () => {
   function emptyState() {
     return {
-      stack: [],
       conversationHistory: [],
     };
   }
 
   function inputWith(gadgets: readonly GadgetDescriptor[]): NegotiatorDecisionInput {
     return {
-      sessionState: emptyState(),
+      renderState: emptyState(),
       blueprintCandidates: [],
       gadgets,
     };
