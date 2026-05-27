@@ -1420,7 +1420,7 @@ export const CONTEXT_SNAPSHOT_MAX_SLOTS = 50;
  * The body of a stream envelope the server emits on the reserved
  * `_ggui:contract-error` channel when a wired-action or refresh-stream
  * invocation fails. Carries enough shape to surface the failure in
- * SessionInspector activity panels AND to correlate back to the
+ * operator-facing activity panels AND to correlate back to the
  * originating dispatch.
  *
  * Design notes:
@@ -1479,7 +1479,7 @@ export interface ContractErrorPayload {
      * sanitizer) before populating this field — the envelope rides
      * `_ggui:contract-error` which is `replay: 'all'`, so anything
      * landed here persists in the session ring buffer and surfaces in
-     * operator tools (SessionInspector). The default sanitizer redacts
+     * operator tools. The default sanitizer redacts
      * Bearer tokens, query-param secrets, and common env-var dumps, and
      * truncates at 2KB. `@ggui-ai/mcp-server`'s session-channel router
      * applies it by default; alternative producers MUST match that
