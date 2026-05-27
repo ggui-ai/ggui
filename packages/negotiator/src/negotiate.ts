@@ -23,7 +23,7 @@
  * Exported:
  *   - `negotiate(deps, input)` — runtime orchestrator.
  *   - `NegotiateDeps` — injection shape (embedding / vectors / llm +
- *     optional session-state reader + optional progress callback).
+ *     optional render-state reader + optional progress callback).
  *   - `NegotiateInput` — agent signal + config.
  *   - `NegotiateConfig` — minimum fields the orchestrator actually
  *     reads. Pool selection is expressed as `includeSharedPool:
@@ -51,7 +51,7 @@ import type {
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import type { LLMCaller } from './llm-caller.js';
-import type { RenderState } from './session.js';
+import type { RenderState } from './render.js';
 import type { NegotiatorDecisionInput } from './decision-input.js';
 import { ragSearch } from './rag-search.js';
 import { makeDecision } from './decision.js';
@@ -155,8 +155,9 @@ export interface NegotiateResult {
 }
 
 /**
- * Orchestrate one negotiation call — RAG search, session read, fast
- * path, decision LLM. See module docstring for the pipeline outline.
+ * Orchestrate one negotiation call — RAG search, render-state read,
+ * fast path, decision LLM. See module docstring for the pipeline
+ * outline.
  */
 export async function negotiate(
   deps: NegotiateDeps,

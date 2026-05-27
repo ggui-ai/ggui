@@ -9,10 +9,6 @@ import { createHash } from 'node:crypto';
  * hex chars (64 bits) gives collision-resistant ids without being
  * wastefully large in logs.
  *
- * **Post-Phase-B argument rename.** First arg was `sessionId` in
- * the pre-flatten world; now it is `renderId` — the value the
- * deleted `Session` vessel's identifier flattened to.
- *
  * @param renderId   Scope. Intent ids are render-local.
  * @param data       Data shape (keys only — values ignored). Undefined → 'no-data'.
  * @param action     Optional action verb. Defaults to 'create'.

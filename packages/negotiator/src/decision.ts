@@ -7,11 +7,9 @@
  * `blueprintCandidates` from `ragSearch`, and returns a
  * {@link NegotiatorDecision} with a full {@link DataContract} payload.
  *
- * **Post-Phase-B decision space.** The pre-flatten `compose` action
- * (multi-item push onto a session stack) is retired — there is at
- * most ONE current render per scope, so composition collapses into
- * `replace` / `update`. Only three actions remain in the decision
- * space.
+ * Decision space is exactly `create | replace | update` — there is
+ * at most ONE current render per scope (flatten-render identity), so
+ * composition collapses into `replace` / `update`.
  *
  * Contract shape — the returned `contract` always includes an
  * `intent` (semantic identity — same intent = cached component).

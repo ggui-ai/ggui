@@ -11,13 +11,12 @@
  * from a `NegotiatorOption`; extracting a named type here would
  * grow public surface for no consumer.
  *
- * **Post-Phase-B field rename.** `sessionState` is now `renderState`
- * — the `Session` vessel is gone and the decision engine reads at
- * most ONE current render via {@link RenderState.currentRender}.
+ * `renderState` is the decision engine's view of the live render
+ * (at most ONE current render — see {@link RenderState.currentRender}).
  */
 
 import type { GadgetDescriptor, DataContract } from '@ggui-ai/protocol';
-import type { RenderState } from './session.js';
+import type { RenderState } from './render.js';
 
 /** Input to the decision engine. */
 export interface NegotiatorDecisionInput {

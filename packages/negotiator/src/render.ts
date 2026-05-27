@@ -9,15 +9,10 @@
  * already-on-screen UI can absorb this push as an `update`, and the
  * conversation history feeds the decision LLM.
  *
- * **Post-Phase-B shape change.** This module used to expose
- * `SessionState { stack: SessionStackEntry[] }` modelling the
- * pre-flatten world where a single session held a multi-entry UI
- * stack. Phase B deletes the `Session` vessel and promotes every
- * stack entry to a flat top-level `Render`; correspondingly, there
- * is at most ONE current render per negotiation call. The state
- * collapses to a single `currentRender?` field and the negotiator's
- * decision space shrinks from `create | replace | update | compose`
- * to `create | replace | update` (compose was a multi-item push).
+ * The decision space is `create | replace | update`: there is at
+ * most ONE current render per negotiation call (flatten-render
+ * identity has no multi-entry stack), and `currentRender` captures
+ * that single live render when present.
  *
  * Kept in `@ggui-ai/negotiator` (not `mcp-server-core`): this is
  * the decision engine's input shape, not a storage seam. An MCP
@@ -48,16 +43,12 @@ export interface RenderEntry {
 
 /**
  * Current state of the active render — at most ONE current render
- * (post-Phase-B; the pre-flatten multi-item stack is gone) plus
- * conversation history.
+ * plus conversation history.
  */
 export interface RenderState {
   /**
    * The render currently on screen for this scope, when any. Absent
-   * ⇒ no live render exists (cold start or post-clear). Replaces
-   * the pre-Phase-B `stack: SessionStackEntry[]` shape — at most
-   * one entry was ever populated after the flatten, so the array
-   * is now a single optional field.
+   * ⇒ no live render exists (cold start or post-clear).
    */
   currentRender?: RenderEntry;
   conversationHistory: Array<{ role: 'user' | 'agent'; content: string }>;

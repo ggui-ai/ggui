@@ -1,8 +1,8 @@
 /**
  * @ggui-ai/negotiator — open-source UI decision engine for ggui.
  *
- * Decides which UI to render (create/update/compose/replace) given agent
- * signal (data/prompt/context/agentTools) and current session state.
+ * Decides which UI to render (create/update/replace) given agent
+ * signal (data/prompt/context/agentTools) and current render state.
  *
  * Composes the storage seams defined in `@ggui-ai/mcp-server-core`
  * (`EmbeddingProvider`, `VectorStore`, `Negotiator`). The decision
@@ -27,7 +27,7 @@ export type {
 } from './rag-search.js';
 export type { NegotiatorOption } from './types.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
-export type { RenderState, RenderEntry } from './session.js';
+export type { RenderState, RenderEntry } from './render.js';
 export type { NegotiatorDecisionInput } from './decision-input.js';
 export {
   DECISION_SYSTEM_PROMPT,
