@@ -13,9 +13,11 @@ import {
   GGUI_PUSH_UI_META,
   MCP_APP_AI_GGUI_SESSION_META_KEY,
   MCP_APP_AI_GGUI_STACK_ITEM_META_KEY,
+  MCP_APP_AI_GGUI_HOST_SESSION_META_KEY,
   MCP_APP_LIFECYCLE_STATES,
   SUBMIT_ACTION_KINDS,
   parseMcpAppAiGguiMeta,
+  parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
   deriveContextName,
   isGguiUserActionMeta,
@@ -26,6 +28,7 @@ import {
   type McpAppAiGguiMeta,
   type McpAppAiGguiSessionMeta,
   type McpAppAiGguiStackItemMeta,
+  type McpAppAiGguiHostSessionMeta,
   type McpAppLifecycleEvent,
   type McpAppLifecycleMessage,
   type McpAppLifecycleState,
@@ -654,7 +657,7 @@ describe('parseMcpAppAiGguiMeta', () => {
         expiresAt: '9999-12-31T23:59:59.999Z',
         themeId: 'indigo',
         themeMode: 'dark',
-        canvasMode: true,
+        displayMode: 'fullscreen',
         appCallableTools: ['ggui_runtime_submit_action'],
       },
       [MCP_APP_AI_GGUI_STACK_ITEM_META_KEY]: {
@@ -670,7 +673,7 @@ describe('parseMcpAppAiGguiMeta', () => {
       expect(result.meta.session?.sessionId).toBe('sess-1');
       expect(result.meta.session?.wsUrl).toBe('ws://x');
       expect(result.meta.session?.wsToken).toBe('t');
-      expect(result.meta.session?.canvasMode).toBe(true);
+      expect(result.meta.session?.displayMode).toBe('fullscreen');
       expect(result.meta.stackItem?.stackItemId).toBe('st-1');
       expect(result.meta.stackItem?.contractHash).toBe('sha256:abc');
       expect(result.meta.stackItem?.kind).toBe('loading');
@@ -724,6 +727,78 @@ describe('parseMcpAppAiGguiMeta', () => {
   });
 });
 
+describe('parseMcpAppAiGguiHostSessionMeta', () => {
+  it('returns ok with no hostSession for empty / null meta', () => {
+    expect(parseMcpAppAiGguiHostSessionMeta({})).toEqual({ ok: true });
+    expect(parseMcpAppAiGguiHostSessionMeta(null)).toEqual({ ok: true });
+    expect(parseMcpAppAiGguiHostSessionMeta(undefined)).toEqual({ ok: true });
+  });
+
+  it('returns ok with no hostSession when the key is absent (opt-out path)', () => {
+    // Other unrecognized keys are ignored — the parser is namespace-scoped.
+    const result = parseMcpAppAiGguiHostSessionMeta({
+      'unrelated/key': { whatever: true },
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('parses a well-formed host-session slice', () => {
+    const slice: McpAppAiGguiHostSessionMeta = {
+      hostName: 'sample',
+      hostSessionId: 'chat-abc-123',
+    };
+    const result = parseMcpAppAiGguiHostSessionMeta({
+      [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: slice,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.hostSession).toEqual(slice);
+  });
+
+  it('rejects a non-object slice value', () => {
+    const r1 = parseMcpAppAiGguiHostSessionMeta({
+      [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: 'not-an-object',
+    });
+    expect(r1.ok ? null : r1.reason).toBe('MALFORMED_HOST_SESSION');
+    const r2 = parseMcpAppAiGguiHostSessionMeta({
+      [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: ['array', 'is', 'not', 'object'],
+    });
+    expect(r2.ok ? null : r2.reason).toBe('MALFORMED_HOST_SESSION');
+    const r3 = parseMcpAppAiGguiHostSessionMeta({
+      [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: null,
+    });
+    expect(r3.ok ? null : r3.reason).toBe('MALFORMED_HOST_SESSION');
+  });
+
+  it('rejects when hostName is missing / empty / wrong type', () => {
+    for (const bad of [undefined, '', 42, null]) {
+      const result = parseMcpAppAiGguiHostSessionMeta({
+        [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: {
+          hostName: bad,
+          hostSessionId: 'chat-abc',
+        },
+      });
+      expect(result.ok ? null : result.reason).toBe('MALFORMED_HOST_SESSION');
+    }
+  });
+
+  it('rejects when hostSessionId is missing / empty / wrong type', () => {
+    for (const bad of [undefined, '', 42, null]) {
+      const result = parseMcpAppAiGguiHostSessionMeta({
+        [MCP_APP_AI_GGUI_HOST_SESSION_META_KEY]: {
+          hostName: 'sample',
+          hostSessionId: bad,
+        },
+      });
+      expect(result.ok ? null : result.reason).toBe('MALFORMED_HOST_SESSION');
+    }
+  });
+
+  it('uses the spec-canonical key spelling', () => {
+    // Locks the wire string — hosts hard-code this; renaming breaks them.
+    expect(MCP_APP_AI_GGUI_HOST_SESSION_META_KEY).toBe('ai.ggui/host-session');
+  });
+});
+
 describe('toMcpAppEnvelope', () => {
   it('emits an empty envelope for empty meta', () => {
     expect(toMcpAppEnvelope({})).toEqual({});
@@ -757,7 +832,7 @@ describe('combine ⇔ emit round-trip', () => {
         pollingUrl: '/api/sessions/sess-1/state',
         themeId: 'indigo',
         themeMode: 'dark',
-        canvasMode: true,
+        displayMode: 'fullscreen',
         wsUrl: 'ws://localhost:8080/ws',
         wsToken: 'btk.sig',
         expiresAt: '9999-12-31T23:59:59.999Z',

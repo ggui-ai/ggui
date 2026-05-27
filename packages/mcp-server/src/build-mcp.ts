@@ -197,8 +197,21 @@ export function buildMcpServer(
         // Opaque to the transport — hosts consume it per their own spec.
         ...(handler._meta ? { _meta: handler._meta } : {}),
       },
-      async (input: Record<string, unknown>) => {
-        const ctx = getContext();
+      async (input: Record<string, unknown>, extra) => {
+        // Thread per-request `_meta` onto the canonical context. The MCP
+        // SDK already parses `params._meta` for us and exposes it on
+        // `RequestHandlerExtra._meta`; handlers that read host-channel
+        // slices (e.g. `ai.ggui/host-session` on `ggui_new_session`)
+        // pick it up via `ctx.requestMeta` without touching the SDK
+        // surface themselves.
+        const baseCtx = getContext();
+        const ctx: HandlerContext =
+          extra?._meta !== undefined
+            ? {
+                ...baseCtx,
+                requestMeta: extra._meta as Readonly<Record<string, unknown>>,
+              }
+            : baseCtx;
         const start = Date.now();
         try {
           const data = await handler.handler(input, ctx);

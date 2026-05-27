@@ -120,42 +120,71 @@ for (const entry of MATRIX) {
       }
     });
 
-    test('preserves conversation context across turns (multi-turn resume)', async ({
+    test('session resume — closing + reopening the tab restores the prior iframe', async ({
       page,
     }) => {
-      test.setTimeout(420_000);
+      // What this test proves: the host-session resume slice
+      // (`_meta["ai.ggui/host-session"]` capture at ggui_new_session,
+      // `ggui_list_sessions(hostName, hostSessionId)` enumeration,
+      // /chat/restore bootstrap envelope replay) wires end-to-end.
+      // After a page.reload() the iframe re-mounts with the same
+      // rendered state, without a new agent turn.
+      //
+      // Mechanics:
+      //   1. Open the page — URL gets redirected to `?session=<chatSessionId>`
+      //      by `getOrCreateChatSessionId`.
+      //   2. Send a prompt → agent renders an iframe with known content.
+      //   3. Capture the resolved URL (now carries `?session=<id>`).
+      //   4. page.reload() — same URL, fresh React tree, no /chat call.
+      //   5. Frontend's on-mount /chat/restore returns the prior
+      //      session's bootstrap envelope, iframe re-mounts.
+      //   6. Assert the same content is back.
+      test.setTimeout(360_000);
       if (!handle) throw new Error('handle not initialized');
       await page.goto(handle.agentUrl);
+
       const input = page.getByRole('textbox');
       const sendButton = page.getByRole('button', { name: /send/i });
-      const turnEndedMarkers = page.getByText(/turn ended/i);
 
       await input.fill(
-        'Build a simple counter UI starting at 0 with an Increment button.',
+        'Build a calculator UI showing the number 42 prominently. Just render it; no other interaction needed.',
       );
       await sendButton.click();
-      await expect(turnEndedMarkers).toHaveCount(1, { timeout: 180_000 });
-      await expect(page.locator('iframe').first()).toBeVisible({
-        timeout: 30_000,
+      await expect(page.getByText(/turn ended/i)).toBeVisible({
+        timeout: 240_000,
       });
 
-      await input.fill('Set the counter to 5.');
-      await sendButton.click();
-      await expect(turnEndedMarkers).toHaveCount(2, { timeout: 180_000 });
+      // The agent renders an iframe; drill through the sandbox-proxy
+      // pair to verify "42" is in the inner srcdoc.
+      const beforeFrame = page
+        .frameLocator('iframe')
+        .first()
+        .frameLocator('iframe')
+        .first();
+      await expect(beforeFrame.getByText(/\b42\b/).first()).toBeVisible({
+        timeout: 120_000,
+      });
 
-      // "5" visible in latest iframe. \b5\b avoids matching 15/50/0.5.
-      // Double `.frameLocator('iframe').first()` after `.last()` drills
-      // through `<AppRenderer>`'s outer sandbox-proxy iframe into the
-      // inner `srcdoc` iframe where the LLM-authored DOM lives.
-      await expect(
-        page
-          .frameLocator('iframe')
-          .last()
-          .frameLocator('iframe')
-          .first()
-          .getByText(/\b5\b/)
-          .first(),
-      ).toBeVisible({ timeout: 60_000 });
+      // Capture the resolved URL — must include the `?session=` param
+      // the frontend wrote so the reload-pass goes to the same chat.
+      const resumeUrl = page.url();
+      expect(resumeUrl).toContain('?session=');
+
+      // Hard reload — same URL, fresh DOM, no /chat call. The frontend
+      // calls /chat/restore on mount and re-mounts the prior iframe.
+      await page.reload();
+
+      // Wait for the iframe to be visible after the reload — it has
+      // to come from /chat/restore's bootstrap envelope, not a new
+      // ggui_push (we never re-sent the prompt).
+      const afterFrame = page
+        .frameLocator('iframe')
+        .first()
+        .frameLocator('iframe')
+        .first();
+      await expect(afterFrame.getByText(/\b42\b/).first()).toBeVisible({
+        timeout: 60_000,
+      });
     });
 
     test('click on a todo propagates to the agent (live ggui_consume loop)', async ({

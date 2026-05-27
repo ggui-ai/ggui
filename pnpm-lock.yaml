@@ -1406,12 +1406,21 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.2.76
         version: 0.2.76(zod@4.3.6)
+      '@ggui-ai/design':
+        specifier: workspace:*
+        version: link:../../../packages/design
+      '@ggui-ai/dev-stack':
+        specifier: workspace:*
+        version: link:../../../packages/dev-stack
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../../../packages/protocol
       '@ggui-ai/react':
         specifier: workspace:*
         version: link:../../../packages/ggui-react
+      '@modelcontextprotocol/sdk':
+        specifier: 1.27.1
+        version: 1.27.1(zod@4.3.6)
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1446,6 +1455,9 @@ importers:
 
   samples/agents/google-adk:
     dependencies:
+      '@ggui-ai/dev-stack':
+        specifier: workspace:*
+        version: link:../../../packages/dev-stack
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../../../packages/protocol
@@ -1455,6 +1467,9 @@ importers:
       '@google/adk':
         specifier: ^1.1.0
         version: 1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0))(@mikro-orm/mssql@6.6.13(@azure/core-client@1.10.1)(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/mysql@6.6.13(@mikro-orm/core@6.6.13)(@types/node@22.19.15)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@modelcontextprotocol/sdk':
+        specifier: 1.27.1
+        version: 1.27.1(zod@3.25.76)
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1492,12 +1507,18 @@ importers:
 
   samples/agents/openai-agents-sdk:
     dependencies:
+      '@ggui-ai/dev-stack':
+        specifier: workspace:*
+        version: link:../../../packages/dev-stack
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../../../packages/protocol
       '@ggui-ai/react':
         specifier: workspace:*
         version: link:../../../packages/ggui-react
+      '@modelcontextprotocol/sdk':
+        specifier: 1.27.1
+        version: 1.27.1(zod@3.25.76)
       '@openai/agents':
         specifier: ^0.0.13
         version: 0.0.13(ws@8.21.0)(zod@3.25.76)
@@ -10444,7 +10465,7 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
+      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))
       '@mikro-orm/core': 6.6.13
       '@mikro-orm/mariadb': 6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0)
       '@mikro-orm/mssql': 6.6.13(@azure/core-client@1.10.1)(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)
@@ -10479,6 +10500,19 @@ snapshots:
       - '@opentelemetry/core'
       - bufferutil
       - encoding
+      - supports-color
+      - utf-8-validate
+
+  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.27.1(zod@3.25.76))':
+    dependencies:
+      google-auth-library: 10.6.2
+      p-retry: 4.6.2
+      protobufjs: 7.6.1
+      ws: 8.21.0
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.27.1(zod@3.25.76)
+    transitivePeerDependencies:
+      - bufferutil
       - supports-color
       - utf-8-validate
 

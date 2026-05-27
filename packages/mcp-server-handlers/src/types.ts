@@ -109,6 +109,22 @@ export interface HandlerContext {
    * sibling stack entry would pick a different value.
    */
   readonly stackItemId?: string;
+  /**
+   * Host-supplied `_meta` from the inbound JSON-RPC `tools/call`
+   * request. The MCP SDK extracts this from `params._meta` and the
+   * transport layer threads it onto the context for handlers that
+   * need to read host-channel slices (today: the
+   * `ai.ggui/host-session` slice consumed by `ggui_new_session` to
+   * group sessions for end-user resume).
+   *
+   * `undefined` when the request carried no `_meta` (most calls) and
+   * for in-process invocations (wired-action dispatch, console
+   * inspector, contract-test fixtures) where there is no upstream
+   * MCP request. Handlers MUST treat it as optional and read keys
+   * with a parser that tolerates absence — never assume a particular
+   * slice is present.
+   */
+  readonly requestMeta?: Readonly<Record<string, unknown>>;
 }
 
 /**

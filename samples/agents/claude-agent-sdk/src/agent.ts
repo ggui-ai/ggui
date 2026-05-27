@@ -267,10 +267,25 @@ export async function* runAgent(
     );
   }
 
-  const systemPrompt =
+  const baseSystemPrompt =
     opts.systemPrompt === null
       ? undefined
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
+
+  // Host-session directive — appended to whatever system prompt is
+  // active so the LLM stamps the chat's host-session onto every
+  // `ggui_new_session` call it makes. The Claude Agent SDK's MCP
+  // client can't set request `_meta` per-call, so we use the
+  // protocol's input-arg fallback path. Empty chatSessionId → no
+  // directive (agent runs in one-shot mode with no resume capability).
+  const hostSessionDirective = opts.chatSessionId
+    ? `\n\nThis chat conversation has hostName "sample" and hostSessionId "${opts.chatSessionId}". When you call \`ggui_new_session\`, pass \`hostSession: {hostName: "sample", hostSessionId: "${opts.chatSessionId}"}\` so the host can find this session later when the user revisits the conversation.`
+    : '';
+  const systemPrompt = baseSystemPrompt
+    ? baseSystemPrompt + hostSessionDirective
+    : hostSessionDirective.length > 0
+      ? hostSessionDirective.trim()
+      : undefined;
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
 

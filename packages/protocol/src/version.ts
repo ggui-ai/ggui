@@ -1144,13 +1144,17 @@
  * --------------------------------------------------------------------
  * Canvas mode (additive):
  *
- *   1. `McpAppAiGguiMeta.canvasMode?: boolean` — discriminator for
- *      the iframe-runtime canvas-mount path. When `true`, the runtime
- *      mounts a session-scoped `CanvasShell` (one iframe for the
- *      whole session) instead of the legacy per-stack-item iframe.
- *      Mutually exclusive with `stackItemId`. Producers SHOULD reject
- *      bootstraps with both fields set; the protocol does not
- *      require them to. Absent / `false` ⇒ existing inline behavior.
+ *   1. `McpAppAiGguiMeta.displayMode?: 'inline' | 'fullscreen'` —
+ *      discriminator for the iframe-runtime canvas-mount path.
+ *      When `'fullscreen'`, the runtime mounts a session-scoped
+ *      `CanvasShell` (one iframe for the whole session) instead of
+ *      the legacy per-stack-item iframe. Mutually exclusive with
+ *      `stackItemId`. Producers SHOULD reject bootstraps with both
+ *      `displayMode === 'fullscreen'` and `stackItemId` set; the
+ *      protocol does not require them to. Absent ⇒ existing inline
+ *      behavior. Spec-aligned with MCP App `McpUiDisplayMode` (the
+ *      `'pip'` literal is reserved for a future floating-canvas
+ *      variant, not yet implemented).
  *
  *   2. `_ggui:lifecycle` reserved channel + `CanvasLifecyclePayload`
  *      discriminated union. Server publishes lifecycle envelopes
