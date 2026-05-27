@@ -1,6 +1,6 @@
 /**
  * `data` channel handler — validates inbound stream-envelope payloads
- * against the active stack item's `streamSpec`, then fans the validated
+ * against the active render's `streamSpec`, then fans the validated
  * envelope out via `streamBus`. Invalid payloads drop silently
  * (matching `GguiSession.handleServerMessage`'s surfacing policy —
  * the violation is already logged by the validator).
@@ -11,16 +11,16 @@
  * in `runtime.ts` as part of the B3b cleanup — the handler is now the
  * sole dispatch surface for `data` frames.
  *
- * Post-stack-removal (2026-05-27): the active item is read through
- * the caller-supplied `getCurrentItem` thunk instead of via a
+ * Post-stack-removal (2026-05-27): the active render is read through
+ * the caller-supplied `getCurrentRender` thunk instead of via a
  * `StackModel.snapshot()` walk — the iframe holds exactly one mounted
- * item, so the lookup is direct.
+ * render, so the lookup is direct.
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
 import {
   CONTRACT_ERROR_CHANNEL,
-  type SessionStackEntry,
+  type Render,
   type StreamEnvelope,
 } from '@ggui-ai/protocol';
 
@@ -36,11 +36,11 @@ import type { StreamBus } from '../wire-config.js';
 
 export interface DataHandlerDeps {
   /**
-   * Read the currently-mounted stack entry. Returns `null` when no
-   * item has been mounted yet — data frames received pre-mount have
-   * no streamSpec to validate against and silently drop.
+   * Read the currently-mounted render. Returns `null` when no render
+   * has been mounted yet — data frames received pre-mount have no
+   * streamSpec to validate against and silently drop.
    */
-  readonly getCurrentItem: () => SessionStackEntry | null;
+  readonly getCurrentRender: () => Render | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
   /**
@@ -80,14 +80,14 @@ export function createDataHandler(
         emitContractErrorFromDataFrame(envelope, deps.onObserve);
       }
 
-      // Active item carries the streamSpec — mirrors
+      // Active render carries the streamSpec — mirrors
       // `GguiSession.handleServerMessage`.
-      const activeItem = deps.getCurrentItem();
+      const activeRender = deps.getCurrentRender();
       const streamSpec =
-        activeItem !== null &&
-        activeItem.type !== 'mcpApps' &&
-        activeItem.type !== 'system'
-          ? activeItem.streamSpec
+        activeRender !== null &&
+        activeRender.type !== 'mcpApps' &&
+        activeRender.type !== 'system'
+          ? activeRender.streamSpec
           : undefined;
       const result = validateInboundStreamPayload(
         streamSpec,

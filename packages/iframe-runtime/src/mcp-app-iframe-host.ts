@@ -1,7 +1,7 @@
 /**
  * Vanilla-TS port of
  * `@ggui-ai/react::components/McpAppsStackItemRenderer.tsx`. Used
- * when a ggui stack item's `kind === 'mcpApps'` — the renderer
+ * when a ggui render's `type === 'mcpApps'` — the renderer
  * mounts a nested iframe that embeds a foreign MCP App.
  *
  * The iframe plays the MCP Apps HOST role for the embedded content:
@@ -34,7 +34,7 @@
  * this host path. Host-to-host sandboxing is browser-enforced by
  * the iframe's `sandbox="allow-scripts"` attribute.
  */
-import type { McpAppsStackItem } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 // =============================================================================
 // JSON-RPC wire types (iframe postMessage bridge)
@@ -68,10 +68,10 @@ const DEFAULT_THEME: Readonly<Record<string, string>> = {
 // =============================================================================
 
 export interface McpAppIframeMountOptions {
-  readonly stackItem: McpAppsStackItem;
-  /** Session id — threaded into the proxy URL so server-side
+  readonly render: McpAppsRender;
+  /** Render id — threaded into the proxy URL so server-side
    *  connector scoping works. */
-  readonly sessionId: string;
+  readonly renderId: string;
   /**
    * Base URL of the ggui server (origin). The host appends
    *  `/mcp-apps/resource` + `/mcp-apps/tools-call` to this. Should
@@ -98,12 +98,12 @@ export interface McpAppIframeMount {
 
 function composeResourceUrl(opts: {
   serverBaseUrl: string;
-  sessionId: string;
+  renderId: string;
   itemId: string;
 }): string {
   const base = opts.serverBaseUrl.replace(/\/$/, '');
   const qs = new URLSearchParams({
-    session: opts.sessionId,
+    render: opts.renderId,
     item: opts.itemId,
   });
   return `${base}/mcp-apps/resource?${qs.toString()}`;
@@ -121,8 +121,8 @@ function buildSandboxAttr(): string {
   return 'allow-scripts allow-forms';
 }
 
-function buildAllowAttr(stackItem: McpAppsStackItem): string | undefined {
-  const perms = stackItem.permissions;
+function buildAllowAttr(render: McpAppsRender): string | undefined {
+  const perms = render.permissions;
   if (!perms) return undefined;
   const parts: string[] = [];
   if (perms.camera) parts.push("camera 'self'");
@@ -153,25 +153,25 @@ export function mountMcpAppIframe(
   const serverBaseUrl = opts.serverBaseUrl ?? '';
   const resourceUrl = composeResourceUrl({
     serverBaseUrl,
-    sessionId: opts.sessionId,
-    itemId: opts.stackItem.id,
+    renderId: opts.renderId,
+    itemId: opts.render.id,
   });
   const toolsCallUrl = composeToolsCallUrl(serverBaseUrl);
   const dims = {
-    width: opts.stackItem.containerDimensions?.width,
-    height: opts.stackItem.containerDimensions?.height,
-    maxWidth: opts.stackItem.containerDimensions?.maxWidth,
-    maxHeight: opts.stackItem.containerDimensions?.maxHeight,
+    width: opts.render.containerDimensions?.width,
+    height: opts.render.containerDimensions?.height,
+    maxWidth: opts.render.containerDimensions?.maxWidth,
+    maxHeight: opts.render.containerDimensions?.maxHeight,
   };
 
   const iframe = container.ownerDocument.createElement('iframe');
   iframe.setAttribute('data-ggui-mcp-apps', 'iframe');
-  iframe.setAttribute('data-ggui-stack-item-id', opts.stackItem.id);
-  iframe.setAttribute('data-ggui-connector-id', opts.stackItem.source.connectorId);
+  iframe.setAttribute('data-ggui-render-id', opts.render.id);
+  iframe.setAttribute('data-ggui-connector-id', opts.render.source.connectorId);
   iframe.src = resourceUrl;
-  iframe.title = opts.stackItem.description ?? 'MCP App';
+  iframe.title = opts.render.description ?? 'MCP App';
   iframe.setAttribute('sandbox', buildSandboxAttr());
-  const allowAttr = buildAllowAttr(opts.stackItem);
+  const allowAttr = buildAllowAttr(opts.render);
   if (allowAttr !== undefined) iframe.setAttribute('allow', allowAttr);
   iframe.style.width = dims.width !== undefined ? `${dims.width}px` : '100%';
   iframe.style.height = dims.height !== undefined ? `${dims.height}px` : '480px';
@@ -240,8 +240,8 @@ export function mountMcpAppIframe(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              session: opts.sessionId,
-              item: opts.stackItem.id,
+              render: opts.renderId,
+              item: opts.render.id,
               tool,
               arguments: args,
             }),

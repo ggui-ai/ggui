@@ -1,26 +1,12 @@
 /**
- * Per-stack-item `WireConfig` factory for the renderer iframe.
+ * Per-render `WireConfig` factory for the renderer iframe.
  *
- * The renderer iframe uses a standalone
- * `scopeWireConfig(root, item, internals)` function plus the
- * `RootWireConfigBundle.buildScopedConfig(item)` closure returned
- * from `buildRootWireConfig` — there is no scoping method on the
- * public `WireConfig` shape.
- *
- * Why per-item scoping:
- *   - A stacked/chat-style UI keeps older cards rendered beneath the
- *     top one. A `useAction('submit')` call inside an older card MUST
- *     emit with THAT card's `stackItemId` + `tool` + `actionSpec` — not the
- *     top-of-stack's. Without per-item scoping, contract enforcement
- *     would reject cross-stack dispatches as "wrong contract" OR the
- *     wrong tool would be invoked server-side.
- *
- * Construction: the renderer builds ONE top-level bundle at boot
- * (`buildRootWireConfig`), which returns `{config, buildScopedConfig}`.
- * The runtime's `stackCtx.getScopedWireConfig` calls
- * `buildScopedConfig(item)` per stack entry; each
- * `<GguiWireProvider>` wraps a stack item with the resulting scoped
- * config.
+ * The renderer iframe mounts EXACTLY ONE {@link Render} per iframe
+ * post-render-identity-collapse (2026-05-27). There is no per-item
+ * scoping factory anymore — the WireConfig is built once at boot,
+ * keyed by the bootstrap's `renderId`, and the active render's
+ * `actionSpec` is wired in via the {@link buildRootWireConfig}'s
+ * `getCurrentRender` thunk.
  *
  * Outbound dispatch uses `buildActionEnvelope` (from
  * `@ggui-ai/wire`) + `validateOutboundActionEnvelope` + a direct
@@ -30,10 +16,9 @@
  * implements against that interface.
  */
 import type {
-  ActionSpec,
   ActionEnvelope,
   JsonValue,
-  SessionStackEntry,
+  Render,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
 import {
@@ -195,15 +180,16 @@ export class StreamBus {
 // =============================================================================
 
 export interface BuildRootWireConfigOptions {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
   /**
-   * Stack snapshot reader. The config's default (unscoped) `dispatch`
-   * reads the top of stack; callers route most dispatches through
-   * `scopeWireConfig(root, item)` for per-item targeting, but the
-   * default is kept for standalone-render paths.
+   * Read the currently-mounted {@link Render}. The config's `dispatch`
+   * resolves the active render's `actionSpec` through this thunk so
+   * the `tool` + outbound validator stay coherent across props_update
+   * patches (which replace the render reference) without rebuilding
+   * the WireConfig.
    */
-  readonly getStack: () => readonly SessionStackEntry[];
+  readonly getCurrentRender: () => Render | null;
   /** Handle to the renderer's WS manager; used for outbound `action` + `feedback` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */
@@ -280,48 +266,22 @@ export interface BuildRootWireConfigOptions {
 }
 
 /**
- * Paired root config + scope factory returned by `buildRootWireConfig`.
- *
- * {@link WireConfig} itself carries no `scope(item)` method — the
- * interface is the minimum contract generated code needs, and
- * per-item scoping is a RENDERER concern. Callers that need
- * per-item scoping — currently only the renderer's `bootProduction`
- * via `stackCtx.getScopedWireConfig` — use `buildScopedConfig(item)`
- * on the returned `RootWireConfigBundle`.
- *
- * The scope-factory is PAIRED with the root construction so the
- * `dispatchByItem` / `getStack` internals stay encapsulated — they
- * aren't exported from this module and never leak into the public
- * WireConfig shape.
- */
-export interface RootWireConfigBundle {
-  readonly config: WireConfig;
-  /**
-   * Build a per-stack-item scoped `WireConfig`. Only `dispatch` is
-   * overridden — every other seam (subscribe, app/session/auth) stays
-   * shared via spread from the root.
-   */
-  readonly buildScopedConfig: (item: {
-    readonly stackItemId?: string;
-    readonly contractHash?: string;
-    readonly actionSpec?: ActionSpec;
-  }) => WireConfig;
-}
-
-/**
- * Build the unscoped root `WireConfig` + its scope-factory closure.
+ * Build the per-render `WireConfig` for the iframe runtime.
  * Bootstraps the renderer's outbound emission + inbound subscription
- * seams.
+ * seams. Returns a `WireConfig` keyed by the bootstrap's `renderId`;
+ * the active render's `actionSpec` is resolved through the
+ * {@link BuildRootWireConfigOptions.getCurrentRender} thunk on every
+ * dispatch so props_update patches don't require rebuilding the
+ * config.
  *
- * Returns a {@link RootWireConfigBundle} rather than a bare
- * `WireConfig` — the scope factory is paired with the root so
- * `dispatchByItem` internals don't leak onto the public WireConfig
- * shape. `scopeWireConfig` (the exported standalone) is the low-level
- * primitive; `buildScopedConfig` is the pre-bound convenience.
+ * Post-render-identity-collapse (2026-05-27): no per-item scope
+ * factory — each iframe mounts exactly one render. The earlier
+ * `RootWireConfigBundle` / `scopeWireConfig` / `buildScopedConfig`
+ * indirection collapsed to a single `WireConfig`.
  */
 export function buildRootWireConfig(
   opts: BuildRootWireConfigOptions,
-): RootWireConfigBundle {
+): WireConfig {
   const clientSeqBox = { current: 0 };
 
   function nextSeq(): number {
@@ -354,89 +314,66 @@ export function buildRootWireConfig(
     emitProtocolError(fromClientContractViolation(err));
   }
 
-  function dispatchByItem(
-    actionName: string,
-    data: unknown,
-    ctx: {
-      stackItemId?: string;
-      stackIndex: number;
-      tool?: string;
-      actionSpec?: ActionSpec;
-    },
-  ): void {
-    const envelope = buildActionEnvelope({
-      sessionId: opts.sessionId,
-      type: 'data:submit',
-      payload: {
-        action: actionName,
-        data: data as JsonValue,
-        ...(ctx.tool ? { tool: ctx.tool } : {}),
-      },
-      stackIndex: ctx.stackIndex,
-      ...(ctx.stackItemId ? { stackItemId: ctx.stackItemId } : {}),
-      clientSeq: nextSeq(),
-    });
-    const result = validateOutboundActionEnvelope(ctx.actionSpec, envelope);
-    if (!result.valid) {
-      surfaceViolation(
-        new ClientContractViolationError('outbound-action', result.violations),
-      );
-      return;
-    }
-    if (opts.onDispatchEnvelope !== undefined) {
-      // Spec-canonical path — the iframe-runtime's LIVE-mode boot
-      // wires this to `routeDispatch`, which postMessages
-      // `tools/call:ggui_runtime_submit_action` through the MCP-Apps
-      // host relay. The default WS-frame send below is retained for
-      // tests + legacy callers that don't relay tools/call.
-      opts.onDispatchEnvelope(envelope);
-    } else {
-      sendActionEnvelope(opts.manager, envelope);
-    }
-    // Observability: a wired-tool dispatch is a `data:submit` whose
-    // resolved action has a `tool` binding. Plain agent-routed actions
-    // (no `tool` on the actionSpec) fire a `dispatch` activity row in
-    // the console via the session-side ring buffer; only wired tools
-    // get this observability event. The server separately emits the
-    // operational telemetry variant on its TelemetrySink.
-    if (ctx.tool !== undefined) {
-      emitObserve({
-        kind: 'wired-tool-invoked',
-        toolName: ctx.tool,
-        actionName,
-        dispatchedAt: new Date().toISOString(),
-      });
-    }
-  }
-
-  const root: WireConfig = {
+  return {
     app: { appId: opts.appId, appName: opts.appId },
-    session: { sessionId: opts.sessionId, isConnected: true },
+    render: { renderId: opts.renderId, isConnected: true },
     auth: { isAuthenticated: false },
     dispatch: (actionName, data) => {
-      // Unscoped fallback — resolve from top of stack. Matches
-      // `GguiSession.wireConfig.dispatch` (the non-scoped path).
-      const stack = opts.getStack();
-      const activeItem = stack[stack.length - 1];
-      const activeIndex = stack.length > 0 ? stack.length - 1 : 0;
-      // McpApps + system items never carry `actionSpec` (their wire is
-      // owned by their own host) — narrow before reading.
+      // Resolve the active render's actionSpec on every dispatch.
+      // Per-render lifecycle: props_update patches replace the render
+      // reference; reading through the thunk keeps the tool binding
+      // + outbound validator coherent without rebuilding the config.
+      const currentRender = opts.getCurrentRender();
       const activeActionSpec =
-        activeItem !== undefined &&
-        activeItem.type !== 'mcpApps' &&
-        activeItem.type !== 'system'
-          ? activeItem.actionSpec
+        currentRender !== null &&
+        currentRender.type !== 'mcpApps' &&
+        currentRender.type !== 'system'
+          ? currentRender.actionSpec
           : undefined;
       const entry = activeActionSpec?.[actionName];
       const tool = entry?.nextStep;
-      dispatchByItem(actionName, data, {
-        stackItemId: activeItem?.id,
-        stackIndex: activeIndex,
-        ...(tool !== undefined ? { tool } : {}),
-        ...(activeActionSpec !== undefined
-          ? { actionSpec: activeActionSpec }
-          : {}),
+
+      const envelope = buildActionEnvelope({
+        renderId: opts.renderId,
+        type: 'data:submit',
+        payload: {
+          action: actionName,
+          data: data as JsonValue,
+          ...(tool ? { tool } : {}),
+        },
+        clientSeq: nextSeq(),
       });
+      const result = validateOutboundActionEnvelope(activeActionSpec, envelope);
+      if (!result.valid) {
+        surfaceViolation(
+          new ClientContractViolationError('outbound-action', result.violations),
+        );
+        return;
+      }
+      if (opts.onDispatchEnvelope !== undefined) {
+        // Spec-canonical path — the iframe-runtime's LIVE-mode boot
+        // wires this to `routeDispatch`, which postMessages
+        // `tools/call:ggui_runtime_submit_action` through the MCP-Apps
+        // host relay. The default WS-frame send below is retained for
+        // tests + legacy callers that don't relay tools/call.
+        opts.onDispatchEnvelope(envelope);
+      } else {
+        sendActionEnvelope(opts.manager, envelope);
+      }
+      // Observability: a wired-tool dispatch is a `data:submit` whose
+      // resolved action has a `tool` binding. Plain agent-routed actions
+      // (no `tool` on the actionSpec) fire a `dispatch` activity row in
+      // the console via the session-side ring buffer; only wired tools
+      // get this observability event. The server separately emits the
+      // operational telemetry variant on its TelemetrySink.
+      if (tool !== undefined) {
+        emitObserve({
+          kind: 'wired-tool-invoked',
+          toolName: tool,
+          actionName,
+          dispatchedAt: new Date().toISOString(),
+        });
+      }
     },
     subscribe: (channelName, handler) => {
       return opts.streamBus.subscribe(channelName, (env) => {
@@ -457,57 +394,6 @@ export function buildRootWireConfig(
     // from inside the renderer. Cross-refs surface via
     // `actionSpec[*].nextStep` (event metadata) and
     // `streamSpec[*].source.tool` (channel data source).
-  };
-
-  // `WireConfig` carries no `scope(item)` method.
-  // Callers that want a per-item config use `buildScopedConfig(item)`
-  // on the returned bundle, which bakes in the `dispatchByItem` +
-  // `getStack` internals so they never leak onto the public
-  // WireConfig shape.
-  const buildScopedConfig: RootWireConfigBundle['buildScopedConfig'] =
-    (item) =>
-      scopeWireConfig(root, item, {
-        getStack: opts.getStack,
-        dispatchByItem,
-      });
-
-  return { config: root, buildScopedConfig };
-}
-
-/**
- * Produce a per-item scoped `WireConfig`. The only override is
- * `dispatch` — every other seam (subscribe) stays shared.
- */
-export function scopeWireConfig(
-  root: WireConfig,
-  item: {
-    stackItemId?: string;
-    contractHash?: string;
-    actionSpec?: ActionSpec;
-  },
-  internals: {
-    getStack: () => readonly SessionStackEntry[];
-    dispatchByItem: (
-      actionName: string,
-      data: unknown,
-      ctx: { stackItemId?: string; stackIndex: number; tool?: string; actionSpec?: ActionSpec },
-    ) => void;
-  },
-): WireConfig {
-  return {
-    ...root,
-    dispatch: (actionName, data) => {
-      const entry = item.actionSpec?.[actionName];
-      const tool = entry?.nextStep;
-      const stack = internals.getStack();
-      const idx = stack.findIndex((s) => s.id === item.stackItemId);
-      internals.dispatchByItem(actionName, data, {
-        ...(item.stackItemId !== undefined ? { stackItemId: item.stackItemId } : {}),
-        stackIndex: idx >= 0 ? idx : 0,
-        ...(tool !== undefined ? { tool } : {}),
-        ...(item.actionSpec !== undefined ? { actionSpec: item.actionSpec } : {}),
-      });
-    },
   };
 }
 

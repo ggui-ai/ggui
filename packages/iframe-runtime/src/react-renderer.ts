@@ -10,12 +10,12 @@
  *
  * Lifecycle seams:
  *
- *   - `mount(container, stackItem)` — replace the container's
+ *   - `mount(container, render)` — replace the container's
  *     children with a React root rendering the compiled component.
  *     Returns a `ReactRootMount` handle; callers use `update()` to
  *     swap props without re-evaluating the module, `unmount()` to
  *     tear down.
- *   - `update(stackItem)` — swap props (and/or componentCode). When
+ *   - `update(render)` — swap props (and/or componentCode). When
  *     componentCode changes, re-evaluates; when only props change,
  *     re-renders the existing component tree with new props.
  *   - `unmount()` — `root.unmount()` + detach observability.
@@ -23,8 +23,8 @@
  * Error handling — ErrorBoundary with auto-retry (AUTO_RETRY_LIMIT +
  * AUTO_RETRY_DELAY) matches the `ReactComponentRenderer` contract.
  * On terminal error, the callback `onRequestRepair` fires; the
- * stack-item dispatcher wires this to the `ggui:request-repair`
- * live-channel envelope `StackItemRenderer` dispatches.
+ * render dispatcher (`render-item.ts`) wires this to the
+ * `ggui:request-repair` live-channel envelope it dispatches.
  *
  * No JSX in this file — the mount-root code uses
  * `React.createElement` + `React.Fragment` directly so the renderer's
@@ -278,13 +278,12 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
 
 export interface ReactRootMountOptions {
   /**
-   * Stack item whose componentCode + props drive the mount. Only
+   * Render whose componentCode + props drive the mount. Only
    * `componentCode` + `props` are read here; the caller is
    * responsible for wrapping this with a `<GguiWireProvider>` at the
-   * higher-level dispatcher (see `stack-item-renderer.ts` in Commit
-   * 4).
+   * higher-level dispatcher (see `render-item.ts`).
    */
-  readonly stackItem: {
+  readonly render: {
     readonly id?: string;
     readonly componentCode: string;
     readonly props?: Record<string, unknown>;
@@ -301,9 +300,9 @@ export interface ReactRootMountOptions {
   readonly onRequestRepair?: (error: Error) => void;
   /**
    * Children injected BETWEEN the mount DOM (scope + CSS) and the
-   * evaluated component element. The caller's stack-item renderer
+   * evaluated component element. The caller's render dispatcher
    * uses this to wrap the eval'd component in `<GguiWireProvider>`
-   * so wire hooks resolve per-item contracts.
+   * so wire hooks resolve per-render contracts.
    *
    * When `undefined`, the evaluated component renders directly.
    */
@@ -334,7 +333,7 @@ export interface ReactRootMount {
 }
 
 /**
- * Mount a React root inside `container` and render `stackItem`'s
+ * Mount a React root inside `container` and render `render`'s
  * compiled componentCode. The container is fully owned after this
  * call (existing children are replaced).
  */
@@ -420,7 +419,7 @@ export async function mountReactRoot(
     const componentElement =
       currentComponent === null
         ? null
-        : createElement(currentComponent, opts.stackItem.props ?? {});
+        : createElement(currentComponent, opts.render.props ?? {});
 
     const wrapped =
       opts.renderWrapper && componentElement !== null
@@ -449,7 +448,7 @@ export async function mountReactRoot(
   }
 
   async function initialEvaluate(): Promise<void> {
-    const code = currentOpts.stackItem.componentCode ?? '';
+    const code = currentOpts.render.componentCode ?? '';
     if (code.trim().length === 0) {
       currentComponent = null;
       currentCode = null;
@@ -484,7 +483,7 @@ export async function mountReactRoot(
     async update(next) {
       const prevCode = currentCode;
       currentOpts = next;
-      const nextCode = next.stackItem.componentCode ?? '';
+      const nextCode = next.render.componentCode ?? '';
 
       // Props-only change — skip module eval. Re-render with new props.
       if (nextCode === prevCode && currentComponent !== null) {

@@ -9,7 +9,7 @@
  * the React mount-target div (no banner, no list-item placeholder text).
  *
  * Post-stack-removal (2026-05-27): the iframe holds exactly one mounted
- * item for its lifetime. The `setConnectedStatus` helper no longer takes
+ * render for its lifetime. The `setConnectedStatus` helper no longer takes
  * a stack-model arg — there's nothing to count — and the placeholder
  * `<li data-ggui-stack-item>` render path is gone.
  *

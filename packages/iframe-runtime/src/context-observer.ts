@@ -180,14 +180,17 @@ function specFor(slot: ResolvedContextSlot): ContextSpec {
  * Identity bundle carried alongside every snapshot post. The runtime
  * captures these from the bootstrap envelope at boot and threads
  * them through `createContextStateHost` so each snapshot's two
- * destinations (host + server) carry the same authoritative session
+ * destinations (host + server) carry the same authoritative render
  * binding. Absent on dev / test code paths that don't have a real
  * bootstrap; the server mirror is skipped in that case.
+ *
+ * Post-render-identity-collapse (2026-05-27): the previous
+ * `{sessionId, appId, stackItemId}` tuple collapsed to
+ * `{renderId, appId}` — render is the single identity key.
  */
 export interface ContextPostIdentity {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
-  readonly stackItemId: string;
 }
 
 /**
@@ -213,8 +216,8 @@ export interface ContextPostIdentity {
  * (`[ggui:context-slot] {slot,value}`). Empirical: claude.ai's host
  * treats each `ui/update-model-context` post as a REPLACE of the
  * widget's tracked context, not a per-slot merge. Server mirror
- * matches: REPLACE-per-(sessionId, stackItemId), last-write-wins.
- * Both destinations therefore stay structurally consistent.
+ * matches: REPLACE-per-renderId, last-write-wins. Both destinations
+ * therefore stay structurally consistent.
  *
  * Server-mirror skipped when `identity` is undefined — dev/test code
  * paths that don't supply a real bootstrap shouldn't pollute the
@@ -252,9 +255,8 @@ function postContextSnapshot(
       params: {
         name: 'ggui_runtime_sync_context',
         arguments: {
-          sessionId: identity.sessionId,
+          renderId: identity.renderId,
           appId: identity.appId,
-          stackItemId: identity.stackItemId,
           snapshot,
         },
       },

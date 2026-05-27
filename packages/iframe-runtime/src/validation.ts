@@ -147,8 +147,8 @@ export function validateOutboundActionEnvelope(
 
 /**
  * Validate an inbound stream-channel delivery before applying it to
- * stack-item state. Known reserved channels (`_ggui:*`) validate even
- * when the target stack item has no declared `streamSpec` — the
+ * render state. Known reserved channels (`_ggui:*`) validate even
+ * when the target render has no declared `streamSpec` — the
  * payload shape is server-owned; user channels stay permissive without
  * a contract.
  */
