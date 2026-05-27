@@ -27,6 +27,5 @@
     "kind": "bootstrap-failure",
     "reason": "BOOTSTRAP_META_MISSING",
     "messageContains": "_meta.ggui.bootstrap"
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-bootstrap-meta-missing-1" }]
+  }
 }

@@ -128,14 +128,8 @@ export type UnknownSetupStep = Record<string, unknown> & {
 // =============================================================================
 
 export type TeardownStep =
-  | CloseRenderTeardown
   | UnregisterToolTeardown
   | UnknownTeardownStep;
-
-export interface CloseRenderTeardown {
-  readonly kind: 'close-render';
-  readonly renderId: string;
-}
 
 export interface UnregisterToolTeardown {
   readonly kind: 'unregister-tool';

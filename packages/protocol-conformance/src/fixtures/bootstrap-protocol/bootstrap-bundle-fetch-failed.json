@@ -21,6 +21,5 @@
     "kind": "bootstrap-failure",
     "reason": "BUNDLE_FETCH_FAILED",
     "messageContains": "Runtime bundle failed to load"
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-bundle-fetch-failed-1" }]
+  }
 }

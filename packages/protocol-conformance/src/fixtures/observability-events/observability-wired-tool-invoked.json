@@ -23,6 +23,5 @@
       "toolName": "tasks_complete",
       "actionName": "toggleTask"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-obs-wired-1" }]
+  }
 }

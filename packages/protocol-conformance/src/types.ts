@@ -188,14 +188,8 @@ export interface UnknownSetupStep {
  * to cleanup.
  */
 export type TeardownStep =
-  | CloseRenderStep
   | UnregisterToolStep
   | UnknownTeardownStep;
-
-export interface CloseRenderStep {
-  readonly type: 'close-render';
-  readonly renderId: string;
-}
 
 export interface UnregisterToolStep {
   readonly type: 'unregister-tool';
@@ -425,8 +419,13 @@ export interface TestCase {
    */
   readonly expectedObservability?: readonly ExpectedObservabilityEvent[];
 
-  /** Cleanup directives the host executes AFTER the assertion. */
-  readonly teardown: readonly TeardownStep[];
+  /**
+   * Cleanup directives the host executes AFTER the assertion. Optional —
+   * most fixtures need no teardown post the `close-render` drop (renders
+   * decay via TTL); `unregister-tool` is the only remaining kind, used
+   * by fixtures that mutate the tool registry.
+   */
+  readonly teardown?: readonly TeardownStep[];
 }
 
 // =============================================================================

@@ -31,7 +31,6 @@ export type {
   UnknownSetupStep,
   // Teardown vocabulary (JSON-authoring surface)
   TeardownStep,
-  CloseRenderStep,
   UnregisterToolStep,
   UnknownTeardownStep,
   // Expected-behavior vocabulary
@@ -70,7 +69,6 @@ export type {
   UnknownSetupStep as HostUnknownSetupStep,
   // Teardown directives (runtime surface — narrowed)
   TeardownStep as HostTeardownStep,
-  CloseRenderTeardown,
   UnregisterToolTeardown,
   UnknownTeardownStep as HostUnknownTeardownStep,
 } from './conformance-host.js';

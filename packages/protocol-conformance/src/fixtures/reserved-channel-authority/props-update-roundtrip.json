@@ -29,6 +29,5 @@
       "attribute": "data-ggui-greeting",
       "expected": "updated-by-host"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-props-update-1" }]
+  }
 }

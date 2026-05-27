@@ -11,6 +11,5 @@
   "expectedBehavior": {
     "kind": "bootstrap-success",
     "observabilitySequence": []
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-version-match-1" }]
+  }
 }

@@ -40,6 +40,5 @@
       "code": "SCHEMA_VIOLATION",
       "toolName": "tasks_malformed_list"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-schema-violation-1" }]
+  }
 }

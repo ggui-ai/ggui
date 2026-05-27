@@ -21,6 +21,5 @@
     "kind": "version-mismatch",
     "serverVersion": "99.99-unsupported",
     "clientAccepts": ["1.1"]
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-version-mismatch-1" }]
+  }
 }

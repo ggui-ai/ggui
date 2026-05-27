@@ -35,6 +35,5 @@
       "kind": "wired-tool-invoked",
       "toolName": "tasks_list"
     }
-  ],
-  "teardown": [{ "type": "close-render", "renderId": "ck-refresh-success-1" }]
+  ]
 }

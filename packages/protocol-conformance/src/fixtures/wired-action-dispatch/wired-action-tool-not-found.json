@@ -26,6 +26,5 @@
       "code": "TOOL_NOT_FOUND",
       "toolName": "doesNotExist"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-tool-not-found-1" }]
+  }
 }

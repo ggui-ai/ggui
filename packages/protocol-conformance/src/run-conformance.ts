@@ -229,7 +229,7 @@ async function runOneFixture(
 
     // Dispatch teardown regardless of match outcome. Failures in
     // teardown surface as warnings; they do not flip pass → fail.
-    if (config.host !== undefined) {
+    if (config.host !== undefined && fixture.teardown !== undefined) {
       for (const step of fixture.teardown) {
         try {
           await config.host.dispatchTeardown(narrowTeardownStep(step));

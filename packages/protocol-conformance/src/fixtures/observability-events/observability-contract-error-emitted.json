@@ -24,6 +24,5 @@
       "toolName": "broken_tool",
       "actionName": "triggerBroken"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-obs-ce-1" }]
+  }
 }

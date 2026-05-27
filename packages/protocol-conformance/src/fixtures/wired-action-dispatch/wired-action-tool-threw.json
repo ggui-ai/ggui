@@ -27,6 +27,5 @@
       "code": "TOOL_THREW",
       "toolName": "tasks_broken"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-tool-threw-1" }]
+  }
 }

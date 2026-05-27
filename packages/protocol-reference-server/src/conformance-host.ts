@@ -3,24 +3,15 @@
  * setup/teardown directive dispatcher onto this package's
  * `ReferenceServer` instance.
  *
- * Directive-kind naming note: the conformance kit still spells its
- * render-lifecycle directives `create-render` / `close-render` (and
- * carries the value on a field named `sessionId`). The reference
- * server honors the kit's wire field names verbatim, then binds the
- * value to a `renderId` on the internal {@link Render} record — the
- * directive kind is the consumer's field name, the binding is the
- * protocol-canonical identity.
- *
  * Directives split into "implement" and "throw":
  *
  *   Implement:
- *     - create-render            → `renders.create()`
+ *     - create-render             → `renders.create()`
  *     - register-tool             → `tools.register(name, handler)`
  *     - register-actionspec       → `renders.registerActionSpec()`
  *     - register-streamspec       → `renders.registerStreamSpec()`
  *     - server-version-override   → `renders.setVersionOverride()`
  *     - emit-envelope             → `renders.injectFrame()`
- *     - close-render             → `renders.close()`
  *     - unregister-tool           → `tools.unregister()`
  *
  *   Throw (kit records SKIP, not FAIL):
@@ -32,9 +23,12 @@
  * skip expectations — browser-level fault injection that requires a
  * richer host harness. Throwing surfaces "directive not implemented"
  * with the error message as the skip reason.
+ *
+ * Note: render-termination directive (`close-render`) is intentionally
+ * absent — render lifecycle is implicit (created → active → TTL-expired);
+ * there is no agent-facing close tool, and no kit directive to invoke.
  */
 import type {
-  CloseRenderTeardown,
   ConformanceHost,
   CreateRenderSetup,
   EmitEnvelopeSetup,
@@ -254,11 +248,6 @@ export function createReferenceConformanceHost({
     },
 
     async dispatchTeardown(step: HostTeardownStep): Promise<void> {
-      if (step.kind === 'close-render') {
-        const s = step as CloseRenderTeardown;
-        serverInstance.renders.close(s.renderId);
-        return;
-      }
       if (step.kind === 'unregister-tool') {
         // Same toolName/name tolerance as register-tool.
         const raw = step as unknown as {

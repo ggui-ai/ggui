@@ -12,6 +12,5 @@
   },
   "expectedBehavior": {
     "kind": "bootstrap-success"
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-bootstrap-success-1" }]
+  }
 }

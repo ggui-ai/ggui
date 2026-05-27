@@ -27,6 +27,5 @@
       "code": "TOOL_TIMEOUT",
       "toolName": "hanging_tool"
     }
-  },
-  "teardown": [{ "type": "close-render", "renderId": "ck-tool-timeout-1" }]
+  }
 }
