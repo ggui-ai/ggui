@@ -107,9 +107,9 @@ export type TransportKind = 'ws' | 'polling';
 
 /**
  * Bootstrap shape the registry reads to pick a transport. Mirrors the
- * subset of `McpAppAiGguiSessionMeta` the transport layer needs —
+ * subset of `McpAppAiGguiRenderMeta` the transport layer needs —
  * keeping the type local lets the gadget stay protocol-version-agnostic
- * at the import boundary (consumers thread in the concrete session
+ * at the import boundary (consumers thread in the concrete render
  * slice). Field names line up 1:1 with the upstream slice so callers
  * can spread without an adapter.
  *
@@ -119,7 +119,7 @@ export type TransportKind = 'ws' | 'polling';
 export interface ChannelClientBootstrap {
   readonly wsUrl?: string;
   readonly wsToken?: string;
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
 }
 

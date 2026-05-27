@@ -40,7 +40,7 @@ function TodoList() {
 | `useAction(name)`                                              | Returns a callback that fires a named action to the agent          |
 | `useStream(name)`                                              | Subscribes to a named agent stream channel                         |
 | `useContract(contract)`                                        | Contract-aware hook factory — autocompletes names, infers payloads |
-| `useApp` / `useSession` / `useAuth`                            | Read app / session / auth info from the live channel               |
+| `useApp` / `useRender` / `useAuth`                             | Read app / render / auth info from the live channel                |
 | `useGguiContext`                                               | Read the host-provided interface context                           |
 | `buildActionEnvelope`, `validateOutbound*`, `validateInbound*` | Envelope build + contract-validation helpers                       |
 

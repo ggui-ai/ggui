@@ -42,7 +42,7 @@ class FakeSocket {
   }
 }
 
-const SUBSCRIBE_FRAME = { type: 'subscribe', payload: { sessionId: 's', appId: 'a', bootstrap: 'tok' } };
+const SUBSCRIBE_FRAME = { type: 'subscribe', payload: { renderId: 's', appId: 'a', bootstrap: 'tok' } };
 
 describe('WSTransport — open + dispatch', () => {
   let fake: FakeSocket;
@@ -74,8 +74,8 @@ describe('WSTransport — open + dispatch', () => {
     // Subscribe frame fired.
     expect(JSON.parse(fake.sent[0])).toEqual(SUBSCRIBE_FRAME);
     // Inbound dispatch.
-    fake.triggerMessage({ type: 'props_update', payload: { stackItemId: 'x' } });
-    expect(propsHandler).toHaveBeenCalledWith({ stackItemId: 'x' });
+    fake.triggerMessage({ type: 'props_update', payload: { renderId: 'x' } });
+    expect(propsHandler).toHaveBeenCalledWith({ renderId: 'x' });
     fake.triggerMessage({ type: 'drain_ack', payload: { eventId: 'evt-1' } });
     expect(drainHandler).toHaveBeenCalledWith({ eventId: 'evt-1' });
   });

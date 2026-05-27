@@ -2,7 +2,6 @@ export { GguiWireProvider, type GguiWireProviderProps } from './WireProvider';
 export type { AllWires } from './all-wires';
 export {
   useWireContext,
-  type LegacyScopableWireConfig,
   type StreamDelivery,
   type WireConfig,
   type WireDispatchData,
@@ -14,7 +13,7 @@ export { useStream, type StreamResult } from './useStream';
 export { useContract, type InferredContractHooks, type ManualContractHooks } from './useContract';
 export { useAuth, type AuthInfo } from './useAuth';
 export { useApp, type AppInfo } from './useApp';
-export { useSession, type SessionInfo } from './useSession';
+export { useRender, type RenderInfo } from './useRender';
 export {
   ClientContractViolationError,
   buildActionEnvelope,

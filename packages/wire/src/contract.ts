@@ -155,11 +155,9 @@ export function validateInboundStreamPayload(
  * `makeActionEnvelope`'s single object parameter.
  */
 export function buildActionEnvelope<TPayload = JsonValue>(params: {
-  sessionId: string;
+  renderId: string;
   type: EventType;
   payload?: TPayload;
-  stackIndex?: number;
-  stackItemId?: string;
   clientSeq?: number;
   /**
    * Explicit override — when omitted, the builder stamps

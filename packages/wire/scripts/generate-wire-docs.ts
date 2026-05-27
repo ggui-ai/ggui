@@ -71,7 +71,7 @@ const hookFiles = [
   // SHOULD invoke on its next turn (no `useAgentTool` replacement).
   { filePath: path.join(wireRoot, 'src/useAuth.ts'), hookName: 'useAuth' },
   { filePath: path.join(wireRoot, 'src/useApp.ts'), hookName: 'useApp' },
-  { filePath: path.join(wireRoot, 'src/useSession.ts'), hookName: 'useSession' },
+  { filePath: path.join(wireRoot, 'src/useRender.ts'), hookName: 'useRender' },
 ];
 
 const providerFile = path.join(wireRoot, 'src/WireProvider.tsx');
@@ -350,11 +350,11 @@ const HOOK_EXAMPLES: Record<string, string> = {
 <Heading>{app.appName}</Heading>
 {app.appDescription && <Text>{app.appDescription}</Text>}`,
 
-  useSession: `const session = useSession();
+  useRender: `const render = useRender();
 
 // In JSX:
-<Badge variant={session.isConnected ? 'success' : 'error'}>
-  {session.isConnected ? 'Connected' : 'Disconnected'}
+<Badge variant={render.isConnected ? 'success' : 'error'}>
+  {render.isConnected ? 'Connected' : 'Disconnected'}
 </Badge>`,
 };
 
@@ -544,8 +544,8 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
       returnIface = allInterfaces.get('AuthInfo');
     } else if (hook.returnType === 'AppInfo') {
       returnIface = allInterfaces.get('AppInfo');
-    } else if (hook.returnType === 'SessionInfo') {
-      returnIface = allInterfaces.get('SessionInfo');
+    } else if (hook.returnType === 'RenderInfo') {
+      returnIface = allInterfaces.get('RenderInfo');
     }
 
     sections.push(generateHookMarkdown(hook, returnIface));
@@ -554,9 +554,9 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
   // ── Context hooks ──
   sections.push('## Context Hooks');
   sections.push('');
-  sections.push('Read-only access to session, app, and auth context.');
+  sections.push('Read-only access to render, app, and auth context.');
 
-  const contextHookNames = ['useAuth', 'useApp', 'useSession'];
+  const contextHookNames = ['useAuth', 'useApp', 'useRender'];
   for (const hookName of contextHookNames) {
     const hook = hooks.find(h => h.name === hookName);
     if (!hook) continue;
@@ -566,8 +566,8 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
       returnIface = allInterfaces.get('AuthInfo');
     } else if (hook.returnType === 'AppInfo') {
       returnIface = allInterfaces.get('AppInfo');
-    } else if (hook.returnType === 'SessionInfo') {
-      returnIface = allInterfaces.get('SessionInfo');
+    } else if (hook.returnType === 'RenderInfo') {
+      returnIface = allInterfaces.get('RenderInfo');
     }
 
     sections.push(generateHookMarkdown(hook, returnIface));

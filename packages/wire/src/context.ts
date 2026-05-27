@@ -1,6 +1,5 @@
 import { createContext, useContext } from 'react';
 import type {
-  ActionSpec,
   DataContract,
   InferActionNames,
   InferActionPayload,
@@ -14,11 +13,11 @@ import type {
  * handler. Carries the per-delivery semantics a subscriber needs to
  * fold state correctly — `mode` (append vs replace) and the optional
  * `complete` terminal marker — without leaking transport plumbing
- * (sessionId, requestId).
+ * (renderId, requestId).
  *
  * Maps 1:1 onto the `payload`/`mode`/`complete` fields of the
  * outbound {@link import('@ggui-ai/protocol').StreamEnvelope}. The
- * envelope's `sessionId` + `channel` are resolved by the provider
+ * envelope's `renderId` + `channel` are resolved by the provider
  * before dispatch, so handlers never see them.
  */
 export interface StreamDelivery<T = unknown> {
@@ -86,11 +85,10 @@ export type WireStreamPayload<T, N extends string> =
  * `dispatch(name, data)` and the optional `nextStep` field on the
  * action entry names the tool the agent SHOULD invoke next.
  *
- * Per-item scoping is owned by the renderer via the standalone
- * `scopeWireConfig` function from `@ggui-ai/iframe-runtime`; providers
- * pass the scoped config directly through
- * `<GguiWireProvider config={scopedConfig}>`. Legacy consumers that
- * still need the factory pattern use {@link LegacyScopableWireConfig}.
+ * The renderer mounts exactly ONE render per iframe — `render.renderId`
+ * is the stable identity the WireProvider was constructed with. No
+ * per-item scoping factory; with a one-render-per-mount lifecycle,
+ * "scope" collapses to identity.
  */
 export interface WireConfig<T extends DataContract = DataContract> {
   readonly app: {
@@ -99,8 +97,8 @@ export interface WireConfig<T extends DataContract = DataContract> {
     readonly appDescription?: string;
     readonly appIcon?: string;
   };
-  readonly session: {
-    readonly sessionId: string;
+  readonly render: {
+    readonly renderId: string;
     readonly isConnected: boolean;
   };
   readonly auth: {
@@ -153,28 +151,6 @@ export interface DispatchSuppressedInfo {
   readonly payload: unknown;
   /** `Date.now()` at the moment suppression was decided. */
   readonly suppressedAt: number;
-}
-
-/**
- * @deprecated Legacy `WireConfig` + `scope(item)` factory shape used
- * by older session/shell components. The renderer iframe now owns
- * scoping via the standalone `scopeWireConfig` function — no factory
- * method on the wire interface. New consumers MUST NOT target this
- * shape; producer code should migrate to {@link WireConfig} and
- * pre-scoped `config` props.
- */
-export interface LegacyScopableWireConfig<T extends DataContract = DataContract>
-  extends WireConfig<T> {
-  /**
-   * Build a per-stack-item scoped config. Legacy pattern — slated for
-   * removal together with the older session/shell components that
-   * still build these objects.
-   */
-  readonly scope: (stackItem: {
-    readonly stackItemId?: string;
-    readonly contractHash?: string;
-    readonly actionSpec?: ActionSpec;
-  }) => LegacyScopableWireConfig<T>;
 }
 
 export const WireContext = createContext<WireConfig | null>(null);

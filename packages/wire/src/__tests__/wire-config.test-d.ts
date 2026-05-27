@@ -23,14 +23,13 @@
  *      `[InferActionNames<T>] extends [never]` branch in
  *      `WireDispatchData` etc. keeps the default-case usable.
  *
- *   3. **`scope(item)` is NOT on `WireConfig`.** Post-C7c the factory
- *      is retired from the interface. Legacy consumers
- *      (`<GguiSession>`, `<BaseShell>`) type themselves as
- *      `LegacyScopableWireConfig` for the C9.6 overlap.
+ *   3. **`scope(item)` is NOT on `WireConfig`.** Post-flatten-render-
+ *      identity (Phase B) the renderer mounts exactly one render per
+ *      iframe; there is no per-stack-item scoping factory because there
+ *      is no stack. `LegacyScopableWireConfig` is DELETED.
  */
 import { defineContract } from '@ggui-ai/protocol';
 import type {
-  LegacyScopableWireConfig,
   WireConfig,
   WireDispatchData,
   WireStreamPayload,
@@ -187,18 +186,10 @@ void ({} as _Pinned);
 // 4. `scope(item)` is NOT on WireConfig — regression lock.
 // =============================================================================
 
-// Post-C7c, `typedCfg.scope` does not exist.
+// Post-flatten-render-identity (Phase B), `WireConfig.scope` does not
+// exist and `LegacyScopableWireConfig` is deleted. The renderer mounts
+// exactly one render per iframe; "scope" collapses to identity.
 // @ts-expect-error WireConfig no longer carries a `scope(item)` method.
-typedCfg.scope({ stackItemId: 'x' });
-
-// LegacyScopableWireConfig DOES carry it during the C9.6 overlap.
-declare const legacy: LegacyScopableWireConfig<WeatherContract>;
-const _scoped = legacy.scope({ stackItemId: 'x' });
-type _ScopedIsLegacy = Expect<Equal<typeof _scoped, LegacyScopableWireConfig<WeatherContract>>>;
-void ({} as _ScopedIsLegacy);
-// The scoped return still has dispatch with the contract narrowing.
-_scoped.dispatch('refresh', undefined);
-// @ts-expect-error 'phantom' not declared on typed contract.
-_scoped.dispatch('phantom', undefined);
+typedCfg.scope({ renderId: 'x' });
 
 export {};
