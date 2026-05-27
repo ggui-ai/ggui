@@ -4,7 +4,7 @@
  *
  * Purpose: let the OSS `createGguiServer({ mcpMounts: [...] })` seam
  * aggregate the tasks tool surface alongside ggui-native tools
- * (`ggui_push`, etc.) without spawning a subprocess or opening a
+ * (`ggui_render`, etc.) without spawning a subprocess or opening a
  * second HTTP/MCP endpoint. The existing `createTasksMcpServer`
  * factory in `./server.ts` stays as the standalone MCP entry-point
  * (used by the 48 contract tests + any future process-mode

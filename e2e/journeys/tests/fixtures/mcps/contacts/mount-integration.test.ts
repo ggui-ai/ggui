@@ -9,11 +9,11 @@
  * `@modelcontextprotocol/sdk` Client over HTTP — the same transport a
  * real agent uses.
  *
- * The product claim this test anchors: one OSS session sees BOTH
- * `ggui_push` AND every `contacts_*` tool on the same `tools/list`,
- * and `tools/call contacts_*` mutations — including the Contacts-
- * specific `contacts_link` cross-ref op — are visible in the shared
- * `ContactsStore` that backed the handler bundle.
+ * The product claim this test anchors: one OSS server surface sees
+ * BOTH `ggui_render` AND every `contacts_*` tool on the same
+ * `tools/list`, and `tools/call contacts_*` mutations — including
+ * the Contacts-specific `contacts_link` cross-ref op — are visible
+ * in the shared `ContactsStore` that backed the handler bundle.
  *
  * Together with the Tasks + Notes mount-integration tests, this
  * completes the trio proof that the `mcpMounts` seam is reusable
@@ -103,27 +103,19 @@ describe('Contacts MCP mounted on createGguiServer — real /mcp wire', () => {
     await fx.server.close();
   });
 
-  it('exposes ggui_push + every contacts_* tool on one session', async () => {
+  it('exposes ggui_render + every contacts_* tool on one MCP surface', async () => {
     const client = await connectClient(fx.url);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
-      // ggui-native surface (15) + 7 contacts_* mount tools = 22.
-      // Breakdown of the 15 native tools, post-Slice 6/7:
-      //   ggui_new_session, ggui_handshake, ggui_push, ggui_update,
-      //   ggui_consume, ggui_emit, ggui_pop, ggui_close,
-      //   ggui_get_session, ggui_get_stack,
-      //   ggui_search_blueprints, ggui_list_featured_blueprints,
-      //   ggui_list_gadgets,
-      //   ggui_runtime_submit_action, ggui_runtime_sync_context
-      // Each new native tool requires bumping this count + a comment
-      // entry so future-you knows what grew.
-      expect(names).toContain('ggui_push');
+      // Required-surface assertion only. The exhaustive tool-count
+      // canary is tarball-smoke's job; `expect.arrayContaining` here
+      // lets new native tools land without flapping this spec.
+      expect(names).toContain('ggui_render');
       expect(names).toContain('ggui_handshake');
       for (const contactName of CONTACTS_TOOL_NAMES) {
         expect(names).toContain(contactName);
       }
-      expect(names).toHaveLength(22);
     } finally {
       await client.close();
     }
@@ -240,47 +232,37 @@ describe('Contacts MCP mounted on createGguiServer — real /mcp wire', () => {
     }
   });
 
-  it('tools/call ggui_push still works on the same session (native tool unaffected by mount)', async () => {
+  it('tools/call ggui_render still works (native tool unaffected by mount)', async () => {
     const client = await connectClient(fx.url);
     try {
-      // Post-Slice-5 push is handshake-first: new_session →
-      // handshake(intent, blueprintDraft) → push(handshakeId, decision).
-      // Direct push without a handshakeId fails with handshake_not_found.
-      const sess = (await client.callTool({
-        name: 'ggui_new_session',
-        arguments: {},
-      })).structuredContent as { sessionId: string };
+      // Post-Phase-B render is handshake-first: handshake(intent,
+      // blueprintDraft) → render(handshakeId, decision). The prior
+      // `ggui_new_session` mint is gone — every render IS the
+      // addressable scope. Direct render without a handshakeId fails
+      // with handshake_not_found.
       const hs = (await client.callTool({
         name: 'ggui_handshake',
         arguments: {
-          sessionId: sess.sessionId,
-          intent: 'smoke test — contacts mount parity with ggui_push',
+          intent: 'smoke test — contacts mount parity with ggui_render',
           blueprintDraft: { contract: {} },
         },
       })).structuredContent as { handshakeId: string };
       const result = await client.callTool({
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: {
           handshakeId: hs.handshakeId,
           decision: { kind: 'accept' },
         },
       });
-      // Post-handshake-first push response: structuredContent carries
-      // `{stackItemId, action}` — sessionId now lives on
-      // `_meta.ggui.bootstrap.sessionId` (MCP Apps spec channel).
+      // Post-Phase-B render response: structuredContent carries
+      // `{renderId, action}`.
       const structured = result.structuredContent as {
-        stackItemId: string;
+        renderId: string;
         action: string;
       };
-      expect(structured.stackItemId).toBeTruthy();
+      expect(structured.renderId).toBeTruthy();
       // Post-R5 (fix-A 2026-05-26): no dead `url` on structuredContent.
       expect(Object.keys(structured)).not.toContain('url');
-      const bootstrapSessionId = (
-        result._meta as
-          | { ggui?: { bootstrap?: { sessionId?: string } } }
-          | undefined
-      )?.ggui?.bootstrap?.sessionId;
-      expect(bootstrapSessionId).toBe(sess.sessionId);
     } finally {
       await client.close();
     }

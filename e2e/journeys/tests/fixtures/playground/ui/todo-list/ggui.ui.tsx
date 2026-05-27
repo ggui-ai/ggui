@@ -13,7 +13,7 @@
  *
  * 2. **Static preview** (BlueprintViewer / `/preview/todo-list`) — the
  *    wire hooks are data-url shims that gracefully no-op when no
- *    `GguiSession` provider is mounted. `useStream` returns `{latest:
+ *    render provider is mounted. `useStream` returns `{latest:
  *    null, all: [], isComplete: false}`; `useAction` returns a no-op
  *    dispatcher. The component detects the empty-stream state and
  *    paints the "no tasks yet" copy, so the blueprint renders

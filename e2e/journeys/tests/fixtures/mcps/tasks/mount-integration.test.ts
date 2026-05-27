@@ -8,7 +8,7 @@
  * a real agent uses.
  *
  * The product claim Slice 6 ships: one OSS session sees **both**
- * `ggui_push` AND every `tasks_*` tool on the same `tools/list`, and
+ * `ggui_render` AND every `tasks_*` tool on the same `tools/list`, and
  * `tools/call tasks_*` mutations are visible in the shared
  * `TasksStore` that backed the handler bundle.
  *
@@ -101,22 +101,19 @@ describe('Tasks MCP mounted on createGguiServer — real /mcp wire', () => {
     await fx.server.close();
   });
 
-  it('exposes ggui_push + every tasks_* tool on one session', async () => {
+  it('exposes ggui_render + every tasks_* tool on one MCP surface', async () => {
     const client = await connectClient(fx.url);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
-      // ggui-native surface (15) + 7 tasks_* mount tools = 22.
-      // Native tools post-Slice 6/7: new_session, handshake, push,
-      // update, consume, emit, pop, close, get_session, get_stack,
-      // search_blueprints, list_featured_blueprints, list_gadgets,
-      // runtime_submit_action, runtime_sync_context.
-      expect(names).toContain('ggui_push');
+      // Required-surface assertion only. The exhaustive tool-count
+      // canary is tarball-smoke's job; this spec proves the mount
+      // didn't displace the native surface.
+      expect(names).toContain('ggui_render');
       expect(names).toContain('ggui_handshake');
       for (const taskName of TASKS_TOOL_NAMES) {
         expect(names).toContain(taskName);
       }
-      expect(names).toHaveLength(22);
     } finally {
       await client.close();
     }
@@ -174,43 +171,34 @@ describe('Tasks MCP mounted on createGguiServer — real /mcp wire', () => {
     }
   });
 
-  it('tools/call ggui_push still works on the same session (native tool unaffected by mount)', async () => {
+  it('tools/call ggui_render still works (native tool unaffected by mount)', async () => {
     const client = await connectClient(fx.url);
     try {
-      // Post-Slice-5 push is handshake-first: new_session →
-      // handshake(intent, blueprintDraft) → push(handshakeId, decision).
-      const sess = (await client.callTool({
-        name: 'ggui_new_session',
-        arguments: {},
-      })).structuredContent as { sessionId: string };
+      // Post-Phase-B render is handshake-first: handshake(intent,
+      // blueprintDraft) → render(handshakeId, decision). The prior
+      // `ggui_new_session` mint is gone — every render IS the
+      // addressable scope.
       const hs = (await client.callTool({
         name: 'ggui_handshake',
         arguments: {
-          sessionId: sess.sessionId,
-          intent: 'smoke test — tasks mount parity with ggui_push',
+          intent: 'smoke test — tasks mount parity with ggui_render',
           blueprintDraft: { contract: {} },
         },
       })).structuredContent as { handshakeId: string };
       const result = await client.callTool({
-        name: 'ggui_push',
+        name: 'ggui_render',
         arguments: {
           handshakeId: hs.handshakeId,
           decision: { kind: 'accept' },
         },
       });
       const structured = result.structuredContent as {
-        stackItemId: string;
+        renderId: string;
         action: string;
       };
-      expect(structured.stackItemId).toBeTruthy();
+      expect(structured.renderId).toBeTruthy();
       // Post-R5 (fix-A 2026-05-26): no dead `url` on structuredContent.
       expect(Object.keys(structured)).not.toContain('url');
-      const bootstrapSessionId = (
-        result._meta as
-          | { ggui?: { bootstrap?: { sessionId?: string } } }
-          | undefined
-      )?.ggui?.bootstrap?.sessionId;
-      expect(bootstrapSessionId).toBe(sess.sessionId);
     } finally {
       await client.close();
     }

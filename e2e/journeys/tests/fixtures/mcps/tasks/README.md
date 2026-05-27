@@ -90,5 +90,5 @@ no LLM.
   for them lands here.
 - Add a Playwright spec. An honest browser proof of "OSS generates UI
   backed by a tasks MCP" requires the Slice 6 wiring so one agent
-  session sees both `ggui_push` and `tasks_*` tools on one MCP
+  session sees both `ggui_render` and `tasks_*` tools on one MCP
   connection — see strategy doc §14.4.
