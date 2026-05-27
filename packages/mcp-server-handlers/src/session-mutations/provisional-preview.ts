@@ -62,8 +62,8 @@ export type ProvisionalPreviewEmit = (
  *   - `emit` is the only I/O — no logger, no metrics, no session
  *     store. Emitters that need more pull from whatever DI they
  *     were constructed with.
- *   - `signal` fires on cancellation (handoff to final UI, external
- *     `ggui_close`, server shutdown). Emitters MUST check it between
+ *   - `signal` fires on cancellation (handoff to final UI, render
+ *     TTL expiry, server shutdown). Emitters MUST check it between
  *     async awaits and abort cleanly.
  *   - `now` is a clock override for tests.
  */

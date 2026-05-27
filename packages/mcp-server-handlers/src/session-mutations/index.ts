@@ -129,11 +129,6 @@ export {
   type RenderSummaryWire,
 } from './list-renders.js';
 export {
-  createGguiCloseHandler,
-  type CloseObserverNotifier,
-  type GguiCloseHandlerDeps,
-} from './close.js';
-export {
   createGguiEmitHandler,
   type GguiEmitHandlerDeps,
   type StreamObserverNotifier,
