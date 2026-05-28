@@ -647,7 +647,7 @@
  *
  *      Untouched (NOT the tool name): `streamSpec`, `StreamChannelEntry`,
  *      `StreamEnvelope`, `SessionChannelServer`, `streamReplayOps`, and
- *      file paths like `session-mutations/stream.ts`. These describe the
+ *      file paths like `renders/stream.ts`. These describe the
  *      channel data plane, not the imperative emit action.
  *      Pre-launch breaking rename; no compatibility shim.
  *
@@ -1577,7 +1577,7 @@
  *      Agent-side: the long-poll loop terminates on TTL expiry rather
  *      than on an explicit terminal status.
  */
-export const PROTOCOL_VERSION = 'draft-2026-05-27';
+export const PROTOCOL_VERSION = "draft-2026-05-27";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the
@@ -1626,7 +1626,7 @@ export const PROTOCOL_SCHEMA_VERSION = PROTOCOL_VERSION;
  * string — the constant exists for authoring ergonomics, not to imply
  * a closed union on `ErrorPayload.code`.
  */
-export const UPGRADE_REQUIRED = 'UPGRADE_REQUIRED';
+export const UPGRADE_REQUIRED = "UPGRADE_REQUIRED";
 
 /**
  * Versions of the ggui protocol this client library accepts on the

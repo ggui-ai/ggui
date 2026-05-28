@@ -22,11 +22,11 @@
  * No virtualization — bounded buffer (200) keeps the list short
  * enough for naive React.
  */
-import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { SectionHead } from '../brand/SectionHead.js';
+import { useEffect, useRef, useState, type ReactElement } from "react";
+import { SectionHead } from "../brand/SectionHead.js";
 
 // Mirror of CacheTraceDecision in
-// packages/mcp-server-handlers/src/session-mutations/cache-trace-sink.ts.
+// packages/mcp-server-handlers/src/renders/cache-trace-sink.ts.
 // The union spans two emitter paths:
 //   - Matcher — `match-*` / `no-match*` / synth.
 //   - Legacy generation-cache fallback — `hit` / `miss-*`. Will be
@@ -36,35 +36,35 @@ import { SectionHead } from '../brand/SectionHead.js';
 // trace stream isn't yet contract-bar; if it becomes one, lift the
 // type into a shared package).
 type CacheTraceDecision =
-  | 'match-exact'
-  | 'match-semantic'
-  | 'match-skip-low-cosine'
-  | 'match-skip-no-llm'
-  | 'no-match'
-  | 'no-match-low-confidence'
-  | 'no-match-judge-defense'
-  | 'no-match-empty-intent'
-  | 'synth-ok'
-  | 'synth-fail'
-  | 'push-classify'
-  | 'hit'
-  | 'miss-empty-intent'
-  | 'miss-empty-scope'
-  | 'miss-below-threshold'
-  | 'miss-key-mismatch'
-  | 'miss-empty-code';
+  | "match-exact"
+  | "match-semantic"
+  | "match-skip-low-cosine"
+  | "match-skip-no-llm"
+  | "no-match"
+  | "no-match-low-confidence"
+  | "no-match-judge-defense"
+  | "no-match-empty-intent"
+  | "synth-ok"
+  | "synth-fail"
+  | "push-classify"
+  | "hit"
+  | "miss-empty-intent"
+  | "miss-empty-scope"
+  | "miss-below-threshold"
+  | "miss-key-mismatch"
+  | "miss-empty-code";
 
-type CacheTraceStrategy = 'exact-key' | 'semantic';
+type CacheTraceStrategy = "exact-key" | "semantic";
 
 /** Filter buckets surfaced as a chip row above the event list. */
-type StrategyFilter = 'all' | CacheTraceStrategy | 'no-strategy';
+type StrategyFilter = "all" | CacheTraceStrategy | "no-strategy";
 
 /** Classification of agent's push-time `contract` against the
  *  handshake's `plan.contract` canonical key. */
-type AgentClassification = 'confirm' | 'override';
+type AgentClassification = "confirm" | "override";
 
 /** Filter buckets for the agent-classification chip row. */
-type ClassificationFilter = 'all' | AgentClassification;
+type ClassificationFilter = "all" | AgentClassification;
 
 interface CacheTraceCandidate {
   readonly key: string;
@@ -74,7 +74,7 @@ interface CacheTraceCandidate {
 
 interface CacheTraceValidatorFinding {
   readonly kind: string;
-  readonly severity: 'warn' | 'error';
+  readonly severity: "warn" | "error";
   readonly hint: string;
 }
 
@@ -102,29 +102,26 @@ interface CacheTraceEvent {
  * stays glanceable; the full `decision` text appears in the detail
  * panel for operators who want it.
  */
-type Outcome = 'match' | 'miss' | 'synth-ok' | 'synth-fail' | 'classify';
+type Outcome = "match" | "miss" | "synth-ok" | "synth-fail" | "classify";
 
 function classify(decision: CacheTraceDecision): Outcome {
-  if (decision === 'synth-ok') return 'synth-ok';
-  if (decision === 'synth-fail') return 'synth-fail';
-  if (decision === 'push-classify') return 'classify';
+  if (decision === "synth-ok") return "synth-ok";
+  if (decision === "synth-fail") return "synth-fail";
+  if (decision === "push-classify") return "classify";
   // Matcher hits + legacy generation-cache hit collapse to "match".
-  if (decision === 'match-exact' || decision === 'match-semantic') return 'match';
-  if (decision === 'hit') return 'match';
+  if (decision === "match-exact" || decision === "match-semantic") return "match";
+  if (decision === "hit") return "match";
   // Everything else (match-skip-*, no-match*, miss-*) is a miss.
-  return 'miss';
+  return "miss";
 }
 
 export function Cache(): ReactElement {
   const [events, setEvents] = useState<readonly CacheTraceEvent[]>([]);
-  const [status, setStatus] = useState<
-    'loading' | 'live' | 'reconnecting' | 'error'
-  >('loading');
+  const [status, setStatus] = useState<"loading" | "live" | "reconnecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<StrategyFilter>('all');
-  const [classificationFilter, setClassificationFilter] =
-    useState<ClassificationFilter>('all');
+  const [filter, setFilter] = useState<StrategyFilter>("all");
+  const [classificationFilter, setClassificationFilter] = useState<ClassificationFilter>("all");
   const seenIds = useRef<Set<string>>(new Set());
 
   // Initial fetch + SSE subscription. The SSE stream only delivers
@@ -143,9 +140,9 @@ export function Cache(): ReactElement {
 
     const init = async (): Promise<void> => {
       try {
-        const res = await fetch('/ggui/console/cache/recent?limit=100', {
-          credentials: 'same-origin',
-          headers: { accept: 'application/json' },
+        const res = await fetch("/ggui/console/cache/recent?limit=100", {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
         });
         if (!res.ok) {
           throw new Error(`recent fetch returned ${res.status}`);
@@ -156,20 +153,16 @@ export function Cache(): ReactElement {
         const initial = [...body.events].reverse();
         for (const event of initial) seenIds.current.add(event.id);
         setEvents(initial);
-        setStatus('live');
+        setStatus("live");
       } catch (err) {
         if (cancelled) return;
-        setStatus('error');
-        setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : 'Could not load recent cache trace.',
-        );
+        setStatus("error");
+        setErrorMessage(err instanceof Error ? err.message : "Could not load recent cache trace.");
         return;
       }
 
       // Open SSE stream.
-      source = new EventSource('/ggui/console/cache/stream', {
+      source = new EventSource("/ggui/console/cache/stream", {
         withCredentials: true,
       });
       source.onmessage = (msg) => {
@@ -182,10 +175,10 @@ export function Cache(): ReactElement {
       };
       source.onerror = () => {
         // Browser auto-reconnects; surface that state in the pill.
-        setStatus('reconnecting');
+        setStatus("reconnecting");
       };
       source.onopen = () => {
-        setStatus('live');
+        setStatus("live");
       };
     };
 
@@ -212,17 +205,15 @@ export function Cache(): ReactElement {
   const counts = countByStrategy(events);
   const classificationCounts = countByClassification(events);
   const afterStrategy =
-    filter === 'all'
+    filter === "all"
       ? events
-      : filter === 'no-strategy'
+      : filter === "no-strategy"
         ? events.filter((e) => e.strategy === undefined)
         : events.filter((e) => e.strategy === filter);
   const visible =
-    classificationFilter === 'all'
+    classificationFilter === "all"
       ? afterStrategy
-      : afterStrategy.filter(
-          (e) => e.agentClassification === classificationFilter,
-        );
+      : afterStrategy.filter((e) => e.agentClassification === classificationFilter);
 
   return (
     <section className="ggui-section">
@@ -232,18 +223,14 @@ export function Cache(): ReactElement {
         mute="Live."
         intro={
           <>
-            Every blueprint-cache lookup the matcher runs — query
-            intent, threshold, top-k candidate similarity scores, and
-            the outcome (MATCH on canonical-key equality or judge
-            accept; MISS on no-match buckets; SYNTH for cold-path
-            contract synthesis; PUSH for paired-push
-            confirm-vs-override classification). Quality-overlay
-            chips surface validator findings on synth output, cosine
-            novelty distance from the registry, and the agent's
-            confirm-vs-override rate against the handshake's
-            provisional. Filter by strategy or agent disposition to
-            slice the stream. Bounded ring buffer — most recent 200
-            events stay in memory.
+            Every blueprint-cache lookup the matcher runs — query intent, threshold, top-k candidate
+            similarity scores, and the outcome (MATCH on canonical-key equality or judge accept;
+            MISS on no-match buckets; SYNTH for cold-path contract synthesis; PUSH for paired-push
+            confirm-vs-override classification). Quality-overlay chips surface validator findings on
+            synth output, cosine novelty distance from the registry, and the agent's
+            confirm-vs-override rate against the handshake's provisional. Filter by strategy or
+            agent disposition to slice the stream. Bounded ring buffer — most recent 200 events stay
+            in memory.
           </>
         }
       />
@@ -252,13 +239,13 @@ export function Cache(): ReactElement {
         <div className="ggui-card__head">
           <span className="ggui-card__title">events</span>
           <span className="ggui-card__num">
-            {status === 'loading'
-              ? 'connecting…'
-              : status === 'live'
+            {status === "loading"
+              ? "connecting…"
+              : status === "live"
                 ? `live · ${events.length}`
-                : status === 'reconnecting'
-                  ? 'reconnecting…'
-                  : 'error'}
+                : status === "reconnecting"
+                  ? "reconnecting…"
+                  : "error"}
           </span>
         </div>
         <div className="ggui-card__body">
@@ -267,34 +254,27 @@ export function Cache(): ReactElement {
               {errorMessage}
             </p>
           ) : null}
-          <StrategyFilterRow
-            filter={filter}
-            onFilter={setFilter}
-            counts={counts}
-          />
+          <StrategyFilterRow filter={filter} onFilter={setFilter} counts={counts} />
           <ClassificationFilterRow
             filter={classificationFilter}
             onFilter={setClassificationFilter}
             counts={classificationCounts}
           />
-          {events.length === 0 && status !== 'error' ? (
+          {events.length === 0 && status !== "error" ? (
             <p className="ggui-muted">
-              No cache lookups yet. Trigger a generation (push a
-              prompt through your MCP client) and decisions will
-              appear here as they fire.
+              No cache lookups yet. Trigger a generation (push a prompt through your MCP client) and
+              decisions will appear here as they fire.
             </p>
           ) : null}
           {events.length > 0 && visible.length === 0 ? (
-            <p className="ggui-muted">
-              No events for this strategy. Try a different filter.
-            </p>
+            <p className="ggui-muted">No events for this strategy. Try a different filter.</p>
           ) : null}
           <ul
             style={{
-              listStyle: 'none',
+              listStyle: "none",
               padding: 0,
               margin: 0,
-              display: 'grid',
+              display: "grid",
               gap: 12,
             }}
             data-ggui-cache-trace-list
@@ -316,27 +296,25 @@ export function Cache(): ReactElement {
 
 interface StrategyCounts {
   readonly all: number;
-  readonly 'exact-key': number;
+  readonly "exact-key": number;
   readonly semantic: number;
-  readonly 'no-strategy': number;
+  readonly "no-strategy": number;
 }
 
-function countByStrategy(
-  events: readonly CacheTraceEvent[],
-): StrategyCounts {
+function countByStrategy(events: readonly CacheTraceEvent[]): StrategyCounts {
   let exactKey = 0;
   let semantic = 0;
   let noStrategy = 0;
   for (const e of events) {
-    if (e.strategy === 'exact-key') exactKey += 1;
-    else if (e.strategy === 'semantic') semantic += 1;
+    if (e.strategy === "exact-key") exactKey += 1;
+    else if (e.strategy === "semantic") semantic += 1;
     else noStrategy += 1;
   }
   return {
     all: events.length,
-    'exact-key': exactKey,
+    "exact-key": exactKey,
     semantic,
-    'no-strategy': noStrategy,
+    "no-strategy": noStrategy,
   };
 }
 
@@ -346,14 +324,12 @@ interface ClassificationCounts {
   readonly override: number;
 }
 
-function countByClassification(
-  events: readonly CacheTraceEvent[],
-): ClassificationCounts {
+function countByClassification(events: readonly CacheTraceEvent[]): ClassificationCounts {
   let confirm = 0;
   let override = 0;
   for (const e of events) {
-    if (e.agentClassification === 'confirm') confirm += 1;
-    else if (e.agentClassification === 'override') override += 1;
+    if (e.agentClassification === "confirm") confirm += 1;
+    else if (e.agentClassification === "override") override += 1;
   }
   // The "all" bucket reflects the same superset the strategy chip row
   // does so the two chip rows compose without disagreeing on totals.
@@ -373,19 +349,19 @@ function StrategyFilterRow({
     readonly key: StrategyFilter;
     readonly label: string;
   }> = [
-    { key: 'all', label: 'all' },
-    { key: 'exact-key', label: 'exact-key' },
-    { key: 'semantic', label: 'semantic' },
-    { key: 'no-strategy', label: 'no-strategy' },
+    { key: "all", label: "all" },
+    { key: "exact-key", label: "exact-key" },
+    { key: "semantic", label: "semantic" },
+    { key: "no-strategy", label: "no-strategy" },
   ];
   return (
     <div
       style={{
-        display: 'flex',
+        display: "flex",
         gap: 6,
-        alignItems: 'center',
+        alignItems: "center",
         marginBottom: 12,
-        flexWrap: 'wrap',
+        flexWrap: "wrap",
       }}
       data-ggui-cache-trace-filter
     >
@@ -393,8 +369,8 @@ function StrategyFilterRow({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: 'var(--ggui-font-mono)',
-          textTransform: 'uppercase',
+          fontFamily: "var(--ggui-font-mono)",
+          textTransform: "uppercase",
           marginRight: 4,
         }}
       >
@@ -409,18 +385,18 @@ function StrategyFilterRow({
             type="button"
             onClick={() => onFilter(item.key)}
             style={{
-              all: 'unset',
-              cursor: 'pointer',
-              fontFamily: 'var(--ggui-font-mono)',
+              all: "unset",
+              cursor: "pointer",
+              fontFamily: "var(--ggui-font-mono)",
               fontSize: 11,
-              padding: '2px 8px',
-              border: '1px solid var(--ggui-rule)',
-              background: isActive ? 'var(--ggui-ink)' : 'transparent',
-              color: isActive ? 'var(--ggui-paper)' : 'var(--ggui-ink)',
-              letterSpacing: '0.05em',
+              padding: "2px 8px",
+              border: "1px solid var(--ggui-rule)",
+              background: isActive ? "var(--ggui-ink)" : "transparent",
+              color: isActive ? "var(--ggui-paper)" : "var(--ggui-ink)",
+              letterSpacing: "0.05em",
             }}
             data-ggui-cache-trace-filter-key={item.key}
-            data-ggui-cache-trace-filter-active={isActive ? 'true' : 'false'}
+            data-ggui-cache-trace-filter-active={isActive ? "true" : "false"}
           >
             {item.label} · {count}
           </button>
@@ -443,18 +419,18 @@ function ClassificationFilterRow({
     readonly key: ClassificationFilter;
     readonly label: string;
   }> = [
-    { key: 'all', label: 'all' },
-    { key: 'confirm', label: 'confirm' },
-    { key: 'override', label: 'override' },
+    { key: "all", label: "all" },
+    { key: "confirm", label: "confirm" },
+    { key: "override", label: "override" },
   ];
   return (
     <div
       style={{
-        display: 'flex',
+        display: "flex",
         gap: 6,
-        alignItems: 'center',
+        alignItems: "center",
         marginBottom: 12,
-        flexWrap: 'wrap',
+        flexWrap: "wrap",
       }}
       data-ggui-cache-trace-classification-filter
     >
@@ -462,8 +438,8 @@ function ClassificationFilterRow({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: 'var(--ggui-font-mono)',
-          textTransform: 'uppercase',
+          fontFamily: "var(--ggui-font-mono)",
+          textTransform: "uppercase",
           marginRight: 4,
         }}
       >
@@ -478,20 +454,18 @@ function ClassificationFilterRow({
             type="button"
             onClick={() => onFilter(item.key)}
             style={{
-              all: 'unset',
-              cursor: 'pointer',
-              fontFamily: 'var(--ggui-font-mono)',
+              all: "unset",
+              cursor: "pointer",
+              fontFamily: "var(--ggui-font-mono)",
               fontSize: 11,
-              padding: '2px 8px',
-              border: '1px solid var(--ggui-rule)',
-              background: isActive ? 'var(--ggui-ink)' : 'transparent',
-              color: isActive ? 'var(--ggui-paper)' : 'var(--ggui-ink)',
-              letterSpacing: '0.05em',
+              padding: "2px 8px",
+              border: "1px solid var(--ggui-rule)",
+              background: isActive ? "var(--ggui-ink)" : "transparent",
+              color: isActive ? "var(--ggui-paper)" : "var(--ggui-ink)",
+              letterSpacing: "0.05em",
             }}
             data-ggui-cache-trace-classification-key={item.key}
-            data-ggui-cache-trace-classification-active={
-              isActive ? 'true' : 'false'
-            }
+            data-ggui-cache-trace-classification-active={isActive ? "true" : "false"}
           >
             {item.label} · {count}
           </button>
@@ -512,38 +486,32 @@ function CacheCard({
 }): ReactElement {
   const at = new Date(event.at);
   const time = at.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   });
   const outcome = classify(event.decision);
-  const showWinner = outcome === 'match' && event.winningBlueprintId;
+  const showWinner = outcome === "match" && event.winningBlueprintId;
   const top = event.candidates[0];
-  const topScore = top ? top.score.toFixed(3) : '—';
+  const topScore = top ? top.score.toFixed(3) : "—";
   // Single-line intent preview for the collapsed row. Cap visually so
   // a long intent doesn't push the score/decision off the right edge.
-  const intentPreview =
-    event.intent.length > 80
-      ? `${event.intent.slice(0, 80)}…`
-      : event.intent;
+  const intentPreview = event.intent.length > 80 ? `${event.intent.slice(0, 80)}…` : event.intent;
 
   return (
     <li
       style={{
-        border: '1px solid var(--ggui-rule)',
-        padding: '10px 12px',
-        background: 'var(--ggui-paper)',
+        border: "1px solid var(--ggui-rule)",
+        padding: "10px 12px",
+        background: "var(--ggui-paper)",
       }}
       data-ggui-cache-trace-event={event.id}
       data-ggui-cache-trace-decision={event.decision}
-      {...(event.strategy
-        ? { 'data-ggui-cache-trace-strategy': event.strategy }
-        : {})}
+      {...(event.strategy ? { "data-ggui-cache-trace-strategy": event.strategy } : {})}
       {...(event.agentClassification
         ? {
-            'data-ggui-cache-trace-classification':
-              event.agentClassification,
+            "data-ggui-cache-trace-classification": event.agentClassification,
           }
         : {})}
     >
@@ -551,18 +519,15 @@ function CacheCard({
         type="button"
         onClick={onToggle}
         style={{
-          all: 'unset',
-          cursor: 'pointer',
-          display: 'flex',
+          all: "unset",
+          cursor: "pointer",
+          display: "flex",
           gap: 12,
-          alignItems: 'baseline',
-          width: '100%',
+          alignItems: "baseline",
+          width: "100%",
         }}
       >
-        <span
-          className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
-        >
+        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-mono)" }}>
           {time}
         </span>
         <DecisionPill outcome={outcome} />
@@ -574,29 +539,24 @@ function CacheCard({
           <ValidatorFindingsBadge
             count={event.validatorFindings.length}
             severity={
-              event.validatorFindings.some((f) => f.severity === 'error')
-                ? 'error'
-                : 'warn'
+              event.validatorFindings.some((f) => f.severity === "error") ? "error" : "warn"
             }
           />
         ) : null}
         <span
           style={{
-            fontFamily: 'var(--ggui-font-mono)',
+            fontFamily: "var(--ggui-font-mono)",
             fontSize: 12,
             flex: 1,
             minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {intentPreview || <span className="ggui-muted">(empty intent)</span>}
         </span>
-        <span
-          className="ggui-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
-        >
+        <span className="ggui-muted" style={{ fontSize: 11, fontFamily: "var(--ggui-font-mono)" }}>
           top {topScore}
         </span>
         <span className="ggui-muted" style={{ fontSize: 11 }}>
@@ -605,10 +565,10 @@ function CacheCard({
         {showWinner ? (
           <span
             style={{
-              fontFamily: 'var(--ggui-font-mono)',
+              fontFamily: "var(--ggui-font-mono)",
               fontSize: 11,
-              padding: '0 6px',
-              border: '1px solid var(--ggui-rule)',
+              padding: "0 6px",
+              border: "1px solid var(--ggui-rule)",
             }}
           >
             {event.winningBlueprintId}
@@ -620,37 +580,33 @@ function CacheCard({
   );
 }
 
-function DecisionPill({
-  outcome,
-}: {
-  readonly outcome: Outcome;
-}): ReactElement {
+function DecisionPill({ outcome }: { readonly outcome: Outcome }): ReactElement {
   // Avoids color reliance — the brand kit's restricted palette has no
   // red/green tokens, and adding them just for this surface would
   // invite design drift. Filled = a positive event (match landed,
   // synth produced a contract, agent confirmed the suggestion). Outline
   // = a miss / failure / divergence.
-  const filled = outcome === 'match' || outcome === 'synth-ok';
+  const filled = outcome === "match" || outcome === "synth-ok";
   const label =
-    outcome === 'match'
-      ? 'MATCH'
-      : outcome === 'synth-ok'
-        ? 'SYNTH'
-        : outcome === 'synth-fail'
-          ? 'SYNTH'
-          : outcome === 'classify'
-            ? 'PUSH'
-            : 'MISS';
+    outcome === "match"
+      ? "MATCH"
+      : outcome === "synth-ok"
+        ? "SYNTH"
+        : outcome === "synth-fail"
+          ? "SYNTH"
+          : outcome === "classify"
+            ? "PUSH"
+            : "MISS";
   return (
     <span
       style={{
-        fontFamily: 'var(--ggui-font-mono)',
+        fontFamily: "var(--ggui-font-mono)",
         fontSize: 11,
-        padding: '0 8px',
-        border: '1px solid var(--ggui-rule)',
-        background: filled ? 'var(--ggui-ink)' : 'transparent',
-        color: filled ? 'var(--ggui-paper)' : 'var(--ggui-ink)',
-        letterSpacing: '0.05em',
+        padding: "0 8px",
+        border: "1px solid var(--ggui-rule)",
+        background: filled ? "var(--ggui-ink)" : "transparent",
+        color: filled ? "var(--ggui-paper)" : "var(--ggui-ink)",
+        letterSpacing: "0.05em",
       }}
       data-ggui-cache-trace-outcome={outcome}
     >
@@ -659,22 +615,18 @@ function DecisionPill({
   );
 }
 
-function StrategyChip({
-  strategy,
-}: {
-  readonly strategy: CacheTraceStrategy;
-}): ReactElement {
+function StrategyChip({ strategy }: { readonly strategy: CacheTraceStrategy }): ReactElement {
   return (
     <span
       style={{
-        fontFamily: 'var(--ggui-font-mono)',
+        fontFamily: "var(--ggui-font-mono)",
         fontSize: 10,
-        padding: '0 6px',
-        border: '1px dashed var(--ggui-rule)',
-        background: 'transparent',
-        color: 'var(--ggui-ink)',
-        letterSpacing: '0.05em',
-        textTransform: 'lowercase',
+        padding: "0 6px",
+        border: "1px dashed var(--ggui-rule)",
+        background: "transparent",
+        color: "var(--ggui-ink)",
+        letterSpacing: "0.05em",
+        textTransform: "lowercase",
       }}
     >
       {strategy}
@@ -691,17 +643,17 @@ function ClassificationChip({
   // — agent echoed the negotiator's suggestion. Outlined `override`
   // signals divergence; both are valid and the chip stays neutral on
   // judgment, but the visual weight tracks reuse-rate skim-readability.
-  const filled = classification === 'confirm';
+  const filled = classification === "confirm";
   return (
     <span
       style={{
-        fontFamily: 'var(--ggui-font-mono)',
+        fontFamily: "var(--ggui-font-mono)",
         fontSize: 10,
-        padding: '0 6px',
-        border: '1px solid var(--ggui-rule)',
-        background: filled ? 'var(--ggui-ink)' : 'transparent',
-        color: filled ? 'var(--ggui-paper)' : 'var(--ggui-ink)',
-        letterSpacing: '0.05em',
+        padding: "0 6px",
+        border: "1px solid var(--ggui-rule)",
+        background: filled ? "var(--ggui-ink)" : "transparent",
+        color: filled ? "var(--ggui-paper)" : "var(--ggui-ink)",
+        letterSpacing: "0.05em",
       }}
       data-ggui-cache-trace-classification-chip={classification}
     >
@@ -715,46 +667,39 @@ function ValidatorFindingsBadge({
   severity,
 }: {
   readonly count: number;
-  readonly severity: 'warn' | 'error';
+  readonly severity: "warn" | "error";
 }): ReactElement {
   return (
     <span
       title={
-        severity === 'error'
-          ? 'Validator emitted at least one error finding — synth dropped the contract.'
-          : 'Validator emitted warning findings — contract was returned but flagged.'
+        severity === "error"
+          ? "Validator emitted at least one error finding — synth dropped the contract."
+          : "Validator emitted warning findings — contract was returned but flagged."
       }
       style={{
-        fontFamily: 'var(--ggui-font-mono)',
+        fontFamily: "var(--ggui-font-mono)",
         fontSize: 10,
-        padding: '0 6px',
-        border:
-          severity === 'error'
-            ? '1px solid var(--ggui-ink)'
-            : '1px dashed var(--ggui-rule)',
-        background: 'transparent',
-        color: 'var(--ggui-ink)',
-        letterSpacing: '0.05em',
+        padding: "0 6px",
+        border: severity === "error" ? "1px solid var(--ggui-ink)" : "1px dashed var(--ggui-rule)",
+        background: "transparent",
+        color: "var(--ggui-ink)",
+        letterSpacing: "0.05em",
       }}
       data-ggui-cache-trace-validator-severity={severity}
     >
-      {severity === 'error' ? 'err' : 'warn'} · {count}
+      {severity === "error" ? "err" : "warn"} · {count}
     </span>
   );
 }
 
-function CacheDetail({
-  event,
-}: {
-  readonly event: CacheTraceEvent;
-}): ReactElement {
+function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactElement {
   return (
     <div
       style={{
         marginTop: 10,
         paddingTop: 10,
-        borderTop: '1px solid var(--ggui-rule)',
-        display: 'grid',
+        borderTop: "1px solid var(--ggui-rule)",
+        display: "grid",
         gap: 12,
       }}
     >
@@ -764,23 +709,19 @@ function CacheDetail({
       <Section label="decision class">
         <div
           style={{
-            display: 'flex',
+            display: "flex",
             gap: 8,
-            alignItems: 'baseline',
-            fontFamily: 'var(--ggui-font-mono)',
+            alignItems: "baseline",
+            fontFamily: "var(--ggui-font-mono)",
             fontSize: 12,
           }}
         >
           <span>{event.decision}</span>
           {event.strategy ? (
-            <span className="ggui-muted">
-              · strategy = {event.strategy}
-            </span>
+            <span className="ggui-muted">· strategy = {event.strategy}</span>
           ) : null}
           {event.agentClassification ? (
-            <span className="ggui-muted">
-              · classification = {event.agentClassification}
-            </span>
+            <span className="ggui-muted">· classification = {event.agentClassification}</span>
           ) : null}
         </div>
       </Section>
@@ -788,18 +729,18 @@ function CacheDetail({
         <Section label="agent classification">
           <div
             style={{
-              display: 'flex',
+              display: "flex",
               gap: 8,
-              alignItems: 'baseline',
-              fontFamily: 'var(--ggui-font-mono)',
+              alignItems: "baseline",
+              fontFamily: "var(--ggui-font-mono)",
               fontSize: 12,
             }}
           >
             <ClassificationChip classification={event.agentClassification} />
             <span className="ggui-muted">
-              {event.agentClassification === 'confirm'
-                ? 'agent push contract canonicalizes to the handshake plan key'
-                : 'agent push contract diverges from the handshake plan key'}
+              {event.agentClassification === "confirm"
+                ? "agent push contract canonicalizes to the handshake plan key"
+                : "agent push contract diverges from the handshake plan key"}
             </span>
           </div>
         </Section>
@@ -807,7 +748,7 @@ function CacheDetail({
       {event.cosineNoveltyDistance !== undefined ? (
         <Section label="cosine novelty distance">
           <div
-            style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}
+            style={{ fontFamily: "var(--ggui-font-mono)", fontSize: 12 }}
             title="1 - top.cosine. Higher = farther from any registered blueprint. Track over time to spot synth fragmentation."
           >
             {event.cosineNoveltyDistance.toFixed(3)}
@@ -815,34 +756,32 @@ function CacheDetail({
         </Section>
       ) : null}
       {event.validatorFindings && event.validatorFindings.length > 0 ? (
-        <Section
-          label={`validator findings (${event.validatorFindings.length})`}
-        >
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        <Section label={`validator findings (${event.validatorFindings.length})`}>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {event.validatorFindings.map((f, i) => (
               <li
                 key={`${f.kind}-${i}`}
                 style={{
-                  padding: '4px 0',
+                  padding: "4px 0",
                   borderBottom:
                     i < (event.validatorFindings?.length ?? 0) - 1
-                      ? '1px solid var(--ggui-rule)'
-                      : 'none',
-                  display: 'grid',
+                      ? "1px solid var(--ggui-rule)"
+                      : "none",
+                  display: "grid",
                   gap: 2,
                 }}
               >
                 <div
                   style={{
-                    display: 'flex',
+                    display: "flex",
                     gap: 8,
-                    alignItems: 'baseline',
+                    alignItems: "baseline",
                   }}
                 >
                   <ValidatorFindingsBadge count={1} severity={f.severity} />
                   <span
                     style={{
-                      fontFamily: 'var(--ggui-font-mono)',
+                      fontFamily: "var(--ggui-font-mono)",
                       fontSize: 12,
                     }}
                   >
@@ -856,12 +795,10 @@ function CacheDetail({
         </Section>
       ) : null}
       <Section label="intent">
-        <pre style={preStyle}>{event.intent || '(empty)'}</pre>
+        <pre style={preStyle}>{event.intent || "(empty)"}</pre>
       </Section>
       <Section label="scope / threshold">
-        <div
-          style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}
-        >
+        <div style={{ fontFamily: "var(--ggui-font-mono)", fontSize: 12 }}>
           <div>
             scope = <strong>{event.scope}</strong>
           </div>
@@ -869,13 +806,11 @@ function CacheDetail({
             threshold = <strong>{event.threshold}</strong>
           </div>
           <div>
-            expectedKey ={' '}
-            <strong>{event.expectedKey || '(none)'}</strong>
+            expectedKey = <strong>{event.expectedKey || "(none)"}</strong>
           </div>
           {event.winningBlueprintId ? (
             <div>
-              winningBlueprintId ={' '}
-              <strong>{event.winningBlueprintId}</strong>
+              winningBlueprintId = <strong>{event.winningBlueprintId}</strong>
             </div>
           ) : null}
         </div>
@@ -886,34 +821,31 @@ function CacheDetail({
             No candidates returned by the vector store.
           </p>
         ) : (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {event.candidates.map((c, i) => {
               const isWinner =
-                event.winningBlueprintId !== undefined &&
-                c.key === event.winningBlueprintId;
+                event.winningBlueprintId !== undefined && c.key === event.winningBlueprintId;
               return (
                 <li
                   key={`${c.key}-${i}`}
                   style={{
-                    padding: '4px 0',
+                    padding: "4px 0",
                     borderBottom:
-                      i < event.candidates.length - 1
-                        ? '1px solid var(--ggui-rule)'
-                        : 'none',
-                    display: 'grid',
+                      i < event.candidates.length - 1 ? "1px solid var(--ggui-rule)" : "none",
+                    display: "grid",
                     gap: 4,
                   }}
                 >
                   <div
                     style={{
-                      display: 'flex',
+                      display: "flex",
                       gap: 8,
-                      alignItems: 'baseline',
+                      alignItems: "baseline",
                     }}
                   >
                     <span
                       style={{
-                        fontFamily: 'var(--ggui-font-mono)',
+                        fontFamily: "var(--ggui-font-mono)",
                         fontSize: 12,
                         fontWeight: isWinner ? 600 : 400,
                       }}
@@ -921,17 +853,14 @@ function CacheDetail({
                       {c.key}
                     </span>
                     {isWinner ? (
-                      <span
-                        className="ggui-muted"
-                        style={{ fontSize: 10 }}
-                      >
+                      <span className="ggui-muted" style={{ fontSize: 10 }}>
                         (winner)
                       </span>
                     ) : null}
                     <span style={{ flex: 1 }} />
                     <span
                       style={{
-                        fontFamily: 'var(--ggui-font-mono)',
+                        fontFamily: "var(--ggui-font-mono)",
                         fontSize: 12,
                       }}
                     >
@@ -943,10 +872,10 @@ function CacheDetail({
                       className="ggui-muted"
                       style={{
                         fontSize: 11,
-                        fontFamily: 'var(--ggui-font-mono)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        fontFamily: "var(--ggui-font-mono)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {c.cachedIntent}
@@ -975,8 +904,8 @@ function Section({
         className="ggui-muted"
         style={{
           fontSize: 11,
-          fontFamily: 'var(--ggui-font-mono)',
-          textTransform: 'uppercase',
+          fontFamily: "var(--ggui-font-mono)",
+          textTransform: "uppercase",
           marginBottom: 4,
         }}
       >
@@ -990,12 +919,12 @@ function Section({
 const preStyle: React.CSSProperties = {
   margin: 0,
   padding: 8,
-  background: 'var(--ggui-paper-2, #efeee8)',
-  border: '1px solid var(--ggui-rule)',
-  fontFamily: 'var(--ggui-font-mono)',
+  background: "var(--ggui-paper-2, #efeee8)",
+  border: "1px solid var(--ggui-rule)",
+  fontFamily: "var(--ggui-font-mono)",
   fontSize: 12,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
   maxHeight: 360,
-  overflow: 'auto',
+  overflow: "auto",
 };
