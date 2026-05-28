@@ -183,7 +183,7 @@ export const invokeTurnSchema = z.object({
  *
  * Stateless by default — client holds history, sends full `history[]` every
  * turn. Agents that need server-side memory layer their own keyed on
- * `X-Ggui-Session-Id`.
+ * `X-Ggui-Host-Session-Id`.
  */
 export const invokeRequestSchema = z.object({
   message: z.string(),

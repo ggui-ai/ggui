@@ -79,9 +79,9 @@ export interface UseInvokeOptions {
   endpointUrl?: string;
   /**
    * Continue an existing conversation. Absent → new session each call.
-   * Forwarded to the agent as the `X-Ggui-Session-Id` header — this is
-   * the conversation envelope identity (the chat thread), distinct from
-   * any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
+   * Forwarded to the agent as the `X-Ggui-Host-Session-Id` header — this
+   * is the conversation envelope identity (the chat thread), distinct
+   * from any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
    */
   hostSessionId?: string;
   /** End-user JWT for authenticated apps. */
@@ -179,11 +179,11 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   const messagesRef = useRef<ConversationMessage[]>(messages);
   messagesRef.current = messages;
   // Tracks the hostSessionId the agent surfaces via `tool_result` on turn 1
-  // so subsequent `send()` calls can carry `X-Ggui-Session-Id` — without
-  // this the agent mints a new session per POST and turn-2 render events
-  // never reach the already-mounted `<GguiRender>`. Mirrors the web hook's
-  // fix. Names the conversation envelope (the chat thread), distinct from
-  // any per-render `renderId`.
+  // so subsequent `send()` calls can carry `X-Ggui-Host-Session-Id` —
+  // without this the agent mints a new session per POST and turn-2 render
+  // events never reach the already-mounted `<GguiRender>`. Mirrors the web
+  // hook's fix. Names the conversation envelope (the chat thread),
+  // distinct from any per-render `renderId`.
   const hostSessionIdRef = useRef<string | null>(options.hostSessionId ?? null);
 
   const send = useCallback(
@@ -237,10 +237,9 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
         };
         // options.hostSessionId wins for explicit-resume callers; otherwise
         // fall back to the hostSessionId surfaced on a prior turn's
-        // tool_result. The wire header name stays `X-Ggui-Session-Id` —
-        // the option just gets a clearer name on the SDK surface.
+        // tool_result.
         const effectiveHostSessionId = options.hostSessionId ?? hostSessionIdRef.current;
-        if (effectiveHostSessionId) headers['X-Ggui-Session-Id'] = effectiveHostSessionId;
+        if (effectiveHostSessionId) headers['X-Ggui-Host-Session-Id'] = effectiveHostSessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 
         const init: RNRequestInit = {
@@ -408,22 +407,21 @@ function makeTransportError(message: string): InvokeError {
 }
 
 /**
- * Pull a `sessionId` string (the conversation envelope = hostSessionId)
- * out of a tool_result's content payload if one is present. Tolerant of
- * arbitrary nested shapes — agents may put the id directly on the result
- * or under a wrapper like `{ result: { sessionId } }`. The field on the
- * wire is still spelled `sessionId` (agent-side payload contract); the
- * SDK-side name `hostSessionId` clarifies the role.
+ * Pull a `hostSessionId` string (the conversation envelope id) out of a
+ * tool_result's content payload if one is present. Tolerant of arbitrary
+ * nested shapes — agents may put the id directly on the result or under
+ * a wrapper like `{ result: { hostSessionId } }`. Wire field and
+ * SDK-side name are both `hostSessionId`.
  */
 function extractHostSessionIdFromContent(content: unknown): string | null {
   if (typeof content !== 'object' || content === null) return null;
   const record = content as Record<string, unknown>;
-  if (typeof record.sessionId === 'string') return record.sessionId;
+  if (typeof record.hostSessionId === 'string') return record.hostSessionId;
   // One level of nesting — common when tools wrap their output in `{ result }`.
   for (const value of Object.values(record)) {
     if (typeof value === 'object' && value !== null) {
       const inner = value as Record<string, unknown>;
-      if (typeof inner.sessionId === 'string') return inner.sessionId;
+      if (typeof inner.hostSessionId === 'string') return inner.hostSessionId;
     }
   }
   return null;

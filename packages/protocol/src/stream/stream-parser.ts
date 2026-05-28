@@ -93,15 +93,15 @@ export function isStreamDone(data: Record<string, unknown>): boolean {
   return false;
 }
 
-// ── SessionId extraction ──
+// ── HostSessionId extraction ──
 
 /**
- * Extract sessionId from a streaming event.
- * Checks for a top-level `sessionId` string — no envelope format required.
+ * Extract hostSessionId (conversation envelope id) from a streaming event.
+ * Checks for a top-level `hostSessionId` string — no envelope format required.
  */
-export function extractSessionId(data: Record<string, unknown>): string | undefined {
-  if (typeof data.sessionId === 'string' && data.sessionId) {
-    return data.sessionId;
+export function extractHostSessionId(data: Record<string, unknown>): string | undefined {
+  if (typeof data.hostSessionId === 'string' && data.hostSessionId) {
+    return data.hostSessionId;
   }
   return undefined;
 }
@@ -115,7 +115,7 @@ export function extractSessionId(data: Record<string, unknown>): string | undefi
 export interface StreamCallbacks {
   onChunk: (text: string) => Promise<void>;
   onDone: () => Promise<void>;
-  onSessionId?: (sessionId: string) => Promise<void>;
+  onHostSessionId?: (hostSessionId: string) => Promise<void>;
 }
 
 /**
@@ -148,8 +148,8 @@ export async function readStream(
   };
 
   const processJsonEvent = async (data: Record<string, unknown>) => {
-    const sid = extractSessionId(data);
-    if (sid) await callbacks.onSessionId?.(sid);
+    const hsid = extractHostSessionId(data);
+    if (hsid) await callbacks.onHostSessionId?.(hsid);
 
     if (isStreamDone(data)) {
       await emitDone();

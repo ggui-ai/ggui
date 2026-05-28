@@ -14,7 +14,7 @@ import { isStreamingContentType } from '../stream/stream-parser';
 
 /** Schema for agent HTTP response data — validates untrusted external input. */
 const agentResponseSchema = z.object({
-  sessionId: z.string().optional(),
+  hostSessionId: z.string().optional(),
   text: z.string().optional(),
   events: z.array(z.object({
     type: z.string(),
@@ -27,9 +27,9 @@ const agentResponseSchema = z.object({
 export interface InvokeAgentOptions {
   /** The agent's HTTP endpoint URL */
   connectorEndpointUrl: string;
-  /** Session ID (omit for 'start' flow — agent creates session) */
-  sessionId?: string;
-  /** Invocation type: 'start' creates a new session, 'message' continues one */
+  /** Conversation envelope id (omit for 'start' flow — agent mints one) */
+  hostSessionId?: string;
+  /** Invocation type: 'start' begins a fresh conversation, 'message' continues one */
   type: 'start' | 'message';
   /** User message text */
   message?: string;
@@ -43,8 +43,8 @@ export interface InvokeAgentOptions {
   onStreamChunk?: (text: string) => Promise<void>;
   /** Callback when the stream is done */
   onStreamDone?: () => Promise<void>;
-  /** Callback when the agent returns a sessionId (start flow, SSE) */
-  onSessionId?: (sessionId: string) => Promise<void>;
+  /** Callback when the agent returns a hostSessionId (start flow, SSE) */
+  onHostSessionId?: (hostSessionId: string) => Promise<void>;
   /** Callback for structured agent events (stream, push, etc.) from the events array */
   onAgentEvent?: (event: { type: string; payload: unknown }) => Promise<void>;
   /** Request timeout in milliseconds (default: 90000) */
@@ -52,8 +52,8 @@ export interface InvokeAgentOptions {
 }
 
 export interface InvokeAgentResult {
-  /** Session ID returned by the agent (start flow) */
-  sessionId?: string;
+  /** Conversation envelope id returned by the agent (start flow) */
+  hostSessionId?: string;
   /** Full text response (JSON responses only — streaming uses callbacks) */
   text?: string;
   /** Whether the response was streamed via SSE */
@@ -75,7 +75,7 @@ export interface InvokeAgentResult {
  *
  * The request body shape follows the ggui bridge protocol:
  *   - start:   { type: 'start', message, appId, interfaceContext }
- *   - message: { type: 'message', sessionId, appId, message, conversationHistory, interfaceContext }
+ *   - message: { type: 'message', hostSessionId, appId, message, conversationHistory, interfaceContext }
  */
 export async function invokeAgentEndpoint(
   options: InvokeAgentOptions,
@@ -84,13 +84,13 @@ export async function invokeAgentEndpoint(
     connectorEndpointUrl,
     type,
     appId,
-    sessionId,
+    hostSessionId,
     message,
     interfaceContext,
     conversationHistory,
     onStreamChunk,
     onStreamDone,
-    onSessionId,
+    onHostSessionId,
     timeoutMs = 90_000,
   } = options;
 
@@ -98,11 +98,11 @@ export async function invokeAgentEndpoint(
   const body: Record<string, unknown> = { type, appId };
 
   if (type === 'start') {
-    if (sessionId) body.sessionId = sessionId;
+    if (hostSessionId) body.hostSessionId = hostSessionId;
     body.message = message || 'Start a new session';
     if (interfaceContext) body.interfaceContext = interfaceContext;
   } else {
-    body.sessionId = sessionId;
+    body.hostSessionId = hostSessionId;
     body.message = message;
     if (interfaceContext) body.interfaceContext = interfaceContext;
     if (conversationHistory && conversationHistory.length > 0) {
@@ -115,8 +115,8 @@ export async function invokeAgentEndpoint(
     'Content-Type': 'application/json',
     'X-Ggui-App-Id': appId,
   };
-  if (sessionId) {
-    headers['X-Ggui-Session-Id'] = sessionId;
+  if (hostSessionId) {
+    headers['X-Ggui-Host-Session-Id'] = hostSessionId;
   }
 
   // POST to agent endpoint
@@ -164,9 +164,9 @@ export async function invokeAgentEndpoint(
     return { status: 'ok', streamed: true };
   }
 
-  // Extract sessionId
-  if (agentData.sessionId) {
-    await onSessionId?.(agentData.sessionId);
+  // Extract hostSessionId
+  if (agentData.hostSessionId) {
+    await onHostSessionId?.(agentData.hostSessionId);
   }
 
   // Forward structured agent events
@@ -182,7 +182,7 @@ export async function invokeAgentEndpoint(
   await onStreamDone?.();
 
   return {
-    sessionId: agentData.sessionId,
+    hostSessionId: agentData.hostSessionId,
     text: resultText,
     status: 'ok',
     streamed: isStreamingContentType(contentType, transferEncoding),

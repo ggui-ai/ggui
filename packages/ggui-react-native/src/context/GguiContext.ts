@@ -58,7 +58,7 @@ export interface GguiContextValue {
   };
   /**
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
-   * the `X-Ggui-Session-Id` header so the agent threads multi-turn
+   * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
    * invokes through its own keyed conversation state. Distinct from
    * {@link renderId} — this names the chat thread, not a render.
    */
