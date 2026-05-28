@@ -357,7 +357,7 @@ import {
   mergeReservedValidators,
 } from './reserved-validators.js';
 import {
-  checkStackItemSchemaCompat,
+  checkRenderSchemaCompat,
   DEFAULT_SCHEMA_COMPAT_MODE,
   SchemaCompatError,
   type SchemaCompatMode,
@@ -728,7 +728,7 @@ export function defaultHandlers(deps: {
      * automatically; callers composing their own push handler via
      * `defaultHandlers` wire the hook themselves.
      */
-    readonly checkStackItemContracts?: (
+    readonly checkRenderContracts?: (
       shape: {
         readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
         readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
@@ -1441,8 +1441,8 @@ export function defaultHandlers(deps: {
         // wraps it in try/catch
         // on the generation + cache-hit paths so a thrown
         // SchemaCompatError converts to an error stack-item.
-        ...(deps.push.checkStackItemContracts
-          ? { checkStackItemContracts: deps.push.checkStackItemContracts }
+        ...(deps.push.checkRenderContracts
+          ? { checkRenderContracts: deps.push.checkRenderContracts }
           : {}),
         // Content-addressable code store. Both fields are forwarded
         // together; the push handler
@@ -3983,13 +3983,13 @@ export function createGguiServer(
                 if (!opts.streamWebSocketLocalTools) return undefined;
                 return [...opts.streamWebSocketLocalTools.allowlist];
               },
-              checkStackItemContracts: (shape) => {
+              checkRenderContracts: (shape) => {
                 // Shape carries the optional actionSpec / streamSpec
                 // pair from either the authored DataContract (push
                 // validation) or a Render (gen / cache-hit backstops).
                 // Both fit structurally; the helper handles missing
                 // fields as a compatible no-op.
-                const report = checkStackItemSchemaCompat(
+                const report = checkRenderSchemaCompat(
                   shape,
                   handlers,
                   schemaCompatMode,
@@ -4167,7 +4167,7 @@ export function createGguiServer(
 
   // Schema compatibility check mode. Resolved once and
   // threaded into the console blueprint-try endpoint + the push
-  // handler's `checkStackItemContracts` closure above (which
+  // handler's `checkRenderContracts` closure above (which
   // late-binds to this constant via lexical capture).
   // See CreateGguiServerOptions.schemaCompatCheck.
   const schemaCompatMode: SchemaCompatMode =
@@ -6039,7 +6039,7 @@ export function createGguiServer(
             // sourced from `createGguiServer({schemaCompatCheck})`;
             // defaults to `'reject'`. See `./schema-compat.ts`.
             try {
-              const report = checkStackItemSchemaCompat(
+              const report = checkRenderSchemaCompat(
                 render,
                 handlers,
                 schemaCompatMode,

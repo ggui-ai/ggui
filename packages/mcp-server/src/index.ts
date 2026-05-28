@@ -87,7 +87,7 @@ export {
 // embedding their own endpoint paths (custom hosted wrappers) can
 // reuse the helper directly.
 export {
-  checkStackItemSchemaCompat,
+  checkRenderSchemaCompat,
   DEFAULT_SCHEMA_COMPAT_MODE,
   SchemaCompatError,
 } from './schema-compat.js';
@@ -95,7 +95,7 @@ export type {
   SchemaCompatFinding,
   SchemaCompatMode,
   SchemaCompatReport,
-  StackItemContractShape,
+  RenderContractShape,
   ToolSchemaRef,
 } from './schema-compat.js';
 export type { ServerInfo } from './build-mcp.js';

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { JsonSchema } from '@ggui-ai/protocol';
 import {
-  checkStackItemSchemaCompat,
+  checkRenderSchemaCompat,
   SchemaCompatError,
   type ToolSchemaRef,
 } from './schema-compat.js';
@@ -43,9 +43,9 @@ const registry: ToolSchemaRef[] = [submitTaskTool, strictTool];
 
 // ── 'off' mode ────────────────────────────────────────────────────
 
-describe('checkStackItemSchemaCompat — off mode', () => {
+describe('checkRenderSchemaCompat — off mode', () => {
   it('returns compatible report without running any check', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           bogus: {
@@ -66,9 +66,9 @@ describe('checkStackItemSchemaCompat — off mode', () => {
 
 // ── action ref compat (action.schema ⊆ tool.inputSchema) ─────────
 
-describe('checkStackItemSchemaCompat — actionSpec direction', () => {
+describe('checkRenderSchemaCompat — actionSpec direction', () => {
   it('compat: action schema is a subset of the tool inputSchema', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           createTask: {
@@ -109,7 +109,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
       },
     };
     // 'warn' mode returns report without throwing
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       stackItem,
       registry,
       'warn',
@@ -139,7 +139,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
       },
     };
     try {
-      checkStackItemSchemaCompat(
+      checkRenderSchemaCompat(
         stackItem,
         registry,
         'reject',
@@ -157,7 +157,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
   });
 
   it('flags tool-not-found when the action refs an unregistered tool', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           createTask: {
@@ -180,7 +180,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
     // submit_task.inputSchema requires `title`; void action sends
     // nothing ⇒ the wire would deliver {} to a tool that rejects
     // missing title. Flag it honestly.
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           trigger: {
@@ -212,7 +212,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
       inputSchema: {},
       outputSchema: { ok: z.boolean() },
     };
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           trigger: {
@@ -230,7 +230,7 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
   });
 
   it("skips actions with dispatch.kind='agent' (wired by agent, not in-process)", () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           agentRouted: {
@@ -252,12 +252,12 @@ describe('checkStackItemSchemaCompat — actionSpec direction', () => {
 
 // ── stream ref compat (channel.schema ⊆ tool.outputSchema) ───────
 
-describe('checkStackItemSchemaCompat — streamSpec direction', () => {
+describe('checkRenderSchemaCompat — streamSpec direction', () => {
   it('compat: every tool-return value is accepted by the channel schema (channel is permissive)', () => {
     // Tool returns `{id, status}` (both required). Channel declares
     // the same two fields — both required, open to additional. Tool
     // returns are all accepted by channel.
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         streamSpec: {
           taskStatus: {
@@ -284,7 +284,7 @@ describe('checkStackItemSchemaCompat — streamSpec direction', () => {
     // Channel declares only `id` but leaves additionalProperties
     // open (default true). Tool returns `{id, status}` — the `status`
     // lands in additionalProperties and the channel accepts it.
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         streamSpec: {
           taskStatus: {
@@ -310,7 +310,7 @@ describe('checkStackItemSchemaCompat — streamSpec direction', () => {
     // tool emits would be rejected by the channel schema.
     // Direction: isSchemaSubset(channel, toolReturn) flags toolReturn
     // as widening the channel via the `status` property.
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         streamSpec: {
           status: {
@@ -335,7 +335,7 @@ describe('checkStackItemSchemaCompat — streamSpec direction', () => {
   });
 
   it('flags tool-not-found for stream refs too', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         streamSpec: {
           feed: {
@@ -355,9 +355,9 @@ describe('checkStackItemSchemaCompat — streamSpec direction', () => {
 
 // ── Mixed spec handling ──────────────────────────────────────────
 
-describe('checkStackItemSchemaCompat — mixed spec handling', () => {
+describe('checkRenderSchemaCompat — mixed spec handling', () => {
   it('reports all findings from both specs in a single report', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {
         actionSpec: {
           bad: {
@@ -387,7 +387,7 @@ describe('checkStackItemSchemaCompat — mixed spec handling', () => {
   });
 
   it('no actionSpec + no streamSpec = always compatible', () => {
-    const report = checkStackItemSchemaCompat(
+    const report = checkRenderSchemaCompat(
       {},
       registry,
       'reject',
@@ -421,7 +421,7 @@ describe('SchemaCompatError — message formatting', () => {
       },
     };
     try {
-      checkStackItemSchemaCompat(
+      checkRenderSchemaCompat(
         stackItem,
         registry,
         'reject',

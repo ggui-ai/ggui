@@ -145,7 +145,7 @@ export interface ToolSchemaRef {
  * schema check (we can't validate a remote server's tool schema from
  * here; the agent owns the cross-MCP call).
  */
-export interface StackItemContractShape {
+export interface RenderContractShape {
   readonly actionSpec?: ActionSpec;
   readonly streamSpec?: StreamSpec;
   readonly agentCapabilities?: {
@@ -181,8 +181,8 @@ export class SchemaCompatError extends Error {
  * up in thrown error messages so an operator reading logs sees
  * which ingress surfaced the mismatch.
  */
-export function checkStackItemSchemaCompat(
-  stackItem: StackItemContractShape,
+export function checkRenderSchemaCompat(
+  render: RenderContractShape,
   tools: Iterable<ToolSchemaRef>,
   mode: SchemaCompatMode,
   context: string,
@@ -205,7 +205,7 @@ export function checkStackItemSchemaCompat(
   // agent's responsibility. Same-server tools still get the full
   // server-driven subset check below.
   const contractDeclaredTools = new Set<string>(
-    Object.keys(stackItem.agentCapabilities?.tools ?? {}),
+    Object.keys(render.agentCapabilities?.tools ?? {}),
   );
 
   const findings: SchemaCompatFinding[] = [];
@@ -216,7 +216,7 @@ export function checkStackItemSchemaCompat(
   // nothing, the tool demands something, so the compat relation is
   // "empty-object ⊆ tool-input" — which fails whenever the tool has
   // required fields.
-  const actionSpec = stackItem.actionSpec ?? {};
+  const actionSpec = render.actionSpec ?? {};
   for (const [actionName, entry] of Object.entries(actionSpec)) {
     if (!entry || typeof entry !== 'object') continue;
     const toolName = entry.nextStep;
@@ -262,7 +262,7 @@ export function checkStackItemSchemaCompat(
 
   // streamSpec — each channel.tool's outputSchema must be a superset
   // of channel.schema (inverted direction from actions).
-  const streamSpec = stackItem.streamSpec ?? {};
+  const streamSpec = render.streamSpec ?? {};
   for (const [channelName, entry] of Object.entries(streamSpec)) {
     if (!entry || typeof entry !== 'object') continue;
     const toolName = entry.tool;
