@@ -17,12 +17,7 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: [
     '@ggui-ai/design',
-    '@ggui-ai/iframe-runtime',
-    '@ggui-ai/preview-a2ui',
-    '@ggui-ai/protocol',
     '@ggui-ai/react',
-    '@ggui-ai/shared',
-    '@ggui-ai/wire',
   ],
 };
 

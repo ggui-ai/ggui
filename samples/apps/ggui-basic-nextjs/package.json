@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
-    "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/react": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "next": "^16.1.0",
