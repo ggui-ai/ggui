@@ -1,34 +1,26 @@
 {
   "name": "@ggui-samples/agent-google-adk",
   "version": "0.0.1",
-  "description": "Reference sample: a Google ADK (TypeScript) app that hosts the ggui MCP server, with a React chat UI built on @ggui-ai/react's <AppRenderer> + @ggui-ai/dev-stack's sandbox-proxy. Boots an HTTP server (default port 6792) + sandbox-proxy server (default port 7792) and serves the chat shell + an SSE-streamed /chat endpoint. Real LLM via GEMINI_API_KEY. Not published.",
+  "description": "Brand-agnostic Google ADK (TypeScript) backend. Boots an HTTP API (default port 6792) + sandbox-proxy server (default port 7792). Pure backend — no bundled frontend; pair with @ggui-samples/app-ggui-basic-nextjs (or any MCP-Apps-spec frontend) via NEXT_PUBLIC_AGENT_ENDPOINT_URL. Real LLM via GEMINI_API_KEY. Not published.",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "vite build && tsx src/index.ts",
-    "dev": "vite build && tsx watch src/index.ts",
-    "build:ui": "vite build",
-    "build": "vite build && tsc -b",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
     "@google/adk": "^1.1.0",
     "@ggui-ai/dev-stack": "workspace:*",
-    "@ggui-ai/react": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "dotenv": "^16.4.5",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.0.0",
-    "vite": "^6.4.2"
+    "typescript": "^5.0.0"
   }
 }
