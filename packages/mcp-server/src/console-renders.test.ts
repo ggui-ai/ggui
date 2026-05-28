@@ -1,14 +1,14 @@
 /**
- * Wire tests for `GET /ggui/console/sessions` — the active-session
- * catalog the console SPA's `/sessions` page consumes.
+ * Wire tests for `GET /ggui/console/renders` — the active-render
+ * catalog the console SPA's `/admin/renders` page consumes.
  *
  * Covers the shape locked in
  * `docs/plans/2026-04-22-console-page-construction.md` §3.3:
  *
  *   - zero-config empty shape when no renderStore is wired (pure
  *     MCP boot without sessionChannel / mcpApps)
- *   - populated shape reads sessionId / appId / stackSize /
- *     lastActivityAt / createdAt from each `Session`
+ *   - populated shape reads renderId / appId / lastActivityAt /
+ *     createdAt from each `Render`
  *   - shortCode enrichment via `shortCodeIndex.findByRenderId(id)`,
  *     optional on the wire (absent-key semantics, not `null`)
  *   - limit query param clamps to [1, 100], defaults to 25
@@ -60,12 +60,11 @@ async function boot(
   return { server, httpServer, url: `http://127.0.0.1:${addr.port}` };
 }
 
-interface SessionsResponse {
-  readonly sessions: ReadonlyArray<{
-    readonly sessionId: string;
+interface RendersResponse {
+  readonly renders: ReadonlyArray<{
+    readonly renderId: string;
     readonly shortCode?: string;
     readonly appId: string;
-    readonly stackSize: number;
     readonly lastActivityAt: number;
     readonly createdAt: number;
     readonly status: 'active';
@@ -73,7 +72,7 @@ interface SessionsResponse {
   readonly total: number;
 }
 
-describe('GET /ggui/console/sessions', () => {
+describe('GET /ggui/console/renders', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -85,27 +84,26 @@ describe('GET /ggui/console/sessions', () => {
 
   it('returns an empty shape when no renderStore is wired', async () => {
     fx = await boot({ console: {} });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
-    const body = (await res.json()) as SessionsResponse;
-    expect(body).toEqual({ sessions: [], total: 0 });
+    const body = (await res.json()) as RendersResponse;
+    expect(body).toEqual({ renders: [], total: 0 });
   });
 
-  it('surfaces sessionId + appId + stackSize from an active session', async () => {
+  it('surfaces renderId + appId from an active render', async () => {
     const renderStore: RenderStore = new InMemoryRenderStore();
     const created = await renderStore.create({ appId: 'app-alpha' });
     fx = await boot({ console: {}, renderStore });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as SessionsResponse;
-    expect(body.sessions).toHaveLength(1);
+    const body = (await res.json()) as RendersResponse;
+    expect(body.renders).toHaveLength(1);
     expect(body.total).toBe(1);
-    const row = body.sessions[0];
+    const row = body.renders[0];
     if (!row) throw new Error('expected row');
-    expect(row.sessionId).toBe(created.id);
+    expect(row.renderId).toBe(created.id);
     expect(row.appId).toBe('app-alpha');
-    expect(row.stackSize).toBe(0);
     expect(row.status).toBe('active');
     expect(typeof row.lastActivityAt).toBe('number');
     expect(typeof row.createdAt).toBe('number');
@@ -123,10 +121,10 @@ describe('GET /ggui/console/sessions', () => {
       appId: 'app-alpha',
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as SessionsResponse;
-    expect(body.sessions).toHaveLength(1);
-    expect(body.sessions[0]?.shortCode).toBe('share12345');
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const body = (await res.json()) as RendersResponse;
+    expect(body.renders).toHaveLength(1);
+    expect(body.renders[0]?.shortCode).toBe('share12345');
   });
 
   it('orders rows by lastActivityAt descending (most-recent first)', async () => {
@@ -138,9 +136,9 @@ describe('GET /ggui/console/sessions', () => {
     await renderStore.update(s2.id, { lastActivityAt: Date.now() + 10_000 });
     await renderStore.update(s3.id, { lastActivityAt: Date.now() + 5_000 });
     fx = await boot({ console: {}, renderStore });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as SessionsResponse;
-    expect(body.sessions.map((r) => r.sessionId)).toEqual([
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const body = (await res.json()) as RendersResponse;
+    expect(body.renders.map((r) => r.renderId)).toEqual([
       s2.id,
       s3.id,
       s1.id,
@@ -149,37 +147,37 @@ describe('GET /ggui/console/sessions', () => {
 
   it('honors ?limit= and clamps to [1, 100]', async () => {
     const renderStore: RenderStore = new InMemoryRenderStore();
-    // Seed 3 sessions so we can verify a limit of 2 returns 2 rows.
+    // Seed 3 renders so we can verify a limit of 2 returns 2 rows.
     await renderStore.create({ appId: 'a' });
     await renderStore.create({ appId: 'a' });
     await renderStore.create({ appId: 'a' });
     fx = await boot({ console: {}, renderStore });
 
-    const res2 = await fetch(`${fx.url}/ggui/console/sessions?limit=2`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body2 = (await res2.json()) as SessionsResponse;
-    expect(body2.sessions).toHaveLength(2);
+    const res2 = await fetch(`${fx.url}/ggui/console/renders?limit=2`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const body2 = (await res2.json()) as RendersResponse;
+    expect(body2.renders).toHaveLength(2);
     expect(body2.total).toBe(2);
 
     // Nonsense input → default (25). 3 rows is well under, so all
     // three come back.
-    const resBogus = await fetch(`${fx.url}/ggui/console/sessions?limit=abc`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const bodyBogus = (await resBogus.json()) as SessionsResponse;
-    expect(bodyBogus.sessions).toHaveLength(3);
+    const resBogus = await fetch(`${fx.url}/ggui/console/renders?limit=abc`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const bodyBogus = (await resBogus.json()) as RendersResponse;
+    expect(bodyBogus.renders).toHaveLength(3);
 
     // Zero / negative → default (clamped up to positive).
-    const resZero = await fetch(`${fx.url}/ggui/console/sessions?limit=0`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const bodyZero = (await resZero.json()) as SessionsResponse;
-    expect(bodyZero.sessions).toHaveLength(3);
+    const resZero = await fetch(`${fx.url}/ggui/console/renders?limit=0`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const bodyZero = (await resZero.json()) as RendersResponse;
+    expect(bodyZero.renders).toHaveLength(3);
 
     // Oversized → capped at 100. Hard to prove directly without
-    // creating 101 sessions; we assert the handler accepts the
+    // creating 101 renders; we assert the handler accepts the
     // request and returns a valid response shape.
-    const resBig = await fetch(`${fx.url}/ggui/console/sessions?limit=9999`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const resBig = await fetch(`${fx.url}/ggui/console/renders?limit=9999`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(resBig.status).toBe(200);
   });
 
   it('shortCode absence for a specific row does NOT break the request', async () => {
-    // A mixed case: one session has a shortCode, the other doesn't.
+    // A mixed case: one render has a shortCode, the other doesn't.
     // Row-wise enrichment; absent shortCode → absent key on the wire.
     const renderStore: RenderStore = new InMemoryRenderStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
@@ -190,11 +188,11 @@ describe('GET /ggui/console/sessions', () => {
       appId: 'a',
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as SessionsResponse;
-    const rowWith = body.sessions.find((r) => r.sessionId === withCode.id);
-    const rowWithout = body.sessions.find(
-      (r) => r.sessionId === withoutCode.id,
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const body = (await res.json()) as RendersResponse;
+    const rowWith = body.renders.find((r) => r.renderId === withCode.id);
+    const rowWithout = body.renders.find(
+      (r) => r.renderId === withoutCode.id,
     );
     expect(rowWith?.shortCode).toBe('share0000');
     expect(Object.keys(rowWithout ?? {})).not.toContain('shortCode');
@@ -228,18 +226,18 @@ describe('GET /ggui/console/sessions', () => {
       renderStore,
       shortCodeIndex: flakyIndex,
     });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as SessionsResponse;
-    expect(body.sessions).toHaveLength(1);
-    expect(body.sessions[0]?.shortCode).toBeUndefined();
+    const body = (await res.json()) as RendersResponse;
+    expect(body.renders).toHaveLength(1);
+    expect(body.renders[0]?.shortCode).toBeUndefined();
   });
 
   it('404s when console is not enabled', async () => {
     const renderStore: RenderStore = new InMemoryRenderStore();
     await renderStore.create({ appId: 'a' });
     fx = await boot({ renderStore });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(404);
   });
 
@@ -252,7 +250,7 @@ describe('GET /ggui/console/sessions', () => {
         return null;
       },
       async list() {
-        throw new Error('session store backend unavailable');
+        throw new Error('render store backend unavailable');
       },
       async update() {
         throw new Error('not used');
@@ -274,10 +272,10 @@ describe('GET /ggui/console/sessions', () => {
       },
     };
     fx = await boot({ console: {}, renderStore: flakyStore });
-    const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
+    const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string; message: string };
-    expect(body.error).toBe('sessions_unavailable');
-    expect(body.message).toContain('session store backend unavailable');
+    expect(body.error).toBe('renders_unavailable');
+    expect(body.message).toContain('render store backend unavailable');
   });
 });

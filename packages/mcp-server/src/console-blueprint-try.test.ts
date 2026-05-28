@@ -254,13 +254,13 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(item.streamSpec).toEqual(CONTRACT_STREAM);
     expect(item.propsSpec).toEqual(CONTRACT_PROPS);
 
-    // ShortCode binding resolves to this render row. The binding's
-    // `sessionId` field name is unchanged from the pre-Phase-B shape
-    // (the ShortCodeIndex schema is intentionally narrow + stable);
-    // the value it now carries IS a renderId post Phase B.
+    // ShortCode binding resolves to this render row. Post Phase-B
+    // the binding is the (renderId, appId) pair — the previous
+    // `sessionId` slot was renamed to `renderId` along with the
+    // identity collapse.
     const binding = await fx.shortCodeIndex.lookup(body.shortCode);
     expect(binding).not.toBeNull();
-    expect(binding!.sessionId).toBe(body.renderId);
+    expect(binding!.renderId).toBe(body.renderId);
     expect(binding!.appId).toBe('builder');
   });
 
@@ -383,7 +383,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
 
   it('503s when uiRegistry is wired but sessionChannel + shortCodeIndex are absent', async () => {
     // Partial wiring — the route mounts (uiRegistry present) but the
-    // try path has nowhere to land sessions/shortCodes. Should
+    // try path has nowhere to land renders/shortCodes. Should
     // short-circuit with a specific error code so the operator knows
     // which gate to flip.
     const server = createGguiServer({

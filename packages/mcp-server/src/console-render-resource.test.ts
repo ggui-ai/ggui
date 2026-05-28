@@ -1,21 +1,22 @@
 /**
- * Tests for the console session-resource pair (Reading B per
+ * Tests for the console render-resource pair (Reading B per
  * `docs/principles/renderer-as-portable-runtime.md` §6.2):
  *
- *   - `GET /ggui/console/session-resource?session=<id>` — returns the
+ *   - `GET /ggui/console/render-resource?render=<id>` — returns the
  *     production thin-shell HTML wrapped as a ResourceContents blob.
  *     NO inlined bootstrap — console fetches that separately.
- *   - `GET /ggui/console/session-bootstrap?session=<id>` — returns
- *     `{bootstrap: McpAppAiGguiMeta}` JSON. Console feeds this to
- *     `<McpAppIframe bootstrap={...}>` which forwards via Reading B.
+ *   - `GET /ggui/console/renders/:renderId/meta` — returns the
+ *     `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` slice envelope
+ *     JSON. The console replies with this to the iframe's
+ *     `ui/initialize` postMessage (Path-B inline-meta delivery).
  *
- * Both routes share the cookie-auth + session-scope gate. The
- * bootstrap route additionally requires `mcpApps: true` (503 when
+ * Both routes share the cookie-auth + render-scope gate. The meta
+ * route additionally requires `mcpApps: true` (503 when
  * mintBootstrap is absent).
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser). The
  * viewer-side mount proof lives in
- * `packages/console/src/routes/SessionViewer.test.tsx`.
+ * `packages/console/src/routes/RenderViewer.test.tsx`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
@@ -51,11 +52,11 @@ interface Fixture {
  */
 async function bootAndMintCookie(): Promise<Fixture> {
   const renderStore = new InMemoryRenderStore();
-  const session = await renderStore.create({ appId: 'app-console' });
+  const render = await renderStore.create({ appId: 'app-console' });
   const shortCodeIndex = new InMemoryShortCodeIndex();
   await shortCodeIndex.put('scode1234', {
-    sessionId: session.id,
-    appId: session.appId,
+    renderId: render.id,
+    appId: render.appId,
   });
 
   const server = createGguiServer({
@@ -74,7 +75,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     throw new Error('server.address() did not return AddressInfo');
   }
   const url = `http://127.0.0.1:${addr.port}`;
-  const mintRes = await fetch(`${url}/ggui/console/session-cookie`, {
+  const mintRes = await fetch(`${url}/ggui/console/render-cookie`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ shortCode: 'scode1234' }),
@@ -88,13 +89,13 @@ async function bootAndMintCookie(): Promise<Fixture> {
     server,
     httpServer,
     url,
-    renderId: session.id,
-    appId: session.appId,
+    renderId: render.id,
+    appId: render.appId,
     cookiePair,
   };
 }
 
-describe('GET /ggui/console/session-resource', () => {
+describe('GET /ggui/console/render-resource', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -104,9 +105,9 @@ describe('GET /ggui/console/session-resource', () => {
     }
   });
 
-  it('returns 400 when `session` query is missing', async () => {
+  it('returns 400 when `render` query is missing', async () => {
     fx = await bootAndMintCookie();
-    const res = await fetch(`${fx.url}/ggui/console/session-resource`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-resource`, {
       headers: { cookie: fx.cookiePair },
     });
     expect(res.status).toBe(400);
@@ -117,7 +118,7 @@ describe('GET /ggui/console/session-resource', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
@@ -127,7 +128,7 @@ describe('GET /ggui/console/session-resource', () => {
   it('returns 401 when the console cookie is invalid', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
       {
         headers: { cookie: 'ggui_console_session=bogus-token' },
       },
@@ -137,23 +138,23 @@ describe('GET /ggui/console/session-resource', () => {
     expect(body.error).toBe('invalid_cookie');
   });
 
-  it('returns 403 when the cookie is scoped to a different session', async () => {
+  it('returns 403 when the cookie is scoped to a different render', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=some-other-session`,
+      `${fx.url}/ggui/console/render-resource?render=some-other-render`,
       {
         headers: { cookie: fx.cookiePair },
       },
     );
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('cookie_session_mismatch');
+    expect(body.error).toBe('cookie_render_mismatch');
   });
 
   it('returns 200 with the PRODUCTION thin-shell ResourceContents on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/session-resource?session=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -182,7 +183,7 @@ describe('GET /ggui/console/session-resource', () => {
   });
 });
 
-describe('GET /ggui/console/sessions/:renderId/meta', () => {
+describe('GET /ggui/console/renders/:renderId/meta', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -195,28 +196,28 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/sessions/${fx.renderId}/meta`,
+      `${fx.url}/ggui/console/renders/${fx.renderId}/meta`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 403 when the cookie is scoped to a different session', async () => {
+  it('returns 403 when the cookie is scoped to a different render', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/sessions/some-other-session/meta`,
+      `${fx.url}/ggui/console/renders/some-other-render/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
     );
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('cookie_session_mismatch');
+    expect(body.error).toBe('cookie_render_mismatch');
   });
 
   it('returns 200 with a well-shaped slice envelope on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/sessions/${fx.renderId}/meta`,
+      `${fx.url}/ggui/console/renders/${fx.renderId}/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -261,11 +262,11 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
     // the meta route must honestly 503 instead of minting a token the
     // subscribe path would reject at handshake.
     const renderStore = new InMemoryRenderStore();
-    const session = await renderStore.create({ appId: 'app-console' });
+    const render = await renderStore.create({ appId: 'app-console' });
     const shortCodeIndex = new InMemoryShortCodeIndex();
     await shortCodeIndex.put('scode1234', {
-      sessionId: session.id,
-      appId: session.appId,
+      renderId: render.id,
+      appId: render.appId,
     });
     const server = createGguiServer({
       logger: silentLogger,
@@ -284,7 +285,7 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
         throw new Error('server.address() did not return AddressInfo');
       }
       const url = `http://127.0.0.1:${addr.port}`;
-      const mintRes = await fetch(`${url}/ggui/console/session-cookie`, {
+      const mintRes = await fetch(`${url}/ggui/console/render-cookie`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ shortCode: 'scode1234' }),
@@ -293,7 +294,7 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
         ';',
       )[0];
       const res = await fetch(
-        `${url}/ggui/console/sessions/${session.id}/meta`,
+        `${url}/ggui/console/renders/${render.id}/meta`,
         {
           headers: { cookie: cookiePair },
         },
@@ -307,74 +308,9 @@ describe('GET /ggui/console/sessions/:renderId/meta', () => {
   });
 });
 
-describe('GET /ggui/console/session-stack', () => {
-  // Slice J observation surface — console-only stack snapshot.
-  // Console's `<SessionViewer>` reads this once on mount to
-  // render `<SessionInspector>` per stack entry. The iframe owns
-  // the live WS subscription (single-use bootstrap token), so the
-  // outer DOM has no live signal — this endpoint is the snapshot
-  // source.
-  let fx: Fixture | null = null;
-
-  afterEach(async () => {
-    if (fx) {
-      await fx.server.close();
-      fx = null;
-    }
-  });
-
-  it('returns 400 when `session` query is missing', async () => {
-    fx = await bootAndMintCookie();
-    const res = await fetch(`${fx.url}/ggui/console/session-stack`, {
-      headers: { cookie: fx.cookiePair },
-    });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('invalid_request');
-  });
-
-  it('returns 401 when the console cookie is missing', async () => {
-    fx = await bootAndMintCookie();
-    const res = await fetch(
-      `${fx.url}/ggui/console/session-stack?session=${fx.renderId}`,
-    );
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 403 when the cookie is scoped to a different session', async () => {
-    fx = await bootAndMintCookie();
-    const res = await fetch(
-      `${fx.url}/ggui/console/session-stack?session=some-other-session`,
-      {
-        headers: { cookie: fx.cookiePair },
-      },
-    );
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('cookie_session_mismatch');
-  });
-
-  it('returns 200 with the stack snapshot on the happy path', async () => {
-    fx = await bootAndMintCookie();
-    const res = await fetch(
-      `${fx.url}/ggui/console/session-stack?session=${fx.renderId}`,
-      {
-        headers: { cookie: fx.cookiePair },
-      },
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      stack: unknown[];
-      currentStackIndex: number;
-      eventSequence: number;
-    };
-    // Freshly created session — empty stack, index = -1, sequence
-    // = 0. We don't pin the exact index/sequence semantics here
-    // (that's session-store's contract); just assert the wire
-    // shape is honest.
-    expect(Array.isArray(body.stack)).toBe(true);
-    expect(typeof body.currentStackIndex).toBe('number');
-    expect(typeof body.eventSequence).toBe('number');
-  });
-
-});
+// `GET /ggui/console/session-stack` was retired in the Phase-B
+// render-identity collapse — no session-stack array exists post
+// Phase-B, just one Render row. The console's `<RenderViewer>`
+// fan-out is now (render-resource, renders/:id/meta) only; what was
+// formerly stack-snapshot data is reachable as a single `render`
+// row via `GET /ggui/console/render?render=<id>`.

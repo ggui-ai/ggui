@@ -311,7 +311,7 @@ describe('createGguiServer — console opt-in', () => {
 });
 
 /*
- * Slice 2 C4 — session-cookie flow + scope isolation.
+ * Slice 2 C4 — render-cookie flow + scope isolation.
  *
  * Covers:
  *   - construction errors when preconditions missing
@@ -320,7 +320,7 @@ describe('createGguiServer — console opt-in', () => {
  *   - 400 on missing/bad body
  *   - cookie does NOT authenticate /mcp (scope invariant)
  *   - cookie DOES authenticate the live-channel WS upgrade, scoped
- *     to the bound session (subscribe sessionId mismatch rejected)
+ *     to the bound render (subscribe renderId mismatch rejected)
  */
 describe('createGguiServer — console.sessionCookie', () => {
   let fx: Fixture | null = null;
@@ -356,7 +356,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     ).toThrow(/shortCodeIndex/);
   });
 
-  it('POST /session-cookie returns 404 for unknown short-code', async () => {
+  it('POST /render-cookie returns 404 for unknown short-code', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
@@ -365,7 +365,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'nope' }),
@@ -374,7 +374,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 
-  it('POST /session-cookie returns 400 on missing shortCode', async () => {
+  it('POST /render-cookie returns 400 on missing shortCode', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
@@ -383,7 +383,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -391,12 +391,12 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /session-cookie mints a cookie for a known short-code', async () => {
+  it('POST /render-cookie mints a cookie for a known short-code', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       sessionChannel: true,
@@ -404,7 +404,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -415,11 +415,11 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(setCookie).toMatch(/HttpOnly/);
     expect(setCookie).toMatch(/SameSite=Strict/);
     const body = (await res.json()) as {
-      sessionId: string;
+      renderId: string;
       appId: string;
       expiresAt: number;
     };
-    expect(body.sessionId).toBe('sess-1');
+    expect(body.renderId).toBe('sess-1');
     expect(body.appId).toBe('app-1');
     expect(typeof body.expiresAt).toBe('number');
     expect(body.expiresAt).toBeGreaterThan(Date.now());
@@ -430,7 +430,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -440,7 +440,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     // Mint the cookie.
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -475,7 +475,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -484,7 +484,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -503,7 +503,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -514,7 +514,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     });
     // Mint the cookie via HTTP so the token was really produced by
     // the server (don't shortcut the plumbing).
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -532,7 +532,7 @@ describe('createGguiServer — console.sessionCookie', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { sessionId: 'sess-1', appId: 'app-1' },
+            payload: { renderId: 'sess-1', appId: 'app-1' },
             requestId: 'r1',
           }),
         );
@@ -546,12 +546,12 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(ack).toMatchObject({ type: 'ack' });
   });
 
-  it('cookie-bound subscribe rejects mismatched sessionId', async () => {
+  it('cookie-bound subscribe rejects mismatched renderId', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -560,7 +560,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -712,7 +712,7 @@ describe('createGguiServer — console security headers', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -730,7 +730,7 @@ describe('createGguiServer — console security headers', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'nope' }),
@@ -744,14 +744,14 @@ describe('createGguiServer — console security headers', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
     fx = await boot({
       sessionChannel: true,
       shortCodeIndex: index,
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -836,7 +836,7 @@ describe('createGguiServer — console security headers', () => {
  * /s/<shortCode>" to "agent push appears on the browser":
  *
  *   1. shortCodeIndex.put (simulates the write ggui_render does).
- *   2. POST /ggui/console/session-cookie → 200 + Set-Cookie.
+ *   2. POST /ggui/console/render-cookie → 200 + Set-Cookie.
  *   3. WebSocket upgrade to /ws carrying the cookie.
  *   4. subscribe → ack (cookie-bound, no bearer in sight).
  *   5. server-side sendToSession → subscriber receives the data frame.
@@ -868,7 +868,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('xyz98765', { sessionId: 'sess-42', appId: 'app-42' });
+    await index.put('xyz98765', { renderId: 'sess-42', appId: 'app-42' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -880,7 +880,7 @@ describe('createGguiServer — console full ceremony integration', () => {
 
     // Step 1: mint the cookie via HTTP (no shortcut around the
     // endpoint — this is what the SPA calls).
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'xyz98765' }),
@@ -957,7 +957,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     ws.close();
   });
 
-  it('full ceremony — cookie-scoped subscribe rejects hostile sessionId even after ack attempt', async () => {
+  it('full ceremony — cookie-scoped subscribe rejects hostile renderId even after ack attempt', async () => {
     // Belt-and-braces: the ceremony WITHOUT a cookie-session match
     // must not leak frames into the wrong session. Pins that cookie
     // binding is enforced at subscribe time, not just advisory.
@@ -965,7 +965,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('xyz98765', { sessionId: 'sess-42', appId: 'app-42' });
+    await index.put('xyz98765', { renderId: 'sess-42', appId: 'app-42' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -974,7 +974,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'z'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'xyz98765' }),
@@ -994,7 +994,7 @@ describe('createGguiServer — console full ceremony integration', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { sessionId: 'other-session', appId: 'app-42' },
+            payload: { renderId: 'other-session', appId: 'app-42' },
             requestId: 'r1',
           }),
         );
