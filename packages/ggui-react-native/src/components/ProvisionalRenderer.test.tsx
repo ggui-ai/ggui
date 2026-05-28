@@ -9,7 +9,7 @@ import React from 'react';
 import { create, act, type ReactTestRenderer } from 'react-test-renderer';
 import { PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { ProvisionalRenderer } from './ProvisionalRenderer';
+import { ProvisionalRenderer, type ProvisionalRendererProps } from './ProvisionalRenderer';
 import {
   __resetPreviewBridgeForTests,
   emitPreviewBridge,
@@ -101,7 +101,7 @@ describe('ProvisionalRenderer (RN) — root buffering', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(ProvisionalRenderer, {
+        React.createElement<ProvisionalRendererProps>(ProvisionalRenderer, {
           fallback: React.createElement(
             'View',
             { testID: 'custom-fallback' },
@@ -466,7 +466,7 @@ describe('ProvisionalRenderer (RN) — accessibility + suspension', () => {
 
     await act(async () => {
       tree!.update(
-        React.createElement(ProvisionalRenderer, { suspended: true }),
+        React.createElement<ProvisionalRendererProps>(ProvisionalRenderer, { suspended: true }),
       );
     });
     expect(findTextNodes(tree!)).not.toContain('hidden');

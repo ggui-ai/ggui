@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import React from 'react';
 import { create, act, type ReactTestRenderer } from 'react-test-renderer';
-import { SelfRepairBoundary } from './SelfRepairBoundary';
+import { SelfRepairBoundary, type SelfRepairBoundaryProps } from './SelfRepairBoundary';
 import type { SelfRepairConfig, ComponentRepairResult } from '@ggui-ai/shared';
 
 // Component that throws on render
@@ -28,11 +28,16 @@ describe('SelfRepairBoundary', () => {
     showRepairUI: true,
   };
 
+  // `children` is required by `SelfRepairBoundaryProps`; the
+  // `React.createElement` third-arg overload doesn't relax the prop
+  // check at the call site, so we satisfy it with `null` here and let
+  // the actual child node (passed as the third arg) win at runtime.
   const defaultProps = {
     appId: 'app_456',
     renderId: 'render_789',
     config: defaultConfig,
     onReportError: vi.fn(async () => {}),
+    children: null as React.ReactNode,
   };
 
   it('renders children normally when no error occurs', () => {
@@ -52,7 +57,9 @@ describe('SelfRepairBoundary', () => {
   });
 
   it('catches errors and triggers repair', () => {
-    const onReportError = vi.fn(async () => {});
+    const onReportError = vi.fn<SelfRepairBoundaryProps['onReportError']>(
+      async () => {},
+    );
 
     act(() => {
       create(
@@ -66,7 +73,9 @@ describe('SelfRepairBoundary', () => {
 
     // Should have reported the error
     expect(onReportError).toHaveBeenCalled();
-    const report = onReportError.mock.calls[0][0];
+    const firstCall = onReportError.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const report = firstCall![0];
     expect(report.error.message).toBe('Test render error');
     expect(report.renderId).toBe('render_789');
   });
@@ -131,6 +140,7 @@ describe('SelfRepairBoundary', () => {
     const boundaryInstance = renderer!.root.findByType(SelfRepairBoundary).instance as SelfRepairBoundary;
     const repairResult: ComponentRepairResult = {
       errorId: 'err_123',
+      renderId: 'render_789',
       success: true,
       repairedCode: 'fixed code',
     };
@@ -167,6 +177,7 @@ describe('SelfRepairBoundary', () => {
     const boundaryInstance = renderer!.root.findByType(SelfRepairBoundary).instance as SelfRepairBoundary;
     const failedResult: ComponentRepairResult = {
       errorId: 'err_123',
+      renderId: 'render_789',
       success: false,
       failureReason: 'Could not fix',
     };
@@ -181,7 +192,9 @@ describe('SelfRepairBoundary', () => {
   });
 
   it('includes device context in error report', () => {
-    const onReportError = vi.fn(async () => {});
+    const onReportError = vi.fn<SelfRepairBoundaryProps['onReportError']>(
+      async () => {},
+    );
 
     act(() => {
       create(
@@ -193,7 +206,9 @@ describe('SelfRepairBoundary', () => {
       );
     });
 
-    const report = onReportError.mock.calls[0][0];
+    const firstCall = onReportError.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    const report = firstCall![0];
     // Should include platform info from our mocked Platform/Dimensions
     expect(report.context.userAgent).toContain('ios');
     expect(report.context.userAgent).toContain('390x844');

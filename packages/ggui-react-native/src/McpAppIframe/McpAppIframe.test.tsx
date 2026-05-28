@@ -26,7 +26,16 @@ import {
   act,
   type ReactTestRenderer,
 } from 'react-test-renderer';
-import type { ResourceContents } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  ResourceContents,
+  TextResourceContents,
+  BlobResourceContents,
+} from '@modelcontextprotocol/sdk/types.js';
+
+// Test fixtures can carry `text` (TextResourceContents) or `blob`
+// (BlobResourceContents) variants. `McpAppIframeProps.resource` is the
+// base `ResourceContents`, structurally satisfied by both.
+type TestResource = ResourceContents | TextResourceContents | BlobResourceContents;
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
@@ -50,7 +59,7 @@ const SAMPLE_META: McpAppAiGguiRenderMeta = {
 // Fixtures
 // -----------------------------------------------------------------------------
 
-function makeResource(overrides?: Partial<ResourceContents>): ResourceContents {
+function makeResource(overrides?: Partial<TestResource>): TestResource {
   return {
     uri: 'ui://test/app',
     mimeType: 'text/html;profile=mcp-app',

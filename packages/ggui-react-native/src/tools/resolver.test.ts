@@ -36,8 +36,8 @@ describe('topologicalSort', () => {
 
   it('detects circular dependencies', () => {
     const bindings: DataBindings = {
-      a: { tool: 'fetch', config: {}, dependsOn: ['b'] },
-      b: { tool: 'fetch', config: {}, dependsOn: ['a'] },
+      a: { tool: 'fetch', config: { endpoint: '/a' }, dependsOn: ['b'] },
+      b: { tool: 'fetch', config: { endpoint: '/b' }, dependsOn: ['a'] },
     };
 
     expect(() => topologicalSort(bindings)).toThrow('Circular dependency');
@@ -45,7 +45,7 @@ describe('topologicalSort', () => {
 
   it('throws for missing dependency', () => {
     const bindings: DataBindings = {
-      a: { tool: 'fetch', config: {}, dependsOn: ['nonexistent'] },
+      a: { tool: 'fetch', config: { endpoint: '/a' }, dependsOn: ['nonexistent'] },
     };
 
     expect(() => topologicalSort(bindings)).toThrow("doesn't exist");
@@ -53,9 +53,9 @@ describe('topologicalSort', () => {
 
   it('handles deep dependency chains', () => {
     const bindings: DataBindings = {
-      c: { tool: 'fetch', config: {}, dependsOn: ['b'] },
-      b: { tool: 'fetch', config: {}, dependsOn: ['a'] },
-      a: { tool: 'fetch', config: {} },
+      c: { tool: 'fetch', config: { endpoint: '/c' }, dependsOn: ['b'] },
+      b: { tool: 'fetch', config: { endpoint: '/b' }, dependsOn: ['a'] },
+      a: { tool: 'fetch', config: { endpoint: '/a' } },
     };
 
     const sorted = topologicalSort(bindings);
@@ -107,7 +107,7 @@ describe('getNestedValue', () => {
   });
 
   it('returns undefined for null intermediate values', () => {
-    expect(getNestedValue({ a: null } as unknown as Record<string, unknown>, 'a.b')).toBeUndefined();
+    expect(getNestedValue({ a: null }, 'a.b')).toBeUndefined();
   });
 });
 

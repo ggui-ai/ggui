@@ -109,11 +109,16 @@ const PROPS_SPEC: PropsSpec = {
 };
 
 function makeRender(id: string): ComponentRender {
+  const now = Date.now();
   return {
     id,
+    appId: 'app-test',
     type: 'component',
     componentCode: '/* stub */',
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    lastActivityAt: now,
+    expiresAt: now + 60_000,
+    eventSequence: 0,
     actionSpec: ACTION_SPEC,
     streamSpec: STREAM_SPEC,
     propsSpec: PROPS_SPEC,

@@ -630,7 +630,7 @@ describe('computeContractBundle', () => {
           schema: { type: 'object', properties: { by: { type: 'integer' } } },
         },
       },
-    };
+    } as const;
     const a = await computeContractBundle(specs);
     const b = await computeContractBundle(specs);
     expect(a?.contractHash).toBe(b?.contractHash);

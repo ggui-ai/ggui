@@ -89,13 +89,18 @@ describe('DynamicComponent', () => {
     it('renders WebViewRenderer when code is provided', async () => {
       let renderer: ReactTestRenderer;
       await act(async () => {
+        const inner = React.createElement(DynamicComponent, {
+          code: 'export default function() { return null; }',
+        });
         renderer = create(
           React.createElement(
             GguiProvider,
-            { appId: 'test-app', designSystemUrl: 'https://test.example/design' },
-            React.createElement(DynamicComponent, {
-              code: 'export default function() { return null; }',
-            })
+            {
+              appId: 'test-app',
+              designSystemUrl: 'https://test.example/design',
+              children: inner,
+            },
+            inner,
           )
         );
         vi.runAllTimers();
