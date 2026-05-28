@@ -10,6 +10,7 @@
  *   POST /chat                       { prompt } → SSE stream of NormalizedMessage events
  *   GET  /chat?chatId=X              server-authoritative chat snapshot
  *   POST /relay/tools-call           iframe-issued tools/call → ggui MCP relay
+ *   POST /relay/resources-read       browser-issued resources/read → ggui MCP relay
  *   GET  /api/renders/:id/state      wsToken-gated render state proxy → ggui MCP
  *   GET  /sandbox-proxy-url          AppRenderer's second-origin sandbox URL
  *
@@ -261,6 +262,55 @@ async function handleRequest(
       // The OSS MCP server may stream back as SSE or as raw JSON
       // depending on the Accept header negotiated. Normalize both
       // shapes to the JSON-RPC response object.
+      const jsonRpc = parseMcpResponse(text);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(jsonRpc));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `relay error: ${message}` }));
+    }
+    return;
+  }
+
+  // MCP Apps spec-canonical resource read relay. The browser-side
+  // <AppRenderer toolResourceUri={uri} onReadResource={...}> calls
+  // POST /relay/resources-read which proxies a JSON-RPC `resources/read`
+  // to the ggui MCP server.
+  //
+  // Why this exists: the spec-canonical render flow has the host fetch
+  // iframe HTML from `_meta.ui.resourceUri` via standard MCP
+  // `resources/read`. The ggui MCP server returns the full
+  // self-contained iframe HTML (with current propsJson baked in) on
+  // every read — every host (claude.ai, ChatGPT, our own) needs zero
+  // ggui-specific HTML-building code; only the standard MCP read.
+  //
+  // The iframe holds no MCP credential; this Node process is the
+  // protocol-defined relay party, same pattern as /relay/tools-call.
+  if (req.method === 'POST' && url.pathname === '/relay/resources-read') {
+    const body = await readBody(req);
+    try {
+      const parsed = JSON.parse(body) as { readonly uri?: unknown };
+      if (typeof parsed.uri !== 'string' || parsed.uri.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'uri required' }));
+        return;
+      }
+      const rpcId = Math.floor(Math.random() * 1e9);
+      const mcpReq = await fetch(opts.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: rpcId,
+          method: 'resources/read',
+          params: { uri: parsed.uri },
+        }),
+      });
+      const text = await mcpReq.text();
       const jsonRpc = parseMcpResponse(text);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(jsonRpc));
