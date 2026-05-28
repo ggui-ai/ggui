@@ -123,7 +123,8 @@ interface EventRow {
   seq: number;
   type: string;
   data: string;
-  timestamp: number;
+  /** ISO 8601 UTC timestamp stamped at append time. */
+  timestamp: string;
 }
 
 /** Per-render tail waiter — parked on `waitForNext()` until an append
@@ -389,19 +390,22 @@ export class SqliteRenderStore implements RenderStore {
         );
       }
       const seq = row.event_sequence + 1;
-      const timestamp = this.now();
+      const nowMs = this.now();
+      const timestampIso = new Date(nowMs).toISOString();
       this.stmts.insertEvent.run(
         input.renderId,
         seq,
         input.type,
         JSON.stringify(input.data ?? null),
-        timestamp,
+        timestampIso,
       );
-      this.stmts.bumpSequence.run(seq, timestamp, input.renderId);
+      // `last_activity_at` stays numeric ms-epoch — it tracks the
+      // render row's lifecycle clock, not the ledger's wire shape.
+      this.stmts.bumpSequence.run(seq, nowMs, input.renderId);
       const event: RenderEvent = {
         seq,
         type: input.type,
-        timestamp,
+        timestamp: timestampIso,
         data: input.data,
       };
       return { seq, event };
@@ -558,7 +562,11 @@ CREATE TABLE IF NOT EXISTS render_events (
   seq INTEGER NOT NULL,
   type TEXT NOT NULL,
   data TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
+  -- ISO 8601 UTC string (Wave 7 flatten-render-identity, 2026-05-28).
+  -- Previously stored as INTEGER ms-epoch; column type widened to TEXT
+  -- so existing sqlite files keep parsing — the column still accepts
+  -- numerics in legacy rows. New writes are ISO strings.
+  timestamp TEXT NOT NULL,
   PRIMARY KEY (render_id, seq),
   FOREIGN KEY (render_id) REFERENCES renders(id) ON DELETE CASCADE
 );
@@ -632,10 +640,17 @@ function rowToStored(row: RenderRow): StoredRender {
 }
 
 function rowToEvent(row: EventRow): RenderEvent {
+  // Legacy rows (pre-Wave-7) stored a numeric ms-epoch. Coerce on
+  // read so downstream consumers always see the ISO string the
+  // protocol promises.
+  const timestamp =
+    typeof row.timestamp === 'number'
+      ? new Date(row.timestamp).toISOString()
+      : row.timestamp;
   return {
     seq: row.seq,
-    type: row.type as RenderEvent['type'],
-    timestamp: row.timestamp,
+    type: row.type,
+    timestamp,
     data: parseJson<unknown>(row.data, null),
   };
 }

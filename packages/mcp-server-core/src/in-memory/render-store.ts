@@ -219,17 +219,18 @@ export class InMemoryRenderStore implements RenderStore {
       );
     }
     const seq = bucket.stored.eventSequence + 1;
+    const nowMs = this.now();
     const event: RenderEvent = {
       seq,
       type: input.type,
-      timestamp: this.now(),
+      timestamp: new Date(nowMs).toISOString(),
       data: input.data,
     };
     bucket.events.push(event);
     bucket.stored = {
       ...bucket.stored,
       eventSequence: seq,
-      lastActivityAt: event.timestamp,
+      lastActivityAt: nowMs,
     };
     // Fan out to all waiters in FIFO order.
     for (const waiter of bucket.waiters.splice(0)) waiter(event);
