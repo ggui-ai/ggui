@@ -153,17 +153,17 @@ The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `
 import { McpAppIframe, type ProtocolError } from "@ggui-ai/react";
 import { useEffect, useState } from "react";
 
-function App({ sessionId }: { sessionId: string }) {
+function App({ renderId }: { renderId: string }) {
   const [resource, setResource] = useState<{ uri: string; mimeType: string; text: string } | null>(
     null
   );
 
   useEffect(() => {
-    // Fetch the session-resource envelope from your MCP host. On the
+    // Fetch the render-resource envelope from your MCP host. On the
     // OSS path the renderer route at /r/<shortCode> embeds the
     // bootstrap inline, so a resource with just `{ uri }` is enough.
-    fetchSessionResource(sessionId).then((r) => setResource(r.contents[0]));
-  }, [sessionId]);
+    fetchRenderResource(renderId).then((r) => setResource(r.contents[0]));
+  }, [renderId]);
 
   if (!resource) return <p>Loading…</p>;
 
