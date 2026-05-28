@@ -1,25 +1,29 @@
 /* eslint-disable no-console */
 /**
- * Minimal HTTP server: static chat shell + SSE-streamed agent loop.
+ * Brand-agnostic MCP-Apps-spec HTTP API for the Google ADK sample.
+ * Pure backend — no static file serving, no bundled frontend.
+ * The reference frontend lives at `oss/samples/apps/ggui-basic-nextjs/`
+ * and binds to this URL via `NEXT_PUBLIC_AGENT_ENDPOINT_URL`.
  *
- *   GET  /                serves public/index.html
- *   GET  /chat.js, /chat.css   static
- *   POST /chat            { prompt } → SSE stream of SDKMessage events
+ * Exposed routes:
+ *
+ *   POST /chat                       { prompt } → SSE stream of NormalizedMessage events
+ *   GET  /chat?chatId=X              server-authoritative chat snapshot
+ *   POST /relay/tools-call           iframe-issued tools/call → ggui MCP relay
+ *   GET  /api/renders/:id/state      wsToken-gated render state proxy → ggui MCP
+ *   GET  /sandbox-proxy-url          AppRenderer's second-origin sandbox URL
  *
  * Also boots a second-port sandbox-proxy server (via
  * `@ggui-ai/dev-stack`'s `startSandboxProxyServer`) so AppRenderer's
  * spec-mandated different-origin sandbox host is available without
- * extra setup. The chosen URL is injected into the host HTML as a
- * `window.GGUI_SANDBOX_PROXY_URL` global the React Chat reads.
+ * extra setup. The URL is surfaced via the `/sandbox-proxy-url`
+ * endpoint above so any frontend can fetch + thread it.
  *
  * No framework dependency — node:http only. Keeps the sample's
  * `node_modules/` tiny so the test harness boots fast.
  */
 import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
@@ -55,27 +59,6 @@ function getOrCreateChatSnapshot(chatId: string): ChatStateSnapshot {
   }
   return snap;
 }
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// Vite builds the React chat UI into `dist-ui/`. The Node server
-// reads from there as a flat static-files directory. Run
-// `pnpm run build:ui` (or `pnpm run dev` / `pnpm start` which chain
-// the build) before booting if `dist-ui/` is missing.
-const PUBLIC_DIR = join(__dirname, '..', 'dist-ui');
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-};
 
 export interface ServerOptions {
   readonly port: number;
@@ -132,6 +115,37 @@ async function handleRequest(
   opts: ServerContext,
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
+
+  // Wide-open CORS — the reference Next.js frontend runs on a different
+  // origin (port 6890 vs the agent backend's 6792), so every browser
+  // fetch is cross-origin. The agent backend is dev-only / sample-only;
+  // it never speaks to real users without an upstream auth layer that
+  // would override these headers anyway.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Accept, X-Chat-Id',
+  );
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  // GET /sandbox-proxy-url — surfaces the second-origin sandbox URL
+  // that `<AppRenderer sandbox.url>` needs per MCP Apps spec. The
+  // backend boots the sandbox-proxy on `agent_port + 1000` (see
+  // ServerOptions.sandboxProxyPort); frontends fetch this endpoint on
+  // mount and thread the URL down.
+  if (req.method === 'GET' && url.pathname === '/sandbox-proxy-url') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    });
+    res.end(JSON.stringify({ url: opts.sandboxProxy.url }));
+    return;
+  }
 
   // GET /chat?chatId=<id> — server-authoritative chat snapshot.
   //
@@ -385,42 +399,8 @@ async function handleRequest(
     return;
   }
 
-  if (req.method === 'GET') {
-    const filename = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-    if (filename.includes('..')) {
-      res.writeHead(403);
-      res.end();
-      return;
-    }
-    const ext = filename.match(/\.[^.]+$/)?.[0] ?? '';
-    const mime = MIME[ext] ?? 'application/octet-stream';
-    try {
-      const content = await readFile(join(PUBLIC_DIR, filename));
-      // Inject the sandbox-proxy URL as a window global into the host
-      // HTML so the React Chat can pass it to AppRenderer's
-      // sandbox.url prop. Only mutates `*.html` payloads; everything
-      // else (JS, CSS, fonts) ships verbatim.
-      if (ext === '.html') {
-        const html = content.toString('utf-8');
-        const injected = html.replace(
-          '</head>',
-          `<script>window.GGUI_SANDBOX_PROXY_URL = ${JSON.stringify(opts.sandboxProxy.url)};</script></head>`,
-        );
-        res.writeHead(200, { 'Content-Type': mime });
-        res.end(injected);
-      } else {
-        res.writeHead(200, { 'Content-Type': mime });
-        res.end(content);
-      }
-    } catch {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('not found');
-    }
-    return;
-  }
-
-  res.writeHead(405);
-  res.end();
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('not found');
 }
 
 /**
