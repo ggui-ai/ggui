@@ -18,7 +18,7 @@ use the `@ggui-ai/react/query` entry point.
 
 ## Quick start
 
-Mount a ggui session with `<GguiApp>` — it wraps the provider and
+Mount a ggui render with `<GguiApp>` — it wraps the provider and
 renders a prebuilt shell:
 
 ```tsx
@@ -43,27 +43,27 @@ import { GguiApp, ChatShell } from "@ggui-ai/react";
 For full control, compose the pieces yourself:
 
 ```tsx
-import { GguiProvider, GguiSession } from "@ggui-ai/react";
+import { GguiProvider, GguiRender } from "@ggui-ai/react";
 
 <GguiProvider appId="my-app">
-  <GguiSession>{/* render session state */}</GguiSession>
+  <GguiRender renderId="render-123">{/* render state */}</GguiRender>
 </GguiProvider>;
 ```
 
 The package also exports hooks (`useWebSocket`, `useInvoke`,
-`useGenerate`, `useStackNavigation`), a client-side data-binding tools
+`useGenerate`), a client-side data-binding tools
 system (`defineTool`, `useTool`, `useBindings`), and `<McpAppIframe>`
-for hosting any MCP Apps-conformant session in an iframe.
+for hosting any MCP Apps-conformant UI in an iframe.
 
 ## Entry points
 
-| Import path                   | Contents                                |
-| ----------------------------- | --------------------------------------- |
-| `@ggui-ai/react`              | Components, hooks, tools, shells        |
-| `@ggui-ai/react/query`        | TanStack Query integration              |
-| `@ggui-ai/react/testing`      | Test helpers and mock tools             |
-| `@ggui-ai/react/chat-helpers` | Message-grouping and stack-item helpers |
-| `@ggui-ai/react/chat-thread`  | Thread-backed chat (`useChatThread`)    |
+| Import path                   | Contents                             |
+| ----------------------------- | ------------------------------------ |
+| `@ggui-ai/react`              | Components, hooks, tools, shells     |
+| `@ggui-ai/react/query`        | TanStack Query integration           |
+| `@ggui-ai/react/testing`      | Test helpers and mock tools          |
+| `@ggui-ai/react/chat-helpers` | Message-grouping and render helpers  |
+| `@ggui-ai/react/chat-thread`  | Thread-backed chat (`useChatThread`) |
 
 ## License
 

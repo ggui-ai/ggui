@@ -19,7 +19,7 @@ The simplest way to start a server is the `ggui` CLI shipped by `@ggui-ai/cli`:
 npx @ggui-ai/cli serve
 ```
 
-`ggui serve` boots this package with the OSS defaults — in-memory session store
+`ggui serve` boots this package with the OSS defaults — in-memory render store
 (or SQLite when `better-sqlite3` is installed), no-auth dev posture, and every UI
 declared in `ggui.json` surfaced through the blueprint tools.
 

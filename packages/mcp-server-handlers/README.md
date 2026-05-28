@@ -2,8 +2,8 @@
 
 MCP tool handler logic for the **ggui protocol**.
 
-This package implements the actual behavior behind every ggui MCP tool — session
-lifecycle, the contract handshake, UI push, blueprint management, threads, app
+This package implements the actual behavior behind every ggui MCP tool — render
+lifecycle, the contract handshake, UI emission, blueprint management, threads, app
 discovery, and the operator (`ggui_ops_*`) tools. The handlers are written purely
 over the seam interfaces in
 [`@ggui-ai/mcp-server-core`](https://www.npmjs.com/package/@ggui-ai/mcp-server-core),

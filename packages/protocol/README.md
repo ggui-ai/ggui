@@ -17,7 +17,7 @@ Here is what happens when a user clicks "Add" on a generated todo UI:
 1. **LLM wrote the hook** — `const addTodo = useAction('addTodo');` bound to the button's `onClick`.
 2. **User clicks** — React fires `onClick`, which calls `addTodo(data)`.
 3. **Hook dispatches** — `useAction` (from `@ggui-ai/wire`) sends an `ActionEnvelope` on the live channel.
-4. **WS transport** — the server receives the envelope on the session's live-channel WebSocket.
+4. **WS transport** — the server receives the envelope on the render's live-channel WebSocket.
 5. **Router looks up the tool** — `wiredActionRouter` reads `actionSpec.addTodo.nextStep === 'todo.add'`.
 6. **MCP tool invoked** — the router calls `todo.add` with the validated payload.
 7. **Tool responds** — `todo.add` returns; the response travels back as a `StreamEnvelope` on the live channel.

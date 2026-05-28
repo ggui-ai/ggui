@@ -22,15 +22,15 @@ Peer dependencies (install the ones your app uses):
 
 ## Quick start
 
-Wrap your app in `<GguiProvider>` and mount a `<GguiSession>`:
+Wrap your app in `<GguiProvider>` and mount a `<GguiRender>`:
 
 ```tsx
-import { GguiProvider, GguiSession } from "@ggui-ai/react-native";
+import { GguiProvider, GguiRender } from "@ggui-ai/react-native";
 
 export function App() {
   return (
     <GguiProvider appId="my-app">
-      <GguiSession sessionId="session-123">{/* render session state */}</GguiSession>
+      <GguiRender renderId="render-123">{/* render state */}</GguiRender>
     </GguiProvider>
   );
 }
@@ -40,7 +40,7 @@ The package also exports a React Native theme system (`ThemeProvider`,
 `useTheme`, mirroring the web design tokens), hooks (`useWebSocket`,
 `useInvoke`, `useAppState`, `useAgentStream`), a client-side
 data-binding tools system, and `<McpAppIframe>` for hosting any
-MCP Apps-conformant session.
+MCP Apps-conformant UI.
 
 ## Entry points
 

@@ -4,7 +4,7 @@ The iframe-local runtime for [ggui](https://ggui.ai).
 
 A self-contained ESM bundle that boots inside an MCP Apps host iframe,
 runs the protocol-version handshake, opens the live-channel WebSocket,
-and renders the ggui session stack. It bundles React, ReactDOM, and the
+and mounts the rendered UI. It bundles React, ReactDOM, and the
 ggui design system inside the artifact so generated component code has a
 single seam to read from.
 
@@ -17,7 +17,7 @@ exists for host apps, the `<McpAppIframe>` wrapper, and tests.
 For host-side code that needs to validate or react to runtime state:
 
 - `parseBootstrap` (and `parseBootstrapFrom*` variants) —
-  parse and validate a session bootstrap before spawning the iframe.
+  parse and validate a render bootstrap before spawning the iframe.
 - `ProtocolError` and the `from*` constructors — the canonical typed
   union for every failure the renderer classifies outward.
 - `ObservabilityEvent` / `postObservabilityToParent` — the renderer →

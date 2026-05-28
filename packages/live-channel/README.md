@@ -6,7 +6,7 @@ A framework-agnostic library — no React, no iframe assumptions. It
 separates three concerns that are easy to tangle together in a client:
 
 - **Transport** — how frames physically reach the client (WebSocket vs
-  HTTP polling). Decided once at `bind()` time from what the session
+  HTTP polling). Decided once at `bind()` time from what the render
   bootstrap declares; a WebSocket failure can transparently fail over
   to polling at runtime.
 - **Channel** — a logical stream of typed payloads. Each channel knows
