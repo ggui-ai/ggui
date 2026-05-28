@@ -993,7 +993,7 @@ First-run bundle (all on by default):
                                   live-channel /ws upgrade.
   - POST /pair + POST /admin/pair/init — pairing endpoint for MCP
                                   hosts and third-party clients.
-  - Live-channel /ws            — live session plane for MCP Apps
+  - Live-channel /ws            — live render plane for MCP Apps
                                   iframes and the console.
 
 Embedding hosts that want a different shape (no landing page, no
@@ -1077,7 +1077,7 @@ Agent runtime:
 Persistent storage (default-on; opt-out via --ephemeral):
   By default \`ggui serve\` writes a small bundle under .ggui/persistent/
   (project-local if a ggui.json was resolved, else ~/.ggui/persistent/)
-  so cached MCP Apps tokens, signed render URLs, shortCodes, sessions,
+  so cached MCP Apps tokens, signed render URLs, shortCodes, renders,
   vectors, and paired bearers survive a restart — claude.ai chat-history
   revisits keep working.
 
@@ -1095,15 +1095,15 @@ Persistent storage (default-on; opt-out via --ephemeral):
   skip the bundle entirely (tests, CI loops, nuclear-revoke).
 
   Explicit ggui.json#storage declarations always win — declare
-  \`{ "sessions": { "driver": "memory" } }\` to opt sessions back to
+  \`{ "renders": { "driver": "memory" } }\` to opt renders back to
   in-memory while keeping other surfaces persistent. Custom sqlite
   paths via ggui.json#storage are honored verbatim:
 
     {
       "storage": {
-        "sessions": { "driver": "sqlite", "path": "./ggui-sessions.sqlite" },
-        "vectors":  { "driver": "sqlite", "path": "./ggui-vectors.sqlite" },
-        "threads":  { "driver": "sqlite", "path": "./ggui-threads.sqlite" }
+        "renders": { "driver": "sqlite", "path": "./ggui-renders.sqlite" },
+        "vectors": { "driver": "sqlite", "path": "./ggui-vectors.sqlite" },
+        "threads": { "driver": "sqlite", "path": "./ggui-threads.sqlite" }
       }
     }
 

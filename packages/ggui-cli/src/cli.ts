@@ -283,7 +283,7 @@ async function runServeCommand(args: string[]): Promise<number> {
   // Resolve `ggui.json#storage` → concrete adapters BEFORE binding.
   // Absent storage block → empty bundle → server keeps in-memory
   // defaults. Sqlite paths resolve relative to the manifest directory
-  // (not CWD) so `"path": "./ggui-sessions.sqlite"` lands next to
+  // (not CWD) so `"path": "./ggui-renders.sqlite"` lands next to
   // `ggui.json` regardless of where the operator invoked `ggui serve`
   // from. Failure to instantiate (e.g. better-sqlite3 peer dep
   // missing, permission denied) propagates to the exit-1 path below.
@@ -318,7 +318,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     // cached row has been edited or uninstalled in the meantime.
     if (!parsed.ephemeral) {
       const persistentDir = getPersistentDir(plan.projectRoot);
-      const manifestDeclaresSessions = plan.manifest?.storage?.sessions !== undefined;
+      const manifestDeclaresRenders = plan.manifest?.storage?.renders !== undefined;
       const manifestDeclaresVectors = plan.manifest?.storage?.vectors !== undefined;
       // The persistent stores are SQLite-backed (`better-sqlite3`, an
       // optional native module). When it isn't installed — or the
@@ -328,7 +328,7 @@ async function runServeCommand(args: string[]): Promise<number> {
       // `better-sqlite3` later upgrades them to persistence. An
       // explicit `ggui.json#storage` declaration still hard-fails (it
       // resolved above) — the operator asked for it by name.
-      if (!manifestDeclaresSessions && storage.renderStore === undefined) {
+      if (!manifestDeclaresRenders && storage.renderStore === undefined) {
         try {
           const renderStore = await createPersistentRenderStore(persistentDir);
           storage = { ...storage, renderStore };
@@ -864,11 +864,11 @@ function describeStorageStatus(
 ): string[] {
   if (!config) return [];
   const lines: string[] = [];
-  if (config.sessions) {
+  if (config.renders) {
     lines.push(
       resolved.renderStore
-        ? `storage: sessions → sqlite (${config.sessions.driver === 'sqlite' ? config.sessions.path : '—'})`
-        : `storage: sessions → in-memory`,
+        ? `storage: renders  → sqlite (${config.renders.driver === 'sqlite' ? config.renders.path : '—'})`
+        : `storage: renders  → in-memory`,
     );
   }
   if (config.vectors) {

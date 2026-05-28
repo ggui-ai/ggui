@@ -1,12 +1,12 @@
 /**
  * Default-on persistent stores under `<persistentDir>/`. Used when the
- * operator hasn't declared `storage.sessions` / `storage.vectors` in
+ * operator hasn't declared `storage.renders` / `storage.vectors` in
  * `ggui.json` AND hasn't passed `--ephemeral`. Closes the RenderStore
  * leg of the rehydrate problem: without this, a restart drops every
  * render row even though the HMAC secret + ShortCodeIndex now persist.
  *
  * Override precedence (caller enforces):
- *   1. Explicit `ggui.json#storage.sessions` / `.vectors`   (user wins)
+ *   1. Explicit `ggui.json#storage.renders` / `.vectors`   (user wins)
  *   2. These defaults                                       (operator-friendly)
  *   3. In-memory (`createGguiServer`'s internal fallback)   (last resort)
  *

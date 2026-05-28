@@ -5,7 +5,7 @@
  *
  *   1. Absent config returns empty bundle (caller keeps current defaults).
  *   2. Explicit sqlite instantiates concrete adapters bound to the right paths.
- *   3. sessions + vectors are honored independently, not as a single switch.
+ *   3. renders + vectors are honored independently, not as a single switch.
  *   4. `driver: 'memory'` is a no-op (same outcome as omitting the surface).
  *
  * Paths resolve relative to `baseDir` when provided, so the sqlite file
@@ -53,7 +53,7 @@ describe('resolveStorageFromConfig — absent config', () => {
 describe('resolveStorageFromConfig — explicit memory driver', () => {
   it('treats driver:"memory" as a no-op (same outcome as omitting the surface)', async () => {
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'memory' },
+      renders: { driver: 'memory' },
       vectors: { driver: 'memory' },
     });
     // Explicit memory is equivalent to absent — we skip adapter
@@ -67,7 +67,7 @@ describe('resolveStorageFromConfig — explicit memory driver', () => {
     // the call succeeds without requiring the adapter module. The
     // returned bundle is empty so nothing was instantiated.
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'memory' },
+      renders: { driver: 'memory' },
     });
     expect(result.renderStore).toBeUndefined();
     expect(result.vectors).toBeUndefined();
@@ -77,13 +77,13 @@ describe('resolveStorageFromConfig — explicit memory driver', () => {
 describe('resolveStorageFromConfig — sqlite driver', () => {
   it('instantiates both adapters when both surfaces declare sqlite', async () => {
     const path = join(tmpRoot, 'both');
-    const sessionsPath = join(path, 'ggui-sessions.sqlite');
+    const rendersPath = join(path, 'ggui-renders.sqlite');
     const vectorsPath = join(path, 'ggui-vectors.sqlite');
 
     // Use absolute paths so resolution is explicit; path resolution is
     // covered independently below.
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'sqlite', path: sessionsPath },
+      renders: { driver: 'sqlite', path: rendersPath },
       vectors: { driver: 'sqlite', path: vectorsPath },
     });
 
@@ -106,12 +106,12 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
     closeIfPossible(result.vectors);
   });
 
-  it('honors sessions + vectors independently (one surface, not both)', async () => {
-    const path = join(tmpRoot, 'sessions-only');
+  it('honors renders + vectors independently (one surface, not both)', async () => {
+    const path = join(tmpRoot, 'renders-only');
     const result = await resolveStorageFromConfig({
-      sessions: {
+      renders: {
         driver: 'sqlite',
-        path: join(path, 'ggui-sessions.sqlite'),
+        path: join(path, 'ggui-renders.sqlite'),
       },
     });
     expect(result.renderStore).toBeDefined();
@@ -133,7 +133,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
   it('honors mixed drivers — sqlite for one surface, memory for the other', async () => {
     const path = join(tmpRoot, 'mixed');
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'memory' },
+      renders: { driver: 'memory' },
       vectors: {
         driver: 'sqlite',
         path: join(path, 'ggui-vectors.sqlite'),
@@ -165,7 +165,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
   });
 
   it('instantiates InMemoryThreadStore + reports ephemeral when storage.threads.driver="memory"', async () => {
-    // Threads differ from sessions/vectors: declaring `memory` is NOT
+    // Threads differ from renders/vectors: declaring `memory` is NOT
     // a no-op — it mounts an actual InMemoryThreadStore so thread
     // routes come online. createGguiServer has no implicit thread
     // default, so the resolver has to produce a real store for the
@@ -185,7 +185,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
 
   it('absent storage.threads → no threadStore + no durability claim', async () => {
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'memory' },
+      renders: { driver: 'memory' },
     });
     expect(result.threadStore).toBeUndefined();
     expect(result.threadDurability).toBeUndefined();
@@ -199,7 +199,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     // were unresolvable, better-sqlite3 would throw during open.
     const result = await resolveStorageFromConfig(
       {
-        sessions: { driver: 'sqlite', path: './db/sessions.sqlite' },
+        renders: { driver: 'sqlite', path: './db/renders.sqlite' },
       },
       { baseDir },
     );
@@ -208,11 +208,11 @@ describe('resolveStorageFromConfig — path resolution', () => {
   });
 
   it('passes absolute paths through unchanged', async () => {
-    const abs = join(tmpRoot, 'absolute-sessions.sqlite');
+    const abs = join(tmpRoot, 'absolute-renders.sqlite');
     expect(isAbsolute(abs)).toBe(true);
     const result = await resolveStorageFromConfig(
       {
-        sessions: { driver: 'sqlite', path: abs },
+        renders: { driver: 'sqlite', path: abs },
       },
       { baseDir: '/some/other/place' },
     );
@@ -230,7 +230,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     // accept it at the sqlite adapter level rather than mangling it
     // into the baseDir resolution.
     const result = await resolveStorageFromConfig({
-      sessions: { driver: 'sqlite', path: ':memory:' },
+      renders: { driver: 'sqlite', path: ':memory:' },
     });
     expect(result.renderStore).toBeDefined();
     closeIfPossible(result.renderStore);
@@ -268,9 +268,9 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     const dir = join(tmpRoot, 'e2e-persist');
 
     const config: StorageConfig = {
-      sessions: {
+      renders: {
         driver: 'sqlite',
-        path: join(dir, 'sessions.sqlite'),
+        path: join(dir, 'renders.sqlite'),
       },
       vectors: {
         driver: 'sqlite',

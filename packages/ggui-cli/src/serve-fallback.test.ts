@@ -202,16 +202,16 @@ describe('resolveAgentPlan — §10.2a fallback matrix', () => {
       ...MINIMAL_MANIFEST,
       agent: { entry: './agent.ts' },
       storage: {
-        sessions: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
       },
     });
     writeAgent('agent.ts');
 
     const plan = resolveAgentPlan({ mcpOnly: false, cwd: projectRoot });
     expect(plan.manifest).not.toBeNull();
-    expect(plan.manifest?.storage?.sessions).toEqual({
+    expect(plan.manifest?.storage?.renders).toEqual({
       driver: 'sqlite',
-      path: './ggui-sessions.sqlite',
+      path: './ggui-renders.sqlite',
     });
     expect(plan.projectRoot).toBe(projectRoot);
   });
@@ -257,7 +257,7 @@ describe('resolveAgentPlan — §10.2a fallback matrix', () => {
       join(projectRoot, 'ggui.json'),
       JSON.stringify({
         ...MINIMAL_MANIFEST,
-        storage: { sessions: { driver: 'postgres', url: 'postgres://…' } },
+        storage: { renders: { driver: 'postgres', url: 'postgres://…' } },
       }),
       'utf-8',
     );

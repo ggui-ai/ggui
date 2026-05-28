@@ -52,7 +52,7 @@ export interface ResolvedAgentPlan {
   /**
    * Absolute path to the manifest's parent directory — the canonical
    * root for resolving relative paths declared in the manifest
-   * (`storage.sessions.path`, `agent.entry`, future additive fields).
+   * (`storage.renders.path`, `agent.entry`, future additive fields).
    * `null` when no manifest was found.
    */
   readonly projectRoot: string | null;
