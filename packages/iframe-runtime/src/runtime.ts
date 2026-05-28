@@ -1256,59 +1256,64 @@ function awaitToolResultMeta(
 }
 
 /**
- * Post-mount resize plumbing for MCP Apps hosts that size the outer
- * iframe based on the inner content height. claude.ai (web +
- * desktop) honors `ui/notifications/size-changed` notifications;
- * other hosts ignore them harmlessly.
- *
- * Owning this in the runtime (instead of duplicated in every shell
- * builder) is the same architectural fix as
- * {@link extractMetaFromToolResult}: anything that observes
- * mounted-component state belongs alongside the mount, not in the
- * shell.
+ * Module-level guard for the App-mediated post-mount toolresult
+ * re-listener. Ensures exactly one persistent
+ * `app.addEventListener('toolresult', …)` registration even when
+ * `bootSelfContained` is called multiple times (e.g. an agent fires a
+ * second `ggui_render` and we re-mount).
  */
-function installResizeObserver(rootEl: Element): void {
-  if (typeof window === 'undefined') return;
-  let lastH = 0;
-  const emit = () => {
-    const docBody = window.document.body;
-    const h = Math.max(
-      rootEl instanceof HTMLElement ? rootEl.scrollHeight : 0,
-      docBody.scrollHeight,
-      200,
-    );
-    if (h === lastH) return;
-    lastH = h;
-    try {
-      window.parent.postMessage(
-        {
-          jsonrpc: '2.0',
-          method: 'ui/notifications/size-changed',
-          params: { height: h },
-        },
-        '*',
+let postMountListenerInstalled = false;
+
+/**
+ * Lazy module-level App initializer for `bootSelfContained`. The
+ * self-contained path doesn't run the WS-driven bootSequence, so it
+ * has to construct + connect its own App to participate in the
+ * spec-canonical primitives (autoResize, toolresult re-mounts,
+ * callServerTool dispatch).
+ *
+ * Idempotent: once connected, subsequent calls return the existing
+ * handle. Re-mount paths reuse the App across bootSelfContained
+ * invocations.
+ *
+ * Returns `null` and logs a warning when running outside a window
+ * (vitest with `globals: false`, server-side render of the bundle
+ * for SSG, etc.). Callers MUST handle the null case by skipping the
+ * connect-only side-effects (toolresult listener, autoResize); the
+ * mount still proceeds because `bootSelfContained` runs purely
+ * client-side.
+ */
+let selfContainedAppPromise: Promise<App | null> | null = null;
+function ensureAppForSelfContained(): Promise<App | null> {
+  if (selfContainedAppPromise !== null) return selfContainedAppPromise;
+  selfContainedAppPromise = (async () => {
+    if (typeof window === 'undefined') return null;
+    const { app, transport } = createDefaultApp();
+    const result = await connectApp(app, transport);
+    if (!result.ok) {
+      // App handshake failed — the self-contained path keeps working
+      // (it mounts client-side without needing the host channel) but
+      // outbound dispatch / re-mount listening won't.
+      // eslint-disable-next-line no-console -- operator-visible degradation hint
+      console.warn(
+        '[ggui:bootSelfContained] App.connect failed — outbound tools/call + toolresult re-mounts disabled:',
+        result.message,
       );
-    } catch {
-      // Detached parent — swallow (matches postBootFailure posture).
+      return null;
     }
-  };
-  emit();
-  if (typeof ResizeObserver === 'function') {
-    const ro = new ResizeObserver(emit);
-    ro.observe(rootEl);
-    ro.observe(window.document.body);
-  } else {
-    setInterval(emit, 500);
-  }
+    setCurrentApp(app);
+    return app;
+  })();
+  return selfContainedAppPromise;
 }
 
 /**
- * Module-level guard for {@link installPostMountListener}. Ensures
- * exactly one persistent `ui/notifications/tool-result` listener is
- * attached even when `bootSelfContained` is called multiple times
- * (e.g. an agent fires a second `ggui_render` and we re-mount).
+ * @internal — exported for unit tests to reset the lazy App
+ * initializer between scenarios.
  */
-let postMountListenerInstalled = false;
+export function __resetSelfContainedAppForTest(): void {
+  selfContainedAppPromise = null;
+  postMountListenerInstalled = false;
+}
 
 /**
  * Module-level guard for {@link installAnchorClickInterceptor}. Same
@@ -2414,40 +2419,36 @@ export function __resetInterceptorsForTest(): void {
 }
 
 /**
- * Install a persistent `message` listener that catches
- * `ui/notifications/tool-result` notifications arriving AFTER the
- * initial mount. Each new tool-result that carries a different
- * bootstrap (different renderId / codeUrl / kind) triggers a
- * re-mount via {@link bootSelfContained}. This closes the boot-only-
+ * Install a persistent `app.addEventListener('toolresult', …)` listener
+ * that catches `ui/notifications/tool-result` notifications arriving
+ * AFTER the initial mount. Each new tool-result that carries a
+ * different bootstrap (different renderId / codeUrl / kind) triggers
+ * a re-mount via {@link bootSelfContained}. This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
  * a second `ggui_render` to the same render-resource.
  *
  * Idempotent: subsequent calls no-op via {@link postMountListenerInstalled}.
  *
- * Why module-level vs scoped to a single mount: bootSelfContained
- * may itself trigger a re-mount, and the listener should outlive any
- * single mount cycle. The compaction ensures we don't stack listeners
+ * Why module-level vs scoped to a single mount: bootSelfContained may
+ * itself trigger a re-mount, and the listener should outlive any
+ * single mount cycle. The guard ensures we don't stack listeners
  * across re-mounts.
+ *
+ * Spec-canonical (post-Phase-1.19b.3): the previous hand-rolled
+ * `window.addEventListener('message', …)` is gone; App handles every
+ * inbound `ui/notifications/tool-result` envelope and dispatches via
+ * its event system. Per-iframe single-tenancy means the App handle
+ * comes from `getCurrentApp()` — set by bootSelfContained's own
+ * connect path before this helper runs.
  */
 function installPostMountListener(): void {
   if (postMountListenerInstalled) return;
-  if (typeof window === 'undefined') return;
+  const app = getCurrentApp();
+  if (app === null) return; // pre-connect; caller bug, swallow safely
   postMountListenerInstalled = true;
   let lastMetaKey: string | null = null;
-  const onMessage = (event: MessageEvent) => {
-    const data = event.data as
-      | { jsonrpc?: string; method?: string; params?: unknown }
-      | null
-      | undefined;
-    if (
-      data === null ||
-      data === undefined ||
-      data.jsonrpc !== '2.0' ||
-      data.method !== 'ui/notifications/tool-result'
-    ) {
-      return;
-    }
-    const meta = extractMetaFromToolResult(data.params);
+  app.addEventListener('toolresult', (params) => {
+    const meta = extractMetaFromToolResult(params);
     if (meta === null) return;
     // Cheap dedupe — the host may emit the same tool-result more
     // than once (claude.ai re-broadcasts on iframe re-attach).
@@ -2507,8 +2508,7 @@ function installPostMountListener(): void {
         reemitIdentity,
       );
     });
-  };
-  window.addEventListener('message', onMessage);
+  });
 }
 
 /**
@@ -2597,7 +2597,12 @@ async function bootSelfContained(
       postLifecycleToParent(
         makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
       );
-      installResizeObserver(container);
+      // Connect the App (idempotent) so autoResize + toolresult
+      // re-mount listening are live. App.connect runs `ui/initialize`
+      // against the host; on success it also activates the
+      // spec-canonical `ResizeObserver` that emits
+      // `ui/notifications/size-changed` (autoResize: true).
+      await ensureAppForSelfContained();
       installPostMountListener();
       return;
     }
@@ -2831,7 +2836,10 @@ async function bootSelfContained(
     postLifecycleToParent(
       makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
     );
-    installResizeObserver(container);
+    // Connect the App (idempotent) so autoResize + toolresult
+    // re-mount listening are live. See system-card branch above for
+    // the rationale.
+    await ensureAppForSelfContained();
     installPostMountListener();
 
     // B4 — when the bootstrap carries a live trio (wsUrl + token),
