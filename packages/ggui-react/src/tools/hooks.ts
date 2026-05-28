@@ -30,7 +30,12 @@ function useToolContext(): ToolContext {
   return {
     resolved: {},
     appId: ctx.appId,
-    sessionId: ctx.sessionId ?? '',
+    // TODO(two-role-sessionId): GguiContext.sessionId is the conversation
+    // envelope (hostSessionId-shaped); ToolContext.renderId is render-scoped
+    // per Phase B. Pending S4-flagged decision on whether to split or
+    // rename GguiContext.sessionId — until then, threading as renderId for
+    // typecheck. Cache-scope semantics may need adjustment.
+    renderId: ctx.sessionId ?? '',
     auth: ctx.auth ?? { isAuthenticated: false },
     apiBaseUrl: ctx.apiBaseUrl,
   };

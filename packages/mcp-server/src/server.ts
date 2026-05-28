@@ -5791,7 +5791,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             const shortCode = generateTryLiveShortCode();
             try {
               await shortCodeIndexForTry.put(shortCode, {
-                sessionId,
+                renderId: sessionId,
                 appId,
               });
             } catch (err) {

@@ -100,9 +100,12 @@ export const fetchTool = defineTool<FetchToolConfig['config'], unknown>({
     const baseUrl = context.apiBaseUrl || '';
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-    // Check cache for GET requests — scope by sessionId to prevent cross-session leaks
+    // Check cache for GET requests — scope by renderId to prevent cross-render leaks
+    // TODO(two-role-sessionId): pending S4-flagged GguiProvider decision —
+    // this cache was historically conversation-scoped (hostSessionId), now
+    // render-scoped per Phase B identity collapse. Verify desired semantics.
     const rawCacheKey = cacheConfig?.key || url;
-    const cacheKey = context.sessionId ? `${context.sessionId}:${rawCacheKey}` : rawCacheKey;
+    const cacheKey = context.renderId ? `${context.renderId}:${rawCacheKey}` : rawCacheKey;
     if (method === 'GET' && cacheConfig?.ttl) {
       const cached = getCached(cacheKey);
       if (cached !== undefined) {
