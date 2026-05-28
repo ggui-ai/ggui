@@ -10,7 +10,7 @@
  *     event log into the right pane.
  *   - **Right**: scrubber over the picked session's event log.
  *     Slider walks `seq` from 1..N; current event card shows the
- *     full `SessionEvent.data` JSON in a `<pre>`. Prev / next /
+ *     full `RenderEvent.data` JSON in a `<pre>`. Prev / next /
  *     jump-to-start / jump-to-end buttons. Empty state when no
  *     events.
  *
@@ -52,16 +52,17 @@ interface TimelineSessionsResponse {
   readonly total: number;
 }
 
-interface TimelineSessionEvent {
+interface TimelineRenderEvent {
   readonly seq: number;
   readonly type: string;
-  readonly timestamp: number;
+  /** ISO 8601 UTC timestamp stamped at append time. */
+  readonly timestamp: string;
   readonly data: unknown;
 }
 
 interface TimelineEventsResponse {
   readonly sessionId: string;
-  readonly events: readonly TimelineSessionEvent[];
+  readonly events: readonly TimelineRenderEvent[];
   readonly streamSeq: number;
   readonly status: 'active' | 'completed' | 'expired' | 'unknown';
 }
@@ -182,7 +183,7 @@ export function Timeline(): ReactElement {
           <>
             Pick a session, then step through its event log
             chronologically. Each event carries the full
-            <code className="ggui-code"> SessionEvent.data </code>
+            <code className="ggui-code"> RenderEvent.data </code>
             payload — useful for answering &ldquo;what was the UI
             state at event N?&rdquo; without a live tail.
           </>
@@ -545,7 +546,7 @@ function EventsLoaded({
 function EventCard({
   event,
 }: {
-  readonly event: TimelineSessionEvent;
+  readonly event: TimelineRenderEvent;
 }): ReactElement {
   return (
     <div
@@ -606,11 +607,16 @@ function shorten(id: string): string {
   return id.length > 16 ? `${id.slice(0, 16)}…` : id;
 }
 
-function formatTime(ms: number): string {
+function formatTime(iso: string): string {
+  // Tolerate legacy numeric ms-epoch values surfaced by older stores
+  // (pre-Wave-7 of flatten-render-identity); coerce to ISO before
+  // slicing.
   try {
-    return new Date(ms).toISOString().slice(11, 23); // HH:MM:SS.mmm
+    const date =
+      typeof iso === 'number' ? new Date(iso) : new Date(iso);
+    return date.toISOString().slice(11, 23); // HH:MM:SS.mmm
   } catch {
-    return String(ms);
+    return String(iso);
   }
 }
 

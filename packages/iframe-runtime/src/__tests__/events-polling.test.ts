@@ -1,7 +1,7 @@
 /**
  * `buildEventsPolling` — registry-level events-polling composition for
  * the iframe-runtime (R7). Reads /api/renders/:renderId/events with a
- * SessionEvent ledger cursor; dispatches each event by `event.type` to
+ * RenderEvent ledger cursor; dispatches each event by `event.type` to
  * the registered channel handler.
  *
  * Mirrors the dropped R6 snapshot-polling tests with the cursor
@@ -72,8 +72,8 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'render', payload: { render: { id: 'a' } } },
-        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { renderId: 'a', props: { x: 1 } } },
+        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'render', data: { render: { id: 'a' } } },
+        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { renderId: 'a', props: { x: 1 } } },
       ],
       lastSequence: 2,
       hasMore: false,
@@ -114,8 +114,8 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { sequence: 1, emittedAt: '2026-01-01T00:00:00Z', type: 'props_update', payload: { renderId: 'a', props: { x: 1 } } },
-        { sequence: 2, emittedAt: '2026-01-01T00:00:01Z', type: 'props_update', payload: { renderId: 'a', props: { x: 2 } } },
+        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'props_update', data: { renderId: 'a', props: { x: 1 } } },
+        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { renderId: 'a', props: { x: 2 } } },
       ],
       lastSequence: 2,
       hasMore: false,

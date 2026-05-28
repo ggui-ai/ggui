@@ -4,7 +4,7 @@
  * The R7 cursor-replay model — paired transport of the
  * `/api/renders/:renderId/events?sinceSequence=N&limit=100` HTTP endpoint
  * + the WS subscribe `sinceSequence` cursor. Both transports replay
- * from the same SessionEvent ledger; the polling client uses HTTP, the
+ * from the same RenderEvent ledger; the polling client uses HTTP, the
  * live client uses WS, and they SHARE the cursor model. Switching
  * transports does not lose events.
  *
@@ -42,7 +42,7 @@ import type {
   ChannelFrame,
   RegistryPollingOptions,
 } from '@ggui-ai/live-channel';
-import type { EventsResponse, SessionEvent } from '@ggui-ai/protocol';
+import type { EventsResponse, RenderEvent } from '@ggui-ai/protocol';
 
 const DEFAULT_EVENTS_POLL_INTERVAL_MS = 2000;
 const DEFAULT_EVENTS_PAGE_LIMIT = 100;
@@ -102,15 +102,15 @@ function isEventsResponse(body: unknown): body is EventsResponse {
 }
 
 /**
- * Type guard for one SessionEvent in the events array.
+ * Type guard for one RenderEvent in the events array.
  */
-function isSessionEvent(value: unknown): value is SessionEvent {
+function isRenderEvent(value: unknown): value is RenderEvent {
   if (value === null || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
-  if (typeof obj['sequence'] !== 'number') return false;
-  if (typeof obj['emittedAt'] !== 'string') return false;
+  if (typeof obj['seq'] !== 'number') return false;
+  if (typeof obj['timestamp'] !== 'string') return false;
   if (typeof obj['type'] !== 'string') return false;
-  // `payload` is intentionally unconstrained — typed at the
+  // `data` is intentionally unconstrained — typed at the
   // consumer-side handler that dispatches on `type`.
   return true;
 }
@@ -118,7 +118,7 @@ function isSessionEvent(value: unknown): value is SessionEvent {
 /**
  * Build a {@link RegistryPollingOptions} descriptor that reads
  * `/api/renders/:renderId/events?sinceSequence=N&limit=M` and dispatches
- * each `SessionEvent` by `event.type` to the registry's matching
+ * each `RenderEvent` by `event.type` to the registry's matching
  * channel handler. Cursor advances per-tick to the server's
  * `lastSequence`.
  *
@@ -204,10 +204,10 @@ export function buildEventsPolling(
       // the dispatch shape to a list per type.
       const frames: Record<string, ChannelFrame> = {};
       for (const event of body.events) {
-        if (!isSessionEvent(event)) continue;
+        if (!isRenderEvent(event)) continue;
         frames[event.type] = {
           type: event.type,
-          payload: event.payload,
+          payload: event.data,
         };
       }
       return frames;
