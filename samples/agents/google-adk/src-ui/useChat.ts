@@ -189,14 +189,14 @@ export function useChat(): UseChatResult {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Stable per-tab chat-session id. Persists across page
+            // Stable per-tab chat id. Persists across page
             // refreshes via sessionStorage (cleared on tab close); a
             // new tab gets a fresh id. The server keys its per-chat
             // agent state on this header so multi-turn flows preserve
             // conversation history, ggui renderId, and render
             // continuity. Missing header = server auto-mints
             // per-request → degrades to single-turn isolation.
-            'X-Chat-Session-Id': getOrCreateChatSessionId(),
+            'X-Chat-Id': getOrCreateChatId(),
           },
           body: JSON.stringify({ prompt: trimmed }),
           signal: controller.signal,
@@ -429,20 +429,20 @@ function handleEvent(
 }
 
 /**
- * Stable per-tab chat-session id. Generated on first call, cached in
+ * Stable per-tab chat id. Generated on first call, cached in
  * sessionStorage so a page refresh within the tab keeps the same id;
  * a fresh tab gets a fresh id. The server reads this off the
- * `X-Chat-Session-Id` header and keys its per-chat agent state on it,
+ * `X-Chat-Id` header and keys its per-chat agent state on it,
  * so multi-turn flows preserve conversation history. SSR-safe: returns
  * a throwaway id when sessionStorage isn't available (test envs).
  */
-const CHAT_SESSION_STORAGE_KEY = 'ggui-chat-session-id';
-function getOrCreateChatSessionId(): string {
+const CHAT_ID_STORAGE_KEY = 'ggui-chat-id';
+function getOrCreateChatId(): string {
   try {
-    const existing = window.sessionStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    const existing = window.sessionStorage.getItem(CHAT_ID_STORAGE_KEY);
     if (existing) return existing;
     const fresh = crypto.randomUUID();
-    window.sessionStorage.setItem(CHAT_SESSION_STORAGE_KEY, fresh);
+    window.sessionStorage.setItem(CHAT_ID_STORAGE_KEY, fresh);
     return fresh;
   } catch {
     // sessionStorage unavailable (SSR / privacy mode) — fall back to a

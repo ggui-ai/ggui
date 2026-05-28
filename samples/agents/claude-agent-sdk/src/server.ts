@@ -104,8 +104,8 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // /chat/restore?chatSessionId=<id> — host-side resume endpoint. The
-  // frontend hits this on mount when a `?session=<id>` URL is present
+  // /chat/restore?chatId=<id> — host-side resume endpoint. The
+  // frontend hits this on mount when a `?chat=<id>` URL is present
   // so the page can rehydrate iframes from prior conversation turns
   // without re-prompting the agent. Implementation:
   //
@@ -124,16 +124,16 @@ async function handleRequest(
   // in-memory state isn't lost. Cross-restart durability is a
   // separate slice.
   if (req.method === 'GET' && url.pathname === '/chat/restore') {
-    const chatSessionId = url.searchParams.get('chatSessionId') ?? '';
-    if (chatSessionId.length === 0) {
+    const chatId = url.searchParams.get('chatId') ?? '';
+    if (chatId.length === 0) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'chatSessionId query required' }));
+      res.end(JSON.stringify({ error: 'chatId query required' }));
       return;
     }
     try {
       const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_renders', {
         hostName: 'sample',
-        hostSessionId: chatSessionId,
+        hostSessionId: chatId,
       });
       const renders = extractRenderSummaries(listed);
       // Resolve each render's bootstrap envelope via the existing
@@ -176,7 +176,7 @@ async function handleRequest(
       });
       res.end(
         JSON.stringify({
-          chatSessionId,
+          chatId,
           renders: bootstraps.filter((b) => b.bootstrap !== null),
         }),
       );
@@ -291,25 +291,25 @@ async function handleRequest(
       return;
     }
 
-    // Per-tab chat-session id from the browser's `X-Chat-Session-Id`
+    // Per-tab chat id from the browser's `X-Chat-Id`
     // header — keys per-chat agent state (conversation history,
     // resume tokens, ggui renderId continuity) so multi-turn flows
     // preserve context across `/chat` POSTs. Auto-mint when missing
     // (non-browser callers like curl get single-turn isolation).
-    const chatSessionHeader = req.headers['x-chat-session-id'];
-    const chatSessionId =
-      typeof chatSessionHeader === 'string' && chatSessionHeader.length > 0
-        ? chatSessionHeader
+    const chatIdHeader = req.headers['x-chat-id'];
+    const chatId =
+      typeof chatIdHeader === 'string' && chatIdHeader.length > 0
+        ? chatIdHeader
         : (() => {
             const minted = randomUUID();
             console.warn(
-              `[sample-agent] /chat missing X-Chat-Session-Id header — minted ${minted} (single-turn isolation; clients should set the header to preserve multi-turn context)`,
+              `[sample-agent] /chat missing X-Chat-Id header — minted ${minted} (single-turn isolation; clients should set the header to preserve multi-turn context)`,
             );
             return minted;
           })();
 
     console.log(
-      `[sample-agent] /chat received — chat=${chatSessionId} prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
+      `[sample-agent] /chat received — chat=${chatId} prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
     );
 
     res.writeHead(200, {
@@ -339,7 +339,7 @@ async function handleRequest(
     try {
       for await (const msg of runAgent({
         prompt,
-        chatSessionId,
+        chatId,
         mcpUrl: opts.mcpUrl,
         abortController,
         ...(opts.todoMcpUrl !== undefined

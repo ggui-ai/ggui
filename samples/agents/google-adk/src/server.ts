@@ -98,7 +98,7 @@ interface ServerContext extends ServerOptions {
 }
 
 /**
- * Per-process event log keyed by chatSessionId. Every NormalizedMessage
+ * Per-process event log keyed by chatId. Every NormalizedMessage
  * yielded from `runAgent` during a `/chat` POST is appended here so a
  * subsequent `POST /chat/restore` can replay the full SSE stream into a
  * freshly-mounted browser tab — restoring assistant text bubbles,
@@ -128,7 +128,7 @@ interface EventLogBucket {
 const chatEventLog = new Map<string, EventLogBucket>();
 
 function appendToEventLog(
-  chatSessionId: string,
+  chatId: string,
   event: NormalizedMessage,
 ): void {
   // Evict idle buckets opportunistically on every write — keeps the map
@@ -140,10 +140,10 @@ function appendToEventLog(
       chatEventLog.delete(id);
     }
   }
-  let bucket = chatEventLog.get(chatSessionId);
+  let bucket = chatEventLog.get(chatId);
   if (!bucket) {
     bucket = { events: [], lastWriteAt: now };
-    chatEventLog.set(chatSessionId, bucket);
+    chatEventLog.set(chatId, bucket);
   }
   bucket.events.push(event);
   if (bucket.events.length > MAX_EVENT_LOG_ENTRIES) {
@@ -152,8 +152,8 @@ function appendToEventLog(
   bucket.lastWriteAt = now;
 }
 
-function readEventLog(chatSessionId: string): NormalizedMessage[] {
-  const bucket = chatEventLog.get(chatSessionId);
+function readEventLog(chatId: string): NormalizedMessage[] {
+  const bucket = chatEventLog.get(chatId);
   return bucket ? bucket.events.slice() : [];
 }
 
@@ -164,10 +164,10 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // GET /chat/restore?chatSessionId=<id> — host-side iframe rehydration
+  // GET /chat/restore?chatId=<id> — host-side iframe rehydration
   // via `ggui_list_renders`. Mirrors the claude-agent-sdk sample so the
   // shared chat UI's restore path is uniform across SDKs. The frontend
-  // hits this on mount when a `?session=<id>` URL is present so the page
+  // hits this on mount when a `?chat=<id>` URL is present so the page
   // can rehydrate iframes from prior conversation turns without
   // re-prompting the agent.
   //
@@ -177,16 +177,16 @@ async function handleRequest(
   // (authoritative via the ggui server), POST = conversation tail (best
   // effort via in-memory log). A frontend can use either or both.
   if (req.method === 'GET' && url.pathname === '/chat/restore') {
-    const chatSessionId = url.searchParams.get('chatSessionId') ?? '';
-    if (chatSessionId.length === 0) {
+    const chatId = url.searchParams.get('chatId') ?? '';
+    if (chatId.length === 0) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'chatSessionId query required' }));
+      res.end(JSON.stringify({ error: 'chatId query required' }));
       return;
     }
     try {
       const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_renders', {
         hostName: 'sample',
-        hostSessionId: chatSessionId,
+        hostSessionId: chatId,
       });
       const renders = extractRenderSummaries(listed);
       const bootstraps = await Promise.all(
@@ -216,7 +216,7 @@ async function handleRequest(
       });
       res.end(
         JSON.stringify({
-          chatSessionId,
+          chatId,
           renders: bootstraps.filter((b) => b.bootstrap !== null),
         }),
       );
@@ -228,7 +228,7 @@ async function handleRequest(
     return;
   }
 
-  // POST /chat/restore — event-log replay. Body: `{ chatSessionId }`.
+  // POST /chat/restore — event-log replay. Body: `{ chatId }`.
   // Returns the full SSE event stream captured during prior `/chat`
   // POSTs in this server process. Lets a freshly-mounted browser tab
   // replay assistant text, tool calls, and render entries through the
@@ -239,26 +239,26 @@ async function handleRequest(
   // /chat/restore for the authoritative iframe bootstrap.
   if (req.method === 'POST' && url.pathname === '/chat/restore') {
     const body = await readBody(req);
-    let chatSessionId: string;
+    let chatId: string;
     try {
-      const parsed = JSON.parse(body) as { chatSessionId?: unknown };
-      if (typeof parsed.chatSessionId !== 'string' || parsed.chatSessionId.length === 0) {
+      const parsed = JSON.parse(body) as { chatId?: unknown };
+      if (typeof parsed.chatId !== 'string' || parsed.chatId.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'chatSessionId required in body' }));
+        res.end(JSON.stringify({ error: 'chatId required in body' }));
         return;
       }
-      chatSessionId = parsed.chatSessionId;
+      chatId = parsed.chatId;
     } catch {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'expected JSON body with { chatSessionId }' }));
+      res.end(JSON.stringify({ error: 'expected JSON body with { chatId }' }));
       return;
     }
-    const events = readEventLog(chatSessionId);
+    const events = readEventLog(chatId);
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
     });
-    res.end(JSON.stringify({ chatSessionId, events }));
+    res.end(JSON.stringify({ chatId, events }));
     return;
   }
 
@@ -365,25 +365,25 @@ async function handleRequest(
       return;
     }
 
-    // Per-tab chat-session id from the browser's `X-Chat-Session-Id`
+    // Per-tab chat id from the browser's `X-Chat-Id`
     // header — keys per-chat agent state (conversation history,
     // resume tokens, ggui renderId continuity) so multi-turn flows
     // preserve context across `/chat` POSTs. Auto-mint when missing
     // (non-browser callers like curl get single-turn isolation).
-    const chatSessionHeader = req.headers['x-chat-session-id'];
-    const chatSessionId =
-      typeof chatSessionHeader === 'string' && chatSessionHeader.length > 0
-        ? chatSessionHeader
+    const chatIdHeader = req.headers['x-chat-id'];
+    const chatId =
+      typeof chatIdHeader === 'string' && chatIdHeader.length > 0
+        ? chatIdHeader
         : (() => {
             const minted = randomUUID();
             console.warn(
-              `[sample-agent] /chat missing X-Chat-Session-Id header — minted ${minted} (single-turn isolation; clients should set the header to preserve multi-turn context)`,
+              `[sample-agent] /chat missing X-Chat-Id header — minted ${minted} (single-turn isolation; clients should set the header to preserve multi-turn context)`,
             );
             return minted;
           })();
 
     console.log(
-      `[sample-agent] /chat received — chat=${chatSessionId} prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
+      `[sample-agent] /chat received — chat=${chatId} prompt: ${JSON.stringify(prompt.slice(0, 80))}`,
     );
 
     res.writeHead(200, {
@@ -413,7 +413,7 @@ async function handleRequest(
     try {
       for await (const msg of runAgent({
         prompt,
-        chatSessionId,
+        chatId,
         mcpUrl: opts.mcpUrl,
         abortController,
         ...(opts.todoMcpUrl !== undefined
@@ -446,7 +446,7 @@ async function handleRequest(
         // page reload. Capture happens even if the SSE write fails
         // (broken pipe) — the agent loop already produced the event,
         // and a future restore should see it.
-        appendToEventLog(chatSessionId, msg);
+        appendToEventLog(chatId, msg);
         res.write(`data: ${JSON.stringify(msg)}\n\n`);
       }
       console.log(

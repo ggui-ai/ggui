@@ -42,20 +42,20 @@ export interface RunAgentOptions {
   /** Cancellation surface — closed-tab teardown propagates here. */
   readonly abortController?: AbortController;
   /**
-   * Per-tab chat-session identifier from the browser's
-   * `X-Chat-Session-Id` header (auto-minted server-side when absent).
+   * Per-tab chat identifier from the browser's
+   * `X-Chat-Id` header (auto-minted server-side when absent).
    * Keys per-chat agent state — conversation history, resume tokens,
    * ggui renderId continuity — so multi-turn flows preserve context
    * across `/chat` POSTs. Threaded through today; consumed by the
    * multi-turn-resume slice that hoists agent state to module scope.
    */
-  readonly chatSessionId?: string;
+  readonly chatId?: string;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
 
 /**
- * Per-process map of chat-session id → the last response id the
+ * Per-process map of chat id → the last response id the
  * OpenAI Responses API minted for that session. Passed as
  * `previousResponseId` on subsequent calls so the model sees the
  * full conversation history (server-side state lives on OpenAI's
@@ -120,7 +120,7 @@ export async function* runAgent(
   // chat-grouping continuity — the OpenAI Agents SDK's MCP client
   // doesn't currently expose a per-call `_meta` hook for it, so the
   // sample's `/chat/restore` (server.ts) uses the server-side
-  // `ggui_list_renders` tool to rehydrate renders by `chatSessionId`.
+  // `ggui_list_renders` tool to rehydrate renders by `chatId`.
   // The LLM never needs to thread the host-session itself.
   const instructions =
     opts.systemPrompt === null
@@ -160,12 +160,12 @@ export async function* runAgent(
     // Multi-turn session continuity. The OpenAI Responses API stores
     // conversation state server-side, keyed by response id; passing
     // `previousResponseId` on the next turn loads that history before
-    // the model is invoked. We track {chatSessionId → lastResponseId}
+    // the model is invoked. We track {chatId → lastResponseId}
     // in `knownResponseIds` and look up the cursor here. Absent →
     // fresh conversation (first turn, or non-browser caller with no
-    // chatSessionId).
-    const previousResponseId = opts.chatSessionId
-      ? knownResponseIds.get(opts.chatSessionId)
+    // chatId).
+    const previousResponseId = opts.chatId
+      ? knownResponseIds.get(opts.chatId)
       : undefined;
     const stream = await run(agent, opts.prompt, {
       stream: true,
@@ -303,10 +303,10 @@ export async function* runAgent(
     // session resumes the conversation. `lastResponseId` populates
     // only after the stream completes; reading it before the
     // for-await drains yields undefined. Skip the write when there's
-    // no chatSessionId — the caller is single-shot, no history to
+    // no chatId — the caller is single-shot, no history to
     // chain forward.
-    if (opts.chatSessionId && stream.lastResponseId) {
-      knownResponseIds.set(opts.chatSessionId, stream.lastResponseId);
+    if (opts.chatId && stream.lastResponseId) {
+      knownResponseIds.set(opts.chatId, stream.lastResponseId);
     }
     yield { type: 'result', subtype: 'ok' };
   } finally {

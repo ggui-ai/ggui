@@ -186,19 +186,19 @@ export interface RunAgentOptions {
    */
   readonly abortController?: AbortController;
   /**
-   * Per-tab chat-session identifier from the browser's
-   * `X-Chat-Session-Id` header (auto-minted server-side when absent).
+   * Per-tab chat identifier from the browser's
+   * `X-Chat-Id` header (auto-minted server-side when absent).
    * Keys per-chat agent state — conversation history, resume tokens,
    * ggui renderId continuity — so multi-turn flows preserve context
    * across `/chat` POSTs. Threaded through today; consumed by the
    * multi-turn-resume slice that passes Claude Agent SDK's
    * `options.resume` keyed by this id.
    */
-  readonly chatSessionId?: string;
+  readonly chatId?: string;
 }
 
 /**
- * Per-process record of which chat-session ids have already produced
+ * Per-process record of which chat ids have already produced
  * at least one Claude Agent SDK turn. Used to choose between
  * `options.sessionId` (first turn — create a new session under our
  * id) and `options.resume` (subsequent turn — load the persisted
@@ -209,7 +209,7 @@ export interface RunAgentOptions {
  * a new session id collision with the on-disk one. The fall-back is
  * a fresh, isolated turn, never an error.
  */
-const knownChatSessions = new Set<string>();
+const knownChats = new Set<string>();
 
 /**
  * Default system prompt — re-exported from `@ggui-ai/protocol`.
@@ -274,7 +274,7 @@ export async function* runAgent(
   // doesn't currently expose a per-call `_meta` hook for it, so the
   // sample's `/chat/restore` uses the server-side `ggui_list_renders`
   // tool (called directly from `server.ts`, not via the LLM) to
-  // rehydrate renders by `chatSessionId`. The LLM never needs to
+  // rehydrate renders by `chatId`. The LLM never needs to
   // thread the host-session itself.
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
@@ -304,21 +304,21 @@ export async function* runAgent(
   //   - `sessionId: <UUID>` — start a new session with our id.
   //   - `resume: <UUID>`    — load the persisted history for that id.
   //
-  // We use our caller's chat-session id (the per-tab UUID minted by
-  // `useChat.ts` and forwarded as `X-Chat-Session-Id`) as the SDK
+  // We use our caller's chat id (the per-tab UUID minted by
+  // `useChat.ts` and forwarded as `X-Chat-Id`) as the SDK
   // session id, so the SDK's filesystem store is keyed by the same
   // identifier the browser uses. First call → sessionId; remembered in
-  // a module-scope Set so subsequent calls → resume. Without a chat-
-  // session id (raw curl callers) we let the SDK mint its own id; that
+  // a module-scope Set so subsequent calls → resume. Without a chat
+  // id (raw curl callers) we let the SDK mint its own id; that
   // call won't be resumable from this server, but it still works.
-  const chatSessionId = opts.chatSessionId;
+  const chatId = opts.chatId;
   const sessionOptions: { resume?: string; sessionId?: string } = {};
-  if (chatSessionId) {
-    if (knownChatSessions.has(chatSessionId)) {
-      sessionOptions.resume = chatSessionId;
+  if (chatId) {
+    if (knownChats.has(chatId)) {
+      sessionOptions.resume = chatId;
     } else {
-      sessionOptions.sessionId = chatSessionId;
-      knownChatSessions.add(chatSessionId);
+      sessionOptions.sessionId = chatId;
+      knownChats.add(chatId);
     }
   }
 

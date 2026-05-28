@@ -44,15 +44,15 @@ export interface RunAgentOptions {
   /** Userid for ADK's session bookkeeping. Default `'sample-user'`. */
   readonly userId?: string;
   /**
-   * Per-tab chat-session identifier from the browser's
-   * `X-Chat-Session-Id` header (auto-minted server-side when absent).
+   * Per-tab chat identifier from the browser's
+   * `X-Chat-Id` header (auto-minted server-side when absent).
    * Keys per-chat agent state — conversation history, resume tokens,
    * ggui renderId continuity — so multi-turn flows preserve context
    * across `/chat` POSTs. Threaded through today; consumed by the
    * multi-turn-resume slice that hoists `sessionService` + `Runner`
    * to module scope and keys ADK sessions by this id.
    */
-  readonly chatSessionId?: string;
+  readonly chatId?: string;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
@@ -141,7 +141,7 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
   // chat-grouping continuity — Google ADK's MCPToolset transport
   // doesn't currently expose a per-call `_meta` hook for it, so the
   // sample's `/chat/restore` (server.ts) uses the server-side
-  // `ggui_list_renders` tool to rehydrate renders by `chatSessionId`.
+  // `ggui_list_renders` tool to rehydrate renders by `chatId`.
   // The LLM never needs to thread the host-session itself.
   const instruction =
     opts.systemPrompt === null
@@ -285,9 +285,9 @@ export async function* runAgent(
   // Per-tab chat session id from the browser; auto-mint if absent so
   // direct (non-browser) callers still get a session — they just
   // won't share history across calls.
-  const chatSessionId = opts.chatSessionId ?? randomUUID();
+  const chatId = opts.chatId ?? randomUUID();
 
-  // Get-or-create the ADK session under our chatSessionId. The
+  // Get-or-create the ADK session under our chatId. The
   // sessionService stores conversation history keyed by sessionId;
   // `runner.runAsync({sessionId})` hydrates that history before
   // invoking the model, which is the entire mechanism behind
@@ -295,13 +295,13 @@ export async function* runAgent(
   let session = await state.sessionService.getSession({
     appName: APP_NAME,
     userId: state.userId,
-    sessionId: chatSessionId,
+    sessionId: chatId,
   });
   if (!session) {
     session = await state.sessionService.createSession({
       appName: APP_NAME,
       userId: state.userId,
-      sessionId: chatSessionId,
+      sessionId: chatId,
     });
   }
 

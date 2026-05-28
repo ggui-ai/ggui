@@ -38,7 +38,7 @@ interface UseChatResult {
    */
   readonly abort: () => void;
   /**
-   * Mint a fresh chatSessionId and navigate the page to it — drives
+   * Mint a fresh chatId and navigate the page to it — drives
    * the "+ New" button in the header. Discards the current chat
    * history's view (the persisted SQLite rows remain on the server,
    * reachable by URL).
@@ -219,14 +219,14 @@ export function useChat(): UseChatResult {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // Stable per-tab chat-session id. Persists across page
+            // Stable per-tab chat id. Persists across page
             // refreshes via sessionStorage (cleared on tab close); a
             // new tab gets a fresh id. The server keys its per-chat
             // agent state on this header so multi-turn flows preserve
             // conversation history, ggui renderId, and render
             // continuity. Missing header = server auto-mints
             // per-request → degrades to single-turn isolation.
-            'X-Chat-Session-Id': getOrCreateChatSessionId(),
+            'X-Chat-Id': getOrCreateChatId(),
           },
           body: JSON.stringify({ prompt: trimmed }),
           signal: controller.signal,
@@ -307,7 +307,7 @@ export function useChat(): UseChatResult {
     abortControllerRef.current?.abort();
   }, []);
 
-  // Start a fresh conversation: mint a new chatSessionId, stamp it
+  // Start a fresh conversation: mint a new chatId, stamp it
   // into the URL, then hard-reload so the React tree and every iframe
   // boot fresh from scratch. Doing this in-place via setState would
   // leak stale render iframes + the restored chat history; a
@@ -315,24 +315,24 @@ export function useChat(): UseChatResult {
   // localStorage write needed.
   const newSession = useCallback(() => {
     const fresh = crypto.randomUUID();
-    window.location.href = `/?${URL_SESSION_PARAM}=${encodeURIComponent(fresh)}`;
+    window.location.href = `/?${URL_CHAT_PARAM}=${encodeURIComponent(fresh)}`;
   }, []);
 
-  // On-mount rehydration. When the URL carries a `?session=<id>` the
+  // On-mount rehydration. When the URL carries a `?chat=<id>` the
   // user is opening a previously-visited conversation; ask the host
-  // for the list of ggui renders tied to that chatSessionId and
+  // for the list of ggui renders tied to that chatId and
   // mount each as a fresh RenderRef. No chat-message history is
   // restored here — the iframe IS the conversation in ggui's
   // worldview, and the agent will pick up again on the next `send`
   // whether or not text history is shown.
   useEffect(() => {
-    const chatSessionId = getOrCreateChatSessionId();
-    if (!chatSessionId) return;
+    const chatId = getOrCreateChatId();
+    if (!chatId) return;
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(
-          `/chat/restore?chatSessionId=${encodeURIComponent(chatSessionId)}`,
+          `/chat/restore?chatId=${encodeURIComponent(chatId)}`,
           { headers: { Accept: 'application/json' } },
         );
         if (!res.ok || cancelled) return;
@@ -365,8 +365,8 @@ export function useChat(): UseChatResult {
     return () => {
       cancelled = true;
     };
-    // Run exactly once on mount — the chatSessionId is stable for the
-    // page lifetime per getOrCreateChatSessionId's contract.
+    // Run exactly once on mount — the chatId is stable for the
+    // page lifetime per getOrCreateChatId's contract.
   }, []);
 
   return { entries, renders, hostDisplayMode, sending, send, abort, newSession };
@@ -556,9 +556,9 @@ function handleEvent(
 }
 
 /**
- * Stable per-conversation chat-session id. Resolution:
+ * Stable per-conversation chat id. Resolution:
  *
- *   1. URL `?session=<id>` query param — authoritative. Every link to
+ *   1. URL `?chat=<id>` query param — authoritative. Every link to
  *      "this conversation" carries the id, so opening the URL in any
  *      tab/window restores that specific conversation, the same way
  *      claude.ai's `/c/<id>` URLs work.
@@ -574,15 +574,15 @@ function handleEvent(
  * SSR-safe: returns a throwaway id when neither URL API nor crypto
  * is available; the resulting chat is single-turn isolated.
  */
-const URL_SESSION_PARAM = 'session';
+const URL_CHAT_PARAM = 'chat';
 
-function getOrCreateChatSessionId(): string {
+function getOrCreateChatId(): string {
   try {
     const url = new URL(window.location.href);
-    const fromUrl = url.searchParams.get(URL_SESSION_PARAM);
+    const fromUrl = url.searchParams.get(URL_CHAT_PARAM);
     if (fromUrl && fromUrl.length > 0) return fromUrl;
     const resolved = crypto.randomUUID();
-    url.searchParams.set(URL_SESSION_PARAM, resolved);
+    url.searchParams.set(URL_CHAT_PARAM, resolved);
     window.history.replaceState({}, '', url.toString());
     return resolved;
   } catch {
