@@ -7,46 +7,50 @@
  *   - `entries[]`   — a flat, render-ready chat log (user prompts,
  *                     assistant text, tool calls, embedded renders,
  *                     errors, end markers).
- *   - `renders[]`   — every ggui render the agent has produced this
- *                     conversation, ready to mount via `<AppRenderer>`.
+ *   - `renders[]`   — every MCP-Apps resource the agent has produced
+ *                     this conversation, ready to mount via
+ *                     `<AppRenderer toolResourceUri={...}>`.
  *
  * Host apps build the React chat panel directly from these types; the
- * sample-agents (claude / openai / google) lean on this layer rather
- * than redoing the meta-extraction in each integration.
+ * sample apps lean on this layer rather than redoing the
+ * `_meta.ui.resourceUri` extraction in each integration.
  */
-import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
  * Host-display-mode hint, parsed from the most-recent render's
- * `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865). Apps that
- * stamp `App.defaultDisplayMode` on their ggui server config will pass
- * this through unchanged; agents can override per-render via
- * `ggui_render.input.displayMode`.
+ * `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865).
  */
 export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
 /**
- * A reference to a ggui render, ready to mount via `<AppRenderer>`.
- *
- * `meta` is the parsed slice envelope (`McpAppAiGguiRenderMeta`); when
- * defined the host can build the iframe HTML + a spec-canonical
- * `ui/notifications/tool-result` envelope from it. `meta` is initially
- * `undefined` for SDKs that strip `_meta` from `tool_result` blocks
- * (Anthropic's Messages API spec only permits text content); the hook
- * lazily recovers it via the wsToken-gated `/api/renders/:id/state`
- * endpoint (configurable via `useMcpAppsChat({ stateEndpoint })`).
+ * A reference to one MCP-Apps resource the agent has surfaced, ready to
+ * mount via `<AppRenderer toolResourceUri={...}>`. The host fetches the
+ * iframe HTML by passing `resourceUri` to AppRenderer plus a matching
+ * `onReadResource` callback (typically a relay endpoint on the agent
+ * backend that proxies the MCP `resources/read` call). All live-update
+ * mechanics (WebSocket, state polling, partial patches) are the server-
+ * rendered HTML's concern — the host stays brand-neutral.
  */
 export interface RenderRef {
-  readonly renderId: string;
   /**
-   * The action the agent took (`'create'` for ggui_render, sometimes
-   * `'restored'` for envelopes rehydrated from a chat snapshot, etc.).
-   * Treat as opaque — the sample uses it as a chrome label.
+   * MCP-Apps spec-canonical resource URI from `_meta.ui.resourceUri` on
+   * the tool result. Stable per render: re-emits of the same URI (e.g.
+   * an `*_update` tool returning the same URI) coalesce onto the same
+   * iframe entry via {@link RenderRef} dedupe.
+   */
+  readonly resourceUri: string;
+  /**
+   * Free-form label describing how this render arrived (`'render'` for
+   * live emissions, `'restored'` for snapshot rehydration). Treat as
+   * opaque chrome metadata.
    */
   readonly action: string;
-  readonly contractHash?: string;
-  /** Last-known render meta. Updated on render + every update. */
-  readonly meta?: McpAppAiGguiRenderMeta;
+  /**
+   * Optional tool-call id of the tool whose result carried this URI.
+   * Useful for chat panels that want to cross-link renders to the
+   * tool-call entry that produced them.
+   */
+  readonly toolUseId?: string;
 }
 
 /**
@@ -74,7 +78,8 @@ export interface ToolCallEntry {
  *   - `tool-call` — the agent invoked a tool; the result lands on the
  *                   same entry asynchronously when the SDK forwards the
  *                   matching `tool_result` block.
- *   - `render`    — the actual MCP Apps iframe — one per ggui_render.
+ *   - `render`    — an MCP-Apps resource iframe — one per unique
+ *                   `_meta.ui.resourceUri`.
  *   - `error`     — terminal error from the agent or the transport.
  *   - `end`       — turn-completed marker (`subtype` is the SDK's
  *                   `result.subtype`, opaque to the chat panel).

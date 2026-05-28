@@ -1,9 +1,5 @@
 /* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  parseMcpAppAiGguiRenderMeta,
-  type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChatEntry,
   HostDisplayMode,
@@ -34,25 +30,14 @@ export interface UseMcpAppsChatOptions {
    * GET endpoint for the server-authoritative chat snapshot. Called
    * once on mount with `?chatId=<id>`. Returns `{messages, renders}` —
    * `messages` are SDK messages (replayed through the same handler the
-   * live SSE stream uses), `renders` are bootstrap envelopes for any
-   * iframe whose envelope didn't ride inline on a recorded SDKMessage.
-   * Defaults to the same URL as {@link chatEndpoint}.
+   * live SSE stream uses), `renders` are optional descriptors for any
+   * MCP-Apps resource whose URI didn't ride inline on a recorded
+   * SDKMessage. Defaults to the same URL as {@link chatEndpoint}.
    *
    * Returning 404 = "fresh chatId" → empty conversation. Returning a
    * non-404 error logs a warning and the chat boots blank.
    */
   readonly snapshotEndpoint?: string;
-  /**
-   * URL prefix for the wsToken-gated render-state polling endpoint.
-   * Used to recover the slice envelope when the LLM SDK strips `_meta`
-   * from tool_result blocks (Anthropic's Messages API spec is the
-   * canonical strip-happy host). The hook appends
-   * `/<encodedRenderId>/state?wsToken=<token>`.
-   *
-   * Default: `/api/renders` (relative to the page origin, proxied by
-   * the sample's HTTP server to the ggui MCP server).
-   */
-  readonly stateEndpointPrefix?: string;
   /**
    * Stable per-conversation chat id. The hook adds this as the
    * `X-Chat-Id` header on every POST. Host apps generate / persist the
@@ -65,10 +50,11 @@ export interface UseMcpAppsChatOptions {
 /**
  * Public return of {@link useMcpAppsChat}.
  *
- * `entries[]` is the render-ready chat log; `renders[]` is every ggui
- * render the agent has produced this conversation (latest at the end).
- * Sample chat panels render `entries` inline and pass `renders[i]` to
- * `<AppRenderer>` for iframe mounting.
+ * `entries[]` is the render-ready chat log; `renders[]` is every
+ * MCP-Apps resource the agent has produced this conversation (latest at
+ * the end). Sample chat panels render `entries` inline and pass
+ * `renders[i]` to `<AppRenderer toolResourceUri={...}>` for iframe
+ * mounting.
  */
 export interface UseMcpAppsChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
@@ -96,38 +82,36 @@ export interface UseMcpAppsChatResult {
 }
 
 /**
- * Canonical hook for chat shells that drive an MCP-Apps-spec agent
- * backend and want to mount ggui renders inline.
+ * Brand-neutral hook for chat shells that drive an MCP-Apps-spec agent
+ * backend and want to mount MCP-Apps resources inline.
  *
- * The hook is responsible for all ggui-shape knowledge:
+ * The hook walks the SDK message stream and, for every `tool_result`
+ * block, extracts the MCP-Apps standard `_meta.ui.resourceUri` (or the
+ * legacy flat `_meta['ui/resourceUri']` form). Each unique resourceUri
+ * becomes one {@link RenderRef} — dedupe is by URI alone, so re-emits
+ * of the same URI (after server-side state mutations such as a
+ * `*_update` tool call) coalesce onto the same iframe entry. The host
+ * mounts the iframe by passing `resourceUri` to
+ * `<AppRenderer toolResourceUri={...}>` plus an `onReadResource`
+ * callback that proxies the read via the agent backend's relay.
  *
- *   - Parses `tool_use_result._meta` for the `ai.ggui/render` slice
- *     envelope (via `parseMcpAppAiGguiRenderMeta`).
- *   - Polls the wsToken-gated `/api/renders/:id/state` endpoint as a
- *     fallback when the SDK strips `_meta` (Anthropic).
- *   - Tracks `_meta.ui.displayMode` and exposes the latest as
- *     `hostDisplayMode` for layout auto-switch.
- *   - Discriminates `ggui_render` (new iframe) vs `ggui_update` (patch
- *     existing meta in place so `<AppRenderer toolResult>` re-projects
- *     via `ui/notifications/tool-result`).
+ * No vendor-specific knowledge: the hook does not parse any non-spec
+ * extension key, doesn't poll a custom state endpoint, doesn't
+ * discriminate between "create" and "update" tool calls. The
+ * server-rendered HTML (returned by `resources/read`) handles its own
+ * live-update channel (e.g. a WebSocket the server bakes into the
+ * shell). When the iframe re-mounts (rehydrate after navigation), the
+ * next `resources/read` returns the current server-authoritative HTML
+ * — staleness is impossible by construction.
  *
- * Host apps remain MCP-spec-only: they receive a stream of SDK messages
- * from their agent endpoint, hand them to this hook, and render
- * `entries[]` + `renders[]`. No `_meta` parsing in the agent backend; no
- * ggui-shape constants in the chat panel. Sample-agents stay
- * brand-agnostic — they only inject the ggui system prompt and host the
- * ggui MCP server, and could swap to any other MCP-Apps-spec UI without
- * touching this hook.
+ * `_meta.ui.displayMode` is the only non-resourceUri spec field the
+ * hook surfaces — exposed as {@link hostDisplayMode} for layout
+ * auto-switch per MCP-Apps SEP-1865.
  */
 export function useMcpAppsChat(
   opts: UseMcpAppsChatOptions,
 ): UseMcpAppsChatResult {
-  const {
-    chatEndpoint,
-    chatId,
-    snapshotEndpoint = chatEndpoint,
-    stateEndpointPrefix = '/api/renders',
-  } = opts;
+  const { chatEndpoint, chatId, snapshotEndpoint = chatEndpoint } = opts;
 
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [renders, setRenders] = useState<RenderRef[]>([]);
@@ -135,11 +119,6 @@ export function useMcpAppsChat(
     HostDisplayMode | undefined
   >(undefined);
   const [sending, setSending] = useState(false);
-  // Mirror of the latest renders for the meta-refetch lookup. Plain
-  // state would close over the snapshot at handler-call time; the ref
-  // always reads current.
-  const rendersRef = useRef<RenderRef[]>([]);
-  rendersRef.current = renders;
   // AbortController for the in-flight chat stream. Replaced on every
   // `send`; consumed by `abort`. Ref (not state) because abort is fire-
   // and-forget — no re-render needed when it changes.
@@ -177,107 +156,15 @@ export function useMcpAppsChat(
 
   const addRender = useCallback((item: RenderRef) => {
     setRenders((prev) => {
-      // Dedupe by renderId — re-renders / updates land on the same
-      // bucket rather than spawning a new iframe each time.
-      if (prev.some((p) => p.renderId === item.renderId)) return prev;
+      // Dedupe by resourceUri — re-emits (e.g. *_update returning the
+      // same URI) land on the same bucket rather than spawning a new
+      // iframe each time. The iframe stays mounted; live updates flow
+      // through whichever channel the server-rendered HTML wired up
+      // (typically a WebSocket baked into the shell).
+      if (prev.some((p) => p.resourceUri === item.resourceUri)) return prev;
       return [...prev, item];
     });
   }, []);
-
-  /**
-   * Patch the meta slice on an existing render by id. Used by the
-   * meta-refetch effect after every ggui_render and every ggui_update
-   * tool_result. `<AppRenderer toolResult>` re-projects via
-   * `ui/notifications/tool-result` whenever this meta field
-   * transitions, so iframe-runtime applies the new `propsJson` without
-   * tearing down the inner React tree.
-   *
-   * Also patches the matching `kind:'render'` entry in `entries[]` so
-   * chat shells that mount iframes off the embedded `entry.render`
-   * reference (the canonical inline-chat layout — see
-   * `samples/apps/ggui-basic-nextjs/app/Chat.tsx`) see the fresh meta.
-   * Without this the entry's `render` field stays pinned to the meta
-   * snapshotted at append-time (initial `ggui_render`), so on
-   * rehydration the iframe re-mounts with stale `propsJson` — every
-   * subsequent `ggui_update`'s post-merge state is lost.
-   */
-  const updateRenderMeta = useCallback(
-    (renderId: string, meta: McpAppAiGguiRenderMeta) => {
-      setRenders((prev) => {
-        const idx = prev.findIndex((p) => p.renderId === renderId);
-        if (idx < 0) return prev;
-        const next = prev.slice();
-        next[idx] = { ...next[idx]!, meta };
-        return next;
-      });
-      setEntries((prev) => {
-        let mutated = false;
-        const next = prev.map((entry) => {
-          if (entry.kind !== 'render') return entry;
-          if (entry.render.renderId !== renderId) return entry;
-          mutated = true;
-          return { ...entry, render: { ...entry.render, meta } };
-        });
-        return mutated ? next : prev;
-      });
-    },
-    [],
-  );
-
-  /**
-   * Recover the slice envelope via the wsToken-gated state endpoint.
-   * The wsToken lives on the slice envelope itself (`meta.wsToken`) —
-   * chicken-and-egg solved by the fact that the FIRST envelope arrives
-   * inline on tool_result `_meta` (when the SDK doesn't strip it) or
-   * is already cached from a previous tick. The hook holds the
-   * most-recently-known meta in `rendersRef`; the polling fetch
-   * carries forward the previously-seen wsToken.
-   *
-   * Returns silently when no wsToken is reachable (first tick on a
-   * strip-happy SDK like Anthropic; the iframe shows the loading
-   * placeholder until the next /state poll succeeds).
-   */
-  const refetchStateById = useCallback(
-    async (renderId: string) => {
-      if (!renderId) return;
-      const existing = rendersRef.current.find(
-        (p) => p.renderId === renderId,
-      );
-      const wsToken = existing?.meta?.wsToken;
-      const search =
-        typeof wsToken === 'string' && wsToken.length > 0
-          ? `?wsToken=${encodeURIComponent(wsToken)}`
-          : '';
-      try {
-        const res = await fetch(
-          `${stateEndpointPrefix}/${encodeURIComponent(renderId)}/state${search}`,
-          { headers: { Accept: 'application/json' } },
-        );
-        if (!res.ok) {
-          if (res.status === 401) {
-            // No wsToken or invalid — expected on the very first call
-            // when the SDK stripped _meta. The endpoint is wsToken-
-            // gated by design; without an inline _meta delivery we have
-            // no credential to present. Iframe stays in the loading
-            // state until the next render/update lands inline.
-            console.warn(
-              '[useMcpAppsChat] /state 401 — no wsToken yet; iframe will retry on the next render/update.',
-            );
-            return;
-          }
-          console.warn('[useMcpAppsChat] /state non-2xx', res.status);
-          return;
-        }
-        const envelope = (await res.json()) as unknown;
-        const parsedMeta = parseMcpAppAiGguiRenderMeta(envelope);
-        if (!parsedMeta.ok || !parsedMeta.meta) return;
-        updateRenderMeta(renderId, parsedMeta.meta);
-      } catch (err) {
-        console.warn('[useMcpAppsChat] /state refetch failed', err);
-      }
-    },
-    [stateEndpointPrefix, updateRenderMeta],
-  );
 
   const send = useCallback(
     async (prompt: string) => {
@@ -337,9 +224,7 @@ export function useMcpAppsChat(
               append,
               addRender,
               setHostDisplayMode,
-              updateRenderMeta,
               patchToolCall,
-              refetchStateById,
             });
           }
         }
@@ -358,15 +243,7 @@ export function useMcpAppsChat(
         setSending(false);
       }
     },
-    [
-      append,
-      addRender,
-      chatEndpoint,
-      chatId,
-      patchToolCall,
-      refetchStateById,
-      updateRenderMeta,
-    ],
+    [append, addRender, chatEndpoint, chatId, patchToolCall],
   );
 
   const abort = useCallback(() => {
@@ -377,12 +254,9 @@ export function useMcpAppsChat(
   // previously-visited conversation, pull the server-authoritative
   // snapshot and re-feed it through the same `handleEvent` pipeline the
   // live SSE stream uses. The server holds the SDK message stream
-  // verbatim plus bootstrap envelopes captured on every tool_result, so
-  // replaying them rebuilds the chat panel AND mounts iframes without
-  // re-prompting the agent. The `renders` field is a hedge: handleEvent
-  // mounts iframes from each user-frame's `tool_use_result._meta`, but
-  // we also apply the explicit renders[] map to cover any envelope
-  // whose SDKMessage carrier dropped `_meta` in transit.
+  // verbatim, so replaying them rebuilds the chat panel AND remounts
+  // iframes by their resourceUri (the next `resources/read` returns
+  // current server-authoritative HTML — staleness is impossible).
   useEffect(() => {
     if (!chatId) return;
     let cancelled = false;
@@ -408,30 +282,25 @@ export function useMcpAppsChat(
             append,
             addRender,
             setHostDisplayMode,
-            updateRenderMeta,
             patchToolCall,
-            refetchStateById,
           });
         }
-        // Mount any renders whose envelope didn't ride inline on a
-        // recorded SDKMessage (defensive — server-side capture already
-        // picks these up). Dedupes by renderId via addRender, so
-        // iframes already mounted from the replay above get their meta
-        // refreshed in place rather than duplicated.
+        // Mount any explicitly-restored resource URIs (defensive — the
+        // replay above already mounts every iframe whose tool_result
+        // carried `_meta.ui.resourceUri`). Dedupes by resourceUri via
+        // addRender.
         for (const entry of body.renders ?? []) {
           if (cancelled) return;
-          if (!entry.bootstrap) continue;
-          const parsed = parseMcpAppAiGguiRenderMeta(entry.bootstrap);
-          if (!parsed.ok || !parsed.meta) continue;
-          const renderId = parsed.meta.renderId;
-          if (!renderId) continue;
-          const item: RenderRef = {
-            renderId,
-            action: 'restored',
-            meta: parsed.meta,
-          };
-          addRender(item);
-          updateRenderMeta(renderId, parsed.meta);
+          if (typeof entry.resourceUri !== 'string' || entry.resourceUri.length === 0) {
+            continue;
+          }
+          addRender({
+            resourceUri: entry.resourceUri,
+            action: entry.action ?? 'restored',
+            ...(entry.toolUseId !== undefined
+              ? { toolUseId: entry.toolUseId }
+              : {}),
+          });
         }
       } catch (err) {
         console.warn('[useMcpAppsChat] GET snapshot failed', err);
@@ -444,7 +313,7 @@ export function useMcpAppsChat(
     // Intentionally omitting append/addRender/etc. from deps — they're
     // stable useCallback refs and the cancellation flag prevents any
     // double-fire if the IDs ever change identity.
-  }, [chatId, snapshotEndpoint, append, addRender, patchToolCall, refetchStateById, updateRenderMeta]);
+  }, [chatId, snapshotEndpoint, append, addRender, patchToolCall]);
 
   return { entries, renders, hostDisplayMode, sending, send, abort };
 }
@@ -458,15 +327,10 @@ interface HandleEventDeps {
   readonly append: (e: ChatEntry) => void;
   readonly addRender: (r: RenderRef) => void;
   readonly setHostDisplayMode: (mode: HostDisplayMode | undefined) => void;
-  readonly updateRenderMeta: (
-    renderId: string,
-    meta: McpAppAiGguiRenderMeta,
-  ) => void;
   readonly patchToolCall: (
     toolUseId: string,
     patch: { readonly result?: unknown; readonly isError?: boolean },
   ) => void;
-  readonly refetchStateById: (renderId: string) => Promise<void>;
 }
 
 function handleEvent(
@@ -475,14 +339,7 @@ function handleEvent(
   baseId: string,
   deps: HandleEventDeps,
 ): void {
-  const {
-    append,
-    addRender,
-    setHostDisplayMode,
-    updateRenderMeta,
-    patchToolCall,
-    refetchStateById,
-  } = deps;
+  const { append, addRender, setHostDisplayMode, patchToolCall } = deps;
   if (eventType === 'error') {
     const err = (payload as { error?: string }).error ?? 'Unknown error';
     append({ id: baseId, kind: 'error', text: err });
@@ -523,18 +380,15 @@ function handleEvent(
     // as a user-role message after the tool call returns. We (a) attach
     // the result to the matching tool-call entry via toolUseId so the
     // expand UI shows full call+result side-by-side, and (b) extract
-    // the ggui slice envelope when present and either spawn a new
-    // render entry or patch an existing one in place.
+    // the spec-canonical `_meta.ui.resourceUri` and either mount a new
+    // iframe entry or dedupe onto an already-mounted one.
     //
     // KEY INSIGHT: Anthropic Agent SDK (and equivalents) preserve the
     // FULL original MCP tool result on `tool_use_result` (sibling of
     // `message`), even though `message.content` is stripped to
     // Anthropic-API-spec-compliant blocks (no structuredContent, no
-    // _meta). This is the ONLY place we can read ggui_render's
-    // `{renderId, action}` structured fields and the inline slice
-    // envelope on `_meta["ai.ggui/render"]`. When `_meta` is present
-    // we skip the wsToken-gated /state poll entirely, sidestepping the
-    // chicken-and-egg first-mount race.
+    // _meta). This is the ONLY place we can read the standard
+    // `_meta.ui.resourceUri` extension.
     const fullToolResult = (payload as { tool_use_result?: unknown })
       .tool_use_result;
     const sc: Record<string, unknown> | undefined =
@@ -546,24 +400,36 @@ function handleEvent(
       fullToolResult && typeof fullToolResult === 'object'
         ? (fullToolResult as { _meta?: unknown })._meta
         : undefined;
-    let initialMeta: McpAppAiGguiRenderMeta | undefined;
-    if (tmRaw !== undefined && tmRaw !== null) {
-      const parsedMeta = parseMcpAppAiGguiRenderMeta(tmRaw);
-      if (parsedMeta.ok && parsedMeta.meta !== undefined) {
-        initialMeta = parsedMeta.meta;
-      }
-    }
 
-    // Host-display-mode hint pickup. `_meta.ui.displayMode` is the
-    // spec-native MCP-Apps SEP-1865 per-render presentation hint —
-    // stamped from `App.defaultDisplayMode` (or
-    // `ggui_render.input.displayMode` override) by the server.
+    // Spec-canonical `_meta.ui.{resourceUri,displayMode}` pickup. Both
+    // fields ride on the same `_meta.ui` block per MCP-Apps
+    // SEP-1865 / SEP-2133. Legacy `_meta['ui/resourceUri']` flat key is
+    // checked as a fallback for older shells.
+    let resourceUri: string | undefined;
     if (tmRaw !== null && typeof tmRaw === 'object') {
       const uiBlock = (tmRaw as { ui?: unknown }).ui;
       if (uiBlock !== null && typeof uiBlock === 'object') {
-        const raw = (uiBlock as { displayMode?: unknown }).displayMode;
-        if (raw === 'inline' || raw === 'fullscreen' || raw === 'pip') {
-          setHostDisplayMode(raw);
+        const rawDisplayMode = (uiBlock as { displayMode?: unknown })
+          .displayMode;
+        if (
+          rawDisplayMode === 'inline' ||
+          rawDisplayMode === 'fullscreen' ||
+          rawDisplayMode === 'pip'
+        ) {
+          setHostDisplayMode(rawDisplayMode);
+        }
+        const rawResourceUri = (uiBlock as { resourceUri?: unknown })
+          .resourceUri;
+        if (typeof rawResourceUri === 'string' && rawResourceUri.length > 0) {
+          resourceUri = rawResourceUri;
+        }
+      }
+      if (resourceUri === undefined) {
+        const flatLegacy = (tmRaw as { 'ui/resourceUri'?: unknown })[
+          'ui/resourceUri'
+        ];
+        if (typeof flatLegacy === 'string' && flatLegacy.length > 0) {
+          resourceUri = flatLegacy;
         }
       }
     }
@@ -593,62 +459,22 @@ function handleEvent(
           ...(block.is_error === true ? { isError: true } : {}),
         });
       }
-      // ggui-specific routing: read from structuredContent (preserved
-      // on tool_use_result), NOT from text blocks (Anthropic SDK strips
-      // structuredContent + _meta from the model-visible content array).
-      if (!sc) continue;
-      // ggui_render's structuredContent carries {renderId, action} plus
-      // the ai.ggui/render meta envelope. ggui_update echoes
-      // {renderId, updated:true} — we use the presence of `updated` to
-      // discriminate.
-      const renderId =
-        typeof sc.renderId === 'string' ? sc.renderId : undefined;
-      if (!renderId) continue;
-      // ggui_render branch — new render entering the chat log.
-      if (sc.updated !== true) {
-        const item: RenderRef = {
-          renderId,
-          action: String(sc.action ?? 'create'),
-          ...(typeof sc.contractHash === 'string'
-            ? { contractHash: sc.contractHash }
-            : {}),
-          ...(initialMeta ? { meta: initialMeta } : {}),
-        };
-        addRender(item);
-        append({
-          id: `${baseId}.s${i}`,
-          kind: 'render',
-          render: item,
-        });
-        // No /state poll needed when the slice envelope rode inline on
-        // tool_use_result._meta — that's the fast path. Fall back to
-        // the wsToken-gated /state endpoint only when _meta is absent.
-        if (!initialMeta) {
-          void refetchStateById(renderId);
-        }
-        continue;
-      }
-      // ggui_update branch — patch the live render's meta in place so
-      // `<AppRenderer toolResult>` re-projects via
-      // `ui/notifications/tool-result`; iframe-runtime applies the new
-      // `propsJson` without a re-mount.
-      //
-      // Safe paired with a stable html string at the host level:
-      // AppRenderer's html stays stable, so the inner iframe is never
-      // torn down. Only `toolResult` changes — which is exactly the
-      // spec-canonical update channel.
-      if (sc.updated === true) {
-        // Fast path: slice envelope rode inline on
-        // tool_use_result._meta. No /state poll needed.
-        if (initialMeta) {
-          updateRenderMeta(renderId, initialMeta);
-          continue;
-        }
-        // Fallback: SDK stripped _meta — recover via the wsToken-gated
-        // /state endpoint (same pattern used on initial render).
-        void refetchStateById(renderId);
-        continue;
-      }
+      // Spec-canonical iframe mount: any tool_result whose `_meta.ui.
+      // resourceUri` is set becomes a render entry. Dedupes by URI in
+      // addRender — `*_update`-style calls that return the same URI
+      // coalesce onto the existing iframe.
+      if (resourceUri === undefined) continue;
+      const item: RenderRef = {
+        resourceUri,
+        action: 'render',
+        ...(toolUseId.length > 0 ? { toolUseId } : {}),
+      };
+      addRender(item);
+      append({
+        id: `${baseId}.s${i}`,
+        kind: 'render',
+        render: item,
+      });
     }
     return;
   }
@@ -666,15 +492,12 @@ function handleEvent(
  * Snapshot returned by `GET <snapshotEndpoint>?chatId=<id>`. `messages`
  * is the verbatim SDK message stream the server observed during the
  * live conversation (replayed through `handleEvent` to rebuild the chat
- * panel). `renders` is an optional per-renderId bootstrap map (mounted
- * directly for any iframe whose envelope didn't ride inline on a
- * recorded SDKMessage).
+ * panel). `renders` is an optional list of resource URIs (mounted
+ * directly for any iframe whose URI didn't ride inline on a recorded
+ * SDKMessage).
  *
- * Sample servers may omit `renders` entirely when the SDK preserves
- * `_meta` on tool_use_result (the replay path mounts iframes by itself).
- * The Anthropic SDK strips _meta from `message.content` but preserves
- * it on the sibling `tool_use_result.meta`, so even Anthropic-driven
- * samples can leave `renders` empty.
+ * Servers may omit `renders` entirely when the SDK preserves `_meta` on
+ * tool_use_result (the replay path mounts iframes by itself).
  */
 interface ChatSnapshotResponse {
   readonly chatId: string;
@@ -683,8 +506,9 @@ interface ChatSnapshotResponse {
 }
 
 interface RestoredRender {
-  readonly renderId: string;
-  readonly bootstrap: Record<string, unknown> | null;
+  readonly resourceUri: string;
+  readonly action?: string;
+  readonly toolUseId?: string;
 }
 
 /**
