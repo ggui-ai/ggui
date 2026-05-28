@@ -4,7 +4,7 @@
  *
  * Background: `createGguiServer` mints two HMAC secrets at boot when the
  * caller doesn't pass them — `wsTokenSecret` (signs the
- * `_meta["ai.ggui/session"].wsToken` envelope so iframes can subscribe
+ * `_meta["ai.ggui/render"].wsToken` envelope so iframes can subscribe
  * to the live-channel WS) and the render-URL signer secret. Both are
  * process-local `randomBytes(32)` by default — fine for a single
  * process lifetime, fatal for "revisit a claude.ai chat history after a
@@ -17,10 +17,10 @@
  * lowercase hex (32 bytes), no trailing newline, no JSON wrapper. Easy
  * to inspect, easy to rotate (delete the file, restart, fresh secret).
  *
- * Security posture: these secrets are a session-token signing key, NOT
+ * Security posture: these secrets are a render-token signing key, NOT
  * a long-lived credential like an OAuth client secret. Losing them
  * means an attacker can mint MCP Apps bootstrap tokens for arbitrary
- * `(sessionId, appId)` pairs — same blast radius as before, just
+ * `(renderId, appId)` pairs — same blast radius as before, just
  * surviving restart. Mode 0600 on the file matches `~/.ggui/credentials
  * .json` (BYOK keys) which has the same threat model.
  *

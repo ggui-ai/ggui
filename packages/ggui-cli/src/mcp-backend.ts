@@ -860,7 +860,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // (SqliteShortCodeIndex under `persistentDir`) so cached short-code
     // lookups survive a restart. Used by render-URL signing and
     // legacy compat paths; post-R5 the primary mount path is the
-    // ui://ggui/session resource (auth-bearer-gated), not shortCodes.
+    // ui://ggui/render resource (auth-bearer-gated), not shortCodes.
     shortCodeIndex: opts.shortCodeIndex ?? new InMemoryShortCodeIndex(),
     // Content-addressable componentCode delivery. The OSS dev default
     // is filesystem-backed at `~/.ggui/code-cache/` (override via
