@@ -37,8 +37,8 @@
  *
  * ## What this handler does NOT do
  *
- *   - Drive a session. No `sessionId`, no `stackItemId`, no commit
- *     into a session stack. Pure registry mutation.
+ *   - Commit a render. No `renderId`, no commit into the render
+ *     store. Pure registry mutation.
  *   - Pick a generator dynamically. Operator chooses; the LLM-driven
  *     selector layers above the registry, not below.
  *   - Validate the contract beyond Zod parsing. Schema-compat and

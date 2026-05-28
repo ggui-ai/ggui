@@ -91,7 +91,7 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
   });
 
   it('incompat: action schema adds a field the tool does not accept', () => {
-    const stackItem = {
+    const render = {
       actionSpec: {
         createTask: {
           label: 'Create task',
@@ -110,7 +110,7 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     };
     // 'warn' mode returns report without throwing
     const report = checkRenderSchemaCompat(
-      stackItem,
+      render,
       registry,
       'warn',
       'test:action-incompat',
@@ -125,7 +125,7 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
   });
 
   it('reject mode throws SchemaCompatError with the full report attached', () => {
-    const stackItem = {
+    const render = {
       actionSpec: {
         createTask: {
           label: 'Create task',
@@ -140,7 +140,7 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     };
     try {
       checkRenderSchemaCompat(
-        stackItem,
+        render,
         registry,
         'reject',
         'test:action-reject',
@@ -402,7 +402,7 @@ describe('checkRenderSchemaCompat — mixed spec handling', () => {
 
 describe('SchemaCompatError — message formatting', () => {
   it('includes context and names every finding', () => {
-    const stackItem = {
+    const render = {
       actionSpec: {
         createTask: {
           label: 'Create',
@@ -422,7 +422,7 @@ describe('SchemaCompatError — message formatting', () => {
     };
     try {
       checkRenderSchemaCompat(
-        stackItem,
+        render,
         registry,
         'reject',
         'test:ctx',

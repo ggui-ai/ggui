@@ -143,7 +143,7 @@ interface Subscriber {
   /**
    * Active `channel_subscribe` polling loops for this subscriber.
    * Keyed by `${renderId}:${channelName}` so a reconnect that
-   * re-subscribes to the same (stackItem, channel) pair replaces the
+   * re-subscribes to the same (render, channel) pair replaces the
    * existing timer rather than minting a duplicate (idempotent
    * semantics on the wire). Torn down en masse by `unregister(ws)` on
    * WS close.
@@ -733,14 +733,14 @@ export interface RenderChannelServer {
    */
   notifyRenderPush(renderId: string, render: Render, matchType?: string): void;
   /**
-   * Prime every declared streamSpec channel on `stackItem` that carries a
+   * Prime every declared streamSpec channel on `render` that carries a
    * `tool` refresh hint. Invokes each refresh tool via the bound
    * wiredActionRouter with the empty refresh input, validates the result
    * against the channel's schema, and fans it out so subscribers see an
    * initial value instead of `latest = undefined`.
    *
-   * Intended for seed-a-session mount paths (console try-live, agent-
-   * initiated bootstraps that append a stack item without a driving
+   * Intended for seed-a-render mount paths (console try-live, agent-
+   * initiated bootstraps that mint a render without a driving
    * action). Without this, blueprints with `streamSpec[channel].tool`
    * render their empty-state branch because the channel has no live
    * delivery — operators see "waiting for data" UI even when the
@@ -749,16 +749,16 @@ export interface RenderChannelServer {
    * Same isolation posture as the action-driven refresh pass: one
    * broken refresh MUST NOT block others; per-channel failures log a
    * warning but don't throw. No-op when no wiredActionRouter is
-   * configured, when `stackItem.streamSpec` is absent, or when every
+   * configured, when `render.streamSpec` is absent, or when every
    * channel lacks a `.tool` hint.
    *
-   * Ordering: callers should invoke AFTER the stack item is persisted
-   * so `sendToSession`'s active-stack-item lookup resolves. The
+   * Ordering: callers should invoke AFTER the render is persisted
+   * so `sendToSession`'s active-render lookup resolves. The
    * `try-live` endpoint awaits this before returning the shortCode so
    * the viewer SPA subscribes with the initial envelope already
-   * buffered on the session's stream-buffer replay state.
+   * buffered on the render's stream-buffer replay state.
    */
-  primeStreams(renderId: string, stackItem: Render): Promise<void>;
+  primeStreams(renderId: string, render: Render): Promise<void>;
   /**
    * Fan a `{type:'props_update', payload:{renderId, props}}` wire frame
    * to every subscriber currently bound to `renderId`. Mount tools
@@ -791,7 +791,7 @@ export interface RenderChannelServer {
    * Schema validation against `propsSpec`: NOT enforced server-side
    * here. The renderer validates inbound props via
    * `validateInboundPropsPayload` against the cached
-   * `stackItem.propsSpec` before applying — defense-in-depth at the
+   * `render.propsSpec` before applying — defense-in-depth at the
    * receiving boundary. Server-side enforcement is reserved for the
    * future agent-driven `ggui_update` path; the mount-tool seam is
    * trusted-runtime today (mounts execute in-process, same trust
@@ -1112,12 +1112,12 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   /**
    * Emit a `channel_error` frame to a specific subscriber. Used by the
    * `channel_subscribe` handler for both subscribe-time rejections
-   * (`CHANNEL_UNKNOWN`, `CHANNEL_NOT_LOCAL`, `STACK_ITEM_NOT_FOUND`,
+   * (`CHANNEL_UNKNOWN`, `CHANNEL_NOT_LOCAL`, `RENDER_NOT_FOUND`,
    * `SUBSCRIBE_UNAUTHORIZED`) AND poll-time failures (`POLL_FAILED`).
    *
    * Direct-to-WS, not via fanOut — channel_error frames are
    * per-subscriber and not stored in the replay buffer. A new
-   * subscriber on the same session will re-subscribe and discover the
+   * subscriber on the same render will re-subscribe and discover the
    * same error itself.
    */
   function sendChannelError(
@@ -1127,7 +1127,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     code:
       | "CHANNEL_UNKNOWN"
       | "CHANNEL_NOT_LOCAL"
-      | "STACK_ITEM_NOT_FOUND"
+      | "RENDER_NOT_FOUND"
       | "SUBSCRIBE_UNAUTHORIZED"
       | "POLL_FAILED",
     message: string,
@@ -1274,20 +1274,20 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         ws,
         payload.renderId,
         payload.channelName,
-        "STACK_ITEM_NOT_FOUND",
+        "RENDER_NOT_FOUND",
         `Render '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
         message.requestId
       );
       return;
     }
-    const stackItem = stored.render;
+    const render = stored.render;
     // Channel entry resolution. mcpApps / system variants have no
     // streamSpec so the field reads back as undefined — same code
     // path as a component variant without the channel declared.
     const streamSpec: StreamSpec | undefined =
-      stackItem.type === "mcpApps" || stackItem.type === "system"
+      render.type === "mcpApps" || render.type === "system"
         ? undefined
-        : stackItem.streamSpec;
+        : render.streamSpec;
     const channelEntry = streamSpec?.[payload.channelName];
     if (!channelEntry || !channelEntry.source) {
       sendChannelError(
@@ -1295,7 +1295,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         payload.renderId,
         payload.channelName,
         "CHANNEL_UNKNOWN",
-        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on stack item '${payload.renderId}'`,
+        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on render '${payload.renderId}'`,
         message.requestId
       );
       return;
@@ -1316,7 +1316,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // Validation passed — schedule (or re-schedule) the polling loop.
     const channelKey = `${payload.renderId}:${payload.channelName}`;
     // Idempotent replace: a reconnect that re-subscribes the same
-    // (stackItem, channel) pair gets a fresh timer + zeroed seq. The
+    // (render, channel) pair gets a fresh timer + zeroed seq. The
     // client's gap-detection treats it as a new stream from the
     // server's perspective; client-side reconnect logic owns
     // continuity if the channel was declared `mode: 'append'`.

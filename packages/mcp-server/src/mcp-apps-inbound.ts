@@ -161,7 +161,7 @@ async function resolveMcpAppsItem(
  * Register the MCP Apps inbound proxy routes on an Express app.
  *
  *   GET  /mcp-apps/resource?session=<id>&item=<id>
- *     Fetches the referenced McpAppsStackItem's `source.resourceUri`
+ *     Fetches the referenced McpAppsRender's `source.resourceUri`
  *     via resources/read on the source MCP server. Returns the HTML
  *     with the MIME declared by the source (typically
  *     `text/html;profile=mcp-app`) and spec-canonical CSP headers.

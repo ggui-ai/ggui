@@ -294,7 +294,7 @@ describe('deriveContractBundle — content-addressable validator bundle', () => 
 describe('deriveContextSlots — resume-aware seed from contextSnapshot', () => {
   // Resume contract — slice V wires the runtime to mirror its
   // contextSpec snapshots to the server via `ggui_runtime_sync_context`.
-  // The handler upserts onto `StackItem.contextSnapshot`. On
+  // The handler upserts onto `ComponentRender.contextSnapshot`. On
   // chat-history rehydrate, the bootstrap-meta projection reads the
   // snapshot first (when present) and falls back to the contract's
   // authoring-time default when a slot wasn't covered. The user

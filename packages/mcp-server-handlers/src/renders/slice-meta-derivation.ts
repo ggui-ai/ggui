@@ -219,7 +219,7 @@ export function deriveWiredActionTools(
  * literal null over silently emitting `undefined`, which would break
  * the runtime's typed Provider seed.
  *
- * Resume-aware seed: when the StackItem carries a `contextSnapshot`
+ * Resume-aware seed: when the Render carries a `contextSnapshot`
  * (mirrored from the runtime via `ggui_runtime_sync_context`), each slot's
  * `default` is sourced from the snapshot value if present,
  * otherwise from the contract's authoring-time default. Chat-history
@@ -236,9 +236,9 @@ export function deriveContextSlots(
   debounceMs?: number;
 }> | undefined {
   // Both `contextSpec` and `contextSnapshot` live on the `component`
-  // variant of Render (StackItem) — narrowing via the
-  // discriminator gives typed access without casts. mcpApps and
-  // system variants don't carry these fields.
+  // variant of Render — narrowing via the discriminator gives typed
+  // access without casts. mcpApps and system variants don't carry
+  // these fields.
   if (item.type === 'mcpApps' || item.type === 'system') return undefined;
   const contextSpec = item.contextSpec;
   if (contextSpec === undefined || contextSpec === null) return undefined;
@@ -515,12 +515,12 @@ export function composeContentSecurityPolicy(
  * JSON-stringify the active stack item's `props` field. Returns
  * `undefined` when no props are present or when serialization fails
  * (circular references, non-serializable values). Variant-agnostic —
- * system cards, component items, and any future stack item shape that
+ * system cards, component renders, and any future render shape that
  * carries a `props` value all share this projection.
  *
  * Try/catch around `JSON.stringify` is defensive: the upstream push
  * handler validates props against `propsSpec` before they land on the
- * StackItem, so a JSON-circularity here would mean an internal
+ * Render, so a JSON-circularity here would mean an internal
  * mutation post-validation. Returning `undefined` keeps the renderer
  * on the fallback path instead of failing the whole bootstrap.
  */
@@ -620,12 +620,12 @@ export interface RenderMetaView {
     readonly bundleSri?: string;
   }>;
   // `compiledValidators` removed in #109 — validators are now served
-  // via a content-addressable URL surfaced on the stack-item slice
+  // via a content-addressable URL surfaced on the render slice
   // (`_meta["ai.ggui/render"].validatorsUrl`). Producers call
   // {@link deriveContractBundle} to compute
   // `{contractHash, bundleSource}`, write `bundleSource` to their
   // `CodeStore` at `contractHash`, then emit
-  // `stackItem.contractHash` + `stackItem.validatorsUrl` for the
+  // `render.contractHash` + `render.validatorsUrl` for the
   // iframe-runtime to fetch.
 }
 

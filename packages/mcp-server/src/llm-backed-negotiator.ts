@@ -350,7 +350,7 @@ export function createLlmBackedHandshakeNegotiator(
       // draft canonical-key-equals a registered blueprint, return
       // `origin: 'cache'` with the matched blueprint's contract +
       // componentCode hash so the paired push.accept short-circuits
-      // straight into commitCachedStackItem.
+      // straight into commitCachedRender.
       //
       // No-match (or any throw) falls through to today's synth path
       // — the negotiator stays useful when the registry is cold,

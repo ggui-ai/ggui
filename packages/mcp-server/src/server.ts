@@ -608,10 +608,10 @@ export function defaultHandlers(deps: {
     /**
      * Optional generation wiring. When present, `ggui_render` invokes
      * the supplied {@link UiGenerator} on every story-path call and
-     * appends the generated `StackItem` to the session before
-     * returning `codeReady: true`. Absent = push stays in
-     * placeholder mode (session + shortCode + preview still work,
-     * but no componentCode is produced).
+     * commits the generated `Render` before returning `codeReady:
+     * true`. Absent = push stays in placeholder mode (render +
+     * shortCode + preview still work, but no componentCode is
+     * produced).
      *
      * Callers compose the `GenerationDeps` directly via the
      * `@ggui-ai/mcp-server-handlers` export — `defaultHandlers`
@@ -714,9 +714,9 @@ export function defaultHandlers(deps: {
   /**
    * `ggui_update` wiring. When present, register the OSS update
    * handler against the supplied RenderStore + optional live-channel
-   * props_update notifier. The handler reads sessionId / stackItemId
-   * from wire input today, but a future in-process dispatcher can
-   * populate them on the canonical context.
+   * props_update notifier. The handler reads `renderId` from wire
+   * input today, but a future in-process dispatcher can populate it
+   * on the canonical context.
    *
    * Absent = `ggui_update` is NOT registered on this server. Hosts
    * that don't expose props mutation keep the smaller surface (e.g.,
@@ -935,7 +935,7 @@ export function defaultHandlers(deps: {
     readonly coupons: CouponRedeemSource;
   };
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
-  // Single shared pending-events pipe (Model C, stackItemId-keyed).
+  // Single shared pending-events pipe (Model C, renderId-keyed).
   // push opens (`markCreated`), submit_action appends, consume drains,
   // pop/close clean up. Every handler that touches the pipe MUST get
   // the same instance — separate instances would mean the pipe push
@@ -1017,8 +1017,8 @@ export function defaultHandlers(deps: {
   // claude.ai (and any MCP Apps host) routes iframe-issued
   // `tools/call` here. Wired only when a renderStore is bound (push
   // is on) — the handler's whole job is upserting the snapshot onto
-  // the active StackItem, which requires the same store push writes
-  // to. Without push, there's no stack to mutate.
+  // the active Render, which requires the same store push writes
+  // to. Without push, there's no render to mutate.
   if (deps.push) {
     handlers.push(
       createGguiSyncContextHandler({
@@ -1130,7 +1130,7 @@ export function defaultHandlers(deps: {
     );
   }
   // ggui_consume registers whenever push is bound (it shares the
-  // RenderStore for stackItemId resolution + tenancy checks).
+  // RenderStore for renderId resolution + tenancy checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
@@ -1970,7 +1970,7 @@ export interface CreateGguiServerOptions {
    *
    * Absent = agent-mediated behavior (canonical for MCP Apps hosts and
    * Claude Agent SDK consumers). Inbound actions land on the
-   * stackItemId-keyed pending-events pipe via `ggui_runtime_submit_action`
+   * renderId-keyed pending-events pipe via `ggui_runtime_submit_action`
    * and the agent's `ggui_consume` long-poll drains them. CLI
    * composition in `ggui serve` wires a router by default over the
    * same handler bundle `/mcp` uses, since that command runs WITHOUT
@@ -2762,10 +2762,10 @@ export interface CreateGguiServerOptions {
 
   /**
    * Generation wiring for the `ggui_render` story path. When present,
-   * every component push invokes the bound `UiGenerator` and
-   * appends the result as a real `StackItem` on the session.
-   * Absent = placeholder mode: `ggui_render` on the story path
-   * returns `codeReady: false` without writing componentCode.
+   * every component push invokes the bound `UiGenerator` and commits
+   * the result as a real `Render`. Absent = placeholder mode:
+   * `ggui_render` on the story path returns `codeReady: false`
+   * without writing componentCode.
    *
    * Requires `mcpApps` to be enabled — generation attaches to
    * `ggui_render`, which is only registered when MCP Apps is on.
@@ -3710,8 +3710,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               ...(provisionalPreviewDeps ? { provisionalPreview: provisionalPreviewDeps } : {}),
               // Wire the UI generator into `ggui_render`. When bound,
               // every story-path push awaits
-              // `uiGenerator.generate(...)`, appends the generated
-              // StackItem, and returns `codeReady:true`. Absent =
+              // `uiGenerator.generate(...)`, commits the generated
+              // Render, and returns `codeReady:true`. Absent =
               // placeholder mode (no componentCode produced).
               //
               // `generationWithCache` enriches the caller-supplied

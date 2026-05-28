@@ -135,24 +135,18 @@ describe('GET /api/renders/:renderId/state', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
 
     const body = (await res.json()) as Record<string, unknown>;
-    const sessionSlice = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+    const renderMeta = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
       | McpAppAiGguiRenderMeta
       | undefined;
-    expect(sessionSlice).toBeDefined();
-    expect(sessionSlice?.renderId).toBe(fx.renderId);
-    expect(sessionSlice?.appId).toBe(fx.appId);
-    expect(typeof sessionSlice?.runtimeUrl).toBe('string');
+    expect(renderMeta).toBeDefined();
+    expect(renderMeta?.renderId).toBe(fx.renderId);
+    expect(renderMeta?.appId).toBe(fx.appId);
+    expect(typeof renderMeta?.runtimeUrl).toBe('string');
     // R6 contract — lastSequence MUST be stamped on every /state read.
-    expect(typeof sessionSlice?.lastSequence).toBe('number');
-    expect(sessionSlice?.lastSequence).toBeGreaterThanOrEqual(0);
-
-    const stackItem = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
-      | McpAppAiGguiRenderMeta
-      | undefined;
-    expect(stackItem).toBeDefined();
-    expect(stackItem?.renderId).toBe('item-1');
+    expect(typeof renderMeta?.lastSequence).toBe('number');
+    expect(renderMeta?.lastSequence).toBeGreaterThanOrEqual(0);
     // codeUrl wired via codeStore + publicBaseUrl.
-    expect(stackItem?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
+    expect(renderMeta?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
   });
 
   it('returns 200 + session slice only when stack is empty', async () => {

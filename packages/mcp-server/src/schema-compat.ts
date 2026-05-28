@@ -1,12 +1,12 @@
 /**
- * Schema compatibility check — verifies that a StackItem's declared
+ * Schema compatibility check — verifies that a Render's declared
  * `actionSpec` / `streamSpec` schemas line up with the input/output
  * schemas of the tools they reference. Wired at two canonical check
  * points: `ggui_render` validation (defensive, fires when the
  * generator eventually emits contract) and blueprint registration
  * (the console blueprint-try endpoint — the real-world site where a
- * StackItem with pre-declared `actionSpec` / `streamSpec` and tool
- * refs lands on a session).
+ * Render with pre-declared `actionSpec` / `streamSpec` and tool
+ * refs lands on the server).
  *
  * **Algorithmic primitive** lives in `@ggui-ai/protocol`:
  *
@@ -16,7 +16,7 @@
  *     `inputSchema` / `outputSchema` to the JsonSchema shape the
  *     subset algorithm consumes.
  *
- * **What this module adds.** A small layer that walks a StackItem's
+ * **What this module adds.** A small layer that walks a Render's
  * `actionSpec` + `streamSpec`, resolves each declared `tool` ref
  * against a toolName → ZodRawShape registry, runs the appropriate
  * subset check, and reports a stable {@link SchemaCompatReport}. The
@@ -132,9 +132,9 @@ export interface ToolSchemaRef {
 }
 
 /**
- * Narrow shape of the StackItem subset the checker consumes — the
+ * Narrow shape of the Render subset the checker consumes — the
  * two spec fields PLUS the contract's own tool catalog. Accepts any
- * object carrying them, so both `@ggui-ai/protocol::StackItem` and
+ * object carrying them, so both `@ggui-ai/protocol::Render` and
  * the console endpoint's manifest contract shape work without a cast.
  *
  * `agentCapabilities.tools` is the contract author's declared catalog
@@ -168,7 +168,7 @@ export class SchemaCompatError extends Error {
 }
 
 /**
- * Check a StackItem's `actionSpec` / `streamSpec` entries against
+ * Check a Render's `actionSpec` / `streamSpec` entries against
  * the tool registry. See {@link SchemaCompatMode} for policy
  * semantics.
  *

@@ -18,7 +18,7 @@
  * `streamSpec[*].schema` vs `agentCapabilities.tools[*].inputSchema` /
  * `outputSchema`, all of which are author-declared JSON Schemas
  * already on the contract. No tool registry, no zod conversion, no
- * server state. The server-level F4 check (`checkStackItemSchemaCompat`
+ * server state. The server-level F4 check (`checkRenderSchemaCompat`
  * in `@ggui-ai/mcp-server`) compares the same `actionSpec` /
  * `streamSpec` schemas against the SERVER-REGISTERED tools' actual
  * zod schemas; it covers the operator-side "did the deployed tool
@@ -264,7 +264,7 @@ export class SchemaCompatInvariantError extends Error {
  *
  * Slots alongside `assertCrossReferences` + `assertNameInvariants`
  * at push time. Different scope from the server-level
- * `SchemaCompatError` thrown by `checkStackItemSchemaCompat` in
+ * `SchemaCompatError` thrown by `checkRenderSchemaCompat` in
  * `@ggui-ai/mcp-server`: this check uses ONLY the contract's own
  * catalog; the server-level check uses the runtime tool registry.
  */
