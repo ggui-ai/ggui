@@ -10,7 +10,7 @@
  * What still lives here:
  *
  *   - `GenerationCacheDeps` + `GenerationCacheHit` — projection shapes
- *     `push.ts` + `commitCachedStackItem` read on the cache-hit commit
+ *     `render.ts` + `commitCachedRender` read on the cache-hit commit
  *     path. The fields stay aligned with what the blueprint-matcher
  *     produces so the commit-site code is one shape regardless of
  *     which match path fired.
@@ -52,13 +52,13 @@ export interface GenerationCacheDeps {
   readonly similarityThreshold?: number;
 }
 
-/** A cache hit the push handler can reconstruct a {@link StackItem} from. */
+/** A cache hit the render handler can reconstruct a {@link ComponentRender} from. */
 export interface GenerationCacheHit {
   /** Short-hash identifier the push handler echoes on the `cache` marker. */
   readonly cachedBlueprintId: string;
   /** Cosine similarity in `[0, 1]`. Always ≥ the configured threshold. */
   readonly similarity: number;
-  /** Cached JS componentCode — dropped straight onto a new `StackItem`. */
+  /** Cached JS componentCode — dropped straight onto a new `ComponentRender`. */
   readonly componentCode: string;
   /** Original intent that produced the cached blueprint. Diagnostic-only. */
   readonly cachedIntent: string;
@@ -69,7 +69,7 @@ export interface GenerationCacheHit {
    * ({@link recordGenerationCache}) does not persist contracts, so
    * cache hits always emit these as `undefined`; they're declared
    * here so the cached-commit path in
-   * `commitCachedStackItem` can project them onto the StackItem
+   * `commitCachedRender` can project them onto the ComponentRender
    * symmetrically with the cold-generation path. When the cache
    * store evolves to persist contracts, only the writer + reader
    * here change; the consumer site stays untouched.
@@ -79,8 +79,8 @@ export interface GenerationCacheHit {
   readonly propsSpec?: import('@ggui-ai/protocol').PropsSpec;
   readonly contextSpec?: import('@ggui-ai/protocol').ContextSpec;
   /**
-   * Agent's declared tool catalog. Used by `commitCachedStackItem`
-   * to project onto the StackItem so the schema-compat backstop
+   * Agent's declared tool catalog. Used by `commitCachedRender`
+   * to project onto the ComponentRender so the schema-compat backstop
    * recognizes cross-MCP tools (tools the agent declared in the
    * contract catalog but doesn't expect to live on this server).
    * Today's cache writer doesn't persist contracts, so cache hits
@@ -89,7 +89,7 @@ export interface GenerationCacheHit {
    */
   readonly agentCapabilities?: import('@ggui-ai/protocol').AgentCapabilitiesSpec;
   /**
-   * `clientCapabilities` projection used by `commitCachedStackItem`
+   * `clientCapabilities` projection used by `commitCachedRender`
    * to derive the iframe's Permissions-Policy directive set. Today's
    * cache writer doesn't persist contracts, so cache hits surface
    * `undefined`; declared here for symmetric commit-path shape.

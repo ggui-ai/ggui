@@ -135,7 +135,7 @@ export type ContractValidator = (
  *
  * Distinct from contract-shape and access errors thrown elsewhere:
  *   - ContractViolationError      — runtime data violates a declared schema
- *   - StackItemNotFoundError           — target stack item id is missing
+ *   - RenderNotFoundError         — target render id is missing
  *   - EventNotAllowedError        — event type not in the subscription allowlist
  *   - BlueprintRejectedError (this) — contract structure trips a fail-closed
  *                                     validator finding at registration time
