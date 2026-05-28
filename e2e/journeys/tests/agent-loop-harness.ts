@@ -287,6 +287,11 @@ export async function spawnAgentLoop(
       env: {
         ...baseEnv,
         VITE_AGENT_ENDPOINT_URL: `http://localhost:${agentPort}`,
+        // Disable ANSI color codes — Vite's colorized output interleaves
+        // escape sequences inside the text we beacon on, breaking the
+        // `Local:\s+http` match (`Local[22m:` ≠ `Local:`).
+        NO_COLOR: '1',
+        FORCE_COLOR: '0',
       },
     });
     await waitForBeacon(
