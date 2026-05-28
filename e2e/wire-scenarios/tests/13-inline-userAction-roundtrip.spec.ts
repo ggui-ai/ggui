@@ -109,6 +109,14 @@ async function fetchTodos(): Promise<ReadonlyArray<Todo>> {
 // the iframe boundary; this scenario adds the agent-side proof which
 // will land after the ggui_update kind:'merge'|'replace' redesign +
 // triad reinforcement + chat-shell auto-forward decision.
+//
+// ADDITIONAL BLOCKER post-flatten-render-identity Phase B (2026-05-27):
+// step 5 of the choreography calls `ggui_close` to invalidate the pipe
+// before the click. That tool is now retired — renders decay via TTL
+// only and there is no force-expire affordance. Before un-skipping,
+// substitute the close step with either (a) a test-only force-expire
+// admin tool, or (b) reframe the scenario against transport disconnect.
+// See: scenario 02 for the parallel skip note.
 describe.skip(
   'Scenario 13 — inline userAction round-trip (pipe gone, payload travels on ui/message)',
   () => {

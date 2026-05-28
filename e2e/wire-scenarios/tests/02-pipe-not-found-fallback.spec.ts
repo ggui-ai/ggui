@@ -24,9 +24,26 @@ import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
-const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
-describe.skipIf(!HAS_KEY)('Scenario 2 — PIPE_NOT_FOUND fallback', () => {
+// SKIPPED post-flatten-render-identity Phase B (2026-05-27): this
+// scenario depended on the `ggui_close` tool to invalidate the pipe
+// server-side, then asserted that the next submit_action falls through
+// to the `ui/message` inline carrier (PIPE_NOT_FOUND classifier). Phase
+// B retired `ggui_close` entirely: renders now decay via TTL only and
+// there is no public/admin force-expire affordance to substitute. The
+// alternative — waiting out DEFAULT_RENDER_TTL_MS in-test — is too long
+// for an e2e budget, and reframing as a transport-disconnect simulation
+// would not exercise the same server-side `markDeleted` → PIPE_NOT_FOUND
+// path the scenario is named for.
+//
+// TODO: un-skip once one of:
+//   (a) a test-only `ggui_ops_force_expire_render` admin tool ships, or
+//   (b) the scenario is reframed against transport-level disconnect
+//       (would prove a different code path — not PIPE_NOT_FOUND).
+// See: oss/packages/mcp-server-handlers/src/renders/ for where a
+// force-expire admin handler would land alongside the existing TTL-decay
+// machinery.
+describe.skip('Scenario 2 — PIPE_NOT_FOUND fallback (blocked: ggui_close retired Phase B; no force-expire affordance)', () => {
   let handle: BrowserHandle;
   beforeEach(async () => {
     handle = await openBrowser();
