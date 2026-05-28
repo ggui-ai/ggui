@@ -2545,7 +2545,7 @@ export interface CreateGguiServerOptions {
         readonly distDir?: string;
         /**
          * Enable the Slice-2 same-origin session-cookie flow
-         * (`POST /ggui/console/session-cookie` + session-channel
+         * (`POST /ggui/console/render-cookie` + session-channel
          * cookie-auth wiring). Defaults to OFF — the landing-page
          * static surface is useful on its own (pair-code display,
          * server identity); turning on the cookie flow is an
@@ -5439,8 +5439,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //   - `GET /ggui/console/info` — JSON describing this server
   //     (name + version + pairing block). Stable shape so the SPA
   //     client in `@ggui-ai/console` can fetch once on load.
-  //   - `POST /ggui/console/session-cookie` — resolve shortCode
-  //     → session and mint the same-origin HTTP-only cookie the
+  //   - `POST /ggui/console/render-cookie` — resolve shortCode
+  //     → render and mint the same-origin HTTP-only cookie the
   //     viewer authenticates to the live channel with. Enabled only when
   //     `console.sessionCookie` is on AND `shortCodeIndex` +
   //     `sessionChannel` are wired.
@@ -5664,7 +5664,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // renderId. The blueprint id makes a natural slug; a
             // same-blueprint retry replaces the row.
             const renderId = `try-${blueprintId}-${randomUUID()}`;
-            const sessionId = renderId; // local name kept for downstream log fields
             const createdAt = Date.now();
 
             const contract = entry.manifest.contract ?? {};
@@ -5785,37 +5784,37 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // client never sees a dangling mapping. Best-effort bind
             // to match push.ts's posture (a put failure shouldn't
             // fail the whole try-live — a 500 here would leave the
-            // session and stack item behind with no way to resolve
-            // from `/s/<shortCode>`, but the operator can still hit
-            // the session via `/ggui/console/sessions`).
+            // render behind with no way to resolve from
+            // `/s/<shortCode>`, but the operator can still hit the
+            // render via `/ggui/console/renders`).
             const shortCode = generateTryLiveShortCode();
             try {
               await shortCodeIndexForTry.put(shortCode, {
-                renderId: sessionId,
+                renderId,
                 appId,
               });
             } catch (err) {
               logger.warn("console_blueprint_try_shortcode_failed", {
                 blueprintId,
-                sessionId,
+                renderId,
                 shortCode,
                 error: String(err),
               });
               // Don't fail the response — the client can reopen via
-              // the sessions list. Surface the issue in the payload
+              // the renders list. Surface the issue in the payload
               // so the SPA can show a degraded banner.
               res.status(200).json({
-                sessionId,
+                renderId,
                 shortCode: null,
                 url: null,
                 warning:
-                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/sessions.",
+                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/renders.",
               });
               return;
             }
 
             res.json({
-              sessionId,
+              renderId,
               shortCode,
               url: `/s/${shortCode}`,
             });
@@ -6220,7 +6219,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //
     // Threat model: `ggui serve` is routinely tunneled (e.g. via
     // Cloudflare) for claude.ai connector use. Without this gate
-    // anyone with the tunnel URL can read live session shortCodes
+    // anyone with the tunnel URL can read live render shortCodes
     // (then walk `/s/<code>` to spy on rendered UIs), the active
     // pair-code window from `/info`, or the full `ggui.json` (which
     // can carry env-var-derived secrets in `mcpMounts`). Localhost-
@@ -6234,7 +6233,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const adminGuardForReadEndpoints = requestHasAdminAuthShared;
       for (const path of [
         "/ggui/console/info",
-        "/ggui/console/sessions",
+        "/ggui/console/renders",
         "/ggui/console/config",
         "/ggui/console/llm-trace",
         "/ggui/console/validator",
@@ -6243,13 +6242,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         "/ggui/console/timeline",
       ]) {
         app.use(path, (req, res, next) => {
-          // The per-session meta route (`/ggui/console/sessions/:id/meta`)
+          // The per-render meta route (`/ggui/console/renders/:id/meta`)
           // gates on the same-origin console cookie, NOT the admin token —
           // its caller is a same-origin iframe that already proved cookie
           // possession. Exempt it from this admin-token middleware so
-          // both gates compose cleanly (admin token for `/sessions` list,
-          // cookie for per-session meta).
-          if (path === "/ggui/console/sessions" && /^\/[^/]+\/meta\/?$/.test(req.path)) {
+          // both gates compose cleanly (admin token for `/renders` list,
+          // cookie for per-render meta).
+          if (path === "/ggui/console/renders" && /^\/[^/]+\/meta\/?$/.test(req.path)) {
             return next();
           }
           if (adminGuardForReadEndpoints(req)) return next();
@@ -6290,41 +6289,40 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // the route handlers tolerate that and return empty bodies.
     mountConsoleTimelineRoutes(app, renderStore, streamBuffer);
 
-    // GET /ggui/console/sessions?limit=<n> — active-session list for
-    // the console SPA's `/sessions` page. Operator-facing "what's
-    // live right now?" surface, enriched with each session's current
+    // GET /ggui/console/renders?limit=<n> — active-render list for
+    // the console SPA's `/admin/renders` page. Operator-facing "what's
+    // live right now?" surface, enriched with each render's current
     // shortCode so rows can link through to `/s/<shortCode>` (the
-    // existing session viewer).
+    // existing render viewer).
     //
-    // Scope: active sessions only. The `SessionFilter.status`
+    // Scope: active renders only. The `SessionFilter.status`
     // taxonomy ('active' | 'completed' | 'expired') requires the
     // store's private `closed` bucket flag to disambiguate completed
-    // from expired — that flag isn't on the `Session` protocol type,
+    // from expired — that flag isn't on the `Render` protocol type,
     // so exposing mixed-status listings honestly requires a seam
     // extension we don't need for the "live right now" use case.
-    // Future slices (historical sessions, closed-sessions triage)
+    // Future slices (historical renders, closed-renders triage)
     // can opt in via query-param.
     //
     // Sources:
     //   - `renderStore.list({ status: 'active', limit })` — single
     //     page, limit default 25, clamped to [1, 100].
-    //   - `shortCodeIndex.findByRenderId(session.id)` — best-effort
+    //   - `shortCodeIndex.findByRenderId(render.id)` — best-effort
     //     enrichment; absent shortCode is a valid row (displays
     //     without a click-through link).
     //
     // Sort: most-recent `lastActivityAt` first — matches operator
     // intent "show me what I was just looking at."
     //
-    // Zero-config shape: `{ sessions: [], total: 0 }` when no
+    // Zero-config shape: `{ renders: [], total: 0 }` when no
     // renderStore is wired (e.g. pure-MCP dev boot with neither
     // sessionChannel nor mcpApps enabled).
-    app.get("/ggui/console/sessions", async (req, res) => {
+    app.get("/ggui/console/renders", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
-      interface SessionSummary {
-        readonly sessionId: string;
+      interface RenderSummary {
+        readonly renderId: string;
         readonly shortCode?: string;
         readonly appId: string;
-        readonly stackSize: number;
         readonly lastActivityAt: number;
         readonly createdAt: number;
         readonly status: "active";
@@ -6340,62 +6338,57 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       }
 
       if (!renderStore) {
-        res.json({ sessions: [], total: 0 });
+        res.json({ renders: [], total: 0 });
         return;
       }
 
       try {
-        const sessions = await renderStore.list({
+        const renders = await renderStore.list({
           status: "active",
           limit,
         });
-        const summaries: SessionSummary[] = [];
-        for (const session of sessions) {
+        const summaries: RenderSummary[] = [];
+        for (const render of renders) {
           let shortCode: string | null = null;
           if (opts.shortCodeIndex) {
             try {
-              shortCode = await opts.shortCodeIndex.findByRenderId(session.id);
+              shortCode = await opts.shortCodeIndex.findByRenderId(render.id);
             } catch (err) {
-              // Best-effort — the session row is still honest
+              // Best-effort — the render row is still honest
               // without a shortCode.
-              logger.warn("console_sessions_shortcode_lookup_failed", {
-                sessionId: session.id,
+              logger.warn("console_renders_shortcode_lookup_failed", {
+                renderId: render.id,
                 error: String(err),
               });
             }
           }
           summaries.push({
-            sessionId: session.id,
+            renderId: render.id,
             ...(shortCode ? { shortCode } : {}),
-            appId: session.appId,
-            // Phase B: a render IS the addressable row; no stack
-            // vessel exists. Pin `stackSize` to 1 so existing console
-            // tabular summary shape stays wire-stable while the field
-            // semantics retire over the next slice.
-            stackSize: 1,
-            lastActivityAt: session.lastActivityAt,
-            createdAt: session.createdAt,
+            appId: render.appId,
+            lastActivityAt: render.lastActivityAt,
+            createdAt: render.createdAt,
             status: "active",
           });
         }
-        // Most-recent activity first. Tiebreak on sessionId for
+        // Most-recent activity first. Tiebreak on renderId for
         // stability when multiple rows share the same ms timestamp.
         summaries.sort((a, b) => {
           const byRecency = b.lastActivityAt - a.lastActivityAt;
           if (byRecency !== 0) return byRecency;
-          return a.sessionId.localeCompare(b.sessionId);
+          return a.renderId.localeCompare(b.renderId);
         });
-        res.json({ sessions: summaries, total: summaries.length });
+        res.json({ renders: summaries, total: summaries.length });
       } catch (err) {
-        logger.warn("console_sessions_list_failed", {
+        logger.warn("console_renders_list_failed", {
           error: String(err),
         });
         res.status(500).json({
-          error: "sessions_unavailable",
+          error: "renders_unavailable",
           message:
             err instanceof Error
-              ? `Session store failed to list — ${err.message}`
-              : `Session store failed to list — ${String(err)}`,
+              ? `Render store failed to list — ${err.message}`
+              : `Render store failed to list — ${String(err)}`,
         });
       }
     });
@@ -6888,7 +6881,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         component: "console-cookie",
       });
 
-      app.post("/ggui/console/session-cookie", async (req: Request, res: Response) => {
+      app.post("/ggui/console/render-cookie", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         const body = (req.body ?? {}) as { shortCode?: unknown };
         if (typeof body.shortCode !== "string" || body.shortCode.length === 0) {
@@ -6930,21 +6923,21 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // Console session-resource pair. The console's `SessionViewer`
+      // Console render-resource pair. The console's `RenderViewer`
       // runs the production iframe path:
       //
-      //   1. GET /ggui/console/session-resource?session=<sessionId>
+      //   1. GET /ggui/console/render-resource?render=<renderId>
       //      → returns a `ResourceContents` blob whose `text` IS the
       //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
       //      byte-identical to what Claude Desktop fetches via MCP
       //      `resources/read ui://ggui/render`). The shell does NOT
       //      carry an inlined bootstrap — same as production.
       //
-      //   2. GET /ggui/console/session-bootstrap?session=<sessionId>
-      //      → returns `{bootstrap: McpAppAiGguiMeta}` JSON. The
-      //      console feeds this to `<McpAppIframe bootstrap={...}>`,
-      //      which forwards it via `ui/initialize`
-      //      (`packages/ggui-react/src/McpAppIframe/dispatch.ts`).
+      //   2. GET /ggui/console/renders/:renderId/meta
+      //      → returns `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` JSON.
+      //      The console replies with this to the iframe's
+      //      `ui/initialize` postMessage (Path-B inline-meta delivery
+      //      per `docs/protocol/extensions/ai.ggui-meta.md`).
       //
       // Earlier iterations used a wrapped-shell path
       // (`buildDevtoolSessionResourceHtml`); that is gone — the
@@ -6964,9 +6957,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
       //     `verifyDevtoolCookie`. Invalid / missing → 401.
-      //   - Scope: `cookie.sessionId` MUST equal `?session=`. Cross-
-      //     session access with a valid cookie → 403.
-      //   - Session existence + appId match: 404 / 403 respectively.
+      //   - Scope: `cookie.renderId` MUST equal `?render=`. Cross-
+      //     render access with a valid cookie → 403.
+      //   - Render existence + appId match: 404 / 403 respectively.
       //   - The bootstrap route additionally requires `mintBootstrap`
       //     (`mcpApps: true` at construction); 503 otherwise.
       //
@@ -6974,24 +6967,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // from earlier iterations; the wire shape is what changed.
 
       /**
-       * Shared auth + scope gate for the two console session routes.
+       * Shared auth + scope gate for the two console render routes.
        * Returns the verified `(renderId, appId)` pair on success or
        * `null` after writing an HTTP error response on failure.
        *
        * Internal — closure-scoped to the route block; not exported.
        */
-      const gateDevtoolSessionRequest = async (
+      const gateDevtoolRenderRequest = async (
         req: Request,
         res: Response,
-        explicitSessionId?: string
+        explicitRenderId?: string
       ): Promise<{ renderId: string; appId: string } | null> => {
-        const sessionIdRaw =
-          explicitSessionId !== undefined ? explicitSessionId : req.query["session"];
-        if (typeof sessionIdRaw !== "string" || sessionIdRaw.length === 0) {
+        const renderIdRaw =
+          explicitRenderId !== undefined ? explicitRenderId : req.query["render"];
+        if (typeof renderIdRaw !== "string" || renderIdRaw.length === 0) {
           res.status(400).json({
             error: "invalid_request",
             message:
-              "`session` query parameter (or :sessionId path parameter on the meta route) is required",
+              "`render` query parameter (or :renderId path parameter on the meta route) is required",
           });
           return null;
         }
@@ -6999,7 +6992,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (!rawCookie) {
           res.status(401).json({
             error: "missing_cookie",
-            message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/session-cookie first)`,
+            message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/render-cookie first)`,
           });
           return null;
         }
@@ -7011,56 +7004,55 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           });
           return null;
         }
-        if (claims.renderId !== sessionIdRaw) {
+        if (claims.renderId !== renderIdRaw) {
           res.status(403).json({
-            error: "cookie_session_mismatch",
-            message: `Console cookie is bound to session '${claims.renderId}' but request targets '${sessionIdRaw}'`,
+            error: "cookie_render_mismatch",
+            message: `Console cookie is bound to render '${claims.renderId}' but request targets '${renderIdRaw}'`,
           });
           return null;
         }
-        // Session existence + appId match — even on the static-shell
-        // route we honestly answer
-        // 404 instead of leaking an HTML blob for a session the server
-        // doesn't know about.
-        let session: Awaited<ReturnType<RenderStore["get"]>> = null;
+        // Render existence + appId match — even on the static-shell
+        // route we honestly answer 404 instead of leaking an HTML blob
+        // for a render the server doesn't know about.
+        let render: Awaited<ReturnType<RenderStore["get"]>> = null;
         if (renderStore) {
           try {
-            session = await renderStore.get(claims.renderId);
+            render = await renderStore.get(claims.renderId);
           } catch (err) {
-            cookieLogger.error("session_resource_store_failed", {
+            cookieLogger.error("render_resource_store_failed", {
               error: String(err),
-              sessionId: claims.renderId,
+              renderId: claims.renderId,
             });
             res.status(500).json({ error: "internal_error" });
             return null;
           }
         }
-        if (!session) {
+        if (!render) {
           res.status(404).json({
-            error: "session_not_found",
-            message: `Session '${claims.renderId}' is not on this server`,
+            error: "render_not_found",
+            message: `Render '${claims.renderId}' is not on this server`,
           });
           return null;
         }
-        if (session.appId !== claims.appId) {
+        if (render.appId !== claims.appId) {
           res.status(403).json({
             error: "app_mismatch",
-            message: `Cookie bound to app '${claims.appId}' but session is on app '${session.appId}'`,
+            message: `Cookie bound to app '${claims.appId}' but render is on app '${render.appId}'`,
           });
           return null;
         }
         return { renderId: claims.renderId, appId: claims.appId };
       };
 
-      // GET /ggui/console/session-resource?session=<sessionId>
+      // GET /ggui/console/render-resource?render=<renderId>
       // → production thin-shell HTML, wrapped as a ResourceContents
       //   blob. NO inlined bootstrap — console fetches the bootstrap
-      //   separately (route below) and threads it via
-      //   `<McpAppIframe bootstrap={...}>`.
-      app.get("/ggui/console/session-resource", async (req: Request, res: Response) => {
+      //   separately (route below) and replies to the iframe's
+      //   `ui/initialize` postMessage with it.
+      app.get("/ggui/console/render-resource", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const verified = await gateDevtoolSessionRequest(req, res);
+        const verified = await gateDevtoolRenderRequest(req, res);
         if (!verified) return;
         res.status(200).json({
           contents: [
@@ -7073,17 +7065,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // GET /ggui/console/sessions/:sessionId/meta
-      // → slice-envelope JSON (`{ "ai.ggui/render": {...}, "ai.ggui/render": {...} }`,
-      //   the same shape as the wire `_meta`). Required when the
-      //   console is hosting the renderer behind `<McpAppIframe>` and
-      //   needs to feed the iframe a meta-pair. `mcpApps: true` is
-      //   required (mintWsToken/mintBootstrap presence) — 503 otherwise.
-      app.get("/ggui/console/sessions/:sessionId/meta", async (req: Request, res: Response) => {
+      // GET /ggui/console/renders/:renderId/meta
+      // → slice-envelope JSON (`{ "ai.ggui/render": {...} }`, the same
+      //   shape as the wire `_meta`). Required when the console is
+      //   hosting the renderer in a srcdoc iframe and needs to feed
+      //   the iframe a meta payload via `ui/initialize`. `mcpApps:
+      //   true` is required (mintWsToken/mintBootstrap presence) —
+      //   503 otherwise.
+      app.get("/ggui/console/renders/:renderId/meta", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const sessionIdFromPath = req.params["sessionId"];
-        const verified = await gateDevtoolSessionRequest(req, res, sessionIdFromPath);
+        const renderIdFromPath = req.params["renderId"];
+        const verified = await gateDevtoolRenderRequest(req, res, renderIdFromPath);
         if (!verified) return;
         if (!mintBootstrap) {
           res.status(503).json({
@@ -7198,7 +7191,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //
       // Named parties:
       //   - console SPA (`RenderViewer`) — holds the same-origin
-      //     cookie minted by `POST /ggui/console/session-cookie`.
+      //     cookie minted by `POST /ggui/console/render-cookie`.
       //   - mcp-server (this handler) — gates auth + scope, reads the
       //     authoritative render from `renderStore`.
       //
@@ -7208,7 +7201,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Failure modes:
       //   - 401 missing/invalid cookie · 403 cross-render/app · 404
       //     unknown render · 500 store failure (all delegated to
-      //     `gateDevtoolSessionRequest`).
+      //     `gateDevtoolRenderRequest`).
       //   - 503 if `renderStore` is not wired (zero-config server).
       //
       // Shape note: Phase B collapsed the prior session-stack array to
@@ -7220,7 +7213,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       app.get("/ggui/console/render", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const verified = await gateDevtoolSessionRequest(req, res);
+        const verified = await gateDevtoolRenderRequest(req, res);
         if (!verified) return;
         if (!renderStore) {
           res.status(503).json({
