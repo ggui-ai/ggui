@@ -1576,8 +1576,24 @@
  *      `pendingEventConsumer.markDeleted`) all retire alongside.
  *      Agent-side: the long-poll loop terminates on TTL expiry rather
  *      than on an explicit terminal status.
+ *
+ *   b8. **SessionEvent dropped; RenderEvent is the single ledger
+ *      primitive (Wave 7, 2026-05-28).** The protocol-side `SessionEvent`
+ *      (sequence + emittedAt + type + payload) and the server-side
+ *      `RenderEvent` (seq + timestamp[ms-epoch] + type + data) merge
+ *      into one canonical `RenderEvent` owned by `@ggui-ai/protocol`.
+ *      Field shape: `seq + type + timestamp[ISO 8601 UTC string] +
+ *      data`. `EventsResponse.events` now ships `ReadonlyArray<RenderEvent>`.
+ *      The WS replay frame discriminator renames
+ *      `'session_event' → 'render_event'`; payload type follows the
+ *      same shape. `@ggui-ai/mcp-server-core` re-exports `RenderEvent`
+ *      / `RenderEventType` from `@ggui-ai/protocol` so downstream
+ *      import paths stay stable. Sqlite + DDB stores stamp ISO
+ *      strings on write; legacy numeric rows are coerced on read.
+ *      Cross-deployment uniformity: the same field type ships from
+ *      polling HTTP endpoint, WS replay frame, and store-side `observe()`.
  */
-export const PROTOCOL_VERSION = "draft-2026-05-27";
+export const PROTOCOL_VERSION = "draft-2026-05-28";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the
