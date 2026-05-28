@@ -127,7 +127,7 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * mounted inside the session viewer. Returns the resolved `shortCode`.
  *
  * The console SessionViewer mounts a plain `<iframe srcDoc>` with
- * `data-testid="session-viewer-iframe"` (read-only / visual-only —
+ * `data-testid="render-viewer-iframe"` (read-only / visual-only —
  * post C1-fix it no longer carries the `<McpAppIframe>`
  * lifecycle-mirror attribute). Inner stack-item attributes
  * (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE the
@@ -159,7 +159,7 @@ async function openLiveSession(page: Page, baseUrl: string, blueprintId: string)
   if (!match) {
     throw new Error(`expected /s/<shortCode> URL, got ${page.url()}`);
   }
-  const liveIframe = page.locator('iframe[data-testid="session-viewer-iframe"]').first();
+  const liveIframe = page.locator('iframe[data-testid="render-viewer-iframe"]').first();
   await expect(liveIframe).toBeVisible({ timeout: 15_000 });
   return match[1]!;
 }
@@ -172,7 +172,7 @@ async function openLiveSession(page: Page, baseUrl: string, blueprintId: string)
  * only via Playwright's `frameLocator` from the spec side.
  */
 function rendererFrame(page: Page) {
-  return page.frameLocator('iframe[data-testid="session-viewer-iframe"]').first();
+  return page.frameLocator('iframe[data-testid="render-viewer-iframe"]').first();
 }
 
 /**

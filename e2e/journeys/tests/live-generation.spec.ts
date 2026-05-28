@@ -278,7 +278,7 @@ test.describe.serial(
       //    `ggui-rcr-*` scope visibility check below — the renderer
       //    React-mounts inside the iframe once the bundle has loaded.
       const liveIframe = page
-        .locator('iframe[data-testid="session-viewer-iframe"]')
+        .locator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
@@ -291,7 +291,7 @@ test.describe.serial(
       //    actually loaded and a React component rendered — not the
       //    loading fallback, not the error boundary.
       const frame = page
-        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .frameLocator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       const rcrScope = frame.locator('[class^="ggui-rcr-"]');
       await expect(rcrScope).toBeVisible({ timeout: 30_000 });

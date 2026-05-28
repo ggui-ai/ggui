@@ -1,26 +1,26 @@
 /**
- * Sessions page proof — closes the Slice-3 loop of the console page
+ * Renders page proof — closes the Slice-3 loop of the console page
  * construction plan (`docs/plans/2026-04-22-console-page-construction.md`
  * §3.3).
  *
  * Scope for Lane 1 coverage:
  *
  *   1. Boot `ggui serve` against the `manifest-capabilities` fixture.
- *      The fixture has no pushed sessions at boot — perfect for the
- *      empty-state path the `/sessions` page surfaces.
- *   2. Navigate to `/sessions`. The SPA fetches
- *      `GET /ggui/console/sessions` (200, shape `{sessions:[],total:0}`)
+ *      The fixture has no pushed renders at boot — perfect for the
+ *      empty-state path the `/admin/renders` page surfaces.
+ *   2. Navigate to `/admin/renders`. The SPA fetches
+ *      `GET /ggui/console/renders` (200, shape `{renders:[],total:0}`)
  *      and paints the branded empty-state card.
- *   3. Navigate via the TopNav's `sessions` link from another page,
+ *   3. Navigate via the TopNav's `renders` link from another page,
  *      proving the cross-page nav wire works.
- *   4. Network gate — `/sessions` is a local read; no hosted / AWS /
- *      Cognito browser hits.
+ *   4. Network gate — `/admin/renders` is a local read; no hosted /
+ *      AWS / Cognito browser hits.
  *
  * Why not seed a populated-list case at Lane 1? Seeding a live
  * render requires either a real `ggui_render` round-trip (needs a
  * BYOK LLM → Lane 2) or a privileged test-fixture endpoint to
  * inject renders (new surface, out of Slice 3). Lane 3
- * (`console-sessions.test.ts`) covers the populated-list case with
+ * (`console-renders.test.ts`) covers the populated-list case with
  * an in-process `InMemoryRenderStore` — faster, deterministic,
  * same contract.
  */
@@ -41,7 +41,7 @@ const TEST_TIMEOUT_MS = 60_000;
 const FIXTURE_DIR = resolvePath(__dirname, 'fixtures/manifest-capabilities');
 
 test.describe.serial(
-  'Console sessions page — empty-state + cross-page nav',
+  'Console renders page — empty-state + cross-page nav',
   () => {
     let handle: GguiServeHandle;
     let gate: NetworkGate;
@@ -72,50 +72,50 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('direct navigation to /admin/sessions paints the empty state', async ({
+    test('direct navigation to /admin/renders paints the empty state', async ({
       page,
     }) => {
       test.setTimeout(TEST_TIMEOUT_MS);
       gate = await installNetworkGate(page);
       await handle.signInAsAdmin(page);
 
-      await page.goto(`${handle.baseUrl}/admin/sessions`, {
+      await page.goto(`${handle.baseUrl}/admin/renders`, {
         waitUntil: 'networkidle',
       });
 
-      // The fixture has no live sessions, so the endpoint returns
-      // `{sessions:[],total:0}` and the SPA renders the empty-state
+      // The fixture has no live renders, so the endpoint returns
+      // `{renders:[],total:0}` and the SPA renders the empty-state
       // card. Assert the empty-state copy — load-bearing proof the
-      // fetch + no-sessions branch wired correctly, because the
+      // fetch + no-renders branch wired correctly, because the
       // branded-card container has a stable anchor the row list
       // wouldn't produce.
       await expect(
-        page.locator('text=No sessions yet.'),
+        page.locator('text=No renders yet.'),
       ).toBeVisible({ timeout: 10_000 });
 
       // No list container when the catalog is empty (component
-      // short-circuits before rendering `<SessionList>`).
+      // short-circuits before rendering `<RenderList>`).
       await expect(
-        page.locator('[data-ggui-sessions-list]'),
+        page.locator('[data-ggui-renders-list]'),
       ).toHaveCount(0);
 
-      // Network gate — /sessions is a local read. Browser must not
-      // reach hosted / AWS / Cognito hosts.
+      // Network gate — /admin/renders is a local read. Browser must
+      // not reach hosted / AWS / Cognito hosts.
       expect(gate.attempts).toEqual([]);
     });
 
-    test('status dashboard paints the empty live-sessions hero (Slice 10)', async ({
+    test('status dashboard paints the empty live-renders hero (Slice 10)', async ({
       page,
     }) => {
       test.setTimeout(TEST_TIMEOUT_MS);
-      // Slice 10 replaced the 5th-in-grid "recent sessions" card with
+      // Slice 10 replaced the 5th-in-grid "recent renders" card with
       // a full-width hero above the status grid. In the fixture's
-      // no-active-sessions state, the hero renders its empty variant
-      // and points the operator at the playground (where sessions
+      // no-active-renders state, the hero renders its empty variant
+      // and points the operator at the playground (where renders
       // get born), not the list (which would be empty too). Active
       // state + "open latest →" + "view all →" are covered by the
       // Lane-3 `Status.test.tsx` spec with a mocked fetch — seeding
-      // a real session here would require BYOK, which is Lane 2.
+      // a real render here would require BYOK, which is Lane 2.
       await handle.signInAsAdmin(page);
       await page.goto(`${handle.baseUrl}/admin/status`, {
         waitUntil: 'networkidle',
@@ -127,9 +127,9 @@ test.describe.serial(
         'empty',
         { timeout: 10_000 },
       );
-      await expect(hero).toContainText('No sessions yet.');
+      await expect(hero).toContainText('No renders yet.');
 
-      // TopNav live-session pill is suppressed when no session with
+      // TopNav live-render pill is suppressed when no render with
       // a shortCode is live — the component collapses to render
       // `null` rather than a placeholder.
       await expect(

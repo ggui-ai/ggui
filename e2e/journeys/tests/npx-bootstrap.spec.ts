@@ -33,9 +33,9 @@
  *      security-header set per `packages/console/README.md` §Security.
  *   6. `GET /ggui/console/info` returns the server-identity block.
  *   7. Browser navigation to `/s/<shortCode>` mints the same-origin
- *      HTTP-only session cookie (via `POST /ggui/console/session-cookie`),
+ *      HTTP-only console cookie (via `POST /ggui/console/render-cookie`),
  *      opens a cookie-authenticated live-channel WebSocket, reaches the
- *      live `connected` state, and shows the real sessionId + "no stack
+ *      live `connected` state, and shows the real renderId + "no stack
  *      items yet" empty-state — the truthful current OSS state because
  *      component-code generation is deferred on OSS (see the `codeReady:
  *      false` note in `packages/mcp-server-handlers/src/renders/push.ts`).

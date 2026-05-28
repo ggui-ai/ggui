@@ -353,14 +353,14 @@ test.describe.serial("Slice 7 follow-up — repeated-turn cache miss→hit on OS
     // iframe; reach them through `frameLocator`. Readiness is gated
     // by the inner `[data-ggui-stack-item-root]` visibility check
     // below.
-    const liveIframe = page.locator('iframe[data-testid="session-viewer-iframe"]').first();
+    const liveIframe = page.locator('iframe[data-testid="render-viewer-iframe"]').first();
     await expect(liveIframe).toBeVisible({ timeout: 15_000 });
     // Post-stack-removal the iframe-runtime mounts the React tree
     // directly into `renderInto`; the per-stack-item container
     // wrapper is gone. The React mount still wraps in a `ggui-rcr-*`
     // scope div (`react-renderer.ts::makeScopeClass`); assert against
     // that scope directly.
-    const frame = page.frameLocator('iframe[data-testid="session-viewer-iframe"]').first();
+    const frame = page.frameLocator('iframe[data-testid="render-viewer-iframe"]').first();
     const rcrScope = frame.locator('[class^="ggui-rcr-"]').last();
     await expect(rcrScope).toBeVisible({ timeout: 30_000 });
     const scopeChildren = await rcrScope.evaluate((el) => el.children.length);

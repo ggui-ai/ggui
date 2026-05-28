@@ -136,7 +136,7 @@ async function openLiveSession(
   // panels) carry their own timeouts and serve as the de-facto
   // readiness gate now that the lifecycle mirror is gone.
   const liveIframe = page
-    .locator('iframe[data-testid="session-viewer-iframe"]')
+    .locator('iframe[data-testid="render-viewer-iframe"]')
     .first();
   await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
@@ -152,7 +152,7 @@ async function openLiveSession(
  */
 function rendererFrame(page: Page) {
   return page
-    .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+    .frameLocator('iframe[data-testid="render-viewer-iframe"]')
     .first();
 }
 

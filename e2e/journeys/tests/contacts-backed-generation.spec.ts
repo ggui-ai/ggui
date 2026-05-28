@@ -251,7 +251,7 @@ test.describe.serial(
       // attribute). Readiness is gated by the inner `ggui-rcr-*`
       // scope visibility check below.
       const liveIframe = page
-        .locator('iframe[data-testid="session-viewer-iframe"]')
+        .locator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
@@ -259,7 +259,7 @@ test.describe.serial(
       // React tree directly into the iframe body. The React mount
       // wraps its tree in a `ggui-rcr-*` scope div.
       const frame = page
-        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .frameLocator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       const rcrScope = frame.locator('[class^="ggui-rcr-"]');
       await expect(rcrScope).toBeVisible({ timeout: 30_000 });

@@ -301,7 +301,7 @@ test.describe.serial(
       // notes-backed) saw similar latency under live LLM and bumped
       // past the original 15s budget; mirror that here.
       const liveIframe = page
-        .locator('iframe[data-testid="session-viewer-iframe"]')
+        .locator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
@@ -312,7 +312,7 @@ test.describe.serial(
       // component mounted (not the loading fallback, not the error
       // boundary).
       const frame = page
-        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .frameLocator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       const rcrScope = frame.locator('[class^="ggui-rcr-"]');
       await expect(rcrScope).toBeVisible({ timeout: 30_000 });

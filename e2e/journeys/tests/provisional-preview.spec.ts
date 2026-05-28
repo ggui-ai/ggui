@@ -157,13 +157,13 @@ test.describe.serial(
       //    Readiness is gated by the inner `data-ggui-preview`
       //    assertion below.
       const liveIframe = page
-        .locator('iframe[data-testid="session-viewer-iframe"]')
+        .locator('iframe[data-testid="render-viewer-iframe"]')
         .first();
       await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
       // Renderer DOM is reachable via frameLocator below.
       const frame = page
-        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+        .frameLocator('iframe[data-testid="render-viewer-iframe"]')
         .first();
 
       // 5. Wait for the deterministic emitter's frames to arrive

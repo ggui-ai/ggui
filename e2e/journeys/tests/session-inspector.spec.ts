@@ -168,11 +168,12 @@ test.describe.serial(
     });
 
     // Slice J (2026-04-26) wired `<SessionInspector>` into production
-    // `<SessionViewer>` via a new `<StackInspectorList>` pane that
-    // renders one inspector per StackItem. Stack data sourced from
-    // `GET /ggui/console/session-stack?session=<id>` (auth-gated by
-    // the same cookie path the resource + bootstrap routes use).
-    // Both spec branches below now run for real — `test.fixme` lifted.
+    // `<RenderViewer>` via a new `<StackInspectorList>` pane that
+    // renders one inspector per stack entry. Post Phase-B stack
+    // collapse the data source is now `GET /ggui/console/render?render=<id>`
+    // (single Render row instead of a stack array; auth-gated by the
+    // same cookie path the resource + meta routes use). Both spec
+    // branches below now run for real — `test.fixme` lifted.
     test(
       'viewer mounts the inspector under the rendered stack entry',
       async ({ page }) => {

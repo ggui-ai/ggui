@@ -1,7 +1,7 @@
 {
   "id": "props-echo",
   "name": "Props echo",
-  "description": "Slice O props_update round-trip fixture. The blueprint renders a server-driven `count` prop and exposes a `bump` button that fires the `bump_count` wired action; the mount tool increments per-session state and pushes the new prop via `ctx.sendPropsUpdate`. The renderer's `props_update` branch applies the patch in-place and the DOM stamps the new value on `data-ggui-prop-count`. Used by `session-viewer-iframe.spec.ts::props-update-roundtrip` to prove the host→iframe props channel is live-wired.",
+  "description": "Slice O props_update round-trip fixture. The blueprint renders a server-driven `count` prop and exposes a `bump` button that fires the `bump_count` wired action; the mount tool increments per-session state and pushes the new prop via `ctx.sendPropsUpdate`. The renderer's `props_update` branch applies the patch in-place and the DOM stamps the new value on `data-ggui-prop-count`. Used by `render-viewer-iframe.spec.ts::props-update-roundtrip` to prove the host→iframe props channel is live-wired.",
   "category": "diagnostic",
   "contract": {
     "intent": "Echo a server-driven `count` prop into the DOM and let the user bump it via a wired action that flows through the props_update emission seam.",

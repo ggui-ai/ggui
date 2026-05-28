@@ -259,7 +259,7 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     // check below — the renderer React-mounts inside the iframe once
     // the bundle has loaded.
     const liveIframe = page
-      .locator('iframe[data-testid="session-viewer-iframe"]')
+      .locator('iframe[data-testid="render-viewer-iframe"]')
       .first();
     await expect(liveIframe).toBeVisible({ timeout: 15_000 });
 
@@ -267,7 +267,7 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     // React tree directly into the iframe body. The React mount
     // wraps its tree in a `ggui-rcr-*` scope div.
     const frame = page
-      .frameLocator('iframe[data-testid="session-viewer-iframe"]')
+      .frameLocator('iframe[data-testid="render-viewer-iframe"]')
       .first();
     const rcrScope = frame.locator('[class^="ggui-rcr-"]');
     await expect(rcrScope).toBeVisible({ timeout: 30_000 });
