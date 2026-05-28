@@ -107,10 +107,11 @@ export interface McpAppIframeProps {
    * `_meta["ai.ggui/render"]` slice from the supplied
    * {@link McpAppAiGguiRenderMeta}, alongside the existing `theme` /
    * `containerDimensions` / `locale` adapter-boundary fields. The
-   * renderer's `parseBootstrap()`
-   * (`packages/renderer/src/bootstrap.ts`) reads exactly that path
-   * and uses it to fetch the renderer bundle, open the WebSocket,
-   * and bootstrap the render.
+   * renderer's slice-meta extraction
+   * (`packages/iframe-runtime/src/meta-parse.ts`,
+   * `parseMetaFromToolResult`'s `params.toolOutput._meta` back-compat
+   * branch) reads exactly that path and uses it to fetch the renderer
+   * bundle, open the WebSocket, and bootstrap the render.
    *
    * **When absent (default):** behavior is unchanged — the host
    * responds with `{theme, containerDimensions, locale}` only and

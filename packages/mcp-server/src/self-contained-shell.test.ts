@@ -21,7 +21,7 @@
  * This suite locks the inline-bootstrap shape against the runtime's
  * validator: the HTML the shell emits MUST contain a JSON literal
  * that round-trips cleanly through the iframe-runtime's
- * {@link parseBootstrapFromGlobal} extractor.
+ * {@link parseMetaFromGlobal} extractor.
  */
 import { describe, expect, it } from 'vitest';
 import { buildSelfContainedShell } from './mcp-apps-outbound.js';

@@ -23,7 +23,7 @@ import {
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { parseBootstrap } from '../meta-parse.js';
+import { parseMetaFromToolResult } from '../meta-parse.js';
 import {
   loadGadgetRegistry,
   type DynamicImporter,
@@ -81,7 +81,7 @@ function makeFakeStdlib(): ModuleNamespace {
 describe('GG.8.2 — full gadget pipeline (per-package)', () => {
   it('STDLIB-only contract: parser → loader → install → per-package registry', async () => {
     // (1) Parse a bootstrap without a gadgets field.
-    const parsed = parseBootstrap(buildBootstrapEnvelope());
+    const parsed = parseMetaFromToolResult(buildBootstrapEnvelope());
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error('unexpected');
     expect(parsed.meta.gadgets).toBeUndefined();
@@ -120,7 +120,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
 
   it('wrapper contract: bootstrap → parser → dynamic import → per-package registry', async () => {
     // (1) Parse a bootstrap WITH a registered package.
-    const parsed = parseBootstrap(
+    const parsed = parseMetaFromToolResult(
       buildBootstrapEnvelope([
         {
           package: '@ggui-samples/gadget-leaflet',
@@ -192,7 +192,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
   });
 
   it('package load failure leaves its slot absent (other slots intact)', async () => {
-    const parsed = parseBootstrap(
+    const parsed = parseMetaFromToolResult(
       buildBootstrapEnvelope([
         {
           package: '@broken/wrapper',
@@ -236,7 +236,7 @@ describe('GG.8.2 — full gadget pipeline (per-package)', () => {
   });
 
   it('STDLIB wins on collision: an operator package named @ggui-ai/gadgets cannot shadow first-party', async () => {
-    const parsed = parseBootstrap(
+    const parsed = parseMetaFromToolResult(
       buildBootstrapEnvelope([
         {
           package: '@ggui-ai/gadgets',

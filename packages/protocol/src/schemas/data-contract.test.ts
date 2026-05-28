@@ -2,7 +2,8 @@
 // `PUBLIC_ENV_APP_KEY_RE`. The schema is the single source of truth
 // for App.publicEnv key shape; tests here pin its behavior so every
 // downstream consumer (OSS ggui.json parser, cloud AppRecord
-// validator, iframe parseBootstrap) inherits the same rule.
+// validator, iframe-runtime slice-meta extractors) inherits the
+// same rule.
 
 import { describe, it, expect } from 'vitest';
 import { ZodError } from 'zod';

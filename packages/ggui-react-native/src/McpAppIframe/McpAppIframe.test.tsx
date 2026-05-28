@@ -149,10 +149,11 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     expect(result['containerDimensions']).toEqual({ width: 640, height: 480 });
   });
 
-  it('ui/initialize READING-B — parseBootstrap-shaped path matches the renderer parser contract', async () => {
+  it('ui/initialize READING-B — toolOutput._meta path matches the renderer parser contract', async () => {
     // Cross-check against the renderer's parser contract. The shape
-    // produced here MUST match what `parseBootstrap()` (in
-    // `packages/iframe-runtime/src/bootstrap.ts`) reads. This test
+    // produced here MUST match what `parseMetaFromToolResult()` (in
+    // `packages/iframe-runtime/src/meta-parse.ts`) reads via its
+    // `params.toolOutput._meta` back-compat branch. This test
     // structurally walks the same path the renderer does.
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 7, method: 'ui/initialize' },

@@ -4,8 +4,8 @@
  * Responsibilities:
  *
  *   1. Hold the latest `HostContextProjection` the runtime has captured.
- *      Seeded from the iframe's `ui/initialize` response (Reading-A
- *      path, via `parseMetaFromUiInitialize`); updated on every
+ *      Seeded from the App's `ui/initialize` capture
+ *      (`app.getHostContext()`); updated on every
  *      `ui/notifications/host-context-changed` postMessage from the host.
  *   2. Echo each fresh value as a `type: 'host_context_observed'`
  *      WebSocket envelope so the server can persist it on
@@ -28,10 +28,10 @@
  *
  *   - Initial seed: `seed(projection, renderId)` called from
  *     `bootProduction` right after the WS transport is attached and we
- *     know the initial projection from `parseMetaFromUiInitialize.hostContext`.
+ *     know the initial projection from `projectHostContext(app.getHostContext())`.
  *     {@link applyHostContextStyling} fires separately from
- *     `bootSequence` against the RAW `ui/initialize.result.hostContext`
- *     so the spec-canonical helpers see the full `McpUiHostContext`
+ *     `bootSequence` against the RAW `app.getHostContext()` so the
+ *     spec-canonical helpers see the full `McpUiHostContext`
  *     (projection drops fields they need).
  *   - Live updates: `attachListener()` installs a `window`-scoped
  *     `message` listener for the spec-defined notification method

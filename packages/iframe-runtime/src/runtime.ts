@@ -942,9 +942,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     rendererHooks.attachManager(renderer, { send: (msg) => handle.handle.send(msg) });
   }
 
-  // seed the host-context emitter with the
-  // projection `parseMetaFromUiInitialize` captured from `ui/initialize`'s
-  // `hostContext` field, and install the `host-context-changed`
+  // seed the host-context emitter with the projection captured from
+  // `app.getHostContext()` (the App class's spec-canonical
+  // `ui/initialize` capture), and install the `hostcontextchanged`
   // notification listener so subsequent live updates also echo to
   // the server. Both calls are idempotent and no-op when the host
   // didn't emit a HostContext (parsed.hostContext === undefined).
@@ -3126,8 +3126,9 @@ if (shouldAutostart() && typeof window !== 'undefined') {
 // The boot pipeline:
 //
 //   1. Status DOM up.
-//   2. ui/initialize postMessage.
-//   3. parseMetaFromUiInitialize.
+//   2. App.connect(transport) — spec-canonical ui/initialize handshake.
+//   3. Slice-meta resolution via parseMetaFromGlobal (inline) +
+//      parseMetaFromToolResult (spec-canonical postMessage).
 //   4. installGlobalRegistry (with real React+ReactDOM+design+wire
 //      module handles).
 //   5. Build StreamBus + root WireConfig.

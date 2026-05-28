@@ -678,7 +678,8 @@ export const clientCapabilitiesSpecSchema = z
  * Consumed by:
  *   - OSS `ggui.json#app.publicEnv` boot-time parse.
  *   - Cloud AppRecord persistence layer.
- *   - Defensive re-validation in `parseBootstrap` (iframe-runtime).
+ *   - Defensive re-validation in the iframe-runtime slice-meta
+ *     extractors (`parseMetaFromGlobal`, `parseMetaFromToolResult`).
  */
 export const appPublicEnvSchema = z
   .record(z.string().regex(PUBLIC_ENV_APP_KEY_RE), z.string())

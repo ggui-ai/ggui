@@ -752,7 +752,9 @@ export interface SelfContainedShellInputs {
   /**
    * Single-use bootstrap token authorising the WS subscribe. Paired
    * with {@link wsUrl} — half-live envelopes (one without the other)
-   * are rejected as MALFORMED by `parseBootstrap`. Server-minted via
+   * are rejected as MALFORMED by the iframe-runtime slice-meta
+   * extractors (`parseMetaFromGlobal`, `parseMetaFromToolResult`).
+   * Server-minted via
    * the same `mintBootstrap` minter the JSON `/api/bootstrap/<shortCode>`
    * route uses, so both transports share replay-cache state.
    */
@@ -831,7 +833,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // Build the single render slice (Phase B: ai.ggui/render collapsed
   // the prior ai.ggui/session + ai.ggui/stack-item pair into one flat
   // shape). The inline global carries the SAME shape as the wire
-  // `_meta` envelope so the iframe-runtime's `parseBootstrapFromGlobal`
+  // `_meta` envelope so the iframe-runtime's `parseMetaFromGlobal`
   // defers to the same `parseMcpAppAiGguiRenderMeta` parser the
   // postMessage paths use. `runtimeUrl` is required across all modes
   // (the shell-bundled script tag fetches the runtime from there).

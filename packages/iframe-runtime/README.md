@@ -16,7 +16,7 @@ exists for host apps, the `<McpAppIframe>` wrapper, and tests.
 
 For host-side code that needs to validate or react to runtime state:
 
-- `parseBootstrap` (and `parseBootstrapFrom*` variants) —
+- `parseMetaFromGlobal` / `parseMetaFromToolResult` —
   parse and validate a render bootstrap before spawning the iframe.
 - `ProtocolError` and the `from*` constructors — the canonical typed
   union for every failure the renderer classifies outward.

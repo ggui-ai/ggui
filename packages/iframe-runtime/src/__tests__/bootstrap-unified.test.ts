@@ -2,16 +2,15 @@
  * Slice 14 (2026-05-08) — envelope-equivalence + per-mode validation
  * for the unified slice-meta parser.
  *
- * The runtime now extracts a single {@link McpAppAiGguiRenderMeta} from
- * three envelope shapes via three thin wrappers
- * ({@link parseMetaFromUiInitialize},
- * {@link parseMetaFromGlobal},
- * {@link parseMetaFromToolResult}) that all delegate to the
+ * The runtime extracts a single {@link McpAppAiGguiRenderMeta} from
+ * two envelope shapes via two thin wrappers
+ * ({@link parseMetaFromGlobal},
+ * {@link parseMetaFromToolResult}) that both delegate to the
  * shared {@link validateMeta} core. This suite exercises:
  *
  *   1. **Envelope equivalence** — given the same raw slice-meta object,
- *      ALL three wrappers MUST produce the same parsed output. The
- *      DRY split is meaningless if the wrappers diverge.
+ *      BOTH wrappers MUST produce the same parsed output. The DRY
+ *      split is meaningless if the wrappers diverge.
  *   2. **Per-mode validation** — live / static-component / system-card
  *      each accept their canonical shape and reject every deformation
  *      enumerated in the validator's contract (no discriminator,
@@ -24,6 +23,12 @@
  * envelope (`ai.ggui/session` + `ai.ggui/stack-item`) into a single
  * `ai.ggui/render` slice. Every field flat on `McpAppAiGguiRenderMeta`.
  *
+ * Post-Phase-1.19b.3 (2026-05-28): the `ui/initialize` Reading-B
+ * extractor (`parseMetaFromUiInitialize`) was retired — App.connect
+ * does not expose `result.toolOutput`, so every slice-meta delivery
+ * flows through inline `__GGUI_META__` or the spec-canonical
+ * `ui/notifications/tool-result` postMessage.
+ *
  * @see packages/iframe-runtime/src/meta-parse.ts
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -32,10 +37,8 @@ import {
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
-  parseBootstrap,
   parseMetaFromGlobal,
   parseMetaFromToolResult,
-  parseMetaFromUiInitialize,
   validateMeta,
 } from '../meta-parse.js';
 
@@ -80,15 +83,6 @@ const systemBootstrap: McpAppAiGguiRenderMeta = {
   themeId: 'indigo',
 };
 
-function wrapUiInitialize(meta: McpAppAiGguiRenderMeta): unknown {
-  return {
-    toolOutput: {
-      _meta: toMcpAppEnvelope(meta),
-      structuredContent: { renderId: meta.renderId },
-    },
-  };
-}
-
 function wrapToolResult(meta: McpAppAiGguiRenderMeta): unknown {
   return { _meta: toMcpAppEnvelope(meta) };
 }
@@ -116,13 +110,9 @@ describe('Slice 14 — envelope equivalence', () => {
   it('static-component bootstrap parses identically through every extractor', () => {
     setGlobal(componentBootstrap);
     const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(componentBootstrap),
-    );
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(componentBootstrap),
     );
-    expect(fromGlobal).toEqual(fromHost);
     expect(fromGlobal).toEqual(fromTool);
     expect(fromGlobal.ok).toBe(true);
     if (fromGlobal.ok) {
@@ -135,33 +125,21 @@ describe('Slice 14 — envelope equivalence', () => {
   it('live-mode bootstrap parses identically through every extractor', () => {
     setGlobal(liveBootstrap);
     const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(liveBootstrap),
-    );
     const fromTool = parseMetaFromToolResult(wrapToolResult(liveBootstrap));
-    expect(fromGlobal).toEqual(fromHost);
     expect(fromGlobal).toEqual(fromTool);
   });
 
   it('system-card bootstrap parses identically through every extractor', () => {
     setGlobal(systemBootstrap);
     const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(systemBootstrap),
-    );
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(systemBootstrap),
     );
-    expect(fromGlobal).toEqual(fromHost);
     expect(fromGlobal).toEqual(fromTool);
     expect(fromGlobal.ok).toBe(true);
     if (fromGlobal.ok) {
       expect(fromGlobal.meta.kind).toBe('no-credentials');
     }
-  });
-
-  it('parseBootstrap (back-compat alias) === parseMetaFromUiInitialize', () => {
-    expect(parseBootstrap).toBe(parseMetaFromUiInitialize);
   });
 });
 
@@ -264,17 +242,10 @@ describe('Slice 14 — optional-field round-trip', () => {
   it('preserves appCallableTools through every extractor', () => {
     setGlobal(componentBootstrap);
     const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(componentBootstrap),
-    );
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(componentBootstrap),
     );
     expect(fromGlobal.ok && fromGlobal.meta.appCallableTools).toEqual([
-      'ggui_runtime_submit_action',
-      'foo_tool',
-    ]);
-    expect(fromHost.ok && fromHost.meta.appCallableTools).toEqual([
       'ggui_runtime_submit_action',
       'foo_tool',
     ]);
@@ -287,16 +258,10 @@ describe('Slice 14 — optional-field round-trip', () => {
   it('preserves actionNextSteps through every extractor', () => {
     setGlobal(componentBootstrap);
     const fromGlobal = parseMetaFromGlobal();
-    const fromHost = parseMetaFromUiInitialize(
-      wrapUiInitialize(componentBootstrap),
-    );
     const fromTool = parseMetaFromToolResult(
       wrapToolResult(componentBootstrap),
     );
     expect(fromGlobal.ok && fromGlobal.meta.actionNextSteps).toEqual({
-      archive: 'gmail_archive',
-    });
-    expect(fromHost.ok && fromHost.meta.actionNextSteps).toEqual({
       archive: 'gmail_archive',
     });
     expect(fromTool.ok && fromTool.meta.actionNextSteps).toEqual({

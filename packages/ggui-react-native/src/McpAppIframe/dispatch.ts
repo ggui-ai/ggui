@@ -69,8 +69,10 @@ export interface HostBridgeContext {
    * `_meta["ai.ggui/render"]` slice from the supplied
    * {@link McpAppAiGguiRenderMeta}) to the response alongside the
    * existing `theme` / `containerDimensions` / `locale`
-   * adapter-boundary fields. The renderer's `parseBootstrap`
-   * (`packages/iframe-runtime/src/bootstrap.ts`) reads this exact shape.
+   * adapter-boundary fields. The renderer's
+   * `parseMetaFromToolResult` extractor
+   * (`packages/iframe-runtime/src/meta-parse.ts`) reads this exact
+   * shape via its `params.toolOutput._meta` back-compat branch.
    *
    * When absent (default), the response is `{theme,
    * containerDimensions, locale}` only — no `toolOutput`, no `_meta`.
@@ -151,8 +153,9 @@ export async function dispatchHostBridgeRequest(
       // meta` JSDoc), augment the result with
       // `toolOutput._meta = toMcpAppEnvelope(ctx.meta)` (the wire
       // envelope carrying the single `ai.ggui/render` slice). The
-      // renderer's `parseBootstrap` reads exactly that path. The
-      // adapter-boundary rule still applies to every other key —
+      // renderer's `parseMetaFromToolResult` extractor reads this
+      // path via its `params.toolOutput._meta` back-compat branch.
+      // The adapter-boundary rule still applies to every other key —
       // only the `ai.ggui/*` slice is forwarded, scoped by the ggui
       // namespace.
       const result: Record<string, unknown> = {

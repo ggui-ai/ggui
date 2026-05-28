@@ -9,11 +9,12 @@
  *   - `McpAppAiGguiMetaParseFailureReason` — closed union of slice-meta
  *     parse failure reasons.
  *   - `McpAppAiGguiMetaParseResult` — discriminated union returned by
- *     `parseMetaFromUiInitialize()`.
- *   - `parseMetaFromUiInitialize` — the parser itself (consumers
- *     wanting to validate a slice meta before spawning the iframe).
- *     Also exported as `parseBootstrap` for back-compat with pre-R4
- *     call sites.
+ *     the slice-meta extractors.
+ *   - `parseMetaFromGlobal` / `parseMetaFromToolResult` — the two
+ *     production extractors (consumers wanting to validate a slice
+ *     meta before spawning the iframe).
+ *   - `validateMeta` — the shared mode-discriminator + expiresAt
+ *     validator the extractors funnel into.
  *   - `RendererBootFailureReason` / `RendererBootFailedMessage` — the
  *     postMessage envelope shape parents observe on boot failure.
  *   - `ProtocolError` — canonical typed union for every failure
@@ -36,8 +37,6 @@ export type {
   McpAppAiGguiMetaParseResult,
 } from './types.js';
 export {
-  parseBootstrap,
-  parseMetaFromUiInitialize,
   parseMetaFromGlobal,
   parseMetaFromToolResult,
   validateMeta,
