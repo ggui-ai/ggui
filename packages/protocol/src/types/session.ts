@@ -172,7 +172,7 @@ export interface RenderBase {
   /** Resolved lifecycle status. Absent ⇒ caller treats as `'active'`. */
   readonly status?: RenderStatus;
   /** Monotonic event ledger sequence (per-render — each Render has its
-   *  own SessionEvent ledger). */
+   *  own RenderEvent ledger). */
   readonly eventSequence: number;
   /** Creation timestamp (epoch ms). */
   readonly createdAt: number;

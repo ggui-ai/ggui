@@ -20,7 +20,17 @@
 import type {
   HostContextProjection,
   Render,
+  RenderEvent,
+  RenderEventType,
 } from '@ggui-ai/protocol';
+
+// Re-export the protocol-level types so downstream importers
+// (`@ggui-ai/mcp-server`, `@ggui-ai/iframe-runtime`, cloud adapters)
+// can keep their existing `@ggui-ai/mcp-server-core` imports. The
+// canonical definitions live in `@ggui-ai/protocol` (Wave 7 of
+// flatten-render-identity, 2026-05-28); these aliases preserve the
+// composition boundary without duplicating the types.
+export type { RenderEvent, RenderEventType } from '@ggui-ai/protocol';
 
 /**
  * Server-side persisted shape of a {@link Render}. Wraps the protocol's
@@ -64,38 +74,6 @@ export interface StoredRender {
    */
   readonly render: Render;
 }
-
-/**
- * Typed render event. Append-only. Every event carries a monotonic `seq`
- * that is gap-free within a single render, starting at 1.
- *
- * Type taxonomy is per-render — each event records a discrete state
- * transition on the render's lifecycle.
- */
-export interface RenderEvent {
-  seq: number;
-  type: RenderEventType;
-  timestamp: number;
-  /** Event-type-specific payload. Discriminate on `type` at the consumer. */
-  data: unknown;
-}
-
-/**
- * Canonical event-type taxonomy. Implementations MUST emit events for the
- * core types; custom types may be added with a `x-` or `ext:` prefix.
- *
- * No terminal event. Renders decay implicitly via TTL — there is no
- * `'session.closed'` / `'render.terminated'` literal because there is
- * no terminal write to make. Observers detect end-of-life by
- * `expiresAt` elapsing relative to wall-clock.
- */
-export type RenderEventType =
-  | 'ui.created'
-  | 'ui.updated'
-  | 'ui.committed'
-  | 'tool.called'
-  | 'tool.result'
-  | 'user.submitted';
 
 /**
  * Options for {@link RenderStore.observe}.

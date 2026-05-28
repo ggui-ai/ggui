@@ -4,7 +4,7 @@ export * from './types/capabilities';
 export * from './types/events';
 export * from './types/region';
 export * from './types/session';
-export * from './types/session-event';
+export * from './types/render-event';
 export * from './types/thread';
 // Live-channel contract payload types — SubscribePayload / AckPayload /
 // StreamEnvelope / etc. The WHAT each live-channel message carries,
