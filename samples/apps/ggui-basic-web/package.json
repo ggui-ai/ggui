@@ -1,0 +1,29 @@
+{
+  "name": "@ggui-samples/app-ggui-basic-web",
+  "version": "0.0.1",
+  "description": "Reference Vite-SPA frontend for any MCP-Apps-spec agent backend that mounts ggui renders. Consumes @ggui-ai/react's <AppRenderer> + useMcpAppsChat hook. Talks to a brand-agnostic agent server (claude-agent-sdk / openai-agents-sdk / google-adk) via VITE_AGENT_ENDPOINT_URL. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ggui-ai/design": "workspace:*",
+    "@ggui-ai/react": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0"
+  }
+}

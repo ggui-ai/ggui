@@ -1,4 +1,3 @@
-'use client';
 /* eslint-disable no-console */
 import {
   useCallback,
@@ -38,6 +37,13 @@ interface ChatProps {
    * backend decides which LLM it drives.
    */
   readonly agentEndpoint: string;
+  /**
+   * Sandbox-proxy origin (second-origin iframe host, per MCP-Apps spec).
+   * Fetched by {@link App} from `GET /sandbox-proxy-url` on the agent
+   * backend and threaded down here so a `<Chat>` mount always has a
+   * resolved URL — no in-component loading state.
+   */
+  readonly sandboxUrl: string;
 }
 
 /**
@@ -48,28 +54,19 @@ interface ChatProps {
  *      tab/window restores that specific conversation.
  *   2. Mint fresh UUID and stamp it into the URL.
  *
- * SSR-safe: returns a throwaway id when neither URL API nor crypto is
- * available; the resulting chat is single-turn isolated.
+ * Browser-only — this app is a pure Vite SPA, so no SSR/pre-hydration
+ * dance is required (unlike the Next.js predecessor).
  */
 const URL_CHAT_PARAM = 'chat';
 
 function getOrCreateChatId(): string {
-  if (typeof window === 'undefined') {
-    // SSR pre-hydration tick — useEffect picks up the real id after
-    // mount; this throwaway never escapes the initial render.
-    return 'ssr-placeholder';
-  }
-  try {
-    const url = new URL(window.location.href);
-    const fromUrl = url.searchParams.get(URL_CHAT_PARAM);
-    if (fromUrl && fromUrl.length > 0) return fromUrl;
-    const resolved = crypto.randomUUID();
-    url.searchParams.set(URL_CHAT_PARAM, resolved);
-    window.history.replaceState({}, '', url.toString());
-    return resolved;
-  } catch {
-    return crypto.randomUUID();
-  }
+  const url = new URL(window.location.href);
+  const fromUrl = url.searchParams.get(URL_CHAT_PARAM);
+  if (fromUrl && fromUrl.length > 0) return fromUrl;
+  const resolved = crypto.randomUUID();
+  url.searchParams.set(URL_CHAT_PARAM, resolved);
+  window.history.replaceState({}, '', url.toString());
+  return resolved;
 }
 
 /**
@@ -82,17 +79,11 @@ function getOrCreateChatId(): string {
  * stock `<AppRenderer>` from `@mcp-ui/client` (re-exported through
  * `@ggui-ai/react` for ergonomics).
  */
-export function Chat({
-  agentEndpoint,
-  sandboxUrl,
-}: ChatProps & { readonly sandboxUrl: string }) {
-  // Resolve the chatId AFTER mount — the initial render runs on the
-  // server (with a placeholder); after mount we read / mint / stamp
-  // the URL chatId and rebind the hook.
-  const [chatId, setChatId] = useState<string>('ssr-placeholder');
-  useEffect(() => {
-    setChatId(getOrCreateChatId());
-  }, []);
+export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
+  // Pure browser env (Vite SPA) — resolve the chat id synchronously
+  // during mount. `useState` initializer runs once per mount; the
+  // returned id is then stable for the lifetime of the component.
+  const [chatId, setChatId] = useState<string>(() => getOrCreateChatId());
 
   const { entries, renders, hostDisplayMode, sending, send, abort } =
     useMcpAppsChat({
@@ -126,7 +117,10 @@ export function Chat({
 
   const newSession = useCallback(() => {
     const fresh = crypto.randomUUID();
-    window.location.href = `/?${URL_CHAT_PARAM}=${encodeURIComponent(fresh)}`;
+    const url = new URL(window.location.href);
+    url.searchParams.set(URL_CHAT_PARAM, fresh);
+    window.history.replaceState({}, '', url.toString());
+    setChatId(fresh);
   }, []);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
