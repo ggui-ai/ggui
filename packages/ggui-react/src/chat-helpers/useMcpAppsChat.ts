@@ -191,6 +191,15 @@ export function useMcpAppsChat(
    * `ui/notifications/tool-result` whenever this meta field
    * transitions, so iframe-runtime applies the new `propsJson` without
    * tearing down the inner React tree.
+   *
+   * Also patches the matching `kind:'render'` entry in `entries[]` so
+   * chat shells that mount iframes off the embedded `entry.render`
+   * reference (the canonical inline-chat layout — see
+   * `samples/apps/ggui-basic-nextjs/app/Chat.tsx`) see the fresh meta.
+   * Without this the entry's `render` field stays pinned to the meta
+   * snapshotted at append-time (initial `ggui_render`), so on
+   * rehydration the iframe re-mounts with stale `propsJson` — every
+   * subsequent `ggui_update`'s post-merge state is lost.
    */
   const updateRenderMeta = useCallback(
     (renderId: string, meta: McpAppAiGguiRenderMeta) => {
@@ -200,6 +209,16 @@ export function useMcpAppsChat(
         const next = prev.slice();
         next[idx] = { ...next[idx]!, meta };
         return next;
+      });
+      setEntries((prev) => {
+        let mutated = false;
+        const next = prev.map((entry) => {
+          if (entry.kind !== 'render') return entry;
+          if (entry.render.renderId !== renderId) return entry;
+          mutated = true;
+          return { ...entry, render: { ...entry.render, meta } };
+        });
+        return mutated ? next : prev;
       });
     },
     [],
