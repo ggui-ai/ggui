@@ -56,7 +56,9 @@ import {
   applyDocumentTheme,
   applyHostFonts,
   applyHostStyleVariables,
+  type App,
   type McpUiHostContext,
+  type McpUiHostContextChangedNotification,
 } from '@modelcontextprotocol/ext-apps';
 import {
   hostContextProjectionsEqual,
@@ -90,11 +92,21 @@ export type HostContextSendFn = (msg: {
 // Module state (single-instance — one runtime per iframe)
 // =============================================================================
 
+/**
+ * Inbound-listener handle. Either the legacy raw `window.message`
+ * listener (kept for tests + degraded modes where no App is wired) or
+ * the spec-canonical `app.removeEventListener` cleanup closure when
+ * the listener was bound via App's event surface.
+ */
+type ListenerHandle =
+  | { readonly kind: 'window'; readonly off: () => void }
+  | { readonly kind: 'app'; readonly off: () => void };
+
 interface EmitterState {
   readonly renderId: string;
   readonly send: HostContextSendFn;
   current: HostContextProjection;
-  listener: ((ev: MessageEvent) => void) | null;
+  listener: ListenerHandle | null;
 }
 
 let state: EmitterState | null = null;
@@ -137,14 +149,41 @@ export function seed(args: {
   }
 }
 
+export interface AttachListenerOptions {
+  /**
+   * Bind via the spec-canonical `App.addEventListener('hostcontextchanged')`
+   * event surface. Production wires this — App's onEventDispatch
+   * pre-merges the params into its internal `_hostContext` before
+   * our handler runs, so `app.getHostContext()` is always fresh by
+   * the time we project + WS-echo.
+   *
+   * When omitted, falls back to a raw `window.addEventListener('message')`
+   * listener (the pre-1.19b.3 behavior). Tests rely on this — they
+   * dispatch `MessageEvent`s directly instead of constructing a
+   * connected App.
+   */
+  readonly app?: App;
+  /**
+   * Target window for the legacy raw-listener fallback. Ignored when
+   * {@link AttachListenerOptions.app} is set. Defaults to `window`.
+   */
+  readonly targetWindow?: Window;
+}
+
 /**
- * Install the `host-context-changed` notification listener on the
- * iframe `window`. Safe to call multiple times — duplicate listeners
- * are deduped via `state.listener !== null` guard.
+ * Install the `host-context-changed` notification listener. When the
+ * {@link AttachListenerOptions.app} handle is supplied, uses App's
+ * spec-canonical event surface; otherwise falls back to a raw
+ * `window.message` listener (tests use this).
+ *
+ * Safe to call multiple times — duplicate listeners are deduped via
+ * `state.listener !== null` guard.
  *
  * Detaches when `detach()` is called or when the module is torn down.
  */
-export function attachListener(targetWindow: Window = window): void {
+export function attachListener(
+  optsOrWindow: AttachListenerOptions | Window = window,
+): void {
   if (state === null) {
     // Not yet seeded — listener can't usefully fire (no send seam).
     // Caller should `seed()` first; this defensive bail keeps the
@@ -153,20 +192,54 @@ export function attachListener(targetWindow: Window = window): void {
   }
   if (state.listener !== null) return;
 
+  // Back-compat: callers that pass a bare `Window` (the pre-1.19b.3
+  // signature, still used by tests) take the raw-listener path.
+  const isWindowArg =
+    optsOrWindow !== null
+    && typeof optsOrWindow === 'object'
+    && 'addEventListener' in (optsOrWindow as object)
+    && 'removeEventListener' in (optsOrWindow as object)
+    && !('app' in (optsOrWindow as object));
+  const opts: AttachListenerOptions = isWindowArg
+    ? { targetWindow: optsOrWindow as Window }
+    : (optsOrWindow as AttachListenerOptions);
+
+  if (opts.app !== undefined) {
+    const handler = (
+      params: McpUiHostContextChangedNotification['params'],
+    ): void => {
+      handleHostContextChangedParams(params as Record<string, unknown>);
+    };
+    opts.app.addEventListener('hostcontextchanged', handler);
+    state.listener = {
+      kind: 'app',
+      off: () => opts.app!.removeEventListener('hostcontextchanged', handler),
+    };
+    return;
+  }
+
+  const targetWindow = opts.targetWindow ?? window;
   const listener = (ev: MessageEvent): void => {
     handleHostContextChangedMessage(ev.data);
   };
-  state.listener = listener;
   targetWindow.addEventListener('message', listener);
+  state.listener = {
+    kind: 'window',
+    off: () => targetWindow.removeEventListener('message', listener),
+  };
 }
 
 /**
  * Tear down: remove the listener, clear module state. Called from
  * unit tests between scenarios and from the future host-switch flow.
+ *
+ * The `targetWindow` parameter is no longer used (the listener handle
+ * carries its own cleanup closure); preserved as an optional arg for
+ * back-compat with existing test code.
  */
-export function detach(targetWindow: Window = window): void {
+export function detach(_targetWindow: Window = window): void {
   if (state !== null && state.listener !== null) {
-    targetWindow.removeEventListener('message', state.listener);
+    state.listener.off();
   }
   state = null;
   // Reset the local subscriber set too — module-level state is the
@@ -283,18 +356,32 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /**
  * Process an incoming postMessage payload. Filters to JSON-RPC
  * notifications with method `ui/notifications/host-context-changed`;
- * everything else is ignored. The notification's `params` is a partial
- * `McpUiHostContext` — we project and merge into the held value.
+ * everything else is ignored. Delegates to {@link handleHostContextChangedParams}
+ * once the envelope shape is validated.
  *
- * Exported via `attachListener` indirection; isolated here so it's
- * unit-testable without dispatching real `MessageEvent`s.
+ * Used by the legacy `window.message` listener path; App's event surface
+ * skips this filter (App's own dispatch has already matched the method).
  */
 function handleHostContextChangedMessage(raw: unknown): void {
-  if (state === null) return;
   if (!isPlainObject(raw)) return;
   if (raw['method'] !== 'ui/notifications/host-context-changed') return;
   const params = raw['params'];
   if (!isPlainObject(params)) return;
+  handleHostContextChangedParams(params);
+}
+
+/**
+ * Apply a `ui/notifications/host-context-changed` params payload to
+ * the iframe DOM + projection state + WS-echo. Called by both delivery
+ * paths (raw window.message in tests / App's `hostcontextchanged`
+ * event in production) once they've extracted the partial-context
+ * payload.
+ *
+ * Exported (module-private) so the App listener can call directly
+ * without re-validating the JSON-RPC envelope.
+ */
+function handleHostContextChangedParams(params: Record<string, unknown>): void {
+  if (state === null) return;
 
   // Apply spec-canonical theme/styles/fonts to the iframe DOM BEFORE
   // the WS-echo path. The DOM-apply path covers fields the projection

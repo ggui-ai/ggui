@@ -954,7 +954,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       send: (msg) => handle.handle.send(msg),
       initial: parsed.hostContext,
     });
-    attachHostContextListener();
+    // Bind via App's spec-canonical `hostcontextchanged` event surface.
+    // App's onEventDispatch pre-merges the params into its internal
+    // `_hostContext` before our handler runs, so `app.getHostContext()`
+    // is always fresh by the time we project + WS-echo.
+    attachHostContextListener({ app });
   }
 
   // First ack — apply the server's render snapshot (when matching
