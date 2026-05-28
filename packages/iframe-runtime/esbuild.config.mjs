@@ -10,8 +10,8 @@
  *
  * C7b scope: WS lifecycle + bootstrap parse + placeholder render +
  * globals/__ggui__ registry + adapter injection, growing across
- * Commits 2–5 into full triad (RCR port + PR port + stack-item
- * renderer + mcp-apps iframe host). Heavy deps (React + ReactDOM +
+ * Commits 2–5 into the full renderer (RCR port + PR port + render-item
+ * mount + mcp-apps iframe host). Heavy deps (React + ReactDOM +
  * `@ggui-ai/wire` + `@ggui-ai/design` + `@ggui-ai/preview-a2ui`) are
  * declared in package.json and bundle inline — `external: []` is a
  * hard constraint because the thin shell's `<script type="module">`

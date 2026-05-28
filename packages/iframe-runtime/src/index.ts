@@ -26,9 +26,10 @@
  *   - `ProtocolErrorEmitter` — function signature for the
  *     caller-side sink.
  *
- * Deliberately NOT exported: `RendererWebSocketManager`, `subscribe`,
- * `bootSequence`, `StackModel`. Those are the renderer's INTERNAL
- * runtime contract and should not become a load-bearing public API.
+ * Deliberately NOT exported: `bootSequence`, `connectViaRegistry`, the
+ * per-channel handler factories, and the single-item render mount.
+ * Those are the renderer's INTERNAL runtime contract and should not
+ * become a load-bearing public API.
  */
 export type {
   McpAppAiGguiMetaParseFailureReason,

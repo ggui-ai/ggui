@@ -24,9 +24,10 @@ For host-side code that needs to validate or react to runtime state:
   host telemetry seam.
 - `LifecycleEmitter` / `postLifecycleToParent` — lifecycle events.
 
-Internal runtime types (`RendererWebSocketManager`, `StackModel`, the
-boot sequence) are deliberately not exported — they are an internal
-implementation contract, not a public API.
+Internal runtime types (`bootSequence`, `connectViaRegistry`, the
+per-channel handler factories, and the single-item render mount) are
+deliberately not exported — they are an internal implementation
+contract, not a public API.
 
 ## License
 
