@@ -42,7 +42,7 @@
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/ui-gen": "workspace:*",
     "@ggui-ai/ui-registry": "workspace:*",
-    "@modelcontextprotocol/ext-apps": "^1.2.0",
+    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "express": "^4.21.0",
     "nodemailer": "^8.0.7",
