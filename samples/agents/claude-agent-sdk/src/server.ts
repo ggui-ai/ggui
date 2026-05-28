@@ -24,31 +24,18 @@ import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
-import {
-  parseMcpAppAiGguiRenderMeta,
-  toMcpAppEnvelope,
-  type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { runAgent } from './agent.js';
 
 /**
- * Per-chat in-memory snapshot of everything the browser needs to
- * rehydrate a tab on page refresh. Server-authoritative — the React
- * panel just re-renders whatever the server hands back.
+ * Per-chat in-memory snapshot of the agent's SDK message stream.
  *
- * `messages` is the verbatim stream of SDK messages from the streaming
- * agent loop; replaying them through `useChat`'s `handleEvent` rebuilds
- * the chat log (user prompts, assistant text, tool-call entries,
- * embedded renders) without re-prompting the agent.
- *
- * `renders` is keyed by `renderId`; the value is the bootstrap envelope
- * (`McpAppAiGguiRenderMeta`) captured from `tool_use_result._meta` at
- * the moment the tool returned. The original wsToken inside the
- * envelope may be aged by the time the user refreshes, but the
- * iframe-runtime's bootstrap fetch (`/api/renders/<id>/state`) trades
- * an aged-but-valid token for a fresh one server-side — so the stored
- * snapshot stays usable across the entire token-issuance window.
+ * **Brand-agnostic by design.** This server keeps only MCP-spec
+ * primitives — `SDKMessage[]` — and stays oblivious to ggui's
+ * `ai.ggui/render` slice. Any MCP-Apps-spec UI knowledge (parsing
+ * `_meta`, mapping renderIds, etc.) lives in the frontend hook
+ * (`useMcpAppsChat` in `@ggui-ai/react/chat-helpers`), which replays
+ * `messages[]` through the same handler the live SSE stream uses.
  *
  * Kept in-process / non-durable on purpose: this slice mirrors how a
  * chat shell stores its current session's artifacts; cross-restart
@@ -57,7 +44,6 @@ import { runAgent } from './agent.js';
 interface ChatStateSnapshot {
   readonly chatId: string;
   readonly messages: SDKMessage[];
-  readonly renders: Map<string, McpAppAiGguiRenderMeta>;
 }
 
 const chatStore = new Map<string, ChatStateSnapshot>();
@@ -65,36 +51,10 @@ const chatStore = new Map<string, ChatStateSnapshot>();
 function getOrCreateChatSnapshot(chatId: string): ChatStateSnapshot {
   let snap = chatStore.get(chatId);
   if (!snap) {
-    snap = { chatId, messages: [], renders: new Map() };
+    snap = { chatId, messages: [] };
     chatStore.set(chatId, snap);
   }
   return snap;
-}
-
-/**
- * Sniff a SDK message for an embedded ggui render bootstrap envelope.
- * Claude Agent SDK forwards every MCP `tool_result` to us as a `user`
- * role message whose `tool_use_result._meta` preserves the original
- * `_meta` block the MCP server stamped (the SDK strips `_meta` from
- * `message.content[*]` for Anthropic-API compliance, but keeps it on
- * the sibling `tool_use_result` field).
- *
- * Returns every `(renderId, meta)` slice attached to this message —
- * one user-role frame can carry multiple tool_result blocks (parallel
- * tool calls), each with its own `_meta`. Callers store them by id.
- */
-function extractRenderMetas(
-  msg: SDKMessage,
-): ReadonlyArray<McpAppAiGguiRenderMeta> {
-  if (msg.type !== 'user') return [];
-  const out: McpAppAiGguiRenderMeta[] = [];
-  const tur = (msg as { tool_use_result?: unknown }).tool_use_result;
-  if (tur && typeof tur === 'object') {
-    const meta = (tur as { _meta?: unknown })._meta;
-    const parsed = parseMcpAppAiGguiRenderMeta(meta);
-    if (parsed.ok && parsed.meta) out.push(parsed.meta);
-  }
-  return out;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -177,11 +137,10 @@ async function handleRequest(
   // GET /chat?chatId=<id> — server-authoritative chat snapshot.
   //
   // Returns the verbatim stream of SDK messages we observed for this
-  // chat plus the bootstrap envelopes for every render the agent
-  // produced. The frontend replays `messages[]` through its existing
-  // `handleEvent` to rebuild the chat panel exactly as it was, and
-  // mounts iframes from `renders[]` for any envelope that survived
-  // restart (no round-trip back to the ggui MCP server).
+  // chat. The frontend hook (`useMcpAppsChat`) replays `messages[]`
+  // through the same handler the live SSE stream uses, rebuilding the
+  // chat panel and re-mounting iframes from each tool_result's
+  // `_meta` slice — no separate per-render store needed server-side.
   //
   // 404 on unknown chatId — distinguishes "fresh tab opened on a URL
   // we don't know about" from "empty conversation" (the former gets a
@@ -207,18 +166,6 @@ async function handleRequest(
       JSON.stringify({
         chatId: snap.chatId,
         messages: snap.messages,
-        // Wrap each stored slice in the spec-canonical `_meta` envelope
-        // so the client parses it with the SAME `parseMcpAppAiGguiRenderMeta`
-        // it uses for every other transport (push frames, postMessage
-        // `ui/notifications/tool-result`, `ui://ggui/session` resources).
-        // Returning the inner slice directly would silently fail the
-        // envelope-unwrap check on the client.
-        renders: Array.from(snap.renders.entries()).map(
-          ([renderId, slice]) => ({
-            renderId,
-            bootstrap: toMcpAppEnvelope(slice),
-          }),
-        ),
       }),
     );
     return;
@@ -406,11 +353,12 @@ async function handleRequest(
         // SDK completion regardless of the SSE socket state (we ALSO
         // abort the SDK on client-close above; this just hedges the
         // ordering race), so any final tool_result still gets recorded
-        // for the next browser refresh.
+        // for the next browser refresh. The browser hook
+        // (`useMcpAppsChat`) replays the recorded `messages[]` through
+        // the same `handleEvent` the live SSE stream uses — re-spawning
+        // every render entry and re-mounting every iframe — so no
+        // separate per-render parse step is needed here.
         snapshot.messages.push(msg);
-        for (const meta of extractRenderMetas(msg)) {
-          snapshot.renders.set(meta.renderId, meta);
-        }
         // Check abort BEFORE writing — otherwise the first
         // post-abort iteration writes one message to an
         // already-closed SSE socket and Node logs an EPIPE.
