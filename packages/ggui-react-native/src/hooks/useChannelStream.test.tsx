@@ -42,7 +42,7 @@ function makeEnvelope(
   partial: Partial<StreamEnvelope> & { channel: string },
 ): StreamEnvelope {
   return {
-    sessionId: 'sess-1',
+    renderId: 'sess-1',
     mode: 'append',
     payload: {},
     ...partial,

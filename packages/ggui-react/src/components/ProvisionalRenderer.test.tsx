@@ -20,7 +20,7 @@ type A2UIPayload = unknown;
 
 function sendPayload(payload: A2UIPayload, complete = false): void {
   const envelope: StreamEnvelope = {
-    sessionId: 's1',
+    renderId: 's1',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],

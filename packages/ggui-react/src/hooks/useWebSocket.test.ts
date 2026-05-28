@@ -58,7 +58,7 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() =>
       useWebSocket({
         url: 'wss://example.com',
-        sessionId: 'sess_123',
+        renderId: 'render_123',
         appId: 'app_456',
       })
     );
@@ -76,7 +76,7 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() =>
       useWebSocket({
         url: 'wss://example.com',
-        sessionId: 'sess_123',
+        renderId: 'render_123',
         appId: 'app_456',
       })
     );
@@ -86,7 +86,7 @@ describe('useWebSocket', () => {
     });
 
     const envelope = {
-      sessionId: 'sess_123',
+      renderId: 'render_123',
       type: 'data:submit' as const,
       payload: { action: 'submit', data: { text: 'hi' } },
       stackIndex: 0,
@@ -107,7 +107,7 @@ describe('useWebSocket', () => {
     renderHook(() =>
       useWebSocket({
         url: 'wss://example.com',
-        sessionId: 'sess_123',
+        renderId: 'render_123',
         appId: 'app_456',
         onMessage,
       })
@@ -127,7 +127,7 @@ describe('useWebSocket', () => {
     const { result } = renderHook(() =>
       useWebSocket({
         url: 'wss://example.com',
-        sessionId: 'sess_123',
+        renderId: 'render_123',
         appId: 'app_456',
       })
     );
@@ -143,7 +143,7 @@ describe('useWebSocket', () => {
     const { unmount } = renderHook(() =>
       useWebSocket({
         url: 'wss://example.com',
-        sessionId: 'sess_123',
+        renderId: 'render_123',
         appId: 'app_456',
       })
     );
