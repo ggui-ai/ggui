@@ -9,7 +9,7 @@
  *
  *   2. `connectViaRegistry` — pre-ack `error` frames:
  *        - UPGRADE_REQUIRED → `{kind: 'version'}`
- *        - SESSION_NOT_FOUND / AUTH_REJECTED → `{kind: 'auth'}`
+ *        - RENDER_NOT_FOUND / AUTH_REJECTED → `{kind: 'auth'}`
  *        - other → `{kind: 'protocol'}` with extensibly-closed code
  *      plus client-side version mismatch on the first ack.
  *
@@ -103,9 +103,9 @@ describe('protocol-error constructors', () => {
   });
 
   it('fromAuthFailure maps each auth code without leaking foreign codes', () => {
-    expect(fromAuthFailure('SESSION_NOT_FOUND', 'gone')).toEqual({
+    expect(fromAuthFailure('RENDER_NOT_FOUND', 'gone')).toEqual({
       kind: 'auth',
-      code: 'SESSION_NOT_FOUND',
+      code: 'RENDER_NOT_FOUND',
       message: 'gone',
     });
     expect(fromAuthFailure('TOKEN_EXPIRED')).toEqual({
@@ -354,7 +354,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     expect(versionErr.clientSupports).toEqual(CLIENT_SUPPORTED_VERSIONS);
   });
 
-  it('emits kind=auth on SESSION_NOT_FOUND error frame', async () => {
+  it('emits kind=auth on RENDER_NOT_FOUND error frame', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
       meta: meta(),
@@ -369,7 +369,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     ws.simulateMessage({
       type: 'error',
       payload: {
-        code: 'SESSION_NOT_FOUND',
+        code: 'RENDER_NOT_FOUND',
         message: 'no session',
       },
     });
@@ -378,7 +378,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (!authErr || authErr.kind !== 'auth') throw new Error('unreachable');
-    expect(authErr.code).toBe('SESSION_NOT_FOUND');
+    expect(authErr.code).toBe('RENDER_NOT_FOUND');
   });
 
   it('emits kind=protocol on unknown error code with extensibly-closed forwarding', async () => {

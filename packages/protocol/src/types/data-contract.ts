@@ -1334,7 +1334,7 @@ export interface DataContract {
  * envelope reaches the agentic loop — instead of a silent `TOOL_THREW`
  * at runtime.
  *
- * `'SESSION_NOT_FOUND'` + `'AUTH_REJECTED'` — fire on post-WS-open
+ * `'RENDER_NOT_FOUND'` + `'AUTH_REJECTED'` — fire on post-WS-open
  * boot failures where the live channel is already alive (so the envelope-
  * emittable invariant is satisfied). The renderer bundle surfaces
  * them BOTH on the live-channel `_ggui:contract-error` envelope (with
@@ -1356,7 +1356,7 @@ export type ContractErrorCode =
   | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
-  | 'SESSION_NOT_FOUND'
+  | 'RENDER_NOT_FOUND'
   | 'AUTH_REJECTED'
   /**
    * `'INVALID_ACTION_KIND'` — emitted when the

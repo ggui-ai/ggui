@@ -210,7 +210,7 @@ function normalizeObservedVersion(
 
 /**
  * Map a pre-ack `error` frame onto a non-UPGRADE_REQUIRED ProtocolError.
- * `SESSION_NOT_FOUND` / `AUTH_REJECTED` → `'auth'`; every other code
+ * `RENDER_NOT_FOUND` / `AUTH_REJECTED` → `'auth'`; every other code
  * → `'protocol'` with the extensibly-closed tail carrying the wire code
  * verbatim.
  */
@@ -219,7 +219,7 @@ function classifyPreAckError(payload: {
   readonly message?: string;
   readonly details?: unknown;
 }): import('./protocol-error.js').ProtocolError {
-  if (payload.code === 'SESSION_NOT_FOUND' || payload.code === 'AUTH_REJECTED') {
+  if (payload.code === 'RENDER_NOT_FOUND' || payload.code === 'AUTH_REJECTED') {
     return fromAuthFailure(payload.code, payload.message);
   }
   if (payload.code === 'TOKEN_EXPIRED') {

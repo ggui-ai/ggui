@@ -48,7 +48,7 @@ import { ClientContractViolationError } from '@ggui-ai/wire';
  *      / `WS_HANDSHAKE_FAILED`. Matches `RendererBootFailureReason`.
  *
  *   3. **Transport-observable failures** — `BUNDLE_FETCH_FAILED` /
- *      `CSP_VIOLATION` / `SESSION_NOT_FOUND` / `AUTH_REJECTED`. These
+ *      `CSP_VIOLATION` / `RENDER_NOT_FOUND` / `AUTH_REJECTED`. These
  *      fire before the renderer parse path runs, so they're authored
  *      here rather than inside `McpAppAiGguiMetaParseFailureReason`.
  *
@@ -70,7 +70,7 @@ export type BootstrapFailureReason =
   // Transport-observable.
   | 'BUNDLE_FETCH_FAILED'
   | 'CSP_VIOLATION'
-  | 'SESSION_NOT_FOUND'
+  | 'RENDER_NOT_FOUND'
   | 'AUTH_REJECTED'
   // Extensibly-closed tail — future wire codes without a client bump.
   | (string & {});
@@ -88,7 +88,7 @@ export type BootstrapFailureReason =
  *                    Includes `retryable` so hosts can decide to reconnect
  *                    vs. give up.
  *   - `auth`       — session / token rejection pre-handshake.
- *                    `SESSION_NOT_FOUND` / `TOKEN_EXPIRED` /
+ *                    `RENDER_NOT_FOUND` / `TOKEN_EXPIRED` /
  *                    `AUTH_REJECTED` — all terminal; hosts typically
  *                    escalate to a login flow.
  *   - `protocol`   — envelope / session-mismatch failures post-handshake.
@@ -109,7 +109,7 @@ export type BootstrapFailureReason =
  */
 export type ProtocolError =
   | { readonly kind: 'transport'; readonly code: 'DISCONNECTED' | 'TIMEOUT'; readonly retryable: boolean; readonly message?: string }
-  | { readonly kind: 'auth'; readonly code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'; readonly message?: string }
+  | { readonly kind: 'auth'; readonly code: 'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'; readonly message?: string }
   | {
       readonly kind: 'protocol';
       readonly code: 'SESSION_MISMATCH' | 'APP_MISMATCH' | 'MALFORMED_ENVELOPE' | (string & {});
@@ -277,7 +277,7 @@ export function fromTransportFailure(
  * pre-handshake.
  */
 export function fromAuthFailure(
-  code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED',
+  code: 'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED',
   message?: string,
 ): ProtocolError {
   return {

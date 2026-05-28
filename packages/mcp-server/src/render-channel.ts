@@ -258,7 +258,7 @@ export interface RenderChannelLocalToolsOptions {
  *      payload. Mismatches are rejected with a clean error.
  *   3. On success, the server mints a reconnect credential via
  *      `issueSessionToken(renderId, appId)` and returns it in
- *      `AckPayload.sessionToken`. The iframe stores this for WS
+ *      `AckPayload.renderToken`. The iframe stores this for WS
  *      reconnects via the normal bearer path.
  *
  * Bootstrap auth is MUTUALLY EXCLUSIVE with the upstream `AuthAdapter`
@@ -314,7 +314,7 @@ export interface RenderChannelBootstrap {
   verify(token: string): RenderChannelBootstrapVerifyResult;
   /**
    * Mint a longer-lived reconnect credential to return in
-   * `AckPayload.sessionToken`. Called only after a successful
+   * `AckPayload.renderToken`. Called only after a successful
    * `verify()` on a bootstrap subscribe.
    */
   issueSessionToken(renderId: string, appId: string): string;
@@ -479,7 +479,7 @@ export interface RenderChannelOptions {
   /**
    * Optional bootstrap-auth plumbing. When present, the channel
    * accepts `SubscribePayload.bootstrap` and issues reconnect
-   * credentials in `AckPayload.sessionToken`. When absent, bootstrap
+   * credentials in `AckPayload.renderToken`. When absent, bootstrap
    * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
    */
   readonly bootstrap?: RenderChannelBootstrap;
@@ -1943,7 +1943,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     if (!stored) {
       sendError(
         ws,
-        "SESSION_NOT_FOUND",
+        "RENDER_NOT_FOUND",
         `Render ${sub.renderId} no longer exists`,
         message.requestId
       );
@@ -2318,7 +2318,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       // the handshake ignore the field (legacy-pass-through).
       serverVersion: PROTOCOL_SCHEMA_VERSION,
       ...(replay?.truncated ? { replayTruncated: true } : {}),
-      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
+      ...(mintedSessionToken !== undefined ? { renderToken: mintedSessionToken } : {}),
     };
     send(ws, {
       type: "ack",

@@ -35,7 +35,7 @@ function exhaust(err: ProtocolError): string {
       return err.code;
     case 'auth':
       expectTypeOf(err.code).toEqualTypeOf<
-        'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'
+        'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'
       >();
       return err.code;
     case 'protocol': {
@@ -93,7 +93,7 @@ const _canonical: BootstrapFailureReason[] = [
   'UPGRADE_REQUIRED',
   'BUNDLE_FETCH_FAILED',
   'CSP_VIOLATION',
-  'SESSION_NOT_FOUND',
+  'RENDER_NOT_FOUND',
   'AUTH_REJECTED',
 ];
 void _canonical;
