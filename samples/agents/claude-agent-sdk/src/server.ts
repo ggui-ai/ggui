@@ -26,6 +26,7 @@ import {
 } from '@ggui-ai/dev-stack';
 import {
   parseMcpAppAiGguiRenderMeta,
+  toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -206,8 +207,17 @@ async function handleRequest(
       JSON.stringify({
         chatId: snap.chatId,
         messages: snap.messages,
+        // Wrap each stored slice in the spec-canonical `_meta` envelope
+        // so the client parses it with the SAME `parseMcpAppAiGguiRenderMeta`
+        // it uses for every other transport (push frames, postMessage
+        // `ui/notifications/tool-result`, `ui://ggui/session` resources).
+        // Returning the inner slice directly would silently fail the
+        // envelope-unwrap check on the client.
         renders: Array.from(snap.renders.entries()).map(
-          ([renderId, bootstrap]) => ({ renderId, bootstrap }),
+          ([renderId, slice]) => ({
+            renderId,
+            bootstrap: toMcpAppEnvelope(slice),
+          }),
         ),
       }),
     );
