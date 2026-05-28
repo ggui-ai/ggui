@@ -263,7 +263,7 @@ describe("checkWirePreservation", () => {
   // field `initialValue` but component updates `count`".
   //
   // Bug shape: the agent authors a counter UI with `propsSpec.initialValue`
-  // (the seed value pushed once at `ggui_push`), but the code-gen LLM
+  // (the seed value pushed once at `ggui_render`), but the code-gen LLM
   // emits a component that mirrors the live count to the agent via
   // `useGguiContext('count')` — a slot the contract never declared. At
   // runtime the iframe throws on mount (`no Context registered for
@@ -291,7 +291,7 @@ describe("checkWirePreservation", () => {
           initialValue: {
             schema: { type: "number" },
             required: false,
-            description: "Seed value for the counter, pushed once at ggui_push.",
+            description: "Seed value for the counter, pushed once at ggui_render.",
           },
         },
       },

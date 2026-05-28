@@ -56,19 +56,19 @@ function handlerWithEmptyOutputSchema(
 
 describe('composeHandlersWithMounts', () => {
   it('returns base handlers unchanged when mounts is undefined', () => {
-    const base = [handler('ggui_push'), handler('ggui_render_blueprint')];
+    const base = [handler('ggui_render'), handler('ggui_render_blueprint')];
     const out = composeHandlersWithMounts(base, undefined);
     expect(out).toBe(base);
   });
 
   it('returns base handlers unchanged when mounts is empty', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     const out = composeHandlersWithMounts(base, []);
     expect(out).toBe(base);
   });
 
   it('appends mount handlers after the base list, preserving order', () => {
-    const base = [handler('ggui_push'), handler('ggui_render_blueprint')];
+    const base = [handler('ggui_render'), handler('ggui_render_blueprint')];
     const mount: McpServerMount = {
       name: 'tasks',
       handlers: [
@@ -79,7 +79,7 @@ describe('composeHandlersWithMounts', () => {
     };
     const out = composeHandlersWithMounts(base, [mount]);
     expect(out.map((h) => h.name)).toEqual([
-      'ggui_push',
+      'ggui_render',
       'ggui_render_blueprint',
       'tasks_list',
       'tasks_create',
@@ -88,31 +88,31 @@ describe('composeHandlersWithMounts', () => {
   });
 
   it('aggregates multiple mounts left-to-right', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     const out = composeHandlersWithMounts(base, [
       { name: 'tasks', handlers: [handler('tasks_list')] },
       { name: 'notes', handlers: [handler('notes_list')] },
     ]);
     expect(out.map((h) => h.name)).toEqual([
-      'ggui_push',
+      'ggui_render',
       'tasks_list',
       'notes_list',
     ]);
   });
 
   it('throws when a mount tool collides with a ggui-native tool', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     expect(() =>
       composeHandlersWithMounts(base, [
-        { name: 'tasks', handlers: [handler('ggui_push')] },
+        { name: 'tasks', handlers: [handler('ggui_render')] },
       ]),
     ).toThrow(
-      /mount "tasks" registers tool "ggui_push" which collides with a ggui-native tool/,
+      /mount "tasks" registers tool "ggui_render" which collides with a ggui-native tool/,
     );
   });
 
   it('throws when two mounts register the same tool name', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     expect(() =>
       composeHandlersWithMounts(base, [
         { name: 'tasks', handlers: [handler('list')] },
@@ -125,7 +125,7 @@ describe('composeHandlersWithMounts', () => {
 
   it('throws when a mount entry has an empty name', () => {
     expect(() =>
-      composeHandlersWithMounts([handler('ggui_push')], [
+      composeHandlersWithMounts([handler('ggui_render')], [
         { name: '', handlers: [handler('tasks_list')] },
       ]),
     ).toThrow(
@@ -134,11 +134,11 @@ describe('composeHandlersWithMounts', () => {
   });
 
   it('accepts a mount with zero handlers (no-op)', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     const out = composeHandlersWithMounts(base, [
       { name: 'tasks', handlers: [] },
     ]);
-    expect(out.map((h) => h.name)).toEqual(['ggui_push']);
+    expect(out.map((h) => h.name)).toEqual(['ggui_render']);
   });
 
   // ────────────────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ describe('composeHandlersWithMounts', () => {
   it('throws when a mount handler declares an empty outputSchema (silent-structuredContent-strip footgun)', () => {
     expect(() =>
       composeHandlersWithMounts(
-        [handler('ggui_push')],
+        [handler('ggui_render')],
         [
           {
             name: 'tasks',
@@ -176,7 +176,7 @@ describe('composeHandlersWithMounts', () => {
     // gets a clear fix. Pin the key phrases the message carries.
     try {
       composeHandlersWithMounts(
-        [handler('ggui_push')],
+        [handler('ggui_render')],
         [
           {
             name: 'notes',
@@ -211,7 +211,7 @@ describe('composeHandlersWithMounts', () => {
   });
 
   it('returned list is a fresh array when mounts contribute handlers (callers never mutate the input)', () => {
-    const base = [handler('ggui_push')];
+    const base = [handler('ggui_render')];
     const out = composeHandlersWithMounts(base, [
       { name: 'tasks', handlers: [handler('tasks_list')] },
     ]);
