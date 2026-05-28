@@ -1036,6 +1036,31 @@ export interface GguiRenderResourceTemplateOptions {
    * load with a generic "script error").
    */
   readonly publicBaseUrl?: string;
+  /**
+   * Live-channel WebSocket bootstrap minter. When wired, every
+   * `resources/read` response embeds `{wsUrl, wsToken}` in the shell
+   * so the iframe-runtime opens a WebSocket immediately on mount and
+   * receives `props_update` frames for in-place re-renders.
+   *
+   * Without this, the per-render resource shell mounts in
+   * static-component mode (codeUrl only) — initial render works but
+   * server-side state mutations (`ggui_update`) never visibly update
+   * the iframe. Spec-compliant MCP-Apps hosts can still re-fetch
+   * `resources/read` per-tool-result to get fresh HTML, but in-place
+   * live updates require the WS pipe.
+   *
+   * Mirrors the `mintWsToken` plumbed into the handler-side render
+   * machinery in `server.ts`; the resource template owns its own
+   * call here because it runs OUTSIDE the per-tool-call context.
+   */
+  readonly mintWsToken?: (
+    renderId: string,
+    appId: string,
+  ) => {
+    readonly wsUrl: string;
+    readonly token: string;
+    readonly expiresAt: string;
+  };
 }
 
 /**
@@ -1321,6 +1346,27 @@ export function registerGguiRenderResourceTemplate(
             // Silent — wrappers calling getPublicEnv throw clearly.
           }
         }
+        // Live-channel bootstrap — when the operator wired
+        // {@link GguiRenderResourceTemplateOptions.mintWsToken}, mint a
+        // wsToken for this render so the iframe-runtime opens a
+        // WebSocket on mount and receives `props_update` frames.
+        // Without this, the resource shell renders in static-component
+        // mode only — `ggui_update` server-side mutations never
+        // visibly reach the live iframe (hosts must re-fetch
+        // `resources/read` after every update tool result to see new
+        // state).
+        let wsUrl: string | undefined;
+        let wsToken: string | undefined;
+        if (opts.mintWsToken) {
+          try {
+            const minted = opts.mintWsToken(renderId, stored.appId);
+            wsUrl = minted.wsUrl;
+            wsToken = minted.token;
+          } catch {
+            // Silent — falls back to static-component mode.
+          }
+        }
+
         const html = buildSelfContainedShell({
           renderId,
           appId: stored.appId,
@@ -1331,6 +1377,9 @@ export function registerGguiRenderResourceTemplate(
                 ...(codeHash !== undefined ? { codeHash } : {}),
               }),
           runtimeUrl: opts.runtimeUrl,
+          ...(wsUrl !== undefined && wsToken !== undefined
+            ? { wsUrl, token: wsToken }
+            : {}),
           ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
           ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),

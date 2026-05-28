@@ -4484,6 +4484,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 // diagnosed live on 2026-05-18 against the cloudflared
                 // tunnel.
                 ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+                // Live-channel wsToken minter — when wired, every
+                // per-render resource shell embeds `{wsUrl, wsToken}`
+                // so the iframe-runtime opens a WebSocket on mount and
+                // receives `props_update` frames for in-place
+                // re-renders. Without this the resource path mounts
+                // in static-component mode only — `ggui_update` server
+                // mutations never visibly reach the live iframe.
+                // Mirrors the per-tool `mintBootstrap` plumbed into
+                // the handler factory above.
+                ...(mintBootstrap
+                  ? { mintWsToken: mintBootstrap }
+                  : {}),
               },
             }
           : {}),
