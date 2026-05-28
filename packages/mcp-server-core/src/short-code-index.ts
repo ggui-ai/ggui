@@ -81,7 +81,7 @@ export interface ShortCodeIndex {
    * valid on the forward `lookup` side; this method is for the
    * console renders page which shows ONE shortCode per render.
    *
-   * Added to support `GET /ggui/console/sessions` — the console's
+   * Added to support `GET /ggui/console/renders` — the console's
    * operator-facing list surface needs to enrich each render row
    * with its current shortCode without iterating the whole index.
    * Hosted DDB implementations will back this by a GSI on

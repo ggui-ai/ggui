@@ -19,7 +19,7 @@
  *   - `console: { sessionCookie: true }` — landing page at `/` +
  *     `/s/<shortCode>` viewer + same-origin HTTP-only cookie flow.
  *   - `shortCodeIndex: new InMemoryShortCodeIndex()` — required by
- *     the `sessionCookie` flow so `POST /ggui/console/session-cookie`
+ *     the `sessionCookie` flow so `POST /ggui/console/render-cookie`
  *     can resolve a posted shortCode to the bound `{renderId, appId}`.
  *     In-memory is correct for the OSS first-run: render state lives
  *     in memory unless the operator opts into sqlite, so a matching

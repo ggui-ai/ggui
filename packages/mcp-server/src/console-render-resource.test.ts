@@ -308,9 +308,9 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
   });
 });
 
-// `GET /ggui/console/session-stack` was retired in the Phase-B
-// render-identity collapse — no session-stack array exists post
-// Phase-B, just one Render row. The console's `<RenderViewer>`
-// fan-out is now (render-resource, renders/:id/meta) only; what was
-// formerly stack-snapshot data is reachable as a single `render`
-// row via `GET /ggui/console/render?render=<id>`.
+// The stack-snapshot route was retired in the Phase-B render-identity
+// collapse — no session-stack array exists post Phase-B, just one
+// Render row. The console's `<RenderViewer>` fan-out is now
+// (render-resource, renders/:id/meta) only; what was formerly
+// stack-snapshot data is reachable as a single `render` row via
+// `GET /ggui/console/render-resource?render=<id>`.

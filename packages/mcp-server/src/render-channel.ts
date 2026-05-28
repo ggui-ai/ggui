@@ -1845,7 +1845,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // configured with cookie-auth plumbing AND no bootstrap is in
     // play. Unlike bootstrap, cookies ARE verified here: the single
     // consumer (console SPA) sets the cookie out-of-band via
-    // `POST /ggui/console/session-cookie` and we do want to
+    // `POST /ggui/console/render-cookie` and we do want to
     // reject the upgrade cleanly (HTTP 401 → browser WS error) when
     // the cookie is stale/missing, not carry a doomed handshake into
     // subscribe where the error surface is worse.
