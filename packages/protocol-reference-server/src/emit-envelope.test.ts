@@ -43,12 +43,10 @@ describe('emit-envelope ConformanceHost directive', () => {
     const renderId = 'emit-target';
     const host = createReferenceConformanceHost({ serverInstance: server });
 
-    // Fixture-canonical order: create-session → (client subscribes) →
+    // Fixture-canonical order: create-render → (client subscribes) →
     // emit-envelope. The `lastCreatedRenderId()` scoping convention
-    // requires create-session before the directive lands. Directive
-    // kind name is `create-session` because the conformance kit still
-    // spells it that way; the value binds to a `renderId` internally.
-    await host.dispatchSetup({ kind: 'create-session', sessionId: renderId });
+    // requires create-render before the directive lands.
+    await host.dispatchSetup({ kind: 'create-render', renderId });
 
     // Subscribe a real WS client + capture frames after the ack.
     const observed = await captureFramesAfterAck(server.baseUrl, renderId, async () => {
@@ -74,9 +72,7 @@ describe('emit-envelope ConformanceHost directive', () => {
 
   it('rejects directive without channel', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
-    await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-channel' });
-    // `sessionId` field name comes from the kit's directive shape; the
-    // value binds to a renderId on the internal RenderStore.
+    await host.dispatchSetup({ kind: 'create-render', renderId: 'no-channel' });
     await expect(
       host.dispatchSetup({
         // Channel deliberately empty — directive must reject.
@@ -95,12 +91,12 @@ describe('emit-envelope ConformanceHost directive', () => {
         channel: 'demo:counter',
         payload: { x: 1 },
       }),
-    ).rejects.toThrow(/before create-session/);
+    ).rejects.toThrow(/before create-render/);
   });
 
   it('no-ops (warns) when the render has no subscribers — directive resolves, no throw', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
-    await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-subs' });
+    await host.dispatchSetup({ kind: 'create-render', renderId: 'no-subs' });
 
     const warnSpy = jestLikeWarnSpy();
     try {

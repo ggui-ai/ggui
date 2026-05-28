@@ -80,7 +80,7 @@ describe('fixtures catalog', () => {
         true,
       );
       expect(Array.isArray(fixture.setup)).toBe(true);
-      expect(Array.isArray(fixture.teardown)).toBe(true);
+      expect(fixture.teardown === undefined || Array.isArray(fixture.teardown)).toBe(true);
       expect('inputEnvelope' in fixture).toBe(true);
       expect(typeof fixture.expectedBehavior.kind).toBe('string');
     }

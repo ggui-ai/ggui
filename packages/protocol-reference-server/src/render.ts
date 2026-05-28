@@ -119,8 +119,7 @@ export class RenderStore {
    * directive doesn't carry a renderId in its JSON shape, so the
    * adapter needs the "most recently created" scope to bind the
    * actionspec to. This matches the fixture-authoring convention that
-   * create-session (the kit's directive name for what the protocol
-   * now calls "create render") always precedes register-actionspec.
+   * create-render always precedes register-actionspec.
    */
   lastCreatedRenderId(): string | undefined {
     return this.lastCreated;
