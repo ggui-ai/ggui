@@ -24,11 +24,13 @@
  */
 import { Agent, MCPServerStreamableHttp, run } from '@openai/agents';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
+import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   FullResultMcpServerStreamableHttp,
   dequeueFullResult,
   type McpCallToolResult,
 } from './mcp-server-with-full-result.js';
+import { synthesizeUserActionPrompt } from './user-action-bridge.js';
 
 /**
  * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
@@ -72,6 +74,19 @@ export interface RunAgentOptions {
    * multi-turn-resume slice that hoists agent state to module scope.
    */
   readonly chatId?: string;
+  /**
+   * Spec-canonical `_meta["ai.ggui/userAction"]` slice forwarded by
+   * the frontend when a user gesture inside a rehydrated iframe
+   * reached the host via `ui/message` (no active `ggui_consume`
+   * long-poll to drain the pipe). See `synthesizeUserActionPrompt`
+   * for the bridge that drains the pipe (when `kind: 'queued'`) and
+   * synthesizes a structured prompt that delivers the action as
+   * machine-extractable fields rather than LLM-parsed prose.
+   *
+   * Absent for ordinary user-typed chat messages — those go straight
+   * through as `opts.prompt` unmodified.
+   */
+  readonly userAction?: GguiUserActionMeta;
 }
 
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
@@ -227,7 +242,24 @@ export async function* runAgent(
     const previousResponseId = opts.chatId
       ? knownResponseIds.get(opts.chatId)
       : undefined;
-    const stream = await run(agent, opts.prompt, {
+    // When the frontend forwarded a `_meta["ai.ggui/userAction"]`
+    // slice (rehydrated-iframe click without an active consume
+    // long-poll), rewrite the user-facing prompt into a synthetic
+    // `ggui_consume` return envelope. The LLM sees a familiar
+    // consume-shaped payload — its existing `consume → domain-tool →
+    // ggui_update` loop takes over without needing to natural-language-
+    // parse a renderId out of prose. See `user-action-bridge.ts`.
+    const gguiServerForBridge = opts.mcpServers.ggui;
+    const promptForLlm =
+      opts.userAction !== undefined && gguiServerForBridge !== undefined
+        ? await synthesizeUserActionPrompt({
+            originalPrompt: opts.prompt,
+            userAction: opts.userAction,
+            gguiMcpUrl: gguiServerForBridge.url,
+            bearer,
+          })
+        : opts.prompt;
+    const stream = await run(agent, promptForLlm, {
       stream: true,
       ...(previousResponseId ? { previousResponseId } : {}),
       ...(opts.abortController ? { signal: opts.abortController.signal } : {}),

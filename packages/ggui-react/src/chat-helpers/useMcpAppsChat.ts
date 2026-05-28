@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChatEntry,
   HostDisplayMode,
@@ -70,8 +71,21 @@ export interface UseMcpAppsChatResult {
   /**
    * Post a fresh user prompt. Trimmed empty strings are no-ops. Opens
    * an SSE stream to the chat endpoint and merges every frame.
+   *
+   * Optional `opts.userAction` threads the spec-canonical
+   * `_meta.ai.ggui/userAction` slice (stamped by iframe-runtime when a
+   * gesture must reach the agent via `ui/message`) end-to-end as
+   * structured data. Without it, the agent only sees the prose text
+   * and must natural-language-parse the renderId — fragile because the
+   * agent may re-handshake instead of reusing the live render. With
+   * it, the agent backend gets the renderId + actionData as typed
+   * fields and can drive the correct consume/update path without
+   * prose extraction.
    */
-  readonly send: (prompt: string) => Promise<void>;
+  readonly send: (
+    prompt: string,
+    opts?: { readonly userAction?: GguiUserActionMeta },
+  ) => Promise<void>;
   /**
    * Abort the in-flight stream. Cancels the `fetch` via its
    * AbortController, which propagates as a network-level abort on the
@@ -167,7 +181,10 @@ export function useMcpAppsChat(
   }, []);
 
   const send = useCallback(
-    async (prompt: string) => {
+    async (
+      prompt: string,
+      sendOpts?: { readonly userAction?: GguiUserActionMeta },
+    ) => {
       const trimmed = prompt.trim();
       if (!trimmed) return;
       const turnId = mintTurnId();
@@ -176,13 +193,19 @@ export function useMcpAppsChat(
       const controller = new AbortController();
       abortControllerRef.current = controller;
       try {
+        const body: {
+          readonly prompt: string;
+          readonly userAction?: GguiUserActionMeta;
+        } = sendOpts?.userAction !== undefined
+          ? { prompt: trimmed, userAction: sendOpts.userAction }
+          : { prompt: trimmed };
         const res = await fetch(chatEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Chat-Id': chatId,
           },
-          body: JSON.stringify({ prompt: trimmed }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         if (!res.body) {

@@ -19,6 +19,10 @@ import {
   type RenderRef,
   type ToolCallEntry,
 } from '@ggui-ai/react/chat-helpers';
+import {
+  isGguiUserActionMeta,
+  type GguiUserActionMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   CallToolRequest,
   CallToolResult,
@@ -96,9 +100,17 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
   const [layout, setLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
 
+  // `userAction` is the spec-canonical `_meta.ai.ggui/userAction` slice
+  // iframe-runtime stamps on `ui/message` envelopes when a click can't
+  // reach the agent via the consume pipe (no active long-poll). Threading
+  // it through `send(...)` lets the backend extract renderId + actionData
+  // as structured fields, so the new agent loop targets the existing
+  // render with `ggui_update` instead of re-handshaking and orphaning the
+  // live iframe. Without this, the renderId only reaches the agent as a
+  // substring of the chat prose — fragile against LLM judgment drift.
   const onUiMessage = useCallback(
-    (text: string) => {
-      void send(text);
+    (text: string, userAction?: GguiUserActionMeta) => {
+      void send(text, userAction !== undefined ? { userAction } : undefined);
     },
     [send],
   );
@@ -275,7 +287,7 @@ function ChatEntryView({
   renderInline: boolean;
   sandboxUrl: string;
   agentEndpoint: string;
-  onUiMessage: (text: string) => void;
+  onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
   if (entry.kind === 'render') {
     if (renderInline) {
@@ -367,7 +379,7 @@ function PanelView({
   renders: ReadonlyArray<RenderRef>;
   sandboxUrl: string;
   agentEndpoint: string;
-  onUiMessage: (text: string) => void;
+  onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
   const top = useMemo(() => renders[renders.length - 1], [renders]);
   if (!top) {
@@ -418,7 +430,7 @@ function ResourceFrame({
   sandboxUrl: string;
   agentEndpoint: string;
   fillContainer?: boolean;
-  onUiMessage?: (text: string) => void;
+  onUiMessage?: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
   // Pre-fetched resource state: `{ html, csp }`. Lazily populated by
   // the effect below; AppRenderer holds the loading placeholder until
@@ -604,7 +616,17 @@ function ResourceFrame({
   const onMessage = useCallback(
     async (params: {
       role: 'user';
-      content: ReadonlyArray<{ type: string; text?: string }>;
+      content: ReadonlyArray<{
+        type: string;
+        text?: string;
+        // Spec-canonical extension point: per the base MCP spec, every
+        // content block has its own open `_meta` record. iframe-runtime
+        // stamps `ai.ggui/userAction` here for queued/inline gestures.
+        // The exact slice shape is validated below via
+        // `isGguiUserActionMeta` — keep the surface area minimally typed
+        // to match `@mcp-ui/client`'s onMessage signature.
+        _meta?: { readonly [key: string]: unknown };
+      }>;
     }): Promise<Record<string, unknown>> => {
       const text = params.content
         .filter((c) => c.type === 'text' && typeof c.text === 'string')
@@ -614,7 +636,21 @@ function ResourceFrame({
       if (text.length === 0 || onUiMessage === undefined) {
         return { isError: true };
       }
-      onUiMessage(text);
+      // Extract the spec-canonical `ai.ggui/userAction` slice off the
+      // first content block that carries one — iframe-runtime stamps it
+      // on the SAME block as the prose text. Type-guarded by the
+      // protocol validator so a malformed slice fails closed (falls
+      // back to prose-only delivery rather than corrupting the backend
+      // signal).
+      let userAction: GguiUserActionMeta | undefined;
+      for (const block of params.content) {
+        const slice = block._meta?.['ai.ggui/userAction'];
+        if (slice !== undefined && isGguiUserActionMeta(slice)) {
+          userAction = slice;
+          break;
+        }
+      }
+      onUiMessage(text, userAction);
       return {};
     },
     [onUiMessage],
