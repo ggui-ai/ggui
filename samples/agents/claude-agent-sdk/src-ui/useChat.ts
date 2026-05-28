@@ -528,18 +528,31 @@ function handleEvent(
         }
         continue;
       }
-      // ggui_update branch — DO NOTHING at the host level. Live props
-      // updates flow through the WS `props_update` channel directly to
-      // iframe-runtime (`oss/packages/iframe-runtime/src/channels/props-update.ts`),
-      // which patches the running React tree in place. The host re-feeding
-      // meta on every tool_result was the "pipe B" that, in combination
-      // with AppRenderer's `toolResult` prop reactivity, re-injected HTML
-      // into the sandbox and blanked the inner iframe — even after the
-      // F9 `html`-prop stabilisation. WS is authoritative; host stays out.
+      // ggui_update branch — patch the live render's meta in place so
+      // AppRenderer's `toolResult` useMemo refreshes and postMessages a
+      // spec-canonical `ui/notifications/tool-result` to the iframe;
+      // iframe-runtime applies the new `propsJson` without a re-mount.
       //
-      // The host still learns about NEW iframes on ggui_render above (to
-      // mount AppRenderer for the first time) — but updates are wire-only.
+      // Safe paired with Render.tsx's html-pin (htmlRef keyed on
+      // renderId): the html string AppRenderer sees stays stable, so
+      // the inner iframe is never torn down. Only `toolResult` changes
+      // — which is exactly the spec-canonical update channel.
+      //
+      // WS `props_update` remains the first-party fast path; this is
+      // the cross-host fallback for clients where the WS subscription
+      // isn't open (self-contained mounts, transient WS gap).
       if (sc.updated === true) {
+        // Fast path: slice envelope rode inline on tool_use_result._meta
+        // (Anthropic SDK preserves _meta when MCP tools opt-in via
+        // _meta.ui — flatten's update.ts emits the full slice envelope
+        // here including patched propsJson). No /state poll needed.
+        if (initialMeta) {
+          updateRenderMeta(renderId, initialMeta);
+          continue;
+        }
+        // Fallback: SDK stripped _meta — recover via the wsToken-gated
+        // /state endpoint (same pattern used on initial render).
+        void refetchStateById(renderId);
         continue;
       }
     }
