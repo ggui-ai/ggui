@@ -147,7 +147,7 @@ The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `
 
 ## Embedding UIs
 
-`<McpAppIframe>` is the canonical consumer primitive. It takes an MCP Apps resource and mounts the ggui session inside a same-origin iframe. The iframe owns the WebSocket lifecycle, renderer bundle, and stack rendering — host code does not touch `StackItem` / WebSocket / renderer internals.
+`<McpAppIframe>` is the canonical consumer primitive. It takes an MCP Apps resource and mounts the ggui render inside a same-origin iframe. The iframe owns the WebSocket lifecycle, renderer bundle, and render mount — host code does not touch `Render` / WebSocket / renderer internals.
 
 ```tsx
 import { McpAppIframe, type ProtocolError } from "@ggui-ai/react";
