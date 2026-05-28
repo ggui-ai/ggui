@@ -361,7 +361,7 @@ export const PROVISIONAL_PREVIEW_CHANNEL = '_ggui:preview';
  * Run-time context the runner computes synchronously from the push
  * handler's resolved state. Structurally distinct from
  * {@link ProvisionalPreviewGateInput} because the runner needs the
- * resolved `renderId` + `renderId` the gate doesn't know about.
+ * resolved `renderId` + `appId` the gate doesn't know about.
  */
 export interface ProvisionalPreviewRunContext {
   readonly renderId: string;
