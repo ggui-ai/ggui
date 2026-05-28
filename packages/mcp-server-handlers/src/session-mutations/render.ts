@@ -1291,11 +1291,8 @@ export function createGguiRenderHandler(
       }
 
       // Devtools payload trace. No-op when no sink is registered.
-      // `sessionId` is the legacy field name on the payload-trace-sink
-      // shape; post-Phase-B it carries the renderId (every render IS
-      // the addressable row). Renaming the sink field is a sibling
-      // slice — owned by the mcp-server agent who also touches
-      // console-payloads.ts.
+      // Post-Phase-B the sink shape addresses by `renderId` directly
+      // (every render IS the addressable row).
       emitPayloadTraceEvent({
         direction: 'outbound-update',
         renderId,
