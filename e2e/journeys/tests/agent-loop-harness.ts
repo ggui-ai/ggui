@@ -1,8 +1,8 @@
 /**
- * Agent-loop harness — boots the three-process ggui demo
- * (ggui + mcp-todo + sample-agent) via workspace `pnpm --filter` against
- * `oss/samples/*`, then returns handles so a spec can drive the browser
- * against the agent's chat UI.
+ * Agent-loop harness — boots the four-process ggui demo
+ * (ggui + mcp-todo + sample-agent + ggui-basic-nextjs) via workspace
+ * `pnpm --filter` against `oss/samples/*`, then returns handles so a
+ * spec can drive the browser against the Next.js frontend URL.
  *
  * Why this exists separately from `ggui-serve-harness.ts`:
  *
@@ -13,8 +13,8 @@
  *     mirror of the per-template Playwright suites. They want workspace
  *     `@ggui-ai/*` resolution so a triad edit (system prompt /
  *     boilerplate / evaluator) shows up immediately, and they want the
- *     three real sample processes (agent, ggui, todo) booted as a
- *     vertical slice. No clean-room invariants, no env scrub.
+ *     four real sample processes booted as a vertical slice. No
+ *     clean-room invariants, no env scrub.
  *
  * Why these specs aren't just the templates' chat-smoke: templates pin
  * `@ggui-ai/*@0.1.0-rc.3` and resolve from npm/Verdaccio. That's a
@@ -22,10 +22,18 @@
  * republish + reinstall (~5 min/cycle). These specs target source
  * directly, so a triad edit is ~30s away from a live e2e signal.
  *
+ * Architecture (frontend/backend split, 2026-05-28):
+ *   - `sample-agent` is a brand-agnostic MCP-Apps-spec backend (one
+ *     per SDK). Pure HTTP API. No bundled chat shell.
+ *   - `ggui-basic-nextjs` is the reference frontend. ONE Next.js app
+ *     consumed by all 3 SDKs, swapped via
+ *     `NEXT_PUBLIC_AGENT_ENDPOINT_URL`.
+ *
  * Beacons consumed:
  *   - ggui CLI       `READY http://<host>:<port>\n`
  *   - mcp-todo       `[mcp-todo] ready: http://localhost:<port>/mcp`
  *   - sample-agent   `[sample-agent] chat UI ready: http://localhost:<port>`
+ *   - nextjs         `Ready in <n>ms` (next dev's standard ready line)
  */
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -46,12 +54,19 @@ import { PACKAGES_ROOT } from './workspace-paths';
 export const HARNESS_PORTS = {
   ggui: 6781,
   todo: 6782,
-  /** Per-SDK agent port. */
+  /** Per-SDK agent backend port (API-only HTTP server). */
   agent: {
     'claude-agent-sdk': 6790,
     'openai-agents-sdk': 6791,
     'google-adk': 6792,
   },
+  /**
+   * Next.js frontend port. Single value across all SDKs — the SAME
+   * Next.js app drives every backend, swapped via
+   * `NEXT_PUBLIC_AGENT_ENDPOINT_URL`. Matches the `next dev --port`
+   * value pinned in `oss/samples/apps/ggui-basic-nextjs/package.json`.
+   */
+  nextjs: 6890,
 } as const;
 
 /**
@@ -85,18 +100,33 @@ const WORKSPACE_ROOT = resolve(PACKAGES_ROOT, '..');
 
 /** Handle returned by {@link spawnAgentLoop}. */
 export interface AgentLoopHandle {
-  /** The agent's chat UI base URL (what Playwright navigates to). */
+  /**
+   * URL Playwright navigates to. Points at the Next.js frontend
+   * (port 6890) — which in turn fetches the agent backend via
+   * `NEXT_PUBLIC_AGENT_ENDPOINT_URL`. The agent backend URL is
+   * internal to the harness and not surfaced here.
+   */
   readonly agentUrl: string;
   /** ggui MCP base URL. */
   readonly gguiUrl: string;
   /** todo MCP base URL. */
   readonly todoUrl: string;
-  /** Kill all 3 child processes. Idempotent. */
+  /** Kill all 4 child processes. Idempotent. */
   close: () => Promise<void>;
   /** Captured stdout from each spawn, for failure dumps. */
-  stdout: () => { ggui: string; todo: string; agent: string };
+  stdout: () => {
+    ggui: string;
+    todo: string;
+    agent: string;
+    nextjs: string;
+  };
   /** Captured stderr from each spawn, for failure dumps. */
-  stderr: () => { ggui: string; todo: string; agent: string };
+  stderr: () => {
+    ggui: string;
+    todo: string;
+    agent: string;
+    nextjs: string;
+  };
 }
 
 export interface SpawnAgentLoopOptions {
@@ -155,6 +185,7 @@ export async function spawnAgentLoop(
       port: agentPort + 1000,
       label: `sandbox-proxy (${opts.sdk})`,
     },
+    { port: ports.nextjs, label: 'nextjs' },
   ];
   let squatted = portsToCheck.filter(({ port }) => portInUse(port));
   for (let i = 0; i < 15 && squatted.length > 0; i++) {
@@ -169,7 +200,7 @@ export async function spawnAgentLoop(
     );
   }
 
-  const procs: { ggui?: Proc; todo?: Proc; agent?: Proc } = {};
+  const procs: { ggui?: Proc; todo?: Proc; agent?: Proc; nextjs?: Proc } = {};
   let closed = false;
 
   const close = async (): Promise<void> => {
@@ -180,11 +211,18 @@ export async function spawnAgentLoop(
     );
     // After SIGKILL the OS still takes a beat to release the bind; the
     // next describe's pre-flight check in this matrix runs immediately.
-    // Wait up to 10s for our 3 ports to actually clear so the next
+    // Wait up to 10s for our ports to actually clear so the next
     // describe doesn't trip on its own predecessor.
     // Drain matches pre-flight — include sandbox-proxy (agent + 1000)
-    // so the next describe's pre-flight doesn't see a stale bind.
-    const myPorts = [ports.ggui, ports.todo, agentPort, agentPort + 1000];
+    // and the Next.js port so the next describe's pre-flight doesn't
+    // see a stale bind.
+    const myPorts = [
+      ports.ggui,
+      ports.todo,
+      agentPort,
+      agentPort + 1000,
+      ports.nextjs,
+    ];
     for (let i = 0; i < 10; i++) {
       if (myPorts.every((p) => !portInUse(p))) return;
       await new Promise((r) => setTimeout(r, 1000));
@@ -208,7 +246,8 @@ export async function spawnAgentLoop(
     });
     await waitForBeacon(procs.todo, /\[mcp-todo\] ready:/, 30_000, 'todo');
 
-    // 3. agent — vite-builds the chat UI bundle first; needs more time.
+    // 3. agent — pure API backend (no vite bundle since the 2026-05-28
+    // frontend-split). Boots quickly once tsx finishes typechecking.
     procs.agent = spawnChild({
       label: opts.sdk,
       pkg: cfg.agentPackage,
@@ -222,8 +261,33 @@ export async function spawnAgentLoop(
     await waitForBeacon(
       procs.agent,
       /\[sample-agent\] chat UI ready:/,
-      120_000,
+      60_000,
       'agent',
+    );
+
+    // 4. Next.js frontend — reads the agent backend URL from the
+    // env var below. ONE Next.js app drives all 3 SDKs; the swap is
+    // purely the endpoint URL, no per-SDK frontend bundle.
+    //
+    // `next dev` does its own compile-on-first-request, so the "Ready"
+    // beacon fires once the dev server is listening — actual page
+    // compilation kicks in on the first Playwright navigation. We
+    // still allow a generous timeout because next-16's first boot does
+    // a chunk of cold dependency analysis.
+    procs.nextjs = spawnChild({
+      label: 'nextjs',
+      pkg: '@ggui-samples/app-ggui-basic-nextjs',
+      env: {
+        ...baseEnv,
+        PORT: String(ports.nextjs),
+        NEXT_PUBLIC_AGENT_ENDPOINT_URL: `http://localhost:${agentPort}`,
+      },
+    });
+    await waitForBeacon(
+      procs.nextjs,
+      /Ready in |started server on|Local:\s+http/,
+      120_000,
+      'nextjs',
     );
   } catch (err) {
     await close();
@@ -231,7 +295,7 @@ export async function spawnAgentLoop(
   }
 
   return {
-    agentUrl: `http://localhost:${agentPort}`,
+    agentUrl: `http://localhost:${ports.nextjs}`,
     gguiUrl: `http://localhost:${ports.ggui}`,
     todoUrl: `http://localhost:${ports.todo}/mcp`,
     close,
@@ -239,11 +303,13 @@ export async function spawnAgentLoop(
       ggui: procs.ggui?.stdout() ?? '',
       todo: procs.todo?.stdout() ?? '',
       agent: procs.agent?.stdout() ?? '',
+      nextjs: procs.nextjs?.stdout() ?? '',
     }),
     stderr: () => ({
       ggui: procs.ggui?.stderr() ?? '',
       todo: procs.todo?.stderr() ?? '',
       agent: procs.agent?.stderr() ?? '',
+      nextjs: procs.nextjs?.stderr() ?? '',
     }),
   };
 }
