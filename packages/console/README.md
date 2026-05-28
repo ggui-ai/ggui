@@ -17,14 +17,14 @@ bundle, Vite + React 19.
 
 ## Surface
 
-- **Landing + session viewer** — landing page at `/`,
-  `POST /ggui/console/session-cookie` (third token kind), `/s/<shortCode>`
+- **Landing + render viewer** — landing page at `/`,
+  `POST /ggui/console/render-cookie` (third token kind), `/s/<shortCode>`
   viewer, cookie-authenticated live-channel WebSocket, scope isolation
   from `/mcp` + `/ggui/auth-check`. CSP + security-header hardening on
   every console response path; bundle stress cap at 400 KB (hard cap
   500 KB).
 - **`/admin/*` operator chrome** — admin-cookie-gated sub-shell:
-  status, sessions, blueprints (declared + cached + variants),
+  status, renders, blueprints (declared + cached + variants),
   config, tools, LLM keys, connector keys, OAuth providers, clients,
   theme. `admin-login` for token paste; `/` and `/admin` both land on
   the status page.
@@ -82,11 +82,11 @@ createGguiServer({ console: { path: "/ui" } });
 The console cookie is a **third token kind**, NOT a
 rebadge of bootstrap/session tokens:
 
-| Ingress          | Credential                    | Who mints it                        |
-| ---------------- | ----------------------------- | ----------------------------------- |
-| `/mcp`           | `Authorization: Bearer …`     | AuthAdapter / pairing               |
-| `/ws` (MCP Apps) | `?bootstrap=<token>`          | `ggui_render` bootstrap mint        |
-| `/ws` (console)  | `ggui_console_session` cookie | `POST /ggui/console/session-cookie` |
+| Ingress          | Credential                    | Who mints it                       |
+| ---------------- | ----------------------------- | ---------------------------------- |
+| `/mcp`           | `Authorization: Bearer …`     | AuthAdapter / pairing              |
+| `/ws` (MCP Apps) | `?bootstrap=<token>`          | `ggui_render` bootstrap mint       |
+| `/ws` (console)  | `ggui_console_session` cookie | `POST /ggui/console/render-cookie` |
 
 The cookie authenticates **only** the live-channel `/ws` upgrade. It is
 invisible to `/mcp`, `/pair`, `/threads`, `/ggui/auth-check` — the
