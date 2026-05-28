@@ -12,23 +12,20 @@
  * ## Schema
  *
  * Single table; primary key on the shortCode itself, with an index on
- * `session_id` so {@link findBySessionId} + {@link revokeBySessionId}
+ * `render_id` so {@link findByRenderId} + {@link revokeByRenderId}
  * stay O(matches) instead of O(table).
  *
  * ```sql
  * CREATE TABLE short_codes (
  *   short_code     TEXT PRIMARY KEY,
- *   session_id     TEXT NOT NULL,
+ *   render_id      TEXT NOT NULL,
  *   app_id         TEXT NOT NULL,
- *   stack_item_id  TEXT,          -- nullable; the writer doesn't always have one
  *   created_at     INTEGER NOT NULL
  * );
- * CREATE INDEX idx_short_codes_session ON short_codes(session_id);
- * CREATE INDEX idx_short_codes_stack   ON short_codes(stack_item_id)
- *   WHERE stack_item_id IS NOT NULL;
+ * CREATE INDEX idx_short_codes_render ON short_codes(render_id);
  * ```
  *
- * `created_at` is the deciding signal for {@link findBySessionId}'s
+ * `created_at` is the deciding signal for {@link findByRenderId}'s
  * "latest shortCode wins" semantics — the in-memory impl tracks this
  * implicitly via Map insertion order; SQLite needs an explicit column
  * so `ORDER BY created_at DESC LIMIT 1` gives the same answer across
@@ -43,7 +40,7 @@
  *     atomicity per-statement.
  *   - Lifetime: the reference never evicts. Renders decay implicitly
  *     via TTL; orphan rows after a crashed process are inert and
- *     cleared by the next `revokeBySessionId` if the operator runs
+ *     cleared by the next `revokeByRenderId` if the operator runs
  *     a teardown sweep, otherwise they sit until manually vacuumed.
  */
 import Database, {
@@ -79,9 +76,8 @@ export interface SqliteShortCodeIndexOptions {
 /** Row shape stored in the `short_codes` table. */
 interface ShortCodeRow {
   short_code: string;
-  session_id: string;
+  render_id: string;
   app_id: string;
-  stack_item_id: string | null;
   created_at: number;
 }
 
@@ -93,9 +89,9 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
   private readonly stmts: {
     upsert: SqliteStatement<unknown[]>;
     selectByCode: SqliteStatement<unknown[], ShortCodeRow>;
-    selectLatestBySession: SqliteStatement<unknown[], ShortCodeRow>;
+    selectLatestByRender: SqliteStatement<unknown[], ShortCodeRow>;
     deleteByCode: SqliteStatement<unknown[]>;
-    deleteBySession: SqliteStatement<unknown[]>;
+    deleteByRender: SqliteStatement<unknown[]>;
   };
 
   constructor(opts: SqliteShortCodeIndexOptions = {}) {
@@ -113,28 +109,27 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
 
     this.stmts = {
       upsert: this.db.prepare<unknown[]>(
-        `INSERT INTO short_codes (short_code, session_id, app_id, stack_item_id, created_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO short_codes (short_code, render_id, app_id, created_at)
+         VALUES (?, ?, ?, ?)
          ON CONFLICT(short_code) DO UPDATE SET
-           session_id = excluded.session_id,
+           render_id = excluded.render_id,
            app_id = excluded.app_id,
-           stack_item_id = excluded.stack_item_id,
            created_at = excluded.created_at`,
       ),
       selectByCode: this.db.prepare<unknown[], ShortCodeRow>(
-        `SELECT short_code, session_id, app_id, stack_item_id, created_at
+        `SELECT short_code, render_id, app_id, created_at
          FROM short_codes WHERE short_code = ?`,
       ),
-      selectLatestBySession: this.db.prepare<unknown[], ShortCodeRow>(
-        `SELECT short_code, session_id, app_id, stack_item_id, created_at
-         FROM short_codes WHERE session_id = ?
+      selectLatestByRender: this.db.prepare<unknown[], ShortCodeRow>(
+        `SELECT short_code, render_id, app_id, created_at
+         FROM short_codes WHERE render_id = ?
          ORDER BY created_at DESC LIMIT 1`,
       ),
       deleteByCode: this.db.prepare<unknown[]>(
         `DELETE FROM short_codes WHERE short_code = ?`,
       ),
-      deleteBySession: this.db.prepare<unknown[]>(
-        `DELETE FROM short_codes WHERE session_id = ?`,
+      deleteByRender: this.db.prepare<unknown[]>(
+        `DELETE FROM short_codes WHERE render_id = ?`,
       ),
     };
   }
@@ -150,9 +145,8 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     }
     this.stmts.upsert.run(
       shortCode,
-      binding.sessionId,
+      binding.renderId,
       binding.appId,
-      binding.stackItemId ?? null,
       this.now(),
     );
   }
@@ -164,9 +158,9 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     return rowToBinding(row);
   }
 
-  async findBySessionId(sessionId: string): Promise<string | null> {
-    if (!sessionId) return null;
-    const row = this.stmts.selectLatestBySession.get(sessionId);
+  async findByRenderId(renderId: string): Promise<string | null> {
+    if (!renderId) return null;
+    const row = this.stmts.selectLatestByRender.get(renderId);
     return row ? row.short_code : null;
   }
 
@@ -175,36 +169,28 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     this.stmts.deleteByCode.run(shortCode);
   }
 
-  async revokeBySessionId(sessionId: string): Promise<number> {
-    if (!sessionId) return 0;
-    const result = this.stmts.deleteBySession.run(sessionId);
+  async revokeByRenderId(renderId: string): Promise<number> {
+    if (!renderId) return 0;
+    const result = this.stmts.deleteByRender.run(renderId);
     return result.changes;
   }
 }
 
 function rowToBinding(row: ShortCodeRow): ShortCodeBinding {
-  // Defensive shape — callers may mutate. Only include `stackItemId`
-  // when the row has one; the InMemory reference omits the key
-  // entirely on `undefined`, and downstream consumers diff
-  // bindings by key set, so honor that.
-  const out: { sessionId: string; appId: string; stackItemId?: string } = {
-    sessionId: row.session_id,
+  // Defensive shape — callers may mutate.
+  return {
+    renderId: row.render_id,
     appId: row.app_id,
   };
-  if (row.stack_item_id !== null) {
-    out.stackItemId = row.stack_item_id;
-  }
-  return out;
 }
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS short_codes (
-  short_code    TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL,
-  app_id        TEXT NOT NULL,
-  stack_item_id TEXT,
-  created_at    INTEGER NOT NULL
+  short_code  TEXT PRIMARY KEY,
+  render_id   TEXT NOT NULL,
+  app_id      TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_short_codes_session
-  ON short_codes(session_id);
+CREATE INDEX IF NOT EXISTS idx_short_codes_render
+  ON short_codes(render_id);
 `;

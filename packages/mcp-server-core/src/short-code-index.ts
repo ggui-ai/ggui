@@ -1,5 +1,5 @@
 /**
- * ShortCodeIndex — shortCode → sessionId/appId lookup.
+ * ShortCodeIndex — shortCode → renderId/appId lookup.
  *
  * Scope. Single narrow purpose: the console render viewer (and
  * future same-origin share-link consumers) resolve `/r/<shortCode>`
@@ -11,7 +11,7 @@
  * Ownership / writers.
  *   - `@ggui-ai/mcp-server-handlers/session-mutations/render` is the
  *     only writer today. After minting a `shortCode` it calls
- *     `index.put(shortCode, { sessionId, appId })` — best-effort, no
+ *     `index.put(shortCode, { renderId, appId })` — best-effort, no
  *     throw on failure, since the tool result is already constructed
  *     by the time the write happens.
  *   - Future writers (share-link tool, programmatic API) bind the
@@ -19,10 +19,10 @@
  *
  * Consumers.
  *   - `@ggui-ai/mcp-server`'s console cookie route uses `lookup`
- *     to resolve a POSTed shortCode into the sessionId the cookie
+ *     to resolve a POSTed shortCode into the renderId the cookie
  *     will be bound to.
  *   - Nothing else reads. In particular: `/mcp` tool handlers never
- *     consult this index — sessionId is always on the wire directly
+ *     consult this index — renderId is always on the wire directly
  *     for them.
  *
  * Lifetime + eviction. Implementation choice. The in-memory reference
@@ -42,31 +42,20 @@
  * fields console needs to mint a session cookie. No user identity,
  * no scopes, no expiry. Adding fields here means every writer has to
  * be updated; resist.
+ *
+ * Post Phase-B identity collapse: `renderId` IS the addressable unit
+ * (session+stackItem merged). The previous `sessionId` + `stackItemId`
+ * slot pair always held the same value at the bind site, so both
+ * collapse to one `renderId` field on the binding row.
  */
 export interface ShortCodeBinding {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
-  /**
-   * Render id at the moment of the bind (`stackItemId` field name
-   * preserved for back-compat with already-deployed adapters that
-   * persist the binding). OSS readers don't use this; hosted DDB
-   * impls record it onto the rich row so the render endpoint can
-   * deep-link directly to the originating render without a follow-up
-   * `renderStore.get`. The mint happens upstream of the placeholder
-   * render write, so the value isn't observable on `renderStore.get`
-   * yet — passing it through the binding lifts the dependency from
-   * "read render" to "read binding."
-   *
-   * Optional + ignored by the in-memory reference impl. Adding a new
-   * field here is intentionally rare; this one was load-bearing for
-   * the cloud pod's render-endpoint deep-link.
-   */
-  readonly stackItemId?: string;
 }
 
 export interface ShortCodeIndex {
   /**
-   * Record a `shortCode → { sessionId, appId }` binding. Idempotent —
+   * Record a `shortCode → { renderId, appId }` binding. Idempotent —
    * calling with the same shortCode twice replaces the previous
    * binding. Writers don't await concurrent put calls, so
    * implementations MUST tolerate racy overlapping writes on the
@@ -84,21 +73,21 @@ export interface ShortCodeIndex {
 
   /**
    * Reverse lookup — return the shortCode currently bound to
-   * `sessionId`, or `null` if no binding exists.
+   * `renderId`, or `null` if no binding exists.
    *
-   * Semantics when a session has multiple historical shortCodes:
+   * Semantics when a render has multiple historical shortCodes:
    * implementations return the most-recently-bound shortCode
    * (last-writer-wins on the reverse side). Old shortCodes remain
    * valid on the forward `lookup` side; this method is for the
-   * console sessions page which shows ONE shortCode per session.
+   * console renders page which shows ONE shortCode per render.
    *
    * Added to support `GET /ggui/console/sessions` — the console's
-   * operator-facing list surface needs to enrich each session row
+   * operator-facing list surface needs to enrich each render row
    * with its current shortCode without iterating the whole index.
    * Hosted DDB implementations will back this by a GSI on
-   * `sessionId`; the in-memory reference keeps a secondary `Map`.
+   * `renderId`; the in-memory reference keeps a secondary `Map`.
    */
-  findBySessionId(sessionId: string): Promise<string | null>;
+  findByRenderId(renderId: string): Promise<string | null>;
 
   /**
    * Revoke (delete) a single binding. Idempotent — revoking an absent
@@ -106,13 +95,13 @@ export interface ShortCodeIndex {
    *
    * Capability-URL hardening: the render route reads `lookup` and
    * 404s on `null`, so revoking is the lifecycle hook that kills a
-   * `/r/<code>` URL the moment the originating session ends.
+   * `/r/<code>` URL the moment the originating render ends.
    */
   revoke(shortCode: string): Promise<void>;
 
   /**
-   * Bulk revoke — drop every binding tied to `sessionId`. Used by
-   * conversation-wide teardown paths (operator-initiated cleanup,
+   * Bulk revoke — drop every binding tied to `renderId`. Used by
+   * render-wide teardown paths (operator-initiated cleanup,
    * tenant offboarding, test fixtures): a single call drops every URL
    * that was ever minted against the supplied id.
    *
@@ -121,5 +110,5 @@ export interface ShortCodeIndex {
    *   - Returns the count of revoked bindings (0 when none existed).
    *   - Idempotent.
    */
-  revokeBySessionId(sessionId: string): Promise<number>;
+  revokeByRenderId(renderId: string): Promise<number>;
 }
