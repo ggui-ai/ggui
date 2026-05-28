@@ -44,8 +44,8 @@ ggui serve --mcp-only               # skip agent supervision
 **Scope today:**
 
 - ✅ Local server, viewer, cookie-authenticated WebSocket subscribe/ack all work end-to-end.
-- ✅ `ggui_push` mints shortCodes and lands on the same-origin viewer.
-- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` — the same harness the hosted runtime uses. `ggui_push` returns `codeReady: false` only when no BYOK credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.); supply a key to get full generation locally.
+- ✅ `ggui_render` mints shortCodes and lands on the same-origin viewer.
+- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` — the same harness the hosted runtime uses. `ggui_render` returns `codeReady: false` only when no BYOK credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.); supply a key to get full generation locally.
 - 🔒 Default auth is dev-mode (any bearer → `builder`). Swap in a real `AuthAdapter` via `createGguiServer({ auth })` before exposing beyond `127.0.0.1`.
 
 ### `ggui dev`

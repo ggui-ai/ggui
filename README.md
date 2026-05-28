@@ -99,8 +99,8 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 ### Honest scope today
 
 - ✅ Local server, viewer, cookie-authenticated WebSocket subscribe → ack all work end-to-end.
-- ✅ `ggui_push` mints shortCodes and lands on the same-origin viewer.
-- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` (the same harness the hosted runtime uses). `ggui_push` returns `codeReady: false` only when no BYOK credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.); supply a key to get full generation locally.
+- ✅ `ggui_render` mints shortCodes and lands on the same-origin viewer.
+- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` (the same harness the hosted runtime uses). `ggui_render` returns `codeReady: false` only when no BYOK credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.); supply a key to get full generation locally.
 - 🔒 Default auth is dev-mode (any non-empty bearer → `builder`). Swap in a real `AuthAdapter` via `createGguiServer({ auth })` before exposing beyond `127.0.0.1`.
 
 ## How it works
@@ -108,7 +108,7 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 ```
 ┌─────────┐     MCP Tools      ┌──────────┐     WebSocket     ┌──────────┐
 │  Your   │ ────────────────→  │  ggui    │ ────────────────→ │  User's  │
-│  Agent  │   ggui_push        │  server  │   real-time UI    │  browser │
+│  Agent  │   ggui_render      │  server  │   real-time UI    │  browser │
 │         │   ggui_update      │          │   updates         │          │
 │         │ ←────────────────  │          │ ←──────────────── │          │
 │         │   user events      │          │   clicks, forms   │          │
@@ -119,12 +119,12 @@ Your agent uses MCP tools to push UIs and receive user events. The protocol is d
 
 ### MCP tools (primary surface)
 
-| Tool             | Description                                              |
-| ---------------- | -------------------------------------------------------- |
-| `ggui_push`      | Push a UI to the user (natural-language prompt + data)   |
-| `ggui_update`    | Update props on an existing UI (no regeneration, ~200ms) |
-| `ggui_handshake` | Initial session bootstrap                                |
-| `ggui_consume`   | Long-poll for user gestures (clicks, form submits)       |
+| Tool             | Description                                               |
+| ---------------- | --------------------------------------------------------- |
+| `ggui_render`    | Render a UI for the user (natural-language prompt + data) |
+| `ggui_update`    | Update props on an existing UI (no regeneration, ~200ms)  |
+| `ggui_handshake` | Initial session bootstrap                                 |
+| `ggui_consume`   | Long-poll for user gestures (clicks, form submits)        |
 
 Plus a blueprint family (`ggui_search_blueprints`, `ggui_render_blueprint`, `ggui_list_featured_blueprints`, …) for catalogue lookups. Full reference: [MCP Protocol Reference](https://docs.ggui.ai/api/mcp-protocol/).
 
@@ -143,7 +143,7 @@ If your agent runtime supports MCP natively, skip the SDK entirely. Add `ggui se
 }
 ```
 
-The runtime's native tool-calling loop discovers `ggui_push`, `ggui_update`, `ggui_consume`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
+The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `ggui_consume`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
 
 ## Embedding UIs
 
