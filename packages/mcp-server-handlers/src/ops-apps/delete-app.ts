@@ -9,7 +9,7 @@
  * What the cloud adapter additionally does on top of this seam (NOT
  * the responsibility of the handler):
  *   - Cascade-revoke per-app `GguiUserApiKey` rows
- *   - Cascade-clean per-app provider keys, blueprints, sessions
+ *   - Cascade-clean per-app provider keys, blueprints, renders
  * The handler stays narrow; the adapter's `delete()` implementation
  * orchestrates the cascade.
  *
@@ -49,7 +49,7 @@ export function createDeleteAppHandler(
     title: 'Delete app',
     audience: ['ops'],
     description:
-      "Hard-delete an app owned by the calling user. Idempotent — a second delete returns `{deleted: true}`. Cross-tenant probes return the same shape without touching foreign rows (no existence leak). Cascades per-app keys / blueprints / sessions at the cloud adapter layer.",
+      "Hard-delete an app owned by the calling user. Idempotent — a second delete returns `{deleted: true}`. Cross-tenant probes return the same shape without touching foreign rows (no existence leak). Cascades per-app keys / blueprints / renders at the cloud adapter layer.",
     inputSchema,
     outputSchema,
     async handler(

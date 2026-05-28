@@ -32,7 +32,7 @@ const inputSchema = {
     .min(1)
     .optional()
     .describe(
-      "Optional `GguiApp.appId` to lock this key to. When set, sessions opened with this key scope to the named app and meta-tools (`ggui_open_app`, `ggui_ops_list_apps`) are NOT exposed. Absent ⇒ universal key — scopes to `User.defaultAppId` per request.",
+      "Optional `GguiApp.appId` to lock this key to. When set, calls opened with this key scope to the named app and meta-tools (`ggui_open_app`, `ggui_ops_list_apps`) are NOT exposed. Absent ⇒ universal key — scopes to `User.defaultAppId` per request.",
     ),
   expiresAt: z
     .string()

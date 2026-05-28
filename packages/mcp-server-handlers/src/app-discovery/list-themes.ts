@@ -99,7 +99,7 @@ export function createGguiListThemesHandler(
     title: 'List themes',
     audience: ['agent'],
     description:
-      "List visual themes the agent may apply to a session via `ggui_render({themeId})` or `ggui_render({themeId})`. Each entry carries an `id` (pass to themeId), `name` (human-readable), `description` (agent-readable: e.g. 'warm marketing palette', 'high-contrast scientific dashboard'), and `modes` (light/dark variants the theme ships). Call this when the user's intent suggests a visual style choice — pick the theme whose description best matches the requested aesthetic. Operator-scoped: returns the per-app allowlist when one is configured, otherwise the full registered catalog.",
+      "List visual themes the agent may apply to a render via `ggui_render({themeId})`. Each entry carries an `id` (pass to themeId), `name` (human-readable), `description` (agent-readable: e.g. 'warm marketing palette', 'high-contrast scientific dashboard'), and `modes` (light/dark variants the theme ships). Call this when the user's intent suggests a visual style choice — pick the theme whose description best matches the requested aesthetic. Operator-scoped: returns the per-app allowlist when one is configured, otherwise the full registered catalog.",
     inputSchema,
     outputSchema,
     async handler(

@@ -29,7 +29,7 @@ const inputSchema = {
     .string()
     .max(10_000)
     .describe(
-      "Replacement system-prompt text. Pass an empty string to clear the per-app override (sessions then use the universal default). Cap 10k chars to bound the response payload + match a reasonable agent-authored prompt length.",
+      "Replacement system-prompt text. Pass an empty string to clear the per-app override (renders then use the universal default). Cap 10k chars to bound the response payload + match a reasonable agent-authored prompt length.",
     ),
 } as const;
 
@@ -65,7 +65,7 @@ export function createUpdateAppSystemPromptHandler(
     title: 'Update app system prompt',
     audience: ['ops'],
     description:
-      "Set or clear the per-app system-prompt override on a `GguiApp` the caller owns. Empty-string clears the field — the pod's session resolution then falls back to the universal default. Cross-tenant targets throw `app_not_found`. Returns the updated row (10k char cap on input).",
+      "Set or clear the per-app system-prompt override on a `GguiApp` the caller owns. Empty-string clears the field — the pod's render resolution then falls back to the universal default. Cross-tenant targets throw `app_not_found`. Returns the updated row (10k char cap on input).",
     inputSchema,
     outputSchema,
     async handler(

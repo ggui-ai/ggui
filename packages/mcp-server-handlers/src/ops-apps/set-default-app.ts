@@ -51,7 +51,7 @@ export function createSetDefaultAppHandler(
     title: 'Set default app',
     audience: ['ops'],
     description:
-      "Set the calling user's `defaultAppId` — the universal MCP route resolves this on every request to scope the session. Target appId MUST be owned by the caller; cross-tenant targets throw `app_not_found`. Returns the persisted `defaultAppId`.",
+      "Set the calling user's `defaultAppId` — the universal MCP route resolves this on every request to scope the call. Target appId MUST be owned by the caller; cross-tenant targets throw `app_not_found`. Returns the persisted `defaultAppId`.",
     inputSchema,
     outputSchema,
     async handler(
