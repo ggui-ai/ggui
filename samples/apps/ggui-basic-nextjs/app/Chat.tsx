@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable no-console */
 import {
   useCallback,
   useEffect,
@@ -10,34 +11,41 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
+  AppRenderer,
+  type RequestHandlerExtra,
+} from '@ggui-ai/react';
+import {
   useMcpAppsChat,
   type ChatEntry,
   type RenderRef,
   type ToolCallEntry,
 } from '@ggui-ai/react/chat-helpers';
-import { Render } from './Render';
+import type {
+  CallToolRequest,
+  CallToolResult,
+  ReadResourceRequest,
+  ReadResourceResult,
+} from '@modelcontextprotocol/sdk/types.js';
 
 type LayoutMode = 'inline' | 'panel';
 
 interface ChatProps {
   /**
-   * MCP-Apps-spec agent backend base URL (e.g.
-   * `http://localhost:6790`). Wired into the `useMcpAppsChat` hook for
-   * POST /chat + GET /chat?chatId=X and into each `<Render>` for the
-   * relay endpoint. The frontend stays SDK-agnostic — the backend
-   * decides which LLM it drives.
+   * MCP-Apps-spec agent backend base URL (e.g. `http://localhost:6790`).
+   * Wired into the `useMcpAppsChat` hook for POST /chat + GET /chat?
+   * chatId=X and into the iframe relay calls (`/relay/tools-call` +
+   * `/relay/resources-read`). The frontend stays SDK-agnostic — the
+   * backend decides which LLM it drives.
    */
   readonly agentEndpoint: string;
 }
 
 /**
- * Stable per-conversation chat id. Resolution mirrors the sample-agent
- * `src-ui/useChat.ts` pattern, ported for Next.js's App Router:
+ * Stable per-conversation chat id. Resolution:
  *
  *   1. URL `?chat=<id>` query param — authoritative. Every link to
  *      "this conversation" carries the id, so opening the URL in any
- *      tab/window restores that specific conversation, the same way
- *      claude.ai's `/c/<id>` URLs work.
+ *      tab/window restores that specific conversation.
  *   2. Mint fresh UUID and stamp it into the URL.
  *
  * SSR-safe: returns a throwaway id when neither URL API nor crypto is
@@ -67,41 +75,31 @@ function getOrCreateChatId(): string {
 /**
  * Chat panel + iframe area for an MCP-Apps-spec agent backend.
  *
- * Brand-agnostic by design: the sample-agent backends only know about
- * SDKMessage[] storage and the relay path; every ggui-shape parse —
- * `_meta` walking, render-id dedup, host-display-mode pickup, wsToken-
- * gated state refetch — lives in `useMcpAppsChat` (in
- * `@ggui-ai/react/chat-helpers`). This component is a thin chrome over
- * the hook plus `<Render>` mount points.
- *
- * Pairs with `app/page.tsx` which owns the sandbox-proxy URL fetch and
- * the ThemeProvider wrap.
+ * Brand-agnostic by design: the sample agent backends only know about
+ * the SDK message stream + relay paths. Every MCP-Apps spec parse —
+ * `_meta.ui.resourceUri` extraction, render-URI dedup, display-mode
+ * pickup — lives in {@link useMcpAppsChat}. Iframe mounting is the
+ * stock `<AppRenderer>` from `@mcp-ui/client` (re-exported through
+ * `@ggui-ai/react` for ergonomics).
  */
-export function Chat({ agentEndpoint, sandboxUrl }: ChatProps & { readonly sandboxUrl: string }) {
-  // Resolve the chatId AFTER mount via useEffect — the initial render
-  // runs on the server (with a placeholder) or pre-hydration (where
-  // crypto.randomUUID + URL APIs are both available but we still want
-  // to keep server-rendered HTML byte-identical to the first client
-  // render). After mount we read / mint / stamp the URL chatId and
-  // rebind the hook.
+export function Chat({
+  agentEndpoint,
+  sandboxUrl,
+}: ChatProps & { readonly sandboxUrl: string }) {
+  // Resolve the chatId AFTER mount — the initial render runs on the
+  // server (with a placeholder); after mount we read / mint / stamp
+  // the URL chatId and rebind the hook.
   const [chatId, setChatId] = useState<string>('ssr-placeholder');
   useEffect(() => {
     setChatId(getOrCreateChatId());
   }, []);
 
-  const {
-    entries,
-    renders,
-    hostDisplayMode,
-    sending,
-    send,
-    abort,
-  } = useMcpAppsChat({
-    chatEndpoint: `${agentEndpoint}/chat`,
-    snapshotEndpoint: `${agentEndpoint}/chat`,
-    stateEndpointPrefix: `${agentEndpoint}/api/renders`,
-    chatId,
-  });
+  const { entries, renders, hostDisplayMode, sending, send, abort } =
+    useMcpAppsChat({
+      chatEndpoint: `${agentEndpoint}/chat`,
+      snapshotEndpoint: `${agentEndpoint}/chat`,
+      chatId,
+    });
 
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
@@ -140,7 +138,13 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps & { readonly sandb
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (
+      e.key === 'Enter' &&
+      !e.shiftKey &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey
+    ) {
       e.preventDefault();
       (e.currentTarget.form as HTMLFormElement).requestSubmit();
     }
@@ -283,7 +287,7 @@ function ChatEntryView({
     if (renderInline) {
       return (
         <div className="msg render-wrap">
-          <Render
+          <ResourceFrame
             item={entry.render}
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
@@ -294,7 +298,7 @@ function ChatEntryView({
     }
     return (
       <div className="msg tool">
-        ← UI #{entry.render.renderId.slice(0, 12)} · {entry.render.action}
+        ← UI · {shortLabel(entry.render)}
       </div>
     );
   }
@@ -341,7 +345,9 @@ function ToolCallView({ entry }: { entry: ToolCallEntry }) {
               {entry.isError ? 'error result' : 'result'}
             </div>
             <pre className="tool-call-json">
-              {entry.result === undefined ? '(awaiting)' : prettyJson(entry.result)}
+              {entry.result === undefined
+                ? '(awaiting)'
+                : prettyJson(entry.result)}
             </pre>
           </div>
         </div>
@@ -373,16 +379,13 @@ function PanelView({
   if (!top) {
     return (
       <div className="ui-placeholder">
-        <p>
-          The rendered UI will appear here once the agent calls{' '}
-          <code>ggui_render</code>.
-        </p>
+        <p>The rendered UI will appear here once the agent emits one.</p>
       </div>
     );
   }
   return (
     <div className="panel-frame">
-      <Render
+      <ResourceFrame
         item={top}
         sandboxUrl={sandboxUrl}
         agentEndpoint={agentEndpoint}
@@ -391,4 +394,173 @@ function PanelView({
       />
     </div>
   );
+}
+
+/**
+ * Render one MCP-Apps resource by URI. Pure spec wiring: passes
+ * `toolResourceUri` to `<AppRenderer>` and a relay-backed
+ * `onReadResource` that proxies the read through the agent backend. No
+ * vendor-specific knowledge — replace `@ggui-ai/react`'s `AppRenderer`
+ * re-export with `@mcp-ui/client`'s direct import and this component
+ * keeps working against any MCP-Apps-spec server.
+ */
+function ResourceFrame({
+  item,
+  sandboxUrl,
+  agentEndpoint,
+  fillContainer = false,
+  onUiMessage,
+}: {
+  item: RenderRef;
+  sandboxUrl: string;
+  agentEndpoint: string;
+  fillContainer?: boolean;
+  onUiMessage?: (text: string) => void;
+}) {
+  const sandbox = useMemo(
+    () => ({ url: new URL(sandboxUrl) }),
+    [sandboxUrl],
+  );
+
+  // Spec-canonical tools/call proxy. The iframe holds no MCP client
+  // credential, so we relay through the agent backend (matches the
+  // pattern at `/relay/resources-read`).
+  const onCallTool = useCallback(
+    async (
+      params: CallToolRequest['params'],
+      _extra: RequestHandlerExtra,
+    ): Promise<CallToolResult> => {
+      console.log('[ResourceFrame] tool_call', params);
+      try {
+        const resp = await fetch(`${agentEndpoint}/relay/tools-call`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: params.name,
+            arguments: params.arguments ?? {},
+          }),
+        });
+        if (!resp.ok) {
+          console.warn('[ResourceFrame] relay non-2xx', resp.status);
+          return { isError: true, content: [] };
+        }
+        const jsonRpc = (await resp.json()) as {
+          readonly result?: CallToolResult;
+          readonly error?: { readonly message?: string };
+        };
+        if (jsonRpc.error !== undefined) {
+          console.warn('[ResourceFrame] relay error envelope', jsonRpc.error);
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: jsonRpc.error.message ?? 'relay error',
+              },
+            ],
+          };
+        }
+        return jsonRpc.result ?? { content: [] };
+      } catch (err) {
+        console.warn('[ResourceFrame] relay transport error', err);
+        return { isError: true, content: [] };
+      }
+    },
+    [agentEndpoint],
+  );
+
+  // Spec-canonical resources/read proxy. AppRenderer calls this when it
+  // sees `toolResourceUri` set, gets back the iframe HTML, and srcdocs
+  // it into the inner sandbox iframe.
+  const onReadResource = useCallback(
+    async (
+      params: ReadResourceRequest['params'],
+      _extra: RequestHandlerExtra,
+    ): Promise<ReadResourceResult> => {
+      console.log('[ResourceFrame] resources/read', params.uri);
+      const resp = await fetch(`${agentEndpoint}/relay/resources-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uri: params.uri }),
+      });
+      if (!resp.ok) {
+        throw new Error(
+          `[ResourceFrame] resources/read relay non-2xx: ${resp.status}`,
+        );
+      }
+      const jsonRpc = (await resp.json()) as {
+        readonly result?: ReadResourceResult;
+        readonly error?: { readonly message?: string };
+      };
+      if (jsonRpc.error !== undefined) {
+        throw new Error(
+          jsonRpc.error.message ?? '[ResourceFrame] resources/read relay error',
+        );
+      }
+      if (!jsonRpc.result) {
+        throw new Error('[ResourceFrame] resources/read relay empty result');
+      }
+      return jsonRpc.result;
+    },
+    [agentEndpoint],
+  );
+
+  const onMessage = useCallback(
+    async (params: {
+      role: 'user';
+      content: ReadonlyArray<{ type: string; text?: string }>;
+    }): Promise<Record<string, unknown>> => {
+      const text = params.content
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
+        .map((c) => c.text ?? '')
+        .join('\n')
+        .trim();
+      if (text.length === 0 || onUiMessage === undefined) {
+        return { isError: true };
+      }
+      onUiMessage(text);
+      return {};
+    },
+    [onUiMessage],
+  );
+
+  return (
+    <div className="render">
+      <div className="render-chrome">
+        <span className="render-id">{shortLabel(item)}</span>
+        <span className="render-action">{item.action}</span>
+      </div>
+      <div
+        className="render-frame"
+        style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
+      >
+        <AppRenderer
+          key={item.resourceUri}
+          toolName="ggui_render"
+          sandbox={sandbox}
+          toolResourceUri={item.resourceUri}
+          onReadResource={onReadResource}
+          onCallTool={onCallTool}
+          onMessage={onMessage}
+          onError={(err) =>
+            console.warn('[ResourceFrame] AppRenderer error', err)
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compact display label for a render. Uses the tool-use id when
+ * available (matches the SDK's view of "which tool call mounted this
+ * iframe"); falls back to the last URI segment so claude.ai-style
+ * `ui://server/render/<id>` URIs still show something meaningful.
+ */
+function shortLabel(item: RenderRef): string {
+  if (item.toolUseId !== undefined && item.toolUseId.length > 0) {
+    return `#${item.toolUseId.slice(0, 12)}`;
+  }
+  const tail = item.resourceUri.split('/').filter(Boolean).pop() ?? '';
+  return tail.length > 0 ? `#${tail.slice(0, 12)}` : '#render';
 }
