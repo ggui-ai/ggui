@@ -114,6 +114,7 @@ import {
   createContextStateHost,
   installContextRegistry,
   reemitLastContextValues,
+  type ContextSnapshotPoster,
   type ResolvedContextSlot,
 } from './context-observer.js';
 
@@ -1430,9 +1431,15 @@ export function formatWiredActionDataInline(data: unknown): string {
  */
 /**
  * Post an arbitrary JSON-RPC envelope to the iframe's parent
- * window. Internal helper shared across {@link dispatchWiredAction},
- * {@link emitAudit}, and the native-idiom interceptors (`openLink` /
- * `requestDisplayMode`). Detached parent → silent drop (non-fatal).
+ * window. Internal helper shared across {@link emitAudit} (the
+ * fire-and-forget `tools/call` audit envelope) and any other
+ * non-spec-canonical `ggui:*` outbound envelope that doesn't have an
+ * App method equivalent. Detached parent → silent drop (non-fatal).
+ *
+ * Spec-canonical MCP-Apps notifications (`ui/update-model-context`,
+ * `ui/message`, `ui/open-link`, `ui/request-display-mode`) flow
+ * through the App method helpers below — they round-trip via the
+ * bound `Transport` and follow the spec's request/response shape.
  */
 function postToParent(envelope: unknown): void {
   if (typeof window === 'undefined') return;
@@ -1442,6 +1449,82 @@ function postToParent(envelope: unknown): void {
     // Detached parent — non-fatal, drop silently.
   }
 }
+
+/**
+ * Outbound MCP-Apps notification shims — fire the spec-canonical App
+ * method when the module-level App handle is set, otherwise drop
+ * silently. Each method is a fire-and-forget request from the
+ * iframe-runtime's perspective: production never awaits the host's
+ * ack, so we use `void` + `.catch(noop)` to suppress unhandled
+ * rejections.
+ *
+ * Pre-connect call site safety: every production caller fires after
+ * the boot pipeline has installed an App (anchor clicks, fullscreen
+ * gestures, context-observer ticks, dispatch fan-outs all gate on
+ * post-mount lifecycle). The no-op fallback exists for unit tests
+ * that exercise these helpers without invoking `bootSequence` —
+ * the absence of side effects there is the test's signal that the
+ * caller did its part.
+ */
+function callAppUpdateModelContext(
+  params: Parameters<App['updateModelContext']>[0],
+): void {
+  const app = getCurrentApp();
+  if (app === null) return;
+  void app.updateModelContext(params).catch(() => {
+    // Detached / host-rejected — drop silently per the helper contract.
+  });
+}
+
+function callAppOpenLink(params: Parameters<App['openLink']>[0]): void {
+  const app = getCurrentApp();
+  if (app === null) return;
+  void app.openLink(params).catch(() => {
+    // Detached / host-rejected — drop silently per the helper contract.
+  });
+}
+
+function callAppRequestDisplayMode(
+  params: Parameters<App['requestDisplayMode']>[0],
+): void {
+  const app = getCurrentApp();
+  if (app === null) return;
+  void app.requestDisplayMode(params).catch(() => {
+    // Detached / host-rejected — drop silently per the helper contract.
+  });
+}
+
+/**
+ * Production {@link ContextSnapshotPoster} — the seam the
+ * context-observer factories consume. Splits the two destinations:
+ *
+ *   - `postUpdateModelContext` → spec-canonical
+ *     `app.updateModelContext(...)` (via {@link callAppUpdateModelContext}).
+ *   - `postContextMirror` → raw `tools/call ggui_runtime_sync_context`
+ *     via {@link postToParent} (the host-relay mirror path; not yet
+ *     migrated to `app.callServerTool` — see emitAudit for the same
+ *     posture).
+ */
+const productionContextSnapshotPoster: ContextSnapshotPoster = {
+  postUpdateModelContext: (params) => {
+    callAppUpdateModelContext(params);
+  },
+  postContextMirror: (params) => {
+    postToParent({
+      jsonrpc: '2.0',
+      id: Math.floor(Math.random() * 1e9),
+      method: 'tools/call',
+      params: {
+        name: 'ggui_runtime_sync_context',
+        arguments: {
+          renderId: params.renderId,
+          appId: params.appId,
+          snapshot: params.snapshot,
+        },
+      },
+    });
+  },
+};
 
 /**
  * Outbound `tools/call` shim. Routes through the spec-canonical
@@ -1780,6 +1863,15 @@ function emitUserActionInline(args: {
     `message instead of queued on the consume pipe. Use the userAction ` +
     `payload to handle it directly; do NOT call ggui_consume for this ` +
     `render.`;
+  // `ui/message` STAYS on raw postMessage. The spec's
+  // `McpUiMessageRequest.params` only defines `{role, content}`; the
+  // `@modelcontextprotocol/ext-apps` `App.sendMessage` validates with
+  // a closed zod schema and would silently strip our extended
+  // `_meta.ggui.userAction.*` payload — the structured channel the
+  // agent reads to short-circuit `ggui_consume`. Until the spec
+  // accommodates a metadata extension point on `ui/message` (or we
+  // move the userAction payload onto a different surface), raw
+  // postMessage is the only way to preserve `_meta`.
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -1835,6 +1927,9 @@ function emitUserActionQueued(args: {
     `User fired "${args.intent}" on render ${args.renderId}. ` +
     `The gesture is queued on the consume pipe but no consumer is active — ` +
     `call ggui_consume with this renderId next to drain the canonical payload.`;
+  // `ui/message` STAYS on raw postMessage. See `emitUserActionInline`
+  // for the rationale — the spec's closed schema would strip our
+  // `_meta.ggui.userAction.*` extension.
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -1891,25 +1986,20 @@ export function dispatchWiredAction(args: {
   // LLM's widget-context surface regardless of which downstream path
   // catches the event (pipe or ui/message). Fire-and-forget; no
   // response needed.
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/update-model-context',
-    params: {
-      content: [
-        {
-          type: 'text',
-          text: `[ggui:pending-action] ${JSON.stringify({
-            actionId,
-            intent,
-            data: data ?? null,
-            firedAt,
-            renderId,
-            appId,
-          })}`,
-        },
-      ],
-    },
+  callAppUpdateModelContext({
+    content: [
+      {
+        type: 'text',
+        text: `[ggui:pending-action] ${JSON.stringify({
+          actionId,
+          intent,
+          data: data ?? null,
+          firedAt,
+          renderId,
+          appId,
+        })}`,
+      },
+    ],
   });
 
   // (1.5) Toast — pending state. User sees "→ Sending: archive"
@@ -2138,12 +2228,7 @@ export function openLinkInParent(args: {
     actionId,
     firedAt,
   });
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/open-link',
-    params: { url },
-  });
+  callAppOpenLink({ url });
 }
 
 /**
@@ -2172,12 +2257,7 @@ export function requestDisplayModeInParent(args: {
     actionId,
     firedAt,
   });
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/request-display-mode',
-    params: { mode },
-  });
+  callAppRequestDisplayMode({ mode });
 }
 
 /**
@@ -2451,7 +2531,7 @@ function installPostMountListener(): void {
         appId: meta.appId,
       };
       reemitLastContextValues(
-        postToParent,
+        productionContextSnapshotPoster,
         activeSlotNames,
         reemitIdentity,
       );
@@ -2724,7 +2804,7 @@ async function bootSelfContained(
     // tuple by construction.
     const ContextStateHost = createContextStateHost({
       react: reactMod,
-      postToParent,
+      poster: productionContextSnapshotPoster,
       consoleWarn:
         typeof console !== 'undefined' && typeof console.warn === 'function'
           ? console.warn.bind(console)
@@ -3219,7 +3299,7 @@ async function bootProduction(opts: {
           : [];
       const ContextStateHost = createContextStateHost({
         react: reactMod,
-        postToParent,
+        poster: productionContextSnapshotPoster,
         consoleWarn:
           typeof console !== 'undefined' && typeof console.warn === 'function'
             ? console.warn.bind(console)

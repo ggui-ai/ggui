@@ -3,8 +3,10 @@
  *
  * Generated components can use plain `<a href>` and the runtime traps
  * the click in the capture phase, routing through
- * {@link openLinkInParent} (full audit envelope + `ui/open-link`
- * postMessage). This file pins the decision rules:
+ * {@link openLinkInParent} (raw-postMessage audit envelope + the
+ * spec-canonical `ui/open-link` request via `app.openLink(...)`
+ * post-Phase-1.19b.3 followup #275). This file pins the decision
+ * rules:
  *
  *   - External http(s) cross-origin → INTERCEPT
  *   - http(s) same-origin with target="_blank" → INTERCEPT
@@ -15,13 +17,20 @@
  *   - Idempotent: install twice → one listener, no double-fire
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { App } from '@modelcontextprotocol/ext-apps';
 import {
+  __resetAppForTest,
   __resetInterceptorsForTest,
   installAnchorClickInterceptor,
+  setCurrentApp,
 } from '../runtime.js';
+import { buildBootHarness, tick } from './boot-helpers.js';
+import type { MockTransport } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
 let originalPostMessage: typeof window.parent.postMessage;
+let transport: MockTransport;
+let app: App;
 
 const baseArgs = {
   dispatchToolName: 'ggui_runtime_submit_action',
@@ -29,7 +38,7 @@ const baseArgs = {
   appId: 'app_1',
 } as const;
 
-beforeEach(() => {
+beforeEach(async () => {
   postMessageSpy = vi.fn();
   originalPostMessage = window.parent.postMessage;
   Object.defineProperty(window.parent, 'postMessage', {
@@ -42,6 +51,12 @@ beforeEach(() => {
   // explicitly test-only.)
   __resetInterceptorsForTest();
   document.body.innerHTML = '';
+
+  const harness = buildBootHarness();
+  transport = harness.transport;
+  app = harness.app;
+  await app.connect(transport);
+  setCurrentApp(app);
 });
 
 afterEach(() => {
@@ -51,6 +66,7 @@ afterEach(() => {
     writable: true,
   });
   document.body.innerHTML = '';
+  __resetAppForTest();
 });
 
 /** Helper — fire a click event the same way a user gesture would. */
@@ -63,15 +79,28 @@ function clickAnchor(link: HTMLAnchorElement): MouseEvent {
   return evt;
 }
 
-/** Helper — return the array of methods seen in postMessage calls. */
-function methodsSeen(): string[] {
+/**
+ * Helper — return the array of methods seen on the raw-postMessage
+ * spy (audits, not the spec-canonical App-routed `ui/open-link`).
+ */
+function postMessageMethods(): string[] {
   return postMessageSpy.mock.calls.map(
     (call) => (call[0] as { method?: string }).method ?? '',
   );
 }
 
+/**
+ * Helper — return every `ui/open-link` request observed on the App
+ * transport (the spec-canonical destination post-#275).
+ */
+function openLinkRequests(): Array<Record<string, unknown>> {
+  return transport.sent
+    .filter((msg) => (msg as { method?: unknown }).method === 'ui/open-link')
+    .map((msg) => msg as Record<string, unknown>);
+}
+
 describe('installAnchorClickInterceptor', () => {
-  it('intercepts external cross-origin http(s) clicks', () => {
+  it('intercepts external cross-origin http(s) clicks', async () => {
     installAnchorClickInterceptor(baseArgs);
     const a = document.createElement('a');
     a.href = 'https://example.com/page';
@@ -81,14 +110,16 @@ describe('installAnchorClickInterceptor', () => {
     const evt = clickAnchor(a);
 
     expect(evt.defaultPrevented).toBe(true);
-    // Two envelopes: audit + ui/open-link.
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
-    expect(methodsSeen()).toEqual(['tools/call', 'ui/open-link']);
-    const openLink = postMessageSpy.mock.calls[1][0] as Record<string, unknown>;
-    expect(openLink.params).toEqual({ url: 'https://example.com/page' });
+    // Audit fires synchronously on raw postMessage.
+    expect(postMessageMethods()).toEqual(['tools/call']);
+    // ui/open-link routes through the App transport — drain microtasks.
+    await tick();
+    const links = openLinkRequests();
+    expect(links).toHaveLength(1);
+    expect(links[0]?.params).toEqual({ url: 'https://example.com/page' });
   });
 
-  it('intercepts same-origin links with target="_blank"', () => {
+  it('intercepts same-origin links with target="_blank"', async () => {
     installAnchorClickInterceptor(baseArgs);
     const a = document.createElement('a');
     // jsdom default origin is http://localhost — make the href same-origin.
@@ -99,10 +130,11 @@ describe('installAnchorClickInterceptor', () => {
     const evt = clickAnchor(a);
 
     expect(evt.defaultPrevented).toBe(true);
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
-    const openLink = postMessageSpy.mock.calls[1][0] as Record<string, unknown>;
-    expect(openLink.method).toBe('ui/open-link');
-    expect((openLink.params as Record<string, unknown>).url).toBe(
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    await tick();
+    const links = openLinkRequests();
+    expect(links).toHaveLength(1);
+    expect((links[0]?.params as Record<string, unknown>).url).toBe(
       `${window.location.origin}/local-page`,
     );
   });
@@ -117,6 +149,7 @@ describe('installAnchorClickInterceptor', () => {
 
     expect(evt.defaultPrevented).toBe(false);
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
   });
 
   it('does NOT intercept #fragment links', () => {
@@ -129,6 +162,7 @@ describe('installAnchorClickInterceptor', () => {
 
     expect(evt.defaultPrevented).toBe(false);
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
   });
 
   it('does NOT intercept mailto: links', () => {
@@ -141,6 +175,7 @@ describe('installAnchorClickInterceptor', () => {
 
     expect(evt.defaultPrevented).toBe(false);
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
   });
 
   it('does NOT intercept tel: links', () => {
@@ -153,6 +188,7 @@ describe('installAnchorClickInterceptor', () => {
 
     expect(evt.defaultPrevented).toBe(false);
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
   });
 
   it('does NOT intercept javascript: links', () => {
@@ -165,9 +201,10 @@ describe('installAnchorClickInterceptor', () => {
 
     expect(evt.defaultPrevented).toBe(false);
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
   });
 
-  it('resolves to the ancestor anchor when click target is nested', () => {
+  it('resolves to the ancestor anchor when click target is nested', async () => {
     installAnchorClickInterceptor(baseArgs);
     const a = document.createElement('a');
     a.href = 'https://example.com/page';
@@ -185,9 +222,11 @@ describe('installAnchorClickInterceptor', () => {
     span.dispatchEvent(evt);
 
     expect(evt.defaultPrevented).toBe(true);
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
-    const openLink = postMessageSpy.mock.calls[1][0] as Record<string, unknown>;
-    expect((openLink.params as Record<string, unknown>).url).toBe(
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    await tick();
+    const links = openLinkRequests();
+    expect(links).toHaveLength(1);
+    expect((links[0]?.params as Record<string, unknown>).url).toBe(
       'https://example.com/page',
     );
   });
@@ -218,13 +257,15 @@ describe('installAnchorClickInterceptor', () => {
 
     const evt = clickAnchor(a);
     expect(evt.defaultPrevented).toBe(true);
-    // Our interceptor saw defaultPrevented and bailed → no postMessages.
+    // Our interceptor saw defaultPrevented and bailed → no postMessages
+    // and no ui/open-link on the App transport.
     expect(postMessageSpy).not.toHaveBeenCalled();
+    expect(openLinkRequests()).toHaveLength(0);
 
     window.removeEventListener('click', earlierBlocker, { capture: true });
   });
 
-  it('is idempotent — calling install twice does not double-fire', () => {
+  it('is idempotent — calling install twice does not double-fire', async () => {
     installAnchorClickInterceptor(baseArgs);
     installAnchorClickInterceptor(baseArgs);
     installAnchorClickInterceptor(baseArgs);
@@ -235,7 +276,10 @@ describe('installAnchorClickInterceptor', () => {
 
     clickAnchor(a);
 
-    // Still exactly 2 envelopes (audit + ui/open-link), not 6.
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
+    // Audit fires exactly once (raw postMessage) and ui/open-link
+    // exactly once (App transport) — not three of each.
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(openLinkRequests()).toHaveLength(1);
   });
 });

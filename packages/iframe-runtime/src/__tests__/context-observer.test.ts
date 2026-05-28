@@ -12,6 +12,14 @@
  *     children receive live tuples via the wire-package
  *     `useGguiContext` hook.
  *   - `reemitLastContextValues`: cross-contract leak filter.
+ *
+ * Post-Phase-1.19b.3 followup (#275): the snapshot poster split into
+ * a {@link ContextSnapshotPoster} interface with `postUpdateModelContext`
+ * (spec-canonical notification, production via
+ * `app.updateModelContext`) and `postContextMirror` (server-mirror
+ * `tools/call`, production raw postMessage). Tests build a recording
+ * poster via {@link makeRecordingPoster} and assert on the captured
+ * payloads.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
@@ -24,9 +32,49 @@ import {
   installContextRegistry,
   reemitLastContextValues,
   type ContextSlotInfo,
+  type ContextSnapshotPoster,
   type ResolvedContextSlot,
 } from '../context-observer.js';
 import type { GguiContextRegistry } from '../globals.js';
+
+type UpdateModelContextParams = Parameters<
+  ContextSnapshotPoster['postUpdateModelContext']
+>[0];
+type ContextMirrorParams = Parameters<
+  ContextSnapshotPoster['postContextMirror']
+>[0];
+
+interface RecordingPoster {
+  readonly poster: ContextSnapshotPoster;
+  readonly updates: UpdateModelContextParams[];
+  readonly mirrors: ContextMirrorParams[];
+}
+
+/**
+ * Build a {@link ContextSnapshotPoster} that records every emission
+ * into two parallel arrays — `updates` for the spec-canonical
+ * `ui/update-model-context` notification and `mirrors` for the
+ * `ggui_runtime_sync_context` server-mirror call. Tests that only
+ * care about the update path read `updates`; the mirror path is
+ * recorded for completeness even when no `identity` is passed (in
+ * which case it stays empty).
+ */
+function makeRecordingPoster(): RecordingPoster {
+  const updates: UpdateModelContextParams[] = [];
+  const mirrors: ContextMirrorParams[] = [];
+  return {
+    updates,
+    mirrors,
+    poster: {
+      postUpdateModelContext: (params) => {
+        updates.push(params);
+      },
+      postContextMirror: (params) => {
+        mirrors.push(params);
+      },
+    },
+  };
+}
 
 beforeEach(() => {
   // Reset module-level state between tests so spec ordering is irrelevant.
@@ -141,10 +189,10 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
   });
 
   it('seeds Provider value with `slot.default` on first mount', () => {
-    const posts: unknown[] = [];
+    const { poster } = makeRecordingPoster();
     const SingleSlotProvider = createSingleSlotProvider({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster,
     });
 
     const slot = buildResolved({
@@ -177,10 +225,10 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
   });
 
   it('posts ui/update-model-context immediately when debounceMs is 0', () => {
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const SingleSlotProvider = createSingleSlotProvider({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
     });
 
     const slot = buildResolved({
@@ -192,22 +240,18 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
     });
 
     render(React.createElement(SingleSlotProvider, { slot }));
-    expect(posts).toHaveLength(1);
-    const env = posts[0] as {
-      method: string;
-      params: { content: Array<{ text: string }> };
-    };
-    expect(env.method).toBe('ui/update-model-context');
-    expect(env.params.content[0]?.text).toContain('tabIndex');
+    expect(recorder.updates).toHaveLength(1);
+    const text = recorder.updates[0]?.content?.[0]?.text ?? '';
+    expect(text).toContain('tabIndex');
     expect(contextSlotLastValues.get('tabIndex')).toBe(2);
   });
 
   it('debounces value changes', () => {
     vi.useFakeTimers();
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const SingleSlotProvider = createSingleSlotProvider({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
     });
 
     const slot = buildResolved({
@@ -219,17 +263,17 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
     });
 
     render(React.createElement(SingleSlotProvider, { slot }));
-    expect(posts).toHaveLength(0);
+    expect(recorder.updates).toHaveLength(0);
     vi.advanceTimersByTime(300);
-    expect(posts).toHaveLength(1);
+    expect(recorder.updates).toHaveLength(1);
   });
 
   it('drops + warns when value violates the slot schema', () => {
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const warnings: unknown[][] = [];
     const SingleSlotProvider = createSingleSlotProvider({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
       consoleWarn: (...args) => warnings.push(args),
     });
 
@@ -243,7 +287,7 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
     });
 
     render(React.createElement(SingleSlotProvider, { slot }));
-    expect(posts).toHaveLength(0);
+    expect(recorder.updates).toHaveLength(0);
     expect(warnings).toHaveLength(1);
     const firstArg = warnings[0]?.[0];
     expect(typeof firstArg).toBe('string');
@@ -251,10 +295,10 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
   });
 
   it('exposes a live setter that updates the Provider value', () => {
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const SingleSlotProvider = createSingleSlotProvider({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
     });
 
     const slot = buildResolved({
@@ -291,10 +335,8 @@ describe('createSingleSlotProvider — owns useState + posts on change', () => {
     // The post on the new value lands too (debounceMs=0).
     // Snapshot format: latest snapshot includes the new value under
     // the slot's name.
-    const lastPost = posts[posts.length - 1] as {
-      params: { content: Array<{ text: string }> };
-    };
-    expect(lastPost.params.content[0]?.text).toContain('"currentStep":7');
+    const lastUpdate = recorder.updates[recorder.updates.length - 1];
+    expect(lastUpdate?.content?.[0]?.text).toContain('"currentStep":7');
   });
 });
 
@@ -304,9 +346,10 @@ describe('createContextStateHost — composes Providers around children', () => 
   });
 
   it('renders children unchanged when slots is empty', () => {
+    const { poster } = makeRecordingPoster();
     const ContextStateHost = createContextStateHost({
       react: React,
-      postToParent: () => {},
+      poster,
     });
     const { container } = render(
       React.createElement(ContextStateHost, {
@@ -318,7 +361,7 @@ describe('createContextStateHost — composes Providers around children', () => 
   });
 
   it('wraps user component so useContext sees live tuples for every slot', () => {
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const registry: GguiContextRegistry = {};
     const slots = [
       buildResolved(
@@ -345,7 +388,7 @@ describe('createContextStateHost — composes Providers around children', () => 
 
     const ContextStateHost = createContextStateHost({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
     });
 
     let observed: { step: unknown; draft: unknown } | null = null;
@@ -366,12 +409,7 @@ describe('createContextStateHost — composes Providers around children', () => 
     expect(observed).toEqual({ step: 1, draft: 'hello' });
     // Snapshot semantics. Each post carries the full current state;
     // assert both slot names appear in at least one snapshot text.
-    const slotsPosted = posts.map((p) => {
-      const text =
-        (p as { params: { content: Array<{ text: string }> } }).params
-          .content[0]?.text ?? '';
-      return text;
-    });
+    const slotsPosted = recorder.updates.map((params) => params.content?.[0]?.text ?? '');
     expect(slotsPosted.some((t) => t.includes('"currentStep":1'))).toBe(true);
     expect(slotsPosted.some((t) => t.includes('"draftText":"hello"'))).toBe(
       true,
@@ -424,10 +462,10 @@ describe('F1 regression — runtime hoisting actually flows setState to posts', 
     (globalThis as { __ggui__?: unknown }).__ggui__ = { contexts: registry };
 
     // 2) Build runtime host.
-    const posts: unknown[] = [];
+    const recorder = makeRecordingPoster();
     const ContextStateHost = createContextStateHost({
       react: React,
-      postToParent: (env) => posts.push(env),
+      poster: recorder.poster,
     });
 
     // 3) User component reads via the wire hook (real, not mocked).
@@ -449,13 +487,11 @@ describe('F1 regression — runtime hoisting actually flows setState to posts', 
 
     // 4) Spy saw the post for the new value (NOT just the seed).
     // Snapshot format: `[ggui:context] {"foo":2,...}`.
-    const newValuePosts = posts.filter((p) => {
-      const text =
-        (p as { params?: { content?: Array<{ text: string }> } }).params
-          ?.content?.[0]?.text ?? '';
+    const newValueUpdates = recorder.updates.filter((params) => {
+      const text = params.content?.[0]?.text ?? '';
       return text.startsWith('[ggui:context] ') && text.includes('"foo":2');
     });
-    expect(newValuePosts.length).toBeGreaterThan(0);
+    expect(newValueUpdates.length).toBeGreaterThan(0);
     expect(contextSlotLastValues.get('foo')).toBe(2);
   });
 });
@@ -469,22 +505,21 @@ describe('reemitLastContextValues', () => {
     contextSlotLastValues.set('currentStep', 3);
     contextSlotLastValues.set('draftText', 'hello');
 
-    const posts: unknown[] = [];
-    reemitLastContextValues((envelope) => posts.push(envelope));
+    const recorder = makeRecordingPoster();
+    reemitLastContextValues(recorder.poster);
 
-    expect(posts).toHaveLength(1);
-    const text =
-      (posts[0] as { params: { content: Array<{ text: string }> } }).params
-        .content[0]?.text ?? '';
+    expect(recorder.updates).toHaveLength(1);
+    const text = recorder.updates[0]?.content?.[0]?.text ?? '';
     expect(text).toContain('"currentStep":3');
     expect(text).toContain('"draftText":"hello"');
     expect(text.startsWith('[ggui:context] ')).toBe(true);
   });
 
   it('is a no-op when the map is empty', () => {
-    const posts: unknown[] = [];
-    reemitLastContextValues((envelope) => posts.push(envelope));
-    expect(posts).toHaveLength(0);
+    const recorder = makeRecordingPoster();
+    reemitLastContextValues(recorder.poster);
+    expect(recorder.updates).toHaveLength(0);
+    expect(recorder.mirrors).toHaveLength(0);
   });
 
   // Cross-contract leak filter.
@@ -493,18 +528,13 @@ describe('reemitLastContextValues', () => {
     contextSlotLastValues.set('bar', 2);
     contextSlotLastValues.set('baz', 3);
 
-    const posts: unknown[] = [];
-    reemitLastContextValues(
-      (envelope) => posts.push(envelope),
-      new Set(['baz']),
-    );
+    const recorder = makeRecordingPoster();
+    reemitLastContextValues(recorder.poster, new Set(['baz']));
 
     // One snapshot post (snapshot mode), containing only the active
     // slot. Stale entries get drained from the map first.
-    expect(posts).toHaveLength(1);
-    const text =
-      (posts[0] as { params: { content: Array<{ text: string }> } }).params
-        .content[0]?.text ?? '';
+    expect(recorder.updates).toHaveLength(1);
+    const text = recorder.updates[0]?.content?.[0]?.text ?? '';
     expect(text).toContain('"baz":3');
     expect(text).not.toContain('"foo"');
     expect(text).not.toContain('"bar"');

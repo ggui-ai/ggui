@@ -194,6 +194,62 @@ export interface ContextPostIdentity {
 }
 
 /**
+ * Snapshot poster contract — fans the same snapshot out to two
+ * destinations:
+ *
+ *   1. {@link postUpdateModelContext} — spec-canonical
+ *      `ui/update-model-context` notification. Production wires this
+ *      to `app.updateModelContext(...)`; tests inject a spy.
+ *   2. {@link postContextMirror} — server mirror via the
+ *      `ggui_runtime_sync_context` tools/call. Production wires this
+ *      to a raw `postToParent` envelope (the existing host-relay
+ *      path); tests inject a spy.
+ *
+ * Splitting the seam keeps spec-canonical MCP-Apps notifications
+ * (Destination 1) on the App method surface while leaving the
+ * non-spec `tools/call` server mirror (Destination 2) on the raw
+ * postMessage channel — matches the broader Phase 1.19b.3 followup
+ * scope (notifications via App; tools/call audit stays on raw post
+ * until a separate cleanup migrates it).
+ */
+/**
+ * Params shape accepted by the spec-canonical
+ * `app.updateModelContext` method — re-imported from
+ * `@modelcontextprotocol/ext-apps` via `Parameters<App['updateModelContext']>`
+ * in the runtime so the production poster can forward verbatim
+ * without a type cast.
+ *
+ * Tests building a recording {@link ContextSnapshotPoster} construct
+ * a `{ content: [{type: 'text', text}] }` payload — the only shape
+ * the iframe-runtime emits today.
+ */
+export interface UpdateModelContextParams {
+  content?: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+}
+
+export interface ContextSnapshotPoster {
+  /**
+   * Fire the spec-canonical `ui/update-model-context` notification
+   * carrying the prose snapshot text. Production: routes through
+   * `app.updateModelContext` (no-op when no App is bound).
+   */
+  readonly postUpdateModelContext: (params: UpdateModelContextParams) => void;
+  /**
+   * Fire the `ggui_runtime_sync_context` tools/call server mirror.
+   * Production: raw postMessage envelope (the host relays to the
+   * MCP server). Caller is responsible for honoring `identity`
+   * presence — pass an undefined-returning closure to disable the
+   * mirror.
+   */
+  readonly postContextMirror: (params: {
+    readonly renderId: string;
+    readonly appId: string;
+    readonly snapshot: Record<string, unknown>;
+  }) => void;
+}
+
+/**
  * Post a context snapshot to BOTH destinations:
  *   1. `ui/update-model-context` to the parent host (claude.ai et al)
  *      — the existing path; agent's LLM reads these via
@@ -203,14 +259,10 @@ export interface ContextPostIdentity {
  *      history rehydrate seeds `contextSlots[i].default` with the
  *      snapshotted values, restoring the user's last-known state.
  *
- * Both posts are postMessage to the parent — fire-and-forget,
- * non-blocking, naturally concurrent (queued back-to-back to the
- * postMessage channel; the host receives them in order without
- * blocking either delivery on the other). No explicit `Promise.all`
- * is needed: postMessage isn't a promise-returning API; both calls
- * return synchronously and the channel handles the ordering. This
- * is the right primitive for a snapshot mirror — neither destination
- * needs to wait for the other to ACK.
+ * Both destinations are fire-and-forget; the channel queues them
+ * back-to-back, no sequential dependency between them. This is the
+ * right primitive for a snapshot mirror — neither destination needs
+ * to wait for the other to ACK.
  *
  * Snapshot replaces an earlier per-slot delta format
  * (`[ggui:context-slot] {slot,value}`). Empirical: claude.ai's host
@@ -224,42 +276,27 @@ export interface ContextPostIdentity {
  * server's store with synthetic ids.
  */
 function postContextSnapshot(
-  postToParent: (envelope: unknown) => void,
+  poster: ContextSnapshotPoster,
   snapshot: Record<string, unknown>,
   identity?: ContextPostIdentity,
 ): void {
   // Destination 1: host. Always fires.
   const text = `[ggui:context] ${JSON.stringify(snapshot)}`;
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/update-model-context',
-    params: {
-      content: [
-        {
-          type: 'text',
-          text,
-        },
-      ],
-    },
+  poster.postUpdateModelContext({
+    content: [
+      {
+        type: 'text',
+        text,
+      },
+    ],
   });
   // Destination 2: server mirror. Skipped when identity is absent
-  // (dev / test paths without a real bootstrap). Both destinations
-  // are postMessage — the channel queues these back-to-back, no
-  // sequential dependency between them.
+  // (dev / test paths without a real bootstrap).
   if (identity) {
-    postToParent({
-      jsonrpc: '2.0',
-      id: Math.floor(Math.random() * 1e9),
-      method: 'tools/call',
-      params: {
-        name: 'ggui_runtime_sync_context',
-        arguments: {
-          renderId: identity.renderId,
-          appId: identity.appId,
-          snapshot,
-        },
-      },
+    poster.postContextMirror({
+      renderId: identity.renderId,
+      appId: identity.appId,
+      snapshot,
     });
   }
 }
@@ -297,7 +334,7 @@ export type ReactCoreForHost = Pick<
  * these per declared slot (via {@link createContextStateHost}).
  *
  * Built as a factory so the runtime can pass dependencies (`react`,
- * `postToParent`, `consoleWarn`) without re-importing in this module
+ * `poster`, `consoleWarn`) without re-importing in this module
  * — keeps the file pure and unit-testable.
  *
  * Exported because `__tests__/context-observer.test.ts` mounts it
@@ -305,7 +342,7 @@ export type ReactCoreForHost = Pick<
  */
 export function createSingleSlotProvider(deps: {
   readonly react: ReactCoreForHost;
-  readonly postToParent: (envelope: unknown) => void;
+  readonly poster: ContextSnapshotPoster;
   readonly consoleWarn?: (...args: unknown[]) => void;
   /** Identity bundle threaded into every snapshot post — server
    *  mirror skipped when undefined. */
@@ -314,7 +351,7 @@ export function createSingleSlotProvider(deps: {
   readonly slot: ResolvedContextSlot;
   readonly children?: ReactNode;
 }) => ReactElement {
-  const { react, postToParent, consoleWarn, identity } = deps;
+  const { react, poster, consoleWarn, identity } = deps;
   const SingleSlotProvider = (props: {
     readonly slot: ResolvedContextSlot;
     readonly children?: ReactNode;
@@ -364,7 +401,7 @@ export function createSingleSlotProvider(deps: {
           // treats `ui/update-model-context` as REPLACE, so deltas
           // wiped the un-mentioned slots).
           contextSlotLastValues.set(slot.name, value);
-          postContextSnapshot(postToParent, buildSnapshot(), identity);
+          postContextSnapshot(poster, buildSnapshot(), identity);
         };
 
         if (slot.debounceMs <= 0) {
@@ -426,7 +463,7 @@ export function createSingleSlotProvider(deps: {
  */
 export function createContextStateHost(deps: {
   readonly react: ReactCoreForHost;
-  readonly postToParent: (envelope: unknown) => void;
+  readonly poster: ContextSnapshotPoster;
   readonly consoleWarn?: (...args: unknown[]) => void;
   /** Identity bundle for the server-mirror destination. Threaded
    *  unchanged into `createSingleSlotProvider` so every slot's debounced
@@ -486,7 +523,7 @@ export function createContextStateHost(deps: {
  * path is closed by construction.
  */
 export function reemitLastContextValues(
-  postToParent: (envelope: unknown) => void,
+  poster: ContextSnapshotPoster,
   activeSlotNames?: ReadonlySet<string>,
   identity?: ContextPostIdentity,
 ): void {
@@ -504,6 +541,6 @@ export function reemitLastContextValues(
   // delta on the host side; the host ended up with only the
   // LAST-fired slot. One snapshot delivers all slots atomically.
   if (contextSlotLastValues.size > 0) {
-    postContextSnapshot(postToParent, buildSnapshot(), identity);
+    postContextSnapshot(poster, buildSnapshot(), identity);
   }
 }

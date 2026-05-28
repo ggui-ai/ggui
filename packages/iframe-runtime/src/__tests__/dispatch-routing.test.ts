@@ -158,7 +158,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
   });
 
   describe('Pattern β (submit_action with ui/message fallback)', () => {
-    it('synchronously fires ui/update-model-context on raw postMessage and tools/call submit_action through App transport', async () => {
+    it('fires ui/update-model-context + tools/call submit_action through App transport (post-#275)', async () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
@@ -172,22 +172,33 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         dispatchToolName: 'ggui_runtime_submit_action',
       });
 
-      // (1) ui/update-model-context — notification, fires synchronously
-      // on raw postMessage.
-      const postMessageMethods = postMessageSpy.mock.calls.map(
-        (call) => (call[0] as { method?: unknown }).method,
-      );
-      expect(postMessageMethods).toEqual(['ui/update-model-context']);
-
-      // (2) submit_action — fires through app.callServerTool, lands on
-      // transport.sent. The send is async (queueMicrotask round-trip),
-      // so drain the microtask queue before asserting.
+      // Both ui/update-model-context AND tools/call submit_action now
+      // flow through the App transport post-#275. The send is async
+      // (queueMicrotask round-trip), so drain microtasks before
+      // asserting on transport.sent. postMessageSpy stays empty for
+      // the synchronous fan-out — only the ui/message fallback (if
+      // submit_action errors) hits raw postMessage.
+      expect(postMessageSpy).not.toHaveBeenCalled();
       await tick();
-      const toolsCallsOnTransport = transport.sent.filter(
+
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string')
+        // Drop the handshake noise (ui/initialize +
+        // ui/notifications/initialized) so the assertion focuses on
+        // the dispatch's outbound shape.
+        .filter(
+          (m) =>
+            m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
+        );
+      expect(transportMethods).toEqual([
+        'ui/update-model-context',
+        'tools/call',
+      ]);
+
+      const submitCall = transport.sent.find(
         (msg) => (msg as { method?: unknown }).method === 'tools/call',
-      );
-      expect(toolsCallsOnTransport).toHaveLength(1);
-      const submitCall = toolsCallsOnTransport[0] as Record<string, unknown>;
+      ) as Record<string, unknown>;
       expect(submitCall).toMatchObject({
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -308,18 +319,20 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       dispatchToolName: 'ggui_runtime_submit_action',
     });
 
-    // ui/update-model-context fires synchronously on raw postMessage.
-    const postMessageMethods = postMessageSpy.mock.calls.map(
-      (call) => (call[0] as { method?: unknown }).method,
-    );
-    expect(postMessageMethods).toEqual(['ui/update-model-context']);
-
-    // submit_action fires through the App transport.
+    // Both ui/update-model-context and submit_action flow through the
+    // App transport post-#275.
+    expect(postMessageSpy).not.toHaveBeenCalled();
     await tick();
-    const toolsCallsOnTransport = transport.sent.filter(
-      (msg) => (msg as { method?: unknown }).method === 'tools/call',
-    );
-    expect(toolsCallsOnTransport).toHaveLength(1);
+    const transportMethods = transport.sent
+      .map((msg) => (msg as { method?: unknown }).method)
+      .filter((m): m is string => typeof m === 'string')
+      .filter(
+        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
+      );
+    expect(transportMethods).toEqual([
+      'ui/update-model-context',
+      'tools/call',
+    ]);
   });
 
   it('Pattern β when the action name is not in actionNextSteps', async () => {
@@ -335,16 +348,18 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       dispatchToolName: 'ggui_runtime_submit_action',
     });
 
-    const postMessageMethods = postMessageSpy.mock.calls.map(
-      (call) => (call[0] as { method?: unknown }).method,
-    );
-    expect(postMessageMethods).toEqual(['ui/update-model-context']);
-
+    expect(postMessageSpy).not.toHaveBeenCalled();
     await tick();
-    const toolsCallsOnTransport = transport.sent.filter(
-      (msg) => (msg as { method?: unknown }).method === 'tools/call',
-    );
-    expect(toolsCallsOnTransport).toHaveLength(1);
+    const transportMethods = transport.sent
+      .map((msg) => (msg as { method?: unknown }).method)
+      .filter((m): m is string => typeof m === 'string')
+      .filter(
+        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
+      );
+    expect(transportMethods).toEqual([
+      'ui/update-model-context',
+      'tools/call',
+    ]);
   });
 
   it('Pattern β when appCallableTools is absent (legacy bootstrap)', async () => {
@@ -359,15 +374,17 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       dispatchToolName: 'ggui_runtime_submit_action',
     });
 
-    const postMessageMethods = postMessageSpy.mock.calls.map(
-      (call) => (call[0] as { method?: unknown }).method,
-    );
-    expect(postMessageMethods).toEqual(['ui/update-model-context']);
-
+    expect(postMessageSpy).not.toHaveBeenCalled();
     await tick();
-    const toolsCallsOnTransport = transport.sent.filter(
-      (msg) => (msg as { method?: unknown }).method === 'tools/call',
-    );
-    expect(toolsCallsOnTransport).toHaveLength(1);
+    const transportMethods = transport.sent
+      .map((msg) => (msg as { method?: unknown }).method)
+      .filter((m): m is string => typeof m === 'string')
+      .filter(
+        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
+      );
+    expect(transportMethods).toEqual([
+      'ui/update-model-context',
+      'tools/call',
+    ]);
   });
 });

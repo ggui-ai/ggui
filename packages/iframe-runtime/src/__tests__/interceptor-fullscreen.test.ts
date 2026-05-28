@@ -4,8 +4,10 @@
  * `Element.prototype.requestFullscreen` and
  * `Document.prototype.exitFullscreen` are overridden to route through
  * {@link requestDisplayModeInParent}. Generated components calling
- * `el.requestFullscreen()` / `document.exitFullscreen()` get a full
- * audit envelope + `ui/request-display-mode` postMessage to the host.
+ * `el.requestFullscreen()` / `document.exitFullscreen()` get a raw-
+ * postMessage audit envelope + the spec-canonical
+ * `ui/request-display-mode` request via `app.requestDisplayMode(...)`
+ * (post-Phase-1.19b.3 followup #275).
  *
  * Both overrides return `Promise.resolve()` so callers using `.then()`
  * / `await` don't break. The native call is NOT delegated — there's
@@ -13,15 +15,22 @@
  * race with the host's handling.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { App } from '@modelcontextprotocol/ext-apps';
 import {
+  __resetAppForTest,
   __resetInterceptorsForTest,
   installFullscreenInterceptors,
+  setCurrentApp,
 } from '../runtime.js';
+import { buildBootHarness, tick } from './boot-helpers.js';
+import type { MockTransport } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
 let originalPostMessage: typeof window.parent.postMessage;
 let originalRequestFullscreen: typeof Element.prototype.requestFullscreen;
 let originalExitFullscreen: typeof Document.prototype.exitFullscreen;
+let transport: MockTransport;
+let app: App;
 
 const baseArgs = {
   dispatchToolName: 'ggui_runtime_submit_action',
@@ -29,7 +38,20 @@ const baseArgs = {
   appId: 'app_1',
 } as const;
 
-beforeEach(() => {
+/**
+ * Helper — return every `ui/request-display-mode` request observed
+ * on the App transport (the spec-canonical destination post-#275).
+ */
+function requestDisplayModeRequests(): Array<Record<string, unknown>> {
+  return transport.sent
+    .filter(
+      (msg) =>
+        (msg as { method?: unknown }).method === 'ui/request-display-mode',
+    )
+    .map((msg) => msg as Record<string, unknown>);
+}
+
+beforeEach(async () => {
   postMessageSpy = vi.fn();
   originalPostMessage = window.parent.postMessage;
   Object.defineProperty(window.parent, 'postMessage', {
@@ -44,6 +66,12 @@ beforeEach(() => {
   originalRequestFullscreen = Element.prototype.requestFullscreen;
   originalExitFullscreen = Document.prototype.exitFullscreen;
   __resetInterceptorsForTest();
+
+  const harness = buildBootHarness();
+  transport = harness.transport;
+  app = harness.app;
+  await app.connect(transport);
+  setCurrentApp(app);
 });
 
 afterEach(() => {
@@ -54,6 +82,7 @@ afterEach(() => {
   });
   Element.prototype.requestFullscreen = originalRequestFullscreen;
   Document.prototype.exitFullscreen = originalExitFullscreen;
+  __resetAppForTest();
 });
 
 describe('installFullscreenInterceptors', () => {
@@ -67,9 +96,9 @@ describe('installFullscreenInterceptors', () => {
     expect(result).toBeInstanceOf(Promise);
     await expect(result).resolves.toBeUndefined();
 
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
+    // Audit fires synchronously via raw postMessage.
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
     const audit = postMessageSpy.mock.calls[0][0] as Record<string, unknown>;
-    const reqMode = postMessageSpy.mock.calls[1][0] as Record<string, unknown>;
     expect((audit.params as Record<string, unknown>).name).toBe(
       'ggui_runtime_submit_action',
     );
@@ -77,8 +106,12 @@ describe('installFullscreenInterceptors', () => {
       ((audit.params as Record<string, unknown>).arguments as Record<string, unknown>)
         .kind,
     ).toBe('requestDisplayMode');
-    expect(reqMode.method).toBe('ui/request-display-mode');
-    expect(reqMode.params).toEqual({ mode: 'fullscreen' });
+
+    // ui/request-display-mode routes through the App transport.
+    await tick();
+    const reqs = requestDisplayModeRequests();
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]?.params).toEqual({ mode: 'fullscreen' });
 
     document.body.removeChild(div);
   });
@@ -91,10 +124,11 @@ describe('installFullscreenInterceptors', () => {
     expect(result).toBeInstanceOf(Promise);
     await expect(result).resolves.toBeUndefined();
 
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
-    const reqMode = postMessageSpy.mock.calls[1][0] as Record<string, unknown>;
-    expect(reqMode.method).toBe('ui/request-display-mode');
-    expect(reqMode.params).toEqual({ mode: 'inline' });
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    await tick();
+    const reqs = requestDisplayModeRequests();
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]?.params).toEqual({ mode: 'inline' });
   });
 
   it('does not throw on accidental options argument', () => {
@@ -119,8 +153,12 @@ describe('installFullscreenInterceptors', () => {
 
     await div.requestFullscreen();
 
-    // Exactly 2 envelopes (audit + ui/request-display-mode), not 6.
-    expect(postMessageSpy).toHaveBeenCalledTimes(2);
+    // Audit fires exactly once (raw postMessage) and the
+    // ui/request-display-mode request fires exactly once (App
+    // transport) — not three of each.
+    expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(requestDisplayModeRequests()).toHaveLength(1);
 
     document.body.removeChild(div);
   });

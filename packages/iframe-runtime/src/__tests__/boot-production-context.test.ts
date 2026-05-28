@@ -33,7 +33,7 @@
  * is caught by the production-code-path scan in
  * `boot-production-source.test.ts`-style assertions below.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 import * as React from 'react';
 import { readFileSync } from 'node:fs';
@@ -44,7 +44,9 @@ import {
   createContextStateHost,
   contextSlotLastValues,
   type ContextSlotInfo,
+  type ContextSnapshotPoster,
   type ResolvedContextSlot,
+  type UpdateModelContextParams,
 } from '../context-observer.js';
 import {
   installGlobalRegistry,
@@ -125,10 +127,19 @@ describe('bootProduction — context registry installation (F4)', () => {
 });
 
 describe('bootProduction — getOuterWrapper composition (F4)', () => {
-  let postSpy: ReturnType<typeof vi.fn>;
+  let updates: UpdateModelContextParams[];
+  let poster: ContextSnapshotPoster;
 
   beforeEach(() => {
-    postSpy = vi.fn();
+    updates = [];
+    poster = {
+      postUpdateModelContext: (params) => {
+        updates.push(params);
+      },
+      postContextMirror: () => {
+        /* not exercised by these specs */
+      },
+    };
   });
 
   /**
@@ -142,7 +153,7 @@ describe('bootProduction — getOuterWrapper composition (F4)', () => {
   ): (mountedTree: React.ReactNode) => React.ReactNode {
     const ContextStateHost = createContextStateHost({
       react: React,
-      postToParent: postSpy,
+      poster,
       consoleWarn: undefined,
     });
     return (mountedTree) =>
@@ -202,31 +213,21 @@ describe('bootProduction — getOuterWrapper composition (F4)', () => {
     // Initial mount fires one ui/update-model-context for the seed —
     // this is the SingleSlotProvider's debouncing useEffect with
     // debounceMs=0 (immediate post).
-    expect(
-      postSpy.mock.calls.some(
-        (call) =>
-          (call[0] as { method?: unknown }).method === 'ui/update-model-context',
-      ),
-    ).toBe(true);
+    expect(updates.length).toBeGreaterThanOrEqual(1);
 
     // Now drive a setter call from the User component — this is what
     // the boilerplate's destructured-tuple setter triggers when the
     // LLM-authored code mutates context state.
-    postSpy.mockClear();
+    updates.length = 0;
     act(() => {
       captured!.setValue(7);
     });
 
     // setValue propagated → SingleSlotProvider's useEffect fired →
     // ui/update-model-context posted with the new value.
-    const updates = postSpy.mock.calls
-      .map((call) => call[0] as Record<string, unknown>)
-      .filter((env) => env.method === 'ui/update-model-context');
     expect(updates.length).toBeGreaterThanOrEqual(1);
-    const lastText = (
-      ((updates[updates.length - 1]!.params as Record<string, unknown>)
-        .content as ReadonlyArray<{ text: string }>)[0]?.text ?? ''
-    );
+    const lastUpdate = updates[updates.length - 1];
+    const lastText = lastUpdate?.content?.[0]?.text ?? '';
     // Snapshot format: `[ggui:context] {"currentStep":7,...}`
     // (snapshot replaces per-slot delta `[ggui:context-slot] {slot,value}`).
     expect(lastText.startsWith('[ggui:context] ')).toBe(true);
@@ -238,8 +239,8 @@ describe('bootProduction — getOuterWrapper composition (F4)', () => {
     const tree = wrapper(React.createElement('span', null, 'hello'));
     const { container } = render(tree as React.ReactElement);
     expect(container.textContent).toContain('hello');
-    // No slots → no SingleSlotProvider → no useEffect post.
-    expect(postSpy).not.toHaveBeenCalled();
+    // No slots → no SingleSlotProvider → no poster fire.
+    expect(updates).toHaveLength(0);
   });
 });
 
