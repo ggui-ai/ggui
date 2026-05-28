@@ -52,6 +52,7 @@ import {
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 
 /**
@@ -518,7 +519,14 @@ export function registerGguiRenderResource(
     }
   }
 
-  server.registerResource(
+  // `registerAppResource` (from `@modelcontextprotocol/ext-apps/server`)
+  // defaults `mimeType` to `RESOURCE_MIME_TYPE` — the same
+  // `text/html;profile=mcp-app` value `GGUI_RENDER_RESOURCE_MIME`
+  // carries. Letting the canonical helper own the default means the
+  // mimeType string lives in ONE place across the ecosystem (the SDK)
+  // rather than duplicated in our protocol package.
+  registerAppResource(
+    server,
     "ggui-render",
     GGUI_RENDER_RESOURCE_URI,
     {

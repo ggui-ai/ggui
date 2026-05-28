@@ -10,6 +10,7 @@
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { z, type ZodRawShape } from 'zod';
 import type {
   HandlerContext,
@@ -185,66 +186,90 @@ export function buildMcpServer(
     ) {
       continue;
     }
-    server.registerTool(
-      handler.name,
-      {
-        ...(handler.title ? { title: handler.title } : {}),
-        description: handler.description,
-        inputSchema: handler.inputSchema,
-        outputSchema: handler.outputSchema,
-        // Forward declaration-level `_meta` (e.g. `_meta.ui.resourceUri`
-        // / `_meta.ui.visibility` stamped by the MCP Apps outbound path).
-        // Opaque to the transport — hosts consume it per their own spec.
-        ...(handler._meta ? { _meta: handler._meta } : {}),
-      },
-      async (input: Record<string, unknown>, extra) => {
-        // Thread per-request `_meta` onto the canonical context. The MCP
-        // SDK already parses `params._meta` for us and exposes it on
-        // `RequestHandlerExtra._meta`; handlers that read host-channel
-        // slices (e.g. `ai.ggui/host-session` on `ggui_handshake`)
-        // pick it up via `ctx.requestMeta` without touching the SDK
-        // surface themselves.
-        const baseCtx = getContext();
-        const ctx: HandlerContext =
-          extra?._meta !== undefined
-            ? {
-                ...baseCtx,
-                requestMeta: extra._meta as Readonly<Record<string, unknown>>,
-              }
-            : baseCtx;
-        const start = Date.now();
-        try {
-          const data = await handler.handler(input, ctx);
-          const validated = z.object(handler.outputSchema).parse(data);
-          // Per-result `_meta` — NOT merged into structuredContent, so
-          // agents that typecheck against the tool signature never see
-          // it. This is where view-only bootstrap material lives.
-          const meta = await handler.resultMeta?.(data, input, ctx);
-          logger.info('tool_invoked', {
-            tool: handler.name,
-            appId: ctx.appId,
-            outcome: 'success',
-            elapsedMs: Date.now() - start,
-          });
-          return {
-            structuredContent: validated as Record<string, unknown>,
-            content: [
-              { type: 'text' as const, text: JSON.stringify(validated) },
-            ],
-            ...(meta !== undefined ? { _meta: meta } : {}),
-          };
-        } catch (err) {
-          logger.warn('tool_invoked', {
-            tool: handler.name,
-            appId: ctx.appId,
-            outcome: 'error',
-            errorClass: errorClassName(err),
-            elapsedMs: Date.now() - start,
-          });
-          throw err;
-        }
-      },
-    );
+    const cb = async (input: Record<string, unknown>, extra: { _meta?: unknown }) => {
+      // Thread per-request `_meta` onto the canonical context. The MCP
+      // SDK already parses `params._meta` for us and exposes it on
+      // `RequestHandlerExtra._meta`; handlers that read host-channel
+      // slices (e.g. `ai.ggui/host-session` on `ggui_handshake`)
+      // pick it up via `ctx.requestMeta` without touching the SDK
+      // surface themselves.
+      const baseCtx = getContext();
+      const ctx: HandlerContext =
+        extra?._meta !== undefined
+          ? {
+              ...baseCtx,
+              requestMeta: extra._meta as Readonly<Record<string, unknown>>,
+            }
+          : baseCtx;
+      const start = Date.now();
+      try {
+        const data = await handler.handler(input, ctx);
+        const validated = z.object(handler.outputSchema).parse(data);
+        // Per-result `_meta` — NOT merged into structuredContent, so
+        // agents that typecheck against the tool signature never see
+        // it. This is where view-only bootstrap material lives.
+        const meta = await handler.resultMeta?.(data, input, ctx);
+        logger.info('tool_invoked', {
+          tool: handler.name,
+          appId: ctx.appId,
+          outcome: 'success',
+          elapsedMs: Date.now() - start,
+        });
+        return {
+          structuredContent: validated as Record<string, unknown>,
+          content: [
+            { type: 'text' as const, text: JSON.stringify(validated) },
+          ],
+          ...(meta !== undefined ? { _meta: meta } : {}),
+        };
+      } catch (err) {
+        logger.warn('tool_invoked', {
+          tool: handler.name,
+          appId: ctx.appId,
+          outcome: 'error',
+          errorClass: errorClassName(err),
+          elapsedMs: Date.now() - start,
+        });
+        throw err;
+      }
+    };
+
+    const baseConfig = {
+      ...(handler.title ? { title: handler.title } : {}),
+      description: handler.description,
+      inputSchema: handler.inputSchema,
+      outputSchema: handler.outputSchema,
+    };
+
+    // Dispatch on declaration-level UI meta presence. `registerAppTool`
+    // (from `@modelcontextprotocol/ext-apps/server`) normalizes the
+    // legacy flat key — when `_meta.ui.resourceUri` is set, it also
+    // stamps `_meta["ui/resourceUri"]` for older hosts. Letting the
+    // canonical helper do that work means ggui handlers carry the
+    // single canonical key only; the helper owns the back-compat
+    // shape. Handlers without `_meta.ui` fall through to plain
+    // `registerTool` — the ext-apps helper requires `_meta.ui` to be
+    // typed.
+    if (handler._meta && 'ui' in handler._meta) {
+      registerAppTool(
+        server,
+        handler.name,
+        {
+          ...baseConfig,
+          _meta: handler._meta as { ui: { resourceUri?: string; visibility?: readonly string[] } },
+        },
+        cb,
+      );
+    } else {
+      server.registerTool(
+        handler.name,
+        {
+          ...baseConfig,
+          ...(handler._meta ? { _meta: handler._meta } : {}),
+        },
+        cb,
+      );
+    }
   }
 
   return server;

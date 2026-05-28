@@ -1002,12 +1002,11 @@ export function createGguiRenderHandler(
       // `_meta.ui.visibility` per the MCP Apps spec. Exactly one ggui
       // tool carries these; expanding this set without revisiting the
       // design lock is a boundary violation.
+      //
+      // Legacy flat-key (`_meta["ui/resourceUri"]`) is stamped
+      // automatically by `registerAppTool` in `build-mcp.ts` — we
+      // carry the canonical key only.
       ui: GGUI_RENDER_UI_META,
-      // Legacy flat key per `@modelcontextprotocol/ext-apps/server`
-      // `registerAppTool` normalization: hosts that read the legacy
-      // shape need the URI at `_meta["ui/resourceUri"]` too. Always
-      // stamped alongside `_meta.ui.resourceUri` for backward compat.
-      'ui/resourceUri': GGUI_RENDER_UI_META.resourceUri,
     },
     async handler(input, ctx: HandlerContext): Promise<RenderOutput> {
       // Render is handshake-first. The wire input is just
