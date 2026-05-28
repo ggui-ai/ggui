@@ -40,17 +40,21 @@ function setCache(key: string, data: unknown, ttl: number): void {
 }
 
 /**
- * Clear cached values.
+ * Clear cached fetch responses.
  *
- * @param sessionId - If provided, only entries for that session are removed.
- *                    If omitted, the entire cache is cleared.
+ * The cache is render-scoped (see {@link fetchTool} — keys are prefixed
+ * with `ToolContext.renderId`). Pass `renderId` to drop only that render's
+ * entries; omit to flush the entire cache.
+ *
+ * @param renderId - If provided, only entries scoped to that render are
+ *                   removed. If omitted, the entire cache is cleared.
  */
-export function clearFetchCache(sessionId?: string): void {
-  if (!sessionId) {
+export function clearFetchCache(renderId?: string): void {
+  if (!renderId) {
     cache.clear();
     return;
   }
-  const prefix = `${sessionId}:`;
+  const prefix = `${renderId}:`;
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) {
       cache.delete(key);
