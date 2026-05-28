@@ -174,8 +174,8 @@ async function handleRequest(
   // Returns the verbatim stream of SDK messages we observed for this
   // chat. The frontend hook (`useMcpAppsChat`) replays `messages[]`
   // through the same handler the live SSE stream uses, rebuilding the
-  // chat panel and re-mounting iframes from each tool_result's
-  // `_meta` slice — no separate per-render store needed server-side.
+  // chat panel and re-mounting iframes from each tool_result's `_meta`
+  // slice — no separate per-render store needed server-side.
   //
   // 404 on unknown chatId — distinguishes "fresh tab opened on a URL
   // we don't know about" from "empty conversation" (the former gets a
@@ -422,8 +422,7 @@ async function handleRequest(
         // actually did (the test's tool-name harvest only runs on
         // success — without this, a stalled round-trip is invisible).
         if (msg.type === 'assistant') {
-          const m = msg as { message?: { content?: ReadonlyArray<{ type?: string; name?: string }> } };
-          for (const c of m.message?.content ?? []) {
+          for (const c of msg.message.content ?? []) {
             if (c.type === 'tool_use' && typeof c.name === 'string') {
               console.log(`[sample-agent]   → tool_use: ${c.name}`);
             }
