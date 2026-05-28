@@ -4723,14 +4723,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     }
   }
 
-  // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
+  // R6 — GET /api/renders/:renderId/state?wsToken=<token>
   //
-  // Auth'd snapshot read of the current session state, returning the
-  // same slice envelope as the wire `_meta` (`{"ai.ggui/render":
-  // {...}, "ai.ggui/render": {...}}`). Polling clients call this
-  // on a fixed interval (registry-level polling — see R6 library
-  // refactor) to pick up changes when WS is blocked at the host's CSP
-  // layer.
+  // Auth'd snapshot read of the current render state, returning the
+  // same slice envelope as the wire `_meta` (a single
+  // `{"ai.ggui/render": {...}}` slice — Phase B collapsed the prior
+  // session + stack-item pair). Polling clients call this on a fixed
+  // interval (registry-level polling — see R6 library refactor) to
+  // pick up changes when WS is blocked at the host's CSP layer.
   //
   // wsToken-gated: same credential as the live-channel WS upgrade
   // (`?wsToken=<token>` on `/ws`). Drift-free with the WS surface —
@@ -4740,8 +4740,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Distinct from `/r/:shortCode` (JSON branch):
   //   - `/r/...` is shortCode-gated (bearer-by-obscurity; anyone with
   //     the URL can read). R5 deletes that surface entirely.
-  //   - `/api/sessions/.../state` is wsToken-gated (HMAC-signed,
-  //     short-TTL, scoped to sessionId+appId). Survives R5.
+  //   - `/api/renders/.../state` is wsToken-gated (HMAC-signed,
+  //     short-TTL, scoped to renderId+appId). Survives R5.
   //
   // Distinct from R7's `/api/renders/:id/events?sinceSequence=N`
   // (planned): /state is a snapshot; /events is a cursor-replay. Both
@@ -4956,7 +4956,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     });
   }
 
-  // R7 — GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M
+  // R7 — GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M
   //
   // Cursor-replay read from the RenderEvent ledger (`bc524f2f0` in
   // cloud; in-memory + sqlite stores OSS). Returns events with
