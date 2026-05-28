@@ -10,19 +10,19 @@
  * Layout:
  *
  *   - SectionHead (page title only — no brand hero).
- *   - **Live sessions rail** (above the grid): full-width card with
- *     top-3 sessions + an "open latest →" one-click CTA. Renders an
- *     empty variant pointing at `/` when no sessions are live.
+ *   - **Live renders rail** (above the grid): full-width card with
+ *     top-3 renders + an "open latest →" one-click CTA. Renders an
+ *     empty variant pointing at `/` when no renders are live.
  *   - 2-column grid of status cards (stacks on narrow viewports):
  *       • server        — name + version + description
  *       • pairing       — pair code + expiry / disabled / idle
  *       • capabilities  — tool / blueprint / primitive counts,
  *         agent + generation wiring
- *       • storage       — session + vector store backends
+ *       • storage       — render + vector store backends
  *
  * Fetches in parallel:
  *   - `GET /ggui/console/info`           (server + pairing + capabilities + storage)
- *   - `GET /ggui/console/sessions?limit=3` (live-now rail data)
+ *   - `GET /ggui/console/renders?limit=3` (live-now rail data)
  */
 import {
   useEffect,
@@ -66,18 +66,17 @@ interface ServerInfoResponse {
   };
 }
 
-interface SessionSummary {
-  readonly sessionId: string;
+interface RenderSummary {
+  readonly renderId: string;
   readonly shortCode?: string;
   readonly appId: string;
-  readonly stackSize: number;
   readonly lastActivityAt: number;
   readonly createdAt: number;
   readonly status: 'active' | 'completed' | 'expired';
 }
 
-interface SessionsResponse {
-  readonly sessions: readonly SessionSummary[];
+interface RendersResponse {
+  readonly renders: readonly RenderSummary[];
   readonly total: number;
 }
 
@@ -86,14 +85,14 @@ type InfoState =
   | { readonly kind: 'ok'; readonly info: ServerInfoResponse }
   | { readonly kind: 'error'; readonly message: string };
 
-type SessionsState =
+type RendersState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ok'; readonly data: SessionsResponse }
+  | { readonly kind: 'ok'; readonly data: RendersResponse }
   | { readonly kind: 'error' };
 
 export function Status(): ReactElement {
   const [info, setInfo] = useState<InfoState>({ kind: 'loading' });
-  const [sessions, setSessions] = useState<SessionsState>({
+  const [renders, setRenders] = useState<RendersState>({
     kind: 'loading',
   });
 
@@ -121,18 +120,18 @@ export function Status(): ReactElement {
     })();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/sessions?limit=3', {
+        const res = await fetch('/ggui/console/renders?limit=3', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
         });
         if (!res.ok) {
-          setSessions({ kind: 'error' });
+          setRenders({ kind: 'error' });
           return;
         }
-        const body = (await res.json()) as SessionsResponse;
-        setSessions({ kind: 'ok', data: body });
+        const body = (await res.json()) as RendersResponse;
+        setRenders({ kind: 'ok', data: body });
       } catch {
-        if (!controller.signal.aborted) setSessions({ kind: 'error' });
+        if (!controller.signal.aborted) setRenders({ kind: 'error' });
       }
     })();
     return () => controller.abort();
@@ -155,7 +154,7 @@ export function Status(): ReactElement {
           </>
         }
       />
-      <LiveSessionsHero state={sessions} />
+      <LiveRendersHero state={renders} />
       <div className="ggui-status-grid">
         <ServerCard state={info} />
         <PairingCard state={info} />
@@ -395,7 +394,7 @@ function StorageCard({
 }
 
 /**
- * Live-sessions hero — surfaces the most operator-relevant signal on
+ * Live-renders hero — surfaces the most operator-relevant signal on
  * this page (where to find the live `/s/<shortCode>` viewer). Rendered
  * directly above the status grid so it's the first thing an operator
  * sees after the page header.
@@ -412,15 +411,15 @@ function StorageCard({
  * "what's live right now?" — one click away, first thing visible,
  * captures the common case (open latest) with a single button.
  */
-function LiveSessionsHero({
+function LiveRendersHero({
   state,
 }: {
-  readonly state: SessionsState;
+  readonly state: RendersState;
 }): ReactElement {
   if (state.kind === 'loading') {
     return (
       <div className="ggui-status-hero" data-ggui-status-hero="loading">
-        <p className="ggui-muted">Loading live sessions…</p>
+        <p className="ggui-muted">Loading live renders…</p>
       </div>
     );
   }
@@ -428,12 +427,12 @@ function LiveSessionsHero({
     return (
       <div className="ggui-status-hero" data-ggui-status-hero="error">
         <p className="ggui-muted">
-          Couldn&apos;t reach <code className="ggui-code">/ggui/console/sessions</code>.
+          Couldn&apos;t reach <code className="ggui-code">/ggui/console/renders</code>.
         </p>
       </div>
     );
   }
-  if (state.data.sessions.length === 0) {
+  if (state.data.renders.length === 0) {
     return (
       <div
         className="ggui-status-hero ggui-status-hero--empty"
@@ -442,11 +441,11 @@ function LiveSessionsHero({
         <div className="ggui-status-hero__head">
           <span className="ggui-status-hero__eyebrow">
             <StatusBadge tone="ink">idle</StatusBadge>
-            <span>live sessions</span>
+            <span>live renders</span>
           </span>
         </div>
         <p className="ggui-muted" style={{ margin: 0 }}>
-          No sessions yet. Open{' '}
+          No renders yet. Open{' '}
           <button
             type="button"
             className="ggui-link"
@@ -461,21 +460,21 @@ function LiveSessionsHero({
     );
   }
 
-  const all = state.data.sessions;
+  const all = state.data.renders;
   const top3 = all.slice(0, 3);
-  const latest = top3.find((s) => typeof s.shortCode === 'string');
+  const latest = top3.find((r) => typeof r.shortCode === 'string');
 
   return (
     <div
       className="ggui-status-hero ggui-status-hero--active"
       data-ggui-status-hero="active"
-      data-ggui-live-session-count={String(all.length)}
+      data-ggui-live-render-count={String(all.length)}
     >
       <div className="ggui-status-hero__head">
         <span className="ggui-status-hero__eyebrow">
           <StatusBadge tone="live">live</StatusBadge>
           <span>
-            {all.length} {all.length === 1 ? 'session' : 'sessions'}
+            {all.length} {all.length === 1 ? 'render' : 'renders'}
           </span>
         </span>
         {latest ? (
@@ -494,38 +493,34 @@ function LiveSessionsHero({
         ) : null}
       </div>
       <ul className="ggui-status-hero__list">
-        {top3.map((s) => (
+        {top3.map((r) => (
           <li
-            key={s.sessionId}
+            key={r.renderId}
             className="ggui-status-hero__row"
-            data-ggui-dashboard-session-id={s.sessionId}
+            data-ggui-dashboard-render-id={r.renderId}
           >
             <div className="ggui-status-hero__row-main">
-              {s.shortCode ? (
+              {r.shortCode ? (
                 <code
                   className="ggui-code"
-                  data-ggui-status-hero-shortcode={s.shortCode}
+                  data-ggui-status-hero-shortcode={r.shortCode}
                 >
-                  /s/{s.shortCode}
+                  /s/{r.shortCode}
                 </code>
               ) : (
-                <code className="ggui-code">{s.sessionId.slice(0, 8)}…</code>
+                <code className="ggui-code">{r.renderId.slice(0, 8)}…</code>
               )}
               <span className="ggui-muted">
-                stack{' '}
-                <code className="ggui-code">{String(s.stackSize)}</code>
-              </span>
-              <span className="ggui-muted">
-                {formatRelative(s.lastActivityAt)}
+                {formatRelative(r.lastActivityAt)}
               </span>
             </div>
-            {s.shortCode ? (
+            {r.shortCode ? (
               <button
                 type="button"
                 className="ggui-btn ggui-btn--ghost"
                 onClick={() =>
                   navigateTo(
-                    `/s/${encodeURIComponent(s.shortCode as string)}`,
+                    `/s/${encodeURIComponent(r.shortCode as string)}`,
                   )
                 }
               >
@@ -542,7 +537,7 @@ function LiveSessionsHero({
           <button
             type="button"
             className="ggui-link"
-            onClick={() => navigateTo('/admin/sessions')}
+            onClick={() => navigateTo('/admin/renders')}
           >
             view all {all.length} →
           </button>
@@ -552,7 +547,7 @@ function LiveSessionsHero({
           <button
             type="button"
             className="ggui-link"
-            onClick={() => navigateTo('/admin/sessions')}
+            onClick={() => navigateTo('/admin/renders')}
           >
             view all →
           </button>
@@ -563,9 +558,9 @@ function LiveSessionsHero({
 }
 
 /**
- * Relative-time formatter — shared with `Sessions.tsx`. Simple inline
+ * Relative-time formatter — shared with `Renders.tsx`. Simple inline
  * copy avoids creating a utilities module for a 10-line helper; the
- * status hero list mirrors the sessions-list formatter character for
+ * status hero list mirrors the renders-list formatter character for
  * character so operators read the same string across pages.
  */
 function formatRelative(ms: number): string {

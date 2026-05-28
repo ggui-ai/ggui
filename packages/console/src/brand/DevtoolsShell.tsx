@@ -4,7 +4,7 @@
  * Sibling to {@link AdminShell}. Same left-rail pattern, different
  * audience: where `/admin/*` is production operator chrome (lean,
  * security-first), `/devtools/*` is the dev-mode firehose — full LLM
- * traces, validator results, cache scoring, session timeline, raw
+ * traces, validator results, cache scoring, render timeline, raw
  * payloads. Default for `ggui dev`; never mounts for `ggui serve`.
  *
  * Three groups:

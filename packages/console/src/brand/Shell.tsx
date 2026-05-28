@@ -6,7 +6,7 @@
  * routes. The `variant` prop swaps the main container's width:
  *
  *   - `wide` (default) — 1120px.
- *   - `narrow` — 820px, used by deep-link viewers (session /
+ *   - `narrow` — 820px, used by deep-link viewers (render /
  *     blueprint) and not-found.
  *   - `admin` — wide, but with the admin sub-shell (left-rail)
  *     wrapping the children. Used by every `/admin/*` route.
@@ -22,7 +22,7 @@ import type { Route } from '../router.js';
 import { AdminShell } from './AdminShell.js';
 import { DevtoolsShell } from './DevtoolsShell.js';
 import { Footer } from './Footer.js';
-import { LiveSessionPill } from './LiveSessionPill.js';
+import { LiveRenderPill } from './LiveRenderPill.js';
 import { TopNav } from './TopNav.js';
 
 export interface ShellProps {
@@ -32,8 +32,8 @@ export interface ShellProps {
   readonly showFooter?: boolean;
   /**
    * Optional additional nav-right content. Always rendered AFTER the
-   * default `LiveSessionPill` so page-specific pills (if ever added)
-   * sit to the right of the live-session portal.
+   * default `LiveRenderPill` so page-specific pills (if ever added)
+   * sit to the right of the live-render portal.
    */
   readonly navRightSlot?: ReactNode;
 }
@@ -51,7 +51,7 @@ export function Shell({
       : 'ggui-shell__main';
   const rightSlot = (
     <>
-      <LiveSessionPill route={route} />
+      <LiveRenderPill route={route} />
       {navRightSlot}
     </>
   );

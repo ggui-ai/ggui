@@ -187,7 +187,7 @@ describe('BlueprintViewer — render states', () => {
         if (init?.method === 'POST') {
           return new Response(
             JSON.stringify({
-              sessionId: 'try-abc',
+              renderId: 'try-abc',
               shortCode: 'abc1234567',
               url: '/s/abc1234567',
             }),

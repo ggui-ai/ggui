@@ -1,5 +1,5 @@
 /**
- * `SessionViewer` — jsdom proofs for the cookie → resource → srcdoc
+ * `RenderViewer` — jsdom proofs for the cookie → resource → srcdoc
  * iframe pipeline.
  *
  * The viewer is a READ-ONLY operator preview surface. It mounts a
@@ -12,13 +12,13 @@
  *
  * What jsdom CAN prove here (and what these tests anchor on):
  *
- *   - Step 1 — POST /ggui/console/session-cookie with the short-code
- *     mints a cookie-session response that drives the state machine
+ *   - Step 1 — POST /ggui/console/render-cookie with the short-code
+ *     mints a cookie-render response that drives the state machine
  *     into `loading-resource`.
- *   - Step 2 — GET /ggui/console/session-resource?session=<id>,
- *     /ggui/console/sessions/:id/meta, and /ggui/console/session-stack
- *     fire in parallel; the resource's `contents[0].text` lands on
- *     the iframe's `srcdoc`, the meta slice replies to `ui/initialize`.
+ *   - Step 2 — GET /ggui/console/render-resource?render=<id> and
+ *     /ggui/console/renders/:id/meta fire in parallel; the resource's
+ *     `contents[0].text` lands on the iframe's `srcdoc`, the meta slice
+ *     replies to `ui/initialize`.
  *   - `ui/initialize` postMessage from the iframe's contentWindow
  *     receives a JSON-RPC reply whose
  *     `result.toolOutput._meta["ai.ggui/render"]` matches the fetched
@@ -39,7 +39,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 // Import the viewer. No external module-boundary mocks — the viewer
 // has no React-side iframe-host dependency to stub now that
 // `<McpAppIframe>` / `<AppRenderer>` is no longer in the chain.
-import { SessionViewer } from './SessionViewer.js';
+import { RenderViewer } from './RenderViewer.js';
 
 // ── Test helpers ────────────────────────────────────────────────────
 
@@ -55,20 +55,18 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 }
 
 /**
- * Install a fetch mock that answers the four endpoints the viewer
- * calls (cookie / resource / meta / stack). Callers can override
- * any stub for failure-path tests.
+ * Install a fetch mock that answers the three endpoints the viewer
+ * calls (cookie / resource / meta). Callers can override any stub
+ * for failure-path tests.
  */
 function installFetchMock({
   cookie,
   resource,
   bootstrap,
-  stack,
 }: {
   readonly cookie?: () => Promise<Response>;
   readonly resource?: () => Promise<Response>;
   readonly bootstrap?: () => Promise<Response>;
-  readonly stack?: () => Promise<Response>;
 } = {}): ReturnType<typeof vi.fn<FetchImpl>> {
   const fetchSpy = vi.fn<FetchImpl>(async (input) => {
     const url =
@@ -77,39 +75,31 @@ function installFetchMock({
         : input instanceof URL
           ? input.toString()
           : input.url;
-    if (url.includes('/ggui/console/session-cookie')) {
+    if (url.includes('/ggui/console/render-cookie')) {
       if (cookie) return cookie();
       return jsonResponse({
-        sessionId: 'sess-xyz',
+        renderId: 'rndr-xyz',
         appId: 'app-demo',
         expiresAt: Date.now() + 3600_000,
       });
     }
-    // sessions/:id/meta matched BEFORE session-resource because the
-    // former is a longer prefix; without this ordering session-resource
+    // renders/:id/meta matched BEFORE render-resource because the
+    // former is a longer prefix; without this ordering render-resource
     // would shadow it.
-    if (url.includes('/ggui/console/sessions/') && url.endsWith('/meta')) {
+    if (url.includes('/ggui/console/renders/') && url.endsWith('/meta')) {
       if (bootstrap) return bootstrap();
       return jsonResponse({
         'ai.ggui/render': {
           wsUrl: 'wss://test.example/ws',
           wsToken: 'mock-token',
           expiresAt: '2099-12-31T23:59:59.999Z',
-          renderId: 'sess-xyz',
+          renderId: 'rndr-xyz',
           appId: 'app-demo',
           runtimeUrl: '/_ggui/iframe-runtime.js',
         },
       });
     }
-    if (url.includes('/ggui/console/session-stack')) {
-      if (stack) return stack();
-      return jsonResponse({
-        stack: [],
-        currentStackIndex: -1,
-        eventSequence: 0,
-      });
-    }
-    if (url.includes('/ggui/console/session-resource')) {
+    if (url.includes('/ggui/console/render-resource')) {
       if (resource) return resource();
       return jsonResponse({
         contents: [
@@ -138,15 +128,15 @@ afterEach(() => {
 
 // ── Mount pipeline ──────────────────────────────────────────────────
 
-describe('SessionViewer — mount pipeline', () => {
-  it('fetches cookie → (resource + meta + stack in parallel), then mounts srcdoc iframe with the shell HTML', async () => {
+describe('RenderViewer — mount pipeline', () => {
+  it('fetches cookie → (resource + meta in parallel), then mounts srcdoc iframe with the shell HTML', async () => {
     installFetchMock();
-    render(<SessionViewer shortCode="scode0001" />);
+    render(<RenderViewer shortCode="scode0001" />);
 
     const iframe = await waitFor(() => {
-      const el = screen.getByTestId('session-viewer-iframe');
+      const el = screen.getByTestId('render-viewer-iframe');
       if (!(el instanceof HTMLIFrameElement)) {
-        throw new Error('session-viewer-iframe is not an <iframe>');
+        throw new Error('render-viewer-iframe is not an <iframe>');
       }
       return el;
     });
@@ -164,18 +154,18 @@ describe('SessionViewer — mount pipeline', () => {
 
   it('replies to the shell\'s ui/initialize postMessage with the slice-envelope toolOutput._meta', async () => {
     installFetchMock();
-    render(<SessionViewer shortCode="scode-init" />);
+    render(<RenderViewer shortCode="scode-init" />);
 
     const iframe = await waitFor(() => {
-      const el = screen.getByTestId('session-viewer-iframe');
+      const el = screen.getByTestId('render-viewer-iframe');
       if (!(el instanceof HTMLIFrameElement)) {
-        throw new Error('session-viewer-iframe is not an <iframe>');
+        throw new Error('render-viewer-iframe is not an <iframe>');
       }
       return el;
     });
 
     // jsdom doesn't actually navigate the srcdoc iframe + load
-    // GGUI_SESSION_SHELL_HTML, so we can't observe a real shell-
+    // GGUI_RENDER_SHELL_HTML, so we can't observe a real shell-
     // initiated postMessage. Instead we drive the wire directly:
     // simulate the shell's `ui/initialize` request by dispatching a
     // MessageEvent whose `source` matches `iframe.contentWindow`,
@@ -207,7 +197,7 @@ describe('SessionViewer — mount pipeline', () => {
           method: 'ui/initialize',
           params: {
             appCapabilities: {},
-            appInfo: { name: 'ggui-session', version: '1.0.0' },
+            appInfo: { name: 'ggui-render', version: '1.0.0' },
             protocolVersion: '2026-01-26',
           },
         },
@@ -235,18 +225,18 @@ describe('SessionViewer — mount pipeline', () => {
     expect(reply.id).toBe(1);
     const renderSlice = reply.result?.toolOutput?._meta?.['ai.ggui/render'];
     expect(renderSlice).toBeTruthy();
-    expect(renderSlice?.renderId).toBe('sess-xyz');
+    expect(renderSlice?.renderId).toBe('rndr-xyz');
     expect(renderSlice?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 
   it('ignores non-ui/initialize postMessages', async () => {
     installFetchMock();
-    render(<SessionViewer shortCode="scode-noise" />);
+    render(<RenderViewer shortCode="scode-noise" />);
 
     const iframe = await waitFor(() => {
-      const el = screen.getByTestId('session-viewer-iframe');
+      const el = screen.getByTestId('render-viewer-iframe');
       if (!(el instanceof HTMLIFrameElement)) {
-        throw new Error('session-viewer-iframe is not an <iframe>');
+        throw new Error('render-viewer-iframe is not an <iframe>');
       }
       return el;
     });
@@ -288,67 +278,67 @@ describe('SessionViewer — mount pipeline', () => {
     installFetchMock({
       cookie: async () => new Response('not found', { status: 404 }),
     });
-    render(<SessionViewer shortCode="missing" />);
+    render(<RenderViewer shortCode="missing" />);
     await waitFor(() => {
       expect(screen.getByText(/short-code not found/i)).toBeTruthy();
     });
-    expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();
+    expect(screen.queryByTestId('render-viewer-iframe')).toBeNull();
   });
 
-  it('transitions to resource-failed when the session-resource fetch returns 503', async () => {
+  it('transitions to resource-failed when the render-resource fetch returns 503', async () => {
     installFetchMock({
       resource: async () =>
         new Response(JSON.stringify({ error: 'mcp_apps_disabled' }), {
           status: 503,
         }),
     });
-    render(<SessionViewer shortCode="scode0002" />);
+    render(<RenderViewer shortCode="scode0002" />);
     await waitFor(() => {
-      expect(screen.getByText(/session resource unavailable/i)).toBeTruthy();
+      expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
     });
     expect(
-      screen.getByText(/session-resource fetch returned 503/i),
+      screen.getByText(/render-resource fetch returned 503/i),
     ).toBeTruthy();
-    expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();
+    expect(screen.queryByTestId('render-viewer-iframe')).toBeNull();
   });
 
   it('transitions to resource-failed when contents[] is empty', async () => {
     installFetchMock({
       resource: async () => jsonResponse({ contents: [] }),
     });
-    render(<SessionViewer shortCode="scode0003" />);
+    render(<RenderViewer shortCode="scode0003" />);
     await waitFor(() => {
       expect(screen.getByText(/empty contents array/i)).toBeTruthy();
     });
   });
 
-  it('transitions to resource-failed when the sessions/:id/meta fetch returns 503', async () => {
+  it('transitions to resource-failed when the renders/:id/meta fetch returns 503', async () => {
     installFetchMock({
       bootstrap: async () =>
         new Response(JSON.stringify({ error: 'mcp_apps_disabled' }), {
           status: 503,
         }),
     });
-    render(<SessionViewer shortCode="scode0004" />);
+    render(<RenderViewer shortCode="scode0004" />);
     await waitFor(() => {
-      expect(screen.getByText(/session resource unavailable/i)).toBeTruthy();
+      expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
     });
     expect(
-      screen.getByText(/sessions\/:id\/meta fetch returned 503/i),
+      screen.getByText(/renders\/:id\/meta fetch returned 503/i),
     ).toBeTruthy();
-    expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();
+    expect(screen.queryByTestId('render-viewer-iframe')).toBeNull();
   });
 
-  it('transitions to resource-failed when the sessions/:id/meta response is missing the render slice', async () => {
+  it('transitions to resource-failed when the renders/:id/meta response is missing the render slice', async () => {
     installFetchMock({
       bootstrap: async () => jsonResponse({}),
     });
-    render(<SessionViewer shortCode="scode0005" />);
+    render(<RenderViewer shortCode="scode0005" />);
     await waitFor(() => {
       expect(
         screen.getByText(/missing `ai\.ggui\/render` slice/i),
       ).toBeTruthy();
     });
-    expect(screen.queryByTestId('session-viewer-iframe')).toBeNull();
+    expect(screen.queryByTestId('render-viewer-iframe')).toBeNull();
   });
 });

@@ -34,7 +34,7 @@ export function StatusBadge({
 }
 
 /**
- * Map a connection-status string (the `@ggui-ai/react` `SessionApi`
+ * Map a connection-status string (the `@ggui-ai/react` `RenderApi`
  * exposes `'connecting' | 'connected' | 'disconnected' | …`) to a
  * brand-kit tone. Centralized so multiple routes agree on the mapping.
  */

@@ -90,7 +90,7 @@ export function Clients(): ReactElement {
 
   useEffect(() => {
     // Single fetch on mount — operators reload the page when they
-    // want the latest state. Same posture as Sessions / Blueprints.
+    // want the latest state. Same posture as Renders / Blueprints.
     // `refresh` reads the closure's `setState` only; safe to omit
     // from deps without `react-hooks/exhaustive-deps` complaining
     // (the rule isn't loaded in this package's eslint config).

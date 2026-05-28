@@ -1,9 +1,9 @@
 /**
- * Session viewer route — `/s/<shortCode>`.
+ * Render viewer route — `/s/<shortCode>`.
  *
- * **Posture: read-only / visual-only.** The console SessionViewer is
+ * **Posture: read-only / visual-only.** The console RenderViewer is
  * an admin inspector view — it shows what the agent rendered into a
- * given session. It does NOT forward end-user interactions back to
+ * given render. It does NOT forward end-user interactions back to
  * any MCP host (the console has no MCP client to relay through), and
  * it does NOT mount the operator-debug chrome (test-action form,
  * activity ring buffer, error pane) the pre-spec-migration viewer
@@ -25,21 +25,16 @@
  *
  * # Boot sequence
  *
- *   1. POST `/ggui/console/session-cookie` with the short-code →
- *      mint a same-origin HttpOnly cookie bound to (sessionId, appId).
+ *   1. POST `/ggui/console/render-cookie` with the short-code →
+ *      mint a same-origin HttpOnly cookie bound to (renderId, appId).
  *   2. In parallel:
- *      - GET `/ggui/console/session-resource?session=<sessionId>` →
+ *      - GET `/ggui/console/render-resource?render=<renderId>` →
  *        `ResourceContents` blob whose `text` is the production thin-
  *        shell HTML.
- *      - GET `/ggui/console/sessions/<sessionId>/meta` →
+ *      - GET `/ggui/console/renders/<renderId>/meta` →
  *        slice-envelope JSON (`{ "ai.ggui/render": {...} }`, same
  *        shape as the wire `_meta` after the Phase-B session+stackItem
  *        collapse).
- *      - GET `/ggui/console/session-stack?session=<sessionId>` →
- *        observational stack snapshot (currently unused by the
- *        read-only viewer; kept in the fetch fan-out so the server
- *        round-trip count doesn't regress when an admin panel is
- *        re-added).
  *   3. Mount `<iframe srcdoc={shellHtml} sandbox="allow-scripts">`.
  *   4. Listen for `ui/initialize` postMessage from the iframe's
  *      contentWindow; reply with the spec-canonical JSON-RPC envelope
@@ -76,51 +71,51 @@ import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
 
 /**
- * Response shape of `POST /ggui/console/session-cookie`. Must
+ * Response shape of `POST /ggui/console/render-cookie`. Must
  * match `packages/mcp-server/src/server.ts`'s cookie-mint route.
  */
-interface SessionCookieResponse {
-  readonly sessionId: string;
+interface RenderCookieResponse {
+  readonly renderId: string;
   readonly appId: string;
   readonly expiresAt: number;
 }
 
 /**
- * Shape of a single content blob returned by the session-resource
+ * Shape of a single content blob returned by the render-resource
  * endpoint. Structurally compatible with
  * `@modelcontextprotocol/sdk`'s `ResourceContents`.
  */
-interface SessionResourceContents {
+interface RenderResourceContents {
   readonly uri: string;
   readonly mimeType: string;
   readonly text: string;
 }
 
 /**
- * Shape of `GET /ggui/console/session-resource?session=<id>`'s
+ * Shape of `GET /ggui/console/render-resource?render=<id>`'s
  * success body.
  */
-interface SessionResourceResponse {
-  readonly contents: readonly SessionResourceContents[];
+interface RenderResourceResponse {
+  readonly contents: readonly RenderResourceContents[];
 }
 
 type BootstrapState =
   | { readonly kind: 'minting' }
   | {
       readonly kind: 'loading-resource';
-      readonly session: SessionCookieResponse;
+      readonly render: RenderCookieResponse;
     }
   | {
       readonly kind: 'ready';
-      readonly session: SessionCookieResponse;
-      readonly resource: SessionResourceContents;
+      readonly render: RenderCookieResponse;
+      readonly resource: RenderResourceContents;
       readonly meta: McpAppAiGguiRenderMeta;
     }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'resource-failed'; readonly message: string }
   | { readonly kind: 'error'; readonly message: string };
 
-export function SessionViewer({
+export function RenderViewer({
   shortCode,
 }: {
   readonly shortCode: string;
@@ -132,7 +127,7 @@ export function SessionViewer({
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/session-cookie', {
+        const res = await fetch('/ggui/console/render-cookie', {
           method: 'POST',
           signal: controller.signal,
           headers: {
@@ -153,8 +148,8 @@ export function SessionViewer({
           });
           return;
         }
-        const session = (await res.json()) as SessionCookieResponse;
-        setState({ kind: 'loading-resource', session });
+        const render = (await res.json()) as RenderCookieResponse;
+        setState({ kind: 'loading-resource', render });
       } catch (err) {
         if (controller.signal.aborted) return;
         setState({ kind: 'error', message: String(err) });
@@ -163,23 +158,21 @@ export function SessionViewer({
     return () => controller.abort();
   }, [shortCode]);
 
-  // Step 2 — fetch the session-resource HTML blob, the slice envelope,
-  // and the observational stack snapshot in parallel once the cookie's
-  // been minted. Cookie travels via `credentials: 'same-origin'`.
-  // Resource + meta failure transitions to `resource-failed`; stack
-  // failure does NOT block (kept in the fan-out as a no-op probe so
-  // when admin chrome is re-added the network shape doesn't regress).
-  const loadingSession =
-    state.kind === 'loading-resource' ? state.session : null;
+  // Step 2 — fetch the render-resource HTML blob and the slice envelope
+  // in parallel once the cookie's been minted. Cookie travels via
+  // `credentials: 'same-origin'`. Either failure transitions to
+  // `resource-failed`.
+  const loadingRender =
+    state.kind === 'loading-resource' ? state.render : null;
   useEffect(() => {
-    if (!loadingSession) return;
+    if (!loadingRender) return;
     const controller = new AbortController();
     void (async () => {
       try {
-        const sessionParam = encodeURIComponent(loadingSession.sessionId);
-        const [resourceRes, metaRes, _stackRes] = await Promise.all([
+        const renderParam = encodeURIComponent(loadingRender.renderId);
+        const [resourceRes, metaRes] = await Promise.all([
           fetch(
-            `/ggui/console/session-resource?session=${sessionParam}`,
+            `/ggui/console/render-resource?render=${renderParam}`,
             {
               method: 'GET',
               signal: controller.signal,
@@ -188,7 +181,7 @@ export function SessionViewer({
             },
           ),
           fetch(
-            `/ggui/console/sessions/${sessionParam}/meta`,
+            `/ggui/console/renders/${renderParam}/meta`,
             {
               method: 'GET',
               signal: controller.signal,
@@ -196,37 +189,28 @@ export function SessionViewer({
               credentials: 'same-origin',
             },
           ),
-          fetch(
-            `/ggui/console/session-stack?session=${sessionParam}`,
-            {
-              method: 'GET',
-              signal: controller.signal,
-              headers: { accept: 'application/json' },
-              credentials: 'same-origin',
-            },
-          ).catch(() => null),
         ]);
         if (!resourceRes.ok) {
           setState({
             kind: 'resource-failed',
-            message: `session-resource fetch returned ${resourceRes.status}`,
+            message: `render-resource fetch returned ${resourceRes.status}`,
           });
           return;
         }
         if (!metaRes.ok) {
           setState({
             kind: 'resource-failed',
-            message: `sessions/:id/meta fetch returned ${metaRes.status}`,
+            message: `renders/:id/meta fetch returned ${metaRes.status}`,
           });
           return;
         }
         const resourceBody =
-          (await resourceRes.json()) as SessionResourceResponse;
+          (await resourceRes.json()) as RenderResourceResponse;
         const first = resourceBody.contents[0];
         if (!first) {
           setState({
             kind: 'resource-failed',
-            message: 'session-resource response had empty contents array',
+            message: 'render-resource response had empty contents array',
           });
           return;
         }
@@ -235,13 +219,13 @@ export function SessionViewer({
         if (!parsedMeta.ok || !parsedMeta.meta) {
           setState({
             kind: 'resource-failed',
-            message: 'sessions/:id/meta response missing `ai.ggui/render` slice',
+            message: 'renders/:id/meta response missing `ai.ggui/render` slice',
           });
           return;
         }
         setState({
           kind: 'ready',
-          session: loadingSession,
+          render: loadingRender,
           resource: first,
           meta: parsedMeta.meta,
         });
@@ -251,13 +235,13 @@ export function SessionViewer({
       }
     })();
     return () => controller.abort();
-  }, [loadingSession]);
+  }, [loadingRender]);
 
   return (
     <section className="ggui-section">
       <SectionHead
-        num="01 / session"
-        title="Live session."
+        num="01 / render"
+        title="Live render."
         mute={
           <>
             <code className="ggui-code">/s/{shortCode}</code>
@@ -269,12 +253,12 @@ export function SessionViewer({
       {state.kind === 'minting' ? (
         <BootstrapCard title="resolving" tone="draft">
           Resolving short-code against{' '}
-          <code className="ggui-code">/ggui/console/session-cookie</code>…
+          <code className="ggui-code">/ggui/console/render-cookie</code>…
         </BootstrapCard>
       ) : state.kind === 'loading-resource' ? (
         <BootstrapCard title="loading" tone="draft">
-          Fetching session resource from{' '}
-          <code className="ggui-code">/ggui/console/session-resource</code>…
+          Fetching render resource from{' '}
+          <code className="ggui-code">/ggui/console/render-resource</code>…
         </BootstrapCard>
       ) : state.kind === 'not-found' ? (
         <UnresolvedCard
@@ -282,24 +266,24 @@ export function SessionViewer({
           body={
             <p className="ggui-body">
               <code className="ggui-code">{shortCode}</code> didn&apos;t
-              resolve to a session on this server. The code may have expired,
+              resolve to a render on this server. The code may have expired,
               been on a different server, or never existed.
             </p>
           }
         />
       ) : state.kind === 'error' ? (
         <UnresolvedCard
-          title="Couldn't open session"
+          title="Couldn't open render"
           body={<p className="ggui-muted">{state.message}</p>}
         />
       ) : state.kind === 'resource-failed' ? (
         <UnresolvedCard
-          title="Session resource unavailable"
+          title="Render resource unavailable"
           body={<p className="ggui-muted">{state.message}</p>}
         />
       ) : (
         <LiveViewer
-          session={state.session}
+          render={state.render}
           resource={state.resource}
           meta={state.meta}
           shortCode={shortCode}
@@ -346,13 +330,13 @@ function isUiInitializeRequest(value: unknown): value is UiInitializeRequest {
  * are all no-ops, which is the read-only contract.
  */
 function LiveViewer({
-  session,
+  render,
   resource,
   meta,
   shortCode,
 }: {
-  readonly session: SessionCookieResponse;
-  readonly resource: SessionResourceContents;
+  readonly render: RenderCookieResponse;
+  readonly resource: RenderResourceContents;
   readonly meta: McpAppAiGguiRenderMeta;
   readonly shortCode: string;
 }): ReactElement {
@@ -419,14 +403,14 @@ function LiveViewer({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <section className="ggui-pane" aria-label="live session header">
+      <section className="ggui-pane" aria-label="live render header">
         <div className="ggui-pane__head">
           <div className="ggui-pane__traffic" aria-hidden>
             <span />
             <span />
             <span />
           </div>
-          <span className="ggui-pane__title">session · {shortCode}</span>
+          <span className="ggui-pane__title">render · {shortCode}</span>
           <span className="ggui-pane__meta">read-only inspector</span>
         </div>
         <div className="ggui-pane__body">
@@ -440,19 +424,19 @@ function LiveViewer({
           >
             <StatusBadge tone="ink">mounted</StatusBadge>
             <span className="ggui-muted">
-              session <code className="ggui-code">{session.sessionId}</code>
+              render <code className="ggui-code">{render.renderId}</code>
             </span>
           </div>
           <p className="ggui-muted">
-            app <code className="ggui-code">{session.appId}</code> · short-code{' '}
+            app <code className="ggui-code">{render.appId}</code> · short-code{' '}
             <code className="ggui-code">{shortCode}</code>
           </p>
         </div>
       </section>
 
-      <section className="ggui-pane" aria-label="rendered session">
+      <section className="ggui-pane" aria-label="rendered render">
         <div className="ggui-pane__head">
-          <span className="ggui-pane__title">rendered session</span>
+          <span className="ggui-pane__title">rendered render</span>
           <span className="ggui-pane__meta">
             <code className="ggui-code">{resource.uri}</code>
           </span>
@@ -461,12 +445,12 @@ function LiveViewer({
           className="ggui-pane__body"
           style={{ padding: 0, minHeight: 420 }}
           data-ggui-console-iframe-host
-          data-ggui-console-session={session.sessionId}
+          data-ggui-console-render={render.renderId}
         >
           <iframe
             ref={iframeRef}
-            data-testid="session-viewer-iframe"
-            title={`session ${shortCode}`}
+            data-testid="render-viewer-iframe"
+            title={`render ${shortCode}`}
             srcDoc={resource.text}
             // `allow-scripts` is required for the shell's inline
             // bootstrap. `allow-same-origin` is INTENTIONALLY omitted —

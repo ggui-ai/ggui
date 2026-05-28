@@ -16,12 +16,12 @@
  *   - Filter input substring-matches name + description.
  *   - Test invoke is DEFERRED — see plan §4.B.1. Calling a tool
  *     from the console needs a same-origin bearer claim story
- *     (console session cookie currently authenticates only the
+ *     (console render cookie currently authenticates only the
  *     live-channel WS upgrade), and that security surface is its own
  *     slice.
  *
  * Layout follows the same `ggui-stack` entry-card grammar the
- * Blueprints + Sessions pages use, so all the index pages read as
+ * Blueprints + Renders pages use, so all the index pages read as
  * one surface.
  *
  * Test contract (data-attrs):

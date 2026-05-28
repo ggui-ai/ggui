@@ -89,9 +89,9 @@ describe('parseRoute — admin zone', () => {
     expect(parseRoute('/admin/status/')).toEqual({ kind: 'admin-status' });
   });
 
-  it('matches /admin/sessions to admin-sessions', () => {
-    expect(parseRoute('/admin/sessions')).toEqual({ kind: 'admin-sessions' });
-    expect(parseRoute('/admin/sessions/')).toEqual({ kind: 'admin-sessions' });
+  it('matches /admin/renders to admin-renders', () => {
+    expect(parseRoute('/admin/renders')).toEqual({ kind: 'admin-renders' });
+    expect(parseRoute('/admin/renders/')).toEqual({ kind: 'admin-renders' });
   });
 
   it('matches /admin/variants to admin-variants (MVB-7)', () => {
@@ -244,6 +244,13 @@ describe('parseRoute — retired paths (pre-launch no-backcompat)', () => {
     });
   });
 
+  it('rejects the retired top-level /admin/sessions (renamed to /admin/renders post-Phase-B)', () => {
+    expect(parseRoute('/admin/sessions')).toEqual({
+      kind: 'not-found',
+      pathname: '/admin/sessions',
+    });
+  });
+
   it('rejects the retired top-level /blueprints', () => {
     expect(parseRoute('/blueprints')).toEqual({
       kind: 'not-found',
@@ -293,7 +300,7 @@ describe('isAdminRoute', () => {
   it('returns true for admin-zone routes', () => {
     expect(isAdminRoute({ kind: 'admin-index' })).toBe(true);
     expect(isAdminRoute({ kind: 'admin-status' })).toBe(true);
-    expect(isAdminRoute({ kind: 'admin-sessions' })).toBe(true);
+    expect(isAdminRoute({ kind: 'admin-renders' })).toBe(true);
     expect(isAdminRoute({ kind: 'admin-blueprints' })).toBe(true);
     expect(isAdminRoute({ kind: 'admin-variants' })).toBe(true);
     expect(

@@ -42,7 +42,7 @@ const SURFACES: Record<string, SurfaceMeta> = {
     answers: "Why didn't this match my saved blueprint?",
   },
   'devtools-timeline': {
-    title: 'Session event timeline',
+    title: 'Render event timeline',
     slice: '7d',
     answers: 'What was the UI state at each event?',
   },

@@ -1,14 +1,14 @@
 /**
- * `/devtools/timeline` — session event time-travel inspector.
+ * `/devtools/timeline` — render event time-travel inspector.
  *
  * Two-pane layout:
  *
- *   - **Left**: session picker. Fetches
- *     `GET /ggui/console/timeline/sessions` once on mount; rows show
- *     sessionId / appId / status / event-cursor metadata, sorted
+ *   - **Left**: render picker. Fetches
+ *     `GET /ggui/console/timeline/renders` once on mount; rows show
+ *     renderId / appId / status / event-cursor metadata, sorted
  *     most-recent-`lastActivityAt` first. Click a row to load its
  *     event log into the right pane.
- *   - **Right**: scrubber over the picked session's event log.
+ *   - **Right**: scrubber over the picked render's event log.
  *     Slider walks `seq` from 1..N; current event card shows the
  *     full `RenderEvent.data` JSON in a `<pre>`. Prev / next /
  *     jump-to-start / jump-to-end buttons. Empty state when no
@@ -21,8 +21,8 @@
  * scrubber's semantics.
  *
  * Test contract (data-attrs):
- *   - `data-ggui-timeline-pane="sessions"` — left list
- *   - `data-ggui-timeline-session-id={id}` — each session row
+ *   - `data-ggui-timeline-pane="renders"` — left list
+ *   - `data-ggui-timeline-render-id={id}` — each render row
  *   - `data-ggui-timeline-pane="events"` — right pane
  *   - `data-ggui-timeline-event-seq={seq}` — current event card
  *   - `data-ggui-timeline-scrubber` — the slider
@@ -37,18 +37,17 @@ import {
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 
-interface TimelineSessionSummary {
-  readonly sessionId: string;
+interface TimelineRenderSummary {
+  readonly renderId: string;
   readonly appId: string;
-  readonly stackSize: number;
   readonly createdAt: number;
   readonly lastActivityAt: number;
   readonly status: 'active' | 'completed' | 'expired';
   readonly streamSeq: number;
 }
 
-interface TimelineSessionsResponse {
-  readonly sessions: readonly TimelineSessionSummary[];
+interface TimelineRendersResponse {
+  readonly renders: readonly TimelineRenderSummary[];
   readonly total: number;
 }
 
@@ -61,59 +60,59 @@ interface TimelineRenderEvent {
 }
 
 interface TimelineEventsResponse {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly events: readonly TimelineRenderEvent[];
   readonly streamSeq: number;
   readonly status: 'active' | 'completed' | 'expired' | 'unknown';
 }
 
-type SessionsState =
+type RendersState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly data: TimelineSessionsResponse }
+  | { readonly kind: 'ready'; readonly data: TimelineRendersResponse }
   | { readonly kind: 'error'; readonly message: string };
 
 type EventsState =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'loading'; readonly sessionId: string }
+  | { readonly kind: 'loading'; readonly renderId: string }
   | {
       readonly kind: 'ready';
-      readonly sessionId: string;
+      readonly renderId: string;
       readonly data: TimelineEventsResponse;
     }
   | {
       readonly kind: 'error';
-      readonly sessionId: string;
+      readonly renderId: string;
       readonly message: string;
     };
 
 export function Timeline(): ReactElement {
-  const [sessions, setSessions] = useState<SessionsState>({ kind: 'loading' });
+  const [renders, setRenders] = useState<RendersState>({ kind: 'loading' });
   const [events, setEvents] = useState<EventsState>({ kind: 'idle' });
-  const [pickedSessionId, setPickedSessionId] = useState<string | null>(null);
+  const [pickedRenderId, setPickedRenderId] = useState<string | null>(null);
   const [scrubIndex, setScrubIndex] = useState(0);
 
-  // Fetch the session picker once on mount.
+  // Fetch the render picker once on mount.
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/timeline/sessions', {
+        const res = await fetch('/ggui/console/timeline/renders', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
           credentials: 'same-origin',
         });
         if (!res.ok) {
-          setSessions({
+          setRenders({
             kind: 'error',
             message: `server returned ${res.status}`,
           });
           return;
         }
-        const body = (await res.json()) as TimelineSessionsResponse;
-        setSessions({ kind: 'ready', data: body });
+        const body = (await res.json()) as TimelineRendersResponse;
+        setRenders({ kind: 'ready', data: body });
       } catch (err) {
         if (controller.signal.aborted) return;
-        setSessions({
+        setRenders({
           kind: 'error',
           message: err instanceof Error ? err.message : String(err),
         });
@@ -122,20 +121,20 @@ export function Timeline(): ReactElement {
     return () => controller.abort();
   }, []);
 
-  // Fetch events whenever the picked session changes.
-  const pickSession = useCallback((sessionId: string) => {
-    setPickedSessionId(sessionId);
+  // Fetch events whenever the picked render changes.
+  const pickRender = useCallback((renderId: string) => {
+    setPickedRenderId(renderId);
     setScrubIndex(0);
-    setEvents({ kind: 'loading', sessionId });
+    setEvents({ kind: 'loading', renderId });
   }, []);
 
   useEffect(() => {
-    if (!pickedSessionId) return;
+    if (!pickedRenderId) return;
     const controller = new AbortController();
     void (async () => {
       try {
         const res = await fetch(
-          `/ggui/console/timeline/${encodeURIComponent(pickedSessionId)}/events`,
+          `/ggui/console/timeline/${encodeURIComponent(pickedRenderId)}/events`,
           {
             signal: controller.signal,
             headers: { accept: 'application/json' },
@@ -148,14 +147,14 @@ export function Timeline(): ReactElement {
         if (!res.ok && res.status !== 404) {
           setEvents({
             kind: 'error',
-            sessionId: pickedSessionId,
+            renderId: pickedRenderId,
             message: `server returned ${res.status}`,
           });
           return;
         }
         setEvents({
           kind: 'ready',
-          sessionId: pickedSessionId,
+          renderId: pickedRenderId,
           data: body,
         });
         // Default to the latest event so the operator sees the
@@ -165,23 +164,23 @@ export function Timeline(): ReactElement {
         if (controller.signal.aborted) return;
         setEvents({
           kind: 'error',
-          sessionId: pickedSessionId,
+          renderId: pickedRenderId,
           message: err instanceof Error ? err.message : String(err),
         });
       }
     })();
     return () => controller.abort();
-  }, [pickedSessionId]);
+  }, [pickedRenderId]);
 
   return (
     <section className="ggui-section">
       <SectionHead
         num="DEVTOOLS / 7D"
-        title="Session timeline."
+        title="Render timeline."
         mute="Snapshot."
         intro={
           <>
-            Pick a session, then step through its event log
+            Pick a render, then step through its event log
             chronologically. Each event carries the full
             <code className="ggui-code"> RenderEvent.data </code>
             payload — useful for answering &ldquo;what was the UI
@@ -198,10 +197,10 @@ export function Timeline(): ReactElement {
           alignItems: 'start',
         }}
       >
-        <SessionsPane
-          state={sessions}
-          pickedSessionId={pickedSessionId}
-          onPick={pickSession}
+        <RendersPane
+          state={renders}
+          pickedRenderId={pickedRenderId}
+          onPick={pickRender}
         />
         <EventsPane
           state={events}
@@ -213,45 +212,45 @@ export function Timeline(): ReactElement {
   );
 }
 
-// ── Sessions pane ─────────────────────────────────────────────────────
+// ── Renders pane ──────────────────────────────────────────────────────
 
-function SessionsPane({
+function RendersPane({
   state,
-  pickedSessionId,
+  pickedRenderId,
   onPick,
 }: {
-  readonly state: SessionsState;
-  readonly pickedSessionId: string | null;
-  readonly onPick: (sessionId: string) => void;
+  readonly state: RendersState;
+  readonly pickedRenderId: string | null;
+  readonly onPick: (renderId: string) => void;
 }): ReactElement {
   return (
-    <div className="ggui-card" data-ggui-timeline-pane="sessions">
+    <div className="ggui-card" data-ggui-timeline-pane="renders">
       <div className="ggui-card__head">
-        <span className="ggui-card__title">sessions</span>
+        <span className="ggui-card__title">renders</span>
         <span className="ggui-card__num">
           {state.kind === 'loading'
             ? 'loading…'
             : state.kind === 'error'
               ? 'error'
-              : `${state.data.sessions.length} / ${state.data.total}`}
+              : `${state.data.renders.length} / ${state.data.total}`}
         </span>
       </div>
       <div className="ggui-card__body" style={{ padding: 0 }}>
         {state.kind === 'loading' ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-            Loading sessions…
+            Loading renders…
           </p>
         ) : state.kind === 'error' ? (
           <p
             className="ggui-muted"
             style={{ margin: 0, padding: 12 }}
-            data-ggui-timeline-sessions-error
+            data-ggui-timeline-renders-error
           >
-            Couldn&apos;t load sessions — {state.message}.
+            Couldn&apos;t load renders — {state.message}.
           </p>
-        ) : state.data.sessions.length === 0 ? (
+        ) : state.data.renders.length === 0 ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-            No sessions yet. Render from an agent (
+            No renders yet. Render from an agent (
             <code className="ggui-code">ggui_render</code>) to create one.
           </p>
         ) : (
@@ -264,12 +263,12 @@ function SessionsPane({
               overflowY: 'auto',
             }}
           >
-            {state.data.sessions.map((session) => (
-              <SessionRow
-                key={session.sessionId}
-                session={session}
-                selected={session.sessionId === pickedSessionId}
-                onClick={() => onPick(session.sessionId)}
+            {state.data.renders.map((render) => (
+              <RenderRow
+                key={render.renderId}
+                render={render}
+                selected={render.renderId === pickedRenderId}
+                onClick={() => onPick(render.renderId)}
               />
             ))}
           </ul>
@@ -279,26 +278,26 @@ function SessionsPane({
   );
 }
 
-function SessionRow({
-  session,
+function RenderRow({
+  render,
   selected,
   onClick,
 }: {
-  readonly session: TimelineSessionSummary;
+  readonly render: TimelineRenderSummary;
   readonly selected: boolean;
   readonly onClick: () => void;
 }): ReactElement {
-  const shortId = session.sessionId.slice(0, 12);
+  const shortId = render.renderId.slice(0, 12);
   const tone =
-    session.status === 'active'
+    render.status === 'active'
       ? 'live'
-      : session.status === 'expired'
+      : render.status === 'expired'
         ? 'signal'
         : 'ink';
   return (
     <li
-      data-ggui-timeline-session-id={session.sessionId}
-      data-ggui-timeline-session-selected={selected ? 'true' : 'false'}
+      data-ggui-timeline-render-id={render.renderId}
+      data-ggui-timeline-render-selected={selected ? 'true' : 'false'}
       style={{
         borderBottom: '1px solid var(--ggui-rule)',
       }}
@@ -329,14 +328,14 @@ function SessionRow({
           >
             {shortId}…
           </code>
-          <StatusBadge tone={tone}>{session.status}</StatusBadge>
+          <StatusBadge tone={tone}>{render.status}</StatusBadge>
         </div>
         <div className="ggui-muted" style={{ fontSize: 11 }}>
-          app <code className="ggui-code">{session.appId}</code> · stack{' '}
-          {session.stackSize} · stream {session.streamSeq}
+          app <code className="ggui-code">{render.appId}</code> · stream{' '}
+          {render.streamSeq}
         </div>
         <div className="ggui-muted" style={{ fontSize: 11, marginTop: 2 }}>
-          last {formatRelative(session.lastActivityAt)}
+          last {formatRelative(render.lastActivityAt)}
         </div>
       </button>
     </li>
@@ -363,7 +362,7 @@ function EventsPane({
         </div>
         <div className="ggui-card__body">
           <p className="ggui-muted">
-            Pick a session on the left to load its event log.
+            Pick a render on the left to load its event log.
           </p>
         </div>
       </div>
@@ -380,7 +379,7 @@ function EventsPane({
         <div className="ggui-card__body">
           <p className="ggui-muted">
             Loading events for{' '}
-            <code className="ggui-code">{shorten(state.sessionId)}</code>…
+            <code className="ggui-code">{shorten(state.renderId)}</code>…
           </p>
         </div>
       </div>
@@ -441,7 +440,7 @@ function EventsLoaded({
     <div className="ggui-card" data-ggui-timeline-pane="events">
       <div className="ggui-card__head">
         <span className="ggui-card__title">
-          <code className="ggui-code">{shorten(state.sessionId)}</code>
+          <code className="ggui-code">{shorten(state.renderId)}</code>
         </span>
         <span className="ggui-card__num">
           {total === 0 ? 'no events' : `${safeIndex + 1} / ${total}`}
@@ -473,7 +472,7 @@ function EventsLoaded({
 
         {total === 0 ? (
           <p className="ggui-muted">
-            No events recorded for this session yet. Inbound user
+            No events recorded for this render yet. Inbound user
             actions, tool calls, and UI mutations land here as the
             agent runs — open the iframe and interact to populate.
           </p>

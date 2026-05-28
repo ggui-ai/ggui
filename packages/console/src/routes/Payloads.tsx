@@ -12,7 +12,7 @@
  * Render shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + direction chip (inbound-push / outbound-update)
  *   - tool name (`ggui_render` / `ggui_update`)
- *   - sessionId truncated to 8 chars
+ *   - renderId truncated to 8 chars
  *   - byte size of the payload
  *   - expandable detail panel with pretty-printed JSON in a paper-2
  *     pre-block, max-height 400px scroll cap
@@ -29,7 +29,7 @@ interface PayloadEvent {
   readonly id: string;
   readonly at: number;
   readonly direction: PayloadDirection;
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly appId: string;
   readonly tool: string;
   readonly payload: unknown;
@@ -212,10 +212,10 @@ function PayloadCard({
     second: '2-digit',
     hour12: false,
   });
-  const sessionShort =
-    event.sessionId.length > 8
-      ? `${event.sessionId.slice(0, 8)}…`
-      : event.sessionId;
+  const renderShort =
+    event.renderId.length > 8
+      ? `${event.renderId.slice(0, 8)}…`
+      : event.renderId;
   const directionLabel =
     event.direction === 'inbound-push' ? 'inbound' : 'outbound';
 
@@ -264,7 +264,7 @@ function PayloadCard({
           className="ggui-muted"
           style={{ fontSize: 11, fontFamily: 'var(--ggui-font-mono)' }}
         >
-          {sessionShort}
+          {renderShort}
         </span>
         <span style={{ flex: 1 }} />
         <span className="ggui-muted" style={{ fontSize: 11 }}>
@@ -292,12 +292,12 @@ function PayloadDetail({
         gap: 12,
       }}
     >
-      <Section label="session">
+      <Section label="render">
         <span
           className="ggui-muted"
           style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}
         >
-          {event.sessionId} · app {event.appId}
+          {event.renderId} · app {event.appId}
         </span>
       </Section>
       <Section label="payload">

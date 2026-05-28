@@ -1,14 +1,14 @@
 /**
- * Sessions route — `/sessions`.
+ * Renders route — `/admin/renders`.
  *
  * Operator-facing "what's live right now?" list. Reads
- * `GET /ggui/console/sessions` on mount, paints one entry card per
- * active session, and click-through to `/s/<shortCode>` (the
+ * `GET /ggui/console/renders` on mount, paints one entry card per
+ * active render, and click-through to `/s/<shortCode>` (the
  * existing viewer) when a shortCode is bound.
  *
  * Scope:
  *
- *   - Active sessions only. Completed / expired states need server
+ *   - Active renders only. Completed / expired states need server
  *     surface we don't expose yet; the endpoint pins `status:
  *     'active'` so every row the SPA sees is live.
  *   - No per-row polling. Single fetch on mount; operators reload
@@ -22,9 +22,9 @@
  *
  * Test contract (data-attrs):
  *
- *   - `data-ggui-sessions-list` on the column container.
- *   - `data-ggui-session-id={sessionId}` on every row.
- *   - `data-ggui-session-status={status}` on every row.
+ *   - `data-ggui-renders-list` on the column container.
+ *   - `data-ggui-render-id={renderId}` on every row.
+ *   - `data-ggui-render-status={status}` on every row.
  */
 import {
   useEffect,
@@ -38,34 +38,33 @@ import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
 
 /**
- * Response shape of `GET /ggui/console/sessions`. Must stay in sync
+ * Response shape of `GET /ggui/console/renders`. Must stay in sync
  * with the handler in `packages/mcp-server/src/server.ts`. Defined
  * locally (not exported from a shared module) — same convention the
  * Blueprints + BlueprintViewer routes use: the SPA owns its view-model,
  * the server owns its wire shape, TypeScript checks compatibility at
  * the parse boundary.
  */
-interface SessionSummary {
-  readonly sessionId: string;
+interface RenderSummary {
+  readonly renderId: string;
   readonly shortCode?: string;
   readonly appId: string;
-  readonly stackSize: number;
   readonly lastActivityAt: number;
   readonly createdAt: number;
   readonly status: 'active' | 'completed' | 'expired';
 }
 
-interface SessionsResponse {
-  readonly sessions: readonly SessionSummary[];
+interface RendersResponse {
+  readonly renders: readonly RenderSummary[];
   readonly total: number;
 }
 
 type FetchState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly data: SessionsResponse }
+  | { readonly kind: 'ready'; readonly data: RendersResponse }
   | { readonly kind: 'error'; readonly message: string };
 
-export function Sessions(): ReactElement {
+export function Renders(): ReactElement {
   const [state, setState] = useState<FetchState>({ kind: 'loading' });
   const [filter, setFilter] = useState('');
 
@@ -73,7 +72,7 @@ export function Sessions(): ReactElement {
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/sessions', {
+        const res = await fetch('/ggui/console/renders', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
         });
@@ -84,7 +83,7 @@ export function Sessions(): ReactElement {
           });
           return;
         }
-        const body = (await res.json()) as SessionsResponse;
+        const body = (await res.json()) as RendersResponse;
         setState({ kind: 'ready', data: body });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -97,9 +96,9 @@ export function Sessions(): ReactElement {
   const needle = filter.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (state.kind !== 'ready') return null;
-    if (needle.length === 0) return state.data.sessions;
-    return state.data.sessions.filter((s) =>
-      [s.sessionId, s.shortCode ?? '', s.appId]
+    if (needle.length === 0) return state.data.renders;
+    return state.data.renders.filter((r) =>
+      [r.renderId, r.shortCode ?? '', r.appId]
         .join(' ')
         .toLowerCase()
         .includes(needle),
@@ -109,13 +108,13 @@ export function Sessions(): ReactElement {
   return (
     <section className="ggui-section">
       <SectionHead
-        num="01 / sessions"
-        title="Live sessions."
-        mute="Active only — push from an agent to create one."
+        num="01 / renders"
+        title="Live renders."
+        mute="Active only — render from an agent to create one."
         intro={
           <>
-            Every row is an active session on this server. Click-through
-            to the viewer when a session has a{' '}
+            Every row is an active render on this server. Click-through
+            to the viewer when a render has a{' '}
             <code className="ggui-code">shortCode</code> minted by{' '}
             <code className="ggui-code">ggui_render</code>.
           </>
@@ -123,25 +122,25 @@ export function Sessions(): ReactElement {
       />
 
       {state.kind === 'loading' ? (
-        <StatusCard title="loading" num="SES / 01" tone="draft">
-          Loading sessions…
+        <StatusCard title="loading" num="REN / 01" tone="draft">
+          Loading renders…
         </StatusCard>
       ) : state.kind === 'error' ? (
         <StatusCard title="error" num="ERR / 01" tone="signal">
-          Couldn&apos;t load sessions — {state.message}.
+          Couldn&apos;t load renders — {state.message}.
         </StatusCard>
       ) : (
         <>
           <div className="ggui-form" style={{ marginBottom: 20 }}>
-            <label className="ggui-label" htmlFor="ggui-sessions-filter">
+            <label className="ggui-label" htmlFor="ggui-renders-filter">
               filter
             </label>
             <div className="ggui-field">
               <input
-                id="ggui-sessions-filter"
+                id="ggui-renders-filter"
                 name="filter"
-                aria-label="filter session entries"
-                placeholder="substring match over sessionId, shortCode, appId…"
+                aria-label="filter render entries"
+                placeholder="substring match over renderId, shortCode, appId…"
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}
                 autoCapitalize="off"
@@ -150,9 +149,9 @@ export function Sessions(): ReactElement {
               />
             </div>
           </div>
-          <SessionList
-            all={state.data.sessions}
-            shown={filtered ?? state.data.sessions}
+          <RenderList
+            all={state.data.renders}
+            shown={filtered ?? state.data.renders}
             filterActive={needle.length > 0}
           />
         </>
@@ -161,25 +160,25 @@ export function Sessions(): ReactElement {
   );
 }
 
-function SessionList({
+function RenderList({
   all,
   shown,
   filterActive,
 }: {
-  readonly all: readonly SessionSummary[];
-  readonly shown: readonly SessionSummary[];
+  readonly all: readonly RenderSummary[];
+  readonly shown: readonly RenderSummary[];
   readonly filterActive: boolean;
 }): ReactElement {
-  if (all.length === 0) return <EmptySessions />;
+  if (all.length === 0) return <EmptyRenders />;
   return (
     <div
-      data-ggui-sessions-list
+      data-ggui-renders-list
       className="ggui-stack"
-      aria-label="active sessions"
+      aria-label="active renders"
     >
       <div className="ggui-stack__head">
-        <span className="ggui-stack__num">SES</span>
-        <span className="ggui-stack__label">live sessions</span>
+        <span className="ggui-stack__num">REN</span>
+        <span className="ggui-stack__label">live renders</span>
         <span className="ggui-stack__count">
           {shown.length}
           {filterActive && shown.length !== all.length ? ` / ${all.length}` : ''}
@@ -187,14 +186,14 @@ function SessionList({
       </div>
       {shown.length === 0 ? (
         <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-          No sessions match the filter.
+          No renders match the filter.
         </p>
       ) : (
         <ul className="ggui-stack__list">
-          {shown.map((session, index) => (
-            <SessionRow
-              key={session.sessionId}
-              session={session}
+          {shown.map((render, index) => (
+            <RenderRow
+              key={render.renderId}
+              render={render}
               index={index + 1}
             />
           ))}
@@ -204,60 +203,56 @@ function SessionList({
   );
 }
 
-function SessionRow({
-  session,
+function RenderRow({
+  render,
   index,
 }: {
-  readonly session: SessionSummary;
+  readonly render: RenderSummary;
   readonly index: number;
 }): ReactElement {
-  const shortId = session.sessionId.slice(0, 8);
+  const shortId = render.renderId.slice(0, 8);
   const tone =
-    session.status === 'active'
+    render.status === 'active'
       ? 'live'
-      : session.status === 'expired'
+      : render.status === 'expired'
         ? 'signal'
         : 'ink';
   return (
     <li
-      data-ggui-session-id={session.sessionId}
-      data-ggui-session-status={session.status}
+      data-ggui-render-id={render.renderId}
+      data-ggui-render-status={render.status}
       className="ggui-stack__entry"
     >
       <div className="ggui-stack__entry-head">
         <span className="ggui-stack__entry-num">
-          {`SES / ${String(index).padStart(2, '0')}`}
+          {`REN / ${String(index).padStart(2, '0')}`}
         </span>
         <span className="ggui-stack__entry-title">
           <code className="ggui-code">{shortId}</code>…
         </span>
-        <StatusBadge tone={tone}>{session.status}</StatusBadge>
+        <StatusBadge tone={tone}>{render.status}</StatusBadge>
       </div>
       <div className="ggui-stack__entry-meta">
         <span>
-          app <code className="ggui-code">{session.appId}</code>
-        </span>
-        <span style={{ marginLeft: 12 }}>
-          stack{' '}
-          <code className="ggui-code">{String(session.stackSize)}</code>
+          app <code className="ggui-code">{render.appId}</code>
         </span>
         <span style={{ marginLeft: 12 }}>
           last active{' '}
           <code className="ggui-code">
-            {formatRelative(session.lastActivityAt)}
+            {formatRelative(render.lastActivityAt)}
           </code>
         </span>
       </div>
       <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-        {session.shortCode ? (
+        {render.shortCode ? (
           <>
-            <code className="ggui-code">{session.shortCode}</code>
+            <code className="ggui-code">{render.shortCode}</code>
             <button
               type="button"
               className="ggui-btn ggui-btn--ghost"
               onClick={() =>
                 navigateTo(
-                  `/s/${encodeURIComponent(session.shortCode as string)}`,
+                  `/s/${encodeURIComponent(render.shortCode as string)}`,
                 )
               }
             >
@@ -266,7 +261,7 @@ function SessionRow({
           </>
         ) : (
           <span className="ggui-muted">
-            No shortCode — push a stack item via{' '}
+            No shortCode — render via{' '}
             <code className="ggui-code">ggui_render</code> to mint one.
           </span>
         )}
@@ -296,19 +291,18 @@ function formatRelative(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function EmptySessions(): ReactElement {
+function EmptyRenders(): ReactElement {
   return (
     <div className="ggui-card">
       <div className="ggui-card__head">
         <span className="ggui-card__title">empty</span>
-        <span className="ggui-card__num">SES / 00</span>
+        <span className="ggui-card__num">REN / 00</span>
       </div>
       <div className="ggui-card__body">
-        <p className="ggui-body">No sessions yet.</p>
+        <p className="ggui-body">No renders yet.</p>
         <p className="ggui-muted">
-          Push from an agent (<code className="ggui-code">ggui_render</code>)
-          or open <code className="ggui-code">/chat</code> to start a
-          generation — new sessions appear here on reload.
+          Render from an agent (<code className="ggui-code">ggui_render</code>)
+          to start a generation — new renders appear here on reload.
         </p>
       </div>
     </div>

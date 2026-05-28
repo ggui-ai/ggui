@@ -7,7 +7,7 @@
  *   - `/`                    → admin-index → mounts {@link Status}
  *   - `/admin`               → admin-index → mounts {@link Status}
  *   - `/admin/status`        → {@link Status}
- *   - `/admin/sessions`      → {@link Sessions}
+ *   - `/admin/renders`       → {@link Renders}
  *   - `/admin/blueprints`    → {@link Blueprints}
  *   - `/admin/variants`      → {@link BlueprintVariants}
  *   - `/admin/variants/:hash`         → {@link BlueprintVariantDetail}
@@ -31,7 +31,7 @@
  *   - `/devtools/benchmarks` → {@link Devtools} (benchmarks dashboard embed)
  *
  *   Deep-link surfaces (top-level, bare-chrome — share-link targets):
- *   - `/s/<shortCode>`       → {@link SessionViewer}
+ *   - `/s/<shortCode>`       → {@link RenderViewer}
  *   - `/preview/<id>`        → {@link BlueprintViewer}
  *
  * Route matching + navigation live in `./router.ts` — this component
@@ -53,8 +53,8 @@ import { Config } from './routes/Config.js';
 import { Devtools } from './routes/Devtools.js';
 import { Keys } from './routes/Keys.js';
 import { McpInspector } from './routes/McpInspector.js';
-import { SessionViewer } from './routes/SessionViewer.js';
-import { Sessions } from './routes/Sessions.js';
+import { RenderViewer } from './routes/RenderViewer.js';
+import { Renders } from './routes/Renders.js';
 import { Status } from './routes/Status.js';
 import { Theme } from './routes/Theme.js';
 import { getStableRoute, navigateTo, onRouteChange, type Route, isDevtoolsRoute } from './router.js';
@@ -85,7 +85,7 @@ export function App(): ReactElement {
   if (route.kind === 'viewer') {
     return (
       <Shell route={route} variant="narrow">
-        <SessionViewer shortCode={route.shortCode} />
+        <RenderViewer shortCode={route.shortCode} />
       </Shell>
     );
   }
@@ -107,10 +107,10 @@ export function App(): ReactElement {
       </Shell>
     );
   }
-  if (route.kind === 'admin-sessions') {
+  if (route.kind === 'admin-renders') {
     return (
       <Shell route={route} variant="admin">
-        <Sessions />
+        <Renders />
       </Shell>
     );
   }

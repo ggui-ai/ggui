@@ -5,20 +5,20 @@
  * fetches the blueprint's compiled bundle from
  * `GET /ggui/console/blueprint/:id`, then hands the code to
  * `RenderRenderer` — the same primitive shells use to mount a single
- * `ComponentRender`. No WebSocket, no session cookie; a blueprint is
+ * `ComponentRender`. No WebSocket, no render cookie; a blueprint is
  * an authored UI rendering in isolation.
  *
  * Route scope:
  *
  *   - READ-ONLY mount. No live-channel subscription, no actionSpec
- *     dispatch, no session stack mutation. A blueprint is the static
+ *     dispatch, no render mutation. A blueprint is the static
  *     artifact; the operator or agent wraps it in richer context
- *     elsewhere (the dev chat, a pushed session) when interactivity
+ *     elsewhere (the dev chat, a pushed render) when interactivity
  *     is needed.
- *   - Error shapes mirror the SessionViewer's: 404 (id unknown),
+ *   - Error shapes mirror the RenderViewer's: 404 (id unknown),
  *     4xx/5xx (server error), network fail (raw message).
  *
- * Visual shell follows the brand kit (same as `SessionViewer`): one
+ * Visual shell follows the brand kit (same as `RenderViewer`): one
  * section head, a pane-style header for blueprint identity + content
  * type, and the mount card stamping `data-ggui-stack-entry="component"`
  * + `data-ggui-code-ready="true"` + `data-ggui-blueprint-id` — a
@@ -232,7 +232,7 @@ function TryLiveAction({
         return;
       }
       const body = (await res.json()) as {
-        readonly sessionId: string;
+        readonly renderId: string;
         readonly shortCode: string | null;
         readonly url: string | null;
         readonly warning?: string;
