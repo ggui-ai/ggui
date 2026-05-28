@@ -4743,10 +4743,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //   - `/api/sessions/.../state` is wsToken-gated (HMAC-signed,
   //     short-TTL, scoped to sessionId+appId). Survives R5.
   //
-  // Distinct from R7's `/api/sessions/:id/events?sinceSequence=N`
+  // Distinct from R7's `/api/renders/:id/events?sinceSequence=N`
   // (planned): /state is a snapshot; /events is a cursor-replay. Both
-  // are gated identically (wsToken), unified under the SessionEvent
-  // ledger cursor (`session.lastSequence`).
+  // are gated identically (wsToken), unified under the RenderEvent
+  // ledger cursor (`render.lastSequence`).
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForState = renderStore;
     const stateSecret = sharedTokenSecret;
@@ -4958,9 +4958,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
   // R7 — GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M
   //
-  // Cursor-replay read from the SessionEvent ledger (`bc524f2f0` in
+  // Cursor-replay read from the RenderEvent ledger (`bc524f2f0` in
   // cloud; in-memory + sqlite stores OSS). Returns events with
-  // `sequence > sinceSequence`, up to `limit` (default 100, max 500).
+  // `seq > sinceSequence`, up to `limit` (default 100, max 500).
   //
   // Unification: WS subscribe's `sinceSequence` cursor and this HTTP
   // endpoint read from the SAME ledger via the same `listEventsSince`
@@ -5084,22 +5084,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
         return;
       }
-      // Project store-level SessionEvent rows onto the protocol's
-      // wire-frame ledger shape (`SessionEvent` from @ggui-ai/protocol).
-      // The two shapes differ only in field names: store uses `seq` +
-      // `timestamp` (ms epoch); protocol uses `sequence` + `emittedAt`
-      // (ISO 8601).
-      const events = result.events.map((event) => ({
-        sequence: event.seq,
-        emittedAt: new Date(event.timestamp).toISOString(),
-        type: event.type,
-        payload: event.data,
-      }));
+      // RenderEvent is now the unified wire-shape ledger primitive
+      // (Wave 7 of flatten-render-identity, 2026-05-28). The store
+      // returns events in protocol-canonical shape (seq + type +
+      // timestamp[ISO] + data); no projection needed.
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.status(200).json({
-        events,
+        events: result.events,
         lastSequence: result.lastSequence,
         hasMore: result.hasMore,
       });

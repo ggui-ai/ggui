@@ -1,6 +1,6 @@
 /**
  * Tests for `GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M`
- * — the R7 wsToken-gated cursor-replay read from the SessionEvent
+ * — the R7 wsToken-gated cursor-replay read from the RenderEvent
  * ledger.
  *
  * # Auth surface
@@ -123,16 +123,16 @@ describe('GET /api/renders/:renderId/events', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
 
     const body = (await res.json()) as {
-      events: Array<{ sequence: number; emittedAt: string; type: string; payload: unknown }>;
+      events: Array<{ seq: number; timestamp: string; type: string; data: unknown }>;
       lastSequence: number;
       hasMore: boolean;
     };
     expect(body.events.length).toBe(3);
-    expect(body.events[0]?.sequence).toBe(1);
-    expect(body.events[1]?.sequence).toBe(2);
-    expect(body.events[2]?.sequence).toBe(3);
+    expect(body.events[0]?.seq).toBe(1);
+    expect(body.events[1]?.seq).toBe(2);
+    expect(body.events[2]?.seq).toBe(3);
     expect(body.events[0]?.type).toBe('ui.created');
-    expect(typeof body.events[0]?.emittedAt).toBe('string');
+    expect(typeof body.events[0]?.timestamp).toBe('string');
     expect(body.lastSequence).toBe(3);
     expect(body.hasMore).toBe(false);
   });
@@ -160,13 +160,13 @@ describe('GET /api/renders/:renderId/events', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      events: Array<{ sequence: number }>;
+      events: Array<{ seq: number }>;
       lastSequence: number;
       hasMore: boolean;
     };
     expect(body.events.length).toBe(2);
-    expect(body.events[0]?.sequence).toBe(1);
-    expect(body.events[1]?.sequence).toBe(2);
+    expect(body.events[0]?.seq).toBe(1);
+    expect(body.events[1]?.seq).toBe(2);
     expect(body.lastSequence).toBe(5);
     expect(body.hasMore).toBe(true);
   });
@@ -312,13 +312,13 @@ describe('GET /api/renders/:renderId/events', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      events: Array<{ sequence: number }>;
+      events: Array<{ seq: number }>;
       lastSequence: number;
       hasMore: boolean;
     };
     expect(body.events.length).toBe(2);
-    expect(body.events[0]?.sequence).toBe(3);
-    expect(body.events[1]?.sequence).toBe(4);
+    expect(body.events[0]?.seq).toBe(3);
+    expect(body.events[1]?.seq).toBe(4);
     expect(body.lastSequence).toBe(4);
   });
 });

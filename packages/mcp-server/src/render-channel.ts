@@ -2326,13 +2326,13 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       ...(message.requestId ? { requestId: message.requestId } : {}),
     });
 
-    // R7 — SessionEvent ledger replay. When `payload.sinceSequence` is
+    // R7 — RenderEvent ledger replay. When `payload.sinceSequence` is
     // present, fetch events with `seq > sinceSequence` from the per-
-    // session ledger and emit each as a `session_event` wire frame
+    // render ledger and emit each as a `render_event` wire frame
     // BEFORE the per-channel stream-buffer replay. Consumers dispatch
     // by `event.type` to fold the wire-frame-equivalent handler
     // (push/props_update/etc.) — same cursor model as the HTTP
-    // `/api/sessions/:id/events?sinceSequence=N` endpoint.
+    // `/api/renders/:id/events?sinceSequence=N` endpoint.
     //
     // Horizon gate: a cursor below the server's replay horizon OR
     // above `lastSequence` (stale from a different deployment) emits
@@ -2369,14 +2369,12 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           );
         } else {
           for (const event of ledger.events) {
+            // RenderEvent is now the wire-shape ledger primitive
+            // (Wave 7 of flatten-render-identity, 2026-05-28); no
+            // projection — emit the store's row directly.
             send(ws, {
-              type: "session_event",
-              payload: {
-                sequence: event.seq,
-                emittedAt: new Date(event.timestamp).toISOString(),
-                type: event.type,
-                payload: event.data,
-              },
+              type: "render_event",
+              payload: event,
             });
           }
         }
