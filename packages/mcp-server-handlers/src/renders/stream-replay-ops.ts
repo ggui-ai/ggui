@@ -17,7 +17,7 @@
  *     supersedes any prior entry for the same channel. Never
  *     participates in cap-driven eviction.
  *   - `'all'`: append to a FIFO ring; evict the oldest entry when the
- *     ring exceeds `maxPerSession`. Tracks `evictedAboveSeq` so
+ *     ring exceeds `maxPerRender`. Tracks `evictedAboveSeq` so
  *     replay can honestly report `truncated` when a subscriber's
  *     `fromSeq` predates a dropped envelope.
  *
@@ -67,13 +67,13 @@ export interface BufferedReplayEnvelope {
 }
 
 /**
- * Per-session replay state. Flat + serializable — every field maps
+ * Per-render replay state. Flat + serializable — every field maps
  * cleanly to a DDB column or AppSync custom-type field.
  *
  * Separation of `ring` vs `latestByChannel` matches the OSS in-memory
  * structure. `'latest'` entries NEVER participate in ring eviction —
  * they're held indefinitely, one per channel. `'all'` entries share
- * a FIFO ring capped by `maxPerSession`.
+ * a FIFO ring capped by `maxPerRender`.
  */
 export interface BufferState {
   /** Latest assigned seq for the session. 0 when never recorded. */
@@ -128,31 +128,31 @@ export const EMPTY_BUFFER_STATE: BufferState = {
 };
 
 /**
- * Default per-session ring cap. Mirrors the OSS
+ * Default per-render ring cap. Mirrors the OSS
  * `DEFAULT_SESSION_STREAM_BUFFER_MAX`. Hosted may pick a smaller cap
  * because on-row storage is constrained by the 400KB DDB item limit.
  */
-export const DEFAULT_REPLAY_MAX_PER_SESSION = 256;
+export const DEFAULT_REPLAY_MAX_PER_RENDER = 256;
 
 /**
- * Bump the session's seq and (conditionally) persist the stamped
+ * Bump the render's seq and (conditionally) persist the stamped
  * envelope per the channel's replay policy.
  *
  * Pure: returns a new {@link BufferState} rather than mutating the
  * input. Consumers that want reference equality for unchanged fields
  * pass the result's `next` through to storage.
  *
- * @throws {TypeError} when `maxPerSession < 1`.
+ * @throws {TypeError} when `maxPerRender < 1`.
  */
 export function applyRecordOp(
   current: BufferState,
   input: StreamReplayInput,
   spec: StreamSpec | undefined,
-  maxPerSession: number = DEFAULT_REPLAY_MAX_PER_SESSION,
+  maxPerRender: number = DEFAULT_REPLAY_MAX_PER_RENDER,
 ): ApplyRecordResult {
-  if (maxPerSession < 1) {
+  if (maxPerRender < 1) {
     throw new TypeError(
-      `applyRecordOp: maxPerSession must be >= 1, got ${maxPerSession}`,
+      `applyRecordOp: maxPerRender must be >= 1, got ${maxPerRender}`,
     );
   }
   const newSeq = current.streamSeq + 1;
@@ -197,7 +197,7 @@ export function applyRecordOp(
     case 'all': {
       const nextRing: BufferedReplayEnvelope[] = [...current.ring, envelope];
       let evictedAboveSeq = current.evictedAboveSeq;
-      while (nextRing.length > maxPerSession) {
+      while (nextRing.length > maxPerRender) {
         const evicted = nextRing.shift();
         if (evicted && evicted.seq > evictedAboveSeq) {
           evictedAboveSeq = evicted.seq;
@@ -338,45 +338,45 @@ export function normalizeBufferState(partial: {
 // Errors are typed so adapters can surface the right thing to callers:
 //   - `ReplayConflictError` is transient; the loop retries up to
 //     `maxRetries` before promoting to `ReplayMaxRetriesExceededError`.
-//   - `ReplaySessionNotFoundError` is terminal; no retry makes a
-//     vanished session reappear.
+//   - `ReplayRenderNotFoundError` is terminal; no retry makes a
+//     vanished render reappear.
 
 /** Thrown by a sequencer's `persist` when the expected-seq check fails.
  *  The outer loop retries — callers typically never see this. */
 export class ReplayConflictError extends Error {
   constructor(
-    public readonly sessionId: string,
+    public readonly renderId: string,
     public readonly expectedOldSeq: number,
   ) {
     super(
-      `replay conflict on session ${sessionId}: streamSeq changed from ${expectedOldSeq} mid-flight`,
+      `replay conflict on render ${renderId}: streamSeq changed from ${expectedOldSeq} mid-flight`,
     );
     this.name = 'ReplayConflictError';
   }
 }
 
 /** Thrown when retry budget is exhausted. Callers surface as 5xx.
- *  Indicates sustained contention — the session row saw more writers
+ *  Indicates sustained contention — the render row saw more writers
  *  than the retry budget could absorb. */
 export class ReplayMaxRetriesExceededError extends Error {
   constructor(
-    public readonly sessionId: string,
+    public readonly renderId: string,
     public readonly attempts: number,
   ) {
     super(
-      `replay sequencer exhausted ${attempts} retries on session ${sessionId}`,
+      `replay sequencer exhausted ${attempts} retries on render ${renderId}`,
     );
     this.name = 'ReplayMaxRetriesExceededError';
   }
 }
 
-/** Thrown when the sequencer's `fetchState` returns null — the session
+/** Thrown when the sequencer's `fetchState` returns null — the render
  *  row is gone (TTL-reaped or explicitly closed between writer reads).
  *  Terminal — no retry brings the row back. */
-export class ReplaySessionNotFoundError extends Error {
-  constructor(public readonly sessionId: string) {
-    super(`replay sequencer: session ${sessionId} not found`);
-    this.name = 'ReplaySessionNotFoundError';
+export class ReplayRenderNotFoundError extends Error {
+  constructor(public readonly renderId: string) {
+    super(`replay sequencer: render ${renderId} not found`);
+    this.name = 'ReplayRenderNotFoundError';
   }
 }
 
@@ -388,24 +388,24 @@ export interface FetchedReplayState {
 
 /**
  * Storage-backed seam the retry loop uses. Adapters implement this
- * inline (one shared deps object per sessionId call is fine —
+ * inline (one shared deps object per renderId call is fine —
  * `fetchState` closes over the storage client, `persist` closes
  * over the same).
  */
 export interface ReplaySequencerDeps {
   /**
    * Read the current replay state + active streamSpec. Return `null`
-   * when the session row is missing — the loop surfaces a
-   * {@link ReplaySessionNotFoundError}.
+   * when the render row is missing — the loop surfaces a
+   * {@link ReplayRenderNotFoundError}.
    */
-  readonly fetchState: (sessionId: string) => Promise<FetchedReplayState | null>;
+  readonly fetchState: (renderId: string) => Promise<FetchedReplayState | null>;
   /**
    * Persist the new state conditional on `expectedOldSeq` matching
    * the current stored `streamSeq`. Throw {@link ReplayConflictError}
    * on mismatch; any other error propagates as-is.
    */
   readonly persist: (
-    sessionId: string,
+    renderId: string,
     expectedOldSeq: number,
     newState: BufferState,
   ) => Promise<void>;
@@ -416,7 +416,7 @@ export interface ReplaySequencerDeps {
 export const DEFAULT_REPLAY_MAX_RETRIES = 5;
 
 export interface RunSequencedRecordOptions {
-  readonly maxPerSession?: number;
+  readonly maxPerRender?: number;
   readonly maxRetries?: number;
 }
 
@@ -426,29 +426,29 @@ export interface RunSequencedRecordOptions {
  * {@link ApplyRecordResult} a single-writer `applyRecordOp` would.
  *
  * Invariant: on success, the returned `envelope.seq` is the
- * authoritative session-scoped monotonic sequence for this emission.
+ * authoritative render-scoped monotonic sequence for this emission.
  * Two concurrent calls MUST observe two distinct seqs.
  *
- * @throws {@link ReplaySessionNotFoundError} — session row gone.
+ * @throws {@link ReplayRenderNotFoundError} — render row gone.
  * @throws {@link ReplayMaxRetriesExceededError} — contention too high.
  */
 export async function runSequencedRecord(
-  sessionId: string,
+  renderId: string,
   input: StreamReplayInput,
   deps: ReplaySequencerDeps,
   options: RunSequencedRecordOptions = {},
 ): Promise<ApplyRecordResult> {
   const maxRetries = options.maxRetries ?? DEFAULT_REPLAY_MAX_RETRIES;
-  const maxPerSession = options.maxPerSession ?? DEFAULT_REPLAY_MAX_PER_SESSION;
+  const maxPerRender = options.maxPerRender ?? DEFAULT_REPLAY_MAX_PER_RENDER;
   let attempts = 0;
   while (attempts <= maxRetries) {
-    const read = await deps.fetchState(sessionId);
+    const read = await deps.fetchState(renderId);
     if (!read) {
-      throw new ReplaySessionNotFoundError(sessionId);
+      throw new ReplayRenderNotFoundError(renderId);
     }
-    const result = applyRecordOp(read.state, input, read.spec, maxPerSession);
+    const result = applyRecordOp(read.state, input, read.spec, maxPerRender);
     try {
-      await deps.persist(sessionId, read.state.streamSeq, result.next);
+      await deps.persist(renderId, read.state.streamSeq, result.next);
       return result;
     } catch (err) {
       if (err instanceof ReplayConflictError) {
@@ -458,5 +458,5 @@ export async function runSequencedRecord(
       throw err;
     }
   }
-  throw new ReplayMaxRetriesExceededError(sessionId, attempts);
+  throw new ReplayMaxRetriesExceededError(renderId, attempts);
 }
