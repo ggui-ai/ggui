@@ -686,6 +686,15 @@ form button:disabled {
   min-height: 0;
 }
 
+/* Pre-meta placeholder (#174 fix). Rendered while we wait for the
+ * render envelope to arrive — before AppRenderer mounts. Matches the
+ * card chrome's background so the frame doesn't flash empty. */
+.render-loading {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-card);
+}
+
 .render-frame iframe {
   /* See styles.css history: F8 (`!important` to override @mcp-ui/client's
    * inline `style.height = '600px'`) + the slice's flex switch (the

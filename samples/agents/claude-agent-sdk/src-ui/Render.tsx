@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   AppRenderer,
   buildAppRendererToolResult,
@@ -72,48 +72,6 @@ export function Render({
   fillContainer = false,
   onUiMessage,
 }: RenderProps) {
-  // Reconstruct the iframe HTML from the render meta. The meta carries
-  // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
-  // iframe-runtime reads everything off `window.__GGUI_META__` at
-  // boot. When meta hasn't landed yet, fall back to a "loading"
-  // placeholder that the next prop transition replaces.
-  //
-  // The shell builds ONCE per render lifetime — pinned in a ref
-  // because subsequent `ggui_update` calls mutate `item.meta` (the
-  // props patch), and AppRenderer re-navigates the inner sandbox
-  // iframe whenever its `html` prop string changes — that wipes the
-  // running React tree. Live props updates MUST flow through
-  // `toolResult` (forwarded as `ui/notifications/tool-result`
-  // postMessage) or the WS `props_update` frame instead. We reset the
-  // ref when the renderId changes (genuinely new mount target).
-  const htmlRef = useRef<{ renderId: string; html: string } | null>(null);
-  if (htmlRef.current !== null && htmlRef.current.renderId !== item.renderId) {
-    htmlRef.current = null;
-  }
-  let html: string;
-  if (!item.meta) {
-    html = LOADING_HTML;
-  } else {
-    if (htmlRef.current === null) {
-      htmlRef.current = {
-        renderId: item.renderId,
-        html: buildSelfContainedHtml(toMcpAppEnvelope(item.meta)),
-      };
-    }
-    html = htmlRef.current.html;
-  }
-
-  // Build a CallToolResult from the render meta so AppRenderer forwards
-  // it to the inner iframe via `ui/notifications/tool-result` — the
-  // post-mount path through which iframe-runtime re-applies state on
-  // every `ggui_update`. Without this, prop changes after the first
-  // mount never reach the iframe-runtime (it would only see the initial
-  // `__GGUI_META__` global, then nothing).
-  const toolResult = useMemo<CallToolResult | undefined>(
-    () => (item.meta ? buildAppRendererToolResult(item.meta) : undefined),
-    [item.meta],
-  );
-
   // CSP wiring — startSandboxProxyServer defaults to
   // `script-src 'self' ...` where 'self' is the sandbox proxy's origin
   // (port 7790). The runtime bundle + WS + /api fetches all live on
@@ -123,9 +81,23 @@ export function Render({
   // `connect-src 'self' <runtimeOrigin> <wsOrigin>`. Without these,
   // the runtime bundle silently fails to load and the iframe stays
   // blank.
+  //
+  // **Sandbox identity stability (#174 fix).** AppRenderer's child
+  // AppFrame keys its inner iframe-effect on `sandbox.url.href + csp`.
+  // When that string transitions on a SAME-bridge re-render (e.g. csp
+  // appearing once item.meta lands), AppFrame tears down the iframe and
+  // calls `bridge.connect()` again — but the bridge still holds its
+  // prior transport, so `@mcp-ui/client` throws "AppBridge is already
+  // connected. Call close() before connecting again." We sidestep the
+  // transition by NOT mounting `<AppRenderer>` until `item.meta` is
+  // defined (see render below), which makes the csp value monotonic for
+  // the AppRenderer lifetime: it's either always-absent (placeholder)
+  // or always-present (renderer mounted post-meta). Memoising on the
+  // content-stable origin strings (not on `item.meta` identity) keeps
+  // sandbox stable even if a future code path mutates meta in place.
+  const runtimeOrigin = safeUrlOrigin(item.meta?.runtimeUrl);
+  const wsOrigin = safeUrlOrigin(item.meta?.wsUrl);
   const sandbox = useMemo(() => {
-    const runtimeOrigin = safeUrlOrigin(item.meta?.runtimeUrl);
-    const wsOrigin = safeUrlOrigin(item.meta?.wsUrl);
     const resourceDomains = runtimeOrigin ? [runtimeOrigin] : [];
     const connectDomains = [runtimeOrigin, wsOrigin].filter(
       (s): s is string => s.length > 0,
@@ -138,7 +110,32 @@ export function Render({
       url: new URL(sandboxUrl),
       ...(csp ? { csp } : {}),
     };
-  }, [sandboxUrl, item.meta]);
+  }, [sandboxUrl, runtimeOrigin, wsOrigin]);
+
+  // Reconstruct the iframe HTML from the render meta. The meta carries
+  // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
+  // iframe-runtime reads everything off `window.__GGUI_META__` at
+  // boot. AppRenderer is mounted only once `item.meta` is defined (the
+  // placeholder branch handles the pre-meta tick), so this memo is
+  // never invoked with a missing envelope.
+  const html = useMemo(
+    () =>
+      item.meta
+        ? buildSelfContainedHtml(toMcpAppEnvelope(item.meta))
+        : undefined,
+    [item.meta],
+  );
+
+  // Build a CallToolResult from the render meta so AppRenderer forwards
+  // it to the inner iframe via `ui/notifications/tool-result` — the
+  // post-mount path through which iframe-runtime re-applies state on
+  // every `ggui_update`. Without this, prop changes after the first
+  // mount never reach the iframe-runtime (it would only see the initial
+  // `__GGUI_META__` global, then nothing).
+  const toolResult = useMemo<CallToolResult | undefined>(
+    () => (item.meta ? buildAppRendererToolResult(item.meta) : undefined),
+    [item.meta],
+  );
 
   // Tool relay — AppRenderer hands us inner-iframe `tools/call` invocations
   // (`onCallTool`). We proxy through `/relay/tools-call` on the sample
@@ -230,28 +227,36 @@ export function Render({
         className="render-frame"
         style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
       >
-        <AppRenderer
-          toolName="ggui_render"
-          sandbox={sandbox}
-          html={html}
-          {...(toolResult !== undefined ? { toolResult } : {})}
-          onCallTool={onCallTool}
-          onMessage={onMessage}
-          onError={(err) =>
-            console.warn('[Render] AppRenderer error', err)
-          }
-        />
+        {/* Defer mounting until meta is defined. AppRenderer's child
+         * AppFrame would otherwise tear-down + reconnect the AppBridge
+         * when csp transitions from "undefined" (pre-meta) to "with
+         * domains" (post-meta) — and @mcp-ui/client's AppBridge throws
+         * "already connected" because connect() is called on a bridge
+         * whose transport is still set (see useMemo block above). The
+         * `key={item.renderId}` ensures a clean unmount/remount when
+         * the surrounding pane re-binds the same DOM slot to a
+         * different render (e.g. panel mode swapping top render). */}
+        {html !== undefined && toolResult !== undefined ? (
+          <AppRenderer
+            key={item.renderId}
+            toolName="ggui_render"
+            sandbox={sandbox}
+            html={html}
+            toolResult={toolResult}
+            onCallTool={onCallTool}
+            onMessage={onMessage}
+            onError={(err) =>
+              console.warn('[Render] AppRenderer error', err)
+            }
+          />
+        ) : (
+          <div className="render-loading" aria-hidden="true" />
+        )}
       </div>
     </div>
   );
 }
 
-/**
- * Placeholder HTML rendered while the slice envelope is being
- * recovered (the meta refetch is async post-tool_result). Shows a tiny
- * loading marker so the iframe isn't fully blank; the next prop
- * transition swaps in the real shell HTML built from the slice.
- */
 /**
  * Extract an origin from a URL string, or return '' if invalid/missing.
  * Used to thread runtime + WS origins into the sandbox proxy's CSP so
@@ -265,15 +270,3 @@ function safeUrlOrigin(url: string | undefined): string {
     return '';
   }
 }
-
-/**
- * Quiet placeholder shown for the ~tens of ms between mount and the
- * first slice envelope landing on `item.meta`. Renders no visible text
- * (no "Loading UI…" jank, no stray flash of `_meta`-absent fallback
- * shell text) — the surrounding `.render` card chrome already
- * conveys "something is here". Background matches `--bg-2` from the
- * chat shell so the iframe blends seamlessly until real content lands.
- */
-const LOADING_HTML = `<!doctype html>
-<html><head><meta name="color-scheme" content="dark"></head>
-<body style="margin:0;background:#1a1a22"></body></html>`;
