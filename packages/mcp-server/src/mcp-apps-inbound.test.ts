@@ -332,11 +332,14 @@ describe('GET /mcp-apps/resource', () => {
     expect(fx.source.toolsListCount()).toBe(countBefore);
   });
 
-  it('returns 400 when session or item query param is missing', async () => {
+  it('returns 400 when the render query param is missing', async () => {
+    // Phase B identity collapse: `item` defaults to `render` when absent
+    // (the pre-Phase-B (sessionId, stackItemId) pair collapsed to a single
+    // renderId). Only `render` is structurally required at this ingress;
+    // its absence is a 400, while a present-but-unknown render falls to
+    // 404 via the lookup path below.
     const r1 = await fetch(`${fx.httpBase}/mcp-apps/resource?item=x`);
     expect(r1.status).toBe(400);
-    const r2 = await fetch(`${fx.httpBase}/mcp-apps/resource?render=x`);
-    expect(r2.status).toBe(400);
   });
 
   it('returns 404 for an unknown session', async () => {

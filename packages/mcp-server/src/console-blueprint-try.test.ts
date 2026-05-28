@@ -238,15 +238,20 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       shortCode: string;
       url: string;
     };
-    expect(body.renderId).toMatch(/^try-[0-9a-f-]{36}$/);
+    // Phase B identity collapse: the prior (sessionId=`try-<uuid>`,
+    // stackItemId=`blueprint-<bpId>`) pair collapsed to one renderId
+    // `try-<bpId>-<uuid>`. The blueprint slug stays in the id for
+    // debug readability; the uuid disambiguates same-blueprint retries.
+    expect(body.renderId).toMatch(/^try-[a-z0-9-]+-[0-9a-f-]{36}$/);
     expect(body.shortCode).toMatch(/^[a-z0-9]{18}$/);
     expect(body.url).toBe(`/s/${body.shortCode}`);
 
-    // Stored render row exists with our Render payload.
+    // Stored render row exists with our Render payload. Post-collapse
+    // `render.id === renderId` (single identity).
     const stored = await fx.renderStore.get(body.renderId);
     expect(stored).not.toBeNull();
     const item = stored!.render as ComponentRender;
-    expect(item.id).toBe('blueprint-todo-list');
+    expect(item.id).toBe(body.renderId);
     expect(item.componentCode).toBe(BUNDLE_CODE);
     expect(item.contentType).toBe('application/javascript+react');
     // Load-bearing: all three contract fields flowed through.
@@ -488,7 +493,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     const body = (await res.json()) as { renderId: string };
     const stored = await fx.renderStore.get(body.renderId);
     expect(stored).not.toBeNull();
-    expect(stored!.render.id).toBe('blueprint-todo-list');
+    // Phase B identity collapse: render.id === renderId.
+    expect(stored!.render.id).toBe(body.renderId);
   });
 
   it('schemaCompatCheck=reject: rejects on streamSpec tool ref too (inverse direction)', async () => {
@@ -590,7 +596,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     const body = (await res.json()) as { renderId: string };
     const stored = await fx.renderStore.get(body.renderId);
     expect(stored).not.toBeNull();
-    expect(stored!.render.id).toBe('blueprint-todo-list');
+    // Phase B identity collapse: render.id === renderId.
+    expect(stored!.render.id).toBe(body.renderId);
   });
 
   it('schemaCompatCheck=off: skips the check entirely (already exercised by the base tests)', async () => {

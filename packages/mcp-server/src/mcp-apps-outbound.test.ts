@@ -452,18 +452,25 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
       ws.once('error', reject);
     });
 
-    const ackPromise = new Promise<{ sequence: number; renderToken?: string; stack?: unknown[] }>(
-      (resolve, reject) => {
-        ws.on('message', (raw) => {
-          const msg = JSON.parse(raw.toString()) as {
-            type: string;
-            payload: { sequence: number; renderToken?: string; stack?: unknown[]; code?: string };
+    const ackPromise = new Promise<{
+      sequence: number;
+      renderToken?: string;
+      render?: { id: string; appId: string };
+    }>((resolve, reject) => {
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type: string;
+          payload: {
+            sequence: number;
+            renderToken?: string;
+            render?: { id: string; appId: string };
+            code?: string;
           };
-          if (msg.type === 'ack') resolve(msg.payload);
-          else if (msg.type === 'error') reject(new Error(msg.payload.code));
-        });
-      },
-    );
+        };
+        if (msg.type === 'ack') resolve(msg.payload);
+        else if (msg.type === 'error') reject(new Error(msg.payload.code));
+      });
+    });
 
     ws.send(
       JSON.stringify({
@@ -480,7 +487,11 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     expect(ack.sequence).toBeDefined();
     expect(typeof ack.renderToken).toBe('string');
     expect((ack.renderToken as string).length).toBeGreaterThan(10);
-    expect(ack.stack).toEqual([]);
+    // Phase B replaced the prior `stack: Render[]` ack slot with a
+    // single `render: Render` (a render IS the addressable unit).
+    expect(ack.render).toBeDefined();
+    expect(ack.render?.id).toBe(bootstrap.renderId);
+    expect(ack.render?.appId).toBe(bootstrap.appId);
     ws.close();
   });
 

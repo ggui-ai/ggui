@@ -149,17 +149,6 @@ describe('GET /api/renders/:renderId/state', () => {
     expect(renderMeta?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
   });
 
-  it('returns 200 + session slice only when stack is empty', async () => {
-    fx = await bootWithSession();
-    const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeDefined();
-    expect(body[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeUndefined();
-  });
-
   it('returns 401 when wsToken query is absent', async () => {
     fx = await bootWithSession();
     const res = await fetch(`${fx.url}/api/renders/${fx.renderId}/state`);
