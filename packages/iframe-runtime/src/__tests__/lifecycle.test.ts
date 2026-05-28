@@ -17,9 +17,10 @@
  *      `error.code` mirroring the legacy `RendererBootFailedMessage`
  *      reason.
  *
- * The bootSequence wiring uses the same mock posture as `boot.test.ts`
- * — inject `callUiInitialize`, `connectFn`, `notifyParent`, and
- * `onLifecycle`.
+ * The bootSequence wiring uses {@link buildBootHarness} (App +
+ * MockTransport) post-Phase-1.19b.3, plus a mocked `connectFn` for
+ * the WS half. Reading-B is RETIRED — every slice meta arrives via
+ * the spec-canonical `ui/notifications/tool-result` notification.
  */
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type { Render } from '@ggui-ai/protocol';
@@ -29,7 +30,6 @@ import type {
   McpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
-  toMcpAppEnvelope,
   isMcpAppLifecycleMessage,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence } from '../runtime.js';
@@ -38,6 +38,7 @@ import {
   postLifecycleToParent,
 } from '../lifecycle.js';
 import type { ConnectFn } from '../registry-subscribe.js';
+import { buildBootHarness, tick } from './boot-helpers.js';
 
 // =============================================================================
 // Test helpers
@@ -173,19 +174,6 @@ const VALID_META: McpAppAiGguiRenderMeta = {
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
-function buildHappyInitResponse(
-  meta: McpAppAiGguiRenderMeta = VALID_META,
-): { result: unknown } {
-  return {
-    result: {
-      toolOutput: {
-        _meta: toMcpAppEnvelope(meta),
-        structuredContent: {},
-      },
-    },
-  };
-}
-
 function makeRender(id: string): Render {
   return {
     id,
@@ -204,16 +192,22 @@ describe('bootSequence — lifecycle on happy path', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
+    const { app, transport, pushToolResult } = buildBootHarness();
     const connectFn = buildHappyConnect(makeRender('render_001'));
 
-    const result = await bootSequence({
+    const bootPromise = bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
       onLifecycle,
+      toolResultTimeoutMs: 500,
     });
+    await tick();
+    pushToolResult(VALID_META);
+
+    const result = await bootPromise;
 
     expect(result.ok).toBe(true);
     const states = lifecycleEvents(onLifecycle).map((e) => e.state);
@@ -224,18 +218,22 @@ describe('bootSequence — lifecycle on happy path', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const callUiInitialize = vi
-      .fn()
-      .mockResolvedValue(buildHappyInitResponse(VALID_META));
+    const { app, transport, pushToolResult } = buildBootHarness();
     const connectFn = buildHappyConnect(makeRender('render_001'));
 
-    await bootSequence({
+    const bootPromise = bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
       onLifecycle,
+      toolResultTimeoutMs: 500,
     });
+    await tick();
+    pushToolResult(VALID_META);
+
+    await bootPromise;
 
     const events = lifecycleEvents(onLifecycle);
     const codeReady = events.find((e) => e.state === 'code-ready');
@@ -251,17 +249,19 @@ describe('bootSequence — lifecycle on failure paths', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const callUiInitialize = vi.fn().mockResolvedValue({
-      error: { code: -1, message: 'host refused' },
+    const { app, transport } = buildBootHarness({
+      initResponse: { error: { code: -1, message: 'host refused' } },
     });
     const connectFn = vi.fn() as unknown as ConnectFn;
 
     await bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
       onLifecycle,
+      toolResultTimeoutMs: 50,
     });
 
     const events = lifecycleEvents(onLifecycle);
@@ -271,21 +271,21 @@ describe('bootSequence — lifecycle on failure paths', () => {
     expect(errorEvt?.error?.message).toContain('host refused');
   });
 
-  it('fires mounting then error with reason=MISSING_META_GGUI_BOOTSTRAP when initResp lacks _meta.ggui.bootstrap', async () => {
+  it('fires mounting then error with reason=MISSING_META_GGUI_BOOTSTRAP when no slice meta arrives', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const callUiInitialize = vi.fn().mockResolvedValue({
-      result: { toolOutput: { _meta: {}, structuredContent: {} } },
-    });
+    const { app, transport } = buildBootHarness();
     const connectFn = vi.fn() as unknown as ConnectFn;
 
     await bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
       onLifecycle,
+      toolResultTimeoutMs: 50,
     });
 
     const events = lifecycleEvents(onLifecycle);
@@ -297,16 +297,22 @@ describe('bootSequence — lifecycle on failure paths', () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
-    const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
+    const { app, transport, pushToolResult } = buildBootHarness();
     const connectFn = vi.fn().mockRejectedValue(new Error('socket dead')) as unknown as ConnectFn;
 
-    await bootSequence({
+    const bootPromise = bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
       onLifecycle,
+      toolResultTimeoutMs: 500,
     });
+    await tick();
+    pushToolResult(VALID_META);
+
+    await bootPromise;
 
     const events = lifecycleEvents(onLifecycle);
     expect(events.map((e) => e.state)).toEqual(['mounting', 'error']);
@@ -317,15 +323,21 @@ describe('bootSequence — lifecycle on failure paths', () => {
   it('does NOT fire any lifecycle event when onLifecycle is omitted (additive opt-in)', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
-    const callUiInitialize = vi.fn().mockResolvedValue(buildHappyInitResponse());
+    const { app, transport, pushToolResult } = buildBootHarness();
     const connectFn = buildHappyConnect(makeRender('render_001'));
 
-    const result = await bootSequence({
+    const bootPromise = bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent: vi.fn(),
+      toolResultTimeoutMs: 500,
     });
+    await tick();
+    pushToolResult(VALID_META);
+
+    const result = await bootPromise;
 
     expect(result.ok).toBe(true);
   });
@@ -335,17 +347,19 @@ describe('bootSequence — lifecycle on failure paths', () => {
     const onLifecycle = vi.fn();
     const notifyParent = vi.fn();
 
-    const callUiInitialize = vi.fn().mockResolvedValue({
-      error: { code: -1, message: 'host refused' },
+    const { app, transport } = buildBootHarness({
+      initResponse: { error: { code: -1, message: 'host refused' } },
     });
     const connectFn = vi.fn() as unknown as ConnectFn;
 
     await bootSequence({
       doc: dom,
-      callUiInitialize,
+      app,
+      transport,
       connectFn,
       notifyParent,
       onLifecycle,
+      toolResultTimeoutMs: 50,
     });
 
     const failedEnvelopes = notifyParentCalls(notifyParent).filter(

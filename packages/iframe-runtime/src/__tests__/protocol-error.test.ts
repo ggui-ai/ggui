@@ -45,6 +45,7 @@ import {
 } from '../wire-config.js';
 import { connectViaRegistry, type ConnectFn } from '../registry-subscribe.js';
 import { bootSequence } from '../runtime.js';
+import { buildBootHarness } from './boot-helpers.js';
 import {
   defaultProtocolErrorEmitter,
   fromBootstrapFailure,
@@ -444,17 +445,22 @@ describe('connectViaRegistry — onProtocolError', () => {
 // =============================================================================
 
 describe('bootSequence — onProtocolError dual emission', () => {
-  it('emits kind=bootstrap + reason=UI_INITIALIZE_FAILED when initResp.error present', async () => {
+  it('emits kind=bootstrap + reason=UI_INITIALIZE_FAILED when App.connect rejects', async () => {
     const doc = document.implementation.createHTMLDocument('boot');
     const notifyParent = vi.fn();
     const onProtocolError = vi.fn<(err: ProtocolError) => void>();
     const connectFn = vi.fn() as unknown as ConnectFn;
+    const { app, transport } = buildBootHarness({
+      initResponse: { error: { message: 'host refused' } },
+    });
     await bootSequence({
       doc,
-      callUiInitialize: async () => ({ error: { message: 'host refused' } }),
+      app,
+      transport,
       connectFn,
       notifyParent,
       onProtocolError,
+      toolResultTimeoutMs: 50,
     });
     expect(notifyParent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'ggui:bootstrap-failed',
@@ -466,35 +472,42 @@ describe('bootSequence — onProtocolError dual emission', () => {
     }));
   });
 
-  it('emits kind=bootstrap + parse reason when _meta.ggui.bootstrap missing', async () => {
+  it('emits kind=bootstrap + reason=MISSING_META_GGUI_BOOTSTRAP when no slice meta arrives', async () => {
     const doc = document.implementation.createHTMLDocument('boot');
     const notifyParent = vi.fn();
     const onProtocolError = vi.fn<(err: ProtocolError) => void>();
     const connectFn = vi.fn() as unknown as ConnectFn;
+    const { app, transport } = buildBootHarness();
     await bootSequence({
       doc,
-      callUiInitialize: async () => ({ result: {} }),
+      app,
+      transport,
       connectFn,
       notifyParent,
       onProtocolError,
+      toolResultTimeoutMs: 50,
     });
     const emittedReasons = onProtocolError.mock.calls
       .map(([err]) => err)
       .filter((e): e is ProtocolError & { kind: 'bootstrap' } => e.kind === 'bootstrap');
     expect(emittedReasons.length).toBeGreaterThanOrEqual(1);
-    const parseReason = emittedReasons[0]?.reason;
-    expect(['MISSING_TOOL_OUTPUT', 'MISSING_META_GGUI_BOOTSTRAP']).toContain(parseReason);
+    expect(emittedReasons[0]?.reason).toBe('MISSING_META_GGUI_BOOTSTRAP');
   });
 
   it('does not emit ProtocolError when onProtocolError absent (legacy callers)', async () => {
     const doc = document.implementation.createHTMLDocument('boot');
     const notifyParent = vi.fn();
     const connectFn = vi.fn() as unknown as ConnectFn;
+    const { app, transport } = buildBootHarness({
+      initResponse: { error: { message: 'host refused' } },
+    });
     await bootSequence({
       doc,
-      callUiInitialize: async () => ({ error: { message: 'host refused' } }),
+      app,
+      transport,
       connectFn,
       notifyParent,
+      toolResultTimeoutMs: 50,
     });
     expect(notifyParent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'ggui:bootstrap-failed',
