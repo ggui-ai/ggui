@@ -136,7 +136,7 @@ const AppSchema = z.strictObject({
    */
   publicEnv: appPublicEnvSchema.optional(),
   /**
-   * App-default display-mode hint stamped on every `ggui_push` from
+   * App-default display-mode hint stamped on every `ggui_render` from
    * this app via `_meta.ui.displayMode`. Spec-aligned with MCP App
    * display literals (`'inline' | 'fullscreen' | 'pip'`).
    *
@@ -147,7 +147,7 @@ const AppSchema = z.strictObject({
    * stamps its own `_meta.ui.resourceUri` and every iframe goes
    * through the same runtime mount path); display mode controls ONLY
    * how the host arranges the iframes it mounts. Agents can override
-   * per push via `ggui_push.input.displayMode`.
+   * per push via `ggui_render.input.displayMode`.
    *
    * Absent ⇒ no per-push hint stamped (host falls back to its own
    * default, typically `'inline'`).
@@ -652,7 +652,7 @@ export const GguiJsonV1 = z.strictObject({
   /**
    * Local MCP tool mounts — the operator-facing seam for declaring
    * additional tool surfaces that aggregate onto `/mcp` alongside
-   * ggui-native tools (`ggui_push`, etc.). Each entry is a module
+   * ggui-native tools (`ggui_render`, etc.). Each entry is a module
    * specifier:
    *
    *   - Relative paths (`./path/to/mount.js`, `../local/mcp.mjs`)
