@@ -130,6 +130,39 @@ export interface PendingEventConsumer {
    * BEFORE the agent's first `ggui_consume`) don't get lost.
    */
   markCreated?(renderId: string, ttlMs?: number): void;
+
+  /**
+   * Flip the pipe's lifecycle status without consuming events. Lets
+   * tests + handler-side close paths transition a render into a
+   * terminal state (`'expired'`) so the next `consumeAndClear`
+   * short-circuits its long-poll loop and returns the new status to
+   * the caller.
+   *
+   * Optional on the interface for the same reason as `markCreated`:
+   * cloud's Dynamo adapter writes status via UpdateItem upserts and
+   * doesn't surface a separate setter. OSS impls (InMemory / Sqlite)
+   * MUST implement it.
+   *
+   * No-op when the pipe doesn't exist — callers shouldn't need to
+   * guard a status flip against a vanished render.
+   */
+  markStatus?(renderId: string, status: RenderStatus): void;
+
+  /**
+   * Tear down the pipe for `renderId`. Subsequent `append` /
+   * `consumeAndClear` calls MUST throw {@link PendingPipeNotFoundError}
+   * exactly as if the pipe had never been opened. Used by paired
+   * close paths (handler-side cleanup, render-close races) and by
+   * tests that simulate mid-poll pipe disappearance.
+   *
+   * Optional on the interface for the same reason as `markCreated`:
+   * cloud's Dynamo adapter relies on TTL-based reaping and doesn't
+   * expose explicit deletion. OSS impls (InMemory / Sqlite) MUST
+   * implement it.
+   *
+   * Idempotent — deleting a non-existent pipe is a no-op.
+   */
+  markDeleted?(renderId: string): void;
 }
 
 /**

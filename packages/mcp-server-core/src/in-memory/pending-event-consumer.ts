@@ -86,6 +86,31 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
     });
   }
 
+  /**
+   * Flip the pipe's lifecycle status without consuming events. Used
+   * by handler-side close paths + tests that need to short-circuit
+   * the long-poll loop. No-op on missing pipe (matches interface
+   * semantics — callers shouldn't have to guard against vanished
+   * renders).
+   */
+  markStatus(renderId: string, status: RenderStatus): void {
+    const entry = this.pipes.get(renderId);
+    if (!entry) return;
+    entry.status = status;
+    entry.lastActivityAt = Date.now();
+  }
+
+  /**
+   * Tear down the pipe for `renderId`. Subsequent `append` /
+   * `consumeAndClear` calls throw {@link PendingPipeNotFoundError}
+   * exactly as if the pipe had never been opened. Idempotent —
+   * deleting a non-existent pipe is a no-op.
+   */
+  markDeleted(renderId: string): void {
+    this.pipes.delete(renderId);
+    this.mutexes.delete(renderId);
+  }
+
   /** Inspector for tests: how many events are queued? */
   pendingCount(renderId: string): number {
     return this.pipes.get(renderId)?.events.length ?? 0;
