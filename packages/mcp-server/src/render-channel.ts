@@ -1300,9 +1300,9 @@ export function createRenderChannelServer(
       return;
     }
 
-    // Phase B: a render IS the addressable unit. The reverse-index
-    // lookup (getSessionByStackItemId) collapses — `renderStore.get`
-    // resolves the render directly.
+    // Phase B: a render IS the addressable unit. The prior
+    // reverse-index lookup collapses — `renderStore.get` resolves
+    // the render directly.
     const stored = await opts.renderStore.get(payload.renderId);
     if (!stored || stored.id !== sub.renderId) {
       sendChannelError(
@@ -1956,7 +1956,7 @@ export function createRenderChannelServer(
    * upstream enforcement skips (allowlist + actionSpec checks are
    * no-ops when no `ComponentRender` is active).
    */
-  function resolveActiveStackItem(
+  function resolveActiveRender(
     render: Render | undefined,
   ): Render | undefined {
     if (!render) return undefined;
@@ -2008,7 +2008,7 @@ export function createRenderChannelServer(
     // Phase B: a render IS the addressable unit. The prior stack
     // routing (stackIndex / cross-stack pickIds) collapses — the
     // resolved render itself is the active item.
-    const activeItem = resolveActiveStackItem(stored.render);
+    const activeItem = resolveActiveRender(stored.render);
 
     // ── Two-step enforcement ──
     //   1. allowlist via assertEventAllowed (Phase B: no-op stub —

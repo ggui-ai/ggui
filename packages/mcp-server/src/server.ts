@@ -6670,7 +6670,7 @@ export function createGguiServer(
     // Sources:
     //   - `renderStore.list({ status: 'active', limit })` — single
     //     page, limit default 25, clamped to [1, 100].
-    //   - `shortCodeIndex.findBySessionId(session.id)` — best-effort
+    //   - `shortCodeIndex.findByRenderId(session.id)` — best-effort
     //     enrichment; absent shortCode is a valid row (displays
     //     without a click-through link).
     //
@@ -6716,7 +6716,7 @@ export function createGguiServer(
           let shortCode: string | null = null;
           if (opts.shortCodeIndex) {
             try {
-              shortCode = await opts.shortCodeIndex.findBySessionId(
+              shortCode = await opts.shortCodeIndex.findByRenderId(
                 session.id,
               );
             } catch (err) {
@@ -7294,12 +7294,7 @@ export function createGguiServer(
             return;
           }
           const mint = mintDevtoolCookie({
-            // shortCodeIndex.lookup still returns the pre-rename
-            // `sessionId` field — the index is keyed by render-id-as-
-            // string post Phase B but the field name is unchanged on
-            // the binding row. Route the value through the new
-            // `renderId` cookie input field.
-            renderId: binding.sessionId,
+            renderId: binding.renderId,
             appId: binding.appId,
             secret,
             ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),

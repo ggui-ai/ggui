@@ -16,12 +16,6 @@
  * Caller composes the path; this module is pure construction over a
  * given dir + better-sqlite3 dynamic-import, so tests can scope to a
  * tmpdir.
- *
- * Phase-B punt: the bound `ShortCodeBinding` still carries `sessionId`
- * + `stackItemId` slot names (the cross-package compat surface
- * upstream in `@ggui-ai/mcp-server-core`). Post-flatten both hold the
- * renderId value — renaming the slots is a separate slice touching
- * DDB + mcp-server-core in lockstep; out of scope for the CLI sweep.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

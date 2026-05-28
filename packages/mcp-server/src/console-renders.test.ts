@@ -9,14 +9,14 @@
  *     MCP boot without sessionChannel / mcpApps)
  *   - populated shape reads sessionId / appId / stackSize /
  *     lastActivityAt / createdAt from each `Session`
- *   - shortCode enrichment via `shortCodeIndex.findBySessionId(id)`,
+ *   - shortCode enrichment via `shortCodeIndex.findByRenderId(id)`,
  *     optional on the wire (absent-key semantics, not `null`)
  *   - limit query param clamps to [1, 100], defaults to 25
  *   - ordering: most-recent `lastActivityAt` first, stable by id tie
  *   - `status: 'active'` hardcoded (we only filter for active)
  *   - console-disabled → 404 (route doesn't mount)
  *   - renderStore.list() failure → 500 with structured error
- *   - shortCodeIndex.findBySessionId() failure doesn't fail the
+ *   - shortCodeIndex.findByRenderId() failure doesn't fail the
  *     whole request — the row lands without a shortCode
  *
  * Lane 3 of the 4-lane test taxonomy (vitest, in-process fake
@@ -114,12 +114,12 @@ describe('GET /ggui/console/sessions', () => {
     expect(Object.keys(row)).not.toContain('shortCode');
   });
 
-  it('enriches rows with shortCode via shortCodeIndex.findBySessionId', async () => {
+  it('enriches rows with shortCode via shortCodeIndex.findByRenderId', async () => {
     const renderStore: RenderStore = new InMemoryRenderStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
     const created = await renderStore.create({ appId: 'app-alpha' });
     await shortCodeIndex.put('share12345', {
-      sessionId: created.id,
+      renderId: created.id,
       appId: 'app-alpha',
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
@@ -186,7 +186,7 @@ describe('GET /ggui/console/sessions', () => {
     const withCode = await renderStore.create({ appId: 'a' });
     const withoutCode = await renderStore.create({ appId: 'a' });
     await shortCodeIndex.put('share0000', {
-      sessionId: withCode.id,
+      renderId: withCode.id,
       appId: 'a',
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
@@ -200,7 +200,7 @@ describe('GET /ggui/console/sessions', () => {
     expect(Object.keys(rowWithout ?? {})).not.toContain('shortCode');
   });
 
-  it('shortCodeIndex.findBySessionId() failure lands the row without a shortCode', async () => {
+  it('shortCodeIndex.findByRenderId() failure lands the row without a shortCode', async () => {
     // A reverse-index implementation could throw (misconfigured GSI,
     // backend hiccup). The row must still land — just without the
     // click-through link — rather than 500ing the whole list.
@@ -213,16 +213,13 @@ describe('GET /ggui/console/sessions', () => {
       async lookup() {
         return null;
       },
-      async findBySessionId() {
+      async findByRenderId() {
         throw new Error('reverse-index unavailable');
       },
       async revoke() {
         /* no-op */
       },
-      async revokeBySessionId() {
-        return 0;
-      },
-      async revokeByStackItemId() {
+      async revokeByRenderId() {
         return 0;
       },
     };

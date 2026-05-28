@@ -71,7 +71,6 @@ import type {
   RateLimiter,
   RenderStore,
   ShortCodeIndex,
-  StoredRender,
   UiGenerateInput,
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
@@ -504,24 +503,12 @@ export interface GguiRenderHandlerDeps {
 
   /**
    * ShortCode → render lookup. When present, every successful render
-   * records the minted `shortCode → { sessionId, appId, stackItemId }`
-   * binding so downstream same-origin consumers (console
-   * `/s/<shortCode>` viewer) can resolve it back. Writes are
-   * best-effort: if the index `put` rejects, the render tool result is
-   * NOT failed — the agent already holds the URL and the
-   * operator-visible surface gracefully 404s on lookup.
-   *
-   * **Field-name note (B.2c).** {@link ShortCodeBinding}'s wire
-   * field names (`sessionId`, `stackItemId`) were NOT renamed when the
-   * protocol collapsed session+stackItem → render. Post-Phase-B every
-   * render IS the addressable row, so `sessionId === renderId ===
-   * stackItemId` for ggui-side bindings; the handler writes the
-   * `renderId` into BOTH legacy field slots so downstream
-   * (`revokeBySessionId` / `revokeByStackItemId`) keep functioning.
-   * Renaming the index surface requires updating mcp-server +
-   * persistent-short-code-index + cloud DDB binding writers, which
-   * sit outside this slice's scope; documented here so a future slice
-   * can finish the rename in one pass.
+   * records the minted `shortCode → { renderId, appId }` binding so
+   * downstream same-origin consumers (console `/s/<shortCode>` viewer)
+   * can resolve it back. Writes are best-effort: if the index `put`
+   * rejects, the render tool result is NOT failed — the agent already
+   * holds the URL and the operator-visible surface gracefully 404s on
+   * lookup.
    *
    * Absence of this dep is the "hosted cloud has its own
    * shortCode→render table, OSS isn't using console" signal —
@@ -1343,18 +1330,15 @@ export function createGguiRenderHandler(
       const shortCode = generateShortCode();
 
       // Record shortCode → render binding for same-origin console
-      // viewer lookups. The ShortCodeBinding wire shape still names
-      // its fields `sessionId` + `stackItemId`; post-Phase-B every
-      // render IS the addressable row so the renderId fills BOTH
-      // positions. Renaming the binding surface is a separate slice
-      // (see ShortCodeIndex docstring + the field-name note on the
-      // `shortCodeIndex` dep above).
+      // viewer lookups. Post Phase-B identity collapse: `renderId` IS
+      // the addressable unit, so the binding row carries a single
+      // `renderId` field (the prior `sessionId` + `stackItemId` slot
+      // pair always held the same value at the bind site).
       if (deps.shortCodeIndex) {
         try {
           await deps.shortCodeIndex.put(shortCode, {
-            sessionId: renderId,
+            renderId,
             appId: ctx.appId,
-            stackItemId: renderId,
           });
         } catch {
           // Silent: the index is a convenience layer. If it rejects
