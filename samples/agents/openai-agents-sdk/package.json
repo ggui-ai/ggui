@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/agent-openai-sdk",
   "version": "0.0.1",
-  "description": "Brand-agnostic OpenAI Agents SDK backend. Boots an HTTP API (default port 6791) + sandbox-proxy server (default port 7791). Pure backend — no bundled frontend; pair with @ggui-samples/app-ggui-basic-nextjs (or any MCP-Apps-spec frontend) via NEXT_PUBLIC_AGENT_ENDPOINT_URL. Real LLM via OPENAI_API_KEY. Not published.",
+  "description": "Brand-agnostic OpenAI Agents SDK backend. Boots an HTTP API (default port 6791) + sandbox-proxy server (default port 7791). Pure backend — no bundled frontend; pair with @ggui-samples/app-ggui-basic-web (or any MCP-Apps-spec frontend) via VITE_AGENT_ENDPOINT_URL. Real LLM via OPENAI_API_KEY. Not published.",
   "private": true,
   "type": "module",
   "scripts": {
