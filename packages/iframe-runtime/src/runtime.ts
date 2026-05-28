@@ -259,10 +259,12 @@ let currentApp: App | null = null;
  * a replace only happens in tests that reuse the module across
  * scenarios (and want each spec to bind its own App).
  *
- * @internal — only the boot paths call this; tests stub via the
- *   module-level export.
+ * @internal — production callers are the boot paths
+ *   (`bootProduction`, `bootSelfContained`); tests inject directly to
+ *   drive outbound `tools/call` through a `MockTransport`-bound App
+ *   without invoking the full boot pipeline.
  */
-function setCurrentApp(app: App): void {
+export function setCurrentApp(app: App): void {
   currentApp = app;
 }
 
@@ -1442,106 +1444,48 @@ function postToParent(envelope: unknown): void {
 }
 
 /**
- * Outbound `tools/call` shim. When the module-level App handle is set
- * (production: bootSequence calls `setCurrentApp(app)` after handshake;
- * tests: opt-in via `setCurrentApp` or fall through), the call routes
- * through the spec-canonical `app.callServerTool` API. Otherwise the
- * legacy raw-postMessage pump fires — preserved so unit tests that
- * exercise dispatch routing without an App keep passing.
+ * Outbound `tools/call` shim. Routes through the spec-canonical
+ * `app.callServerTool` API on the module-level App handle. Production
+ * always has the handle set (bootSequence / bootSelfContained call
+ * `setCurrentApp(app)` after handshake); tests that exercise dispatch
+ * routing install one explicitly via {@link setCurrentApp} bound to
+ * a `MockTransport`.
  *
  * Returns a `JsonRpcResponse`-shaped object for source-compatibility
  * with the previous direct postMessage path: callers parse
  * `resp.result.structuredContent` to read submit_action's `{ok, code,
  * consumerPresent}` envelope. The App branch wraps the parsed
- * `CallToolResult` in `{result: ...}`; the raw-postMessage branch
- * delivers the envelope verbatim.
+ * `CallToolResult` in `{result: ...}`.
  *
- * @internal — retiring with the rest of the legacy JSON-RPC pump
- *   once the channel-transport router + dispatchWiredAction migrate
- *   to `app.callServerTool` directly.
+ * Drops with an error envelope when no App is bound — the dispatch
+ * pipeline classifies that as a transport error and routes to the
+ * `ui/message` fallback.
  */
 async function callServerToolSpec(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<JsonRpcResponse> {
   const app = getCurrentApp();
-  if (app !== null) {
-    try {
-      const result = await app.callServerTool({
-        name: toolName,
-        arguments: args,
-      });
-      return { jsonrpc: '2.0', result: result as unknown };
-    } catch (err) {
-      return {
-        error: {
-          message: err instanceof Error ? err.message : String(err),
-        },
-      };
-    }
+  if (app === null) {
+    return {
+      error: {
+        message: 'callServerToolSpec: no App bound — call setCurrentApp() first',
+      },
+    };
   }
-  return postRpcToParentLegacy('tools/call', { name: toolName, arguments: args });
-}
-
-/**
- * Legacy raw-postMessage `tools/call` pump. Used as the fallback when
- * the App handle isn't set (test runs that bypass `bootSequence`).
- * Production never hits this branch post-boot.
- *
- * Detached parent → rejects with a synchronous error. Single shared
- * listener per iframe lifecycle (added on first call) so the router
- * doesn't churn `'message'` handlers per poll tick.
- */
-let postRpcToParentInited = false;
-const postRpcToParentPending = new Map<
-  number,
-  (resp: JsonRpcResponse) => void
->();
-let postRpcToParentNextId = 1_000_000;
-function ensurePostRpcToParentListener(): void {
-  if (postRpcToParentInited) return;
-  if (typeof window === 'undefined') return;
-  postRpcToParentInited = true;
-  window.addEventListener('message', (event: MessageEvent) => {
-    const data = event.data as unknown;
-    if (data === null || typeof data !== 'object') return;
-    const id = (data as { id?: unknown }).id;
-    if (typeof id !== 'number') return;
-    if (!('result' in data) && !('error' in data)) return;
-    const resolver = postRpcToParentPending.get(id);
-    if (resolver === undefined) return;
-    postRpcToParentPending.delete(id);
-    resolver(data as JsonRpcResponse);
-  });
-}
-function postRpcToParentLegacy(
-  method: string,
-  params: unknown,
-): Promise<JsonRpcResponse> {
-  if (typeof window === 'undefined') {
-    return Promise.resolve({
-      error: { message: 'postRpcToParentLegacy: no window' },
+  try {
+    const result = await app.callServerTool({
+      name: toolName,
+      arguments: args,
     });
+    return { jsonrpc: '2.0', result: result as unknown };
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : String(err),
+      },
+    };
   }
-  ensurePostRpcToParentListener();
-  return new Promise<JsonRpcResponse>((resolve) => {
-    const id = postRpcToParentNextId;
-    postRpcToParentNextId += 1;
-    postRpcToParentPending.set(id, resolve);
-    try {
-      window.parent.postMessage(
-        { jsonrpc: '2.0', id, method, params: params ?? {} },
-        '*',
-      );
-    } catch (err) {
-      postRpcToParentPending.delete(id);
-      resolve({
-        error: {
-          message: err instanceof Error ? err.message : String(err),
-        },
-      });
-    }
-  });
 }
 
 /**

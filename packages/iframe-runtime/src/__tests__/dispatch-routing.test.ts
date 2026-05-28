@@ -18,25 +18,44 @@
  *     else (cross-server tool, no wired tool, tool not in
  *     `appCallableTools`). Synchronously fires:
  *       (1) `ui/update-model-context` — silent LLM hint.
- *       (2) `tools/call ggui_runtime_submit_action` via the host relay
- *           — awaits the response.
+ *       (2) `tools/call ggui_runtime_submit_action` — routed through
+ *           the spec-canonical `app.callServerTool` API. Awaits the
+ *           response.
  *     Then asynchronously, on relay response:
  *       (3) On `{ok:true}` (pipe append succeeded) → DONE.
  *       (3') On `{ok:false}` (PIPE_NOT_FOUND, INVALID_ACTION_KIND, or
  *           transport error) → `ui/message` chat-shortcut so the
  *           gesture reaches the agent on its next turn.
  *
- * Tests cover the synchronous fan-out (which envelopes fire when) and
- * the async fallback path (which is triggered by emulating the host's
- * response via window.postMessage with the matching JSON-RPC id).
+ * Post-Phase-1.19b.3 (2026-05-28): outbound `tools/call` from
+ * `dispatchWiredAction` flows through `app.callServerTool` on the
+ * module-level App handle (`setCurrentApp`). This suite injects a
+ * `MockTransport`-bound App via `setCurrentApp` so the `submit_action`
+ * envelope round-trips through the spec-canonical API and the relay
+ * response is delivered via `transport.queueResponse('tools/call', …)`
+ * instead of a faked `MessageEvent`. Notifications
+ * (`ui/update-model-context`, `ui/message`) and the Pattern α direct
+ * `tools/call` (`fireDirectToolCall`) still flow through raw
+ * `window.parent.postMessage`, so they remain asserted via the
+ * `postMessageSpy`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireDirectToolCall, routeDispatch } from '../runtime.js';
+import { App } from '@modelcontextprotocol/ext-apps';
+import {
+  __resetAppForTest,
+  fireDirectToolCall,
+  routeDispatch,
+  setCurrentApp,
+} from '../runtime.js';
+import { buildBootHarness, tick } from './boot-helpers.js';
+import type { MockTransport } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
 let originalPostMessage: typeof window.parent.postMessage;
+let transport: MockTransport;
+let app: App;
 
-beforeEach(() => {
+beforeEach(async () => {
   postMessageSpy = vi.fn();
   originalPostMessage = window.parent.postMessage;
   Object.defineProperty(window.parent, 'postMessage', {
@@ -44,6 +63,12 @@ beforeEach(() => {
     configurable: true,
     writable: true,
   });
+
+  const harness = buildBootHarness();
+  transport = harness.transport;
+  app = harness.app;
+  await app.connect(transport);
+  setCurrentApp(app);
 });
 
 afterEach(() => {
@@ -52,6 +77,7 @@ afterEach(() => {
     configurable: true,
     writable: true,
   });
+  __resetAppForTest();
 });
 
 describe('fireDirectToolCall (Pattern α helper)', () => {
@@ -113,6 +139,8 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       },
       dispatchToolName: 'ggui_runtime_submit_action',
     });
+    // Pattern α flows through fireDirectToolCall → postToParent → raw
+    // postMessage. Nothing hits the App transport.
     expect(postMessageSpy).toHaveBeenCalledTimes(1);
     const methods = postMessageSpy.mock.calls.map(
       (call) => (call[0] as { method?: unknown }).method,
@@ -122,10 +150,15 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     expect((direct.params as Record<string, unknown>).name).toBe(
       'gmail_archive',
     );
+    // Pattern α does NOT call submit_action — transport.sent stays empty.
+    const toolsCallsOnTransport = transport.sent.filter(
+      (msg) => (msg as { method?: unknown }).method === 'tools/call',
+    );
+    expect(toolsCallsOnTransport).toHaveLength(0);
   });
 
   describe('Pattern β (submit_action with ui/message fallback)', () => {
-    it('synchronously fires ui/update-model-context FIRST then tools/call submit_action', () => {
+    it('synchronously fires ui/update-model-context on raw postMessage and tools/call submit_action through App transport', async () => {
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
@@ -138,16 +171,23 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
-      // Synchronous fan-out: update-model-context then submit_action.
-      // ui/message is NOT fired yet — it depends on the relay response.
-      const methods = postMessageSpy.mock.calls.map(
+
+      // (1) ui/update-model-context — notification, fires synchronously
+      // on raw postMessage.
+      const postMessageMethods = postMessageSpy.mock.calls.map(
         (call) => (call[0] as { method?: unknown }).method,
       );
-      expect(methods).toEqual(['ui/update-model-context', 'tools/call']);
-      const submitCall = postMessageSpy.mock.calls[1][0] as Record<
-        string,
-        unknown
-      >;
+      expect(postMessageMethods).toEqual(['ui/update-model-context']);
+
+      // (2) submit_action — fires through app.callServerTool, lands on
+      // transport.sent. The send is async (queueMicrotask round-trip),
+      // so drain the microtask queue before asserting.
+      await tick();
+      const toolsCallsOnTransport = transport.sent.filter(
+        (msg) => (msg as { method?: unknown }).method === 'tools/call',
+      );
+      expect(toolsCallsOnTransport).toHaveLength(1);
+      const submitCall = toolsCallsOnTransport[0] as Record<string, unknown>;
       expect(submitCall).toMatchObject({
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -168,6 +208,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     });
 
     it('on relay response {ok:true} → no ui/message fallback', async () => {
+      transport.queueResponse('tools/call', {
+        result: { structuredContent: { ok: true } },
+      });
+
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
@@ -179,28 +223,24 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
-      // Grab the JSON-RPC id from the synchronous submit_action call so
-      // we can post a matching response back.
-      const submitEnvelope = postMessageSpy.mock.calls[1][0] as {
-        id: number;
-      };
-      const responseEvent = new MessageEvent('message', {
-        data: {
-          jsonrpc: '2.0',
-          id: submitEnvelope.id,
-          result: { structuredContent: { ok: true } },
-        },
-      });
-      window.dispatchEvent(responseEvent);
-      // Let the async listener resolve.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const methods = postMessageSpy.mock.calls.map(
+
+      // Let App round-trip the request + response.
+      await tick();
+      await tick();
+
+      const postMessageMethods = postMessageSpy.mock.calls.map(
         (call) => (call[0] as { method?: unknown }).method,
       );
-      expect(methods).not.toContain('ui/message');
+      expect(postMessageMethods).not.toContain('ui/message');
     });
 
     it('on relay response {ok:false, code:PIPE_NOT_FOUND} → ui/message fallback fires', async () => {
+      transport.queueResponse('tools/call', {
+        result: {
+          structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' },
+        },
+      });
+
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
@@ -212,25 +252,15 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
-      const submitEnvelope = postMessageSpy.mock.calls[1][0] as {
-        id: number;
-      };
-      const responseEvent = new MessageEvent('message', {
-        data: {
-          jsonrpc: '2.0',
-          id: submitEnvelope.id,
-          result: {
-            structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' },
-          },
-        },
-      });
-      window.dispatchEvent(responseEvent);
+
       // Wait for the async fallback to fire.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const methods = postMessageSpy.mock.calls.map(
+      await tick();
+      await tick();
+
+      const postMessageMethods = postMessageSpy.mock.calls.map(
         (call) => (call[0] as { method?: unknown }).method,
       );
-      expect(methods).toContain('ui/message');
+      expect(postMessageMethods).toContain('ui/message');
       const uiMessage = postMessageSpy.mock.calls.find(
         (call) => (call[0] as { method?: unknown }).method === 'ui/message',
       )?.[0] as Record<string, unknown>;
@@ -239,6 +269,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     });
 
     it('on relay response with JSON-RPC error → ui/message fallback fires', async () => {
+      transport.queueResponse('tools/call', {
+        error: { code: -32601, message: 'no relay wired' },
+      });
+
       routeDispatch({
         actionName: 'archive',
         data: { id: 'msg_1' },
@@ -250,27 +284,18 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
-      const submitEnvelope = postMessageSpy.mock.calls[1][0] as {
-        id: number;
-      };
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            jsonrpc: '2.0',
-            id: submitEnvelope.id,
-            error: { code: -32601, message: 'no relay wired' },
-          },
-        }),
-      );
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const methods = postMessageSpy.mock.calls.map(
+
+      await tick();
+      await tick();
+
+      const postMessageMethods = postMessageSpy.mock.calls.map(
         (call) => (call[0] as { method?: unknown }).method,
       );
-      expect(methods).toContain('ui/message');
+      expect(postMessageMethods).toContain('ui/message');
     });
   });
 
-  it('Pattern β when actionNextSteps is absent (legacy bootstrap)', () => {
+  it('Pattern β when actionNextSteps is absent (legacy bootstrap)', async () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
@@ -282,13 +307,22 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       },
       dispatchToolName: 'ggui_runtime_submit_action',
     });
-    const methods = postMessageSpy.mock.calls.map(
+
+    // ui/update-model-context fires synchronously on raw postMessage.
+    const postMessageMethods = postMessageSpy.mock.calls.map(
       (call) => (call[0] as { method?: unknown }).method,
     );
-    expect(methods).toEqual(['ui/update-model-context', 'tools/call']);
+    expect(postMessageMethods).toEqual(['ui/update-model-context']);
+
+    // submit_action fires through the App transport.
+    await tick();
+    const toolsCallsOnTransport = transport.sent.filter(
+      (msg) => (msg as { method?: unknown }).method === 'tools/call',
+    );
+    expect(toolsCallsOnTransport).toHaveLength(1);
   });
 
-  it('Pattern β when the action name is not in actionNextSteps', () => {
+  it('Pattern β when the action name is not in actionNextSteps', async () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
@@ -300,13 +334,20 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       },
       dispatchToolName: 'ggui_runtime_submit_action',
     });
-    const methods = postMessageSpy.mock.calls.map(
+
+    const postMessageMethods = postMessageSpy.mock.calls.map(
       (call) => (call[0] as { method?: unknown }).method,
     );
-    expect(methods).toEqual(['ui/update-model-context', 'tools/call']);
+    expect(postMessageMethods).toEqual(['ui/update-model-context']);
+
+    await tick();
+    const toolsCallsOnTransport = transport.sent.filter(
+      (msg) => (msg as { method?: unknown }).method === 'tools/call',
+    );
+    expect(toolsCallsOnTransport).toHaveLength(1);
   });
 
-  it('Pattern β when appCallableTools is absent (legacy bootstrap)', () => {
+  it('Pattern β when appCallableTools is absent (legacy bootstrap)', async () => {
     routeDispatch({
       actionName: 'archive',
       data: { id: 'msg_1' },
@@ -317,9 +358,16 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       },
       dispatchToolName: 'ggui_runtime_submit_action',
     });
-    const methods = postMessageSpy.mock.calls.map(
+
+    const postMessageMethods = postMessageSpy.mock.calls.map(
       (call) => (call[0] as { method?: unknown }).method,
     );
-    expect(methods).toEqual(['ui/update-model-context', 'tools/call']);
+    expect(postMessageMethods).toEqual(['ui/update-model-context']);
+
+    await tick();
+    const toolsCallsOnTransport = transport.sent.filter(
+      (msg) => (msg as { method?: unknown }).method === 'tools/call',
+    );
+    expect(toolsCallsOnTransport).toHaveLength(1);
   });
 });
