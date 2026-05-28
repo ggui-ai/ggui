@@ -88,7 +88,7 @@ Pure vitest tests under `packages/*/src/**/*.test.ts`. Strategy-owned blocking c
 - Schema + tool-declaration lint
 - Failure-mode contracts (no-key / bad-key / generation-invalid / rate-limited)
 
-Also Lane 3: `packages/mcp-server-handlers/src/session-mutations/*.test.ts` — all handler contract tests.
+Also Lane 3: `packages/mcp-server-handlers/src/renders/*.test.ts` — all handler contract tests.
 
 ## Lane 4 inventory (reference)
 

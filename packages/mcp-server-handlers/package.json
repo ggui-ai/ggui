@@ -30,9 +30,9 @@
       "types": "./dist/provider-keys/index.d.ts",
       "import": "./dist/provider-keys/index.js"
     },
-    "./session-mutations": {
-      "types": "./dist/session-mutations/index.d.ts",
-      "import": "./dist/session-mutations/index.js"
+    "./renders": {
+      "types": "./dist/renders/index.d.ts",
+      "import": "./dist/renders/index.js"
     },
     "./threads": {
       "types": "./dist/threads/index.d.ts",

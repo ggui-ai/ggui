@@ -2,7 +2,7 @@
  * Typed errors thrown by the operator-class blueprint handlers.
  *
  * Lives alongside the handlers (not in `@ggui-ai/protocol`) for the
- * same reason `session-mutations/errors.ts` does — these are
+ * same reason `renders/errors.ts` does — these are
  * handler-flow diagnostics, not contract-shape violations.
  *
  * `BlueprintNotFoundError` and `BlueprintAlreadyExistsError` are
@@ -24,12 +24,12 @@
  * before re-invoking.
  */
 export class GeneratorNotFoundError extends Error {
-  readonly code = 'generator_not_found' as const;
+  readonly code = "generator_not_found" as const;
   constructor(slug: string, registeredSlugs: readonly string[]) {
     super(
-      `generator_not_found: no generator registered under slug ${JSON.stringify(slug)}. Registered slugs: [${registeredSlugs.map((s) => JSON.stringify(s)).join(', ')}]. Omit the \`generator\` field to use the registry default, or register the missing generator before re-invoking.`,
+      `generator_not_found: no generator registered under slug ${JSON.stringify(slug)}. Registered slugs: [${registeredSlugs.map((s) => JSON.stringify(s)).join(", ")}]. Omit the \`generator\` field to use the registry default, or register the missing generator before re-invoking.`
     );
-    this.name = 'GeneratorNotFoundError';
+    this.name = "GeneratorNotFoundError";
   }
 }
 
@@ -45,13 +45,13 @@ export class GeneratorNotFoundError extends Error {
  * whose `resolveLlm` dep returns a pool credential.
  */
 export class MissingCredentialsError extends Error {
-  readonly code = 'missing_credentials' as const;
+  readonly code = "missing_credentials" as const;
   constructor(message?: string) {
     super(
       message ??
-        'missing_credentials: no LLM provider credentials resolved for the caller. Set a BYOK provider key (`ggui_ops_set_provider_key`) before invoking generate, or run on a deployment whose `resolveLlm` dep returns a pool credential.',
+        "missing_credentials: no LLM provider credentials resolved for the caller. Set a BYOK provider key (`ggui_ops_set_provider_key`) before invoking generate, or run on a deployment whose `resolveLlm` dep returns a pool credential."
     );
-    this.name = 'MissingCredentialsError';
+    this.name = "MissingCredentialsError";
   }
 }
 
@@ -62,11 +62,11 @@ export class MissingCredentialsError extends Error {
  * which generator failed and why.
  */
 export class GenerationFailedError extends Error {
-  readonly code = 'generation_failed' as const;
+  readonly code = "generation_failed" as const;
   readonly cause: unknown;
   constructor(message: string, cause: unknown) {
     super(`generation_failed: ${message}`);
-    this.name = 'GenerationFailedError';
+    this.name = "GenerationFailedError";
     this.cause = cause;
   }
 }

@@ -32,7 +32,7 @@
  * ## Protocol & Contract Bar
  *
  * **Parties:**
- * - Producer / writer: `mcp-server-handlers/session-mutations/render.ts` —
+ * - Producer / writer: `mcp-server-handlers/renders/render.ts` —
  *   after `runGenerationIntoSession` produces componentCode, the handler
  *   computes `sha256(code)` and `put`s the (hash, code) pair before
  *   minting the bootstrap envelope.
@@ -97,7 +97,7 @@
  * - Compression. node serves with content-encoding identity; if
  *   operators care, a CDN in front of the route handles it transparently.
  */
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
 /**
  * Content-addressable code blob storage. Key = `sha256(code)` hex, value
@@ -138,7 +138,7 @@ export interface CodeStore {
  * onto a tool result before the put has completed).
  */
 export function sha256Hex(code: string): string {
-  return createHash('sha256').update(code, 'utf-8').digest('hex');
+  return createHash("sha256").update(code, "utf-8").digest("hex");
 }
 
 /**

@@ -38,7 +38,7 @@
  *      live `connected` state, and shows the real sessionId + "no stack
  *      items yet" empty-state — the truthful current OSS state because
  *      component-code generation is deferred on OSS (see the `codeReady:
- *      false` note in `packages/mcp-server-handlers/src/session-mutations/push.ts`).
+ *      false` note in `packages/mcp-server-handlers/src/renders/push.ts`).
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
  *   - Real component-code generation. The OSS `ggui_render` deliberately
@@ -65,10 +65,10 @@
  * Docker-backed specs in the same project.
  */
 
-import { test, expect } from '@playwright/test';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { OUTERMOST_ROOT, packagePath } from './workspace-paths';
+import { expect, test } from "@playwright/test";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync } from "node:fs";
+import { OUTERMOST_ROOT, packagePath } from "./workspace-paths";
 
 // Publishable-package paths resolve CONTEXT-INDEPENDENTLY via
 // `workspace-paths.ts` (walks up to the nearest `pnpm-workspace.yaml`).
@@ -77,8 +77,8 @@ import { OUTERMOST_ROOT, packagePath } from './workspace-paths';
 // `e2e/journeys/` in the OSS standalone repo — and silently wrong in
 // the other. Shared with `ggui-serve-harness.ts` and
 // `tarball-install-harness.ts`.
-const GGUI_CLI_DIST = packagePath('ggui-cli', 'dist', 'cli.js');
-const DEVTOOL_DIST = packagePath('console', 'dist', 'index.html');
+const GGUI_CLI_DIST = packagePath("ggui-cli", "dist", "cli.js");
+const DEVTOOL_DIST = packagePath("console", "dist", "index.html");
 
 /** How long we wait for `ggui serve` to print `READY`. */
 const READY_TIMEOUT_MS = 15_000;
@@ -86,23 +86,23 @@ const READY_TIMEOUT_MS = 15_000;
 const TEST_TIMEOUT_MS = 90_000;
 
 let serveProc: ChildProcessWithoutNullStreams | null = null;
-let baseUrl = '';
+let baseUrl = "";
 /**
  * Bearer minted by consuming the CLI's PAIR_CODE beacon before the
  * first MCP call. Replaces the old `Bearer dev` shortcut — the CLI
  * composes `InMemoryAuthAdapter({ devAllowAll: false })` now, so any
  * bearer that isn't pair-minted is rejected.
  */
-let pairToken = '';
+let pairToken = "";
 /**
  * Admin token captured from the CLI's `ADMIN_TOKEN <token>` stdout
  * beacon. Required by admin-gated console routes since the Slice 4
  * admin-zone refactor (`/ggui/console/info`, `/ggui/console/keys`,
  * etc.). Empty until the boot beacon arrives.
  */
-let adminToken = '';
+let adminToken = "";
 
-test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
+test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
   test.beforeAll(async () => {
     // Fast skip if the workspace hasn't built the OSS surface yet —
     // gives the operator an actionable message instead of a cryptic
@@ -110,14 +110,14 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     if (!existsSync(GGUI_CLI_DIST)) {
       test.skip(
         true,
-        `@ggui-ai/cli dist missing at ${GGUI_CLI_DIST}. Run \`pnpm --filter @ggui-ai/cli build\` first.`,
+        `@ggui-ai/cli dist missing at ${GGUI_CLI_DIST}. Run \`pnpm --filter @ggui-ai/cli build\` first.`
       );
       return;
     }
     if (!existsSync(DEVTOOL_DIST)) {
       test.skip(
         true,
-        `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`,
+        `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`
       );
       return;
     }
@@ -144,17 +144,17 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // stale and `codeReady:true` will leak in via the new alias.
     const heroEnv = { ...process.env };
     for (const k of [
-      'ANTHROPIC_API_KEY',
-      'OPENAI_API_KEY',
-      'GOOGLE_API_KEY',
-      'GEMINI_API_KEY',
-      'OPENROUTER_API_KEY',
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "GOOGLE_API_KEY",
+      "GEMINI_API_KEY",
+      "OPENROUTER_API_KEY",
     ]) {
       delete heroEnv[k];
     }
-    serveProc = spawn('node', [GGUI_CLI_DIST, 'serve', '--port', '0', '--mcp-only'], {
+    serveProc = spawn("node", [GGUI_CLI_DIST, "serve", "--port", "0", "--mcp-only"], {
       cwd: OUTERMOST_ROOT,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
       env: heroEnv,
     }) as ChildProcessWithoutNullStreams;
 
@@ -163,7 +163,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // they can arrive in separate stream chunks — resolving on
     // READY alone and then synchronously grepping for PAIR_CODE
     // races the next chunk and often misses it.
-    let stdoutBuf = '';
+    let stdoutBuf = "";
     const { baseUrl: resolvedUrl, pairCode } = await new Promise<{
       baseUrl: string;
       pairCode: string;
@@ -171,8 +171,8 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
       const timer = setTimeout(() => {
         fail(
           new Error(
-            `\`ggui serve\` did not print READY + PAIR_CODE within ${READY_TIMEOUT_MS}ms — stdout so far:\n${stdoutBuf}`,
-          ),
+            `\`ggui serve\` did not print READY + PAIR_CODE within ${READY_TIMEOUT_MS}ms — stdout so far:\n${stdoutBuf}`
+          )
         );
       }, READY_TIMEOUT_MS);
 
@@ -185,8 +185,8 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
         }
       };
 
-      serveProc!.stdout.setEncoding('utf8');
-      serveProc!.stdout.on('data', (chunk: string) => {
+      serveProc!.stdout.setEncoding("utf8");
+      serveProc!.stdout.on("data", (chunk: string) => {
         process.stdout.write(`[ggui serve] ${chunk}`);
         stdoutBuf += chunk;
         if (capturedUrl === null) {
@@ -197,23 +197,19 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
           const m = stdoutBuf.match(/PAIR_CODE\s+(\d{6})/);
           if (m) capturedCode = m[1]!;
         }
-        if (adminToken === '') {
+        if (adminToken === "") {
           const m = stdoutBuf.match(/ADMIN_TOKEN\s+(\S+)/);
           if (m) adminToken = m[1]!;
         }
         tryFinish();
       });
-      serveProc!.stderr.setEncoding('utf8');
-      serveProc!.stderr.on('data', (chunk: string) => {
+      serveProc!.stderr.setEncoding("utf8");
+      serveProc!.stderr.on("data", (chunk: string) => {
         process.stderr.write(`[ggui serve:err] ${chunk}`);
       });
-      serveProc!.on('exit', (code) => {
+      serveProc!.on("exit", (code) => {
         clearTimeout(timer);
-        fail(
-          new Error(
-            `\`ggui serve\` exited prematurely with code ${code ?? 'null'}`,
-          ),
-        );
+        fail(new Error(`\`ggui serve\` exited prematurely with code ${code ?? "null"}`));
       });
     });
     baseUrl = resolvedUrl;
@@ -223,17 +219,15 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // devAllowAll, which no longer authenticates anything — the
     // honest OSS claim is that /mcp only accepts pair-minted tokens.
     const pairRes = await fetch(`${baseUrl}/pair`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         code: pairCode,
-        deviceName: 'npx-bootstrap-hero',
+        deviceName: "npx-bootstrap-hero",
       }),
     });
     if (pairRes.status !== 200) {
-      throw new Error(
-        `POST /pair returned ${pairRes.status}: ${await pairRes.text()}`,
-      );
+      throw new Error(`POST /pair returned ${pairRes.status}: ${await pairRes.text()}`);
     }
     const completion = (await pairRes.json()) as { token: string };
     pairToken = completion.token;
@@ -241,16 +235,16 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
 
   test.afterAll(async () => {
     if (serveProc && !serveProc.killed) {
-      serveProc.kill('SIGTERM');
+      serveProc.kill("SIGTERM");
       await new Promise<void>((done) => {
         const done2 = (): void => done();
-        serveProc!.once('exit', done2);
+        serveProc!.once("exit", done2);
         // Hard cap on shutdown — SIGTERM triggers the CLI's
         // AbortController which closes the HTTP server cleanly; if
         // it hangs we don't block Playwright's teardown.
         setTimeout(() => {
           try {
-            serveProc?.kill('SIGKILL');
+            serveProc?.kill("SIGKILL");
           } catch {
             /* noop */
           }
@@ -261,7 +255,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     }
   });
 
-  test('boot → MCP → ggui_render → console viewer', async () => {
+  test("boot → MCP → ggui_render → console viewer", async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     // ── 1. Health shape ────────────────────────────────────────────
@@ -274,8 +268,8 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
       tools: number;
       channel?: { path: string; subscribers: number; sessions: number };
     };
-    expect(health.status).toBe('ok');
-    expect(health.server).toBe('ggui-mcp-server');
+    expect(health.status).toBe("ok");
+    expect(health.server).toBe("ggui-mcp-server");
     expect(health.version).toMatch(/^\d+\.\d+\.\d+/);
     // Native ggui_* surface (post-Slice 6/7) + the CLI's serve-mode
     // additions (registry / runtime / ops handlers visible on the OSS
@@ -286,10 +280,10 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // explicitly via `expect.arrayContaining` so adding a new native
     // tool doesn't flap this spec.
     expect(health.tools).toBeGreaterThanOrEqual(15);
-    expect(health.channel?.path).toBe('/ws');
+    expect(health.channel?.path).toBe("/ws");
 
     // ── 2. tools/list — MCP Apps entry-point stamp on ggui_render ──
-    const listed = await mcpCall(baseUrl, pairToken, 'tools/list', {});
+    const listed = await mcpCall(baseUrl, pairToken, "tools/list", {});
     const tools = (listed.result?.tools ?? []) as Array<{
       name: string;
       _meta?: { ui?: { resourceUri?: string; visibility?: readonly string[] } };
@@ -303,16 +297,16 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // pinning is brittle.
     expect(toolNames).toEqual(
       expect.arrayContaining([
-        'ggui_handshake',
-        'ggui_list_featured_blueprints',
-        'ggui_render',
-        'ggui_search_blueprints',
-        'ggui_update',
-      ]),
+        "ggui_handshake",
+        "ggui_list_featured_blueprints",
+        "ggui_render",
+        "ggui_search_blueprints",
+        "ggui_update",
+      ])
     );
-    const renderTool = tools.find((t) => t.name === 'ggui_render');
-    expect(renderTool?._meta?.ui?.resourceUri).toBe('ui://ggui/render');
-    expect(renderTool?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
+    const renderTool = tools.find((t) => t.name === "ggui_render");
+    expect(renderTool?._meta?.ui?.resourceUri).toBe("ui://ggui/render");
+    expect(renderTool?._meta?.ui?.visibility).toEqual(expect.arrayContaining(["model"]));
 
     // ── 3. tools/call ggui_handshake → ggui_render ────────────────
     //
@@ -324,21 +318,20 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // shortCode, codeReady, handshakeId, contractHash, decision) are
     // gone — `_meta["ai.ggui/render"]` (Phase-B slice envelope)
     // carries the renderId + auth tuple.
-    const hsEnvelope = await mcpCall(baseUrl, pairToken, 'tools/call', {
-      name: 'ggui_handshake',
+    const hsEnvelope = await mcpCall(baseUrl, pairToken, "tools/call", {
+      name: "ggui_handshake",
       arguments: {
-        intent: 'weather dashboard for Tokyo — current + 3-day forecast',
+        intent: "weather dashboard for Tokyo — current + 3-day forecast",
         blueprintDraft: { contract: {} },
       },
     });
-    const handshakeId = (
-      hsEnvelope.result as { structuredContent: { handshakeId: string } }
-    ).structuredContent.handshakeId;
+    const handshakeId = (hsEnvelope.result as { structuredContent: { handshakeId: string } })
+      .structuredContent.handshakeId;
     expect(handshakeId).toBeTruthy();
 
-    const renderEnvelope = await mcpCall(baseUrl, pairToken, 'tools/call', {
-      name: 'ggui_render',
-      arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+    const renderEnvelope = await mcpCall(baseUrl, pairToken, "tools/call", {
+      name: "ggui_render",
+      arguments: { handshakeId, decision: { kind: "override", blueprintDraft: { contract: {} } } },
     });
     const renderResult = renderEnvelope.result as {
       content?: ReadonlyArray<{ type: string; text: string }>;
@@ -351,7 +344,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
         // Phase-B slice envelope — `_meta["ai.ggui/render"]` replaced
         // the legacy session-keyed nesting. The bearer field is
         // `wsToken`; the rest of the slice carries through.
-        'ai.ggui/render'?: {
+        "ai.ggui/render"?: {
           wsUrl: string;
           wsToken: string;
           expiresAt: string;
@@ -370,27 +363,25 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // First render mints a fresh render — `create`. (Cache hits would
     // surface as `reuse`; on a brand-new server the catalog can also
     // exact-key match, accept either.)
-    expect(['create', 'reuse']).toContain(out.action);
+    expect(["create", "reuse"]).toContain(out.action);
     // Post-R5 (fix-A 2026-05-26): there is no `url` field on
     // structuredContent. The `/r/<shortCode>` route was deleted; hosts
     // mount via `_meta.ui.resourceUri` or resolve `{renderId}`
     // through their own render-resource endpoint. Assert the dead
     // field really is gone.
-    expect(Object.keys(out)).not.toContain('url');
+    expect(Object.keys(out)).not.toContain("url");
 
-    const renderSlice = renderResult._meta?.['ai.ggui/render'];
+    const renderSlice = renderResult._meta?.["ai.ggui/render"];
     expect(renderSlice).toBeTruthy();
     expect(renderSlice?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
-    expect(typeof renderSlice?.wsToken).toBe('string');
+    expect(typeof renderSlice?.wsToken).toBe("string");
     expect(renderSlice?.renderId).toBe(out.renderId);
 
     // ── 4. Console info endpoint ───────────────────────────────────
     // Admin-gated since the Slice 4 admin-zone refactor — pass the
     // Bearer token captured from the `ADMIN_TOKEN` boot beacon.
     const infoRes = await fetch(`${baseUrl}/ggui/console/info`, {
-      headers: adminToken
-        ? { authorization: `Bearer ${adminToken}` }
-        : {},
+      headers: adminToken ? { authorization: `Bearer ${adminToken}` } : {},
     });
     expect(infoRes.status).toBe(200);
     const info = (await infoRes.json()) as {
@@ -398,7 +389,7 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
       version: string;
       pairing?: { enabled: boolean };
     };
-    expect(info.server).toBe('ggui-mcp-server');
+    expect(info.server).toBe("ggui-mcp-server");
     // Harness wires `pairing: true`; the landing page uses this to distinguish
     // "real OSS operator server" from the no-pairing default.
     expect(info.pairing?.enabled).toBe(true);
@@ -406,15 +397,13 @@ test.describe.serial('OSS hero path — `ggui serve` (real CLI bin)', () => {
     // ── 5. Landing bundle + CSP / X-Frame-Options headers ─────────
     const landing = await fetch(`${baseUrl}/`);
     expect(landing.status).toBe(200);
-    expect((landing.headers.get('content-type') ?? '').toLowerCase()).toContain(
-      'text/html',
-    );
+    expect((landing.headers.get("content-type") ?? "").toLowerCase()).toContain("text/html");
     // Embedded-UI security-header set (Slice 3 of the MVP plan). Sampling
     // X-Frame-Options + Referrer-Policy is enough to prove the surgical
     // middleware is on the path; the full set is covered by the package's
     // own integration tests.
-    expect(landing.headers.get('x-frame-options')).toBe('DENY');
-    expect(landing.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(landing.headers.get("x-frame-options")).toBe("DENY");
+    expect(landing.headers.get("x-content-type-options")).toBe("nosniff");
 
     // ── 6. Live session viewer ────────────────────────────────────
     //
@@ -454,17 +443,17 @@ async function mcpCall(
   base: string,
   bearer: string,
   method: string,
-  params: unknown,
+  params: unknown
 ): Promise<{ result?: Record<string, unknown>; error?: { code: number; message: string } }> {
   const res = await fetch(`${base}/mcp`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
       Authorization: `Bearer ${bearer}`,
     },
     body: JSON.stringify({
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id: `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       method,
       params,
@@ -472,18 +461,18 @@ async function mcpCall(
   });
   if (!res.ok) {
     throw new Error(
-      `MCP ${method} failed: HTTP ${res.status} ${res.statusText} — ${await res.text()}`,
+      `MCP ${method} failed: HTTP ${res.status} ${res.statusText} — ${await res.text()}`
     );
   }
-  const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-  if (contentType.includes('text/event-stream')) {
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (contentType.includes("text/event-stream")) {
     const body = await res.text();
     // SSE payload shape: one or more `data: <json>\n\n` blocks. We only
     // expect a single response frame for stateless request/response.
     const dataLine = body
-      .split('\n')
+      .split("\n")
       .map((l) => l.trim())
-      .find((l) => l.startsWith('data:'));
+      .find((l) => l.startsWith("data:"));
     if (!dataLine) {
       throw new Error(`MCP ${method} SSE response had no data frame: ${body}`);
     }

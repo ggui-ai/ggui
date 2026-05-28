@@ -46,53 +46,48 @@
  *     contract the operator paste-tested into the console.
  */
 
-import { randomUUID, createHash } from 'node:crypto';
-import { z } from 'zod';
-import {
-  opsGenerateBlueprintInputSchema,
-  type Blueprint,
-  type GadgetDescriptor,
-  type DataContract,
-  type OpsGenerateBlueprintInput,
-  type OpsGenerateBlueprintOutput,
-} from '@ggui-ai/protocol';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import type {
   AppMetadataStore,
+  BlueprintProvider,
   BlueprintStore,
   GeneratorRegistry,
   TelemetrySink,
-  UiGenerator,
   UiGenerateInput,
-  BlueprintProvider,
-} from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+  UiGenerator,
+} from "@ggui-ai/mcp-server-core";
 import {
-  GeneratorNotFoundError,
-  GenerationFailedError,
-  MissingCredentialsError,
-} from './errors.js';
-import {
-  findNearDuplicatePersona,
-  normalizePersona,
-} from './persona-normalization.js';
+  opsGenerateBlueprintInputSchema,
+  type Blueprint,
+  type DataContract,
+  type GadgetDescriptor,
+  type OpsGenerateBlueprintInput,
+  type OpsGenerateBlueprintOutput,
+} from "@ggui-ai/protocol";
+import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
+import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import {
   registerBlueprint,
   type BlueprintRegistryDeps,
   type GenerationCredentials,
-} from '../session-mutations/index.js';
-import { assertGadgetsRegistered } from '../session-mutations/assert-gadgets.js';
-import { assertContractNoRetiredFields } from '../session-mutations/assert-contract-no-retired-fields.js';
+} from "../renders/index.js";
+import type { HandlerContext, SharedHandler } from "../types.js";
+import {
+  GenerationFailedError,
+  GeneratorNotFoundError,
+  MissingCredentialsError,
+} from "./errors.js";
+import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
 
 const opsInputSchema = opsGenerateBlueprintInputSchema.shape;
-const opsOutputSchema = z
-  .object({
-    blueprintId: z.string().min(1),
-    codeHash: z.string().optional(),
-    validatorScore: z.number().min(0).max(1).optional(),
-    generator: z.string().min(1),
-  })
-  .shape;
+const opsOutputSchema = z.object({
+  blueprintId: z.string().min(1),
+  codeHash: z.string().optional(),
+  validatorScore: z.number().min(0).max(1).optional(),
+  generator: z.string().min(1),
+}).shape;
 
 /**
  * In-memory `putCode` hook for blueprint stores that hold code bodies
@@ -145,11 +140,8 @@ export interface GguiOpsGenerateBlueprintDeps {
    * {@link MissingCredentialsError}.
    */
   readonly resolveLlm: (
-    ctx: HandlerContext,
-  ) =>
-    | Promise<GenerationCredentials | null>
-    | GenerationCredentials
-    | null;
+    ctx: HandlerContext
+  ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
   /**
    * Blueprint catalog handed to the generator. Same instance the
    * push handler threads into `GenerationDeps.blueprints`; surfaced
@@ -213,10 +205,9 @@ export interface GguiOpsGenerateBlueprintDeps {
  * confined to one place and the call sites stay clean.
  */
 function readValidatorScore(metadata: unknown): number | undefined {
-  if (!metadata || typeof metadata !== 'object') return undefined;
-  const candidate = (metadata as { validatorScore?: unknown })
-    .validatorScore;
-  if (typeof candidate !== 'number') return undefined;
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const candidate = (metadata as { validatorScore?: unknown }).validatorScore;
+  if (typeof candidate !== "number") return undefined;
   if (!Number.isFinite(candidate)) return undefined;
   if (candidate < 0 || candidate > 1) return undefined;
   return candidate;
@@ -226,58 +217,47 @@ function readValidatorScore(metadata: unknown): number | undefined {
  * Resolve which generator to dispatch. Throws {@link GeneratorNotFoundError}
  * with a clear "did you mean…" payload when the slug is unknown.
  */
-function resolveGenerator(
-  registry: GeneratorRegistry,
-  slug: string | undefined,
-): UiGenerator {
+function resolveGenerator(registry: GeneratorRegistry, slug: string | undefined): UiGenerator {
   if (slug === undefined) return registry.defaultGenerator();
   const found = registry.get(slug);
   if (found === null) {
     throw new GeneratorNotFoundError(
       slug,
-      registry.list().map((g) => g.slug),
+      registry.list().map((g) => g.slug)
     );
   }
   return found;
 }
 
 export function createGguiOpsGenerateBlueprintHandler(
-  deps: GguiOpsGenerateBlueprintDeps,
-): SharedHandler<
-  typeof opsInputSchema,
-  typeof opsOutputSchema,
-  OpsGenerateBlueprintOutput
-> {
+  deps: GguiOpsGenerateBlueprintDeps
+): SharedHandler<typeof opsInputSchema, typeof opsOutputSchema, OpsGenerateBlueprintOutput> {
   const now = deps.now ?? (() => new Date().toISOString());
-  const mintBlueprintId =
-    deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
+  const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
 
   return {
-    name: 'ggui_ops_generate_blueprint',
-    title: 'Generate blueprint',
-    audience: ['ops'],
+    name: "ggui_ops_generate_blueprint",
+    title: "Generate blueprint",
+    audience: ["ops"],
     description:
       "Author a new blueprint variant for the caller's app. Dispatches through the registry's selected generator (defaults to `registry.defaultGenerator()` when the slug is omitted) and persists the resulting code body + metadata against a fresh `blueprintId`. Optionally pins the new blueprint as the operator default for its `(appId, contractHash)` group. Persona tags are normalized (lowercase + trim); near-duplicates surface a warning via telemetry. Returns the new id + content-hash + validator score + resolved generator slug — code body lives in the bound store, fetched via push's fast-path on cache hit.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
       rawInput: Record<string, unknown>,
-      ctx: HandlerContext,
+      ctx: HandlerContext
     ): Promise<OpsGenerateBlueprintOutput> {
       if (!ctx.appId) {
-        throw new Error(
-          'ggui_ops_generate_blueprint: missing caller identity (appId empty)',
-        );
+        throw new Error("ggui_ops_generate_blueprint: missing caller identity (appId empty)");
       }
-      const parsed: OpsGenerateBlueprintInput =
-        opsGenerateBlueprintInputSchema.parse(rawInput);
+      const parsed: OpsGenerateBlueprintInput = opsGenerateBlueprintInputSchema.parse(rawInput);
 
       // Reject retired top-level contract fields BEFORE any
       // persistence so an operator-supplied row can't smuggle
       // deprecated vocabulary (`terminal`, `consumeSpec`,
       // `interaction`, `commandSpec`, `behaviorSpec`) into the
       // registry. The same gate fires on the push + handshake seams
-      // in `session-mutations/`.
+      // in `renders/`.
       assertContractNoRetiredFields(parsed.contract);
 
       // 0. Every `contract.clientCapabilities.gadgets[*]` MUST
@@ -294,10 +274,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
       if (deps.appMetadataStore) {
         const appRecord = await deps.appMetadataStore.get(ctx.appId);
-        assertGadgetsRegistered(
-          parsed.contract,
-          appRecord?.gadgets,
-        );
+        assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
         resolvedAppLibraries = appRecord?.gadgets;
       }
 
@@ -313,22 +290,19 @@ export function createGguiOpsGenerateBlueprintHandler(
           for (const row of allForApp) {
             if (row.variance.persona) existingPersonas.add(row.variance.persona);
           }
-          const check = findNearDuplicatePersona(
-            normalizedPersona,
-            existingPersonas,
-          );
+          const check = findNearDuplicatePersona(normalizedPersona, existingPersonas);
           if (check !== null) {
             // Telemetry is lossy + non-throwing. Don't await — drop
             // the warning into the sink and proceed.
             try {
               deps.telemetry?.emit({
-                name: 'blueprint.near_duplicate_persona',
+                name: "blueprint.near_duplicate_persona",
                 at: Date.now(),
                 attributes: {
                   appId: ctx.appId,
                   requestId: ctx.requestId,
                   newPersona: check.newPersona,
-                  nearestExisting: check.nearestExisting ?? '',
+                  nearestExisting: check.nearestExisting ?? "",
                   nearestDistance: check.nearestDistance,
                 },
               });
@@ -357,42 +331,32 @@ export function createGguiOpsGenerateBlueprintHandler(
       const generateInput: UiGenerateInput = {
         request: {
           renderId: `ops_gen_${randomUUID()}`,
-          prompt:
-            parsed.seedPrompt ??
-            'Operator-authored blueprint variant',
+          prompt: parsed.seedPrompt ?? "Operator-authored blueprint variant",
         },
         blueprints: deps.blueprints,
         contract,
         llm: creds.selection,
         providerKey: creds.providerKey,
-        ...(resolvedAppLibraries !== undefined
-          ? { appGadgets: resolvedAppLibraries }
-          : {}),
+        ...(resolvedAppLibraries !== undefined ? { appGadgets: resolvedAppLibraries } : {}),
       };
 
-      let result: Awaited<ReturnType<UiGenerator['generate']>>;
+      let result: Awaited<ReturnType<UiGenerator["generate"]>>;
       try {
         result = await generator.generate(generateInput);
       } catch (err) {
         throw new GenerationFailedError(
-          err instanceof Error ? err.message : 'generator threw',
-          err,
+          err instanceof Error ? err.message : "generator threw",
+          err
         );
       }
 
       if (!result.ok) {
-        throw new GenerationFailedError(
-          result.error.message,
-          result.error,
-        );
+        throw new GenerationFailedError(result.error.message, result.error);
       }
 
       // 6. Persist the blueprint + code body.
       const componentCode = result.response.componentCode;
-      const codeHash = createHash('sha256')
-        .update(componentCode)
-        .digest('hex')
-        .slice(0, 32);
+      const codeHash = createHash("sha256").update(componentCode).digest("hex").slice(0, 32);
 
       // The advanced generator tunnels `validatorScore` through
       // `metadata` until the UiGenerator interface widens to carry
@@ -409,18 +373,12 @@ export function createGguiOpsGenerateBlueprintHandler(
         codeHash,
         generator: generator.slug,
         variance: {
-          ...(normalizedPersona !== undefined
-            ? { persona: normalizedPersona }
-            : {}),
-          ...(parsed.context !== undefined
-            ? { context: parsed.context }
-            : {}),
-          ...(parsed.seedPrompt !== undefined
-            ? { seedPrompt: parsed.seedPrompt }
-            : {}),
+          ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
+          ...(parsed.context !== undefined ? { context: parsed.context } : {}),
+          ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
         },
         createdAt: now(),
-        createdBy: 'operator',
+        createdBy: "operator",
         contract,
         ...(validatorScore !== undefined ? { validatorScore } : {}),
       };
@@ -444,23 +402,23 @@ export function createGguiOpsGenerateBlueprintHandler(
             normalizedPersona ??
             `operator-authored blueprint (${blueprintId})`;
           await registerBlueprint(deps.cacheRegistry, ctx.appId, {
-            kind: 'template',
+            kind: "template",
             contract,
             intent: intentForCache,
             componentCode,
-            provenance: 'register',
+            provenance: "register",
           });
         } catch (err) {
           try {
             deps.telemetry?.emit({
-              name: 'blueprint.cache_mirror_failed',
+              name: "blueprint.cache_mirror_failed",
               at: Date.now(),
               attributes: {
                 appId: ctx.appId,
                 requestId: ctx.requestId,
                 blueprintId,
                 contractHash,
-                errorClass: err instanceof Error ? err.name : 'unknown',
+                errorClass: err instanceof Error ? err.name : "unknown",
                 errorMessage: err instanceof Error ? err.message : String(err),
               },
             });
@@ -477,7 +435,7 @@ export function createGguiOpsGenerateBlueprintHandler(
 
       try {
         deps.telemetry?.emit({
-          name: 'blueprint.generated',
+          name: "blueprint.generated",
           at: Date.now(),
           attributes: {
             appId: ctx.appId,
@@ -485,7 +443,7 @@ export function createGguiOpsGenerateBlueprintHandler(
             blueprintId,
             contractHash,
             generator: generator.slug,
-            createdBy: 'operator',
+            createdBy: "operator",
             setAsOperatorDefault: parsed.setAsOperatorDefault === true,
           },
         });

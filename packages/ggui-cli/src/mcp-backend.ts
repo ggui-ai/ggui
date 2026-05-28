@@ -36,9 +36,10 @@
  * pairing, programmatic control) compose `createGguiServer()` directly
  * rather than going through `ggui serve`.
  */
-import { createServer as createNetServer } from 'node:net';
-import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { listThemes } from "@ggui-ai/design/themes";
+import { compileUiOnDemand } from "@ggui-ai/dev-stack";
+import { createLocalEmbeddingProvider } from "@ggui-ai/embedding-local";
+import { RUNTIME_BUNDLE_URL_PATH } from "@ggui-ai/iframe-runtime/server";
 import {
   composeWiredActionRouterFromMounts,
   createGguiServer,
@@ -50,42 +51,37 @@ import {
   InMemoryShortCodeIndex,
   selectEmailSenderFromEnv,
   type BlueprintProvider,
-  type GadgetDescriptor,
-  type McpUiDisplayMode,
   type DiscoveredPrimitiveCatalog,
   type EmailSender,
+  type GadgetDescriptor,
   type GenerationDeps,
   type LoadedTheme,
   type McpServerMount,
+  type McpUiDisplayMode,
   type OperatorConfig,
   type ResolvedStorageStores,
   type ShortCodeIndex,
   type ThemeWriter,
-} from '@ggui-ai/mcp-server';
-import type { UiRegistry } from '@ggui-ai/ui-registry';
-import { createDeterministicPreviewEmitter } from '@ggui-ai/preview-a2ui/emitters';
-import { RUNTIME_BUNDLE_URL_PATH } from '@ggui-ai/iframe-runtime/server';
-import { createLocalEmbeddingProvider } from '@ggui-ai/embedding-local';
-import { PlaintextFileProviderKeyStore } from '@ggui-ai/mcp-server-core/plaintext';
-import { InMemoryAppMetadataStore, InMemoryVectorStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { listThemes } from '@ggui-ai/design/themes';
+} from "@ggui-ai/mcp-server";
+import { InMemoryAppMetadataStore, InMemoryVectorStore } from "@ggui-ai/mcp-server-core/in-memory";
+import { PlaintextFileProviderKeyStore } from "@ggui-ai/mcp-server-core/plaintext";
 import {
   createInstalledBlueprintsProvider,
   type CreateInstalledBlueprintsProviderOptions,
   type InstalledBlueprintCacheIssue,
   type InstalledBlueprintCompileResult,
   type InstalledBlueprintEntry,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
-import { compileUiOnDemand } from '@ggui-ai/dev-stack';
-import type { UiManifest } from '@ggui-ai/project-config';
-import {
-  getCodeCacheDir,
-  getCredentialsFile,
-  getEmbeddingCacheDir,
-} from './paths.js';
-import { readOrMintHexSecret } from './persistent-secrets.js';
-import { join } from 'node:path';
-import type { ServeBackend } from './serve-command.js';
+} from "@ggui-ai/mcp-server-handlers/renders";
+import { createDeterministicPreviewEmitter } from "@ggui-ai/preview-a2ui/emitters";
+import type { UiManifest } from "@ggui-ai/project-config";
+import type { UiRegistry } from "@ggui-ai/ui-registry";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
+import { join } from "node:path";
+import { getCodeCacheDir, getCredentialsFile, getEmbeddingCacheDir } from "./paths.js";
+import { readOrMintHexSecret } from "./persistent-secrets.js";
+import type { ServeBackend } from "./serve-command.js";
 
 export interface BuildMcpServerBackendOptions {
   /**
@@ -171,10 +167,12 @@ export interface BuildMcpServerBackendOptions {
    * pairs this with `onThemeConfigChange` so a console save
    * reaches the next render without a server restart.
    */
-  readonly themeProvider?: () => {
-    readonly id?: string;
-    readonly mode?: 'light' | 'dark';
-  } | undefined;
+  readonly themeProvider?: () =>
+    | {
+        readonly id?: string;
+        readonly mode?: "light" | "dark";
+      }
+    | undefined;
   /**
    * Optional change notifier — fires from
    * `mountDevtoolThemeRoutes`'s POST handlers when the operator
@@ -184,9 +182,9 @@ export interface BuildMcpServerBackendOptions {
   readonly onThemeConfigChange?: (
     next:
       | string
-      | { preset: string; mode?: 'light' | 'dark'; overrides?: Record<string, string> }
-      | { file: string; mode?: 'light' | 'dark' }
-      | null,
+      | { preset: string; mode?: "light" | "dark"; overrides?: Record<string, string> }
+      | { file: string; mode?: "light" | "dark" }
+      | null
   ) => void;
   /**
    * Generation wiring for `ggui_render`. When present, the OSS render
@@ -335,12 +333,7 @@ export interface BuildMcpServerBackendOptions {
    * Surface = `--mcp-instructions <preset>` CLI flag or
    * `GGUI_MCP_INSTRUCTIONS` env var (CLI flag wins).
    */
-  readonly mcpInstructions?:
-    | 'default'
-    | 'aggressive'
-    | 'always'
-    | 'minimal'
-    | 'off';
+  readonly mcpInstructions?: "default" | "aggressive" | "always" | "minimal" | "off";
 
   /**
    * Directory backing the cross-restart persistence bundle. When set,
@@ -447,16 +440,16 @@ export interface BuildMcpServerBackendOptions {
  * `close()` and the caller's `listen()`. The CLI surfaces bind errors
  * as a fatal exit; the OSS first-run path recovers by re-running.
  */
-export function pickFreePort(host = '127.0.0.1'): Promise<number> {
+export function pickFreePort(host = "127.0.0.1"): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createNetServer();
-    probe.once('error', (err) => {
+    probe.once("error", (err) => {
       probe.close();
       reject(err);
     });
     probe.listen(0, host, () => {
       const addr = probe.address();
-      if (addr === null || typeof addr === 'string') {
+      if (addr === null || typeof addr === "string") {
         probe.close();
         reject(new Error(`pickFreePort: could not resolve a free port (got ${String(addr)})`));
         return;
@@ -474,13 +467,11 @@ export function pickFreePort(host = '127.0.0.1'): Promise<number> {
  * `pairing: true`) surface synchronously, before `runServe` bothers
  * binding a port.
  */
-export function buildMcpServerBackend(
-  opts: BuildMcpServerBackendOptions,
-): ServeBackend {
+export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): ServeBackend {
   const storage: ResolvedStorageStores = opts.storage ?? {};
   if (!Number.isInteger(opts.port) || opts.port <= 0 || opts.port > 65535) {
     throw new Error(
-      `buildMcpServerBackend: \`port\` must be a concrete TCP port (1..65535), got ${opts.port}. Resolve \`--port 0\` via pickFreePort() before composing.`,
+      `buildMcpServerBackend: \`port\` must be a concrete TCP port (1..65535), got ${opts.port}. Resolve \`--port 0\` via pickFreePort() before composing.`
     );
   }
   // `baseUrl` feeds `runtime.url`; `wsBaseUrl` feeds `mcpApps.wsUrl`.
@@ -491,17 +482,14 @@ export function buildMcpServerBackend(
   // no trailing slash); we just substitute the scheme for ws/wss to
   // derive the live-channel URL.
   const baseUrl = opts.publicBaseUrl ?? `http://${opts.host}:${opts.port}`;
-  const wsBaseUrl = baseUrl.replace(/^http(s?):\/\//, 'ws$1://');
+  const wsBaseUrl = baseUrl.replace(/^http(s?):\/\//, "ws$1://");
   // Router over the mount handler bundle. Computed once; absent
   // (`null`) when no mounts are declared so the server falls through
   // to agent-routed behavior.
-  const wiredActionRouter = composeWiredActionRouterFromMounts(
-    opts.mcpMounts,
-    () => ({
-      appId: DEFAULT_BUILDER_APP_ID,
-      requestId: randomUUID(),
-    }),
-  );
+  const wiredActionRouter = composeWiredActionRouterFromMounts(opts.mcpMounts, () => ({
+    appId: DEFAULT_BUILDER_APP_ID,
+    requestId: randomUUID(),
+  }));
   // Strict-auth OSS default (`devAllowAll: false`). `createGguiServer`
   // would otherwise fall back to `InMemoryAuthAdapter({ devAllowAll:
   // true })`, which authenticates any non-empty bearer as builder — a
@@ -576,21 +564,21 @@ export function buildMcpServerBackend(
   const emailSenderSelection = selectEmailSenderFromEnv();
   let emailSender: EmailSender;
   let emailFromAddress: string;
-  const defaultFromAddress = 'ggui-serve <noreply@localhost>';
-  if (emailSenderSelection.kind === 'ok') {
+  const defaultFromAddress = "ggui-serve <noreply@localhost>";
+  if (emailSenderSelection.kind === "ok") {
     emailSender = emailSenderSelection.sender;
     emailFromAddress = emailSenderSelection.fromAddress ?? defaultFromAddress;
   } else {
     // eslint-disable-next-line no-console -- one-shot boot warning, mirrors banner output
     console.warn(
-      `[ggui-cli] email-login: ${emailSenderSelection.reason}; falling back to ConsoleEmailSender (magic links print to terminal).`,
+      `[ggui-cli] email-login: ${emailSenderSelection.reason}; falling back to ConsoleEmailSender (magic links print to terminal).`
     );
     const fallback = selectEmailSenderFromEnv({
-      env: { GGUI_EMAIL_SENDER: 'console' },
+      env: { GGUI_EMAIL_SENDER: "console" },
     });
-    if (fallback.kind !== 'ok') {
+    if (fallback.kind !== "ok") {
       throw new Error(
-        `[ggui-cli] email-login: console fallback selection failed: ${fallback.reason}`,
+        `[ggui-cli] email-login: console fallback selection failed: ${fallback.reason}`
       );
     }
     emailSender = fallback.sender;
@@ -606,37 +594,30 @@ export function buildMcpServerBackend(
   let persistedWsTokenSecret: string | undefined;
   let persistedRenderSignerSecret: string | undefined;
   if (opts.persistentDir !== undefined) {
-    persistedWsTokenSecret = readOrMintHexSecret(
-      join(opts.persistentDir, 'ws-token-secret.hex'),
-    );
+    persistedWsTokenSecret = readOrMintHexSecret(join(opts.persistentDir, "ws-token-secret.hex"));
     persistedRenderSignerSecret = readOrMintHexSecret(
-      join(opts.persistentDir, 'render-signer-secret.hex'),
+      join(opts.persistentDir, "render-signer-secret.hex")
     );
   }
   // Resolve mcpInstructions: CLI flag wins over env var. Validated
   // env-var values pass through to createGguiServer; invalid values
   // fall through to the no-preset default with a one-line warning.
   const envInstructions = process.env.GGUI_MCP_INSTRUCTIONS?.trim();
-  let resolvedMcpInstructions:
-    | 'default'
-    | 'aggressive'
-    | 'always'
-    | 'minimal'
-    | 'off'
-    | undefined = opts.mcpInstructions;
+  let resolvedMcpInstructions: "default" | "aggressive" | "always" | "minimal" | "off" | undefined =
+    opts.mcpInstructions;
   if (resolvedMcpInstructions === undefined && envInstructions) {
     if (
-      envInstructions === 'default' ||
-      envInstructions === 'aggressive' ||
-      envInstructions === 'always' ||
-      envInstructions === 'minimal' ||
-      envInstructions === 'off'
+      envInstructions === "default" ||
+      envInstructions === "aggressive" ||
+      envInstructions === "always" ||
+      envInstructions === "minimal" ||
+      envInstructions === "off"
     ) {
       resolvedMcpInstructions = envInstructions;
     } else {
       // eslint-disable-next-line no-console -- one-shot boot warning
       console.warn(
-        `[ggui-cli] GGUI_MCP_INSTRUCTIONS='${envInstructions}' not recognized; falling back to default preset.`,
+        `[ggui-cli] GGUI_MCP_INSTRUCTIONS='${envInstructions}' not recognized; falling back to default preset.`
       );
     }
   }
@@ -649,12 +630,9 @@ export function buildMcpServerBackend(
   // `listThemes()` either way; the file-mode override only affects the
   // server's bound `theme` (rendered CSS variables), not the
   // session/handler-side `themeId` chain.
-  const manifestThemePreset =
-    opts.theme?.source === 'preset' ? opts.theme.preset : undefined;
+  const manifestThemePreset = opts.theme?.source === "preset" ? opts.theme.preset : undefined;
   const appMetadataStore = new InMemoryAppMetadataStore({
-    ...(manifestThemePreset !== undefined
-      ? { defaultThemeId: manifestThemePreset }
-      : {}),
+    ...(manifestThemePreset !== undefined ? { defaultThemeId: manifestThemePreset } : {}),
     // `ggui.json#app.gadgets` declarations (Leaflet, Mapbox, …). When
     // omitted, the InMemoryAppMetadataStore falls back to
     // STDLIB_GADGETS from @ggui-ai/protocol so the first-party hooks
@@ -693,9 +671,7 @@ export function buildMcpServerBackend(
   // lazily compiles every installed-blueprint entry on the first
   // `matchBlueprint` call per scope. Idempotent + best-effort per
   // entry — a broken installed-blueprint never sinks the match flow.
-  let installedBlueprintsProvider:
-    | ReturnType<typeof createInstalledBlueprintsProvider>
-    | undefined;
+  let installedBlueprintsProvider: ReturnType<typeof createInstalledBlueprintsProvider> | undefined;
   if (opts.installedBlueprints && opts.installedBlueprints.entries.length > 0) {
     const { projectRoot, entries } = opts.installedBlueprints;
     const byId = new Map(entries.map((e) => [e.id, e] as const));
@@ -703,10 +679,7 @@ export function buildMcpServerBackend(
       installedBlueprints: () =>
         entries.flatMap((entry) => {
           if (entry.manifest.contract === undefined) return [];
-          const intent =
-            entry.manifest.description ??
-            entry.manifest.name ??
-            entry.id;
+          const intent = entry.manifest.description ?? entry.manifest.name ?? entry.id;
           return [
             {
               id: entry.id,
@@ -716,38 +689,35 @@ export function buildMcpServerBackend(
             },
           ];
         }),
-      compile: async (
-        entry: InstalledBlueprintEntry,
-      ): Promise<InstalledBlueprintCompileResult> => {
+      compile: async (entry: InstalledBlueprintEntry): Promise<InstalledBlueprintCompileResult> => {
         const ui = byId.get(entry.id);
         if (!ui) {
-          return { kind: 'missing-entry', tried: [] };
+          return { kind: "missing-entry", tried: [] };
         }
         const result = await compileUiOnDemand({
           projectRoot,
           manifestPath: ui.manifestPath,
           manifest: ui.manifest,
         });
-        if (result.kind === 'ok') {
-          return { kind: 'ok', code: result.code };
+        if (result.kind === "ok") {
+          return { kind: "ok", code: result.code };
         }
-        if (result.kind === 'missing-entry') {
-          return { kind: 'missing-entry', tried: result.tried };
+        if (result.kind === "missing-entry") {
+          return { kind: "missing-entry", tried: result.tried };
         }
         return {
-          kind: 'failure',
+          kind: "failure",
           errors: result.errors.map((m) => m.text),
         };
       },
       deps: { embedding, vectorStore },
       onIssue: (issue: InstalledBlueprintCacheIssue) => {
         process.stderr.write(
-          `[ggui serve] installed-blueprint ${issue.id}: ${issue.kind}: ${issue.message}\n`,
+          `[ggui serve] installed-blueprint ${issue.id}: ${issue.kind}: ${issue.message}\n`
         );
       },
     };
-    installedBlueprintsProvider =
-      createInstalledBlueprintsProvider(providerOptions);
+    installedBlueprintsProvider = createInstalledBlueprintsProvider(providerOptions);
   }
 
   // Fold the bridge into the generation deps so the push handler +
@@ -783,23 +753,17 @@ export function buildMcpServerBackend(
     // process. Render-signer.secret rides on the `renderSigning`
     // discriminated union (the `false` shape disables the layer
     // entirely; we always want it on here, so build the object form).
-    ...(persistedWsTokenSecret !== undefined
-      ? { wsTokenSecret: persistedWsTokenSecret }
-      : {}),
+    ...(persistedWsTokenSecret !== undefined ? { wsTokenSecret: persistedWsTokenSecret } : {}),
     ...(persistedRenderSignerSecret !== undefined
       ? { renderSigning: { secret: persistedRenderSignerSecret } }
       : {}),
-    ...(resolvedMcpInstructions !== undefined
-      ? { mcpInstructions: resolvedMcpInstructions }
-      : {}),
+    ...(resolvedMcpInstructions !== undefined ? { mcpInstructions: resolvedMcpInstructions } : {}),
     // `--multi-tenant` flips the `/ggui/console/llm-keys` gate from
     // admin-token to auth-adapter. Default scope derivation in the
     // server picks up `userId` / `appId` from the resolved identity;
     // operators with composite scopes pass their own `providerKeyScope`
     // by composing `createGguiServer` directly.
-    ...(opts.multiTenant
-      ? { providerKeysGate: 'auth-adapter' as const }
-      : {}),
+    ...(opts.multiTenant ? { providerKeysGate: "auth-adapter" as const } : {}),
     // Gate OAuth login routes on publicBaseUrl. Without it the
     // redirect_uri can't be composed; the admin transport still mounts
     // so operators can paste credentials in advance.
@@ -824,16 +788,12 @@ export function buildMcpServerBackend(
       ? {
           threads: {
             store: storage.threadStore,
-            ...(storage.threadDurability
-              ? { durability: storage.threadDurability }
-              : {}),
+            ...(storage.threadDurability ? { durability: storage.threadDurability } : {}),
           },
         }
       : {}),
     sessionChannel: true,
-    pairing: opts.keysFile
-      ? { persistencePath: opts.keysFile }
-      : true,
+    pairing: opts.keysFile ? { persistencePath: opts.keysFile } : true,
     // Email magic-link login. OSS first-run default mirrors
     // `provisionalPreview` — wire a sender so magic links can be
     // delivered. `selectEmailSenderFromEnv` reads
@@ -883,7 +843,7 @@ export function buildMcpServerBackend(
             !!process.env.GOOGLE_API_KEY ||
             !!process.env.OPENROUTER_API_KEY;
           if (!credsFileExists && !anyEnvKey) {
-            return '/admin-login?next=%2Fadmin%2Fllm-keys';
+            return "/admin-login?next=%2Fadmin%2Fllm-keys";
           }
           return null;
         } catch {
@@ -913,9 +873,7 @@ export function buildMcpServerBackend(
     // found UIs in `blueprints.include`; absent = the server's
     // `ggui_list_featured_blueprints` returns an empty catalog (the
     // zero-config default).
-    ...(opts.blueprintProvider
-      ? { blueprintProvider: opts.blueprintProvider }
-      : {}),
+    ...(opts.blueprintProvider ? { blueprintProvider: opts.blueprintProvider } : {}),
     // Manifest-backed UI registry — resolves blueprint ids to
     // compiled bundles for `ggui_render_blueprint`. Paired with
     // `blueprintProvider` above (metadata vs. bundle resolution on
@@ -924,9 +882,7 @@ export function buildMcpServerBackend(
     // Manifest-declared primitive catalogs. Present when `ggui serve`
     // resolved `primitives.{packages,local}`; absent = in-memory-only
     // server with an empty `server.primitiveCatalogs`.
-    ...(opts.primitiveCatalogs
-      ? { primitiveCatalogs: opts.primitiveCatalogs }
-      : {}),
+    ...(opts.primitiveCatalogs ? { primitiveCatalogs: opts.primitiveCatalogs } : {}),
     // Manifest-declared theme. Present when `ggui serve` resolved
     // `ggui.json#theme`; absent = `createGguiServer` falls back to its
     // `lightTheme`-backed default internally.
@@ -942,9 +898,7 @@ export function buildMcpServerBackend(
     // bootstrap envelope without a restart. Both threaded through
     // when present; absent = boot-baked behaviour (legacy).
     ...(opts.themeProvider ? { themeProvider: opts.themeProvider } : {}),
-    ...(opts.onThemeConfigChange
-      ? { onThemeConfigChange: opts.onThemeConfigChange }
-      : {}),
+    ...(opts.onThemeConfigChange ? { onThemeConfigChange: opts.onThemeConfigChange } : {}),
     // Register `ggui_render` + serve `ui://ggui/render`. The `wsUrl`
     // is the live-channel URL published on `_meta["ai.ggui/render"]`
     // so iframes opened by an MCP Apps host (Claude Desktop, Claude
@@ -994,9 +948,7 @@ export function buildMcpServerBackend(
     // `/mcp` alongside ggui-native tools. No CLI config loader yet —
     // programmatic hosts + integration tests compose mounts through
     // this opt directly.
-    ...(opts.mcpMounts && opts.mcpMounts.length > 0
-      ? { mcpMounts: opts.mcpMounts }
-      : {}),
+    ...(opts.mcpMounts && opts.mcpMounts.length > 0 ? { mcpMounts: opts.mcpMounts } : {}),
     // wiredActionRouter composed from the same mount handlers. With
     // mounts present, every mounted tool becomes wire-dispatchable
     // from a generated UI's `actionSpec[name].dispatch.tool` (when
@@ -1016,14 +968,11 @@ export function buildMcpServerBackend(
     // 'off'`. Unrecognized values fall through to the server's
     // default. Keeping the parse narrow so a typo yields default
     // behavior (reject) rather than silent relaxation.
-    ...(process.env['GGUI_SCHEMA_COMPAT_MODE'] === 'warn' ||
-    process.env['GGUI_SCHEMA_COMPAT_MODE'] === 'off' ||
-    process.env['GGUI_SCHEMA_COMPAT_MODE'] === 'reject'
+    ...(process.env["GGUI_SCHEMA_COMPAT_MODE"] === "warn" ||
+    process.env["GGUI_SCHEMA_COMPAT_MODE"] === "off" ||
+    process.env["GGUI_SCHEMA_COMPAT_MODE"] === "reject"
       ? {
-          schemaCompatCheck: process.env['GGUI_SCHEMA_COMPAT_MODE'] as
-            | 'reject'
-            | 'warn'
-            | 'off',
+          schemaCompatCheck: process.env["GGUI_SCHEMA_COMPAT_MODE"] as "reject" | "warn" | "off",
         }
       : {}),
     // Wired-tool per-call timeout override (default 30 s in
@@ -1040,8 +989,8 @@ export function buildMcpServerBackend(
     // Operators that need a different production timeout SHOULD compose
     // `createGguiServer` directly rather than rely on env coupling.
     ...(() => {
-      const raw = process.env['GGUI_WIRED_TIMEOUT_MS'];
-      if (raw === undefined || raw === '') return {};
+      const raw = process.env["GGUI_WIRED_TIMEOUT_MS"];
+      if (raw === undefined || raw === "") return {};
       const parsed = Number(raw);
       if (!Number.isFinite(parsed) || parsed <= 0) return {};
       return { wiredActionTimeoutMs: Math.floor(parsed) };
@@ -1051,14 +1000,14 @@ export function buildMcpServerBackend(
     listen: async (port, host) => {
       const httpServer = await server.listen(port, host);
       const addr = httpServer.address();
-      if (!addr || typeof addr === 'string') {
-        throw new Error('server.address() returned an unexpected shape');
+      if (!addr || typeof addr === "string") {
+        throw new Error("server.address() returned an unexpected shape");
       }
       return addr.port;
     },
     close: () => server.close(),
     toolCount: server.toolCount,
-    serverName: 'ggui-mcp-server',
+    serverName: "ggui-mcp-server",
     serverVersion: opts.cliVersion,
     primitiveCatalogCount: server.primitiveCatalogs.length,
     themeSource: server.theme.source,

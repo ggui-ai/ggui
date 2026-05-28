@@ -51,7 +51,7 @@
  * Lane 2 of the 4-lane taxonomy (LLM-backed, advisory). Serial by
  * construction (two pushes on one harness lifetime).
  */
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 import {
   attachServeArtifacts,
   installNetworkGate,
@@ -61,8 +61,8 @@ import {
   spawnGguiServe,
   type GguiServeHandle,
   type NetworkGate,
-} from './ggui-serve-harness';
-import { createPerfRecorder, type PerfRecorder } from './perf-recorder';
+} from "./ggui-serve-harness";
+import { createPerfRecorder, type PerfRecorder } from "./perf-recorder";
 
 /** Generous envelope — two pushes, ~one LLM roundtrip, browser mount. */
 const TEST_TIMEOUT_MS = 240_000;
@@ -73,7 +73,7 @@ const GENERATION_BUDGET_MS = 120_000;
 /**
  * The same intent fires both turns. Cache normalization trims
  * whitespace but is case-sensitive (see `generationCacheKey` in
- * `@ggui-ai/mcp-server-handlers/session-mutations/generation-cache.ts`),
+ * `@ggui-ai/mcp-server-handlers/renders/generation-cache.ts`),
  * so an identical string is the cleanest anchor for a ≈1.0 cosine
  * similarity. The assertions don't depend on WHAT the UI says.
  *
@@ -84,8 +84,7 @@ const GENERATION_BUDGET_MS = 120_000;
  * domain widget cannot match any featured example, so turn-1 genuinely
  * cold-generates + registers and turn-2 hits THAT registration.
  */
-const PUSH_INTENT =
-  'Render a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
+const PUSH_INTENT = 'Render a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
 
 /**
  * A distinctive non-empty contract. An empty `{}` contract exact-key-
@@ -96,17 +95,17 @@ const PUSH_INTENT =
  */
 const PUSH_CONTRACT = {
   propsSpec: {
-    description: 'Soil-moisture gauge panel inputs.',
+    description: "Soil-moisture gauge panel inputs.",
     properties: {
       zoneLabel: {
-        schema: { type: 'string' },
+        schema: { type: "string" },
         required: false,
-        description: 'Greenhouse zone label.',
+        description: "Greenhouse zone label.",
       },
       moisturePct: {
-        schema: { type: 'number' },
+        schema: { type: "number" },
         required: false,
-        description: 'Current soil moisture, 0-100.',
+        description: "Current soil moisture, 0-100.",
       },
     },
   },
@@ -136,7 +135,7 @@ const PUSH_CONTRACT = {
 interface RenderStructuredContent {
   readonly renderId?: string;
   readonly url?: string;
-  readonly action?: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
+  readonly action?: "create" | "reuse" | "update" | "replace" | "compose";
 }
 
 interface RenderOutput {
@@ -159,10 +158,10 @@ async function renderWithTimeout(
   baseUrl: string,
   token: string,
   budgetMs: number,
-  opts: { forceCreate?: boolean } = {},
+  opts: { forceCreate?: boolean } = {}
 ): Promise<RenderOutput> {
-  const hsEnv = await mcpCallAs(baseUrl, token, 'tools/call', {
-    name: 'ggui_handshake',
+  const hsEnv = await mcpCallAs(baseUrl, token, "tools/call", {
+    name: "ggui_handshake",
     arguments: {
       intent: PUSH_INTENT,
       blueprintDraft: { contract: PUSH_CONTRACT },
@@ -177,18 +176,17 @@ async function renderWithTimeout(
   if (hsEnv.error) {
     throw new Error(`ggui_handshake error: ${JSON.stringify(hsEnv.error)}`);
   }
-  const handshakeId = (
-    hsEnv.result as { structuredContent: { handshakeId: string } }
-  ).structuredContent.handshakeId;
+  const handshakeId = (hsEnv.result as { structuredContent: { handshakeId: string } })
+    .structuredContent.handshakeId;
 
   const start = Date.now();
   const env = await Promise.race<ReturnType<typeof mcpCallAs>>([
-    mcpCallAs(baseUrl, token, 'tools/call', {
-      name: 'ggui_render',
+    mcpCallAs(baseUrl, token, "tools/call", {
+      name: "ggui_render",
       arguments: {
         handshakeId,
         decision: {
-          kind: 'override',
+          kind: "override",
           blueprintDraft: { contract: PUSH_CONTRACT },
         },
       },
@@ -197,12 +195,10 @@ async function renderWithTimeout(
       setTimeout(
         () =>
           reject(
-            new Error(
-              `ggui_render did not return within ${budgetMs}ms — LLM call may be hanging.`,
-            ),
+            new Error(`ggui_render did not return within ${budgetMs}ms — LLM call may be hanging.`)
           ),
-        budgetMs,
-      ),
+        budgetMs
+      )
     ) as Promise<never>,
   ]);
   const elapsedMs = Date.now() - start;
@@ -214,15 +210,11 @@ async function renderWithTimeout(
     isError?: boolean;
   };
   if (outer.isError === true) {
-    throw new Error(
-      `ggui_render returned isError: true (see server stderr for cause).`,
-    );
+    throw new Error(`ggui_render returned isError: true (see server stderr for cause).`);
   }
   const sc = outer.structuredContent;
   if (!sc) {
-    throw new Error(
-      `ggui_render returned no structuredContent — expected a Phase-B+ payload.`,
-    );
+    throw new Error(`ggui_render returned no structuredContent — expected a Phase-B+ payload.`);
   }
   return {
     result: sc,
@@ -244,168 +236,149 @@ function shortCodeFromUrl(url: string): string {
  * 2026-04-24 (closes LANES §Gaps #2) so every Lane 2 spec can't drift.
  */
 function shouldSkipAdvisory(): { skip: boolean; reason?: string } {
-  return shouldSkipLane2Advisory({ specLabel: 'repeated-turn cache spec' });
+  return shouldSkipLane2Advisory({ specLabel: "repeated-turn cache spec" });
 }
 
-test.describe.serial(
-  'Slice 7 follow-up — repeated-turn cache miss→hit on OSS (advisory)',
-  () => {
-    let handle: GguiServeHandle;
-    let gate: NetworkGate;
-    let perf: PerfRecorder;
-    let skipped = false;
+test.describe.serial("Slice 7 follow-up — repeated-turn cache miss→hit on OSS (advisory)", () => {
+  let handle: GguiServeHandle;
+  let gate: NetworkGate;
+  let perf: PerfRecorder;
+  let skipped = false;
 
-    test.beforeAll(async () => {
-      const skip = shouldSkipAdvisory();
-      if (skip.skip) {
-        skipped = true;
-        test.skip(true, skip.reason);
-        return;
-      }
-      // Same clean-room carve-out as live-generation.spec.ts — only
-      // the Anthropic key crosses the env wall.
-      handle = await spawnGguiServe({ forwardEnv: ['ANTHROPIC_API_KEY'] });
+  test.beforeAll(async () => {
+    const skip = shouldSkipAdvisory();
+    if (skip.skip) {
+      skipped = true;
+      test.skip(true, skip.reason);
+      return;
+    }
+    // Same clean-room carve-out as live-generation.spec.ts — only
+    // the Anthropic key crosses the env wall.
+    handle = await spawnGguiServe({ forwardEnv: ["ANTHROPIC_API_KEY"] });
+  });
+
+  test.afterAll(async () => {
+    if (handle) await handle.close();
+  });
+
+  test.afterEach(async () => {
+    if (handle) await attachServeArtifacts(handle);
+    // Emit the turn-1 + turn-2 timings as a single perf attachment.
+    // Turn-1 is advisory (real LLM, provider tail); turn-2 is
+    // blocking (cache hit must stay sub-2s — identical to the
+    // existing inline assertion below, just captured in the
+    // structured artifact so a reviewer can see the delta turn-1
+    // → turn-2 at a glance).
+    if (perf) await perf.attach();
+  });
+
+  test("same intent twice: turn-1 miss generates, turn-2 hit reuses + mounts cached code", async ({
+    page,
+  }) => {
+    if (skipped) return;
+    test.setTimeout(TEST_TIMEOUT_MS);
+    perf = createPerfRecorder();
+    gate = await installNetworkGate(page);
+
+    // 1. Pair token + banner sanity. The banner proves generation is
+    //    wired (same guard as live-generation.spec.ts).
+    const { token } = await mintPairToken(handle, "cache-reuse-slice7");
+    expect(token.length).toBeGreaterThan(0);
+    expect(handle.stdout(), `CLI banner did not announce anthropic generation binding.`).toMatch(
+      /generation:\s+anthropic\s+\/\s+\S+\s+\(env:\s+ANTHROPIC_API_KEY\)/
+    );
+
+    // 2. Turn 1 — cache miss. Real LLM call. Latency > 1s is the
+    //    structural proof (the in-band `cache.hit` / `similarity` /
+    //    `cachedBlueprintId` marker no longer rides on
+    //    `structuredContent` — see PushStructuredContent above).
+    const turn1 = await renderWithTimeout(handle.baseUrl, token, GENERATION_BUDGET_MS, {
+      forceCreate: true,
+    });
+    perf.recordAdvisory("cache-reuse-turn1", turn1.elapsedMs, "cache miss — real LLM");
+    expect(turn1.result.renderId).toBeTruthy();
+    expect(turn1.result.url).toMatch(/\/r\/[a-z0-9]+/);
+    // Real-LLM floor. Matches `live-generation.spec.ts`; catches a
+    // regression where the generator itself is stubbed.
+    expect(
+      turn1.elapsedMs,
+      `turn 1 returned in ${turn1.elapsedMs}ms — too fast for a real LLM call. Stub regression?`
+    ).toBeGreaterThan(1_000);
+
+    // 3. Turn 2 — cache hit. Same intent string → same deterministic
+    //    key → same embedding → ≈1.0 cosine similarity with the
+    //    turn-1 entry. The handler's pre-generation lookup fires
+    //    BEFORE the generator so this round-trip skips the LLM.
+    //    Phase B removed the sessionId axis — the cache key is appId
+    //    + contract derived, so same-app same-contract second handshake
+    //    naturally lands on turn-1's registered blueprint.
+    const turn2 = await renderWithTimeout(
+      handle.baseUrl,
+      token,
+      // Cache hit should be fast; keep a small envelope to catch a
+      // regression where the cache silently fails over to the LLM.
+      15_000
+    );
+    // Blocking record — turn-2 is a pure cache hit (no LLM call);
+    // the 2s budget from BUDGET_RATIONALE catches LLM fallthrough
+    // regressions. This supersedes the inline `toBeLessThan(2_000)`
+    // below once `perf.assertBudgets()` runs (kept AS-WELL for
+    // readable in-test failure message).
+    perf.recordBlocking("cache-reuse-turn2", turn2.elapsedMs, "cache hit — no LLM call");
+    expect(turn2.result.renderId).toBeTruthy();
+    // Load-bearing: cache-hit path must NOT re-invoke the LLM.
+    // Anything above ~2s on the local loopback is a red flag that
+    // we silently fell through to generation. With the in-band cache
+    // marker retired this latency assertion IS the cache-hit proof
+    // — see the PushStructuredContent docstring above for the gap.
+    expect(
+      turn2.elapsedMs,
+      `turn 2 took ${turn2.elapsedMs}ms — cache hit should be sub-second; LLM fallthrough regression?`
+    ).toBeLessThan(2_000);
+
+    // 4. Navigate to turn-2 shortCode. Cached componentCode must
+    //    mount identically to a fresh generation (Slice 4 renderer
+    //    contract: data-ggui-code-ready="true" handoff + ggui-rcr-*
+    //    scope). If the cache stored something invalid, the handoff
+    //    would flip to an error panel and this would fail.
+    const shortCode = shortCodeFromUrl(turn2.result.url!);
+    await page.goto(`${handle.baseUrl}/s/${shortCode}`, {
+      waitUntil: "networkidle",
     });
 
-    test.afterAll(async () => {
-      if (handle) await handle.close();
-    });
+    // The console SessionViewer mounts the rendered session inside a
+    // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
+    // it no longer carries the `<McpAppIframe>` lifecycle-mirror
+    // attribute). Inner componentCard data-attrs live INSIDE the
+    // iframe; reach them through `frameLocator`. Readiness is gated
+    // by the inner `[data-ggui-stack-item-root]` visibility check
+    // below.
+    const liveIframe = page.locator('iframe[data-testid="session-viewer-iframe"]').first();
+    await expect(liveIframe).toBeVisible({ timeout: 15_000 });
+    // Post-stack-removal the iframe-runtime mounts the React tree
+    // directly into `renderInto`; the per-stack-item container
+    // wrapper is gone. The React mount still wraps in a `ggui-rcr-*`
+    // scope div (`react-renderer.ts::makeScopeClass`); assert against
+    // that scope directly.
+    const frame = page.frameLocator('iframe[data-testid="session-viewer-iframe"]').first();
+    const rcrScope = frame.locator('[class^="ggui-rcr-"]').last();
+    await expect(rcrScope).toBeVisible({ timeout: 30_000 });
+    const scopeChildren = await rcrScope.evaluate((el) => el.children.length);
+    expect(
+      scopeChildren,
+      `cached componentCode's ggui-rcr-* scope has ${scopeChildren} children — expected ≥ 1 (cache hit must mount real DOM, same as fresh gen).`
+    ).toBeGreaterThanOrEqual(1);
 
-    test.afterEach(async () => {
-      if (handle) await attachServeArtifacts(handle);
-      // Emit the turn-1 + turn-2 timings as a single perf attachment.
-      // Turn-1 is advisory (real LLM, provider tail); turn-2 is
-      // blocking (cache hit must stay sub-2s — identical to the
-      // existing inline assertion below, just captured in the
-      // structured artifact so a reviewer can see the delta turn-1
-      // → turn-2 at a glance).
-      if (perf) await perf.attach();
-    });
+    // 5. Network gate holds — no hosted / AWS / Cognito hit from the
+    //    browser. Same invariant as the sibling live-gen spec.
+    expect(gate.attempts).toEqual([]);
 
-    test('same intent twice: turn-1 miss generates, turn-2 hit reuses + mounts cached code', async ({
-      page,
-    }) => {
-      if (skipped) return;
-      test.setTimeout(TEST_TIMEOUT_MS);
-      perf = createPerfRecorder();
-      gate = await installNetworkGate(page);
-
-      // 1. Pair token + banner sanity. The banner proves generation is
-      //    wired (same guard as live-generation.spec.ts).
-      const { token } = await mintPairToken(handle, 'cache-reuse-slice7');
-      expect(token.length).toBeGreaterThan(0);
-      expect(
-        handle.stdout(),
-        `CLI banner did not announce anthropic generation binding.`,
-      ).toMatch(/generation:\s+anthropic\s+\/\s+\S+\s+\(env:\s+ANTHROPIC_API_KEY\)/);
-
-      // 2. Turn 1 — cache miss. Real LLM call. Latency > 1s is the
-      //    structural proof (the in-band `cache.hit` / `similarity` /
-      //    `cachedBlueprintId` marker no longer rides on
-      //    `structuredContent` — see PushStructuredContent above).
-      const turn1 = await renderWithTimeout(
-        handle.baseUrl,
-        token,
-        GENERATION_BUDGET_MS,
-        { forceCreate: true },
-      );
-      perf.recordAdvisory(
-        'cache-reuse-turn1',
-        turn1.elapsedMs,
-        'cache miss — real LLM',
-      );
-      expect(turn1.result.renderId).toBeTruthy();
-      expect(turn1.result.url).toMatch(/\/r\/[a-z0-9]+/);
-      // Real-LLM floor. Matches `live-generation.spec.ts`; catches a
-      // regression where the generator itself is stubbed.
-      expect(
-        turn1.elapsedMs,
-        `turn 1 returned in ${turn1.elapsedMs}ms — too fast for a real LLM call. Stub regression?`,
-      ).toBeGreaterThan(1_000);
-
-      // 3. Turn 2 — cache hit. Same intent string → same deterministic
-      //    key → same embedding → ≈1.0 cosine similarity with the
-      //    turn-1 entry. The handler's pre-generation lookup fires
-      //    BEFORE the generator so this round-trip skips the LLM.
-      //    Phase B removed the sessionId axis — the cache key is appId
-      //    + contract derived, so same-app same-contract second handshake
-      //    naturally lands on turn-1's registered blueprint.
-      const turn2 = await renderWithTimeout(
-        handle.baseUrl,
-        token,
-        // Cache hit should be fast; keep a small envelope to catch a
-        // regression where the cache silently fails over to the LLM.
-        15_000,
-      );
-      // Blocking record — turn-2 is a pure cache hit (no LLM call);
-      // the 2s budget from BUDGET_RATIONALE catches LLM fallthrough
-      // regressions. This supersedes the inline `toBeLessThan(2_000)`
-      // below once `perf.assertBudgets()` runs (kept AS-WELL for
-      // readable in-test failure message).
-      perf.recordBlocking(
-        'cache-reuse-turn2',
-        turn2.elapsedMs,
-        'cache hit — no LLM call',
-      );
-      expect(turn2.result.renderId).toBeTruthy();
-      // Load-bearing: cache-hit path must NOT re-invoke the LLM.
-      // Anything above ~2s on the local loopback is a red flag that
-      // we silently fell through to generation. With the in-band cache
-      // marker retired this latency assertion IS the cache-hit proof
-      // — see the PushStructuredContent docstring above for the gap.
-      expect(
-        turn2.elapsedMs,
-        `turn 2 took ${turn2.elapsedMs}ms — cache hit should be sub-second; LLM fallthrough regression?`,
-      ).toBeLessThan(2_000);
-
-      // 4. Navigate to turn-2 shortCode. Cached componentCode must
-      //    mount identically to a fresh generation (Slice 4 renderer
-      //    contract: data-ggui-code-ready="true" handoff + ggui-rcr-*
-      //    scope). If the cache stored something invalid, the handoff
-      //    would flip to an error panel and this would fail.
-      const shortCode = shortCodeFromUrl(turn2.result.url!);
-      await page.goto(`${handle.baseUrl}/s/${shortCode}`, {
-        waitUntil: 'networkidle',
-      });
-
-      // The console SessionViewer mounts the rendered session inside a
-      // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
-      // it no longer carries the `<McpAppIframe>` lifecycle-mirror
-      // attribute). Inner componentCard data-attrs live INSIDE the
-      // iframe; reach them through `frameLocator`. Readiness is gated
-      // by the inner `[data-ggui-stack-item-root]` visibility check
-      // below.
-      const liveIframe = page
-        .locator('iframe[data-testid="session-viewer-iframe"]')
-        .first();
-      await expect(liveIframe).toBeVisible({ timeout: 15_000 });
-      // Post-stack-removal the iframe-runtime mounts the React tree
-      // directly into `renderInto`; the per-stack-item container
-      // wrapper is gone. The React mount still wraps in a `ggui-rcr-*`
-      // scope div (`react-renderer.ts::makeScopeClass`); assert against
-      // that scope directly.
-      const frame = page
-        .frameLocator('iframe[data-testid="session-viewer-iframe"]')
-        .first();
-      const rcrScope = frame.locator('[class^="ggui-rcr-"]').last();
-      await expect(rcrScope).toBeVisible({ timeout: 30_000 });
-      const scopeChildren = await rcrScope.evaluate((el) => el.children.length);
-      expect(
-        scopeChildren,
-        `cached componentCode's ggui-rcr-* scope has ${scopeChildren} children — expected ≥ 1 (cache hit must mount real DOM, same as fresh gen).`,
-      ).toBeGreaterThanOrEqual(1);
-
-      // 5. Network gate holds — no hosted / AWS / Cognito hit from the
-      //    browser. Same invariant as the sibling live-gen spec.
-      expect(gate.attempts).toEqual([]);
-
-      // 6. Blocking-budget gate — turn-2 cache hit must stay under
-      //    2s. Redundant with the inline assertion above but makes
-      //    the threshold explicit in the perf artifact.
-      perf.assertBudgets();
-    });
-  },
-);
+    // 6. Blocking-budget gate — turn-2 cache hit must stay under
+    //    2s. Redundant with the inline assertion above but makes
+    //    the threshold explicit in the perf artifact.
+    perf.assertBudgets();
+  });
+});
 
 /**
  * Cold → hit → reset/cold cache lifecycle proof (advisory).
@@ -457,128 +430,114 @@ test.describe.serial(
  *     block already proves same-intent hits; the exact-key gate is
  *     covered at Lane 3 in `generation-cache.test.ts`.
  */
-test.describe.serial(
-  'Slice 7 follow-up — cold → hit → reset → cold cache lifecycle (advisory)',
-  () => {
-    test('same intent hits on turn-2, then cold again after ggui serve restart', async () => {
-      const skip = shouldSkipAdvisory();
-      if (skip.skip) {
-        test.skip(true, skip.reason);
-        return;
-      }
+test.describe
+  .serial("Slice 7 follow-up — cold → hit → reset → cold cache lifecycle (advisory)", () => {
+  test("same intent hits on turn-2, then cold again after ggui serve restart", async () => {
+    const skip = shouldSkipAdvisory();
+    if (skip.skip) {
+      test.skip(true, skip.reason);
+      return;
+    }
 
-      test.setTimeout(TEST_TIMEOUT_MS);
-      // One recorder across all three turns — the perf artifact shows
-      // the full miss → hit → miss shape for a reviewer at a glance.
-      const perf = createPerfRecorder();
+    test.setTimeout(TEST_TIMEOUT_MS);
+    // One recorder across all three turns — the perf artifact shows
+    // the full miss → hit → miss shape for a reviewer at a glance.
+    const perf = createPerfRecorder();
 
-      // ── Server A — prove turn-1 cold + turn-2 hit ──────────────────
-      //
-      // Re-state the same invariants the sibling repeated-turn test
-      // owns (cold marker + hit marker + timing floors) in compressed
-      // form. Duplication is intentional — the lifecycle proof is
-      // only honest if BOTH legs of the baseline are shown to pass
-      // against the same running process before the restart.
-      const handleA = await spawnGguiServe({
-        forwardEnv: ['ANTHROPIC_API_KEY'],
-      });
-      try {
-        const { token: tokenA } = await mintPairToken(
-          handleA,
-          'cache-reuse-lifecycle-a',
-        );
-        expect(tokenA.length).toBeGreaterThan(0);
-
-        // Latency channel IS the cache signal now (cache marker
-        // retired from structuredContent — see PushStructuredContent
-        // docstring above). Turn-1 must take real-LLM time; turn-2 on
-        // the same scope must finish under the cache-hit ceiling.
-        const turn1 = await renderWithTimeout(
-          handleA.baseUrl,
-          tokenA,
-          GENERATION_BUDGET_MS,
-          { forceCreate: true },
-        );
-        perf.recordAdvisory(
-          'cache-reuse-lifecycle-turn1',
-          turn1.elapsedMs,
-          'server A — cold (real LLM)',
-        );
-        expect(turn1.elapsedMs).toBeGreaterThan(1_000);
-
-        const turn2 = await renderWithTimeout(handleA.baseUrl, tokenA, 15_000);
-        perf.recordBlocking(
-          // Reuse the existing blocking budget key — same invariant
-          // (sub-2s cache hit, no LLM fallthrough), just captured here
-          // for server A's turn-2 leg of the lifecycle.
-          'cache-reuse-turn2',
-          turn2.elapsedMs,
-          'server A — hit (no LLM)',
-        );
-        expect(turn2.elapsedMs).toBeLessThan(2_000);
-      } finally {
-        // Tear down server A. Closing the process is what empties the
-        // cache — the next spawn gets a fresh `InMemoryVectorStore`.
-        await handleA.close();
-      }
-
-      // Failure-artifact capture for server A even on success —
-      // reviewers who look at the run want to see the banner + env
-      // snapshot from the process that got the initial two turns.
-      await attachServeArtifacts(handleA);
-
-      // ── Server B — prove turn-3 cold-generates on the fresh process ─
-      //
-      // A second `spawnGguiServe` is a fresh process with its own
-      // empty vector store + isolated code cache — the restart-reset.
-      // turn-3 passes `forceCreate` (like turn-1) so the cold path is
-      // measured deterministically: the OSS built-in blueprint catalog
-      // plus the non-deterministic semantic matcher mean a bare-latency
-      // "did the restart clear the cache?" probe is no longer reliable
-      // black-box. What stays honest: server B is a distinct process
-      // that cold-generates from scratch.
-      const handleB = await spawnGguiServe({
-        forwardEnv: ['ANTHROPIC_API_KEY'],
-      });
-      try {
-        const { token: tokenB } = await mintPairToken(
-          handleB,
-          'cache-reuse-lifecycle-b',
-        );
-        expect(tokenB.length).toBeGreaterThan(0);
-
-        const turn3 = await renderWithTimeout(
-          handleB.baseUrl,
-          tokenB,
-          GENERATION_BUDGET_MS,
-          { forceCreate: true },
-        );
-        perf.recordAdvisory(
-          'cache-reuse-lifecycle-turn3',
-          turn3.elapsedMs,
-          'server B — cold again after restart',
-        );
-
-        // Load-bearing assertion. With the in-band cache marker
-        // retired, the real-LLM latency floor IS the proof the cache
-        // was cleared on restart — if turn-3 fell back to a cache hit,
-        // it would finish in <2s like turn-2 instead of taking real-
-        // LLM time. The structural cache-hit/miss flag (`cache.hit`)
-        // is no longer on structuredContent (see PushStructuredContent
-        // above); turn-3 must take >1s to satisfy this restart-clears-
-        // cache invariant.
-        expect(
-          turn3.elapsedMs,
-          `turn 3 returned in ${turn3.elapsedMs}ms — too fast for a real LLM call after restart. Cache not actually cleared?`,
-        ).toBeGreaterThan(1_000);
-      } finally {
-        await handleB.close();
-      }
-
-      await attachServeArtifacts(handleB);
-
-      // Single perf attachment for the full miss→hit→miss shape.
-      await perf.attach();
+    // ── Server A — prove turn-1 cold + turn-2 hit ──────────────────
+    //
+    // Re-state the same invariants the sibling repeated-turn test
+    // owns (cold marker + hit marker + timing floors) in compressed
+    // form. Duplication is intentional — the lifecycle proof is
+    // only honest if BOTH legs of the baseline are shown to pass
+    // against the same running process before the restart.
+    const handleA = await spawnGguiServe({
+      forwardEnv: ["ANTHROPIC_API_KEY"],
     });
-  },
-);
+    try {
+      const { token: tokenA } = await mintPairToken(handleA, "cache-reuse-lifecycle-a");
+      expect(tokenA.length).toBeGreaterThan(0);
+
+      // Latency channel IS the cache signal now (cache marker
+      // retired from structuredContent — see PushStructuredContent
+      // docstring above). Turn-1 must take real-LLM time; turn-2 on
+      // the same scope must finish under the cache-hit ceiling.
+      const turn1 = await renderWithTimeout(handleA.baseUrl, tokenA, GENERATION_BUDGET_MS, {
+        forceCreate: true,
+      });
+      perf.recordAdvisory(
+        "cache-reuse-lifecycle-turn1",
+        turn1.elapsedMs,
+        "server A — cold (real LLM)"
+      );
+      expect(turn1.elapsedMs).toBeGreaterThan(1_000);
+
+      const turn2 = await renderWithTimeout(handleA.baseUrl, tokenA, 15_000);
+      perf.recordBlocking(
+        // Reuse the existing blocking budget key — same invariant
+        // (sub-2s cache hit, no LLM fallthrough), just captured here
+        // for server A's turn-2 leg of the lifecycle.
+        "cache-reuse-turn2",
+        turn2.elapsedMs,
+        "server A — hit (no LLM)"
+      );
+      expect(turn2.elapsedMs).toBeLessThan(2_000);
+    } finally {
+      // Tear down server A. Closing the process is what empties the
+      // cache — the next spawn gets a fresh `InMemoryVectorStore`.
+      await handleA.close();
+    }
+
+    // Failure-artifact capture for server A even on success —
+    // reviewers who look at the run want to see the banner + env
+    // snapshot from the process that got the initial two turns.
+    await attachServeArtifacts(handleA);
+
+    // ── Server B — prove turn-3 cold-generates on the fresh process ─
+    //
+    // A second `spawnGguiServe` is a fresh process with its own
+    // empty vector store + isolated code cache — the restart-reset.
+    // turn-3 passes `forceCreate` (like turn-1) so the cold path is
+    // measured deterministically: the OSS built-in blueprint catalog
+    // plus the non-deterministic semantic matcher mean a bare-latency
+    // "did the restart clear the cache?" probe is no longer reliable
+    // black-box. What stays honest: server B is a distinct process
+    // that cold-generates from scratch.
+    const handleB = await spawnGguiServe({
+      forwardEnv: ["ANTHROPIC_API_KEY"],
+    });
+    try {
+      const { token: tokenB } = await mintPairToken(handleB, "cache-reuse-lifecycle-b");
+      expect(tokenB.length).toBeGreaterThan(0);
+
+      const turn3 = await renderWithTimeout(handleB.baseUrl, tokenB, GENERATION_BUDGET_MS, {
+        forceCreate: true,
+      });
+      perf.recordAdvisory(
+        "cache-reuse-lifecycle-turn3",
+        turn3.elapsedMs,
+        "server B — cold again after restart"
+      );
+
+      // Load-bearing assertion. With the in-band cache marker
+      // retired, the real-LLM latency floor IS the proof the cache
+      // was cleared on restart — if turn-3 fell back to a cache hit,
+      // it would finish in <2s like turn-2 instead of taking real-
+      // LLM time. The structural cache-hit/miss flag (`cache.hit`)
+      // is no longer on structuredContent (see PushStructuredContent
+      // above); turn-3 must take >1s to satisfy this restart-clears-
+      // cache invariant.
+      expect(
+        turn3.elapsedMs,
+        `turn 3 returned in ${turn3.elapsedMs}ms — too fast for a real LLM call after restart. Cache not actually cleared?`
+      ).toBeGreaterThan(1_000);
+    } finally {
+      await handleB.close();
+    }
+
+    await attachServeArtifacts(handleB);
+
+    // Single perf attachment for the full miss→hit→miss shape.
+    await perf.attach();
+  });
+});

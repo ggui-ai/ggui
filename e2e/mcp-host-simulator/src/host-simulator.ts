@@ -33,20 +33,20 @@
  *   - Wired-action bridge (T2.5)
  *   - Host-shape configs (T2.7)
  */
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
-  parseMcpAppAiGguiRenderMeta,
   MCP_APPS_UI_CAPABILITY,
+  parseMcpAppAiGguiRenderMeta,
   type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
-import WebSocket from 'ws';
+} from "@ggui-ai/protocol/integrations/mcp-apps";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import WebSocket from "ws";
 import {
   buildWiredAction,
   type BuiltWiredAction,
-  type WiredActionUpdateContextEnvelope,
   type WiredActionUiMessageEnvelope,
-} from './wired-action.js';
+  type WiredActionUpdateContextEnvelope,
+} from "./wired-action.js";
 
 export interface HostSimulatorOptions {
   /**
@@ -128,7 +128,7 @@ export interface CallToolResult {
  * so test assertions stay flat.
  */
 export interface SubscribeAck {
-  readonly kind: 'ack' | 'error';
+  readonly kind: "ack" | "error";
   /** Set on `ack` — the reconnect token replacing the bootstrap one. */
   readonly sessionToken?: string;
   /** Set on `ack` — current sequence number for reconnect resume. */
@@ -165,7 +165,7 @@ export interface SuggestionBlueprintMeta {
  * surfaces validator output (soft on `cache`).
  */
 export interface HandshakeSuggestionView {
-  readonly origin: 'cache' | 'agent' | 'synth';
+  readonly origin: "cache" | "agent" | "synth";
   readonly rationale: string;
   readonly blueprintMeta: SuggestionBlueprintMeta;
   readonly amendments?: {
@@ -174,7 +174,7 @@ export interface HandshakeSuggestionView {
   };
   readonly validationFindings?: ReadonlyArray<{
     readonly code: string;
-    readonly severity: 'error' | 'warn';
+    readonly severity: "error" | "warn";
     readonly path: string;
     readonly message: string;
   }>;
@@ -188,13 +188,7 @@ export interface HandshakeSuggestionView {
  */
 export interface HandshakeOutput {
   readonly handshakeId: string;
-  readonly action:
-    | 'create'
-    | 'reuse'
-    | 'update'
-    | 'replace'
-    | 'compose'
-    | 'declined';
+  readonly action: "create" | "reuse" | "update" | "replace" | "compose" | "declined";
   readonly reason: string;
   readonly target: {
     readonly renderId?: string;
@@ -203,7 +197,7 @@ export interface HandshakeOutput {
   readonly alternatives?: ReadonlyArray<unknown>;
   readonly contractHash: string;
   readonly nextStep?: {
-    readonly tool: 'ggui_render';
+    readonly tool: "ggui_render";
     readonly description: string;
     readonly example: string;
   };
@@ -216,9 +210,9 @@ export interface HandshakeOutput {
  * `blueprintId` against a new draft.
  */
 export type RenderDecisionInput =
-  | { readonly kind: 'accept' }
+  | { readonly kind: "accept" }
   | {
-      readonly kind: 'override';
+      readonly kind: "override";
       readonly blueprintDraft: {
         readonly contract: Record<string, unknown>;
         readonly variance?: {
@@ -263,7 +257,7 @@ export interface SimulateWiredActionResult {
   /**
    * `structuredContent` from the gateway tool's response, after the
    * `tools/call ggui_runtime_submit_action` round-trip. Shape per
-   * `packages/mcp-server-handlers/src/session-mutations/submit-action.ts`:
+   * `packages/mcp-server-handlers/src/renders/submit-action.ts`:
    * `{ok, code?, message?, consumerPresent?}` — a minimal ack, not a
    * verbatim echo of the envelope.
    */
@@ -321,25 +315,22 @@ export class HostSimulator {
    */
   async connect(): Promise<void> {
     if (this.client) return;
-    const mcpPath = this.opts.mcpPath ?? '/mcp';
+    const mcpPath = this.opts.mcpPath ?? "/mcp";
     const url = new URL(`${this.opts.url}${mcpPath}`);
     const headers: Record<string, string> = {};
     if (this.opts.bearer) {
-      headers['Authorization'] = `Bearer ${this.opts.bearer}`;
+      headers["Authorization"] = `Bearer ${this.opts.bearer}`;
     }
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers },
     });
-    this.client = new Client(
-      this.opts.clientInfo ?? { name: 'host-simulator', version: '1.0' },
-      {
-        capabilities: {
-          // App-spec opt-in — server checks this on initialize and
-          // unlocks resource-uri-bearing tool advertisements.
-          experimental: { [MCP_APPS_UI_CAPABILITY]: {} },
-        },
+    this.client = new Client(this.opts.clientInfo ?? { name: "host-simulator", version: "1.0" }, {
+      capabilities: {
+        // App-spec opt-in — server checks this on initialize and
+        // unlocks resource-uri-bearing tool advertisements.
+        experimental: { [MCP_APPS_UI_CAPABILITY]: {} },
       },
-    );
+    });
     await this.client.connect(this.transport);
   }
 
@@ -354,15 +345,14 @@ export class HostSimulator {
    * boundary.
    */
   async listTools(): Promise<readonly ToolListEntry[]> {
-    if (!this.client) throw new Error('connect() first');
+    if (!this.client) throw new Error("connect() first");
     if (this.cachedTools) return this.cachedTools;
     const result = await this.client.listTools();
     const entries: ToolListEntry[] = [];
     for (const tool of result.tools) {
       const meta = (tool as { _meta?: unknown })._meta;
       const ui = (meta as { ui?: { resourceUri?: unknown } } | undefined)?.ui;
-      const resourceUri =
-        typeof ui?.resourceUri === 'string' ? ui.resourceUri : undefined;
+      const resourceUri = typeof ui?.resourceUri === "string" ? ui.resourceUri : undefined;
       entries.push({
         name: tool.name,
         ...(tool.description !== undefined ? { description: tool.description } : {}),
@@ -378,16 +368,13 @@ export class HostSimulator {
           // is a single text resource (the iframe shell HTML or the
           // bundle URL referenced inside).
           const first = res.contents[0];
-          const text =
-            first && 'text' in first && typeof first.text === 'string'
-              ? first.text
-              : '';
+          const text = first && "text" in first && typeof first.text === "string" ? first.text : "";
           this.prefetchedResources.set(resourceUri, text);
         } catch {
           // Resource not readable — record an empty body so the
           // tools/list call itself doesn't fail; the test can
           // assert on `getPrefetchedResource` returning empty.
-          this.prefetchedResources.set(resourceUri, '');
+          this.prefetchedResources.set(resourceUri, "");
         }
       }
     }
@@ -422,18 +409,16 @@ export class HostSimulator {
   async callTool(
     name: string,
     args: Record<string, unknown>,
-    options?: { readonly timeoutMs?: number },
+    options?: { readonly timeoutMs?: number }
   ): Promise<CallToolResult> {
-    if (!this.client) throw new Error('connect() first');
+    if (!this.client) throw new Error("connect() first");
     const tools = await this.listTools();
     const toolEntry = tools.find((t) => t.name === name);
 
     const result = await this.client.callTool(
       { name, arguments: args },
       undefined,
-      options?.timeoutMs !== undefined
-        ? { timeout: options.timeoutMs }
-        : undefined,
+      options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : undefined
     );
     const rawMeta = (result as { _meta?: unknown })._meta;
     const parsed = parseMcpAppAiGguiRenderMeta(rawMeta);
@@ -454,9 +439,7 @@ export class HostSimulator {
         : {}),
       ...(isError ? { isError: true } : {}),
       ...(meta !== undefined ? { meta } : {}),
-      ...(toolEntry?.resourceUri !== undefined
-        ? { toolResourceUri: toolEntry.resourceUri }
-        : {}),
+      ...(toolEntry?.resourceUri !== undefined ? { toolResourceUri: toolEntry.resourceUri } : {}),
     };
   }
 
@@ -489,15 +472,13 @@ export class HostSimulator {
   }): Promise<HandshakeOutput> {
     const blueprintDraft = args.blueprintDraft ?? { contract: {} };
     const result = await this.callTool(
-      'ggui_handshake',
+      "ggui_handshake",
       {
         intent: args.intent,
         blueprintDraft,
-        ...(args.forceCreate !== undefined
-          ? { forceCreate: args.forceCreate }
-          : {}),
+        ...(args.forceCreate !== undefined ? { forceCreate: args.forceCreate } : {}),
       },
-      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined,
+      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined
     );
     return result.structuredContent as HandshakeOutput;
   }
@@ -526,13 +507,13 @@ export class HostSimulator {
     readonly timeoutMs?: number;
   }): Promise<CallToolResult> {
     return this.callTool(
-      'ggui_render',
+      "ggui_render",
       {
         handshakeId: args.handshakeId,
         decision: args.decision,
         ...(args.props !== undefined ? { props: args.props } : {}),
       },
-      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined,
+      args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined
     );
   }
 
@@ -575,8 +556,7 @@ export class HostSimulator {
       intent: args.intent,
     };
     if (args.blueprintDraft !== undefined) {
-      (handshakeArgs as { blueprintDraft?: unknown }).blueprintDraft =
-        args.blueprintDraft;
+      (handshakeArgs as { blueprintDraft?: unknown }).blueprintDraft = args.blueprintDraft;
     }
     if (args.forceCreate !== undefined) {
       (handshakeArgs as { forceCreate?: boolean }).forceCreate = args.forceCreate;
@@ -585,7 +565,7 @@ export class HostSimulator {
 
     const renderArgs: Parameters<typeof this.render>[0] = {
       handshakeId: handshake.handshakeId,
-      decision: args.decision ?? { kind: 'accept' },
+      decision: args.decision ?? { kind: "accept" },
     };
     if (args.props !== undefined) {
       (renderArgs as { props?: unknown }).props = args.props;
@@ -610,11 +590,11 @@ export class HostSimulator {
    */
   async subscribeWith(
     meta: McpAppAiGguiRenderMeta,
-    opts: { keepOpen?: boolean } = {},
+    opts: { keepOpen?: boolean } = {}
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
     if (!meta.wsUrl) {
       throw new Error(
-        'subscribeWith: meta.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver.',
+        "subscribeWith: meta.wsUrl is required to open a WS subscription. Self-contained / no-channel bootstraps have no live receiver."
       );
     }
     // Thread the bootstrap token on the upgrade URL as `?wsToken=`.
@@ -625,7 +605,7 @@ export class HostSimulator {
     // iframe-runtime's `composeWsUrl`; the token also stays in the
     // subscribe payload for servers that consume it there.
     const upgradeUrl = meta.wsToken
-      ? `${meta.wsUrl}${meta.wsUrl.includes('?') ? '&' : '?'}wsToken=${encodeURIComponent(meta.wsToken)}`
+      ? `${meta.wsUrl}${meta.wsUrl.includes("?") ? "&" : "?"}wsToken=${encodeURIComponent(meta.wsToken)}`
       : meta.wsUrl;
     const ws = new WebSocket(upgradeUrl);
     // 15s ack budget — covers the cloud WS handler under bursty
@@ -636,34 +616,30 @@ export class HostSimulator {
     const ackPromise = new Promise<SubscribeAck>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`WS ack timeout (${ACK_TIMEOUT_MS}ms)`)),
-        ACK_TIMEOUT_MS,
+        ACK_TIMEOUT_MS
       );
-      ws.once('message', (data) => {
+      ws.once("message", (data) => {
         clearTimeout(timer);
         try {
           const parsed = JSON.parse(data.toString()) as {
             type?: unknown;
             payload?: Record<string, unknown>;
           };
-          const kind = parsed.type === 'ack' ? 'ack' : 'error';
+          const kind = parsed.type === "ack" ? "ack" : "error";
           const payload = parsed.payload ?? {};
           resolve({
             kind,
-            ...(typeof payload['sessionToken'] === 'string'
-              ? { sessionToken: payload['sessionToken'] }
+            ...(typeof payload["sessionToken"] === "string"
+              ? { sessionToken: payload["sessionToken"] }
               : {}),
-            ...(typeof payload['sequence'] === 'number'
-              ? { sequence: payload['sequence'] }
-              : {}),
-            ...(typeof payload['code'] === 'string'
-              ? { code: payload['code'] }
-              : {}),
+            ...(typeof payload["sequence"] === "number" ? { sequence: payload["sequence"] } : {}),
+            ...(typeof payload["code"] === "string" ? { code: payload["code"] } : {}),
           });
         } catch (err) {
           reject(err instanceof Error ? err : new Error(String(err)));
         }
       });
-      ws.once('error', (err) => {
+      ws.once("error", (err) => {
         clearTimeout(timer);
         reject(err);
       });
@@ -678,21 +654,21 @@ export class HostSimulator {
     ackPromise.catch(() => undefined);
 
     await new Promise<void>((resolve, reject) => {
-      ws.once('open', () => resolve());
-      ws.once('error', reject);
+      ws.once("open", () => resolve());
+      ws.once("error", reject);
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
     //   { type: 'subscribe', payload: { renderId, appId, wsToken } }
     ws.send(
       JSON.stringify({
-        type: 'subscribe',
+        type: "subscribe",
         payload: {
           renderId: meta.renderId,
           appId: meta.appId,
           wsToken: meta.wsToken,
         },
-      }),
+      })
     );
 
     const ack = await ackPromise;
@@ -724,10 +700,8 @@ export class HostSimulator {
    * Returns the actionId + gateway tool result + both captured
    * envelopes for direct assertion.
    */
-  async simulateWiredAction(
-    args: SimulateWiredActionArgs,
-  ): Promise<SimulateWiredActionResult> {
-    if (!this.client) throw new Error('connect() first');
+  async simulateWiredAction(args: SimulateWiredActionArgs): Promise<SimulateWiredActionResult> {
+    if (!this.client) throw new Error("connect() first");
     const built: BuiltWiredAction = buildWiredAction({
       intent: args.intent,
       data: args.data,
@@ -742,8 +716,8 @@ export class HostSimulator {
       name: built.toolsCall.params.name,
       arguments: { ...built.toolsCall.params.arguments },
     });
-    const gatewayResult: unknown =
-      (toolResult as { structuredContent?: unknown }).structuredContent;
+    const gatewayResult: unknown = (toolResult as { structuredContent?: unknown })
+      .structuredContent;
 
     // (2) Update LLM context — latest-wins per spec §1099.
     this.modelContext = built.updateContext;

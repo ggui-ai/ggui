@@ -9,7 +9,7 @@
  * interfaces owns the mapping.
  *
  * Ownership / writers.
- *   - `@ggui-ai/mcp-server-handlers/session-mutations/render` is the
+ *   - `@ggui-ai/mcp-server-handlers/renders/render` is the
  *     only writer today. After minting a `shortCode` it calls
  *     `index.put(shortCode, { renderId, appId })` — best-effort, no
  *     throw on failure, since the tool result is already constructed

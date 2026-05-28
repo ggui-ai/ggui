@@ -2,7 +2,7 @@
  * Typed errors thrown by app-discovery handlers.
  *
  * Lives alongside the handlers (not in `@ggui-ai/protocol`) for the
- * same reason `session-mutations/errors.ts` does — these are
+ * same reason `renders/errors.ts` does — these are
  * handler-flow diagnostics, not contract-shape violations.
  */
 
@@ -18,12 +18,12 @@
  * app.
  */
 export class AppAccessDeniedError extends Error {
-  readonly code = 'app_access_denied' as const;
+  readonly code = "app_access_denied" as const;
   constructor(message?: string) {
     super(
       message ??
-        'app_access_denied: the supplied appId does not match the caller identity. Omit the appId field to default to the caller-resolved app, or invoke from a deployment whose auth resolves to the requested app.',
+        "app_access_denied: the supplied appId does not match the caller identity. Omit the appId field to default to the caller-resolved app, or invoke from a deployment whose auth resolves to the requested app."
     );
-    this.name = 'AppAccessDeniedError';
+    this.name = "AppAccessDeniedError";
   }
 }

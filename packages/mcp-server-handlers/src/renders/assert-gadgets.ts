@@ -61,14 +61,14 @@ import {
   listContractGadgets,
   type DataContract,
   type GadgetDescriptor,
-} from '@ggui-ai/protocol';
-import { levenshtein } from '../ops-blueprint/persona-normalization.js';
+} from "@ggui-ai/protocol";
+import { levenshtein } from "../ops-blueprint/persona-normalization.js";
 
 // Re-export the canonical resolver. The previous
 // `enrichContractGadgets` (which overlaid descriptors onto the
 // contract) is retired — the wire stays the wire; descriptors land
 // on `Render.gadgetDescriptors` as a sidecar. Keeps the
-// existing `from '../session-mutations/assert-gadgets'` import path
+// existing `from '../renders/assert-gadgets'` import path
 // stable for downstream callers.
 export { filterDescriptorsToContract };
 
@@ -103,16 +103,14 @@ export interface PackageMismatchEntry {
  * package misses, so a multi-category push surfaces every violation in
  * one rejection. Empty string when there is nothing else to report.
  */
-function renderSecondaryTail(
-  packageMismatches: readonly PackageMismatchEntry[],
-): string {
-  if (packageMismatches.length === 0) return '';
+function renderSecondaryTail(packageMismatches: readonly PackageMismatchEntry[]): string {
+  if (packageMismatches.length === 0) return "";
   const lines = packageMismatches.map(
     (m) =>
-      `  - [gadget_package_mismatch] export \`${m.hook}\` requested under \`${m.requestedPackage}\``,
+      `  - [gadget_package_mismatch] export \`${m.hook}\` requested under \`${m.requestedPackage}\``
   );
   return `\n\nThis push ALSO has gadget refs failing other checks — fix these in the same pass to avoid a repeat rejection:\n${lines.join(
-    '\n',
+    "\n"
   )}`;
 }
 
@@ -134,7 +132,7 @@ function renderSecondaryTail(
  * or drop the reference from the contract.
  */
 export class GadgetNotRegisteredError extends Error {
-  readonly code = 'gadget_not_registered' as const;
+  readonly code = "gadget_not_registered" as const;
   readonly unregistered: readonly UnregisteredHookEntry[];
   /**
    * Lower-priority misses on the same push. Present only when this
@@ -147,22 +145,19 @@ export class GadgetNotRegisteredError extends Error {
     unregistered: readonly UnregisteredHookEntry[],
     secondary?: {
       readonly packageMismatches: readonly PackageMismatchEntry[];
-    },
+    }
   ) {
     const lines = unregistered.map((u) => {
-      const tail =
-        u.suggestion !== null ? ` — did you mean \`${u.suggestion}\`?` : '';
+      const tail = u.suggestion !== null ? ` — did you mean \`${u.suggestion}\`?` : "";
       return `  - \`${u.package}\` exports \`${u.hook}\` — not registered in App.gadgets${tail}`;
     });
-    const secondaryTail = secondary
-      ? renderSecondaryTail(secondary.packageMismatches)
-      : '';
+    const secondaryTail = secondary ? renderSecondaryTail(secondary.packageMismatches) : "";
     super(
       `gadget_not_registered: contract.clientCapabilities.gadgets references exports not present in App.gadgets:\n${lines.join(
-        '\n',
-      )}\n\nRegister the missing gadget(s) on this app (ggui.json#app.gadgets or the operator tool), or drop the reference from the contract.${secondaryTail}`,
+        "\n"
+      )}\n\nRegister the missing gadget(s) on this app (ggui.json#app.gadgets or the operator tool), or drop the reference from the contract.${secondaryTail}`
     );
-    this.name = 'GadgetNotRegisteredError';
+    this.name = "GadgetNotRegisteredError";
     this.unregistered = unregistered;
     if (secondary && secondary.packageMismatches.length > 0) {
       this.secondary = secondary;
@@ -189,21 +184,21 @@ export class GadgetNotRegisteredError extends Error {
  * or register the requested package on this app.
  */
 export class GadgetPackageMismatchError extends Error {
-  readonly code = 'gadget_package_mismatch' as const;
+  readonly code = "gadget_package_mismatch" as const;
   readonly mismatches: readonly PackageMismatchEntry[];
   constructor(mismatches: readonly PackageMismatchEntry[]) {
     const lines = mismatches.map(
       (m) =>
         `  - export \`${m.hook}\` requested under package \`${m.requestedPackage}\`, but the app registered it under: ${m.registered.join(
-          ', ',
-        )}`,
+          ", "
+        )}`
     );
     super(
       `gadget_package_mismatch: contract.clientCapabilities.gadgets references exports registered under a different package:\n${lines.join(
-        '\n',
-      )}\n\nPoint the contract reference at the registered package, or register the requested package on this app.`,
+        "\n"
+      )}\n\nPoint the contract reference at the registered package, or register the requested package on this app.`
     );
-    this.name = 'GadgetPackageMismatchError';
+    this.name = "GadgetPackageMismatchError";
     this.mismatches = mismatches;
   }
 }
@@ -227,7 +222,7 @@ export class GadgetPackageMismatchError extends Error {
  */
 export function assertGadgetsRegistered(
   contract: DataContract | undefined,
-  appGadgets: readonly GadgetDescriptor[] | undefined,
+  appGadgets: readonly GadgetDescriptor[] | undefined
 ): void {
   if (!contract || !appGadgets) return;
   const declared = listContractGadgets(contract);
@@ -244,9 +239,7 @@ export function assertGadgetsRegistered(
   for (const descriptor of appGadgets) {
     for (const exp of descriptor.exports) {
       const name = gadgetExportName(exp);
-      registeredKeys.add(
-        gadgetIdentityKey({ name, package: descriptor.package }),
-      );
+      registeredKeys.add(gadgetIdentityKey({ name, package: descriptor.package }));
       const list = byExportName.get(name);
       if (list) list.push(descriptor.package);
       else byExportName.set(name, [descriptor.package]);
@@ -303,17 +296,14 @@ export function assertGadgetsRegistered(
  */
 export function findClosestRegisteredHook(
   candidate: string,
-  appGadgets: readonly GadgetDescriptor[],
+  appGadgets: readonly GadgetDescriptor[]
 ): string | null {
   let nearest: string | null = null;
   let nearestDistance = Infinity;
   for (const descriptor of appGadgets) {
     for (const exp of descriptor.exports) {
       const exportName = gadgetExportName(exp);
-      const d = levenshtein(
-        candidate.toLowerCase(),
-        exportName.toLowerCase(),
-      );
+      const d = levenshtein(candidate.toLowerCase(), exportName.toLowerCase());
       if (d < nearestDistance) {
         nearestDistance = d;
         nearest = exportName;

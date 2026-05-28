@@ -3,7 +3,7 @@
  * codepath so hosted + OSS mutation handlers converge on one set of
  * primitives.
  *
- * Post-Phase-B (flatten-render-identity): the prior "session-mutations"
+ * Post-Phase-B (flatten-render-identity): the prior "renders"
  * surface (vessel-wrapping-a-stack) collapsed to "render-mutations"
  * (a render IS the addressable unit). Helpers + errors renamed; the
  * folder retains its old name to keep import paths stable for one
@@ -32,127 +32,33 @@
  *     throw sites.
  */
 export {
-  RenderNotFoundError,
-  ChannelNotDeclaredError,
-  InvalidCompleteError,
-} from './errors.js';
-export { assertPropsContract } from './assert-props-contract.js';
-export { assertStreamContract } from './assert-stream-contract.js';
-export { assertActionContract } from './assert-action-contract.js';
-export {
-  assertGadgetsRegistered,
-  GadgetNotRegisteredError,
-  GadgetPackageMismatchError,
-  filterDescriptorsToContract,
-  findClosestRegisteredHook,
-  type UnregisteredHookEntry,
-  type PackageMismatchEntry,
-} from './assert-gadgets.js';
-export {
-  assertContractNoRetiredFields,
-  ContractRetiredFieldError,
-} from './assert-contract-no-retired-fields.js';
-export {
-  assertPublicEnvSatisfied,
-  GadgetPublicEnvMissingError,
-  findClosestPublicEnvKey,
-  type PublicEnvViolation,
-} from './assert-public-env.js';
-export {
   applyRenderPatch,
   type ApplyRenderPatchInput,
   type ApplyRenderPatchResult,
   type RenderTarget,
-} from './apply-render-patch.js';
+} from "./apply-render-patch.js";
+export { assertActionContract } from "./assert-action-contract.js";
 export {
-  handleStream,
-  type HandleStreamDeps,
-  type HandleStreamEnvelope,
-  type SendEnvelopeFn,
-  type SendEnvelopeResult,
-  type RenderStreamTarget,
-} from './handle-stream.js';
+  assertContractNoRetiredFields,
+  ContractRetiredFieldError,
+} from "./assert-contract-no-retired-fields.js";
 export {
-  applyRecordOp,
-  replayFromBufferOp,
-  normalizeBufferState,
-  runSequencedRecord,
-  EMPTY_BUFFER_STATE,
-  DEFAULT_REPLAY_MAX_PER_SESSION,
-  DEFAULT_REPLAY_MAX_RETRIES,
-  ReplayConflictError,
-  ReplayMaxRetriesExceededError,
-  ReplaySessionNotFoundError,
-  type ApplyRecordResult,
-  type BufferedReplayEnvelope,
-  type BufferState,
-  type FetchedReplayState,
-  type ReplayResult,
-  type ReplaySequencerDeps,
-  type RunSequencedRecordOptions,
-  type StreamReplayInput,
-} from './stream-replay-ops.js';
+  assertGadgetsRegistered,
+  filterDescriptorsToContract,
+  findClosestRegisteredHook,
+  GadgetNotRegisteredError,
+  GadgetPackageMismatchError,
+  type PackageMismatchEntry,
+  type UnregisteredHookEntry,
+} from "./assert-gadgets.js";
+export { assertPropsContract } from "./assert-props-contract.js";
 export {
-  createGguiRenderHandler,
-  type ChannelNotifier,
-  type GenerationCredentials,
-  type GenerationDeps,
-  type GguiRenderHandlerDeps,
-  type RenderPostSuccessArgs,
-} from './render.js';
-export {
-  NO_CREDENTIALS_SYSTEM_CARD_KIND,
-  buildNoCredentialsRender,
-} from './no-credentials-card.js';
-export {
-  createGguiUpdateHandler,
-  UpdateUnsupportedError,
-  type BillingGate,
-  type GguiUpdateHandlerDeps,
-  type PropsUpdateNotifier,
-} from './update.js';
-export {
-  createGguiConsumeHandler,
-  type ConsumeLogger,
-  type DrainAckNotifier,
-  type GguiConsumeHandlerDeps,
-  type ObserverNotifier,
-} from './consume.js';
-export {
-  createGguiGetRenderHandler,
-  type GetRenderHeartbeatResult,
-  type GguiGetRenderHandlerDeps,
-} from './get-render.js';
-export {
-  createGguiListRendersHandler,
-  type GguiListRendersHandlerDeps,
-  type RenderSummaryWire,
-} from './list-renders.js';
-export {
-  createGguiEmitHandler,
-  type GguiEmitHandlerDeps,
-  type StreamObserverNotifier,
-} from './stream.js';
-export { createGguiSubmitActionHandler } from './submit-action.js';
-export {
-  createGguiRefreshWsTokenHandler,
-  type WsTokenRefreshSeam,
-  type GguiRefreshWsTokenHandlerDeps,
-} from './refresh-ws-token.js';
-export {
-  createGguiSyncContextHandler,
-  type CreateGguiSyncContextHandlerDeps,
-} from './sync-context.js';
-export {
-  clearGenerationCache,
-  DEFAULT_CACHE_SIMILARITY_THRESHOLD,
-  generationCacheKey,
-  invalidateGenerationCache,
-  listGenerationCache,
-  type GenerationCacheDeps,
-  type GenerationCacheEntry,
-  type GenerationCacheHit,
-} from './generation-cache.js';
+  assertPublicEnvSatisfied,
+  findClosestPublicEnvKey,
+  GadgetPublicEnvMissingError,
+  type PublicEnvViolation,
+} from "./assert-public-env.js";
+export { assertStreamContract } from "./assert-stream-contract.js";
 export {
   CACHE_TRACE_INTENT_MAX_BYTES,
   CACHE_TRACE_PROBE_SIZE,
@@ -166,7 +72,47 @@ export {
   type CacheTraceEvent,
   type CacheTraceSink,
   type CacheTraceValidatorFinding,
-} from './cache-trace-sink.js';
+} from "./cache-trace-sink.js";
+export {
+  createGguiConsumeHandler,
+  type ConsumeLogger,
+  type DrainAckNotifier,
+  type GguiConsumeHandlerDeps,
+  type ObserverNotifier,
+} from "./consume.js";
+export { ChannelNotDeclaredError, InvalidCompleteError, RenderNotFoundError } from "./errors.js";
+export {
+  clearGenerationCache,
+  DEFAULT_CACHE_SIMILARITY_THRESHOLD,
+  generationCacheKey,
+  invalidateGenerationCache,
+  listGenerationCache,
+  type GenerationCacheDeps,
+  type GenerationCacheEntry,
+  type GenerationCacheHit,
+} from "./generation-cache.js";
+export {
+  createGguiGetRenderHandler,
+  type GetRenderHeartbeatResult,
+  type GguiGetRenderHandlerDeps,
+} from "./get-render.js";
+export {
+  handleStream,
+  type HandleStreamDeps,
+  type HandleStreamEnvelope,
+  type RenderStreamTarget,
+  type SendEnvelopeFn,
+  type SendEnvelopeResult,
+} from "./handle-stream.js";
+export {
+  createGguiListRendersHandler,
+  type GguiListRendersHandlerDeps,
+  type RenderSummaryWire,
+} from "./list-renders.js";
+export {
+  buildNoCredentialsRender,
+  NO_CREDENTIALS_SYSTEM_CARD_KIND,
+} from "./no-credentials-card.js";
 export {
   emitPayloadTraceEvent,
   getPayloadTraceSink,
@@ -175,7 +121,57 @@ export {
   type PayloadTraceDirection,
   type PayloadTraceEvent,
   type PayloadTraceSink,
-} from './payload-trace-sink.js';
+} from "./payload-trace-sink.js";
+export {
+  createGguiRefreshWsTokenHandler,
+  type GguiRefreshWsTokenHandlerDeps,
+  type WsTokenRefreshSeam,
+} from "./refresh-ws-token.js";
+export {
+  createGguiRenderHandler,
+  type ChannelNotifier,
+  type GenerationCredentials,
+  type GenerationDeps,
+  type GguiRenderHandlerDeps,
+  type RenderPostSuccessArgs,
+} from "./render.js";
+export {
+  applyRecordOp,
+  DEFAULT_REPLAY_MAX_PER_SESSION,
+  DEFAULT_REPLAY_MAX_RETRIES,
+  EMPTY_BUFFER_STATE,
+  normalizeBufferState,
+  ReplayConflictError,
+  replayFromBufferOp,
+  ReplayMaxRetriesExceededError,
+  ReplaySessionNotFoundError,
+  runSequencedRecord,
+  type ApplyRecordResult,
+  type BufferedReplayEnvelope,
+  type BufferState,
+  type FetchedReplayState,
+  type ReplayResult,
+  type ReplaySequencerDeps,
+  type RunSequencedRecordOptions,
+  type StreamReplayInput,
+} from "./stream-replay-ops.js";
+export {
+  createGguiEmitHandler,
+  type GguiEmitHandlerDeps,
+  type StreamObserverNotifier,
+} from "./stream.js";
+export { createGguiSubmitActionHandler } from "./submit-action.js";
+export {
+  createGguiSyncContextHandler,
+  type CreateGguiSyncContextHandlerDeps,
+} from "./sync-context.js";
+export {
+  createGguiUpdateHandler,
+  UpdateUnsupportedError,
+  type BillingGate,
+  type GguiUpdateHandlerDeps,
+  type PropsUpdateNotifier,
+} from "./update.js";
 // The handshake handler owns suggestion orchestration directly, via
 // `HandshakeNegotiator.decide` returning a `HandshakeSuggestion`.
 // The LLM-backed negotiator in `@ggui-ai/mcp-server` is the
@@ -187,17 +183,17 @@ export {
   type BlueprintMatchResult,
   type MatchBlueprintDeps,
   type MatchBlueprintOptions,
-} from './blueprint-matcher.js';
+} from "./blueprint-matcher.js";
 export {
-  registerBlueprint,
+  BlueprintRejectedError,
+  composeBlueprintId,
+  composeEmbeddingInput,
+  deleteBlueprint,
   findBlueprintExact,
   findBlueprintsByEmbedding,
   listBlueprints,
   recordBlueprintHit,
-  deleteBlueprint,
-  composeBlueprintId,
-  composeEmbeddingInput,
-  BlueprintRejectedError,
+  registerBlueprint,
   type Blueprint,
   type BlueprintCandidate,
   type BlueprintKind,
@@ -206,34 +202,31 @@ export {
   type ContractValidator,
   type RegisterBlueprintInput,
   type RegisterBlueprintOptions,
-} from './blueprint-registry.js';
+} from "./blueprint-registry.js";
 export {
-  installToCache,
-  type InstallToCacheInput,
-} from './install-to-cache.js';
-export {
-  createInstalledBlueprintsProvider,
-  type CompileResult as InstalledBlueprintCompileResult,
-  type CreateInstalledBlueprintsProviderOptions,
-  type InstalledBlueprintCacheIssue,
-  type InstalledBlueprintEntry,
-  type InstalledBlueprintsProvider,
-} from './installed-blueprints-provider.js';
-export {
-  createGguiHandshakeHandler,
   consumeHandshakeRecord,
-  peekHandshakeRecord,
-  handshakeRecordKey,
-  HandshakeNotFoundError,
-  HANDSHAKE_RECORD_TTL_SEC,
+  createGguiHandshakeHandler,
   DEFAULT_GENERATOR_SLUG,
+  HANDSHAKE_RECORD_TTL_SEC,
+  HandshakeNotFoundError,
+  handshakeRecordKey,
+  peekHandshakeRecord,
   type GguiHandshakeHandlerDeps,
   type HandshakeNegotiator,
   type HandshakeNegotiatorResult,
   type HandshakeRecord,
   type HandshakeStoredInput,
   type HandshakeStoredTarget,
-} from './handshake.js';
+} from "./handshake.js";
+export { installToCache, type InstallToCacheInput } from "./install-to-cache.js";
+export {
+  createInstalledBlueprintsProvider,
+  type CreateInstalledBlueprintsProviderOptions,
+  type InstalledBlueprintCacheIssue,
+  type CompileResult as InstalledBlueprintCompileResult,
+  type InstalledBlueprintEntry,
+  type InstalledBlueprintsProvider,
+} from "./installed-blueprints-provider.js";
 export {
   createInMemoryProvisionalPreviewRegistry,
   evaluateProvisionalPreviewGate,
@@ -254,7 +247,7 @@ export {
   type ProvisionalPreviewRegistry,
   type ProvisionalPreviewRunContext,
   type ProvisionalPreviewSkipReason,
-} from './provisional-preview.js';
+} from "./provisional-preview.js";
 
 // Slice-meta projection helpers shared by the
 // `_meta["ai.ggui/render"]` builder in `render.ts` / `update.ts`.
@@ -264,11 +257,11 @@ export {
 export {
   deriveBundleOrigins,
   deriveContextSlots,
+  deriveContractBundle,
   derivePropsJson,
   derivePublicEnvProjection,
-  deriveContractBundle,
   deriveRenderMeta,
   deriveWiredActionTools,
   resolveGadgetUrls,
   type RenderMetaView,
-} from './slice-meta-derivation.js';
+} from "./slice-meta-derivation.js";

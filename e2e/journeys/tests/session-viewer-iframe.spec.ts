@@ -44,9 +44,21 @@
  * host a non-React implementation that surfaces the deleted
  * IframeErrorPane semantics.
  */
-import { test, expect, type Page } from '@playwright/test';
-import { resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { runConformance, type ConformanceHost } from "@ggui-ai/protocol-conformance";
+import {
+  createReferenceConformanceHost,
+  ReferenceServer,
+} from "@ggui-ai/protocol-reference-server";
+import { expect, test, type Page } from "@playwright/test";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  listFixtures,
+  loadFixture,
+  type ContractErrorBehavior,
+  type ObservabilityBehavior,
+  type TestCase,
+} from "./fixtures/contract-kit/index.js";
 import {
   attachServeArtifacts,
   DEVTOOL_DIST,
@@ -54,24 +66,9 @@ import {
   installNetworkGate,
   spawnGguiServeInCwd,
   type GguiServeHandle,
-} from './ggui-serve-harness';
-import {
-  listFixtures,
-  loadFixture,
-  type ContractErrorBehavior,
-  type ObservabilityBehavior,
-  type TestCase,
-} from './fixtures/contract-kit/index.js';
-import {
-  runConformance,
-  type ConformanceHost,
-} from '@ggui-ai/protocol-conformance';
-import {
-  ReferenceServer,
-  createReferenceConformanceHost,
-} from '@ggui-ai/protocol-reference-server';
+} from "./ggui-serve-harness";
 
-const FIXTURE_CWD = resolve(__dirname, 'fixtures/playground');
+const FIXTURE_CWD = resolve(__dirname, "fixtures/playground");
 const TEST_TIMEOUT_MS = 60_000;
 
 // =============================================================================
@@ -99,17 +96,17 @@ const TEST_TIMEOUT_MS = 60_000;
  *                      `data-tool` attribute.
  */
 const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
-  'wired-action-success': 'todo-list',
-  'wired-action-tool-threw': 'contract-probe',
-  'wired-action-tool-not-found': 'contract-probe',
-  'wired-action-tool-timeout': 'contract-probe',
-  'stream-schema-violation': 'contract-probe',
+  "wired-action-success": "todo-list",
+  "wired-action-tool-threw": "contract-probe",
+  "wired-action-tool-not-found": "contract-probe",
+  "wired-action-tool-timeout": "contract-probe",
+  "stream-schema-violation": "contract-probe",
   // `bootstrap-success` asserts the happy-path boot landed — any
   // blueprint satisfies that, since `openLiveSession` already waits
   // for `data-ggui-code-ready="true"` on the first stack entry (which
   // is itself proof the bootstrap-failed envelope did NOT fire).
   // `todo-list` is the cheapest (no synthetic probe traffic).
-  'bootstrap-success': 'todo-list',
+  "bootstrap-success": "todo-list",
   // Slice O props_update round-trip — `props-echo` blueprint pairs
   // with the `props-echo-mount.mjs` fixture's `bump_count` tool. The
   // dispatcher (`driveBrowserPropsUpdateFixture`) clicks the bump
@@ -117,7 +114,7 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
   // `"1"` within a small budget — evidence the props_update emission
   // seam round-tripped end-to-end (mount → channel-server →
   // iframe-runtime → DOM).
-  'props-update-roundtrip': 'props-echo',
+  "props-update-roundtrip": "props-echo",
 };
 
 // =============================================================================
@@ -144,31 +141,25 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * against its path-scope (the helper is not exported from the
  * harness).
  */
-async function openLiveSession(
-  page: Page,
-  baseUrl: string,
-  blueprintId: string,
-): Promise<string> {
+async function openLiveSession(page: Page, baseUrl: string, blueprintId: string): Promise<string> {
   await page.goto(`${baseUrl}/preview/${blueprintId}`, {
-    waitUntil: 'networkidle',
+    waitUntil: "networkidle",
   });
   const tryBtn = page.locator(
-    `button[data-ggui-try-live][data-ggui-blueprint-id="${blueprintId}"]`,
+    `button[data-ggui-try-live][data-ggui-blueprint-id="${blueprintId}"]`
   );
   await expect(tryBtn).toBeVisible({ timeout: 15_000 });
   await tryBtn.click();
   // Short code is the URL-safe lowercase alphabet from
   // `generateShortCode()` in `packages/mcp-server-handlers/src/
-  // session-mutations/push.ts`. Length is not pinned here — the
+  // renders/push.ts`. Length is not pinned here — the
   // generator's length has drifted across slices.
   await page.waitForURL(/\/s\/[a-z0-9]+$/, { timeout: 15_000 });
   const match = page.url().match(/\/s\/([a-z0-9]+)$/);
   if (!match) {
     throw new Error(`expected /s/<shortCode> URL, got ${page.url()}`);
   }
-  const liveIframe = page
-    .locator('iframe[data-testid="session-viewer-iframe"]')
-    .first();
+  const liveIframe = page.locator('iframe[data-testid="session-viewer-iframe"]').first();
   await expect(liveIframe).toBeVisible({ timeout: 15_000 });
   return match[1]!;
 }
@@ -181,9 +172,7 @@ async function openLiveSession(
  * only via Playwright's `frameLocator` from the spec side.
  */
 function rendererFrame(page: Page) {
-  return page
-    .frameLocator('iframe[data-testid="session-viewer-iframe"]')
-    .first();
+  return page.frameLocator('iframe[data-testid="session-viewer-iframe"]').first();
 }
 
 /**
@@ -206,9 +195,9 @@ async function driveWiredActionSuccess(page: Page): Promise<void> {
   // Playwright's frameLocator, which transparently descends into the
   // iframe's contentDocument.
   const frame = rendererFrame(page);
-  const bootstrapInput = frame.getByLabel('new task');
-  await bootstrapInput.fill('ck-bootstrap');
-  await frame.getByRole('button', { name: 'add' }).click();
+  const bootstrapInput = frame.getByLabel("new task");
+  await bootstrapInput.fill("ck-bootstrap");
+  await frame.getByRole("button", { name: "add" }).click();
 
   const seed1 = frame.locator('[data-task-id="seed-1"]');
   await expect(seed1).toBeVisible({ timeout: 15_000 });
@@ -218,11 +207,11 @@ async function driveWiredActionSuccess(page: Page): Promise<void> {
   // wired-action-success once per serve lifetime (FIXTURE_BLUEPRINTS
   // maps exactly one fixture to todo-list), so seed-1 starts 'todo'
   // every time.
-  const initialStatus = await seed1.getAttribute('data-task-status');
+  const initialStatus = await seed1.getAttribute("data-task-status");
   const checkbox = seed1.locator('input[type="checkbox"]');
   await checkbox.click();
-  const expectedAfter = initialStatus === 'todo' ? 'done' : 'todo';
-  await expect(seed1).toHaveAttribute('data-task-status', expectedAfter, {
+  const expectedAfter = initialStatus === "todo" ? "done" : "todo";
+  await expect(seed1).toHaveAttribute("data-task-status", expectedAfter, {
     timeout: 10_000,
   });
 }
@@ -234,17 +223,14 @@ async function driveWiredActionSuccess(page: Page): Promise<void> {
  * then assert the per-row attributes. Mirrors
  * `runtime-contract.spec.ts::tool-throws` + schema-violation rows.
  */
-async function driveContractErrorFixture(
-  page: Page,
-  fixture: TestCase,
-): Promise<void> {
+async function driveContractErrorFixture(page: Page, fixture: TestCase): Promise<void> {
   const behavior = fixture.expectedBehavior as ContractErrorBehavior;
   const probeSelector =
-    behavior.code === 'TOOL_THREW'
+    behavior.code === "TOOL_THREW"
       ? 'button[data-ggui-probe="break"]'
-      : behavior.code === 'TOOL_NOT_FOUND'
+      : behavior.code === "TOOL_NOT_FOUND"
         ? 'button[data-ggui-probe="not-found"]'
-        : behavior.code === 'TOOL_TIMEOUT'
+        : behavior.code === "TOOL_TIMEOUT"
           ? 'button[data-ggui-probe="timeout"]'
           : 'button[data-ggui-probe="malformed"]'; // SCHEMA_VIOLATION
 
@@ -252,7 +238,7 @@ async function driveContractErrorFixture(
   // through the frameLocator (outer-DOM lifecycle gating already happened
   // in `openLiveSession`).
   const frame = rendererFrame(page);
-  const panel = frame.locator('[data-ggui-contract-error-count]').first();
+  const panel = frame.locator("[data-ggui-contract-error-count]").first();
   const button = frame.locator(probeSelector);
   await expect(button).toBeVisible({ timeout: 10_000 });
   await button.click();
@@ -262,19 +248,15 @@ async function driveContractErrorFixture(
   // the 1st or Nth envelope on the channel. Matches the pattern in
   // `runtime-contract.spec.ts::schema-violation-on-refresh` which
   // must tolerate prior rows.
-  await expect(panel).toHaveAttribute(
-    'data-ggui-contract-error-codes',
-    new RegExp(behavior.code),
-    { timeout: 10_000 },
-  );
+  await expect(panel).toHaveAttribute("data-ggui-contract-error-codes", new RegExp(behavior.code), {
+    timeout: 10_000,
+  });
 
-  const row = panel
-    .locator(`[data-ggui-contract-error][data-code="${behavior.code}"]`)
-    .first();
+  const row = panel.locator(`[data-ggui-contract-error][data-code="${behavior.code}"]`).first();
   await expect(row).toBeVisible();
-  await expect(row).toHaveAttribute('data-tool', behavior.toolName);
+  await expect(row).toHaveAttribute("data-tool", behavior.toolName);
   if (behavior.sourceAction !== undefined) {
-    await expect(row).toHaveAttribute('data-source', behavior.sourceAction);
+    await expect(row).toHaveAttribute("data-source", behavior.sourceAction);
   }
 
   // Session-alive invariant: the probe button stays interactive after
@@ -289,34 +271,30 @@ async function driveContractErrorFixture(
  * without asserting when the fixture is skipReason'd — the caller's
  * `test.skip()` gate handles the reporter narrative.
  */
-async function runFixture(
-  page: Page,
-  handle: GguiServeHandle,
-  fixture: TestCase,
-): Promise<void> {
+async function runFixture(page: Page, handle: GguiServeHandle, fixture: TestCase): Promise<void> {
   const blueprintId = FIXTURE_BLUEPRINTS[fixture.name];
   if (blueprintId === undefined) {
     throw new Error(
-      `contract-kit: fixture '${fixture.name}' has skipReason=null but no blueprint mapping — either add it to FIXTURE_BLUEPRINTS, or (if no consumer harness can drive it) author a fixture-level skipReason.`,
+      `contract-kit: fixture '${fixture.name}' has skipReason=null but no blueprint mapping — either add it to FIXTURE_BLUEPRINTS, or (if no consumer harness can drive it) author a fixture-level skipReason.`
     );
   }
   await openLiveSession(page, handle.baseUrl, blueprintId);
 
   switch (fixture.expectedBehavior.kind) {
-    case 'contract-error':
+    case "contract-error":
       await driveContractErrorFixture(page, fixture);
       return;
-    case 'observability-event': {
+    case "observability-event": {
       const behavior = fixture.expectedBehavior as ObservabilityBehavior;
-      if (behavior.event.kind === 'wired-tool-invoked') {
+      if (behavior.event.kind === "wired-tool-invoked") {
         await driveWiredActionSuccess(page);
         return;
       }
       throw new Error(
-        `contract-kit: observability fixture '${fixture.name}' — kind '${behavior.event.kind}' not yet driveable by Phase 2 C10 harness; add a skipReason.`,
+        `contract-kit: observability fixture '${fixture.name}' — kind '${behavior.event.kind}' not yet driveable by Phase 2 C10 harness; add a skipReason.`
       );
     }
-    case 'bootstrap-success':
+    case "bootstrap-success":
       // `openLiveSession` above already waited for
       // `data-ggui-code-ready="true"` on the first stack entry, which
       // is the renderer's "ready to accept actions" signal — i.e.,
@@ -325,17 +303,17 @@ async function runFixture(
       // `_meta.ggui.bootstrap`). No further assertion needed; the
       // caller already verified the behavior this fixture targets.
       return;
-    case 'bootstrap-failure':
-    case 'version-mismatch':
-    case 'props-update':
-    case 'stream-update':
-    case 'no-op':
+    case "bootstrap-failure":
+    case "version-mismatch":
+    case "props-update":
+    case "stream-update":
+    case "no-op":
       throw new Error(
-        `contract-kit: fixture '${fixture.name}' has skipReason=null but expectedBehavior.kind='${fixture.expectedBehavior.kind}' requires a dispatcher this spec does not implement; mark skipReason.`,
+        `contract-kit: fixture '${fixture.name}' has skipReason=null but expectedBehavior.kind='${fixture.expectedBehavior.kind}' requires a dispatcher this spec does not implement; mark skipReason.`
       );
     default:
       throw new Error(
-        `contract-kit: fixture '${fixture.name}' has an unknown expectedBehavior.kind='${(fixture.expectedBehavior as { kind: string }).kind}' — author a skipReason.`,
+        `contract-kit: fixture '${fixture.name}' has an unknown expectedBehavior.kind='${(fixture.expectedBehavior as { kind: string }).kind}' — author a skipReason.`
       );
   }
 }
@@ -396,11 +374,11 @@ async function runFixture(
  * Follow-up tracking: see comment block on `KIT_DRIVEN_KNOWN_GAPS`.
  */
 const KIT_DRIVEN_FIXTURES: ReadonlySet<string> = new Set([
-  'observability-contract-error-emitted',
-  'observability-wired-tool-invoked',
-  'stream-refresh-success',
-  'version-match',
-  'version-mismatch',
+  "observability-contract-error-emitted",
+  "observability-wired-tool-invoked",
+  "stream-refresh-success",
+  "version-match",
+  "version-mismatch",
 ]);
 
 /**
@@ -458,12 +436,12 @@ const KIT_DRIVEN_KNOWN_GAPS: Readonly<Record<string, string>> = {};
  * re-evaluated.
  */
 const PENDING_DRIVER_FIXTURES: ReadonlySet<string> = new Set([
-  'canvas-bootstrap-mutual-exclusion',
-  'canvas-lifecycle-channel-emits-handshake-started',
-  'canvas-navigated-updates-active-stack-item',
-  'host-context-observed-persists',
-  'bootstrap-bundle-fetch-failed',
-  'bootstrap-meta-missing',
+  "canvas-bootstrap-mutual-exclusion",
+  "canvas-lifecycle-channel-emits-handshake-started",
+  "canvas-navigated-updates-active-stack-item",
+  "host-context-observed-persists",
+  "bootstrap-bundle-fetch-failed",
+  "bootstrap-meta-missing",
 ]);
 
 /**
@@ -485,11 +463,11 @@ const PENDING_DRIVER_FIXTURES: ReadonlySet<string> = new Set([
 async function runFixtureViaKit(
   fixture: TestCase,
   refServer: ReferenceServer,
-  host: ConformanceHost,
+  host: ConformanceHost
 ): Promise<void> {
   const result = await runConformance({
     serverUrl: refServer.baseUrl,
-    auth: { kind: 'bearer', token: 'reference' },
+    auth: { kind: "bearer", token: "reference" },
     host,
     only: [fixture.name],
     // 1500ms matches the reference-server CI test — comfortably above
@@ -513,7 +491,7 @@ async function runFixtureViaKit(
     throw new Error(
       `kit-driven fixture '${fixture.name}' failed unexpectedly — ${fail.message}\n` +
         `expected: ${JSON.stringify(fail.expected)}\n` +
-        `received: ${JSON.stringify(fail.received)}`,
+        `received: ${JSON.stringify(fail.received)}`
     );
   }
   throw new Error(
@@ -522,7 +500,7 @@ async function runFixtureViaKit(
         passed: result.passed,
         failed: result.failed.map((f) => f.name),
         skipped: result.skipped.map((s) => s.name),
-      })}`,
+      })}`
   );
 }
 
@@ -571,7 +549,7 @@ async function runFixtureViaKit(
  * on a clean run.
  */
 const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
-  'props-update-roundtrip',
+  "props-update-roundtrip",
 ]);
 
 /**
@@ -602,20 +580,20 @@ const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
 async function runBrowserDrivenPropsUpdateFixture(
   page: Page,
   handle: GguiServeHandle,
-  fixture: TestCase,
+  fixture: TestCase
 ): Promise<void> {
-  if (fixture.name !== 'props-update-roundtrip') {
+  if (fixture.name !== "props-update-roundtrip") {
     throw new Error(
-      `runBrowserDrivenPropsUpdateFixture: unknown fixture '${fixture.name}' — registered in BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES by mistake?`,
+      `runBrowserDrivenPropsUpdateFixture: unknown fixture '${fixture.name}' — registered in BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES by mistake?`
     );
   }
-  await openLiveSession(page, handle.baseUrl, 'props-echo');
+  await openLiveSession(page, handle.baseUrl, "props-echo");
 
   const frame = rendererFrame(page);
-  const counter = frame.locator('[data-ggui-prop-count]');
+  const counter = frame.locator("[data-ggui-prop-count]");
   // Cold-start render: no props_update has fired yet, the component's
   // `count ?? 0` fallback paints `"0"` on the attribute.
-  await expect(counter).toHaveAttribute('data-ggui-prop-count', '0', {
+  await expect(counter).toHaveAttribute("data-ggui-prop-count", "0", {
     timeout: 10_000,
   });
 
@@ -628,7 +606,7 @@ async function runBrowserDrivenPropsUpdateFixture(
   await expect(bump).toBeVisible({ timeout: 10_000 });
   await bump.click();
 
-  await expect(counter).toHaveAttribute('data-ggui-prop-count', '1', {
+  await expect(counter).toHaveAttribute("data-ggui-prop-count", "1", {
     timeout: 5_000,
   });
 
@@ -644,7 +622,7 @@ async function runBrowserDrivenPropsUpdateFixture(
 // Spec
 // =============================================================================
 
-test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', () => {
+test.describe.serial("Slice 11.5 C10 — MCP Apps iframe conformance fixtures", () => {
   let handle: GguiServeHandle | null = null;
   let refServer: ReferenceServer | null = null;
   let refHost: ConformanceHost | null = null;
@@ -653,14 +631,14 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
     if (!existsSync(GGUI_CLI_DIST)) {
       test.skip(
         true,
-        `@ggui-ai/cli dist missing at ${GGUI_CLI_DIST}. Run \`pnpm --filter @ggui-ai/cli build\` first.`,
+        `@ggui-ai/cli dist missing at ${GGUI_CLI_DIST}. Run \`pnpm --filter @ggui-ai/cli build\` first.`
       );
       return;
     }
     if (!existsSync(DEVTOOL_DIST)) {
       test.skip(
         true,
-        `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`,
+        `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`
       );
       return;
     }
@@ -669,7 +647,7 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
     // runtime SCHEMA_VIOLATION + TOOL_THREW envelopes — default
     // `'reject'` blocks try-live before the runtime error path fires.
     // See runtime-contract.spec.ts for the full rationale.
-    process.env['GGUI_SCHEMA_COMPAT_MODE'] = 'warn';
+    process.env["GGUI_SCHEMA_COMPAT_MODE"] = "warn";
     // Wired-tool timeout override. Default in
     // `session-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS` is 30 s —
     // dropping to 1500 ms keeps the TOOL_TIMEOUT fixture's per-test
@@ -677,10 +655,10 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
     // `tasks-mount.mjs` sleeps 30 s, so it is comfortably above any
     // value chosen here. Threaded into spawned `ggui serve` via
     // `forwardEnv` (the harness's `GGUI_*` ban is whitelisted per name).
-    process.env['GGUI_WIRED_TIMEOUT_MS'] = '1500';
+    process.env["GGUI_WIRED_TIMEOUT_MS"] = "1500";
     handle = await spawnGguiServeInCwd({
       cwd: FIXTURE_CWD,
-      forwardEnv: ['GGUI_SCHEMA_COMPAT_MODE', 'GGUI_WIRED_TIMEOUT_MS'],
+      forwardEnv: ["GGUI_SCHEMA_COMPAT_MODE", "GGUI_WIRED_TIMEOUT_MS"],
     });
 
     // Phase-3.1 reference server for kit-driven fixtures (Slice G).
@@ -708,9 +686,9 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
   // output is deterministic across filesystems.
   const fixtureNames = listFixtures();
   if (fixtureNames.length === 0) {
-    test('contract-kit fixture catalog is non-empty', () => {
+    test("contract-kit fixture catalog is non-empty", () => {
       throw new Error(
-        'contract-kit: no fixtures found under ./fixtures/contract-kit/cases/. The spec registers one test per fixture; an empty catalog would produce zero tests.',
+        "contract-kit: no fixtures found under ./fixtures/contract-kit/cases/. The spec registers one test per fixture; an empty catalog would produce zero tests."
       );
     });
   }
@@ -733,7 +711,7 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
       // still applies — the mount handler runs in-process and the
       // emission seam stays inside the running server.
       if (BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES.has(fixture.name)) {
-        if (!handle) throw new Error('handle not ready — beforeAll failed');
+        if (!handle) throw new Error("handle not ready — beforeAll failed");
         const gate = await installNetworkGate(page);
         await runBrowserDrivenPropsUpdateFixture(page, handle, fixture);
         expect(gate.attempts).toEqual([]);
@@ -746,9 +724,7 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
       // the kit speaks pure WS to a separate server.
       if (KIT_DRIVEN_FIXTURES.has(fixture.name)) {
         if (!refServer || !refHost) {
-          throw new Error(
-            'reference server not ready — beforeAll failed to start it',
-          );
+          throw new Error("reference server not ready — beforeAll failed to start it");
         }
         await runFixtureViaKit(fixture, refServer, refHost);
         return;
@@ -760,12 +736,12 @@ test.describe.serial('Slice 11.5 C10 — MCP Apps iframe conformance fixtures', 
       if (PENDING_DRIVER_FIXTURES.has(fixture.name)) {
         test.skip(
           true,
-          `${fixture.name}: behavioral runner is a pending kit minor — fixture freezes the protocol intent (see its sub-module index.ts).`,
+          `${fixture.name}: behavioral runner is a pending kit minor — fixture freezes the protocol intent (see its sub-module index.ts).`
         );
         return;
       }
 
-      if (!handle) throw new Error('handle not ready — beforeAll failed');
+      if (!handle) throw new Error("handle not ready — beforeAll failed");
 
       // Every run-tier fixture passes through the real iframe host
       // path. Assert no hosted / AWS / Cognito reach-out — the OSS

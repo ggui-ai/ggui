@@ -23,7 +23,7 @@ that determines which route it surfaces on and its wire-name prefix —
 ## Subpath exports
 
 Handler families are also available behind subpath exports — for example
-`@ggui-ai/mcp-server-handlers/blueprints`, `/session-mutations`, `/threads`,
+`@ggui-ai/mcp-server-handlers/blueprints`, `/renders`, `/threads`,
 `/credits`, `/app-discovery`, and the `/ops-*` families — so consumers can import
 exactly the family they need.
 

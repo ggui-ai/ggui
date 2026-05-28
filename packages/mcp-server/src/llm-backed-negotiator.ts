@@ -51,7 +51,6 @@
  * infrastructure isn't bound.
  */
 
-import { negotiate, type LLMCaller } from '@ggui-ai/negotiator';
 import type {
   EmbeddingProvider,
   LlmRoute,
@@ -60,8 +59,8 @@ import type {
   VariantSelectionContext,
   VariantSelectionDecision,
   VectorStore,
-} from '@ggui-ai/mcp-server-core';
-import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
+} from "@ggui-ai/mcp-server-core";
+import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
 import {
   DEFAULT_GENERATOR_SLUG,
   matchBlueprint,
@@ -69,15 +68,12 @@ import {
   type HandshakeNegotiatorResult,
   type InstalledBlueprintsProvider,
   type MatchBlueprintDeps,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
-import { createHash, randomUUID } from 'node:crypto';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
-import type {
-  Blueprint,
-  DataContract,
-  HandshakeSuggestion,
-} from '@ggui-ai/protocol';
-import { selectAdapter } from '@ggui-ai/ui-gen/providers';
+} from "@ggui-ai/mcp-server-handlers/renders";
+import { negotiate, type LLMCaller } from "@ggui-ai/negotiator";
+import type { Blueprint, DataContract, HandshakeSuggestion } from "@ggui-ai/protocol";
+import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import { selectAdapter } from "@ggui-ai/ui-gen/providers";
+import { createHash, randomUUID } from "node:crypto";
 
 /**
  * Operational error classifier — mirrors the cloud helper. Bugs
@@ -115,12 +111,9 @@ function isOperationalError(err: unknown): boolean {
  *   - `@ggui-ai/negotiator/synthesize-contract` (cold-path contract
  *     synthesizer)
  */
-export function buildLlmCaller(
-  selection: LlmSelection,
-  providerKey: ProviderKeyRef,
-): LLMCaller {
+export function buildLlmCaller(selection: LlmSelection, providerKey: ProviderKeyRef): LLMCaller {
   const adapter = selectAdapter(selection.provider);
-  const isAnthropic = selection.provider === 'anthropic';
+  const isAnthropic = selection.provider === "anthropic";
   // `selection` IS an `LlmRoute & {inference params}` — the typed
   // discriminated union means `selection.model` is already in the
   // wire-canonical form the provider SDK expects. No LiteLLM-prefix
@@ -144,7 +137,7 @@ export function buildLlmCaller(
       if (!result.ok) {
         throw new Error(
           `[llm-backed-negotiator] ${selection.provider} ${selection.model} ` +
-            `failed: ${result.error.kind} — ${result.error.message}`,
+            `failed: ${result.error.kind} — ${result.error.message}`
         );
       }
       return result.response.text;
@@ -155,7 +148,7 @@ export function buildLlmCaller(
       systemPrompt: string,
       userMessage: string,
       tool: { name: string; description: string; input_schema: Record<string, unknown> },
-      maxTokens?: number,
+      maxTokens?: number
     ): Promise<T> => {
       const result = await anthropicCallStructured({
         apiKey: providerKey.key,
@@ -201,7 +194,7 @@ async function anthropicCallStructured(args: {
     // paraphrase via canonical-key normalisation rather than relying
     // on temperature=0.
     system: args.systemPrompt,
-    messages: [{ role: 'user', content: args.userMessage }],
+    messages: [{ role: "user", content: args.userMessage }],
     tools: [
       {
         name: args.tool.name,
@@ -212,22 +205,20 @@ async function anthropicCallStructured(args: {
     // Forced tool use — model MUST emit exactly this tool. Without
     // this the model can drift to a text reply and synth/rerank
     // both lose their structured guarantee.
-    tool_choice: { type: 'tool', name: args.tool.name },
+    tool_choice: { type: "tool", name: args.tool.name },
   };
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
     headers: {
-      'x-api-key': args.apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
+      "x-api-key": args.apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
     },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(
-      `anthropic tool-use HTTP ${response.status}: ${text.slice(0, 500)}`,
-    );
+    const text = await response.text().catch(() => "");
+    throw new Error(`anthropic tool-use HTTP ${response.status}: ${text.slice(0, 500)}`);
   }
   const json = (await response.json()) as {
     content?: Array<{
@@ -240,12 +231,10 @@ async function anthropicCallStructured(args: {
   // model is forced to emit exactly one; defensively scan in case the
   // shape ever shifts.
   const toolUse = json.content?.find(
-    (block) => block.type === 'tool_use' && block.name === args.tool.name,
+    (block) => block.type === "tool_use" && block.name === args.tool.name
   );
   if (!toolUse || toolUse.input === undefined) {
-    throw new Error(
-      `anthropic tool-use response missing tool_use block for "${args.tool.name}"`,
-    );
+    throw new Error(`anthropic tool-use response missing tool_use block for "${args.tool.name}"`);
   }
   return toolUse.input;
 }
@@ -263,7 +252,7 @@ export interface LlmBackedHandshakeNegotiatorDeps {
    * dispatchers can return synchronously).
    */
   resolveLlm: (
-    ctx: HandlerContext,
+    ctx: HandlerContext
   ) =>
     | { selection: LlmSelection; providerKey: ProviderKeyRef }
     | Promise<{ selection: LlmSelection; providerKey: ProviderKeyRef } | null>
@@ -314,23 +303,23 @@ const DEFAULT_GEN_LATENCY_MS = 30_000;
 function buildCreateFallback(
   draftContract: DataContract,
   reason: string,
-  _estimatedLatencyMs: number,
+  _estimatedLatencyMs: number
 ): HandshakeNegotiatorResult {
   // Fallback path stamps an `origin: 'agent'` suggestion against the
   // agent's draft. Gen-pending; no codeHash; provisional blueprintId.
   const contractHash = blueprintKey(draftContract);
   const suggestion: HandshakeSuggestion = {
-    origin: 'agent',
+    origin: "agent",
     rationale: reason,
     blueprintMeta: {
       blueprintId: `bp_${randomUUID()}`,
       contractHash,
-      generator: 'ui-gen-default-haiku-4-5',
+      generator: "ui-gen-default-haiku-4-5",
       variance: {},
     },
   };
   return {
-    action: 'create',
+    action: "create",
     reason,
     suggestion,
     effectiveContract: draftContract,
@@ -347,10 +336,9 @@ function buildCreateFallback(
  * @public
  */
 export function createLlmBackedHandshakeNegotiator(
-  deps: LlmBackedHandshakeNegotiatorDeps,
+  deps: LlmBackedHandshakeNegotiatorDeps
 ): HandshakeNegotiator {
-  const estimatedLatencyMs =
-    deps.estimatedGenerationLatencyMs ?? DEFAULT_GEN_LATENCY_MS;
+  const estimatedLatencyMs = deps.estimatedGenerationLatencyMs ?? DEFAULT_GEN_LATENCY_MS;
 
   return {
     async decide({ intent, blueprintDraft, gadgets, ctx }): Promise<HandshakeNegotiatorResult> {
@@ -372,21 +360,17 @@ export function createLlmBackedHandshakeNegotiator(
         try {
           const matchDeps: MatchBlueprintDeps = {
             registry: deps.cache,
-            ...(deps.installedBlueprints
-              ? { installedBlueprints: deps.installedBlueprints }
-              : {}),
+            ...(deps.installedBlueprints ? { installedBlueprints: deps.installedBlueprints } : {}),
           };
           const matchResult = await matchBlueprint(matchDeps, ctx.appId, {
             intent,
             contract: draftContract,
           });
-          if (matchResult.strategy === 'exact-key') {
+          if (matchResult.strategy === "exact-key") {
             const matched = matchResult.blueprint;
-            const codeHash = createHash('sha256')
-              .update(matched.componentCode)
-              .digest('hex');
+            const codeHash = createHash("sha256").update(matched.componentCode).digest("hex");
             const suggestion: HandshakeSuggestion = {
-              origin: 'cache',
+              origin: "cache",
               rationale: matchResult.reason,
               blueprintMeta: {
                 blueprintId: matched.id,
@@ -398,7 +382,7 @@ export function createLlmBackedHandshakeNegotiator(
               },
             };
             return {
-              action: 'reuse',
+              action: "reuse",
               reason: matchResult.reason,
               suggestion,
               effectiveContract: matched.contract,
@@ -417,7 +401,7 @@ export function createLlmBackedHandshakeNegotiator(
           const message = err instanceof Error ? err.message : String(err);
           // eslint-disable-next-line no-console -- operator-visible signal
           console.warn(
-            `[llm-backed-negotiator] matchBlueprint exact-key probe failed; falling through to synth: ${message}`,
+            `[llm-backed-negotiator] matchBlueprint exact-key probe failed; falling through to synth: ${message}`
           );
         }
       }
@@ -426,25 +410,21 @@ export function createLlmBackedHandshakeNegotiator(
       if (!creds) {
         return buildCreateFallback(
           draftContract,
-          'no-creds: no BYOK credentials resolved for the configured provider; ggui_push will surface the same error and the handshake stays a no-op create.',
-          estimatedLatencyMs,
+          "no-creds: no BYOK credentials resolved for the configured provider; ggui_push will surface the same error and the handshake stays a no-op create.",
+          estimatedLatencyMs
         );
       }
 
       try {
         const llm = buildLlmCaller(creds.selection, creds.providerKey);
-        const declaredAgentTools = Object.keys(
-          draftContract.agentCapabilities?.tools ?? {},
-        );
+        const declaredAgentTools = Object.keys(draftContract.agentCapabilities?.tools ?? {});
         const synthPrompt = blueprintDraft.variance?.seedPrompt ?? intent;
         const result = await negotiate(
           { llm },
           {
             agent: {
               prompt: synthPrompt,
-              ...(declaredAgentTools.length > 0
-                ? { agentTools: declaredAgentTools }
-                : {}),
+              ...(declaredAgentTools.length > 0 ? { agentTools: declaredAgentTools } : {}),
               ...(gadgets !== undefined ? { gadgets } : {}),
             },
             config: {
@@ -453,10 +433,10 @@ export function createLlmBackedHandshakeNegotiator(
               // is bound yet. The negotiator only uses `renderId` to key
               // its optional `readRenderState` callback, which the OSS
               // path doesn't wire here, so a stable placeholder works.
-              renderId: 'handshake',
+              renderId: "handshake",
               includeSharedPool: false,
             },
-          },
+          }
         );
 
         const decision = result.decision;
@@ -472,63 +452,63 @@ export function createLlmBackedHandshakeNegotiator(
         let suggestion: HandshakeSuggestion;
         if (blueprintId) {
           suggestion = {
-            origin: 'cache',
+            origin: "cache",
             rationale: decision.reasoning ?? `cache match (${blueprintId})`,
             blueprintMeta: {
               blueprintId,
               contractHash,
-              generator: 'ui-gen-default-haiku-4-5',
+              generator: "ui-gen-default-haiku-4-5",
               variance: {},
             },
           };
         } else if (contractHash === draftHash) {
           suggestion = {
-            origin: 'agent',
-            rationale: decision.reasoning ?? 'novel-but-clean contract',
+            origin: "agent",
+            rationale: decision.reasoning ?? "novel-but-clean contract",
             blueprintMeta: {
               blueprintId: `bp_${randomUUID()}`,
               contractHash,
-              generator: 'ui-gen-default-haiku-4-5',
+              generator: "ui-gen-default-haiku-4-5",
               variance: {},
             },
           };
         } else {
           suggestion = {
-            origin: 'synth',
-            rationale: decision.reasoning ?? 'synth amended contract',
+            origin: "synth",
+            rationale: decision.reasoning ?? "synth amended contract",
             blueprintMeta: {
               blueprintId: `bp_${randomUUID()}`,
               contractHash,
-              generator: 'ui-gen-default-haiku-4-5',
+              generator: "ui-gen-default-haiku-4-5",
               variance: {},
             },
             amendments: {
               contractDiff: [
                 {
-                  op: 'replace',
-                  path: '',
-                  value: contract as unknown as import('@ggui-ai/protocol').JsonValue,
+                  op: "replace",
+                  path: "",
+                  value: contract as unknown as import("@ggui-ai/protocol").JsonValue,
                 },
               ],
-              reasoning: decision.reasoning ?? 'negotiator-amended contract',
+              reasoning: decision.reasoning ?? "negotiator-amended contract",
             },
           };
         }
 
         return {
-          action: blueprintId ? 'reuse' : 'create',
-          reason: decision.reasoning ?? 'negotiated',
+          action: blueprintId ? "reuse" : "create",
+          reason: decision.reasoning ?? "negotiated",
           suggestion,
           effectiveContract: contract,
         };
       } catch (err) {
         if (!isOperationalError(err)) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        const errorClass = err instanceof Error ? err.name : 'unknown';
+        const errorClass = err instanceof Error ? err.name : "unknown";
         return buildCreateFallback(
           draftContract,
           `negotiator-degraded: ${errorClass} during decision LLM call — ${message}. Falling back to bare-create; the paired ggui_push will still generate the UI.`,
-          estimatedLatencyMs,
+          estimatedLatencyMs
         );
       }
     },
@@ -547,13 +527,13 @@ export function createLlmBackedHandshakeNegotiator(
     async selectVariant({ candidates, context, ctx }): Promise<VariantSelectionDecision> {
       if (candidates.length === 0) {
         throw new Error(
-          'selectVariant: empty candidates list — orchestration should short-circuit before calling',
+          "selectVariant: empty candidates list — orchestration should short-circuit before calling"
         );
       }
       const creds = await deps.resolveLlm(ctx);
       if (!creds) {
         throw new Error(
-          'selectVariant: no BYOK credentials resolved; orchestration falls through to deterministic ladder',
+          "selectVariant: no BYOK credentials resolved; orchestration falls through to deterministic ladder"
         );
       }
       const llm = buildLlmCaller(creds.selection, creds.providerKey);
@@ -570,8 +550,7 @@ export function createLlmBackedHandshakeNegotiator(
  * token budget on the user message (candidate JSON) is more useful
  * than verbose system framing.
  */
-export const VARIANT_SELECTION_SYSTEM_PROMPT =
-  `You are the variant selector for the ggui UI matcher. You receive a shortlist of pre-built UI blueprint variants and a request context. Pick the variant that best fits the request.
+export const VARIANT_SELECTION_SYSTEM_PROMPT = `You are the variant selector for the ggui UI matcher. You receive a shortlist of pre-built UI blueprint variants and a request context. Pick the variant that best fits the request.
 
 Each variant carries:
   - blueprintId: stable identity (you MUST echo back exactly one of these).
@@ -593,10 +572,10 @@ Honor operator pins (isOperatorDefault: true) unless variance.persona / variance
 
 Calibrate confidence honestly. Return high (≥ 0.7) only when a clear best match exists. Return low (< 0.6) when signals are weak — the orchestration falls back to a deterministic ladder in that case. The fallback is safe; over-confident picks are NOT.`;
 
-const VARIANT_SELECTION_TOOL_NAME = 'select_variant';
+const VARIANT_SELECTION_TOOL_NAME = "select_variant";
 
 const VARIANT_SELECTION_TOOL_DESCRIPTION =
-  'Pick the variant that best fits the request context. Return the chosen blueprintId, a calibrated 0-1 confidence, and a one-sentence reason citing the matching axes (persona / aesthetic / context / seedPrompt / pin / validator).';
+  "Pick the variant that best fits the request context. Return the chosen blueprintId, a calibrated 0-1 confidence, and a one-sentence reason citing the matching axes (persona / aesthetic / context / seedPrompt / pin / validator).";
 
 /**
  * JSON Schema for the structured-output tool call. Forces the model
@@ -605,27 +584,27 @@ const VARIANT_SELECTION_TOOL_DESCRIPTION =
  * path parses the same shape from regex-extracted JSON.
  */
 const VARIANT_SELECTION_TOOL_SCHEMA: Record<string, unknown> = {
-  type: 'object',
+  type: "object",
   properties: {
     blueprintId: {
-      type: 'string',
+      type: "string",
       description:
-        'One of the candidate blueprintIds shown in the request. Echo exactly — must match a candidate.',
+        "One of the candidate blueprintIds shown in the request. Echo exactly — must match a candidate.",
     },
     confidence: {
-      type: 'number',
+      type: "number",
       minimum: 0,
       maximum: 1,
       description:
-        'Calibrated confidence in this pick on [0, 1]. Use < 0.6 when signals are weak; the orchestration falls back to a deterministic ladder.',
+        "Calibrated confidence in this pick on [0, 1]. Use < 0.6 when signals are weak; the orchestration falls back to a deterministic ladder.",
     },
     reason: {
-      type: 'string',
+      type: "string",
       description:
-        'One-sentence rationale citing the matching axes (persona, aesthetic, context, seedPrompt, validator, pin).',
+        "One-sentence rationale citing the matching axes (persona, aesthetic, context, seedPrompt, validator, pin).",
     },
   },
-  required: ['blueprintId', 'confidence', 'reason'],
+  required: ["blueprintId", "confidence", "reason"],
 };
 
 /**
@@ -639,25 +618,17 @@ const VARIANT_SELECTION_TOOL_SCHEMA: Record<string, unknown> = {
  */
 export function buildVariantSelectionUserMessage(
   candidates: readonly Blueprint[],
-  context: VariantSelectionContext,
+  context: VariantSelectionContext
 ): string {
   const projectedCandidates = candidates.map((c) => ({
     blueprintId: c.blueprintId,
     generator: c.generator,
-    ...(c.validatorScore !== undefined
-      ? { validatorScore: c.validatorScore }
-      : {}),
+    ...(c.validatorScore !== undefined ? { validatorScore: c.validatorScore } : {}),
     ...(c.isOperatorDefault === true ? { isOperatorDefault: true } : {}),
     variance: {
-      ...(c.variance.persona !== undefined
-        ? { persona: c.variance.persona }
-        : {}),
-      ...(c.variance.context !== undefined
-        ? { context: c.variance.context }
-        : {}),
-      ...(c.variance.seedPrompt !== undefined
-        ? { seedPrompt: c.variance.seedPrompt }
-        : {}),
+      ...(c.variance.persona !== undefined ? { persona: c.variance.persona } : {}),
+      ...(c.variance.context !== undefined ? { context: c.variance.context } : {}),
+      ...(c.variance.seedPrompt !== undefined ? { seedPrompt: c.variance.seedPrompt } : {}),
     },
   }));
   const requestProjection = {
@@ -683,14 +654,14 @@ export function buildVariantSelectionUserMessage(
       : {}),
   };
   return [
-    'CANDIDATES:',
+    "CANDIDATES:",
     JSON.stringify(projectedCandidates, null, 2),
-    '',
-    'REQUEST:',
+    "",
+    "REQUEST:",
     JSON.stringify(requestProjection, null, 2),
-    '',
-    'Pick the variant that best fits the REQUEST. Echo the blueprintId exactly, surface calibrated confidence, give a one-sentence rationale.',
-  ].join('\n');
+    "",
+    "Pick the variant that best fits the REQUEST. Echo the blueprintId exactly, surface calibrated confidence, give a one-sentence rationale.",
+  ].join("\n");
 }
 
 /**
@@ -704,7 +675,7 @@ export function buildVariantSelectionUserMessage(
 async function runVariantSelectionLlm(
   llm: LLMCaller,
   candidates: readonly Blueprint[],
-  context: VariantSelectionContext,
+  context: VariantSelectionContext
 ): Promise<VariantSelectionDecision> {
   const userMessage = buildVariantSelectionUserMessage(candidates, context);
   if (llm.callStructured) {
@@ -716,7 +687,7 @@ async function runVariantSelectionLlm(
         description: VARIANT_SELECTION_TOOL_DESCRIPTION,
         input_schema: VARIANT_SELECTION_TOOL_SCHEMA,
       },
-      512,
+      512
     );
     return parseVariantSelectionResponse(decoded);
   }
@@ -726,12 +697,12 @@ async function runVariantSelectionLlm(
   const text = await llm.call(
     VARIANT_SELECTION_SYSTEM_PROMPT,
     `${userMessage}\n\nRespond as ONE LINE of JSON: {"blueprintId":"…","confidence":0.0-1.0,"reason":"…"}`,
-    512,
+    512
   );
   const match = text.match(/\{[\s\S]*?"blueprintId"[\s\S]*?\}/);
   if (!match) {
     throw new Error(
-      `variant-selection: no JSON object found in text response (length ${text.length})`,
+      `variant-selection: no JSON object found in text response (length ${text.length})`
     );
   }
   return parseVariantSelectionResponse(JSON.parse(match[0]));
@@ -745,31 +716,29 @@ async function runVariantSelectionLlm(
  *   through to the deterministic ladder; the message is surfaced in
  *   `VariantSelectionResult.reason` for telemetry.
  */
-export function parseVariantSelectionResponse(
-  raw: unknown,
-): VariantSelectionDecision {
-  if (raw === null || typeof raw !== 'object') {
-    throw new Error('variant-selection: response is not an object');
+export function parseVariantSelectionResponse(raw: unknown): VariantSelectionDecision {
+  if (raw === null || typeof raw !== "object") {
+    throw new Error("variant-selection: response is not an object");
   }
   const obj = raw as Record<string, unknown>;
-  const blueprintId = obj['blueprintId'];
-  const confidence = obj['confidence'];
-  const reason = obj['reason'];
-  if (typeof blueprintId !== 'string' || blueprintId.length === 0) {
-    throw new Error('variant-selection: blueprintId missing or non-string');
+  const blueprintId = obj["blueprintId"];
+  const confidence = obj["confidence"];
+  const reason = obj["reason"];
+  if (typeof blueprintId !== "string" || blueprintId.length === 0) {
+    throw new Error("variant-selection: blueprintId missing or non-string");
   }
   if (
-    typeof confidence !== 'number' ||
+    typeof confidence !== "number" ||
     !Number.isFinite(confidence) ||
     confidence < 0 ||
     confidence > 1
   ) {
     throw new Error(
-      `variant-selection: confidence missing or out of range: ${JSON.stringify(confidence)}`,
+      `variant-selection: confidence missing or out of range: ${JSON.stringify(confidence)}`
     );
   }
-  if (typeof reason !== 'string') {
-    throw new Error('variant-selection: reason missing or non-string');
+  if (typeof reason !== "string") {
+    throw new Error("variant-selection: reason missing or non-string");
   }
   return { blueprintId, confidence, reason };
 }

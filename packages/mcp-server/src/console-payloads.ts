@@ -20,12 +20,9 @@
  * memory bounded. At ~50 KB / event the worst-case ring is ~5 MB.
  * Operator can override at construction.
  */
-import type { Request, Response, Express } from 'express';
-import type {
-  PayloadTraceEvent,
-  PayloadTraceSink,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
-import { applyDevtoolSecurityHeaders } from './console-headers.js';
+import type { PayloadTraceEvent, PayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
+import type { Express, Request, Response } from "express";
+import { applyDevtoolSecurityHeaders } from "./console-headers.js";
 
 /** SSE listener — receives one event per accepted payload. */
 type SseListener = (event: PayloadTraceEvent) => void;
@@ -49,9 +46,7 @@ export class BoundedPayloadTraceSink implements PayloadTraceSink {
   constructor(opts?: { readonly capacity?: number }) {
     const cap = opts?.capacity ?? 100;
     if (!Number.isFinite(cap) || cap <= 0) {
-      throw new Error(
-        `BoundedPayloadTraceSink: capacity must be a positive integer, got ${cap}`,
-      );
+      throw new Error(`BoundedPayloadTraceSink: capacity must be a positive integer, got ${cap}`);
     }
     this.capacity = Math.floor(cap);
   }
@@ -105,53 +100,44 @@ export class BoundedPayloadTraceSink implements PayloadTraceSink {
  * middleware on these paths beforehand — this function does not
  * re-implement auth.
  */
-export function mountConsolePayloadsRoutes(
-  app: Express,
-  sink: BoundedPayloadTraceSink,
-): void {
+export function mountConsolePayloadsRoutes(app: Express, sink: BoundedPayloadTraceSink): void {
   // GET /ggui/console/payloads/recent?limit=<n> — JSON snapshot.
-  app.get(
-    '/ggui/console/payloads/recent',
-    (req: Request, res: Response) => {
-      applyDevtoolSecurityHeaders(res);
-      const limitRaw = req.query['limit'];
-      let limit = 100;
-      if (typeof limitRaw === 'string') {
-        const parsed = Number.parseInt(limitRaw, 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          limit = Math.min(500, parsed);
-        }
+  app.get("/ggui/console/payloads/recent", (req: Request, res: Response) => {
+    applyDevtoolSecurityHeaders(res);
+    const limitRaw = req.query["limit"];
+    let limit = 100;
+    if (typeof limitRaw === "string") {
+      const parsed = Number.parseInt(limitRaw, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        limit = Math.min(500, parsed);
       }
-      res.json({ events: sink.recent(limit) });
-    },
-  );
+    }
+    res.json({ events: sink.recent(limit) });
+  });
 
   // GET /ggui/console/payloads/stream — SSE live stream.
   // Heartbeat comment every 15s so reverse proxies don't kill the
   // connection on idle. Client cleanup unregisters the listener.
-  app.get(
-    '/ggui/console/payloads/stream',
-    (req: Request, res: Response) => {
-      applyDevtoolSecurityHeaders(res);
-      res.setHeader('content-type', 'text/event-stream');
-      res.setHeader('cache-control', 'no-store');
-      res.setHeader('connection', 'keep-alive');
-      // Flush headers immediately so the EventSource starts receiving.
-      res.flushHeaders?.();
+  app.get("/ggui/console/payloads/stream", (req: Request, res: Response) => {
+    applyDevtoolSecurityHeaders(res);
+    res.setHeader("content-type", "text/event-stream");
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("connection", "keep-alive");
+    // Flush headers immediately so the EventSource starts receiving.
+    res.flushHeaders?.();
 
-      const heartbeat = setInterval(() => {
-        // SSE comment frame — clients ignore but proxies see traffic.
-        res.write(': ping\n\n');
-      }, 15000);
+    const heartbeat = setInterval(() => {
+      // SSE comment frame — clients ignore but proxies see traffic.
+      res.write(": ping\n\n");
+    }, 15000);
 
-      const off = sink.subscribe((event) => {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      });
+    const off = sink.subscribe((event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    });
 
-      req.on('close', () => {
-        clearInterval(heartbeat);
-        off();
-      });
-    },
-  );
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      off();
+    });
+  });
 }

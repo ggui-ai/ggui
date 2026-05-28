@@ -20,15 +20,9 @@
  * `buildMcpServer` registration, `toolCount`, telemetry, and logging
  * all Just Work.
  */
-import type { ZodRawShape } from 'zod';
-import type {
-  HandlerContext,
-  SharedHandler,
-} from '@ggui-ai/mcp-server-handlers';
-import type {
-  WiredActionContext,
-  WiredActionRouter,
-} from './render-channel.js';
+import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
+import type { ZodRawShape } from "zod";
+import type { WiredActionContext, WiredActionRouter } from "./render-channel.js";
 
 /**
  * Runtime ctx the mount-router hands the mount handler. Structurally a
@@ -65,8 +59,7 @@ import type {
  * + `stackItemId: string` (no `| undefined`) + every `HandlerContext` field
  * (`appId`, `requestId`, optional `apiKeyHash`).
  */
-export type WiredMountContext = Omit<HandlerContext, 'renderId'> &
-  WiredActionContext;
+export type WiredMountContext = Omit<HandlerContext, "renderId"> & WiredActionContext;
 
 /**
  * One named bundle of tool handlers the server should aggregate onto
@@ -87,7 +80,7 @@ export interface McpServerMount {
   readonly name: string;
   /**
    * Tool handler bundle. Each entry is a `SharedHandler` — the same
-   * shape ggui-native handlers (blueprint family, session-mutations,
+   * shape ggui-native handlers (blueprint family, renders,
    * threads) already use. The server calls {@link SharedHandler.handler}
    * through `buildMcpServer`'s regular registration path; validation,
    * logging, and output-schema parsing all happen uniformly.
@@ -99,7 +92,7 @@ export interface McpServerMount {
  * Branded HTTP path for an isolated MCP service. Mint one from a
  * raw string via {@link validateServicePath}.
  */
-export type ServicePath = string & { readonly __brand: 'ServicePath' };
+export type ServicePath = string & { readonly __brand: "ServicePath" };
 
 /**
  * Built-in routes the multi-service mount loop must not shadow.
@@ -107,16 +100,16 @@ export type ServicePath = string & { readonly __brand: 'ServicePath' };
  * silently swallow OAuth discovery / health / per-app traffic.
  */
 const RESERVED_SERVICE_PATHS: ReadonlySet<string> = new Set([
-  '/',
-  '/mcp',
-  '/protocol',
-  '/ops',
-  '/ws',
-  '/health',
-  '/.well-known',
-  '/oauth',
-  '/_ggui',
-  '/ggui',
+  "/",
+  "/mcp",
+  "/protocol",
+  "/ops",
+  "/ws",
+  "/health",
+  "/.well-known",
+  "/oauth",
+  "/_ggui",
+  "/ggui",
 ]);
 
 const SERVICE_PATH_REGEX = /^\/[a-zA-Z0-9_/-]+$/;
@@ -135,17 +128,17 @@ const SERVICE_PATH_REGEX = /^\/[a-zA-Z0-9_/-]+$/;
 export function validateServicePath(p: string): ServicePath {
   if (!SERVICE_PATH_REGEX.test(p)) {
     throw new Error(
-      `createGguiServer: mcpServices path "${p}" is malformed — must start with "/" and contain only letters, digits, "-", "_", and "/".`,
+      `createGguiServer: mcpServices path "${p}" is malformed — must start with "/" and contain only letters, digits, "-", "_", and "/".`
     );
   }
-  if (p.length > 1 && p.endsWith('/')) {
+  if (p.length > 1 && p.endsWith("/")) {
     throw new Error(
-      `createGguiServer: mcpServices path "${p}" must not end with "/" (use "${p.slice(0, -1)}" instead).`,
+      `createGguiServer: mcpServices path "${p}" must not end with "/" (use "${p.slice(0, -1)}" instead).`
     );
   }
   if (RESERVED_SERVICE_PATHS.has(p)) {
     throw new Error(
-      `createGguiServer: mcpServices path "${p}" collides with a reserved built-in route. Pick a distinct prefix (e.g. "/docs", "/playground/...").`,
+      `createGguiServer: mcpServices path "${p}" collides with a reserved built-in route. Pick a distinct prefix (e.g. "/docs", "/playground/...").`
     );
   }
   return p as ServicePath;
@@ -235,42 +228,42 @@ export interface McpService {
  * reference unchanged on the empty path.
  */
 export function validateMcpServices(
-  services: ReadonlyArray<McpService> | undefined,
+  services: ReadonlyArray<McpService> | undefined
 ): ReadonlyArray<McpService> {
   if (!services || services.length === 0) return services ?? [];
   const seenPaths = new Set<string>();
   for (const svc of services) {
-    if (typeof svc.name !== 'string' || svc.name.length === 0) {
+    if (typeof svc.name !== "string" || svc.name.length === 0) {
       throw new Error(
-        'createGguiServer: every `mcpServices` entry must carry a non-empty string `name` (for validation-error clarity).',
+        "createGguiServer: every `mcpServices` entry must carry a non-empty string `name` (for validation-error clarity)."
       );
     }
     validateServicePath(svc.path);
     if (seenPaths.has(svc.path)) {
       throw new Error(
-        `createGguiServer: mcpServices path "${svc.path}" is declared by more than one service. Each service must mount at a distinct path.`,
+        `createGguiServer: mcpServices path "${svc.path}" is declared by more than one service. Each service must mount at a distinct path.`
       );
     }
     seenPaths.add(svc.path);
     const seenTools = new Set<string>();
     for (const h of svc.handlers) {
       if (
-        typeof h.outputSchema !== 'object' ||
+        typeof h.outputSchema !== "object" ||
         h.outputSchema === null ||
         Object.keys(h.outputSchema).length === 0
       ) {
         throw new Error(
-          `createGguiServer: service "${svc.name}" handler "${h.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`).`,
+          `createGguiServer: service "${svc.name}" handler "${h.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`).`
         );
       }
       if (h.audience !== undefined) {
         throw new Error(
-          `createGguiServer: service "${svc.name}" handler "${h.name}" sets \`audience\` (${JSON.stringify(h.audience)}). Services bypass audience filtering — the path "${svc.path}" IS the audience. Remove the \`audience\` field or move the handler to an aggregate mount.`,
+          `createGguiServer: service "${svc.name}" handler "${h.name}" sets \`audience\` (${JSON.stringify(h.audience)}). Services bypass audience filtering — the path "${svc.path}" IS the audience. Remove the \`audience\` field or move the handler to an aggregate mount.`
         );
       }
       if (seenTools.has(h.name)) {
         throw new Error(
-          `createGguiServer: service "${svc.name}" registers tool "${h.name}" twice. Tool names must be unique within a service (cross-service collisions ARE allowed).`,
+          `createGguiServer: service "${svc.name}" registers tool "${h.name}" twice. Tool names must be unique within a service (cross-service collisions ARE allowed).`
         );
       }
       seenTools.add(h.name);
@@ -293,7 +286,7 @@ export function validateMcpServices(
  */
 export function composeHandlersWithMounts(
   baseHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-  mounts: ReadonlyArray<McpServerMount> | undefined,
+  mounts: ReadonlyArray<McpServerMount> | undefined
 ): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
   if (!mounts || mounts.length === 0) {
     return baseHandlers;
@@ -302,15 +295,13 @@ export function composeHandlersWithMounts(
   // the offending source. 'ggui' = one of ggui's native handlers;
   // any other string = the mount's `name` that first claimed the tool.
   const owner = new Map<string, string>();
-  for (const h of baseHandlers) owner.set(h.name, 'ggui');
+  for (const h of baseHandlers) owner.set(h.name, "ggui");
 
-  const aggregated: Array<SharedHandler<ZodRawShape, ZodRawShape>> = [
-    ...baseHandlers,
-  ];
+  const aggregated: Array<SharedHandler<ZodRawShape, ZodRawShape>> = [...baseHandlers];
   for (const mount of mounts) {
-    if (typeof mount.name !== 'string' || mount.name.length === 0) {
+    if (typeof mount.name !== "string" || mount.name.length === 0) {
       throw new Error(
-        'createGguiServer: every `mcpMounts` entry must carry a non-empty string `name` (for diagnostic telemetry + collision-error clarity).',
+        "createGguiServer: every `mcpMounts` entry must carry a non-empty string `name` (for diagnostic telemetry + collision-error clarity)."
       );
     }
     for (const mh of mount.handlers) {
@@ -328,22 +319,19 @@ export function composeHandlersWithMounts(
       // `{ ok: z.literal(true) }` or equivalent — the zero-field
       // case is never what you want over the wire.
       if (
-        typeof mh.outputSchema !== 'object' ||
+        typeof mh.outputSchema !== "object" ||
         mh.outputSchema === null ||
         Object.keys(mh.outputSchema).length === 0
       ) {
         throw new Error(
-          `createGguiServer: mount "${mount.name}" handler "${mh.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`). If the tool genuinely returns nothing, declare a sentinel like \`{ ok: z.literal(true) }\`.`,
+          `createGguiServer: mount "${mount.name}" handler "${mh.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`). If the tool genuinely returns nothing, declare a sentinel like \`{ ok: z.literal(true) }\`.`
         );
       }
       const prior = owner.get(mh.name);
       if (prior !== undefined) {
-        const priorLabel =
-          prior === 'ggui'
-            ? 'a ggui-native tool'
-            : `mount "${prior}"`;
+        const priorLabel = prior === "ggui" ? "a ggui-native tool" : `mount "${prior}"`;
         throw new Error(
-          `createGguiServer: mount "${mount.name}" registers tool "${mh.name}" which collides with ${priorLabel}. Rename the tool or drop the duplicate mount.`,
+          `createGguiServer: mount "${mount.name}" registers tool "${mh.name}" which collides with ${priorLabel}. Rename the tool or drop the duplicate mount.`
         );
       }
       owner.set(mh.name, mount.name);
@@ -390,13 +378,10 @@ export function composeHandlersWithMounts(
  */
 export function composeWiredActionRouterFromMounts(
   mounts: ReadonlyArray<McpServerMount> | undefined,
-  resolveContext: () => HandlerContext,
+  resolveContext: () => HandlerContext
 ): WiredActionRouter | null {
   if (!mounts || mounts.length === 0) return null;
-  const byName = new Map<
-    string,
-    SharedHandler<ZodRawShape, ZodRawShape>
-  >();
+  const byName = new Map<string, SharedHandler<ZodRawShape, ZodRawShape>>();
   for (const mount of mounts) {
     for (const h of mount.handlers) {
       // First-write-wins matches `composeHandlersWithMounts`'s
@@ -412,16 +397,14 @@ export function composeWiredActionRouterFromMounts(
     async invoke(
       toolName: string,
       input: Record<string, unknown>,
-      wiredCtx: WiredActionContext,
+      wiredCtx: WiredActionContext
     ): Promise<unknown> {
       const handler = byName.get(toolName);
       if (!handler) {
         // Unreachable in normal use — the session channel has()-gates
         // before calling invoke. Thrown errors surface as TOOL_THREW
         // envelopes, so the caller still gets a canonical shape.
-        throw new Error(
-          `wiredActionRouter(mounts): no handler registered for '${toolName}'`,
-        );
+        throw new Error(`wiredActionRouter(mounts): no handler registered for '${toolName}'`);
       }
       // Synthesize the runtime ctx — structural superset of
       // HandlerContext + WiredActionContext. The static

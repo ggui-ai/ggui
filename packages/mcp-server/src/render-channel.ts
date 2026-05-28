@@ -4,7 +4,7 @@
  * The live channel is where the typed-channel contract is enforced on
  * live traffic between the server and the user. It co-hosts on the
  * same Express server as `/mcp` and reuses the same
- * `@ggui-ai/mcp-server-handlers/session-mutations` helpers that the
+ * `@ggui-ai/mcp-server-handlers/renders` helpers that the
  * closed hosted server consumes.
  *
  * Scope:
@@ -37,11 +37,23 @@
  *     `/mcp` endpoint's shape and is operator-replaceable.
  */
 
-import { randomUUID } from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
-import type { Duplex } from 'node:stream';
-import { WebSocketServer, type WebSocket } from 'ws';
-import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
+import type {
+  AuthAdapter,
+  AuthResult,
+  BufferedStreamEnvelope,
+  RenderPatch,
+  RenderStore,
+  SessionStreamBuffer,
+  StreamEnvelopeInput,
+  StreamFanout,
+  TelemetrySink,
+} from "@ggui-ai/mcp-server-core";
+import {
+  InMemorySessionStreamBuffer,
+  InProcessStreamFanout,
+  NoopTelemetrySink,
+} from "@ggui-ai/mcp-server-core/in-memory";
+import { assertActionContract, assertStreamContract } from "@ggui-ai/mcp-server-handlers/renders";
 import type {
   AckPayload,
   ActionEnvelope,
@@ -56,39 +68,26 @@ import type {
   SanitizeCausedBy,
   StreamSpec,
   SubscribePayload,
-} from '@ggui-ai/protocol';
+} from "@ggui-ai/protocol";
 import {
   CONTRACT_ERROR_CHANNEL,
   ContractViolationError,
+  sanitizeCausedBy as defaultSanitizeCausedBy,
   EMPTY_REFRESH_INPUT,
+  makeContractErrorPayload,
   PROTOCOL_SCHEMA_VERSION,
   UPGRADE_REQUIRED,
-  makeContractErrorPayload,
-  sanitizeCausedBy as defaultSanitizeCausedBy,
-} from '@ggui-ai/protocol';
-import type {
-  AuthAdapter,
-  AuthResult,
-  BufferedStreamEnvelope,
-  RenderPatch,
-  RenderStore,
-  SessionStreamBuffer,
-  StreamEnvelopeInput,
-  StreamFanout,
-  TelemetrySink,
-} from '@ggui-ai/mcp-server-core';
-import {
-  InMemorySessionStreamBuffer,
-  InProcessStreamFanout,
-  NoopTelemetrySink,
-} from '@ggui-ai/mcp-server-core/in-memory';
-import {
-  assertActionContract,
-  assertStreamContract,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
+} from "@ggui-ai/protocol";
+import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
+import { randomUUID } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import type { Duplex } from "node:stream";
+import { WebSocketServer, type WebSocket } from "ws";
+import { resolveIdentityFromHeaders, UnauthenticatedError } from "./auth.js";
+import type { Logger } from "./logger.js";
 
 // `assertEventAllowed` + `EventNotAllowedError` were removed from
-// `@ggui-ai/mcp-server-handlers/session-mutations` in Phase B alongside
+// `@ggui-ai/mcp-server-handlers/renders` in Phase B alongside
 // the session-stack collapse — the event-allowlist concept on a
 // `StackItem.subscription` no longer has a wire shape to bind to.
 // Local stand-ins keep the inbound-action allowlist call sites
@@ -98,26 +97,18 @@ import {
 class EventNotAllowedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'EventNotAllowedError';
+    this.name = "EventNotAllowedError";
   }
 }
-function assertEventAllowed(
-  _subscription: unknown,
-  _type: string,
-): void {
+function assertEventAllowed(_subscription: unknown, _type: string): void {
   // No-op: pre-Phase-B this read `StackItem.subscription` and rejected
   // event types not on the allowlist. Post-collapse there's no
   // subscription field on `Render`; the gate is deferred to a follow-up
   // slice that defines per-render event policy on the new wire shape.
 }
-import {
-  resolveIdentityFromHeaders,
-  UnauthenticatedError,
-} from './auth.js';
-import type { Logger } from './logger.js';
 
 /** Default URL path for the channel endpoint. Operators can override. */
-export const DEFAULT_RENDER_CHANNEL_PATH = '/ws';
+export const DEFAULT_RENDER_CHANNEL_PATH = "/ws";
 
 /**
  * A single connected subscriber (one client, one session). Held live in
@@ -293,7 +284,7 @@ export type RenderChannelBootstrapVerifyResult =
       readonly renderId: string;
       readonly appId: string;
     }
-  | { readonly ok: false; readonly reason: 'expired' | 'invalid' };
+  | { readonly ok: false; readonly reason: "expired" | "invalid" };
 
 /**
  * Result of {@link RenderChannelBootstrap.refresh}.
@@ -308,7 +299,7 @@ export type SessionChannelBootstrapRefreshResult =
       readonly token: string;
       readonly expiresAt: string;
     }
-  | { readonly ok: false; readonly reason: 'window_closed' | 'invalid' };
+  | { readonly ok: false; readonly reason: "window_closed" | "invalid" };
 
 export interface RenderChannelBootstrap {
   /**
@@ -443,7 +434,7 @@ export interface WiredActionRouter {
   invoke(
     toolName: string,
     input: Record<string, unknown>,
-    ctx: WiredActionContext,
+    ctx: WiredActionContext
   ): Promise<unknown>;
 }
 
@@ -566,10 +557,7 @@ export interface RenderChannelOptions {
    * implementations without the preview package); `_ggui:contract-
    * error` is always validated via the built-in.
    */
-  readonly extraReservedValidators?: ReadonlyMap<
-    string,
-    ReservedChannelValidator
-  >;
+  readonly extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
   /**
    * Optional {@link TelemetrySink} for live-channel operational signals
    * (C12). When present, the channel emits `wired-tool.invoked` events
@@ -621,7 +609,7 @@ export interface RenderChannelOptions {
    * not a schema change — the wire fields and error code ship
    * identically in both modes.
    */
-  readonly versionPolicy?: 'advisory' | 'reject';
+  readonly versionPolicy?: "advisory" | "reject";
   /**
    * Optional hook fired synchronously when the local subscriber count
    * for `renderId` transitions 0 → 1 (the first subscriber for that
@@ -667,7 +655,7 @@ export interface RenderChannelCookieAuth {
    * from the incoming request headers. Returns `null` when the
    * cookie is absent or malformed.
    */
-  readCookie(headers: import('node:http').IncomingHttpHeaders): string | null;
+  readCookie(headers: import("node:http").IncomingHttpHeaders): string | null;
   /**
    * Verify a cookie value and return the bound session/app. Returns
    * `null` on any failure (signature, expiry, wrong kind). Never
@@ -684,11 +672,7 @@ export interface RenderChannelServer {
    * on auth failure; otherwise completes the WS handshake and wires
    * the subscriber.
    */
-  handleUpgrade(
-    req: IncomingMessage,
-    socket: Duplex,
-    head: Buffer,
-  ): void;
+  handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void;
   /**
    * Deliver a stream envelope to every subscriber of `delivery.renderId`.
    *
@@ -747,11 +731,7 @@ export interface RenderChannelServer {
    * `renderStore.commit` resolves so the snapshot a
    * concurrent fresh subscriber observes still includes the entry.
    */
-  notifyRenderPush(
-    renderId: string,
-    render: Render,
-    matchType?: string,
-  ): void;
+  notifyRenderPush(renderId: string, render: Render, matchType?: string): void;
   /**
    * Prime every declared streamSpec channel on `stackItem` that carries a
    * `tool` refresh hint. Invokes each refresh tool via the bound
@@ -817,10 +797,7 @@ export interface RenderChannelServer {
    * trusted-runtime today (mounts execute in-process, same trust
    * boundary as ggui-native handlers).
    */
-  sendPropsUpdate(
-    renderId: string,
-    props: JsonObject,
-  ): Promise<void>;
+  sendPropsUpdate(renderId: string, props: JsonObject): Promise<void>;
   /**
    * Fan a `{type:'drain_ack', payload:{renderId, appId, renderId,
    * eventId, drainedAt}}` wire frame to every subscriber currently
@@ -884,7 +861,7 @@ class WiredToolTimeoutError extends Error {
   readonly timeoutMs: number;
   constructor(toolName: string, timeoutMs: number) {
     super(`Wired tool '${toolName}' did not complete within ${timeoutMs}ms`);
-    this.name = 'WiredToolTimeoutError';
+    this.name = "WiredToolTimeoutError";
     this.toolName = toolName;
     this.timeoutMs = timeoutMs;
   }
@@ -894,23 +871,18 @@ class WiredToolTimeoutError extends Error {
  * Build an OSS live-channel server. The returned object is designed to be
  * composed into `createGguiServer` — see `server.ts` for the wire-up.
  */
-export function createRenderChannelServer(
-  opts: RenderChannelOptions,
-): RenderChannelServer {
+export function createRenderChannelServer(opts: RenderChannelOptions): RenderChannelServer {
   const path = opts.path ?? DEFAULT_RENDER_CHANNEL_PATH;
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
-  const streamBuffer: SessionStreamBuffer =
-    opts.streamBuffer ?? new InMemorySessionStreamBuffer();
+  const streamBuffer: SessionStreamBuffer = opts.streamBuffer ?? new InMemorySessionStreamBuffer();
   // Live-tail pub/sub. Default in-process; hosted binds RedisPubSubFanout.
-  const streamFanout: StreamFanout =
-    opts.streamFanout ?? new InProcessStreamFanout();
+  const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
   // `causedBy` sanitizer applied to every contract-error emission.
   // Defaults to the protocol's pattern-based redactor (Bearer tokens,
   // query-param secrets, env-var dumps, 2 KB truncation). Operators
   // pass their own to tighten or broaden coverage.
-  const sanitize: SanitizeCausedBy =
-    opts.sanitizeCausedBy ?? defaultSanitizeCausedBy;
+  const sanitize: SanitizeCausedBy = opts.sanitizeCausedBy ?? defaultSanitizeCausedBy;
   // Operational telemetry — default no-op. Fires `wired-tool.invoked`
   // on every successful wired-action dispatch (C12); future sites
   // (refresh-stream success / failure counts) reuse the same sink.
@@ -920,17 +892,13 @@ export function createRenderChannelServer(
   // at composition so the `channel_subscribe` handler doesn't pay the
   // option-spread cost per request. Absent ⇒ all channel subscribes
   // reject with `CHANNEL_NOT_LOCAL`.
-  const localTools: RenderChannelLocalToolsOptions | undefined =
-    opts.streamWebSocketLocalTools;
+  const localTools: RenderChannelLocalToolsOptions | undefined = opts.streamWebSocketLocalTools;
   const localToolsAllowlist: ReadonlySet<string> = localTools
     ? new Set(localTools.allowlist)
     : new Set();
-  const pollFloorMs =
-    localTools?.pollCadence?.floorMs ?? DEFAULT_CHANNEL_POLL_FLOOR_MS;
-  const pollCeilingMs =
-    localTools?.pollCadence?.ceilingMs ?? DEFAULT_CHANNEL_POLL_CEILING_MS;
-  const pollDefaultMs =
-    localTools?.pollCadence?.defaultMs ?? DEFAULT_CHANNEL_POLL_DEFAULT_MS;
+  const pollFloorMs = localTools?.pollCadence?.floorMs ?? DEFAULT_CHANNEL_POLL_FLOOR_MS;
+  const pollCeilingMs = localTools?.pollCadence?.ceilingMs ?? DEFAULT_CHANNEL_POLL_CEILING_MS;
+  const pollDefaultMs = localTools?.pollCadence?.defaultMs ?? DEFAULT_CHANNEL_POLL_DEFAULT_MS;
 
   // `noServer: true` means we own the upgrade wiring (see handleUpgrade);
   // ws won't try to bind its own port.
@@ -980,10 +948,10 @@ export function createRenderChannelServer(
           await sub.iter.return?.();
           return;
         }
-        send(sub.ws, { type: 'data', payload: value });
+        send(sub.ws, { type: "data", payload: value });
       }
     } catch (err) {
-      opts.logger.warn('session_channel_pump_failed', {
+      opts.logger.warn("session_channel_pump_failed", {
         renderId: sub.renderId,
         error: String(err),
       });
@@ -1004,7 +972,7 @@ export function createRenderChannelServer(
       } catch (err) {
         // Best-effort: a thrown hook MUST NOT corrupt the
         // wsSubscribers set vs the real socket lifecycle.
-        opts.logger.warn('session_channel_on_first_subscriber_threw', {
+        opts.logger.warn("session_channel_on_first_subscriber_threw", {
           renderId: sub.renderId,
           error: String(err),
         });
@@ -1028,7 +996,7 @@ export function createRenderChannelServer(
         try {
           opts.onLastSubscriberGone(sub.renderId);
         } catch (err) {
-          opts.logger.warn('session_channel_on_last_subscriber_gone_threw', {
+          opts.logger.warn("session_channel_on_last_subscriber_gone_threw", {
             renderId: sub.renderId,
             error: String(err),
           });
@@ -1056,7 +1024,7 @@ export function createRenderChannelServer(
     try {
       ws.send(JSON.stringify(msg));
     } catch (err) {
-      opts.logger.warn('session_channel_send_failed', { error: String(err) });
+      opts.logger.warn("session_channel_send_failed", { error: String(err) });
     }
   }
 
@@ -1065,10 +1033,10 @@ export function createRenderChannelServer(
     code: string,
     message: string,
     requestId?: string,
-    details?: ErrorPayload['details'],
+    details?: ErrorPayload["details"]
   ): void {
     send(ws, {
-      type: 'error',
+      type: "error",
       payload: { code, message, ...(details !== undefined ? { details } : {}) },
       ...(requestId ? { requestId } : {}),
     });
@@ -1092,23 +1060,23 @@ export function createRenderChannelServer(
     sub: Subscriber | undefined,
     payload: { readonly renderId?: string },
     messageType: string,
-    requestId?: string,
+    requestId?: string
   ): sub is Subscriber {
     if (!sub) {
       sendError(
         ws,
-        'NOT_SUBSCRIBED',
+        "NOT_SUBSCRIBED",
         `Send a 'subscribe' message first before '${messageType}'`,
-        requestId,
+        requestId
       );
       return false;
     }
     if (payload.renderId !== sub.renderId) {
       sendError(
         ws,
-        'SESSION_MISMATCH',
-        `${messageType} payload id '${payload.renderId ?? '<missing>'}' does not match subscriber render '${sub.renderId}'`,
-        requestId,
+        "SESSION_MISMATCH",
+        `${messageType} payload id '${payload.renderId ?? "<missing>"}' does not match subscriber render '${sub.renderId}'`,
+        requestId
       );
       return false;
     }
@@ -1127,12 +1095,12 @@ export function createRenderChannelServer(
     renderId: string,
     appId: string,
     messageType: string,
-    patch: RenderPatch,
+    patch: RenderPatch
   ): Promise<void> {
     try {
       await opts.renderStore.update(renderId, patch);
     } catch (err) {
-      opts.logger.warn('session_channel_observation_persist_failed', {
+      opts.logger.warn("session_channel_observation_persist_failed", {
         messageType,
         renderId,
         appId,
@@ -1157,17 +1125,17 @@ export function createRenderChannelServer(
     renderId: string,
     channelName: string,
     code:
-      | 'CHANNEL_UNKNOWN'
-      | 'CHANNEL_NOT_LOCAL'
-      | 'STACK_ITEM_NOT_FOUND'
-      | 'SUBSCRIBE_UNAUTHORIZED'
-      | 'POLL_FAILED',
+      | "CHANNEL_UNKNOWN"
+      | "CHANNEL_NOT_LOCAL"
+      | "STACK_ITEM_NOT_FOUND"
+      | "SUBSCRIBE_UNAUTHORIZED"
+      | "POLL_FAILED",
     message: string,
     requestId?: string,
-    details?: ErrorPayload['details'],
+    details?: ErrorPayload["details"]
   ): void {
     send(ws, {
-      type: 'channel_error',
+      type: "channel_error",
       payload: {
         renderId,
         channelName,
@@ -1186,7 +1154,7 @@ export function createRenderChannelServer(
    * docstring — clients propose, server clamps.
    */
   function clampPollInterval(supplied: number | undefined): number {
-    if (typeof supplied !== 'number' || !Number.isFinite(supplied)) {
+    if (typeof supplied !== "number" || !Number.isFinite(supplied)) {
       return pollDefaultMs;
     }
     if (supplied < pollFloorMs) return pollFloorMs;
@@ -1205,10 +1173,7 @@ export function createRenderChannelServer(
    * subscribes whose `source.tool` isn't in `localTools.allowlist`
    * never reach this function.
    */
-  async function pollChannelOnce(
-    sub: Subscriber,
-    state: ChannelSubscriptionState,
-  ): Promise<void> {
+  async function pollChannelOnce(sub: Subscriber, state: ChannelSubscriptionState): Promise<void> {
     if (!localTools) return;
     if (sub.ws.readyState !== sub.ws.OPEN) return;
     try {
@@ -1219,7 +1184,7 @@ export function createRenderChannelServer(
       if (sub.ws.readyState !== sub.ws.OPEN) return;
       state.seq += 1;
       send(sub.ws, {
-        type: 'channel_payload',
+        type: "channel_payload",
         payload: {
           renderId: sub.renderId,
           appId: sub.appId,
@@ -1231,7 +1196,7 @@ export function createRenderChannelServer(
           // append semantics declare `mode: 'append'` on streamSpec;
           // honoring that is the iframe-runtime's concern at fold
           // time. See `ChannelPayloadFrame.mode`.
-          mode: 'replace',
+          mode: "replace",
           payload: output as JsonObject,
         },
       });
@@ -1241,14 +1206,14 @@ export function createRenderChannelServer(
         sub.ws,
         sub.renderId,
         state.channelName,
-        'POLL_FAILED',
+        "POLL_FAILED",
         err instanceof Error ? err.message : String(err),
         undefined,
         // causedBy slot — sanitized for credential safety in the same
         // posture as wired-tool's TOOL_THREW emission.
-        sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err)),
+        sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err))
       );
-      opts.logger.warn('session_channel_channel_poll_failed', {
+      opts.logger.warn("session_channel_channel_poll_failed", {
         renderId: sub.renderId,
         appId: sub.appId,
         channelName: state.channelName,
@@ -1268,7 +1233,7 @@ export function createRenderChannelServer(
   async function handleChannelSubscribe(
     ws: WebSocket,
     sub: Subscriber,
-    message: WebSocketMessage & { type: 'channel_subscribe' },
+    message: WebSocketMessage & { type: "channel_subscribe" }
   ): Promise<void> {
     const payload = message.payload;
     // renderId match — the spoof guard at every wire-input boundary.
@@ -1279,9 +1244,9 @@ export function createRenderChannelServer(
         ws,
         payload.renderId,
         payload.channelName,
-        'SUBSCRIBE_UNAUTHORIZED',
+        "SUBSCRIBE_UNAUTHORIZED",
         `Subscriber is bound to session '${sub.renderId}' but channel_subscribe targets '${payload.renderId}'`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -1293,9 +1258,9 @@ export function createRenderChannelServer(
         ws,
         payload.renderId,
         payload.channelName,
-        'CHANNEL_NOT_LOCAL',
-        'This server has no streamWebSocketLocalTools allowlist; iframe must poll the source tool directly.',
-        message.requestId,
+        "CHANNEL_NOT_LOCAL",
+        "This server has no streamWebSocketLocalTools allowlist; iframe must poll the source tool directly.",
+        message.requestId
       );
       return;
     }
@@ -1309,9 +1274,9 @@ export function createRenderChannelServer(
         ws,
         payload.renderId,
         payload.channelName,
-        'STACK_ITEM_NOT_FOUND',
+        "STACK_ITEM_NOT_FOUND",
         `Render '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -1320,7 +1285,7 @@ export function createRenderChannelServer(
     // streamSpec so the field reads back as undefined — same code
     // path as a component variant without the channel declared.
     const streamSpec: StreamSpec | undefined =
-      stackItem.type === 'mcpApps' || stackItem.type === 'system'
+      stackItem.type === "mcpApps" || stackItem.type === "system"
         ? undefined
         : stackItem.streamSpec;
     const channelEntry = streamSpec?.[payload.channelName];
@@ -1329,9 +1294,9 @@ export function createRenderChannelServer(
         ws,
         payload.renderId,
         payload.channelName,
-        'CHANNEL_UNKNOWN',
+        "CHANNEL_UNKNOWN",
         `streamSpec['${payload.channelName}'] not declared OR has no source.tool on stack item '${payload.renderId}'`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -1341,9 +1306,9 @@ export function createRenderChannelServer(
         ws,
         payload.renderId,
         payload.channelName,
-        'CHANNEL_NOT_LOCAL',
+        "CHANNEL_NOT_LOCAL",
         `source.tool '${sourceTool}' is not in streamWebSocketLocalTools; iframe must poll directly`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -1395,7 +1360,7 @@ export function createRenderChannelServer(
       timer,
     };
     sub.channelSubs.set(channelKey, state);
-    opts.logger.info('render_channel_channel_subscribe', {
+    opts.logger.info("render_channel_channel_subscribe", {
       renderId: sub.renderId,
       appId: sub.appId,
       channelName: payload.channelName,
@@ -1418,7 +1383,7 @@ export function createRenderChannelServer(
   function handleChannelUnsubscribe(
     _ws: WebSocket,
     sub: Subscriber,
-    message: WebSocketMessage & { type: 'channel_unsubscribe' },
+    message: WebSocketMessage & { type: "channel_unsubscribe" }
   ): void {
     const payload = message.payload;
     if (payload.renderId !== sub.renderId) {
@@ -1432,7 +1397,7 @@ export function createRenderChannelServer(
     if (!existing) return;
     clearInterval(existing.timer);
     sub.channelSubs.delete(channelKey);
-    opts.logger.info('render_channel_channel_unsubscribe', {
+    opts.logger.info("render_channel_channel_unsubscribe", {
       renderId: sub.renderId,
       appId: sub.appId,
       channelName: payload.channelName,
@@ -1455,7 +1420,7 @@ export function createRenderChannelServer(
    */
   async function fanOut(
     delivery: StreamEnvelopeInput,
-    activeStreamSpec: StreamSpec | undefined,
+    activeStreamSpec: StreamSpec | undefined
   ): Promise<{ seq: number }> {
     const { envelope } = await streamBuffer.record(delivery, activeStreamSpec);
     // Publish to the seam — InProcessStreamFanout walks its subscriber
@@ -1478,7 +1443,7 @@ export function createRenderChannelServer(
   function emitContractError(
     renderId: string,
     activeStreamSpec: StreamSpec | undefined,
-    payload: ContractErrorPayload,
+    payload: ContractErrorPayload
   ): void {
     try {
       // Central stamp — re-emit through makeContractErrorPayload so
@@ -1493,12 +1458,8 @@ export function createRenderChannelServer(
         toolName: payload.toolName,
         error: payload.error,
         timestamp: payload.timestamp,
-        ...(payload.actionName !== undefined
-          ? { actionName: payload.actionName }
-          : {}),
-        ...(payload.sourceAction !== undefined
-          ? { sourceAction: payload.sourceAction }
-          : {}),
+        ...(payload.actionName !== undefined ? { actionName: payload.actionName } : {}),
+        ...(payload.sourceAction !== undefined ? { sourceAction: payload.sourceAction } : {}),
       });
       // Fire-and-forget: emitContractError is called from sync `catch`
       // branches and a second async failure here would be a footgun.
@@ -1509,12 +1470,12 @@ export function createRenderChannelServer(
         {
           renderId,
           channel: CONTRACT_ERROR_CHANNEL,
-          mode: 'append',
-          payload: stamped as unknown as StreamEnvelopeInput['payload'],
+          mode: "append",
+          payload: stamped as unknown as StreamEnvelopeInput["payload"],
         },
-        activeStreamSpec,
+        activeStreamSpec
       ).catch((err) => {
-        opts.logger.error('session_channel_contract_error_emit_failed', {
+        opts.logger.error("session_channel_contract_error_emit_failed", {
           renderId,
           toolName: payload.toolName,
           code: payload.error.code,
@@ -1522,7 +1483,7 @@ export function createRenderChannelServer(
         });
       });
     } catch (err) {
-      opts.logger.error('session_channel_contract_error_emit_failed', {
+      opts.logger.error("session_channel_contract_error_emit_failed", {
         renderId,
         toolName: payload.toolName,
         code: payload.error.code,
@@ -1547,7 +1508,7 @@ export function createRenderChannelServer(
     // the only producers; nothing else should widen this.
     input: Record<string, unknown> | RefreshInput,
     ctx: WiredActionContext,
-    timeoutMs: number,
+    timeoutMs: number
   ): Promise<unknown> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -1571,22 +1532,19 @@ export function createRenderChannelServer(
    * same logic without forward-referencing the returned object. Best-
    * effort + orphan-tolerant per the docstring on the public method.
    */
-  async function sendPropsUpdateImpl(
-    renderId: string,
-    props: JsonObject,
-  ): Promise<void> {
+  async function sendPropsUpdateImpl(renderId: string, props: JsonObject): Promise<void> {
     let stored;
     try {
       stored = await opts.renderStore.get(renderId);
     } catch (err) {
-      opts.logger.warn('render_channel_props_update_lookup_failed', {
+      opts.logger.warn("render_channel_props_update_lookup_failed", {
         renderId,
         error: String(err),
       });
       return;
     }
     if (!stored) {
-      opts.logger.warn('render_channel_props_update_orphan', {
+      opts.logger.warn("render_channel_props_update_orphan", {
         renderId,
       });
       return;
@@ -1599,7 +1557,7 @@ export function createRenderChannelServer(
     for (const sub of wsSubscribers) {
       if (sub.renderId !== renderId) continue;
       send(sub.ws, {
-        type: 'props_update',
+        type: "props_update",
         payload: { renderId, props },
       });
     }
@@ -1629,7 +1587,7 @@ export function createRenderChannelServer(
     stored: { id: string },
     activeItem: Render | undefined,
     envelope: ActionEnvelope,
-    dispatchedAt: string,
+    dispatchedAt: string
   ): Promise<void> {
     // Post-Phase-B, the active "session" is just the stored render's
     // id. Keep a `session` alias inside the body so the existing
@@ -1637,10 +1595,10 @@ export function createRenderChannelServer(
     // re-name pass.
     const session = stored;
     const router = opts.wiredActionRouter;
-    if (!router || !activeItem || envelope.type !== 'data:submit') return;
+    if (!router || !activeItem || envelope.type !== "data:submit") return;
 
     const payload = envelope.payload as ActionEventValue | undefined;
-    if (!payload || typeof payload.action !== 'string') return;
+    if (!payload || typeof payload.action !== "string") return;
 
     // Disagreement policy — the server-side enforcement point for the
     // `client wins` rule documented on `ActionEventValue.tool`. Prefer
@@ -1654,38 +1612,34 @@ export function createRenderChannelServer(
     // actionSpec / streamSpec only exist on ComponentRender. The
     // mcpApps / system variants narrow them to undefined.
     const componentItem =
-      activeItem.type === 'mcpApps' || activeItem.type === 'system'
-        ? undefined
-        : activeItem;
+      activeItem.type === "mcpApps" || activeItem.type === "system" ? undefined : activeItem;
     const actionEntry = componentItem?.actionSpec?.[payload.action];
     const serverDeclaredTool = actionEntry?.nextStep;
     const declaredTool =
-      (typeof payload.tool === 'string' && payload.tool.length > 0
-        ? payload.tool
-        : undefined) ?? serverDeclaredTool;
+      (typeof payload.tool === "string" && payload.tool.length > 0 ? payload.tool : undefined) ??
+      serverDeclaredTool;
     if (!declaredTool) return;
 
     const actionName = payload.action;
     const input =
-      payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+      payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
         ? (payload.data as Record<string, unknown>)
         : {};
-    const timeoutMs =
-      opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
+    const timeoutMs = opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
     const streamSpec = componentItem?.streamSpec;
 
     if (!router.has(declaredTool)) {
       emitContractError(session.id, streamSpec, {
         toolName: declaredTool,
         actionName,
-        sourceAction: { type: 'wired-action', dispatchedAt },
+        sourceAction: { type: "wired-action", dispatchedAt },
         error: {
-          code: 'TOOL_NOT_FOUND',
+          code: "TOOL_NOT_FOUND",
           message: `wiredActionRouter has no handler for tool '${declaredTool}'`,
         },
         timestamp: new Date().toISOString(),
       });
-      opts.logger.warn('session_channel_wired_tool_not_found', {
+      opts.logger.warn("session_channel_wired_tool_not_found", {
         renderId: session.id,
         toolName: declaredTool,
         actionName,
@@ -1712,21 +1666,19 @@ export function createRenderChannelServer(
       await invokeWithTimeout(router, declaredTool, input, wiredCtx, timeoutMs);
     } catch (err) {
       const code: ContractErrorCode =
-        err instanceof WiredToolTimeoutError ? 'TOOL_TIMEOUT' : 'TOOL_THREW';
+        err instanceof WiredToolTimeoutError ? "TOOL_TIMEOUT" : "TOOL_THREW";
       emitContractError(session.id, streamSpec, {
         toolName: declaredTool,
         actionName,
-        sourceAction: { type: 'wired-action', dispatchedAt },
+        sourceAction: { type: "wired-action", dispatchedAt },
         error: {
           code,
           message: err instanceof Error ? err.message : String(err),
-          ...(err instanceof Error && err.stack
-            ? { causedBy: sanitize(err.stack) }
-            : {}),
+          ...(err instanceof Error && err.stack ? { causedBy: sanitize(err.stack) } : {}),
         },
         timestamp: new Date().toISOString(),
       });
-      opts.logger.warn('session_channel_wired_tool_failed', {
+      opts.logger.warn("session_channel_wired_tool_failed", {
         renderId: session.id,
         toolName: declaredTool,
         actionName,
@@ -1741,7 +1693,7 @@ export function createRenderChannelServer(
     // sink MUST NOT block the refresh pass. Attribute set is kept
     // flat + primitive-only per TelemetryEvent.attributes shape.
     telemetry.emit({
-      name: 'wired-tool.invoked',
+      name: "wired-tool.invoked",
       at: Date.now(),
       attributes: {
         toolName: declaredTool,
@@ -1764,9 +1716,9 @@ export function createRenderChannelServer(
         emitContractError(session.id, streamSpec, {
           toolName: refreshTool,
           actionName,
-          sourceAction: { type: 'refresh-stream', dispatchedAt },
+          sourceAction: { type: "refresh-stream", dispatchedAt },
           error: {
-            code: 'TOOL_NOT_FOUND',
+            code: "TOOL_NOT_FOUND",
             message: `wiredActionRouter has no handler for refresh tool '${refreshTool}' (channel '${channelName}')`,
           },
           timestamp: new Date().toISOString(),
@@ -1786,25 +1738,23 @@ export function createRenderChannelServer(
           refreshTool,
           EMPTY_REFRESH_INPUT,
           wiredCtx,
-          timeoutMs,
+          timeoutMs
         );
       } catch (err) {
         const code: ContractErrorCode =
-          err instanceof WiredToolTimeoutError ? 'TOOL_TIMEOUT' : 'TOOL_THREW';
+          err instanceof WiredToolTimeoutError ? "TOOL_TIMEOUT" : "TOOL_THREW";
         emitContractError(session.id, streamSpec, {
           toolName: refreshTool,
           actionName,
-          sourceAction: { type: 'refresh-stream', dispatchedAt },
+          sourceAction: { type: "refresh-stream", dispatchedAt },
           error: {
             code,
             message: err instanceof Error ? err.message : String(err),
-            ...(err instanceof Error && err.stack
-              ? { causedBy: sanitize(err.stack) }
-              : {}),
+            ...(err instanceof Error && err.stack ? { causedBy: sanitize(err.stack) } : {}),
           },
           timestamp: new Date().toISOString(),
         });
-        opts.logger.warn('session_channel_refresh_tool_failed', {
+        opts.logger.warn("session_channel_refresh_tool_failed", {
           renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
@@ -1821,14 +1771,14 @@ export function createRenderChannelServer(
           emitContractError(session.id, streamSpec, {
             toolName: refreshTool,
             actionName,
-            sourceAction: { type: 'refresh-stream', dispatchedAt },
+            sourceAction: { type: "refresh-stream", dispatchedAt },
             error: {
-              code: 'SCHEMA_VIOLATION',
+              code: "SCHEMA_VIOLATION",
               message: err.message,
             },
             timestamp: new Date().toISOString(),
           });
-          opts.logger.warn('session_channel_refresh_schema_violation', {
+          opts.logger.warn("session_channel_refresh_schema_violation", {
             renderId: session.id,
             toolName: refreshTool,
             channel: channelName,
@@ -1844,17 +1794,17 @@ export function createRenderChannelServer(
           {
             renderId: session.id,
             channel: channelName,
-            mode: channelEntry?.mode ?? 'append',
-            payload: output as StreamEnvelopeInput['payload'],
+            mode: channelEntry?.mode ?? "append",
+            payload: output as StreamEnvelopeInput["payload"],
           },
-          streamSpec,
+          streamSpec
         );
       } catch (err) {
         // fanOut swallows per-subscriber transport errors; a throw here
         // is buffer-internal (e.g., record() invariant violation). Log
         // but don't propagate — a single broken channel must not take
         // down the session.
-        opts.logger.error('session_channel_refresh_emit_failed', {
+        opts.logger.error("session_channel_refresh_emit_failed", {
           renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
@@ -1864,10 +1814,8 @@ export function createRenderChannelServer(
     }
   }
 
-  async function resolveIdentityFromUpgrade(
-    req: IncomingMessage,
-  ): Promise<AuthResult> {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+  async function resolveIdentityFromUpgrade(req: IncomingMessage): Promise<AuthResult> {
+    const url = new URL(req.url ?? "/", "http://localhost");
 
     // WS-token gate: when `?wsToken=` is present AND the channel is
     // configured with ws-token-auth plumbing, skip the AuthAdapter
@@ -1881,15 +1829,15 @@ export function createRenderChannelServer(
     // upgrade for missing bearer" signal. The real verify runs at
     // subscribe time; an invalid token reaches that point and is
     // rejected with BOOTSTRAP_INVALID.
-    if (opts.bootstrap && url.searchParams.has('wsToken')) {
+    if (opts.bootstrap && url.searchParams.has("wsToken")) {
       return {
         identity: {
-          kind: 'user',
-          userId: '__bootstrap_pending__',
-          workspaceId: '__bootstrap_pending__',
+          kind: "user",
+          userId: "__bootstrap_pending__",
+          workspaceId: "__bootstrap_pending__",
           roles: [],
         },
-        source: 'apikey',
+        source: "apikey",
       };
     }
 
@@ -1917,14 +1865,14 @@ export function createRenderChannelServer(
             }
           ).__gguiCookieBound = bound;
           return {
-            identity: { kind: 'builder' },
-            source: 'apikey',
+            identity: { kind: "builder" },
+            source: "apikey",
           };
         }
         // Cookie present but invalid — do NOT fall through to the
         // bearer path. An invalid cookie is a same-origin user error,
         // not a pass-through condition.
-        throw new UnauthenticatedError('console cookie invalid');
+        throw new UnauthenticatedError("console cookie invalid");
       }
       // No cookie present → fall through to bearer path below. Mixed
       // deployments (pairing-token bearer + same-origin cookie for
@@ -1935,16 +1883,16 @@ export function createRenderChannelServer(
     // to `?token=<jwt>` for web clients, matching the convention most
     // session-channel endpoints ship with. Server-side clients (Node
     // `ws`, tests) continue to set the header directly.
-    if (!req.headers['authorization']) {
-      const token = url.searchParams.get('token');
+    if (!req.headers["authorization"]) {
+      const token = url.searchParams.get("token");
       if (token) {
-        req.headers['authorization'] = `Bearer ${token}`;
+        req.headers["authorization"] = `Bearer ${token}`;
       }
     }
     return resolveIdentityFromHeaders(
       opts.auth,
       req.headers,
-      req.socket?.remoteAddress ?? undefined,
+      req.socket?.remoteAddress ?? undefined
     );
   }
 
@@ -1956,14 +1904,11 @@ export function createRenderChannelServer(
    * upstream enforcement skips (allowlist + actionSpec checks are
    * no-ops when no `ComponentRender` is active).
    */
-  function resolveActiveRender(
-    render: Render | undefined,
-  ): Render | undefined {
+  function resolveActiveRender(render: Render | undefined): Render | undefined {
     if (!render) return undefined;
-    if (render.type === 'mcpApps' || render.type === 'system') return undefined;
+    if (render.type === "mcpApps" || render.type === "system") return undefined;
     return render;
   }
-
 
   /**
    * Handle an inbound `action` message — the canonical flat
@@ -1978,7 +1923,7 @@ export function createRenderChannelServer(
   async function handleInboundAction(
     ws: WebSocket,
     sub: Subscriber,
-    message: WebSocketMessage & { type: 'action' },
+    message: WebSocketMessage & { type: "action" }
   ): Promise<void> {
     const envelope: ActionEnvelope = message.payload;
 
@@ -1987,9 +1932,9 @@ export function createRenderChannelServer(
     if (envelope.renderId !== sub.renderId) {
       sendError(
         ws,
-        'SESSION_MISMATCH',
+        "SESSION_MISMATCH",
         `Action targets session '${envelope.renderId}' but this socket is subscribed to '${sub.renderId}'`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -1998,9 +1943,9 @@ export function createRenderChannelServer(
     if (!stored) {
       sendError(
         ws,
-        'SESSION_NOT_FOUND',
+        "SESSION_NOT_FOUND",
         `Render ${sub.renderId} no longer exists`,
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -2021,43 +1966,32 @@ export function createRenderChannelServer(
       assertEventAllowed(undefined, envelope.type);
     } catch (err) {
       if (err instanceof EventNotAllowedError) {
-        opts.logger.warn('render_channel_event_not_allowed', {
+        opts.logger.warn("render_channel_event_not_allowed", {
           renderId: sub.renderId,
-          envelope: 'action',
+          envelope: "action",
           error: err.message,
         });
-        sendError(
-          ws,
-          'EVENT_NOT_ALLOWED',
-          err.message,
-          message.requestId,
-        );
+        sendError(ws, "EVENT_NOT_ALLOWED", err.message, message.requestId);
         return;
       }
       throw err;
     }
 
-    if (envelope.type === 'data:submit') {
+    if (envelope.type === "data:submit") {
       try {
         const activeActionSpec =
-          activeItem && activeItem.type !== 'mcpApps' && activeItem.type !== 'system'
+          activeItem && activeItem.type !== "mcpApps" && activeItem.type !== "system"
             ? activeItem.actionSpec
             : undefined;
         assertActionContract(activeActionSpec, envelope.payload);
       } catch (err) {
         if (err instanceof ContractViolationError) {
-          opts.logger.warn('session_channel_contract_violation', {
+          opts.logger.warn("session_channel_contract_violation", {
             renderId: sub.renderId,
             violations: err.violations,
-            envelope: 'action',
+            envelope: "action",
           });
-          sendError(
-            ws,
-            'CONTRACT_VIOLATION',
-            err.message,
-            message.requestId,
-            err.toErrorData(),
-          );
+          sendError(ws, "CONTRACT_VIOLATION", err.message, message.requestId, err.toErrorData());
           return;
         }
         throw err;
@@ -2071,19 +2005,19 @@ export function createRenderChannelServer(
     try {
       seq = await opts.renderStore.appendEvent({
         renderId: sub.renderId,
-        type: 'user.submitted',
+        type: "user.submitted",
         data: envelope,
       });
     } catch (err) {
-      opts.logger.error('session_channel_append_failed', {
+      opts.logger.error("session_channel_append_failed", {
         renderId: sub.renderId,
         error: String(err),
       });
       sendError(
         ws,
-        'APPEND_FAILED',
+        "APPEND_FAILED",
         err instanceof Error ? err.message : String(err),
-        message.requestId,
+        message.requestId
       );
       return;
     }
@@ -2115,7 +2049,7 @@ export function createRenderChannelServer(
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     send(ws, {
-      type: 'ack',
+      type: "ack",
       payload: { sequence: seq, timestamp: Date.now() },
       ...(message.requestId ? { requestId: message.requestId } : {}),
     });
@@ -2124,7 +2058,7 @@ export function createRenderChannelServer(
   async function handleSubscribe(
     ws: WebSocket,
     identity: AuthResult,
-    message: WebSocketMessage & { type: 'subscribe' },
+    message: WebSocketMessage & { type: "subscribe" }
   ): Promise<void> {
     const payload: SubscribePayload = message.payload;
 
@@ -2152,27 +2086,27 @@ export function createRenderChannelServer(
       payload.supportedVersions.length > 0 &&
       !payload.supportedVersions.includes(PROTOCOL_SCHEMA_VERSION)
     ) {
-      const policy: 'advisory' | 'reject' = opts.versionPolicy ?? 'reject';
+      const policy: "advisory" | "reject" = opts.versionPolicy ?? "reject";
       sendError(
         ws,
         UPGRADE_REQUIRED,
         `Server speaks ${PROTOCOL_SCHEMA_VERSION}; client declared ` +
-          `supportedVersions=[${payload.supportedVersions.join(', ')}].`,
+          `supportedVersions=[${payload.supportedVersions.join(", ")}].`,
         message.requestId,
         {
           serverVersion: PROTOCOL_SCHEMA_VERSION,
           clientSupportedVersions: payload.supportedVersions,
           policy,
-        },
+        }
       );
-      opts.logger.warn('session_channel_version_mismatch', {
+      opts.logger.warn("session_channel_version_mismatch", {
         renderId: payload.renderId,
         appId: payload.appId,
         serverVersion: PROTOCOL_SCHEMA_VERSION,
         clientSupportedVersions: payload.supportedVersions,
         policy,
       });
-      if (policy === 'reject') {
+      if (policy === "reject") {
         try {
           ws.close();
         } catch {
@@ -2189,19 +2123,19 @@ export function createRenderChannelServer(
     // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
     let mintedSessionToken: string | undefined;
-    if (typeof payload.wsToken === 'string' && payload.wsToken.length > 0) {
+    if (typeof payload.wsToken === "string" && payload.wsToken.length > 0) {
       if (!opts.bootstrap) {
         sendError(
           ws,
-          'BOOTSTRAP_NOT_SUPPORTED',
-          'This server was not configured with ws-token-auth plumbing',
-          message.requestId,
+          "BOOTSTRAP_NOT_SUPPORTED",
+          "This server was not configured with ws-token-auth plumbing",
+          message.requestId
         );
         return;
       }
       const verifyResult = opts.bootstrap.verify(payload.wsToken);
       if (!verifyResult.ok) {
-        opts.logger.warn('session_channel_bootstrap_rejected', {
+        opts.logger.warn("session_channel_bootstrap_rejected", {
           renderId: payload.renderId,
           appId: payload.appId,
           reason: verifyResult.reason,
@@ -2212,19 +2146,19 @@ export function createRenderChannelServer(
         // (no refresh path); expired-but-signed envelopes emit the
         // dedicated BOOTSTRAP_EXPIRED so the client knows to call
         // `ggui_runtime_refresh_bootstrap`.
-        if (verifyResult.reason === 'expired') {
+        if (verifyResult.reason === "expired") {
           sendError(
             ws,
-            'BOOTSTRAP_EXPIRED',
-            'Bootstrap token expired — call ggui_runtime_refresh_bootstrap or re-handshake',
-            message.requestId,
+            "BOOTSTRAP_EXPIRED",
+            "Bootstrap token expired — call ggui_runtime_refresh_bootstrap or re-handshake",
+            message.requestId
           );
         } else {
           sendError(
             ws,
-            'BOOTSTRAP_INVALID',
-            'Bootstrap token invalid (bad signature, malformed, or wrong kind)',
-            message.requestId,
+            "BOOTSTRAP_INVALID",
+            "Bootstrap token invalid (bad signature, malformed, or wrong kind)",
+            message.requestId
           );
         }
         return;
@@ -2233,18 +2167,18 @@ export function createRenderChannelServer(
       if (bound.renderId !== payload.renderId) {
         sendError(
           ws,
-          'BOOTSTRAP_SESSION_MISMATCH',
+          "BOOTSTRAP_SESSION_MISMATCH",
           `Bootstrap token is bound to session '${bound.renderId}' but subscribe targets '${payload.renderId}'`,
-          message.requestId,
+          message.requestId
         );
         return;
       }
       if (bound.appId !== payload.appId) {
         sendError(
           ws,
-          'BOOTSTRAP_APP_MISMATCH',
+          "BOOTSTRAP_APP_MISMATCH",
           `Bootstrap token is bound to app '${bound.appId}' but subscribe targets '${payload.appId}'`,
-          message.requestId,
+          message.requestId
         );
         return;
       }
@@ -2254,21 +2188,18 @@ export function createRenderChannelServer(
       // citizen for the lifetime of this subscription.
       effectiveIdentity = {
         identity: {
-          kind: 'user',
+          kind: "user",
           userId: bound.renderId,
           workspaceId: bound.appId,
           roles: [],
         },
-        source: 'apikey',
+        source: "apikey",
       };
       // Mint the reconnect credential now — before create/observe
       // work — so a downstream failure doesn't leave the client with
       // no way to resume.
-      mintedSessionToken = opts.bootstrap.issueSessionToken(
-        bound.renderId,
-        bound.appId,
-      );
-      opts.logger.info('session_channel_bootstrap_accepted', {
+      mintedSessionToken = opts.bootstrap.issueSessionToken(bound.renderId, bound.appId);
+      opts.logger.info("session_channel_bootstrap_accepted", {
         renderId: bound.renderId,
         appId: bound.appId,
       });
@@ -2285,9 +2216,9 @@ export function createRenderChannelServer(
       if (session.appId !== payload.appId) {
         sendError(
           ws,
-          'APP_MISMATCH',
+          "APP_MISMATCH",
           `Session ${payload.renderId} belongs to a different app`,
-          message.requestId,
+          message.requestId
         );
         return;
       }
@@ -2300,9 +2231,9 @@ export function createRenderChannelServer(
       } catch (err) {
         sendError(
           ws,
-          'SESSION_CREATE_FAILED',
+          "SESSION_CREATE_FAILED",
           err instanceof Error ? err.message : String(err),
-          message.requestId,
+          message.requestId
         );
         return;
       }
@@ -2335,16 +2266,12 @@ export function createRenderChannelServer(
     // walk still surfaces server-pushed state that landed before the
     // subscriber attached.
     const activeStreamSpec =
-      activeItem.type !== 'mcpApps' && activeItem.type !== 'system'
+      activeItem.type !== "mcpApps" && activeItem.type !== "system"
         ? activeItem.streamSpec
         : undefined;
     const replay =
       payload.fromSeq !== undefined
-        ? await streamBuffer.replay(
-            stored.id,
-            payload.fromSeq,
-            activeStreamSpec,
-          )
+        ? await streamBuffer.replay(stored.id, payload.fromSeq, activeStreamSpec)
         : await streamBuffer.replay(stored.id, 0, undefined);
 
     // Subscribe to the StreamFanout BEFORE constructing the Subscriber:
@@ -2353,8 +2280,7 @@ export function createRenderChannelServer(
     // seam side means any concurrent `streamFanout.publish` from this
     // point onward queues into our iterator — paired with the
     // replayCompletedSeq cursor below, that's race-free.
-    const fanoutIter =
-      streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
+    const fanoutIter = streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
     const sub: Subscriber = {
       ws,
       renderId: stored.id,
@@ -2369,7 +2295,7 @@ export function createRenderChannelServer(
       channelSubs: new Map<string, ChannelSubscriptionState>(),
     };
     register(sub);
-    opts.logger.info('render_channel_subscribed', {
+    opts.logger.info("render_channel_subscribed", {
       renderId: stored.id,
       appId: stored.appId,
       identityKind: effectiveIdentity.identity.kind,
@@ -2392,12 +2318,10 @@ export function createRenderChannelServer(
       // the handshake ignore the field (legacy-pass-through).
       serverVersion: PROTOCOL_SCHEMA_VERSION,
       ...(replay?.truncated ? { replayTruncated: true } : {}),
-      ...(mintedSessionToken !== undefined
-        ? { sessionToken: mintedSessionToken }
-        : {}),
+      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
     };
     send(ws, {
-      type: 'ack',
+      type: "ack",
       payload: ackPayload,
       ...(message.requestId ? { requestId: message.requestId } : {}),
     });
@@ -2419,9 +2343,9 @@ export function createRenderChannelServer(
       if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
         sendError(
           ws,
-          'INVALID_SINCE_SEQUENCE',
-          'sinceSequence must be a non-negative integer',
-          message.requestId,
+          "INVALID_SINCE_SEQUENCE",
+          "sinceSequence must be a non-negative integer",
+          message.requestId
         );
       } else {
         const ledger = await opts.renderStore.listEventsSince(
@@ -2429,27 +2353,24 @@ export function createRenderChannelServer(
           sinceSeq,
           // Server-side cap matches the HTTP route's default (100).
           // Stress + replay-from-zero workloads cap here.
-          100,
+          100
         );
         if (ledger === null) {
           // Session disappeared between resolve and ledger read —
           // already handled by the broader error envelope path; nothing
           // to do here.
-        } else if (
-          sinceSeq > ledger.lastSequence ||
-          sinceSeq < ledger.horizonSeq
-        ) {
+        } else if (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq) {
           sendError(
             ws,
-            'REPLAY_HORIZON_PASSED',
+            "REPLAY_HORIZON_PASSED",
             `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
             message.requestId,
-            { currentSequence: ledger.lastSequence },
+            { currentSequence: ledger.lastSequence }
           );
         } else {
           for (const event of ledger.events) {
             send(ws, {
-              type: 'session_event',
+              type: "session_event",
               payload: {
                 sequence: event.seq,
                 emittedAt: new Date(event.timestamp).toISOString(),
@@ -2469,7 +2390,7 @@ export function createRenderChannelServer(
     // the single source of truth for ordering.
     if (replay) {
       for (const env of replay.envelopes) {
-        send(ws, { type: 'data', payload: env });
+        send(ws, { type: "data", payload: env });
       }
     }
   }
@@ -2480,22 +2401,22 @@ export function createRenderChannelServer(
     try {
       message = JSON.parse(raw) as WebSocketMessage;
     } catch {
-      sendError(ws, 'INVALID_JSON', 'Message is not valid JSON');
+      sendError(ws, "INVALID_JSON", "Message is not valid JSON");
       return;
     }
-    if (!message || typeof message !== 'object' || typeof message.type !== 'string') {
-      sendError(ws, 'INVALID_MESSAGE', 'Message is missing a `type` discriminator');
+    if (!message || typeof message !== "object" || typeof message.type !== "string") {
+      sendError(ws, "INVALID_MESSAGE", "Message is missing a `type` discriminator");
       return;
     }
 
     switch (message.type) {
-      case 'subscribe': {
+      case "subscribe": {
         // `subscribe` is the only message allowed before identity is
         // bound to a session. Identity was already resolved at upgrade
         // time; we just need to register the subscriber.
         const identity = pendingIdentity.get(ws);
         if (!identity) {
-          sendError(ws, 'UNAUTHENTICATED', 'No identity bound to this socket', message.requestId);
+          sendError(ws, "UNAUTHENTICATED", "No identity bound to this socket", message.requestId);
           return;
         }
         // Cookie-scope enforcement: when the upgrade was authenticated
@@ -2507,18 +2428,18 @@ export function createRenderChannelServer(
           if (message.payload.renderId !== cookieBound.renderId) {
             sendError(
               ws,
-              'DEVTOOL_COOKIE_SESSION_MISMATCH',
+              "DEVTOOL_COOKIE_SESSION_MISMATCH",
               `Embedded-ui cookie is bound to session '${cookieBound.renderId}' but subscribe targets '${message.payload.renderId}'`,
-              message.requestId,
+              message.requestId
             );
             return;
           }
           if (message.payload.appId !== cookieBound.appId) {
             sendError(
               ws,
-              'DEVTOOL_COOKIE_APP_MISMATCH',
+              "DEVTOOL_COOKIE_APP_MISMATCH",
               `Embedded-ui cookie is bound to app '${cookieBound.appId}' but subscribe targets '${message.payload.appId}'`,
-              message.requestId,
+              message.requestId
             );
             return;
           }
@@ -2528,43 +2449,43 @@ export function createRenderChannelServer(
         pendingCookieBinding.delete(ws);
         return;
       }
-      case 'ping':
+      case "ping":
         send(ws, {
-          type: 'pong',
+          type: "pong",
           payload: {},
           ...(message.requestId ? { requestId: message.requestId } : {}),
         });
         return;
-      case 'close':
+      case "close":
         // Explicit close from client — unregister + close the socket.
         if (sub) unregister(ws);
-        ws.close(1000, 'client_close');
+        ws.close(1000, "client_close");
         return;
-      case 'action':
+      case "action":
         if (!sub) {
           sendError(
             ws,
-            'NOT_SUBSCRIBED',
+            "NOT_SUBSCRIBED",
             "Send a 'subscribe' message first before 'action'",
-            message.requestId,
+            message.requestId
           );
           return;
         }
         await handleInboundAction(ws, sub, message);
         return;
-      case 'channel_subscribe':
+      case "channel_subscribe":
         if (!sub) {
           sendError(
             ws,
-            'NOT_SUBSCRIBED',
+            "NOT_SUBSCRIBED",
             "Send a 'subscribe' message first before 'channel_subscribe'",
-            message.requestId,
+            message.requestId
           );
           return;
         }
         await handleChannelSubscribe(ws, sub, message);
         return;
-      case 'channel_unsubscribe':
+      case "channel_unsubscribe":
         if (!sub) {
           // No subscriber → nothing was subscribed → no-op silently.
           // Returning an error would leak "is this socket subscribed"
@@ -2573,39 +2494,29 @@ export function createRenderChannelServer(
         }
         handleChannelUnsubscribe(ws, sub, message);
         return;
-      case 'host_context_observed':
+      case "host_context_observed":
         // The iframe-runtime echoes its captured `McpUiHostContext`
         // after `ui/initialize` resolves and on every
         // `ui/notifications/host-context-changed` notification. Persist
         // on `Session.hostContext` so `ggui_handshake` and
         // `ggui_consume` can surface it to the agent on subsequent
         // turns. Fire-and-forget on the client side; no response.
-        if (
-          !checkSubscriberTenancy(
-            ws,
-            sub,
-            message.payload,
-            message.type,
-            message.requestId,
-          )
-        ) {
+        if (!checkSubscriberTenancy(ws, sub, message.payload, message.type, message.requestId)) {
           return;
         }
-        await applySessionPatch(
-          sub.renderId,
-          sub.appId,
-          message.type,
-          { hostContext: message.payload.hostContext, lastActivityAt: Date.now() },
-        );
+        await applySessionPatch(sub.renderId, sub.appId, message.type, {
+          hostContext: message.payload.hostContext,
+          lastActivityAt: Date.now(),
+        });
         return;
-      case 'feedback':
+      case "feedback":
         // Require an active subscription for operational messages.
         if (!sub) {
           sendError(
             ws,
-            'NOT_SUBSCRIBED',
+            "NOT_SUBSCRIBED",
             `Send a 'subscribe' message first before '${message.type}'`,
-            message.requestId,
+            message.requestId
           );
           return;
         }
@@ -2615,17 +2526,17 @@ export function createRenderChannelServer(
         // clear code so clients don't assume silent success.
         sendError(
           ws,
-          'NOT_IMPLEMENTED',
+          "NOT_IMPLEMENTED",
           `'${message.type}' not yet handled on the OSS channel server`,
-          message.requestId,
+          message.requestId
         );
         return;
       default:
         sendError(
           ws,
-          'UNSUPPORTED_MESSAGE',
+          "UNSUPPORTED_MESSAGE",
           `Unsupported message type: ${String((message as WebSocketMessage).type)}`,
-          message.requestId,
+          message.requestId
         );
     }
   }
@@ -2644,12 +2555,9 @@ export function createRenderChannelServer(
    * issued for. Parallel to {@link pendingIdentity} — same lifetime,
    * same WeakMap rationale.
    */
-  const pendingCookieBinding = new WeakMap<
-    WebSocket,
-    { renderId: string; appId: string }
-  >();
+  const pendingCookieBinding = new WeakMap<WebSocket, { renderId: string; appId: string }>();
 
-  wss.on('connection', (ws, req) => {
+  wss.on("connection", (ws, req) => {
     // Bind the resolved identity from the upgrade phase. It was
     // attached to the request object in handleUpgrade.
     const identity = (req as IncomingMessage & { __gguiIdentity?: AuthResult }).__gguiIdentity;
@@ -2662,24 +2570,24 @@ export function createRenderChannelServer(
     ).__gguiCookieBound;
     if (cookieBound) pendingCookieBinding.set(ws, cookieBound);
 
-    ws.on('message', (raw) => {
+    ws.on("message", (raw) => {
       // `ws.on('message')` delivers Buffer/ArrayBuffer/Buffer[] depending
       // on frame type; normalize to string.
-      const text = typeof raw === 'string' ? raw : raw.toString('utf8');
+      const text = typeof raw === "string" ? raw : raw.toString("utf8");
       onMessage(ws, text).catch((err) => {
-        opts.logger.error('session_channel_message_failed', {
+        opts.logger.error("session_channel_message_failed", {
           error: String(err),
         });
       });
     });
 
-    ws.on('close', () => {
+    ws.on("close", () => {
       unregister(ws);
       pendingIdentity.delete(ws);
     });
 
-    ws.on('error', (err) => {
-      opts.logger.warn('session_channel_socket_error', { error: String(err) });
+    ws.on("error", (err) => {
+      opts.logger.warn("session_channel_socket_error", { error: String(err) });
     });
   });
 
@@ -2694,30 +2602,27 @@ export function createRenderChannelServer(
           (req as IncomingMessage & { __gguiIdentity?: AuthResult }).__gguiIdentity = identity;
           wss.handleUpgrade(req, socket, head, (ws) => {
             // Expose `upgradeReq` for the connection handler.
-            wss.emit('connection', ws, req);
+            wss.emit("connection", ws, req);
           });
         })
         .catch((err) => {
           if (err instanceof UnauthenticatedError) {
-            opts.logger.warn('session_channel_auth_failed', {
+            opts.logger.warn("session_channel_auth_failed", {
               reason: err.message,
             });
             socket.write(
-              'HTTP/1.1 401 Unauthorized\r\n' +
-                'Connection: close\r\n' +
-                'Content-Type: text/plain\r\n\r\n' +
-                'Unauthorized: ' +
+              "HTTP/1.1 401 Unauthorized\r\n" +
+                "Connection: close\r\n" +
+                "Content-Type: text/plain\r\n\r\n" +
+                "Unauthorized: " +
                 err.message +
-                '\r\n',
+                "\r\n"
             );
           } else {
-            opts.logger.error('session_channel_upgrade_failed', {
+            opts.logger.error("session_channel_upgrade_failed", {
               error: String(err),
             });
-            socket.write(
-              'HTTP/1.1 500 Internal Server Error\r\n' +
-                'Connection: close\r\n\r\n',
-            );
+            socket.write("HTTP/1.1 500 Internal Server Error\r\n" + "Connection: close\r\n\r\n");
           }
           socket.destroy();
         });
@@ -2733,16 +2638,14 @@ export function createRenderChannelServer(
       const stored = await opts.renderStore.get(delivery.renderId);
       const activeEntry = stored?.render;
       const streamSpec =
-        activeEntry !== undefined
-        && activeEntry.type !== 'mcpApps'
-        && activeEntry.type !== 'system'
+        activeEntry !== undefined && activeEntry.type !== "mcpApps" && activeEntry.type !== "system"
           ? activeEntry.streamSpec
           : undefined;
       assertStreamContract(
         streamSpec,
         delivery.channel,
         delivery.payload,
-        opts.extraReservedValidators,
+        opts.extraReservedValidators
       );
       return fanOut(delivery, streamSpec);
     },
@@ -2754,20 +2657,17 @@ export function createRenderChannelServer(
       // NOT routed through StreamFanout either — `type: 'render'` is a
       // distinct WebSocket message type. Filter the flat WS-subscriber
       // set by renderId; N is typically 1-2 (multi-tab render sharing).
-      const payload =
-        matchType !== undefined ? { render, matchType } : { render };
+      const payload = matchType !== undefined ? { render, matchType } : { render };
       for (const sub of wsSubscribers) {
         if (sub.renderId !== renderId) continue;
-        send(sub.ws, { type: 'render', payload });
+        send(sub.ws, { type: "render", payload });
       }
     },
     async primeStreams(renderId, render) {
       const router = opts.wiredActionRouter;
-      const streamSpec =
-        'streamSpec' in render ? render.streamSpec : undefined;
+      const streamSpec = "streamSpec" in render ? render.streamSpec : undefined;
       if (!router || !streamSpec) return;
-      const timeoutMs =
-        opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
+      const timeoutMs = opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
       // Build the same wired-action ctx the dispatcher uses.
       // Prime-time invocations reuse the seam so a refresh tool that
       // fires `sendPropsUpdate` on cold-start works the same way as
@@ -2782,7 +2682,7 @@ export function createRenderChannelServer(
         const refreshTool = channelEntry?.tool;
         if (!refreshTool) continue;
         if (!router.has(refreshTool)) {
-          opts.logger.warn('render_channel_prime_tool_not_found', {
+          opts.logger.warn("render_channel_prime_tool_not_found", {
             renderId,
             toolName: refreshTool,
             channel: channelName,
@@ -2796,10 +2696,10 @@ export function createRenderChannelServer(
             refreshTool,
             EMPTY_REFRESH_INPUT,
             wiredCtx,
-            timeoutMs,
+            timeoutMs
           );
         } catch (err) {
-          opts.logger.warn('render_channel_prime_tool_failed', {
+          opts.logger.warn("render_channel_prime_tool_failed", {
             renderId,
             toolName: refreshTool,
             channel: channelName,
@@ -2808,14 +2708,9 @@ export function createRenderChannelServer(
           continue;
         }
         try {
-          assertStreamContract(
-            streamSpec,
-            channelName,
-            output,
-            opts.extraReservedValidators,
-          );
+          assertStreamContract(streamSpec, channelName, output, opts.extraReservedValidators);
         } catch (err) {
-          opts.logger.warn('render_channel_prime_schema_violation', {
+          opts.logger.warn("render_channel_prime_schema_violation", {
             renderId,
             toolName: refreshTool,
             channel: channelName,
@@ -2828,13 +2723,13 @@ export function createRenderChannelServer(
             {
               renderId,
               channel: channelName,
-              mode: channelEntry?.mode ?? 'append',
-              payload: output as StreamEnvelopeInput['payload'],
+              mode: channelEntry?.mode ?? "append",
+              payload: output as StreamEnvelopeInput["payload"],
             },
-            streamSpec,
+            streamSpec
           );
         } catch (err) {
-          opts.logger.error('render_channel_prime_emit_failed', {
+          opts.logger.error("render_channel_prime_emit_failed", {
             renderId,
             toolName: refreshTool,
             channel: channelName,
@@ -2860,7 +2755,7 @@ export function createRenderChannelServer(
       for (const sub of wsSubscribers) {
         if (sub.renderId !== renderId) continue;
         send(sub.ws, {
-          type: 'drain_ack',
+          type: "drain_ack",
           payload: { renderId, appId, eventId, drainedAt },
         });
       }
@@ -2909,7 +2804,7 @@ export function createRenderChannelServer(
       for (const sub of wsSubscribers) {
         sessions.add(sub.renderId);
         try {
-          sub.ws.close(1012, 'service_restart');
+          sub.ws.close(1012, "service_restart");
         } catch {
           /* best-effort */
         }
@@ -2925,8 +2820,8 @@ export function createRenderChannelServer(
         Array.from(sessions, (renderId) =>
           streamFanout.close(renderId).catch(() => {
             /* best-effort */
-          }),
-        ),
+          })
+        )
       );
       await new Promise<void>((resolve) => {
         wss.close(() => resolve());

@@ -38,59 +38,8 @@
  * once at boot so operators see the shape they're running.
  */
 
-import express, {
-  type Express,
-  type Request,
-  type Response,
-} from 'express';
-import { Server as NodeHttpServer } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { randomUUID, randomBytes } from 'node:crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
-import { CONSOLE_DIST_DIR } from '@ggui-ai/console/server';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import {
-  RUNTIME_BUNDLE_FILE,
-  RUNTIME_BUNDLE_URL_PATH,
-} from '@ggui-ai/iframe-runtime/server';
-import {
-  CONSOLE_COOKIE_NAME,
-  mintDevtoolCookie,
-  readDevtoolCookieFromHeaders,
-  verifyDevtoolCookie,
-} from './console-auth.js';
-import { applyDevtoolSecurityHeaders } from './console-headers.js';
-import { renderWelcomeHtml } from './console-welcome.js';
-import {
-  BoundedLlmTraceSink,
-  mountConsoleLlmTraceRoutes,
-} from './console-llm-trace.js';
-import {
-  BoundedValidatorTraceSink,
-  mountConsoleValidatorRoutes,
-} from './console-validator.js';
-import { mountConsoleTimelineRoutes } from './console-timeline.js';
-import { setLlmTraceSink } from '@ggui-ai/ui-gen/harness/llm-trace-sink';
-import { setValidatorTraceSink } from '@ggui-ai/ui-gen/harness/validator-trace-sink';
-import {
-  BoundedCacheTraceSink,
-  mountConsoleCacheRoutes,
-} from './console-cache.js';
-import { setCacheTraceSink } from '@ggui-ai/mcp-server-handlers/session-mutations';
-import {
-  BoundedPayloadTraceSink,
-  mountConsolePayloadsRoutes,
-} from './console-payloads.js';
-import { setPayloadTraceSink } from '@ggui-ai/mcp-server-handlers/session-mutations';
-import {
-  mountDevtoolThemeRoutes,
-  type ThemeWriter,
-  type ThemeFileUploader,
-} from './console-theme-routes.js';
-import { GGUI_RENDER_SHELL_HTML } from './mcp-apps-outbound.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { z, type ZodRawShape } from 'zod';
+import { CONSOLE_DIST_DIR } from "@ggui-ai/console/server";
+import { RUNTIME_BUNDLE_FILE, RUNTIME_BUNDLE_URL_PATH } from "@ggui-ai/iframe-runtime/server";
 import type {
   AppMetadataStore,
   AuditSink,
@@ -100,8 +49,8 @@ import type {
   BlueprintSearch,
   BlueprintSelector,
   BlueprintStore,
-  ConnectorRegistry,
   CodeStore,
+  ConnectorRegistry,
   EmbeddingProvider,
   GeneratorRegistry,
   KeyValueStore,
@@ -116,52 +65,27 @@ import type {
   TelemetrySink,
   ThreadStore,
   VectorStore,
-} from '@ggui-ai/mcp-server-core';
+} from "@ggui-ai/mcp-server-core";
 import {
   CODE_HASH_REGEX,
+  createDeterministicBlueprintSelector,
   isEnumerableVectorStore,
   isTokenRegisteringAuthAdapter,
-  mintWsToken,
   mintSessionToken,
+  mintWsToken,
   refreshWsToken,
   verifyToken,
-  createDeterministicBlueprintSelector,
-} from '@ggui-ai/mcp-server-core';
+} from "@ggui-ai/mcp-server-core";
 import {
   createInMemoryBlueprintSearch,
   createInMemoryGeneratorRegistry,
-  InMemoryBlueprintStore,
-} from '@ggui-ai/mcp-server-core/in-memory';
-import type {
-  Blueprint,
-  CanvasLifecyclePayload,
-  Render,
-} from '@ggui-ai/protocol';
-import { LIFECYCLE_CHANNEL } from '@ggui-ai/protocol';
-import {
-  GGUI_RENDER_RESOURCE_MIME,
-  GGUI_RENDER_RESOURCE_URI,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
-import type {
-  DiscoveredPrimitiveCatalog,
-  LoadedTheme,
-} from '@ggui-ai/project-config/node';
-import {
-  findGguiJson,
-  loadTheme,
-  safeLoadGguiJson,
-} from '@ggui-ai/project-config/node';
-import { GguiJsonV1 } from '@ggui-ai/project-config';
-import type { OperatorConfig, ThemeConfig } from '@ggui-ai/project-config';
-import {
   FixedWindowRateLimiter,
+  InMemoryActiveConsumerRegistry,
   InMemoryAppMetadataStore,
   InMemoryAuthAdapter,
+  InMemoryBlueprintStore,
   InMemoryKeyValueStore,
   InMemoryPairingService,
-  InMemoryActiveConsumerRegistry,
   InMemoryPendingEventConsumer,
   InMemoryQuotaStore,
   InMemoryRenderStore,
@@ -171,11 +95,13 @@ import {
   NoopAuditSink,
   NoopRateLimiter,
   NoopTelemetrySink,
-} from '@ggui-ai/mcp-server-core/in-memory';
-import type {
-  HandlerContext,
-  SharedHandler,
-} from '@ggui-ai/mcp-server-handlers';
+} from "@ggui-ai/mcp-server-core/in-memory";
+import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
+import {
+  createGguiListGadgetsHandler,
+  createGguiListThemesHandler,
+  type ThemeCatalogEntry,
+} from "@ggui-ai/mcp-server-handlers/app-discovery";
 import {
   createDescribeBlueprintFormatHandler,
   createDescribeDataContractFormatHandler,
@@ -186,70 +112,106 @@ import {
   createRenderBlueprintHandler,
   createSearchBlueprintsHandler,
   createValidateBlueprintHandler,
-} from '@ggui-ai/mcp-server-handlers/blueprints';
+} from "@ggui-ai/mcp-server-handlers/blueprints";
 import {
-  createGguiListGadgetsHandler,
-  createGguiListThemesHandler,
-  type ThemeCatalogEntry,
-} from '@ggui-ai/mcp-server-handlers/app-discovery';
-import {
-  createGguiOpsGenerateBlueprintHandler,
-  createGguiOpsRegisterBlueprintHandler,
-  createGguiOpsListBlueprintsHandler,
-  createGguiOpsUpdateBlueprintHandler,
   createGguiOpsDeleteBlueprintHandler,
-} from '@ggui-ai/mcp-server-handlers/ops-blueprint';
+  createGguiOpsGenerateBlueprintHandler,
+  createGguiOpsListBlueprintsHandler,
+  createGguiOpsRegisterBlueprintHandler,
+  createGguiOpsUpdateBlueprintHandler,
+} from "@ggui-ai/mcp-server-handlers/ops-blueprint";
+import { setCacheTraceSink, setPayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
+import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
+import { GguiJsonV1 } from "@ggui-ai/project-config";
+import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
+import { findGguiJson, loadTheme, safeLoadGguiJson } from "@ggui-ai/project-config/node";
+import type { Blueprint, CanvasLifecyclePayload, Render } from "@ggui-ai/protocol";
+import { LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
+import {
+  GGUI_RENDER_RESOURCE_MIME,
+  GGUI_RENDER_RESOURCE_URI,
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  type McpAppAiGguiRenderMeta,
+} from "@ggui-ai/protocol/integrations/mcp-apps";
+import { setLlmTraceSink } from "@ggui-ai/ui-gen/harness/llm-trace-sink";
+import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-sink";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import express, { type Express, type Request, type Response } from "express";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { Server as NodeHttpServer } from "node:http";
+import path from "node:path";
+import { z, type ZodRawShape } from "zod";
+import {
+  CONSOLE_COOKIE_NAME,
+  mintDevtoolCookie,
+  readDevtoolCookieFromHeaders,
+  verifyDevtoolCookie,
+} from "./console-auth.js";
+import { BoundedCacheTraceSink, mountConsoleCacheRoutes } from "./console-cache.js";
+import { applyDevtoolSecurityHeaders } from "./console-headers.js";
+import { BoundedLlmTraceSink, mountConsoleLlmTraceRoutes } from "./console-llm-trace.js";
+import { BoundedPayloadTraceSink, mountConsolePayloadsRoutes } from "./console-payloads.js";
+import {
+  mountDevtoolThemeRoutes,
+  type ThemeFileUploader,
+  type ThemeWriter,
+} from "./console-theme-routes.js";
+import { mountConsoleTimelineRoutes } from "./console-timeline.js";
+import { BoundedValidatorTraceSink, mountConsoleValidatorRoutes } from "./console-validator.js";
+import { renderWelcomeHtml } from "./console-welcome.js";
+import { GGUI_RENDER_SHELL_HTML } from "./mcp-apps-outbound.js";
 // Operator-class MCP handlers — twelve `ggui_ops_*` handlers across
 // four domains (apps / orgs / connector-keys / coupon). Every factory
 // binds a deps seam; deployments that don't wire the seam simply
 // don't register the tool (matching `ggui_ops_get_credit_balance`'s
 // pattern).
 import {
-  createListAppsHandler,
   createCreateAppHandler,
-  createRenameAppHandler,
   createDeleteAppHandler,
+  createListAppsHandler,
+  createRenameAppHandler,
   createSetDefaultAppHandler,
   createUpdateAppSystemPromptHandler,
   type AppsSource,
   type UserDefaultAppSource,
-} from '@ggui-ai/mcp-server-handlers/ops-apps';
+} from "@ggui-ai/mcp-server-handlers/ops-apps";
 import {
-  createListOrgsHandler,
-  createCreateOrgHandler,
-  createInviteToOrgHandler,
-  createRevokeInviteHandler,
-  type OrgsSource,
-  type OrgInvitesSource,
-} from '@ggui-ai/mcp-server-handlers/ops-orgs';
-import {
-  createListConnectorKeysHandler,
   createIssueConnectorKeyHandler,
+  createListConnectorKeysHandler,
   createRevokeConnectorKeyHandler,
   type ConnectorKeysSource,
-} from '@ggui-ai/mcp-server-handlers/ops-connector-keys';
+} from "@ggui-ai/mcp-server-handlers/ops-connector-keys";
 import {
   createRedeemCouponHandler,
   type CouponRedeemSource,
-} from '@ggui-ai/mcp-server-handlers/ops-coupon';
-import type { UiRegistry } from '@ggui-ai/ui-registry';
+} from "@ggui-ai/mcp-server-handlers/ops-coupon";
 import {
-  buildLlmCaller,
-  createLlmBackedHandshakeNegotiator,
-} from './llm-backed-negotiator.js';
+  createCreateOrgHandler,
+  createInviteToOrgHandler,
+  createListOrgsHandler,
+  createRevokeInviteHandler,
+  type OrgInvitesSource,
+  type OrgsSource,
+} from "@ggui-ai/mcp-server-handlers/ops-orgs";
 import {
   clearGenerationCache,
   createGguiConsumeHandler,
-  createGguiGetRenderHandler,
-  createGguiListRendersHandler,
   createGguiEmitHandler,
+  createGguiGetRenderHandler,
   createGguiHandshakeHandler,
+  createGguiListRendersHandler,
+  createGguiRefreshWsTokenHandler,
   createGguiRenderHandler,
-  createGguiUpdateHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
-  createGguiRefreshWsTokenHandler,
+  createGguiUpdateHandler,
   createInMemoryProvisionalPreviewRegistry,
+  deriveContractBundle,
+  derivePublicEnvProjection,
+  deriveRenderMeta,
   invalidateGenerationCache,
   listBlueprints,
   listGenerationCache,
@@ -259,22 +221,41 @@ import {
   type GenerationDeps,
   type HandshakeNegotiator,
   type PropsUpdateNotifier,
+  type ProvisionalPreviewConfig,
   type ProvisionalPreviewDeps,
   type ProvisionalPreviewEmitter,
-  type ProvisionalPreviewConfig,
   type ProvisionalPreviewOutcome,
-  deriveRenderMeta,
-  derivePublicEnvProjection,
-  deriveContractBundle,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
-import { buildMcpServer, type ServerInfo } from './build-mcp.js';
-import { installMcpAppsInbound } from './mcp-apps-inbound.js';
+} from "@ggui-ai/mcp-server-handlers/renders";
+import type { UiRegistry } from "@ggui-ai/ui-registry";
+import {
+  DEFAULT_ADMIN_BLUEPRINTS_PATH,
+  mountAdminBlueprintsTransport,
+} from "./admin-blueprints-transport.js";
+import { mountAdminOAuthProvidersTransport } from "./admin-oauth-providers-transport.js";
 import {
   DEFAULT_BUILDER_APP_ID,
   defaultAppIdFromIdentity,
   resolveIdentity,
   UnauthenticatedError,
-} from './auth.js';
+} from "./auth.js";
+import { buildMcpServer, type ServerInfo } from "./build-mcp.js";
+import { createCsrfMiddleware, mountCsrfTokenRoute } from "./csrf-middleware.js";
+import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./email-login.js";
+import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
+import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
+import { createConsoleLogger, type Logger } from "./logger.js";
+import { installMcpAppsInbound } from "./mcp-apps-inbound.js";
+import {
+  composeHandlersWithMounts,
+  validateMcpServices,
+  type McpServerMount,
+  type McpService,
+} from "./mcp-mounts.js";
+import type { OAuthLoginProvider } from "./oauth-login-types.js";
+import { mountOAuthLoginRoutes } from "./oauth-login.js";
+import { createOAuthProvidersStore } from "./oauth-providers-store.js";
+import { githubLoginProvider } from "./oauth-providers/github.js";
+import { googleLoginProvider } from "./oauth-providers/google.js";
 import {
   buildWwwAuthenticate,
   handleAuthorizationServerMetadata,
@@ -287,90 +268,42 @@ import {
   resolveIssuerUrl,
   type OAuthConfig,
   type OAuthStorage,
-} from './oauth.js';
-import { createConsoleLogger, type Logger } from './logger.js';
-import {
-  buildRequestContextMiddleware,
-  resolveRuntimeUrl,
-} from './request-context.js';
+} from "./oauth.js";
 import {
   DEFAULT_PAIRING_ADMIN_INIT_PATH,
   DEFAULT_PAIRING_PATH,
   mountPairingTransport,
-} from './pairing-transport.js';
-import {
-  cookieAuthMiddleware,
-} from './user-session-auth.js';
-import {
-  createPairLoginRateLimitMiddleware,
-} from './rate-limit-middleware.js';
-import {
-  createCsrfMiddleware,
-  mountCsrfTokenRoute,
-} from './csrf-middleware.js';
-import {
-  createSecurityHeadersMiddleware,
-} from './security-headers-middleware.js';
-import {
-  createOAuthProvidersStore,
-} from './oauth-providers-store.js';
-import {
-  mountAdminOAuthProvidersTransport,
-} from './admin-oauth-providers-transport.js';
-import {
-  mountOAuthLoginRoutes,
-} from './oauth-login.js';
-import {
-  mountEmailLoginRoutes,
-  type EmailSender,
-  type MagicLinkStore,
-} from './email-login.js';
-import {
-  resolveMcpInstructions,
-  type McpInstructionsValue,
-} from './instructions-presets.js';
-import { googleLoginProvider } from './oauth-providers/google.js';
-import { githubLoginProvider } from './oauth-providers/github.js';
-import type { OAuthLoginProvider } from './oauth-login-types.js';
-import {
-  DEFAULT_ADMIN_BLUEPRINTS_PATH,
-  mountAdminBlueprintsTransport,
-} from './admin-blueprints-transport.js';
-import {
-  DEFAULT_THREADS_PATH,
-  mountThreadTransport,
-  type ThreadOwnerResolver,
-} from './thread-transport.js';
+} from "./pairing-transport.js";
+import { createPairLoginRateLimitMiddleware } from "./rate-limit-middleware.js";
 import {
   createRenderChannelServer,
   type RenderChannelServer,
   type WiredActionRouter,
-} from './render-channel.js';
-import {
-  composeHandlersWithMounts,
-  type McpServerMount,
-  type McpService,
-  validateMcpServices,
-} from './mcp-mounts.js';
-import {
-  composePreviewReservedValidator,
-  mergeReservedValidators,
-} from './reserved-validators.js';
+} from "./render-channel.js";
+import { buildRequestContextMiddleware, resolveRuntimeUrl } from "./request-context.js";
+import { composePreviewReservedValidator, mergeReservedValidators } from "./reserved-validators.js";
 import {
   checkRenderSchemaCompat,
   DEFAULT_SCHEMA_COMPAT_MODE,
   SchemaCompatError,
   type SchemaCompatMode,
-} from './schema-compat.js';
+} from "./schema-compat.js";
+import { createSecurityHeadersMiddleware } from "./security-headers-middleware.js";
+import {
+  DEFAULT_THREADS_PATH,
+  mountThreadTransport,
+  type ThreadOwnerResolver,
+} from "./thread-transport.js";
+import { cookieAuthMiddleware } from "./user-session-auth.js";
 
 /**
  * Default server identity. Callers override via `info:` when embedding.
  */
 const DEFAULT_INFO: ServerInfo = {
-  name: 'ggui-mcp-server',
-  version: '0.0.1',
+  name: "ggui-mcp-server",
+  version: "0.0.1",
   description:
-    'Open self-hosted MCP server for the ggui protocol. Powered by @ggui-ai/mcp-server-handlers.',
+    "Open self-hosted MCP server for the ggui protocol. Powered by @ggui-ai/mcp-server-handlers.",
 };
 
 /**
@@ -378,19 +311,17 @@ const DEFAULT_INFO: ServerInfo = {
  * MCP-Apps `ui.visibility` array. Defensive against legacy handlers
  * that omit `_meta` entirely (no cast required to read through).
  */
-function hasUiVisibilityArray(
-  meta: Record<string, unknown> | undefined,
-): meta is Record<string, unknown> & {
+function hasUiVisibilityArray(meta: Record<string, unknown> | undefined): meta is Record<
+  string,
+  unknown
+> & {
   ui: { visibility: readonly string[] };
 } {
   if (!meta) return false;
-  const ui = meta['ui'];
-  if (ui === null || typeof ui !== 'object') return false;
+  const ui = meta["ui"];
+  if (ui === null || typeof ui !== "object") return false;
   const visibility = (ui as { visibility?: unknown }).visibility;
-  return (
-    Array.isArray(visibility) &&
-    visibility.every((v) => typeof v === 'string')
-  );
+  return Array.isArray(visibility) && visibility.every((v) => typeof v === "string");
 }
 
 /**
@@ -404,12 +335,12 @@ function hasUiVisibilityArray(
  * Order matches handler registration order (deterministic for tests).
  */
 function collectAppCallableToolNames(
-  handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+  handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>
 ): readonly string[] {
   const names: string[] = [];
   for (const h of handlers) {
     if (!hasUiVisibilityArray(h._meta)) continue;
-    if (h._meta.ui.visibility.includes('app')) {
+    if (h._meta.ui.visibility.includes("app")) {
       names.push(h.name);
     }
   }
@@ -456,11 +387,8 @@ function buildOpsBlueprintDeps(input: {
   readonly blueprintStore: BlueprintStore;
   readonly blueprintSearch: BlueprintSearch;
   readonly resolveLlm?: (
-    ctx: HandlerContext,
-  ) =>
-    | Promise<GenerationCredentials | null>
-    | GenerationCredentials
-    | null;
+    ctx: HandlerContext
+  ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
   readonly blueprints?: BlueprintProvider;
   /**
    * Cache-registry bundle for the ops dual-write mirror. When bound,
@@ -480,19 +408,11 @@ function buildOpsBlueprintDeps(input: {
     readonly registry: GeneratorRegistry;
     readonly blueprintStore: BlueprintStore;
     readonly blueprintSearch: BlueprintSearch;
-    readonly putCode?: (
-      codeHash: string,
-      body: string,
-    ) => void | Promise<void>;
-    readonly listAllForApp?: (
-      appId: string,
-    ) => Promise<readonly Blueprint[]>;
+    readonly putCode?: (codeHash: string, body: string) => void | Promise<void>;
+    readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
     readonly resolveLlm?: (
-      ctx: HandlerContext,
-    ) =>
-      | Promise<GenerationCredentials | null>
-      | GenerationCredentials
-      | null;
+      ctx: HandlerContext
+    ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
     readonly blueprints?: BlueprintProvider;
     readonly cacheRegistry?: {
       readonly embedding: EmbeddingProvider;
@@ -507,8 +427,7 @@ function buildOpsBlueprintDeps(input: {
           putCode: (codeHash: string, body: string) => {
             blueprintStore.putCode(codeHash, body);
           },
-          listAllForApp: (appId: string) =>
-            blueprintStore.listAllForApp(appId),
+          listAllForApp: (appId: string) => blueprintStore.listAllForApp(appId),
         }
       : {};
   return {
@@ -594,9 +513,7 @@ export function defaultHandlers(deps: {
      * subscribe-for vs. must iframe-poll directly. Returning
      * `undefined` omits the field (universal iframe-polling fallback).
      */
-    readonly serverCapabilities?: () =>
-      | import('@ggui-ai/protocol').ServerCapabilities
-      | undefined;
+    readonly serverCapabilities?: () => import("@ggui-ai/protocol").ServerCapabilities | undefined;
   };
   readonly push?: {
     readonly renderStore: RenderStore;
@@ -609,7 +526,7 @@ export function defaultHandlers(deps: {
      */
     readonly mintBootstrap?: (
       renderId: string,
-      appId: string,
+      appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
     /**
      * URL of the renderer bundle the thin-shell HTML should fetch
@@ -635,7 +552,7 @@ export function defaultHandlers(deps: {
      */
     readonly themeId?: string;
     /** Theme color mode resolved from `ggui.json#theme.mode`. */
-    readonly themeMode?: 'light' | 'dark';
+    readonly themeMode?: "light" | "dark";
     /**
      * Live theme getter — resolved per-push. When set, supersedes
      * the static `themeId` / `themeMode` for every push's bootstrap.
@@ -645,10 +562,12 @@ export function defaultHandlers(deps: {
      * Forwarded onto `deps.push.themeProvider` so the handler reads
      * the live theme each call.
      */
-    readonly themeProvider?: () => {
-      readonly id?: string;
-      readonly mode?: 'light' | 'dark';
-    } | undefined;
+    readonly themeProvider?: () =>
+      | {
+          readonly id?: string;
+          readonly mode?: "light" | "dark";
+        }
+      | undefined;
     /**
      * Optional connector registry — required for accepting
      * `shortcuts.mcpApps` push payloads (inbound MCP Apps hosting).
@@ -728,12 +647,10 @@ export function defaultHandlers(deps: {
      * automatically; callers composing their own push handler via
      * `defaultHandlers` wire the hook themselves.
      */
-    readonly checkRenderContracts?: (
-      shape: {
-        readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
-        readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
-      },
-    ) => void;
+    readonly checkRenderContracts?: (shape: {
+      readonly actionSpec?: import("@ggui-ai/protocol").ActionSpec;
+      readonly streamSpec?: import("@ggui-ai/protocol").StreamSpec;
+    }) => void;
 
     /**
      * Optional content-addressable code store. When present together
@@ -792,9 +709,7 @@ export function defaultHandlers(deps: {
      * `channelBootstrap.refresh` so the OSS factory's behavior matches
      * the cloud pod's tool-side composition.
      */
-    readonly bootstrapRefresh?: import(
-      '@ggui-ai/mcp-server-handlers/session-mutations'
-    ).WsTokenRefreshSeam;
+    readonly bootstrapRefresh?: import("@ggui-ai/mcp-server-handlers/renders").WsTokenRefreshSeam;
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
@@ -828,7 +743,7 @@ export function defaultHandlers(deps: {
      */
     readonly mintBootstrap?: (
       renderId: string,
-      appId: string,
+      appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
     /** Iframe-runtime bundle URL forwarded onto the
      *  `ai.ggui/render.runtimeUrl` slice field.
@@ -837,12 +752,14 @@ export function defaultHandlers(deps: {
     /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
     readonly themeId?: string;
     /** Theme color mode forwarded onto the `ai.ggui/render.themeMode` slice field. */
-    readonly themeMode?: 'light' | 'dark';
+    readonly themeMode?: "light" | "dark";
     /** Live theme getter — overrides static themeId/themeMode per-update. */
-    readonly themeProvider?: () => {
-      readonly id?: string;
-      readonly mode?: 'light' | 'dark';
-    } | undefined;
+    readonly themeProvider?: () =>
+      | {
+          readonly id?: string;
+          readonly mode?: "light" | "dark";
+        }
+      | undefined;
     /** Returns names of app-visible tools for bootstrap.appCallableTools. */
     readonly appCallableTools?: () => readonly string[];
     /** Resolver for bootstrap.streamWebSocketLocalTools. */
@@ -956,18 +873,13 @@ export function defaultHandlers(deps: {
      * adapters that persist code inside `BlueprintStore.put` omit
      * this.
      */
-    readonly putCode?: (
-      codeHash: string,
-      body: string,
-    ) => void | Promise<void>;
+    readonly putCode?: (codeHash: string, body: string) => void | Promise<void>;
     /**
      * Per-app blueprint enumerator — used for the persona near-dup
      * warning on the generate path. Optional; when omitted the
      * check is skipped.
      */
-    readonly listAllForApp?: (
-      appId: string,
-    ) => Promise<readonly Blueprint[]>;
+    readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
     /**
      * Resolver for LLM credentials on the generate path. Same shape
      * as `push.generation.resolveLlm` — typically wired to the same
@@ -975,11 +887,8 @@ export function defaultHandlers(deps: {
      * (list/update/delete still register).
      */
     readonly resolveLlm?: (
-      ctx: import('@ggui-ai/mcp-server-handlers').HandlerContext,
-    ) =>
-      | Promise<GenerationCredentials | null>
-      | GenerationCredentials
-      | null;
+      ctx: import("@ggui-ai/mcp-server-handlers").HandlerContext
+    ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
     /**
      * BlueprintProvider passed to the generator (same instance
      * `defaultHandlers`'s blueprint search reads). Required when
@@ -1055,7 +964,7 @@ export function defaultHandlers(deps: {
       ...(deps.blueprints ? { blueprints: deps.blueprints } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
     createListFeaturedBlueprintsHandler(
-      deps.blueprints ? { blueprints: deps.blueprints } : {},
+      deps.blueprints ? { blueprints: deps.blueprints } : {}
     ) as SharedHandler<ZodRawShape, ZodRawShape>,
     // Spec / discovery handlers — zero-deps. These may be tagged
     // `audience: ['protocol']` and mounted on `/protocol`; today they
@@ -1079,9 +988,7 @@ export function defaultHandlers(deps: {
     createGguiSubmitActionHandler({
       pendingEventConsumer,
       activeConsumerRegistry,
-      ...(deps.push?.renderStore
-        ? { renderStore: deps.push.renderStore }
-        : {}),
+      ...(deps.push?.renderStore ? { renderStore: deps.push.renderStore } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
     // `ggui_list_gadgets` — per-app discovery. Returns the registered
@@ -1102,7 +1009,7 @@ export function defaultHandlers(deps: {
       createGguiListThemesHandler({
         appMetadataStore: deps.appMetadataStore,
         themes: deps.themes,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   // ggui_runtime_sync_context — runtime → server contextSpec snapshot mirror.
@@ -1116,7 +1023,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiSyncContextHandler({
         renderStore: deps.push.renderStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_runtime_refresh_bootstrap` — G14 (2026-05-23) signed-
     // envelope refresh tool. Registered only when a refresh seam is
@@ -1128,7 +1035,7 @@ export function defaultHandlers(deps: {
       handlers.push(
         createGguiRefreshWsTokenHandler({
           refreshSeam: deps.push.bootstrapRefresh,
-        }) as SharedHandler<ZodRawShape, ZodRawShape>,
+        }) as SharedHandler<ZodRawShape, ZodRawShape>
       );
     }
     // Phase B (flatten-render-identity): the session lifetime entry
@@ -1146,7 +1053,7 @@ export function defaultHandlers(deps: {
       createRenderBlueprintHandler({ uiRegistry: deps.uiRegistry }) as SharedHandler<
         ZodRawShape,
         ZodRawShape
-      >,
+      >
     );
   }
   // Canvas-mode lifecycle emitter — shared by handshake/push/consume so
@@ -1169,7 +1076,7 @@ export function defaultHandlers(deps: {
             .sendToSession({
               renderId,
               channel: LIFECYCLE_CHANNEL,
-              mode: 'append',
+              mode: "append",
               payload,
             })
             .catch(() => undefined);
@@ -1187,17 +1094,13 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiHandshakeHandler({
         kvStore: deps.handshake.kvStore,
-        ...(deps.handshake.negotiator
-          ? { negotiator: deps.handshake.negotiator }
-          : {}),
+        ...(deps.handshake.negotiator ? { negotiator: deps.handshake.negotiator } : {}),
         ...(resolvedAppMetadataStore ? { appMetadataStore: resolvedAppMetadataStore } : {}),
         ...(deps.handshake.serverCapabilities
           ? { serverCapabilities: deps.handshake.serverCapabilities }
           : {}),
-        ...(canvasLifecycleEmitter
-          ? { canvasLifecycle: canvasLifecycleEmitter }
-          : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.update) {
@@ -1210,18 +1113,10 @@ export function defaultHandlers(deps: {
         // Bootstrap-emission deps mirror push so MCP Apps hosts that
         // forward `ui/notifications/tool-result` via postMessage can
         // re-apply patched props on the live mount without a WS round-trip.
-        ...(deps.update.mintBootstrap
-          ? { mintWsToken: deps.update.mintBootstrap }
-          : {}),
-        ...(deps.update.runtimeUrl !== undefined
-          ? { runtimeUrl: deps.update.runtimeUrl }
-          : {}),
-        ...(deps.update.themeId !== undefined
-          ? { themeId: deps.update.themeId }
-          : {}),
-        ...(deps.update.themeMode !== undefined
-          ? { themeMode: deps.update.themeMode }
-          : {}),
+        ...(deps.update.mintBootstrap ? { mintWsToken: deps.update.mintBootstrap } : {}),
+        ...(deps.update.runtimeUrl !== undefined ? { runtimeUrl: deps.update.runtimeUrl } : {}),
+        ...(deps.update.themeId !== undefined ? { themeId: deps.update.themeId } : {}),
+        ...(deps.update.themeMode !== undefined ? { themeMode: deps.update.themeMode } : {}),
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
@@ -1231,7 +1126,7 @@ export function defaultHandlers(deps: {
         ...(deps.update.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.update.streamWebSocketLocalTools }
           : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   // ggui_consume registers whenever push is bound (it shares the
@@ -1283,10 +1178,8 @@ export function defaultHandlers(deps: {
           : {}),
         ...(drainAckNotifier ? { drainAckNotifier } : {}),
         logger: drainTelemetryLogger,
-        ...(canvasLifecycleEmitter
-          ? { canvasLifecycle: canvasLifecycleEmitter }
-          : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // 2026-05-14 — `ggui_runtime_claim_pending` retired alongside the
     // iframe-side 10s claim timer. The pipe is now the single source of
@@ -1304,7 +1197,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiGetRenderHandler({
         renderStore: deps.push.renderStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // ggui_list_renders — host-scoped render enumeration for resume.
     // Folds the ws-token mint into the same call so the host doesn't
@@ -1321,16 +1214,13 @@ export function defaultHandlers(deps: {
           ? {
               mintWsToken: {
                 mint: ({ renderId, appId }) => {
-                  const { token, expiresAt } = pushMintBootstrap(
-                    renderId,
-                    appId,
-                  );
+                  const { token, expiresAt } = pushMintBootstrap(renderId, appId);
                   return { token, expiresAt };
                 },
               },
             }
           : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_emit` routes outbound stream envelopes through the active
     // `RenderChannelServer.sendToSession`
@@ -1370,7 +1260,7 @@ export function defaultHandlers(deps: {
           // wire frame have a stable handle.
           return { seq };
         },
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.push) {
@@ -1382,8 +1272,7 @@ export function defaultHandlers(deps: {
     // `composeHandlersWithMounts`) are NOT included — same-server
     // app-visible tools live on the OSS handler list, mounted tools
     // are by definition cross-server.
-    const appCallableToolsProvider = (): readonly string[] =>
-      collectAppCallableToolNames(handlers);
+    const appCallableToolsProvider = (): readonly string[] => collectAppCallableToolNames(handlers);
     handlers.push(
       createGguiRenderHandler({
         renderStore: deps.push.renderStore,
@@ -1392,51 +1281,33 @@ export function defaultHandlers(deps: {
         // `assertGadgetsRegistered`. Same instance the
         // handshake handler reads from so both seams enforce the
         // same registry membership.
-        ...(deps.appMetadataStore
-          ? { appMetadataStore: deps.appMetadataStore }
-          : {}),
+        ...(deps.appMetadataStore ? { appMetadataStore: deps.appMetadataStore } : {}),
         pendingEventConsumer,
         appCallableTools: appCallableToolsProvider,
         ...(deps.push.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.push.streamWebSocketLocalTools }
           : {}),
-        ...(deps.push.mintBootstrap
-          ? { mintWsToken: deps.push.mintBootstrap }
-          : {}),
-        ...(deps.push.runtimeUrl !== undefined
-          ? { runtimeUrl: deps.push.runtimeUrl }
-          : {}),
-        ...(deps.push.themeId !== undefined
-          ? { themeId: deps.push.themeId }
-          : {}),
-        ...(deps.push.themeMode !== undefined
-          ? { themeMode: deps.push.themeMode }
-          : {}),
+        ...(deps.push.mintBootstrap ? { mintWsToken: deps.push.mintBootstrap } : {}),
+        ...(deps.push.runtimeUrl !== undefined ? { runtimeUrl: deps.push.runtimeUrl } : {}),
+        ...(deps.push.themeId !== undefined ? { themeId: deps.push.themeId } : {}),
+        ...(deps.push.themeMode !== undefined ? { themeMode: deps.push.themeMode } : {}),
         ...(deps.push.themeProvider !== undefined
           ? { themeProvider: deps.push.themeProvider }
           : {}),
         ...(deps.push.connectors ? { connectors: deps.push.connectors } : {}),
-        ...(deps.push.rateLimiter
-          ? { rateLimiter: deps.push.rateLimiter }
-          : {}),
-        ...(deps.push.shortCodeIndex
-          ? { shortCodeIndex: deps.push.shortCodeIndex }
-          : {}),
+        ...(deps.push.rateLimiter ? { rateLimiter: deps.push.rateLimiter } : {}),
+        ...(deps.push.shortCodeIndex ? { shortCodeIndex: deps.push.shortCodeIndex } : {}),
         ...(deps.push.provisionalPreview
           ? { provisionalPreview: deps.push.provisionalPreview }
           : {}),
-        ...(deps.push.generation
-          ? { generation: deps.push.generation }
-          : {}),
+        ...(deps.push.generation ? { generation: deps.push.generation } : {}),
         // Live-subscriber render-commit notifier. Forwarded as-is
         // when present so the render handler can fan out
         // `renderStore.commit` deltas to already-subscribed
         // live-channel clients. Hosts without a render channel pass
         // nothing; the handler's own no-op-on-absent posture keeps
         // the path intact.
-        ...(deps.push.channelNotifier
-          ? { channelNotifier: deps.push.channelNotifier }
-          : {}),
+        ...(deps.push.channelNotifier ? { channelNotifier: deps.push.channelNotifier } : {}),
         // F4 schema compat hook. Forwarded as-is; the push handler
         // wraps it in try/catch
         // on the generation + cache-hit paths so a thrown
@@ -1460,13 +1331,9 @@ export function defaultHandlers(deps: {
         // handshakeStore to push if they split minting + consuming
         // across processes, but the defaults wire them to the same
         // instance.
-        ...(deps.handshake
-          ? { handshakeStore: deps.handshake.kvStore }
-          : {}),
-        ...(canvasLifecycleEmitter
-          ? { canvasLifecycle: canvasLifecycleEmitter }
-          : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+        ...(deps.handshake ? { handshakeStore: deps.handshake.kvStore } : {}),
+        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   // Operator-class blueprint tools. Registered
@@ -1483,9 +1350,7 @@ export function defaultHandlers(deps: {
           blueprintStore: deps.opsBlueprint.blueprintStore,
           resolveLlm: deps.opsBlueprint.resolveLlm,
           blueprints: deps.opsBlueprint.blueprints,
-          ...(deps.opsBlueprint.putCode
-            ? { putCode: deps.opsBlueprint.putCode }
-            : {}),
+          ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
           ...(deps.opsBlueprint.listAllForApp
             ? { listAllForApp: deps.opsBlueprint.listAllForApp }
             : {}),
@@ -1493,7 +1358,7 @@ export function defaultHandlers(deps: {
             ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
             : {}),
           ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
-        }) as SharedHandler<ZodRawShape, ZodRawShape>,
+        }) as SharedHandler<ZodRawShape, ZodRawShape>
       );
     }
     // `ggui_ops_register_blueprint` — sibling of `_generate_*` that
@@ -1505,9 +1370,7 @@ export function defaultHandlers(deps: {
       createGguiOpsRegisterBlueprintHandler({
         registry: deps.opsBlueprint.registry,
         blueprintStore: deps.opsBlueprint.blueprintStore,
-        ...(deps.opsBlueprint.putCode
-          ? { putCode: deps.opsBlueprint.putCode }
-          : {}),
+        ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
         ...(deps.opsBlueprint.listAllForApp
           ? { listAllForApp: deps.opsBlueprint.listAllForApp }
           : {}),
@@ -1515,23 +1378,23 @@ export function defaultHandlers(deps: {
           ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
           : {}),
         ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsListBlueprintsHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
         blueprintSearch: deps.opsBlueprint.blueprintSearch,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsUpdateBlueprintHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsDeleteBlueprintHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   // Operator-class per-domain handlers for the console's apps + orgs
@@ -1542,79 +1405,79 @@ export function defaultHandlers(deps: {
     handlers.push(
       createListAppsHandler({
         apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createCreateAppHandler({
         apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createRenameAppHandler({
         apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createDeleteAppHandler({
         apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createSetDefaultAppHandler({
         apps: deps.opsApps.apps,
         userDefaultApp: deps.opsApps.userDefaultApp,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createUpdateAppSystemPromptHandler({
         apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsOrgs) {
     handlers.push(
       createListOrgsHandler({
         orgs: deps.opsOrgs.orgs,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createCreateOrgHandler({
         orgs: deps.opsOrgs.orgs,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createInviteToOrgHandler({
         invites: deps.opsOrgs.invites,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createRevokeInviteHandler({
         invites: deps.opsOrgs.invites,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsConnectorKeys) {
     handlers.push(
       createListConnectorKeysHandler({
         connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createIssueConnectorKeyHandler({
         connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createRevokeConnectorKeyHandler({
         connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsCoupon) {
     handlers.push(
       createRedeemCouponHandler({
         coupons: deps.opsCoupon.coupons,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   return handlers;
@@ -1641,7 +1504,7 @@ export interface CreateGguiServerOptions {
    * dev, anything else including unset → prod). Pass an explicit
    * value to override the env in test fixtures and embedders.
    */
-  readonly mode?: 'dev' | 'prod';
+  readonly mode?: "dev" | "prod";
 
   /**
    * Shared handler set to expose. Defaults to the blueprint-read family
@@ -1669,7 +1532,7 @@ export interface CreateGguiServerOptions {
    * See `packages/mcp-server-handlers/src/types.ts`
    * (`SharedHandler.allowedFor`).
    */
-  readonly allowedKinds?: ReadonlyArray<'app' | 'user' | 'builder'>;
+  readonly allowedKinds?: ReadonlyArray<"app" | "user" | "builder">;
 
   /**
    * Auth adapter. Defaults to `InMemoryAuthAdapter({devAllowAll: true})`
@@ -1864,10 +1727,12 @@ export interface CreateGguiServerOptions {
    * `theme` opt's resolved id/mode (if any) take effect. Returning
    * `{ id, mode? }` always wins over the static path.
    */
-  readonly themeProvider?: () => {
-    readonly id?: string;
-    readonly mode?: 'light' | 'dark';
-  } | undefined;
+  readonly themeProvider?: () =>
+    | {
+        readonly id?: string;
+        readonly mode?: "light" | "dark";
+      }
+    | undefined;
 
   /**
    * Optional change notifier — fires when the operator's theme
@@ -1886,9 +1751,9 @@ export interface CreateGguiServerOptions {
   readonly onThemeConfigChange?: (
     next:
       | string
-      | { preset: string; mode?: 'light' | 'dark'; overrides?: Record<string, string> }
-      | { file: string; mode?: 'light' | 'dark' }
-      | null,
+      | { preset: string; mode?: "light" | "dark"; overrides?: Record<string, string> }
+      | { file: string; mode?: "light" | "dark" }
+      | null
   ) => void;
 
   /**
@@ -1957,10 +1822,7 @@ export interface CreateGguiServerOptions {
      * non-collision (e.g. UUIDs, opaque hex of fixed length).
      */
     readonly pathPrefix?: string;
-    readonly authorize?: (
-      urlAppId: string,
-      identity: AuthResult,
-    ) => Promise<void>;
+    readonly authorize?: (urlAppId: string, identity: AuthResult) => Promise<void>;
   };
 
   /** Structured logger. Defaults to `createConsoleLogger()`. */
@@ -1985,9 +1847,9 @@ export interface CreateGguiServerOptions {
    * `catch (err)` block; any throw from the mapper itself is treated
    * as if it returned `undefined` (default 500).
    */
-  readonly errorMapper?: (err: unknown) =>
-    | { readonly status: number; readonly code: number; readonly message: string }
-    | undefined;
+  readonly errorMapper?: (
+    err: unknown
+  ) => { readonly status: number; readonly code: number; readonly message: string } | undefined;
 
   /**
    * BYOK provider-key store consumed by the operator-facing
@@ -2032,10 +1894,7 @@ export interface CreateGguiServerOptions {
    * `'admin-token'` gate (no auth-adapter call happens) and the
    * resolved `AuthResult` under the `'auth-adapter'` gate.
    */
-  readonly providerKeyScope?: (
-    req: Request,
-    identity: AuthResult | null,
-  ) => string;
+  readonly providerKeyScope?: (req: Request, identity: AuthResult | null) => string;
 
   /**
    * Which gate guards the `/ggui/console/llm-keys` plane.
@@ -2058,7 +1917,7 @@ export interface CreateGguiServerOptions {
    * `'auth-adapter'`, the admin token is irrelevant — the route is
    * mounted whenever `providerKeys` is set.
    */
-  readonly providerKeysGate?: 'admin-token' | 'auth-adapter';
+  readonly providerKeysGate?: "admin-token" | "auth-adapter";
 
   /** Express body size limit. Defaults to `'4mb'`. */
   readonly bodyLimit?: string;
@@ -2094,7 +1953,7 @@ export interface CreateGguiServerOptions {
    *
    * The live channel is where the live-contract enforcement point
    * lives. Enabling this makes the OSS server a second real consumer
-   * of the shared `@ggui-ai/mcp-server-handlers/session-mutations`
+   * of the shared `@ggui-ai/mcp-server-handlers/renders`
    * helpers.
    */
   readonly sessionChannel?: boolean | { readonly path?: string };
@@ -2145,7 +2004,7 @@ export interface CreateGguiServerOptions {
    * verbatim to `createRenderChannelServer` (see
    * `RenderChannelOptions.streamWebSocketLocalTools`).
    */
-  readonly streamWebSocketLocalTools?: import('./render-channel.js').RenderChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: import("./render-channel.js").RenderChannelLocalToolsOptions;
   /**
    * Hook fired when the local subscriber count for `sessionId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
@@ -2174,7 +2033,7 @@ export interface CreateGguiServerOptions {
    * `createRenderChannelServer`. See `RenderChannelOptions
    * .sanitizeCausedBy` for the contract.
    */
-  readonly sanitizeCausedBy?: import('@ggui-ai/protocol').SanitizeCausedBy;
+  readonly sanitizeCausedBy?: import("@ggui-ai/protocol").SanitizeCausedBy;
 
   /**
    * Extra reserved-channel payload validators merged with the
@@ -2194,7 +2053,7 @@ export interface CreateGguiServerOptions {
    */
   readonly extraReservedValidators?: ReadonlyMap<
     string,
-    import('@ggui-ai/protocol').ReservedChannelValidator
+    import("@ggui-ai/protocol").ReservedChannelValidator
   >;
 
   /**
@@ -2208,7 +2067,7 @@ export interface CreateGguiServerOptions {
    *
    * Only consulted when `sessionChannel` is enabled.
    */
-  readonly versionPolicy?: 'advisory' | 'reject';
+  readonly versionPolicy?: "advisory" | "reject";
 
   /**
    * Policy for the schema compat check. Checks that every
@@ -2454,7 +2313,7 @@ export interface CreateGguiServerOptions {
      * right durability claim; the server doesn't inspect the store
      * instance to guess.
      */
-    readonly durability?: 'durable' | 'ephemeral';
+    readonly durability?: "durable" | "ephemeral";
   };
 
   readonly pairing?:
@@ -2850,7 +2709,7 @@ export interface CreateGguiServerOptions {
      */
     readonly emitter: ProvisionalPreviewEmitter;
     /** Per-push predicate. See {@link ProvisionalPreviewConfig}. */
-    readonly isEnabledFor?: ProvisionalPreviewConfig['isEnabledFor'];
+    readonly isEnabledFor?: ProvisionalPreviewConfig["isEnabledFor"];
     /** Lifecycle observer. Fires sync — must not throw. */
     readonly onOutcome?: (outcome: ProvisionalPreviewOutcome) => void;
     /** Clock override for tests. Defaults to `Date.now`. */
@@ -3216,26 +3075,22 @@ export interface GguiServer {
  * so `createGguiServer()` with no arguments boots a working in-memory
  * server on demand.
  */
-export function createGguiServer(
-  opts: CreateGguiServerOptions = {},
-): GguiServer {
+export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer {
   const info: ServerInfo = { ...DEFAULT_INFO, ...opts.info };
   const logger = opts.logger ?? createConsoleLogger({ server: info.name });
-  const bodyLimit = opts.bodyLimit ?? '4mb';
+  const bodyLimit = opts.bodyLimit ?? "4mb";
 
   // Operator mode: gates the `/devtools/*` namespace. Explicit option
   // wins; otherwise read GGUI_MODE env (`'dev'` opts in, anything else
   // including unset is `'prod'`). Surfaced via `/info` so the SPA
   // shows or hides the `/devtools` link without a build-time flag.
-  const mode: 'dev' | 'prod' =
-    opts.mode ?? (process.env.GGUI_MODE === 'dev' ? 'dev' : 'prod');
+  const mode: "dev" | "prod" = opts.mode ?? (process.env.GGUI_MODE === "dev" ? "dev" : "prod");
 
   // Default adapters wire a fully in-memory OSS server — good for local
   // dev, tests, and zero-config demos. Production deployments swap these.
-  const auth =
-    opts.auth ?? new InMemoryAuthAdapter({ devAllowAll: true });
+  const auth = opts.auth ?? new InMemoryAuthAdapter({ devAllowAll: true });
   if (!opts.auth) {
-    logger.warn('dev_mode_auth_enabled', {
+    logger.warn("dev_mode_auth_enabled", {
       hint: 'No auth adapter provided — any non-empty bearer token authenticates as "builder". Pass `auth:` for real deployments.',
     });
   }
@@ -3258,8 +3113,8 @@ export function createGguiServer(
   // null-check branches.
   const rateLimiter = opts.rateLimiter ?? new NoopRateLimiter();
   if (!opts.audit) {
-    logger.warn('audit_sink_missing', {
-      hint: 'No audit sink provided — privileged actions (pair / revoke / admin) will not be recorded. Pass `audit:` with a durable implementation for production.',
+    logger.warn("audit_sink_missing", {
+      hint: "No audit sink provided — privileged actions (pair / revoke / admin) will not be recorded. Pass `audit:` with a durable implementation for production.",
     });
   }
 
@@ -3316,14 +3171,12 @@ export function createGguiServer(
   const mcpAppsEnabled = opts.mcpApps !== undefined && opts.mcpApps !== false;
   if (mcpAppsEnabled && !opts.sessionChannel) {
     throw new Error(
-      'createGguiServer: `mcpApps` requires `sessionChannel: true`. The MCP Apps iframe has nowhere to connect to without a live-channel endpoint.',
+      "createGguiServer: `mcpApps` requires `sessionChannel: true`. The MCP Apps iframe has nowhere to connect to without a live-channel endpoint."
     );
   }
   const mcpAppsConfig =
-    typeof opts.mcpApps === 'object' && opts.mcpApps !== null
-      ? opts.mcpApps
-      : {};
-  const wsUrl = mcpAppsConfig.wsUrl ?? 'ws://localhost/ws';
+    typeof opts.mcpApps === "object" && opts.mcpApps !== null ? opts.mcpApps : {};
+  const wsUrl = mcpAppsConfig.wsUrl ?? "ws://localhost/ws";
 
   // Iframe-runtime bundle mount resolution (C8 — plan §C8).
   //
@@ -3341,19 +3194,14 @@ export function createGguiServer(
   // (via `runtime.url`) — typical for production deployments
   // where the bundle rides a CDN.
   const runtimeConfig =
-    typeof opts.runtime === 'object' && opts.runtime !== null
-      ? opts.runtime
-      : {};
-  const runtimeEnabled =
-    mcpAppsEnabled && opts.runtime !== false;
-  const runtimePath =
-    runtimeConfig.path ?? RUNTIME_BUNDLE_URL_PATH;
+    typeof opts.runtime === "object" && opts.runtime !== null ? opts.runtime : {};
+  const runtimeEnabled = mcpAppsEnabled && opts.runtime !== false;
+  const runtimePath = runtimeConfig.path ?? RUNTIME_BUNDLE_URL_PATH;
   const runtimeBundleFile =
     runtimeConfig.distDir !== undefined
-      ? path.join(runtimeConfig.distDir, 'iframe-runtime.js')
+      ? path.join(runtimeConfig.distDir, "iframe-runtime.js")
       : RUNTIME_BUNDLE_FILE;
-  const runtimeBootstrapUrl =
-    runtimeConfig.url ?? runtimePath;
+  const runtimeBootstrapUrl = runtimeConfig.url ?? runtimePath;
 
   // Lazy resolver: each push/update handler invocation looks up the
   // request-context-derived absolute base inside the request scope
@@ -3371,10 +3219,9 @@ export function createGguiServer(
   // Render store is resolved here (not lazy-inside-sessionChannel)
   // when mcpApps is on, because the render-commit handler needs it at
   // handler-factory time, BEFORE the session-channel factory runs.
-  const renderStore: RenderStore | undefined = opts.renderStore
-    ?? (mcpAppsEnabled || opts.sessionChannel
-      ? new InMemoryRenderStore()
-      : undefined);
+  const renderStore: RenderStore | undefined =
+    opts.renderStore ??
+    (mcpAppsEnabled || opts.sessionChannel ? new InMemoryRenderStore() : undefined);
 
   // Outbound stream replay buffer is hoisted here so the
   // `/ggui/console/timeline/*` mount can read its cursor alongside
@@ -3398,14 +3245,9 @@ export function createGguiServer(
   // (which always call this on the live-mode path) get clean strings
   // without per-callsite narrowing.
   let mintBootstrap:
-    | ((
-        renderId: string,
-        appId: string,
-      ) => { wsUrl: string; token: string; expiresAt: string })
+    | ((renderId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
-  let channelBootstrap:
-    | import('./render-channel.js').RenderChannelBootstrap
-    | undefined;
+  let channelBootstrap: import("./render-channel.js").RenderChannelBootstrap | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
   // session tokens, console cookies). Distinct `kind` claims
   // prevent cross-kind confusion; sharing the secret keeps the
@@ -3415,9 +3257,9 @@ export function createGguiServer(
   let sharedTokenSecret: string | undefined = opts.wsTokenSecret;
   if (mcpAppsEnabled) {
     if (sharedTokenSecret === undefined) {
-      sharedTokenSecret = randomBytes(32).toString('hex');
-      logger.warn('bootstrap_secret_ephemeral', {
-        hint: 'No `wsTokenSecret` provided — minted a process-local random secret. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
+      sharedTokenSecret = randomBytes(32).toString("hex");
+      logger.warn("bootstrap_secret_ephemeral", {
+        hint: "No `wsTokenSecret` provided — minted a process-local random secret. Multi-host deployments MUST pass a deterministic value (env / secrets manager).",
       });
     }
     const secret = sharedTokenSecret;
@@ -3438,7 +3280,7 @@ export function createGguiServer(
     mintBootstrap = syncMinter;
     channelBootstrap = {
       verify: (token) => {
-        const result = verifyToken(token, secret, 'ws');
+        const result = verifyToken(token, secret, "ws");
         if (result.ok) {
           return {
             ok: true,
@@ -3449,10 +3291,10 @@ export function createGguiServer(
         // Surface `expired` separately so the channel server can emit
         // `BOOTSTRAP_EXPIRED` instead of `BOOTSTRAP_INVALID` — drives
         // the iframe's refresh-vs-rehandshake branch.
-        if (result.reason === 'expired') {
-          return { ok: false, reason: 'expired' };
+        if (result.reason === "expired") {
+          return { ok: false, reason: "expired" };
         }
-        return { ok: false, reason: 'invalid' };
+        return { ok: false, reason: "invalid" };
       },
       issueSessionToken: (renderId, appId) => {
         const { token } = mintSessionToken({ renderId, appId }, secret);
@@ -3467,14 +3309,14 @@ export function createGguiServer(
             expiresAt: new Date(result.claims.exp * 1000).toISOString(),
           };
         }
-        if (result.reason === 'refresh_window_closed') {
-          return { ok: false, reason: 'window_closed' };
+        if (result.reason === "refresh_window_closed") {
+          return { ok: false, reason: "window_closed" };
         }
         // Tamper / format / kind / shape failures collapse into a
         // single `invalid` — the iframe MUST re-handshake; the exact
         // breakage type is logged server-side, not surfaced on the
         // wire (would be useful only to attackers probing the surface).
-        return { ok: false, reason: 'invalid' };
+        return { ok: false, reason: "invalid" };
       },
     };
   }
@@ -3504,7 +3346,7 @@ export function createGguiServer(
   // time rather than chasing a "why doesn't my BYOK fire?" ghost.
   if (opts.generation && !mcpAppsEnabled) {
     throw new Error(
-      'createGguiServer: `generation` requires `mcpApps` (ggui_render must be registered for the generator to attach). Enable MCP Apps or leave generation unset.',
+      "createGguiServer: `generation` requires `mcpApps` (ggui_render must be registered for the generator to attach). Enable MCP Apps or leave generation unset."
     );
   }
   // Auto-wire the generation cache from the server's already-composed
@@ -3518,9 +3360,7 @@ export function createGguiServer(
   const generationWithCache = opts.generation
     ? {
         ...opts.generation,
-        cache:
-          opts.generation.cache ??
-          ({ embedding, vectorStore: vectors } as const),
+        cache: opts.generation.cache ?? ({ embedding, vectorStore: vectors } as const),
       }
     : undefined;
 
@@ -3539,12 +3379,12 @@ export function createGguiServer(
     const bridgeDeps = generationWithCache.installedBlueprints.deps;
     if (bridgeDeps.vectorStore !== vectors) {
       throw new Error(
-        'createGguiServer: `generation.installedBlueprints` provider was constructed with a different `vectorStore` than the server resolved. The bridge must share the same vectorStore the matcher reads — pass the same instance to both `vectors:` and the provider\'s `deps.vectorStore`.',
+        "createGguiServer: `generation.installedBlueprints` provider was constructed with a different `vectorStore` than the server resolved. The bridge must share the same vectorStore the matcher reads — pass the same instance to both `vectors:` and the provider's `deps.vectorStore`."
       );
     }
     if (bridgeDeps.embedding !== embedding) {
       throw new Error(
-        'createGguiServer: `generation.installedBlueprints` provider was constructed with a different `embedding` than the server resolved. The bridge must share the same embedding provider the matcher reads — pass the same instance to both `embedding:` and the provider\'s `deps.embedding`.',
+        "createGguiServer: `generation.installedBlueprints` provider was constructed with a different `embedding` than the server resolved. The bridge must share the same embedding provider the matcher reads — pass the same instance to both `embedding:` and the provider's `deps.embedding`."
       );
     }
   }
@@ -3569,7 +3409,8 @@ export function createGguiServer(
   // deterministic fallback ladder. Operators MAY swap in their own
   // (DDB-backed store, LLM-driven selector) via opts.
   const blueprintStore: BlueprintStore =
-    opts.blueprintStore ?? new InMemoryBlueprintStore({
+    opts.blueprintStore ??
+    new InMemoryBlueprintStore({
       embeddingProvider: opts.embedding,
     });
   const blueprintSelector: BlueprintSelector =
@@ -3594,9 +3435,9 @@ export function createGguiServer(
         {
           search: async () => {
             throw new Error(
-              'createGguiServer: blueprintStore was provided but blueprintSearch was not. ' +
-                'Non-InMemoryBlueprintStore stores must be paired with an explicit blueprintSearch ' +
-                'implementation that knows how to scan the appId namespace.',
+              "createGguiServer: blueprintStore was provided but blueprintSearch was not. " +
+                "Non-InMemoryBlueprintStore stores must be paired with an explicit blueprintSearch " +
+                "implementation that knows how to scan the appId namespace."
             );
           },
         });
@@ -3612,17 +3453,13 @@ export function createGguiServer(
   //     renderStore / streamBuffer default behavior).
   const handshakeExplicitlyDisabled = opts.handshake === false;
   const handshakeExplicit =
-    typeof opts.handshake === 'object' && opts.handshake !== null
-      ? opts.handshake
-      : undefined;
+    typeof opts.handshake === "object" && opts.handshake !== null ? opts.handshake : undefined;
   if (handshakeExplicit && !mcpAppsEnabled) {
     throw new Error(
-      'createGguiServer: `handshake` requires `mcpApps` (ggui_render must be registered for the paired consume path to attach). Enable MCP Apps or leave handshake unset.',
+      "createGguiServer: `handshake` requires `mcpApps` (ggui_render must be registered for the paired consume path to attach). Enable MCP Apps or leave handshake unset."
     );
   }
-  const handshakeEnabled =
-    mcpAppsEnabled &&
-    !handshakeExplicitlyDisabled;
+  const handshakeEnabled = mcpAppsEnabled && !handshakeExplicitlyDisabled;
   const handshakeKvStore: KeyValueStore | undefined = handshakeEnabled
     ? (handshakeExplicit?.kvStore ?? new InMemoryKeyValueStore())
     : undefined;
@@ -3670,42 +3507,39 @@ export function createGguiServer(
   //
   // The LLM-backed negotiator is the sole entrypoint in the OSS
   // server.
-  const handshakeNegotiator: HandshakeNegotiator | undefined =
-    handshakeEnabled
-      ? (handshakeExplicit?.negotiator ??
-        (generationWithCache?.resolveLlm
-          ? createLlmBackedHandshakeNegotiator({
-              resolveLlm: generationWithCache.resolveLlm,
-              // Pass through the cache bundle so the negotiator can
-              // run matchBlueprint exact-key BEFORE the synth LLM
-              // round-trip. Same bundle the paired push handler reads
-              // / writes — handshake match decisions converge with
-              // what push would do on the same draft. Absent →
-              // negotiator falls back to the synth-only path (same
-              // posture as deployments without RAG infrastructure).
-              ...(generationWithCache.cache
-                ? { cache: generationWithCache.cache }
-                : {}),
-              // Marketplace-install bridge. When wired, the
-              // handshake's exact-key probe sees
-              // installed blueprints too — the provider lazily
-              // compiles + caches each installed entry on first
-              // ensureCached per scope, so the handshake hits the
-              // cache directly without a synth round-trip. Same
-              // provider the paired push handler reads, so handshake
-              // + push converge on the same blueprint pool.
-              ...(generationWithCache.installedBlueprints
-                ? { installedBlueprints: generationWithCache.installedBlueprints }
-                : {}),
-            })
-          : undefined))
-      : undefined;
+  const handshakeNegotiator: HandshakeNegotiator | undefined = handshakeEnabled
+    ? (handshakeExplicit?.negotiator ??
+      (generationWithCache?.resolveLlm
+        ? createLlmBackedHandshakeNegotiator({
+            resolveLlm: generationWithCache.resolveLlm,
+            // Pass through the cache bundle so the negotiator can
+            // run matchBlueprint exact-key BEFORE the synth LLM
+            // round-trip. Same bundle the paired push handler reads
+            // / writes — handshake match decisions converge with
+            // what push would do on the same draft. Absent →
+            // negotiator falls back to the synth-only path (same
+            // posture as deployments without RAG infrastructure).
+            ...(generationWithCache.cache ? { cache: generationWithCache.cache } : {}),
+            // Marketplace-install bridge. When wired, the
+            // handshake's exact-key probe sees
+            // installed blueprints too — the provider lazily
+            // compiles + caches each installed entry on first
+            // ensureCached per scope, so the handshake hits the
+            // cache directly without a synth round-trip. Same
+            // provider the paired push handler reads, so handshake
+            // + push converge on the same blueprint pool.
+            ...(generationWithCache.installedBlueprints
+              ? { installedBlueprints: generationWithCache.installedBlueprints }
+              : {}),
+          })
+        : undefined))
+    : undefined;
 
   let provisionalPreviewDeps: ProvisionalPreviewDeps | undefined;
   if (opts.provisionalPreview?.enabled) {
     if (!mcpAppsEnabled) {
       throw new Error(
-        'createGguiServer: `provisionalPreview.enabled` requires `mcpApps` (ggui_render must be registered for preview to attach). Enable MCP Apps or leave preview disabled.',
+        "createGguiServer: `provisionalPreview.enabled` requires `mcpApps` (ggui_render must be registered for preview to attach). Enable MCP Apps or leave preview disabled."
       );
     }
     const previewRegistry = createInMemoryProvisionalPreviewRegistry();
@@ -3740,9 +3574,7 @@ export function createGguiServer(
       ...(opts.provisionalPreview.onOutcome
         ? { onOutcome: opts.provisionalPreview.onOutcome }
         : {}),
-      ...(opts.provisionalPreview.now
-        ? { now: opts.provisionalPreview.now }
-        : {}),
+      ...(opts.provisionalPreview.now ? { now: opts.provisionalPreview.now } : {}),
     };
   }
 
@@ -3760,9 +3592,7 @@ export function createGguiServer(
     defaultHandlers({
       embedding,
       vectors,
-      ...(opts.blueprintProvider
-        ? { blueprints: opts.blueprintProvider }
-        : {}),
+      ...(opts.blueprintProvider ? { blueprints: opts.blueprintProvider } : {}),
       // UI registry for `ggui_render_blueprint`. Absent = render tool
       // is NOT registered on this server (defaultHandlers' own opt-in
       // rule). OSS CLI wires a `LocalUiRegistry` here so manifest
@@ -3791,9 +3621,7 @@ export function createGguiServer(
               // cache uses. Undefined when no generation cache is
               // wired (keeps the pre-binding no-negotiator default
               // behavior visible to the handshake handler).
-              ...(handshakeNegotiator
-                ? { negotiator: handshakeNegotiator }
-                : {}),
+              ...(handshakeNegotiator ? { negotiator: handshakeNegotiator } : {}),
               // Advertise server-side stream-transport
               // capabilities on every handshake response. Threading
               // a resolver (read each call) rather than a static
@@ -3816,9 +3644,7 @@ export function createGguiServer(
                 if (!opts.streamWebSocketLocalTools) return undefined;
                 return {
                   streamWebSocket: { url: wsUrl },
-                  streamWebSocketLocalTools: [
-                    ...opts.streamWebSocketLocalTools.allowlist,
-                  ],
+                  streamWebSocketLocalTools: [...opts.streamWebSocketLocalTools.allowlist],
                 };
               },
             },
@@ -3853,12 +3679,10 @@ export function createGguiServer(
               // (claude.ai, Claude Desktop) that mount via the
               // postMessage tool-result path propagate the theme into
               // the iframe. Same resolution as the `/r/...` route.
-              ...(opts.theme !== undefined &&
-              opts.theme.source === 'preset'
+              ...(opts.theme !== undefined && opts.theme.source === "preset"
                 ? { themeId: opts.theme.preset }
                 : {}),
-              ...(opts.theme !== undefined &&
-              opts.theme.source !== 'default'
+              ...(opts.theme !== undefined && opts.theme.source !== "default"
                 ? { themeMode: opts.theme.mode }
                 : {}),
               // Live-theme getter — when present, overrides static
@@ -3867,9 +3691,7 @@ export function createGguiServer(
               // console "Save to ggui.json" reaches the next push
               // without restarting the server. CLI owns the shared
               // state cell; this getter just reads it.
-              ...(opts.themeProvider !== undefined
-                ? { themeProvider: opts.themeProvider }
-                : {}),
+              ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
               ...(opts.connectors ? { connectors: opts.connectors } : {}),
               // Only thread the limiter through when the operator
               // bound a real one — passing the NoopRateLimiter is a
@@ -3880,16 +3702,12 @@ export function createGguiServer(
               // Same "opt-in, not default" logic for the shortCode
               // index. Absent = hosted cloud (DDB side-table) / no
               // console consumer.
-              ...(opts.shortCodeIndex
-                ? { shortCodeIndex: opts.shortCodeIndex }
-                : {}),
+              ...(opts.shortCodeIndex ? { shortCodeIndex: opts.shortCodeIndex } : {}),
               // Provisional A2UI preview. When `opts.provisionalPreview.enabled`
               // flipped on above, the deps object owns
               // `sendEnvelope` (late-bound to the live channel) +
               // an in-memory registry. Absent = no preview path.
-              ...(provisionalPreviewDeps
-                ? { provisionalPreview: provisionalPreviewDeps }
-                : {}),
+              ...(provisionalPreviewDeps ? { provisionalPreview: provisionalPreviewDeps } : {}),
               // Wire the UI generator into `ggui_render`. When bound,
               // every story-path push awaits
               // `uiGenerator.generate(...)`, appends the generated
@@ -3916,10 +3734,7 @@ export function createGguiServer(
                         if (!generationWithCache.resolveLlm) return null;
                         const creds = await generationWithCache.resolveLlm(ctx);
                         if (!creds) return null;
-                        return buildLlmCaller(
-                          creds.selection,
-                          creds.providerKey,
-                        );
+                        return buildLlmCaller(creds.selection, creds.providerKey);
                       },
                     },
                   }
@@ -3942,11 +3757,7 @@ export function createGguiServer(
               channelNotifier: {
                 notifyRenderCommit: (renderId, render, matchType) => {
                   if (!channelForHealth) return;
-                  channelForHealth.notifyRenderPush(
-                    renderId,
-                    render,
-                    matchType,
-                  );
+                  channelForHealth.notifyRenderPush(renderId, render, matchType);
                 },
               },
               // F4 schema compat check. Late-binds to the composed
@@ -3993,7 +3804,7 @@ export function createGguiServer(
                   shape,
                   handlers,
                   schemaCompatMode,
-                  'ggui_render',
+                  "ggui_render"
                 );
                 // `warn` mode: helper returned the report without
                 // throwing. Surface on the structured logger so the
@@ -4003,8 +3814,8 @@ export function createGguiServer(
                 // (`reject` already threw; `off` returned a
                 // `compatible: true` empty report.)
                 if (!report.compatible) {
-                  logger.warn('schema_compat_warn', {
-                    site: 'ggui_render',
+                  logger.warn("schema_compat_warn", {
+                    site: "ggui_render",
                     findingCount: report.findings.length,
                     findings: report.findings.map((f) => ({
                       kind: f.kind,
@@ -4040,10 +3851,7 @@ export function createGguiServer(
               propsUpdateNotifier: {
                 sendPropsUpdate: async (renderId, props) => {
                   if (!channelForHealth) return;
-                  await channelForHealth.sendPropsUpdate(
-                    renderId,
-                    props,
-                  );
+                  await channelForHealth.sendPropsUpdate(renderId, props);
                 },
               },
               // Bootstrap-emission deps. Mirror push so MCP Apps hosts
@@ -4057,17 +3865,13 @@ export function createGguiServer(
               // same absolute URL when the server sits behind a tunnel
               // / reverse proxy.
               runtimeUrl: resolveRuntimeUrlForResultMeta,
-              ...(opts.theme !== undefined &&
-              opts.theme.source === 'preset'
+              ...(opts.theme !== undefined && opts.theme.source === "preset"
                 ? { themeId: opts.theme.preset }
                 : {}),
-              ...(opts.theme !== undefined &&
-              opts.theme.source !== 'default'
+              ...(opts.theme !== undefined && opts.theme.source !== "default"
                 ? { themeMode: opts.theme.mode }
                 : {}),
-              ...(opts.themeProvider !== undefined
-                ? { themeProvider: opts.themeProvider }
-                : {}),
+              ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
             },
           }
         : {}),
@@ -4084,9 +3888,7 @@ export function createGguiServer(
       // lookup). Absent ⇒ `defaultHandlers` falls back to per-handler
       // ephemeral InMemoryAppMetadataStore instances (the pre-Phase-3
       // shape). The CLI seeds this from `ggui.json#theme.preset`.
-      ...(opts.appMetadataStore
-        ? { appMetadataStore: opts.appMetadataStore }
-        : {}),
+      ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
       // Theme catalog resolver. Read per-call so additions to the
       // registry surface without a restart. Wired alongside
       // `appMetadataStore` to register `ggui_list_themes`; absent ⇒
@@ -4125,9 +3927,7 @@ export function createGguiServer(
             // key probe (handshake + push) finds them. Same bundle
             // the push handler + handshake negotiator already
             // consume.
-            ...(generationWithCache?.cache
-              ? { cacheRegistry: generationWithCache.cache }
-              : {}),
+            ...(generationWithCache?.cache ? { cacheRegistry: generationWithCache.cache } : {}),
           })
         : {}),
       // Forward each operator-class per-domain dep bundle from the
@@ -4136,9 +3936,7 @@ export function createGguiServer(
       // orgs surface, and so on.
       ...(opts.opsApps ? { opsApps: opts.opsApps } : {}),
       ...(opts.opsOrgs ? { opsOrgs: opts.opsOrgs } : {}),
-      ...(opts.opsConnectorKeys
-        ? { opsConnectorKeys: opts.opsConnectorKeys }
-        : {}),
+      ...(opts.opsConnectorKeys ? { opsConnectorKeys: opts.opsConnectorKeys } : {}),
       ...(opts.opsCoupon ? { opsCoupon: opts.opsCoupon } : {}),
       // ggui_emit resolves the channel via
       // a lazy getter so the handler captures whatever
@@ -4170,11 +3968,9 @@ export function createGguiServer(
   // handler's `checkRenderContracts` closure above (which
   // late-binds to this constant via lexical capture).
   // See CreateGguiServerOptions.schemaCompatCheck.
-  const schemaCompatMode: SchemaCompatMode =
-    opts.schemaCompatCheck ?? DEFAULT_SCHEMA_COMPAT_MODE;
+  const schemaCompatMode: SchemaCompatMode = opts.schemaCompatCheck ?? DEFAULT_SCHEMA_COMPAT_MODE;
 
-  const appIdFromIdentity =
-    opts.appIdFromIdentity ?? defaultAppIdFromIdentity;
+  const appIdFromIdentity = opts.appIdFromIdentity ?? defaultAppIdFromIdentity;
 
   const als = new AsyncLocalStorage<HandlerContext>();
 
@@ -4188,7 +3984,7 @@ export function createGguiServer(
   // Form-urlencoded body parser for /oauth/token (RFC 6749 §4.1.3
   // requires application/x-www-form-urlencoded). JSON bodies still
   // work via the JSON parser above — handlers tolerate both.
-  app.use(express.urlencoded({ extended: false, limit: '64kb' }));
+  app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 
   // End-user browser-session cookie bridge. When a request
   // arrives with `ggui_user_session` cookie but no `Authorization`
@@ -4225,43 +4021,40 @@ export function createGguiServer(
   // or a custom string. See `instructions-presets.ts` for full copy.
   const resolvedInstructions = resolveMcpInstructions(opts.mcpInstructions);
   if (resolvedInstructions) {
-    logger.info('mcp_instructions_set', {
+    logger.info("mcp_instructions_set", {
       preset:
-        typeof opts.mcpInstructions === 'string'
-        && (opts.mcpInstructions === 'default'
-          || opts.mcpInstructions === 'aggressive'
-          || opts.mcpInstructions === 'always'
-          || opts.mcpInstructions === 'minimal'
-          || opts.mcpInstructions === 'off')
+        typeof opts.mcpInstructions === "string" &&
+        (opts.mcpInstructions === "default" ||
+          opts.mcpInstructions === "aggressive" ||
+          opts.mcpInstructions === "always" ||
+          opts.mcpInstructions === "minimal" ||
+          opts.mcpInstructions === "off")
           ? opts.mcpInstructions
           : opts.mcpInstructions === undefined
-            ? 'default (no-preset fallback)'
-            : 'custom',
+            ? "default (no-preset fallback)"
+            : "custom",
       length: resolvedInstructions.length,
     });
   } else {
-    logger.info('mcp_instructions_off', {
-      reason:
-        opts.mcpInstructions === 'off'
-          ? 'preset=off'
-          : 'empty custom string',
+    logger.info("mcp_instructions_off", {
+      reason: opts.mcpInstructions === "off" ? "preset=off" : "empty custom string",
     });
   }
   const csrfSecret =
     opts.csrfSecret && opts.csrfSecret.length >= 32
       ? opts.csrfSecret
-      : randomBytes(32).toString('base64url');
+      : randomBytes(32).toString("base64url");
   if (!opts.csrfSecret) {
-    logger.info('csrf_secret_ephemeral', {
-      hint: 'No csrfSecret provided — minted a per-process secret. Tokens are invalidated on every server restart. Pass `csrfSecret` ≥32 bytes for production.',
+    logger.info("csrf_secret_ephemeral", {
+      hint: "No csrfSecret provided — minted a per-process secret. Tokens are invalidated on every server restart. Pass `csrfSecret` ≥32 bytes for production.",
     });
   }
   mountCsrfTokenRoute(app, { secret: csrfSecret });
   app.use(
     createCsrfMiddleware({
       secret: csrfSecret,
-      logger: logger.child({ middleware: 'csrf' }),
-    }),
+      logger: logger.child({ middleware: "csrf" }),
+    })
   );
 
   // OAuth 2.1 + PKCE + DCR (per MCP spec 2025-06-18+). When enabled,
@@ -4272,7 +4065,7 @@ export function createGguiServer(
   // OAuth-discovery clients bail with "couldn't reach". See `./oauth.ts`.
   const oauthEnabled = opts.oauth !== undefined && opts.oauth !== false;
   const baseOauthConfig: OAuthConfig =
-    typeof opts.oauth === 'object' && opts.oauth !== null ? opts.oauth : {};
+    typeof opts.oauth === "object" && opts.oauth !== null ? opts.oauth : {};
   // RFC 8707 resource-indicator validator. Built
   // here from the deployment shape (universalMcpPath + perAppRouting)
   // and threaded onto OAuthConfig so the OAuth handlers stay
@@ -4285,26 +4078,20 @@ export function createGguiServer(
     validateResource:
       baseOauthConfig.validateResource ??
       buildResourceValidator({
-        universalMcpPath: opts.universalMcpPath ?? '/mcp',
+        universalMcpPath: opts.universalMcpPath ?? "/mcp",
         perAppRouting: opts.perAppRouting,
       }),
   };
-  const oauthStorage: OAuthStorage =
-    oauthConfig.storage ?? new InMemoryOAuthStorage();
+  const oauthStorage: OAuthStorage = oauthConfig.storage ?? new InMemoryOAuthStorage();
   if (oauthEnabled) {
     // `trust proxy` so req.protocol + req.host honor X-Forwarded-Proto +
     // X-Forwarded-Host. nginx-ingress + ALB both terminate TLS upstream;
     // without trust-proxy the metadata advertises `http://` instead of
     // `https://` which breaks PKCE (browsers refuse insecure flows).
-    app.set('trust proxy', true);
+    app.set("trust proxy", true);
 
-    app.get('/.well-known/oauth-protected-resource', (req, res) =>
-      handleProtectedResourceMetadata(
-        req,
-        res,
-        oauthConfig,
-        opts.universalMcpPath ?? '/mcp',
-      ),
+    app.get("/.well-known/oauth-protected-resource", (req, res) =>
+      handleProtectedResourceMetadata(req, res, oauthConfig, opts.universalMcpPath ?? "/mcp")
     );
     // Per-app protected-resource metadata (RFC 9728 per-resource
     // discovery). When `perAppRouting` is configured,
@@ -4317,37 +4104,32 @@ export function createGguiServer(
     // (also us) issue tokens bound to either resource via RFC 8707
     // resource indicators.
     if (opts.perAppRouting !== undefined) {
-      const { paramName, paramPattern, pathPrefix = '' } = opts.perAppRouting;
+      const { paramName, paramPattern, pathPrefix = "" } = opts.perAppRouting;
       app.get(
         `${pathPrefix}/:${paramName}(${paramPattern})/.well-known/oauth-protected-resource`,
         (req, res) => {
           const appId = req.params[paramName];
-          if (typeof appId !== 'string' || appId.length === 0) {
-            res.status(404).json({ error: 'not_found' });
+          if (typeof appId !== "string" || appId.length === 0) {
+            res.status(404).json({ error: "not_found" });
             return;
           }
-          handleProtectedResourceMetadata(
-            req,
-            res,
-            oauthConfig,
-            `${pathPrefix}/${appId}`,
-          );
-        },
+          handleProtectedResourceMetadata(req, res, oauthConfig, `${pathPrefix}/${appId}`);
+        }
       );
     }
-    app.get('/.well-known/oauth-authorization-server', (req, res) =>
-      handleAuthorizationServerMetadata(req, res, oauthConfig),
+    app.get("/.well-known/oauth-authorization-server", (req, res) =>
+      handleAuthorizationServerMetadata(req, res, oauthConfig)
     );
-    app.post('/oauth/register', (req, res) => {
+    app.post("/oauth/register", (req, res) => {
       void handleRegister(req, res, oauthConfig, oauthStorage);
     });
-    app.get('/oauth/authorize', (req, res) => {
+    app.get("/oauth/authorize", (req, res) => {
       void handleAuthorizeGet(req, res, oauthConfig, oauthStorage);
     });
-    app.post('/oauth/authorize', (req, res) => {
+    app.post("/oauth/authorize", (req, res) => {
       void handleAuthorizePost(req, res, oauthConfig, oauthStorage, auth, pairingService);
     });
-    app.post('/oauth/token', (req, res) => {
+    app.post("/oauth/token", (req, res) => {
       void handleToken(req, res, oauthStorage);
     });
   }
@@ -4378,7 +4160,7 @@ export function createGguiServer(
           const ready = await Promise.race<boolean>([
             Promise.resolve().then(() => check()),
             new Promise<boolean>((resolve) =>
-              setTimeout(() => resolve(false), READINESS_CHECK_TIMEOUT_MS),
+              setTimeout(() => resolve(false), READINESS_CHECK_TIMEOUT_MS)
             ),
           ]);
           results[name] = ready;
@@ -4387,7 +4169,7 @@ export function createGguiServer(
           results[name] = false;
           allReady = false;
         }
-      }),
+      })
     );
     return { allReady, results };
   }
@@ -4415,15 +4197,15 @@ export function createGguiServer(
    * shell. No `readinessChecks` invoked — keeping this probe cheap
    * is the point; any heavier work belongs in `/ggui/health`.
    */
-  app.get('/ggui/live', (_req, res) => {
-    res.status(200).json({ status: 'alive', server: info.name });
+  app.get("/ggui/live", (_req, res) => {
+    res.status(200).json({ status: "alive", server: info.name });
   });
 
-  app.get('/ggui/health', (_req, res) => {
+  app.get("/ggui/health", (_req, res) => {
     void (async () => {
       const { allReady, results } = await runReadinessChecks();
       const body: Record<string, unknown> = {
-        status: allReady ? 'ok' : 'degraded',
+        status: allReady ? "ok" : "degraded",
         server: info.name,
         version: info.version,
         tools: handlers.length,
@@ -4443,7 +4225,7 @@ export function createGguiServer(
       if (opts.threads) {
         body.threads = {
           enabled: true,
-          durability: opts.threads.durability ?? 'ephemeral',
+          durability: opts.threads.durability ?? "ephemeral",
         };
       }
       if (Object.keys(results).length > 0) {
@@ -4470,7 +4252,7 @@ export function createGguiServer(
    * We deliberately skip the MCP error envelope shape used by `/mcp`
    * because this route is explicitly NOT part of the MCP wire.
    */
-  app.get('/ggui/auth-check', async (req: Request, res: Response) => {
+  app.get("/ggui/auth-check", async (req: Request, res: Response) => {
     try {
       await resolveIdentity(auth, req);
       res.status(204).end();
@@ -4482,14 +4264,14 @@ export function createGguiServer(
           // universal resource metadata. Symmetric with the universal
           // /mcp handler's 401 behavior.
           res.setHeader(
-            'WWW-Authenticate',
-            buildWwwAuthenticate(resolveIssuerUrl(req, oauthConfig.issuerUrl)),
+            "WWW-Authenticate",
+            buildWwwAuthenticate(resolveIssuerUrl(req, oauthConfig.issuerUrl))
           );
         }
         res.status(401).end();
         return;
       }
-      logger.error('auth_check_unexpected_error', { error: String(err) });
+      logger.error("auth_check_unexpected_error", { error: String(err) });
       res.status(500).end();
     }
   });
@@ -4504,150 +4286,137 @@ export function createGguiServer(
    */
   const filterHandlersByAudience = (
     set: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-    allowed: ReadonlyArray<'agent' | 'runtime' | 'protocol' | 'ops'>,
+    allowed: ReadonlyArray<"agent" | "runtime" | "protocol" | "ops">
   ): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> =>
     set.filter((h) => {
-      const tags = h.audience ?? (['agent'] as const);
+      const tags = h.audience ?? (["agent"] as const);
       return tags.some((t) => allowed.includes(t));
     });
 
-  const makeMcpHandler = (
-    routeHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-    handlerOpts?: { readonly anonymous?: boolean },
-  ) => async (req: Request, res: Response): Promise<void> => {
-    const requestId =
-      typeof req.headers['x-request-id'] === 'string'
-        ? req.headers['x-request-id']
-        : randomUUID();
-    const reqLogger = logger.child({ requestId });
+  const makeMcpHandler =
+    (
+      routeHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+      handlerOpts?: { readonly anonymous?: boolean }
+    ) =>
+    async (req: Request, res: Response): Promise<void> => {
+      const requestId =
+        typeof req.headers["x-request-id"] === "string"
+          ? req.headers["x-request-id"]
+          : randomUUID();
+      const reqLogger = logger.child({ requestId });
 
-    let identity: AuthResult;
-    if (handlerOpts?.anonymous) {
-      // Anonymous-mode services bypass the auth chain. Synthesize an
-      // identity so every downstream consumer (HandlerContext, MCP
-      // server build, logger metadata) sees the same shape it would
-      // for any other request — the only difference is `source` =
-      // `'anonymous'`, which handlers may read if they need to gate
-      // sensitive paths (e.g. writes) even on a public service.
-      identity = { identity: { kind: 'builder' }, source: 'anonymous' };
-    } else {
-      try {
-        identity = await resolveIdentity(auth, req);
-      } catch (err) {
-        if (err instanceof UnauthenticatedError) {
-          reqLogger.warn('auth_failed', { reason: err.message });
-          // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
-          // read this header to find the resource-metadata URL and
-          // begin the OAuth dance. Pure-bearer clients ignore it.
-          //
-          // Per-app routes point at the per-app resource-metadata
-          // document so RFC 9728 discovery resolves
-          // to a per-app `resource` URL. Universal routes keep the
-          // bare metadata path.
-          if (oauthEnabled) {
-            const wwwAuthResourcePath = resolveWwwAuthResourcePath(req, opts);
-            res.setHeader(
-              'WWW-Authenticate',
-              buildWwwAuthenticate(
-                resolveIssuerUrl(req, oauthConfig.issuerUrl),
-                wwwAuthResourcePath,
-              ),
-            );
+      let identity: AuthResult;
+      if (handlerOpts?.anonymous) {
+        // Anonymous-mode services bypass the auth chain. Synthesize an
+        // identity so every downstream consumer (HandlerContext, MCP
+        // server build, logger metadata) sees the same shape it would
+        // for any other request — the only difference is `source` =
+        // `'anonymous'`, which handlers may read if they need to gate
+        // sensitive paths (e.g. writes) even on a public service.
+        identity = { identity: { kind: "builder" }, source: "anonymous" };
+      } else {
+        try {
+          identity = await resolveIdentity(auth, req);
+        } catch (err) {
+          if (err instanceof UnauthenticatedError) {
+            reqLogger.warn("auth_failed", { reason: err.message });
+            // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
+            // read this header to find the resource-metadata URL and
+            // begin the OAuth dance. Pure-bearer clients ignore it.
+            //
+            // Per-app routes point at the per-app resource-metadata
+            // document so RFC 9728 discovery resolves
+            // to a per-app `resource` URL. Universal routes keep the
+            // bare metadata path.
+            if (oauthEnabled) {
+              const wwwAuthResourcePath = resolveWwwAuthResourcePath(req, opts);
+              res.setHeader(
+                "WWW-Authenticate",
+                buildWwwAuthenticate(
+                  resolveIssuerUrl(req, oauthConfig.issuerUrl),
+                  wwwAuthResourcePath
+                )
+              );
+            }
+            res.status(401).json({
+              jsonrpc: "2.0",
+              error: { code: -32000, message: err.message },
+              id: null,
+            });
+            return;
           }
-          res.status(401).json({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: err.message },
+          reqLogger.error("auth_unexpected_error", { error: String(err) });
+          res.status(500).json({
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "Internal server error" },
             id: null,
           });
           return;
         }
-        reqLogger.error('auth_unexpected_error', { error: String(err) });
-        res.status(500).json({
-          jsonrpc: '2.0',
-          error: { code: -32603, message: 'Internal server error' },
-          id: null,
-        });
-        return;
       }
-    }
 
-    // Per-tenant URL routing. When `perAppRouting`
-    // is configured AND the request matched the per-app path
-    // `/:${paramName}/mcp`, Express populates `req.params[paramName]`
-    // with the validated tenant id. Use it as `ctx.appId` for this
-    // request, overriding `appIdFromIdentity`. The universal `/mcp`
-    // route doesn't have the param so it falls through to the
-    // identity-based resolution.
-    const urlAppId =
-      opts.perAppRouting !== undefined
-        ? req.params[opts.perAppRouting.paramName]
-        : undefined;
-    const hasUrlAppId = typeof urlAppId === 'string' && urlAppId.length > 0;
+      // Per-tenant URL routing. When `perAppRouting`
+      // is configured AND the request matched the per-app path
+      // `/:${paramName}/mcp`, Express populates `req.params[paramName]`
+      // with the validated tenant id. Use it as `ctx.appId` for this
+      // request, overriding `appIdFromIdentity`. The universal `/mcp`
+      // route doesn't have the param so it falls through to the
+      // identity-based resolution.
+      const urlAppId =
+        opts.perAppRouting !== undefined ? req.params[opts.perAppRouting.paramName] : undefined;
+      const hasUrlAppId = typeof urlAppId === "string" && urlAppId.length > 0;
 
-    // Per-app authorize hook — when the deployment configured
-    // `perAppRouting.authorize` AND the request matched the per-app
-    // path, invoke the callback. Throwing collapses to a 403 before
-    // the MCP handler ever sees the request, which is the boundary
-    // that prevents cross-user blueprint reads when pod tools bypass
-    // AppSync owner-auth via raw DDB. Universal-endpoint requests
-    // skip this entirely (no urlAppId).
-    if (hasUrlAppId && opts.perAppRouting?.authorize) {
-      try {
-        await opts.perAppRouting.authorize(urlAppId, identity);
-      } catch (err) {
-        reqLogger.warn('per_app_authorize_denied', {
-          urlAppId,
-          reason: err instanceof Error ? err.message : String(err),
-        });
-        res.status(403).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Forbidden' },
-          id: null,
-        });
-        return;
+      // Per-app authorize hook — when the deployment configured
+      // `perAppRouting.authorize` AND the request matched the per-app
+      // path, invoke the callback. Throwing collapses to a 403 before
+      // the MCP handler ever sees the request, which is the boundary
+      // that prevents cross-user blueprint reads when pod tools bypass
+      // AppSync owner-auth via raw DDB. Universal-endpoint requests
+      // skip this entirely (no urlAppId).
+      if (hasUrlAppId && opts.perAppRouting?.authorize) {
+        try {
+          await opts.perAppRouting.authorize(urlAppId, identity);
+        } catch (err) {
+          reqLogger.warn("per_app_authorize_denied", {
+            urlAppId,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+          res.status(403).json({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "Forbidden" },
+            id: null,
+          });
+          return;
+        }
       }
-    }
 
-    const ctx: HandlerContext = {
-      appId: hasUrlAppId ? urlAppId : appIdFromIdentity(identity),
-      requestId,
-      // Identity is the canonical source of two mutually-exclusive
-      // hosted fields: `apiKeyHash` for kind=app, `userId` for kind=user.
-      // Threading them onto HandlerContext here means hosted handlers
-      // (the K8s ggui-protocol pod's billing gate + per-user blueprint
-      // scoping) can read identity directly without a parallel pod-only
-      // context shape; OSS handlers continue to ignore both fields.
-      ...(identity.identity.kind === 'app'
-        ? { apiKeyHash: identity.identity.apiKeyHash }
-        : {}),
-      ...(identity.identity.kind === 'user'
-        ? { userId: identity.identity.userId }
-        : {}),
-    };
-    reqLogger.debug?.('mcp_request', { appId: ctx.appId });
+      const ctx: HandlerContext = {
+        appId: hasUrlAppId ? urlAppId : appIdFromIdentity(identity),
+        requestId,
+        // Identity is the canonical source of two mutually-exclusive
+        // hosted fields: `apiKeyHash` for kind=app, `userId` for kind=user.
+        // Threading them onto HandlerContext here means hosted handlers
+        // (the K8s ggui-protocol pod's billing gate + per-user blueprint
+        // scoping) can read identity directly without a parallel pod-only
+        // context shape; OSS handlers continue to ignore both fields.
+        ...(identity.identity.kind === "app" ? { apiKeyHash: identity.identity.apiKeyHash } : {}),
+        ...(identity.identity.kind === "user" ? { userId: identity.identity.userId } : {}),
+      };
+      reqLogger.debug?.("mcp_request", { appId: ctx.appId });
 
-    const mcp = buildMcpServer(
-      info,
-      routeHandlers,
-      () => als.getStore() ?? ctx,
-      reqLogger,
-      {
+      const mcp = buildMcpServer(info, routeHandlers, () => als.getStore() ?? ctx, reqLogger, {
         mcpAppsOutbound: mcpAppsEnabled,
         // Caller-provided `shellHtml` overrides the default;
         // `installMcpAppsOutbound` falls back to its baked
         // `GGUI_RENDER_SHELL_HTML` constant when absent.
-        ...(mcpAppsConfig.shellHtml !== undefined
-          ? { shellHtml: mcpAppsConfig.shellHtml }
-          : {}),
+        ...(mcpAppsConfig.shellHtml !== undefined ? { shellHtml: mcpAppsConfig.shellHtml } : {}),
         // Forward the operator-supplied public origin so the static
         // `ui://ggui/render` resource declares `_meta.ui.csp` for
         // spec-compliant hosts (Claude Desktop / claude.ai Connector /
         // Claude Code). Without this the host's restrictive default
         // (`connect-src 'none'`) blocks the iframe from fetching the
         // runtime bundle and opening the WebSocket.
-        ...(opts.publicBaseUrl !== undefined
-          ? { publicBaseUrl: opts.publicBaseUrl }
-          : {}),
+        ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
         // Per-session self-contained shell registration. Only wired
         // when MCP Apps is on AND the session store is resolved —
         // both preconditions for `ggui_render.resultMeta` stamping a
@@ -4666,12 +4435,10 @@ export function createGguiServer(
                 // default theme — `ggui.json#theme: 'indigo'` would
                 // only take effect on the direct-browser `/r/<shortCode>`
                 // path. Same resolution as the `/r/...` route below.
-                ...(opts.theme !== undefined &&
-                opts.theme.source === 'preset'
+                ...(opts.theme !== undefined && opts.theme.source === "preset"
                   ? { themeId: opts.theme.preset }
                   : {}),
-                ...(opts.theme !== undefined &&
-                opts.theme.source !== 'default'
+                ...(opts.theme !== undefined && opts.theme.source !== "default"
                   ? { themeMode: opts.theme.mode }
                   : {}),
                 // Resume contract — registry-only fallback. Wired
@@ -4706,9 +4473,7 @@ export function createGguiServer(
                 // `/r/<shortCode>` route's lookup. Defaults to
                 // `InMemoryAppMetadataStore` (created above) when
                 // opts.appMetadataStore is undefined.
-                ...(opts.appMetadataStore
-                  ? { appMetadataStore: opts.appMetadataStore }
-                  : {}),
+                ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
                 // Stamp `_meta.ui.csp.{connectDomains,resourceDomains}`
                 // on every per-call resource response. Symmetric with
                 // the declaration on the static `ui://ggui/render`
@@ -4718,77 +4483,66 @@ export function createGguiServer(
                 // fails with a generic "script error" — the bug
                 // diagnosed live on 2026-05-18 against the cloudflared
                 // tunnel.
-                ...(opts.publicBaseUrl !== undefined
-                  ? { publicBaseUrl: opts.publicBaseUrl }
-                  : {}),
+                ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
               },
             }
           : {}),
-        ...(opts.allowedKinds !== undefined
-          ? { allowedKinds: opts.allowedKinds }
-          : {}),
-        ...(resolvedInstructions !== undefined
-          ? { instructions: resolvedInstructions }
-          : {}),
-        ...(opts.extraResources !== undefined
-          ? { extraResources: opts.extraResources }
-          : {}),
-      },
-    );
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
+        ...(opts.allowedKinds !== undefined ? { allowedKinds: opts.allowedKinds } : {}),
+        ...(resolvedInstructions !== undefined ? { instructions: resolvedInstructions } : {}),
+        ...(opts.extraResources !== undefined ? { extraResources: opts.extraResources } : {}),
+      });
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      });
 
-    res.on('close', () => {
-      transport.close().catch(() => undefined);
-      mcp.close().catch(() => undefined);
-    });
+      res.on("close", () => {
+        transport.close().catch(() => undefined);
+        mcp.close().catch(() => undefined);
+      });
 
-    try {
-      await mcp.connect(transport);
-      await als.run(ctx, () =>
-        transport.handleRequest(req, res, req.body),
-      );
-    } catch (err) {
-      reqLogger.error('mcp_handle_failed', { error: String(err) });
-      if (!res.headersSent) {
-        let mapped:
-          | { readonly status: number; readonly code: number; readonly message: string }
-          | undefined;
-        if (opts.errorMapper) {
-          try {
-            mapped = opts.errorMapper(err);
-          } catch (mapperErr) {
-            // Defensive: a thrown mapper degrades to the default 500
-            // rather than letting the inner failure escape the handler.
-            reqLogger.warn('error_mapper_failed', {
-              error: String(mapperErr),
+      try {
+        await mcp.connect(transport);
+        await als.run(ctx, () => transport.handleRequest(req, res, req.body));
+      } catch (err) {
+        reqLogger.error("mcp_handle_failed", { error: String(err) });
+        if (!res.headersSent) {
+          let mapped:
+            | { readonly status: number; readonly code: number; readonly message: string }
+            | undefined;
+          if (opts.errorMapper) {
+            try {
+              mapped = opts.errorMapper(err);
+            } catch (mapperErr) {
+              // Defensive: a thrown mapper degrades to the default 500
+              // rather than letting the inner failure escape the handler.
+              reqLogger.warn("error_mapper_failed", {
+                error: String(mapperErr),
+              });
+            }
+          }
+          if (mapped) {
+            res.status(mapped.status).json({
+              jsonrpc: "2.0",
+              error: { code: mapped.code, message: mapped.message },
+              id: null,
+            });
+          } else {
+            res.status(500).json({
+              jsonrpc: "2.0",
+              error: { code: -32603, message: "Internal server error" },
+              id: null,
             });
           }
         }
-        if (mapped) {
-          res.status(mapped.status).json({
-            jsonrpc: '2.0',
-            error: { code: mapped.code, message: mapped.message },
-            id: null,
-          });
-        } else {
-          res.status(500).json({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
-          });
-        }
       }
-    }
-  };
+    };
 
   const methodNotAllowed = (_req: Request, res: Response): void => {
     res.status(405).json({
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       error: {
         code: -32000,
-        message: 'Method not allowed (stateless server).',
+        message: "Method not allowed (stateless server).",
       },
       id: null,
     });
@@ -4798,12 +4552,9 @@ export function createGguiServer(
   // subset of `handlers` whose `audience` tag intersects the route's
   // allowed list. Handlers without an explicit tag default to
   // ['agent'] — every such handler is agent-runtime callable.
-  const agentRouteHandlers = filterHandlersByAudience(handlers, [
-    'agent',
-    'runtime',
-  ]);
-  const protocolRouteHandlers = filterHandlersByAudience(handlers, ['protocol']);
-  const opsRouteHandlers = filterHandlersByAudience(handlers, ['ops']);
+  const agentRouteHandlers = filterHandlersByAudience(handlers, ["agent", "runtime"]);
+  const protocolRouteHandlers = filterHandlersByAudience(handlers, ["protocol"]);
+  const opsRouteHandlers = filterHandlersByAudience(handlers, ["ops"]);
 
   const agentMcpHandler = makeMcpHandler(agentRouteHandlers);
   const protocolMcpHandler = makeMcpHandler(protocolRouteHandlers);
@@ -4820,7 +4571,7 @@ export function createGguiServer(
   // Exposes audience tags ['agent', 'runtime'] — runtime tools stay
   // routable on the same endpoint but invisible to the agent's
   // `tools/list` via the `_meta.ui.visibility: ['app']` filter.
-  const universalMcpPath = opts.universalMcpPath ?? '/mcp';
+  const universalMcpPath = opts.universalMcpPath ?? "/mcp";
   app.post(universalMcpPath, agentMcpHandler);
 
   // Per-tenant endpoint — only mounted when the deployment opts in
@@ -4855,17 +4606,17 @@ export function createGguiServer(
   // Always mounted; the route has the same auth chain as `/mcp` for
   // v1 (operators MAY narrow auth in their own middleware later).
   // Empty when the deployment didn't wire any protocol-tagged handlers.
-  app.post('/protocol', protocolMcpHandler);
-  app.get('/protocol', methodNotAllowed);
-  app.delete('/protocol', methodNotAllowed);
+  app.post("/protocol", protocolMcpHandler);
+  app.get("/protocol", methodNotAllowed);
+  app.delete("/protocol", methodNotAllowed);
 
   // /ops — operator-class management surface. Hosts the
   // `audience: ['ops']` tools (`ggui_set_provider_key`, `ggui_get_credit_balance`,
   // etc.). Always mounted; same auth chain as `/mcp`. Empty when the
   // deployment didn't wire any ops-tagged handlers.
-  app.post('/ops', opsMcpHandler);
-  app.get('/ops', methodNotAllowed);
-  app.delete('/ops', methodNotAllowed);
+  app.post("/ops", opsMcpHandler);
+  app.get("/ops", methodNotAllowed);
+  app.delete("/ops", methodNotAllowed);
 
   // Isolated MCP services — each at its own HTTP path with its own
   // tool namespace. Bypasses audience filtering (the path IS the
@@ -4883,7 +4634,7 @@ export function createGguiServer(
     // every canonical route.
     const svcMcpHandler = makeMcpHandler(
       svc.handlers,
-      svc.anonymous ? { anonymous: true } : undefined,
+      svc.anonymous ? { anonymous: true } : undefined
     );
     app.post(svc.path, svcMcpHandler);
     app.get(svc.path, methodNotAllowed);
@@ -4901,7 +4652,7 @@ export function createGguiServer(
     installMcpAppsInbound(app, {
       connectors: opts.connectors,
       renderStore,
-      logger: logger.child({ component: 'mcp-apps-inbound' }),
+      logger: logger.child({ component: "mcp-apps-inbound" }),
     });
   }
 
@@ -4935,12 +4686,12 @@ export function createGguiServer(
   if (runtimeEnabled) {
     if (existsSync(runtimeBundleFile)) {
       app.get(runtimePath, (_req, res) => {
-        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
         // Short cache — operators iterating on the renderer want
         // fresh copies after rebuild. Production hardening (etag,
         // long-term caching with hashed filenames) is a follow-on
         // concern; same posture console takes.
-        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader("Cache-Control", "no-cache");
         // CORS: the bundle MUST be loadable from `<script type="module"
         // src=...>` inside a sandboxed `srcdoc` iframe (the
         // `<McpAppIframe>` mount path — see `packages/ggui-react/src/
@@ -4955,25 +4706,22 @@ export function createGguiServer(
         // narrower origin allowlist. This pairs with the production
         // `/ui://ggui/render` shell HTML setting `s.type='module'`
         // (`mcp-apps-outbound.ts::GGUI_SESSION_SHELL_SCRIPT_BODY`).
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader("Access-Control-Allow-Origin", "*");
         res.sendFile(runtimeBundleFile);
       });
     } else {
-      logger.warn('renderer_bundle_missing', {
+      logger.warn("renderer_bundle_missing", {
         bundleFile: runtimeBundleFile,
-        hint: 'Run `pnpm --filter @ggui-ai/iframe-runtime build` to produce the bundle. Serving 503 from the mount point until it exists.',
+        hint: "Run `pnpm --filter @ggui-ai/iframe-runtime build` to produce the bundle. Serving 503 from the mount point until it exists.",
       });
       app.get(runtimePath, (_req, res) => {
         res
           .status(503)
-          .type('text/plain')
-          .send(
-            'renderer bundle not built. Run:\n  pnpm --filter @ggui-ai/iframe-runtime build\n',
-          );
+          .type("text/plain")
+          .send("renderer bundle not built. Run:\n  pnpm --filter @ggui-ai/iframe-runtime build\n");
       });
     }
   }
-
 
   // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
   //
@@ -4999,94 +4747,85 @@ export function createGguiServer(
   // (planned): /state is a snapshot; /events is a cursor-replay. Both
   // are gated identically (wsToken), unified under the SessionEvent
   // ledger cursor (`session.lastSequence`).
-  if (
-    mcpAppsEnabled &&
-    renderStore &&
-    sharedTokenSecret !== undefined
-  ) {
+  if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForState = renderStore;
     const stateSecret = sharedTokenSecret;
     const appMetadataStoreForState = opts.appMetadataStore;
     const stateThemeId =
-      opts.theme === undefined || opts.theme.source === 'default'
+      opts.theme === undefined || opts.theme.source === "default"
         ? undefined
-        : opts.theme.source === 'preset'
+        : opts.theme.source === "preset"
           ? opts.theme.preset
           : undefined;
     const stateThemeMode =
-      opts.theme === undefined || opts.theme.source === 'default'
-        ? undefined
-        : opts.theme.mode;
-    app.get('/api/renders/:renderId/state', async (req, res) => {
-      const renderId = req.params['renderId'];
-      if (typeof renderId !== 'string' || renderId.length === 0) {
-        res.status(400).type('text/plain').send('renderId required');
+      opts.theme === undefined || opts.theme.source === "default" ? undefined : opts.theme.mode;
+    app.get("/api/renders/:renderId/state", async (req, res) => {
+      const renderId = req.params["renderId"];
+      if (typeof renderId !== "string" || renderId.length === 0) {
+        res.status(400).type("text/plain").send("renderId required");
         return;
       }
-      const wsTokenRaw = req.query['wsToken'];
-      const wsToken = typeof wsTokenRaw === 'string' ? wsTokenRaw : '';
+      const wsTokenRaw = req.query["wsToken"];
+      const wsToken = typeof wsTokenRaw === "string" ? wsTokenRaw : "";
       if (wsToken.length === 0) {
-        res
-          .status(401)
-          .type('text/plain')
-          .send('wsToken query required');
+        res.status(401).type("text/plain").send("wsToken query required");
         return;
       }
-      const verify = verifyToken(wsToken, stateSecret, 'ws');
+      const verify = verifyToken(wsToken, stateSecret, "ws");
       if (!verify.ok) {
         // 410 Gone for expired (matches the `BOOTSTRAP_EXPIRED`
         // semantics on the WS upgrade): the envelope was once valid
         // but has aged out; the iframe-runtime branches on this to
         // surface a refresh-vs-rehandshake prompt instead of treating
         // it as a hostile request.
-        if (verify.reason === 'expired') {
-          res.status(410).type('text/plain').send('wsToken expired');
+        if (verify.reason === "expired") {
+          res.status(410).type("text/plain").send("wsToken expired");
           return;
         }
         // 401 for tamper / wrong-kind / malformed / invalid-format —
         // the caller is broken or hostile; no info leak.
-        res.status(401).type('text/plain').send('wsToken invalid');
+        res.status(401).type("text/plain").send("wsToken invalid");
         return;
       }
       // Tenancy gate: the wsToken's claimed renderId MUST match the
       // URL's renderId. A wsToken minted for render A MUST NOT read
       // render B's state.
       if (verify.claims.renderId !== renderId) {
-        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
       let stored;
       try {
         stored = await renderStoreForState.get(renderId);
       } catch (err) {
-        logger.warn('state_read_failed', {
+        logger.warn("state_read_failed", {
           renderId,
           error: String(err),
         });
-        res.status(500).type('text/plain').send('internal error');
+        res.status(500).type("text/plain").send("internal error");
         return;
       }
       if (!stored) {
         // 404: render evicted / never existed. Polling clients fold
         // this into "stop polling" — distinct from 410 which signals
         // "credential aged out, refresh".
-        res.status(404).type('text/plain').send('render not found');
+        res.status(404).type("text/plain").send("render not found");
         return;
       }
       // Tenancy gate (round 2): the wsToken's appId MUST match the
       // render's appId. Closes the case where a render is created
       // under a different appId than the token was minted for.
       if (verify.claims.appId !== stored.appId) {
-        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
       // Phase B: a render IS the addressable unit. Pick directly from
       // the resolved Render (no stack walk).
       const render = stored.render;
-      const isMcpApps = render.type === 'mcpApps';
-      const isSystem = !isMcpApps && render.type === 'system';
+      const isMcpApps = render.type === "mcpApps";
+      const isSystem = !isMcpApps && render.type === "system";
       const renderKind =
-        isSystem && typeof (render as { kind?: string }).kind === 'string'
+        isSystem && typeof (render as { kind?: string }).kind === "string"
           ? (render as { kind: string }).kind
           : undefined;
       // Build render-slice meta. Mirror render.resultMeta's shape so
@@ -5095,16 +4834,11 @@ export function createGguiServer(
       // R6 addition: polling clients use it to initialize the R7 /events
       // cursor (`?sinceSequence=N`) aligned with the WS stream.
       const view = !isMcpApps ? deriveRenderMeta(render) : undefined;
-      let statePublicEnv:
-        | Readonly<Record<string, string>>
-        | undefined;
+      let statePublicEnv: Readonly<Record<string, string>> | undefined;
       if (appMetadataStoreForState && !isMcpApps) {
         try {
           const appRecord = await appMetadataStoreForState.get(stored.appId);
-          statePublicEnv = derivePublicEnvProjection(
-            render,
-            appRecord?.publicEnv,
-          );
+          statePublicEnv = derivePublicEnvProjection(render, appRecord?.publicEnv);
         } catch {
           // Silent — wrappers calling getPublicEnv throw clearly.
         }
@@ -5119,16 +4853,14 @@ export function createGguiServer(
       // never reaches the iframe. The render-commit handler already
       // stamps this trio on its resultMeta; mirroring here closes the
       // drift.
-      const liveTrio = mintBootstrap
-        ? mintBootstrap(stored.id, stored.appId)
-        : undefined;
+      const liveTrio = mintBootstrap ? mintBootstrap(stored.id, stored.appId) : undefined;
       // Polling URL — the iframe-runtime's R6 polling-fallback path
       // composes its fetch URL from `render.pollingUrl`. The /state
       // endpoint IS that URL, so we stamp it here; without it the
       // iframe-runtime can't fall back when the WS upgrade fails.
-      const requestHostForPolling = req.get('host') ?? '';
+      const requestHostForPolling = req.get("host") ?? "";
       const pollingBase = opts.publicBaseUrl
-        ? opts.publicBaseUrl.replace(/\/$/, '')
+        ? opts.publicBaseUrl.replace(/\/$/, "")
         : `${req.protocol}://${requestHostForPolling}`;
       const pollingUrl = `${pollingBase}/api/renders/${encodeURIComponent(stored.id)}/state`;
       // Static-component delivery via codeUrl (the same content-addressable
@@ -5140,14 +4872,14 @@ export function createGguiServer(
       let renderValidatorsUrl: string | undefined;
       if (!isSystem && !isMcpApps && opts.codeStore) {
         const code = (render as { componentCode?: string }).componentCode;
-        if (typeof code === 'string' && code.length > 0) {
+        if (typeof code === "string" && code.length > 0) {
           try {
             const hash = opts.codeStore.hashOf(code);
             await opts.codeStore.put(hash, code);
             renderCodeHash = hash;
-            const requestHost = req.get('host') ?? '';
+            const requestHost = req.get("host") ?? "";
             const base = opts.publicBaseUrl
-              ? opts.publicBaseUrl.replace(/\/$/, '')
+              ? opts.publicBaseUrl.replace(/\/$/, "")
               : `${req.protocol}://${requestHost}`;
             renderCodeUrl = `${base}/code/${hash}.js`;
           } catch {
@@ -5156,14 +4888,11 @@ export function createGguiServer(
           try {
             const bundle = await deriveContractBundle(render);
             if (bundle) {
-              await opts.codeStore.put(
-                bundle.contractHash,
-                bundle.bundleSource,
-              );
+              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
               renderContractHash = bundle.contractHash;
-              const requestHost = req.get('host') ?? '';
+              const requestHost = req.get("host") ?? "";
               const base = opts.publicBaseUrl
-                ? opts.publicBaseUrl.replace(/\/$/, '')
+                ? opts.publicBaseUrl.replace(/\/$/, "")
                 : `${req.protocol}://${requestHost}`;
               renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
             }
@@ -5187,18 +4916,14 @@ export function createGguiServer(
           : {}),
         pollingUrl,
         ...(stateThemeId !== undefined ? { themeId: stateThemeId } : {}),
-        ...(stateThemeMode !== undefined
-          ? { themeMode: stateThemeMode }
-          : {}),
+        ...(stateThemeMode !== undefined ? { themeMode: stateThemeMode } : {}),
         ...(view?.gadgets !== undefined && view.gadgets.length > 0
           ? { gadgets: view.gadgets }
           : {}),
-        ...(statePublicEnv !== undefined &&
-        Object.keys(statePublicEnv).length > 0
+        ...(statePublicEnv !== undefined && Object.keys(statePublicEnv).length > 0
           ? { publicEnv: statePublicEnv }
           : {}),
-        ...(view?.permissionsPolicy !== undefined &&
-        view.permissionsPolicy.length > 0
+        ...(view?.permissionsPolicy !== undefined && view.permissionsPolicy.length > 0
           ? { permissionsPolicy: view.permissionsPolicy }
           : {}),
         // R6 — load-bearing ledger cursor. Always stamped on /state
@@ -5213,12 +4938,8 @@ export function createGguiServer(
             }
           : {}),
         ...(view?.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        ...(view?.actionNextSteps !== undefined
-          ? { actionNextSteps: view.actionNextSteps }
-          : {}),
-        ...(view?.contextSlots !== undefined
-          ? { contextSlots: view.contextSlots }
-          : {}),
+        ...(view?.actionNextSteps !== undefined ? { actionNextSteps: view.actionNextSteps } : {}),
+        ...(view?.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
         ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
           ? {
               contractHash: renderContractHash,
@@ -5226,9 +4947,9 @@ export function createGguiServer(
             }
           : {}),
       };
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.status(200).json({
         [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
       });
@@ -5257,36 +4978,32 @@ export function createGguiServer(
   //     `sinceSequence` is below the server's replay horizon OR strictly
   //     greater than `lastSequence` (cursor is from a stale deployment
   //     or the session was reset). Clients re-mount from /state.
-  if (
-    mcpAppsEnabled &&
-    renderStore &&
-    sharedTokenSecret !== undefined
-  ) {
+  if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForEvents = renderStore;
     const eventsSecret = sharedTokenSecret;
-    app.get('/api/renders/:renderId/events', async (req, res) => {
-      const renderId = req.params['renderId'];
-      if (typeof renderId !== 'string' || renderId.length === 0) {
-        res.status(400).type('text/plain').send('renderId required');
+    app.get("/api/renders/:renderId/events", async (req, res) => {
+      const renderId = req.params["renderId"];
+      if (typeof renderId !== "string" || renderId.length === 0) {
+        res.status(400).type("text/plain").send("renderId required");
         return;
       }
-      const wsTokenRaw = req.query['wsToken'];
-      const wsToken = typeof wsTokenRaw === 'string' ? wsTokenRaw : '';
+      const wsTokenRaw = req.query["wsToken"];
+      const wsToken = typeof wsTokenRaw === "string" ? wsTokenRaw : "";
       if (wsToken.length === 0) {
-        res.status(401).type('text/plain').send('wsToken query required');
+        res.status(401).type("text/plain").send("wsToken query required");
         return;
       }
-      const verify = verifyToken(wsToken, eventsSecret, 'ws');
+      const verify = verifyToken(wsToken, eventsSecret, "ws");
       if (!verify.ok) {
-        if (verify.reason === 'expired') {
-          res.status(410).type('text/plain').send('wsToken expired');
+        if (verify.reason === "expired") {
+          res.status(410).type("text/plain").send("wsToken expired");
           return;
         }
-        res.status(401).type('text/plain').send('wsToken invalid');
+        res.status(401).type("text/plain").send("wsToken invalid");
         return;
       }
       if (verify.claims.renderId !== renderId) {
-        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
       // Parse + validate sinceSequence (required, non-negative integer)
@@ -5295,58 +5012,44 @@ export function createGguiServer(
       // sinceSequence is REQUIRED — explicit cursor reads only. A missing
       // query is a caller bug (no sensible default; `0` means "replay
       // everything" which we don't want to fire unintentionally).
-      const sinceSequenceRaw = req.query['sinceSequence'];
-      if (typeof sinceSequenceRaw !== 'string' || sinceSequenceRaw.length === 0) {
+      const sinceSequenceRaw = req.query["sinceSequence"];
+      if (typeof sinceSequenceRaw !== "string" || sinceSequenceRaw.length === 0) {
         res
           .status(400)
-          .type('text/plain')
-          .send('sinceSequence query required (non-negative integer)');
+          .type("text/plain")
+          .send("sinceSequence query required (non-negative integer)");
         return;
       }
       const sinceSequence = Number(sinceSequenceRaw);
       if (!Number.isInteger(sinceSequence) || sinceSequence < 0) {
-        res
-          .status(400)
-          .type('text/plain')
-          .send('sinceSequence must be a non-negative integer');
+        res.status(400).type("text/plain").send("sinceSequence must be a non-negative integer");
         return;
       }
-      const limitRaw = req.query['limit'];
+      const limitRaw = req.query["limit"];
       let limit = 100;
-      if (typeof limitRaw === 'string' && limitRaw.length > 0) {
+      if (typeof limitRaw === "string" && limitRaw.length > 0) {
         const parsed = Number(limitRaw);
-        if (
-          !Number.isInteger(parsed) ||
-          parsed < 1 ||
-          parsed > 500
-        ) {
-          res
-            .status(400)
-            .type('text/plain')
-            .send('limit must be an integer in [1, 500]');
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
+          res.status(400).type("text/plain").send("limit must be an integer in [1, 500]");
           return;
         }
         limit = parsed;
       }
       let result;
       try {
-        result = await renderStoreForEvents.listEventsSince(
-          renderId,
-          sinceSequence,
-          limit,
-        );
+        result = await renderStoreForEvents.listEventsSince(renderId, sinceSequence, limit);
       } catch (err) {
-        logger.warn('events_read_failed', {
+        logger.warn("events_read_failed", {
           renderId,
           error: String(err),
         });
-        res.status(500).type('text/plain').send('internal error');
+        res.status(500).type("text/plain").send("internal error");
         return;
       }
       if (result === null) {
         // 404 — render not found. Distinct from 410 (cursor stale on
         // a live render) so polling clients can branch.
-        res.status(404).type('text/plain').send('render not found');
+        res.status(404).type("text/plain").send("render not found");
         return;
       }
       // Tenancy gate (round 2): the wsToken's appId MUST match the
@@ -5354,11 +5057,11 @@ export function createGguiServer(
       // it. listEventsSince validated the render exists.
       const stored = await renderStoreForEvents.get(renderId);
       if (!stored) {
-        res.status(404).type('text/plain').send('render not found');
+        res.status(404).type("text/plain").send("render not found");
         return;
       }
       if (verify.claims.appId !== stored.appId) {
-        res.status(401).type('text/plain').send('wsToken scope mismatch');
+        res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
       // Replay-horizon gate. Two cases collapse to REPLAY_HORIZON_PASSED:
@@ -5368,23 +5071,17 @@ export function createGguiServer(
       //       deployment / reset session; the server has no events
       //       beyond what it knows, and we can't safely advance.
       if (sinceSequence > result.lastSequence) {
-        res
-          .status(410)
-          .type('application/json')
-          .json({
-            reason: 'REPLAY_HORIZON_PASSED',
-            currentSequence: result.lastSequence,
-          });
+        res.status(410).type("application/json").json({
+          reason: "REPLAY_HORIZON_PASSED",
+          currentSequence: result.lastSequence,
+        });
         return;
       }
       if (sinceSequence < result.horizonSeq) {
-        res
-          .status(410)
-          .type('application/json')
-          .json({
-            reason: 'REPLAY_HORIZON_PASSED',
-            currentSequence: result.lastSequence,
-          });
+        res.status(410).type("application/json").json({
+          reason: "REPLAY_HORIZON_PASSED",
+          currentSequence: result.lastSequence,
+        });
         return;
       }
       // Project store-level SessionEvent rows onto the protocol's
@@ -5398,9 +5095,9 @@ export function createGguiServer(
         type: event.type,
         payload: event.data,
       }));
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.status(200).json({
         events,
         lastSequence: result.lastSequence,
@@ -5436,19 +5133,16 @@ export function createGguiServer(
   // store sees the parameter.
   if (opts.codeStore) {
     const codeStoreForRoute = opts.codeStore;
-    const mountContentAddressableRoute = (
-      mountPath: string,
-      label: 'code' | 'contract',
-    ): void => {
+    const mountContentAddressableRoute = (mountPath: string, label: "code" | "contract"): void => {
       app.get(mountPath, async (req: Request, res: Response) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        const hash = req.params['hash'];
-        if (typeof hash !== 'string' || !CODE_HASH_REGEX.test(hash)) {
-          res.setHeader('Cache-Control', 'no-store');
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        const hash = req.params["hash"];
+        if (typeof hash !== "string" || !CODE_HASH_REGEX.test(hash)) {
+          res.setHeader("Cache-Control", "no-store");
           res.status(400).json({
             error: {
-              code: 'invalid_request',
-              message: 'hash path parameter must be 64-char lowercase hex',
+              code: "invalid_request",
+              message: "hash path parameter must be 64-char lowercase hex",
             },
           });
           return;
@@ -5456,38 +5150,32 @@ export function createGguiServer(
         try {
           const code = await codeStoreForRoute.get(hash);
           if (code === null) {
-            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader("Cache-Control", "no-store");
             res.status(404).json({
               error: {
-                code: 'not_found',
+                code: "not_found",
                 message: `unknown ${label} hash`,
               },
             });
             return;
           }
-          res.setHeader(
-            'Content-Type',
-            'application/javascript; charset=utf-8',
-          );
-          res.setHeader(
-            'Cache-Control',
-            'public, max-age=31536000, immutable',
-          );
+          res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           res.status(200).send(code);
         } catch (err) {
           logger.warn(`${label}_route_failed`, { hash, error: String(err) });
-          res.setHeader('Cache-Control', 'no-store');
+          res.setHeader("Cache-Control", "no-store");
           res.status(500).json({
             error: {
-              code: 'internal',
+              code: "internal",
               message: `${label} fetch failed`,
             },
           });
         }
       });
     };
-    mountContentAddressableRoute('/code/:hash.js', 'code');
-    mountContentAddressableRoute('/contract/:hash.js', 'contract');
+    mountContentAddressableRoute("/code/:hash.js", "code");
+    mountContentAddressableRoute("/contract/:hash.js", "contract");
   }
 
   // Pairing transport + auth bridge. Opt-in via `opts.pairing`. When
@@ -5506,10 +5194,7 @@ export function createGguiServer(
     path?: string;
     adminInitPath?: string | null;
     adminRevokePath?: string | null;
-  } =
-    typeof opts.pairing === 'object' && opts.pairing !== null
-      ? opts.pairing
-      : {};
+  } = typeof opts.pairing === "object" && opts.pairing !== null ? opts.pairing : {};
   let pairingService: PairingService | null = null;
   if (pairingEnabled) {
     if (pairingConfig.service) {
@@ -5524,7 +5209,7 @@ export function createGguiServer(
       // bridge exists to prevent. Fail fast at construction instead.
       if (!isTokenRegisteringAuthAdapter(auth)) {
         throw new Error(
-          'createGguiServer: `pairing: true` requires an AuthAdapter that implements `registerToken` + `unregisterToken` (e.g. InMemoryAuthAdapter). Pass `pairing: { service: yourPairingService }` to supply a pre-bridged service instead.',
+          "createGguiServer: `pairing: true` requires an AuthAdapter that implements `registerToken` + `unregisterToken` (e.g. InMemoryAuthAdapter). Pass `pairing: { service: yourPairingService }` to supply a pre-bridged service instead."
         );
       }
       const bridgedAuth = auth;
@@ -5535,8 +5220,8 @@ export function createGguiServer(
           : {}),
         onTokenIssued: (token, pairing) => {
           bridgedAuth.registerToken(token, {
-            identity: { kind: 'builder' },
-            source: 'pairing',
+            identity: { kind: "builder" },
+            source: "pairing",
             metadata: {
               pairingId: pairing.pairingId,
               deviceName: pairing.deviceName,
@@ -5549,23 +5234,23 @@ export function createGguiServer(
           void audit
             .record({
               at: Date.now(),
-              action: 'pairing.token.issued',
-              actor: { kind: 'builder' },
-              resource: { kind: 'pairing', id: pairing.pairingId },
+              action: "pairing.token.issued",
+              actor: { kind: "builder" },
+              resource: { kind: "pairing", id: pairing.pairingId },
               metadata: {
                 deviceName: pairing.deviceName,
                 createdAt: pairing.createdAt,
               },
             })
             .catch((err: unknown) => {
-              logger.error('audit_record_failed', {
-                action: 'pairing.token.issued',
+              logger.error("audit_record_failed", {
+                action: "pairing.token.issued",
                 pairingId: pairing.pairingId,
                 error: String(err),
               });
             });
           telemetry.emit({
-            name: 'pairing.token.issued',
+            name: "pairing.token.issued",
             at: Date.now(),
           });
         },
@@ -5580,18 +5265,18 @@ export function createGguiServer(
           void audit
             .record({
               at: Date.now(),
-              action: 'pairing.token.revoked',
-              actor: { kind: 'system' },
-              resource: { kind: 'pairing-token', id: prefix },
+              action: "pairing.token.revoked",
+              actor: { kind: "system" },
+              resource: { kind: "pairing-token", id: prefix },
             })
             .catch((err: unknown) => {
-              logger.error('audit_record_failed', {
-                action: 'pairing.token.revoked',
+              logger.error("audit_record_failed", {
+                action: "pairing.token.revoked",
                 error: String(err),
               });
             });
           telemetry.emit({
-            name: 'pairing.token.revoked',
+            name: "pairing.token.revoked",
             at: Date.now(),
           });
         },
@@ -5609,16 +5294,16 @@ export function createGguiServer(
       pairingConfig.path ?? DEFAULT_PAIRING_PATH,
       createPairLoginRateLimitMiddleware({
         limiter: authRateLimiter,
-        logger: logger.child({ middleware: 'rate-limit', route: 'pair' }),
-        quotaKey: 'pair',
+        logger: logger.child({ middleware: "rate-limit", route: "pair" }),
+        quotaKey: "pair",
         ...(opts.trustProxy !== undefined ? { trustProxy: opts.trustProxy } : {}),
-      }),
+      })
     );
 
     mountPairingTransport(app, {
       pairing: pairingService,
       auth,
-      logger: logger.child({ component: 'pairing' }),
+      logger: logger.child({ component: "pairing" }),
       path: pairingConfig.path ?? DEFAULT_PAIRING_PATH,
       adminInitPath:
         pairingConfig.adminInitPath === undefined
@@ -5629,7 +5314,6 @@ export function createGguiServer(
           ? undefined // → pairing-transport default (`/admin/pair/:pairingId/revoke`)
           : pairingConfig.adminRevokePath,
     });
-
   }
 
   // OAuth login. Two layers:
@@ -5646,12 +5330,12 @@ export function createGguiServer(
   // factories are baked in (Google + GitHub for v1; Anthropic deferred).
   const oauthStore = createOAuthProvidersStore({
     ...(opts.oauthProvidersPath ? { filePath: opts.oauthProvidersPath } : {}),
-    logger: logger.child({ component: 'oauth-providers-store' }),
+    logger: logger.child({ component: "oauth-providers-store" }),
   });
   mountAdminOAuthProvidersTransport(app, {
     store: oauthStore,
     auth,
-    logger: logger.child({ component: 'admin-oauth-providers' }),
+    logger: logger.child({ component: "admin-oauth-providers" }),
     auditSink: audit,
   });
   if (opts.publicBaseUrl) {
@@ -5659,10 +5343,8 @@ export function createGguiServer(
       string,
       (clientId: string, clientSecret: string) => OAuthLoginProvider
     > = {
-      google: (clientId, clientSecret) =>
-        googleLoginProvider({ clientId, clientSecret }),
-      github: (clientId, clientSecret) =>
-        githubLoginProvider({ clientId, clientSecret }),
+      google: (clientId, clientSecret) => googleLoginProvider({ clientId, clientSecret }),
+      github: (clientId, clientSecret) => githubLoginProvider({ clientId, clientSecret }),
     };
     mountOAuthLoginRoutes(app, {
       providers: async () => {
@@ -5677,15 +5359,15 @@ export function createGguiServer(
         return out;
       },
       auth,
-      logger: logger.child({ component: 'oauth-login' }),
+      logger: logger.child({ component: "oauth-login" }),
       stateSecret: csrfSecret,
       publicBaseUrl: opts.publicBaseUrl,
       auditSink: audit,
     });
-    logger.info('oauth_login_mounted', { publicBaseUrl: opts.publicBaseUrl });
+    logger.info("oauth_login_mounted", { publicBaseUrl: opts.publicBaseUrl });
   } else {
-    logger.info('oauth_login_skipped', {
-      reason: 'publicBaseUrl not set; admin transport still mounted',
+    logger.info("oauth_login_skipped", {
+      reason: "publicBaseUrl not set; admin transport still mounted",
     });
   }
 
@@ -5699,7 +5381,7 @@ export function createGguiServer(
       sender: opts.emailLogin.sender,
       fromAddress: opts.emailLogin.fromAddress,
       auth,
-      logger: logger.child({ component: 'email-login' }),
+      logger: logger.child({ component: "email-login" }),
       publicBaseUrl: opts.publicBaseUrl,
       ...(opts.emailLogin.store ? { store: opts.emailLogin.store } : {}),
       ...(opts.emailLogin.subject ? { subject: opts.emailLogin.subject } : {}),
@@ -5707,13 +5389,13 @@ export function createGguiServer(
       ...(opts.emailLogin.bodyHtml ? { bodyHtml: opts.emailLogin.bodyHtml } : {}),
       auditSink: audit,
     });
-    logger.info('email_login_mounted', {
+    logger.info("email_login_mounted", {
       publicBaseUrl: opts.publicBaseUrl,
       fromAddress: opts.emailLogin.fromAddress,
     });
   } else if (opts.emailLogin) {
-    logger.warn('email_login_skipped', {
-      reason: 'publicBaseUrl required for email magic-link routes',
+    logger.warn("email_login_skipped", {
+      reason: "publicBaseUrl required for email magic-link routes",
     });
   }
 
@@ -5732,13 +5414,13 @@ export function createGguiServer(
   // be a surprise.
   if (opts.blueprintProvider && opts.adminBlueprints !== false) {
     const cfg =
-      typeof opts.adminBlueprints === 'object' && opts.adminBlueprints !== null
+      typeof opts.adminBlueprints === "object" && opts.adminBlueprints !== null
         ? opts.adminBlueprints
         : {};
     mountAdminBlueprintsTransport(app, {
       provider: opts.blueprintProvider,
       auth,
-      logger: logger.child({ component: 'admin-blueprints' }),
+      logger: logger.child({ component: "admin-blueprints" }),
       path: cfg.path === undefined ? DEFAULT_ADMIN_BLUEPRINTS_PATH : cfg.path,
     });
   }
@@ -5751,7 +5433,7 @@ export function createGguiServer(
     mountThreadTransport(app, {
       store: opts.threads.store,
       auth,
-      logger: logger.child({ component: 'threads' }),
+      logger: logger.child({ component: "threads" }),
       path: opts.threads.path ?? DEFAULT_THREADS_PATH,
       ...(opts.threads.ownerFromIdentity
         ? { ownerFromIdentity: opts.threads.ownerFromIdentity }
@@ -5785,15 +5467,12 @@ export function createGguiServer(
   // silent 404 would be mistaken for "console is broken" rather
   // than "console wasn't built yet," which is a real debugging
   // trap for self-hosted operators.
-  const consoleEnabled =
-    opts.console !== undefined && opts.console !== false;
+  const consoleEnabled = opts.console !== undefined && opts.console !== false;
   // Cookie-auth binding into the session-channel. Populated inside
   // the console block below when `sessionCookie` is enabled, then
   // threaded into createRenderChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
-  let consoleCookieAuth:
-    | import('./render-channel.js').RenderChannelCookieAuth
-    | undefined;
+  let consoleCookieAuth: import("./render-channel.js").RenderChannelCookieAuth | undefined;
   // Admin token resolution. Surfaced on `GguiServer.adminToken` when
   // console is on; `null` when it's off (no consumer for the gate).
   // Operator-supplied wins; otherwise we mint a fresh
@@ -5804,12 +5483,9 @@ export function createGguiServer(
   let resolvedAdminToken: string | null = null;
   if (consoleEnabled) {
     const consoleConfigForToken =
-      typeof opts.console === 'object' && opts.console !== null
-        ? opts.console
-        : {};
+      typeof opts.console === "object" && opts.console !== null ? opts.console : {};
     resolvedAdminToken =
-      consoleConfigForToken.adminToken ??
-      `ggui_admin_${randomBytes(9).toString('base64url')}`;
+      consoleConfigForToken.adminToken ?? `ggui_admin_${randomBytes(9).toString("base64url")}`;
   }
   // Shared admin-auth check used by every operator-only console route.
   // Mirrors the Bearer-or-cookie pattern the keys/theme/llm-keys gates
@@ -5822,18 +5498,18 @@ export function createGguiServer(
       ? (() => {
           const tok = resolvedAdminToken;
           return (req: Request): boolean => {
-            const authHeader = req.headers['authorization'];
-            if (typeof authHeader === 'string') {
+            const authHeader = req.headers["authorization"];
+            if (typeof authHeader === "string") {
               const m = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
               if (m && m[1] === tok) return true;
             }
-            const cookieHeader = req.headers['cookie'];
-            if (typeof cookieHeader === 'string') {
-              for (const raw of cookieHeader.split(';')) {
+            const cookieHeader = req.headers["cookie"];
+            if (typeof cookieHeader === "string") {
+              for (const raw of cookieHeader.split(";")) {
                 const trimmed = raw.trim();
-                const eq = trimmed.indexOf('=');
+                const eq = trimmed.indexOf("=");
                 if (eq <= 0) continue;
-                if (trimmed.slice(0, eq) !== 'ggui_console_admin') continue;
+                if (trimmed.slice(0, eq) !== "ggui_console_admin") continue;
                 if (decodeURIComponent(trimmed.slice(eq + 1)) === tok) {
                   return true;
                 }
@@ -5845,12 +5521,9 @@ export function createGguiServer(
       : null;
   if (consoleEnabled) {
     const consoleConfig =
-      typeof opts.console === 'object' && opts.console !== null
-        ? opts.console
-        : {};
-    const consolePath = consoleConfig.path ?? '/';
-    const consoleDistDir =
-      consoleConfig.distDir ?? CONSOLE_DIST_DIR;
+      typeof opts.console === "object" && opts.console !== null ? opts.console : {};
+    const consolePath = consoleConfig.path ?? "/";
+    const consoleDistDir = consoleConfig.distDir ?? CONSOLE_DIST_DIR;
 
     // Cookie flow preconditions. Opt-in via explicit `sessionCookie`
     // truthy value — operators enabling only the landing page surface
@@ -5861,23 +5534,21 @@ export function createGguiServer(
     // either is missing when the operator asked for the flow.
     const sessionCookieEnabled =
       consoleConfig.sessionCookie === true ||
-      (typeof consoleConfig.sessionCookie === 'object' &&
-        consoleConfig.sessionCookie !== null);
+      (typeof consoleConfig.sessionCookie === "object" && consoleConfig.sessionCookie !== null);
     if (sessionCookieEnabled) {
       if (!opts.sessionChannel) {
         throw new Error(
-          'createGguiServer: `console.sessionCookie` requires `sessionChannel: true`. The cookie authenticates the live-channel WebSocket upgrade; without a channel it has no consumer.',
+          "createGguiServer: `console.sessionCookie` requires `sessionChannel: true`. The cookie authenticates the live-channel WebSocket upgrade; without a channel it has no consumer."
         );
       }
       if (!opts.shortCodeIndex) {
         throw new Error(
-          'createGguiServer: `console.sessionCookie` requires `shortCodeIndex`. The cookie endpoint resolves POSTed shortCodes through this index.',
+          "createGguiServer: `console.sessionCookie` requires `shortCodeIndex`. The cookie endpoint resolves POSTed shortCodes through this index."
         );
       }
     }
     const sessionCookieConfig =
-      typeof consoleConfig.sessionCookie === 'object' &&
-      consoleConfig.sessionCookie !== null
+      typeof consoleConfig.sessionCookie === "object" && consoleConfig.sessionCookie !== null
         ? consoleConfig.sessionCookie
         : {};
     // The cookie reuses the shared HMAC secret — see
@@ -5888,9 +5559,9 @@ export function createGguiServer(
     // ephemeral secrets so multi-host deployments flip to an
     // explicit value.
     if (sessionCookieEnabled && sharedTokenSecret === undefined) {
-      sharedTokenSecret = randomBytes(32).toString('hex');
-      logger.warn('console_cookie_secret_ephemeral', {
-        hint: 'No `wsTokenSecret` provided — minted a process-local random secret for console cookies. Multi-host deployments MUST pass a deterministic value (env / secrets manager).',
+      sharedTokenSecret = randomBytes(32).toString("hex");
+      logger.warn("console_cookie_secret_ephemeral", {
+        hint: "No `wsTokenSecret` provided — minted a process-local random secret for console cookies. Multi-host deployments MUST pass a deterministic value (env / secrets manager).",
       });
     }
 
@@ -5938,18 +5609,17 @@ export function createGguiServer(
       if (renderStore && opts.shortCodeIndex) {
         const renderStoreForTry = renderStore;
         const shortCodeIndexForTry = opts.shortCodeIndex;
-        app.post('/ggui/console/blueprint/:id/try', async (req, res) => {
+        app.post("/ggui/console/blueprint/:id/try", async (req, res) => {
           applyDevtoolSecurityHeaders(res);
-          const blueprintId = req.params['id'];
+          const blueprintId = req.params["id"];
           if (
-            typeof blueprintId !== 'string' ||
+            typeof blueprintId !== "string" ||
             blueprintId.length === 0 ||
             blueprintId.length > 256
           ) {
             res.status(400).json({
-              error: 'invalid_request',
-              message:
-                '`id` path parameter must be a non-empty string (≤256 chars)',
+              error: "invalid_request",
+              message: "`id` path parameter must be a non-empty string (≤256 chars)",
             });
             return;
           }
@@ -5957,16 +5627,15 @@ export function createGguiServer(
             const entry = await uiRegistryForEndpoint.get(blueprintId);
             if (!entry) {
               res.status(404).json({
-                error: 'not_found',
+                error: "not_found",
                 message: `No blueprint registered with id "${blueprintId}". Check ggui.json#blueprints.include globs + ggui.ui.json#id values.`,
               });
               return;
             }
-            const bundle =
-              await uiRegistryForEndpoint.getBundle(blueprintId);
+            const bundle = await uiRegistryForEndpoint.getBundle(blueprintId);
             if (!bundle) {
               res.status(404).json({
-                error: 'bundle_not_available',
+                error: "bundle_not_available",
                 message: `Blueprint "${blueprintId}" (${entry.manifest.name}) has no bundle available. Either the TSX entry is missing or compile-on-demand failed.`,
               });
               return;
@@ -5975,16 +5644,16 @@ export function createGguiServer(
             // stores componentCode inline. Same rule the sibling GET
             // endpoint applies.
             let code: string;
-            if (typeof bundle.code === 'string') {
+            if (typeof bundle.code === "string") {
               code = bundle.code;
             } else {
               const reader = bundle.code.getReader();
               const decoder = new TextDecoder();
-              let out = '';
+              let out = "";
               for (;;) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                if (typeof value === 'string') out += value;
+                if (typeof value === "string") out += value;
                 else if (value instanceof Uint8Array)
                   out += decoder.decode(value, { stream: true });
               }
@@ -6009,7 +5678,7 @@ export function createGguiServer(
             const render: Render = {
               id: renderId,
               appId,
-              type: 'component',
+              type: "component",
               componentCode: code,
               contentType: bundle.contentType,
               eventSequence: 0,
@@ -6023,12 +5692,8 @@ export function createGguiServer(
               // an empty-shape contract tripping structural
               // validators downstream).
               ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
-              ...(contract.actionSpec
-                ? { actionSpec: contract.actionSpec }
-                : {}),
-              ...(contract.streamSpec
-                ? { streamSpec: contract.streamSpec }
-                : {}),
+              ...(contract.actionSpec ? { actionSpec: contract.actionSpec } : {}),
+              ...(contract.streamSpec ? { streamSpec: contract.streamSpec } : {}),
             };
 
             // Schema compatibility check. Fires BEFORE the render
@@ -6043,13 +5708,13 @@ export function createGguiServer(
                 render,
                 handlers,
                 schemaCompatMode,
-                `console blueprint-try:${blueprintId}`,
+                `console blueprint-try:${blueprintId}`
               );
               if (!report.compatible) {
                 // Non-throwing path (mode === 'warn'): log with full
                 // detail so the operator has an observable surface.
-                logger.warn('schema_compat_warn', {
-                  site: 'console_blueprint_try',
+                logger.warn("schema_compat_warn", {
+                  site: "console_blueprint_try",
                   blueprintId,
                   findingCount: report.findings.length,
                   findings: report.findings.map((f) => ({
@@ -6063,12 +5728,12 @@ export function createGguiServer(
               }
             } catch (err) {
               if (err instanceof SchemaCompatError) {
-                logger.warn('console_blueprint_try_schema_compat_rejected', {
+                logger.warn("console_blueprint_try_schema_compat_rejected", {
                   blueprintId,
                   findingCount: err.report.findings.length,
                 });
                 res.status(422).json({
-                  error: 'SCHEMA_MISMATCH_ERROR',
+                  error: "SCHEMA_MISMATCH_ERROR",
                   message: err.message,
                   findings: err.report.findings.map((f) => ({
                     kind: f.kind,
@@ -6086,15 +5751,14 @@ export function createGguiServer(
             try {
               await renderStoreForTry.commit({ render, appId });
             } catch (err) {
-              logger.warn('console_blueprint_try_commit_failed', {
+              logger.warn("console_blueprint_try_commit_failed", {
                 blueprintId,
                 renderId,
                 error: String(err),
               });
               res.status(500).json({
-                error: 'commit_failed',
-                message:
-                  err instanceof Error ? err.message : String(err),
+                error: "commit_failed",
+                message: err instanceof Error ? err.message : String(err),
               });
               return;
             }
@@ -6116,7 +5780,7 @@ export function createGguiServer(
               try {
                 await channelForHealth.primeStreams(renderId, render);
               } catch (err) {
-                logger.warn('console_blueprint_try_prime_failed', {
+                logger.warn("console_blueprint_try_prime_failed", {
                   blueprintId,
                   renderId,
                   error: String(err),
@@ -6138,7 +5802,7 @@ export function createGguiServer(
                 appId,
               });
             } catch (err) {
-              logger.warn('console_blueprint_try_shortcode_failed', {
+              logger.warn("console_blueprint_try_shortcode_failed", {
                 blueprintId,
                 sessionId,
                 shortCode,
@@ -6152,7 +5816,7 @@ export function createGguiServer(
                 shortCode: null,
                 url: null,
                 warning:
-                  'shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/sessions.',
+                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/sessions.",
               });
               return;
             }
@@ -6163,12 +5827,12 @@ export function createGguiServer(
               url: `/s/${shortCode}`,
             });
           } catch (err) {
-            logger.warn('console_blueprint_try_failed', {
+            logger.warn("console_blueprint_try_failed", {
               blueprintId,
               error: String(err),
             });
             res.status(500).json({
-              error: 'try_failed',
+              error: "try_failed",
               message: err instanceof Error ? err.message : String(err),
             });
           }
@@ -6178,26 +5842,26 @@ export function createGguiServer(
         // has nowhere to land. Surface with 503 + specific message
         // so the operator knows which seam to add (console cookie +
         // shortCodeIndex live on `console.sessionCookie: true`).
-        app.post('/ggui/console/blueprint/:id/try', (_req, res) => {
+        app.post("/ggui/console/blueprint/:id/try", (_req, res) => {
           applyDevtoolSecurityHeaders(res);
           res.status(503).json({
-            error: 'try_not_wired',
+            error: "try_not_wired",
             message:
-              'POST /ggui/console/blueprint/:id/try requires `sessionChannel: true` + `shortCodeIndex` on createGguiServer. The CLI enables both by default via `console.sessionCookie: true`.',
+              "POST /ggui/console/blueprint/:id/try requires `sessionChannel: true` + `shortCodeIndex` on createGguiServer. The CLI enables both by default via `console.sessionCookie: true`.",
           });
         });
       }
-      app.get('/ggui/console/blueprint/:id', async (req, res) => {
+      app.get("/ggui/console/blueprint/:id", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
-        const blueprintId = req.params['id'];
+        const blueprintId = req.params["id"];
         if (
-          typeof blueprintId !== 'string' ||
+          typeof blueprintId !== "string" ||
           blueprintId.length === 0 ||
           blueprintId.length > 256
         ) {
           res.status(400).json({
-            error: 'invalid_request',
-            message: '`id` path parameter must be a non-empty string (≤256 chars)',
+            error: "invalid_request",
+            message: "`id` path parameter must be a non-empty string (≤256 chars)",
           });
           return;
         }
@@ -6205,7 +5869,7 @@ export function createGguiServer(
           const entry = await uiRegistryForEndpoint.get(blueprintId);
           if (!entry) {
             res.status(404).json({
-              error: 'not_found',
+              error: "not_found",
               message: `No blueprint registered with id "${blueprintId}". Check ggui.json#blueprints.include globs + ggui.ui.json#id values.`,
             });
             return;
@@ -6213,7 +5877,7 @@ export function createGguiServer(
           const bundle = await uiRegistryForEndpoint.getBundle(blueprintId);
           if (!bundle) {
             res.status(404).json({
-              error: 'bundle_not_available',
+              error: "bundle_not_available",
               message: `Blueprint "${blueprintId}" (${entry.manifest.name}) has no bundle available. Either the TSX entry is missing or compile-on-demand failed — check the manifest directory.`,
             });
             return;
@@ -6222,18 +5886,17 @@ export function createGguiServer(
           // collapse stream bundles to a plain string so the browser
           // fetch can JSON-parse the response in one shot.
           let code: string;
-          if (typeof bundle.code === 'string') {
+          if (typeof bundle.code === "string") {
             code = bundle.code;
           } else {
             const reader = bundle.code.getReader();
             const decoder = new TextDecoder();
-            let out = '';
+            let out = "";
             for (;;) {
               const { done, value } = await reader.read();
               if (done) break;
-              if (typeof value === 'string') out += value;
-              else if (value instanceof Uint8Array)
-                out += decoder.decode(value, { stream: true });
+              if (typeof value === "string") out += value;
+              else if (value instanceof Uint8Array) out += decoder.decode(value, { stream: true });
             }
             out += decoder.decode();
             code = out;
@@ -6245,12 +5908,12 @@ export function createGguiServer(
             contentType: bundle.contentType,
           });
         } catch (err) {
-          logger.warn('console_blueprint_resolve_failed', {
+          logger.warn("console_blueprint_resolve_failed", {
             blueprintId,
             error: String(err),
           });
           res.status(500).json({
-            error: 'resolve_failed',
+            error: "resolve_failed",
             message: err instanceof Error ? err.message : String(err),
           });
         }
@@ -6283,7 +5946,7 @@ export function createGguiServer(
     // same-origin operator-facing). Output is stable-sorted by id /
     // name so the SPA's filter-as-you-type UI doesn't need a second
     // sort pass.
-    app.get('/ggui/console/registry', async (_req, res) => {
+    app.get("/ggui/console/registry", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);
       interface BlueprintSummary {
         readonly id: string;
@@ -6293,7 +5956,7 @@ export function createGguiServer(
       }
       interface PrimitiveSummary {
         readonly name: string;
-        readonly source: 'package' | 'local';
+        readonly source: "package" | "local";
         readonly catalog: string;
       }
 
@@ -6316,11 +5979,11 @@ export function createGguiServer(
           }
           blueprints.sort((a, b) => a.id.localeCompare(b.id));
         } catch (err) {
-          logger.warn('console_registry_blueprint_list_failed', {
+          logger.warn("console_registry_blueprint_list_failed", {
             error: String(err),
           });
           res.status(500).json({
-            error: 'registry_unavailable',
+            error: "registry_unavailable",
             message:
               err instanceof Error
                 ? `Blueprint registry failed to list — ${err.message}`
@@ -6382,31 +6045,28 @@ export function createGguiServer(
     // entries. Rejects with 501 when the vector store doesn't
     // support enumeration (AWS-adapter path). Empty scope returns
     // `{entries: [], total: 0}` — not an error.
-    app.get('/ggui/console/blueprints/cached', async (_req, res) => {
+    app.get("/ggui/console/blueprints/cached", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);
       if (!isEnumerableVectorStore(vectors)) {
         res.status(501).json({
-          error: 'enumeration_unsupported',
+          error: "enumeration_unsupported",
           message:
-            'The configured vector store does not support enumeration. ' +
-            'Wire an EnumerableVectorStore (default InMemoryVectorStore ' +
-            'or SqliteVectorStore) to surface the cache in the console.',
+            "The configured vector store does not support enumeration. " +
+            "Wire an EnumerableVectorStore (default InMemoryVectorStore " +
+            "or SqliteVectorStore) to surface the cache in the console.",
         });
         return;
       }
       try {
-        const entries = await listGenerationCache(
-          { vectorStore: vectors },
-          DEFAULT_BUILDER_APP_ID,
-        );
+        const entries = await listGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID);
         const payload: readonly GenerationCacheEntry[] = entries;
         res.json({ entries: payload, total: payload.length });
       } catch (err) {
-        logger.warn('console_blueprints_cached_list_failed', {
+        logger.warn("console_blueprints_cached_list_failed", {
           error: String(err),
         });
         res.status(500).json({
-          error: 'cache_unavailable',
+          error: "cache_unavailable",
           message:
             err instanceof Error
               ? `Generation cache failed to list — ${err.message}`
@@ -6419,79 +6079,66 @@ export function createGguiServer(
     // cached entry. Idempotent — 204 whether the id was present or
     // not (same contract as VectorStore.deleteVector). No enumerable
     // gate — delete works on every vector-store implementation.
-    app.delete(
-      '/ggui/console/blueprints/cached/:id',
-      async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const id = req.params.id;
-        if (!id || id.length === 0) {
-          res.status(400).json({
-            error: 'missing_id',
-            message: 'Cache entry id required in path segment.',
-          });
-          return;
-        }
-        try {
-          await invalidateGenerationCache(
-            { vectorStore: vectors },
-            DEFAULT_BUILDER_APP_ID,
-            id,
-          );
-          res.status(204).end();
-        } catch (err) {
-          logger.warn('console_blueprints_cached_invalidate_failed', {
-            error: String(err),
-            id,
-          });
-          res.status(500).json({
-            error: 'cache_invalidate_failed',
-            message:
-              err instanceof Error
-                ? `Invalidate failed — ${err.message}`
-                : `Invalidate failed — ${String(err)}`,
-          });
-        }
-      },
-    );
+    app.delete("/ggui/console/blueprints/cached/:id", async (req, res) => {
+      applyDevtoolSecurityHeaders(res);
+      const id = req.params.id;
+      if (!id || id.length === 0) {
+        res.status(400).json({
+          error: "missing_id",
+          message: "Cache entry id required in path segment.",
+        });
+        return;
+      }
+      try {
+        await invalidateGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID, id);
+        res.status(204).end();
+      } catch (err) {
+        logger.warn("console_blueprints_cached_invalidate_failed", {
+          error: String(err),
+          id,
+        });
+        res.status(500).json({
+          error: "cache_invalidate_failed",
+          message:
+            err instanceof Error
+              ? `Invalidate failed — ${err.message}`
+              : `Invalidate failed — ${String(err)}`,
+        });
+      }
+    });
 
     // POST /ggui/console/blueprints/cached/clear — bulk-delete every
     // cached entry in the scope. Returns the count. Requires
     // EnumerableVectorStore (we enumerate to find keys to delete).
-    app.post(
-      '/ggui/console/blueprints/cached/clear',
-      async (_req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        if (!isEnumerableVectorStore(vectors)) {
-          res.status(501).json({
-            error: 'enumeration_unsupported',
-            message:
-              'Bulk-clear requires a vector store that supports ' +
-              'enumeration. Invalidate entries individually via ' +
-              'DELETE /ggui/console/blueprints/cached/:id, or wire an ' +
-              'EnumerableVectorStore to unlock bulk-clear.',
-          });
-          return;
-        }
-        try {
-          const result = await clearGenerationCache(
-            { vectorStore: vectors },
-            DEFAULT_BUILDER_APP_ID,
-          );
-          res.json(result);
-        } catch (err) {
-          logger.warn('console_blueprints_cached_clear_failed', {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: 'cache_clear_failed',
-            message:
-              err instanceof Error
-                ? `Clear failed — ${err.message}`
-                : `Clear failed — ${String(err)}`,
-          });
-        }
-      },
-    );
+    app.post("/ggui/console/blueprints/cached/clear", async (_req, res) => {
+      applyDevtoolSecurityHeaders(res);
+      if (!isEnumerableVectorStore(vectors)) {
+        res.status(501).json({
+          error: "enumeration_unsupported",
+          message:
+            "Bulk-clear requires a vector store that supports " +
+            "enumeration. Invalidate entries individually via " +
+            "DELETE /ggui/console/blueprints/cached/:id, or wire an " +
+            "EnumerableVectorStore to unlock bulk-clear.",
+        });
+        return;
+      }
+      try {
+        const result = await clearGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID);
+        res.json(result);
+      } catch (err) {
+        logger.warn("console_blueprints_cached_clear_failed", {
+          error: String(err),
+        });
+        res.status(500).json({
+          error: "cache_clear_failed",
+          message:
+            err instanceof Error
+              ? `Clear failed — ${err.message}`
+              : `Clear failed — ${String(err)}`,
+        });
+      }
+    });
 
     // GET /ggui/console/blueprints/registry — list every blueprint
     // registered in the three-tier matcher's storage.
@@ -6507,28 +6154,29 @@ export function createGguiServer(
     //
     // Optional `?kind=template|organism|molecule|atom` filter narrows
     // by atomic-design level — kindless query returns everything.
-    app.get('/ggui/console/blueprints/registry', async (req, res) => {
+    app.get("/ggui/console/blueprints/registry", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
       if (!isEnumerableVectorStore(vectors)) {
         res.status(501).json({
-          error: 'enumeration_unsupported',
+          error: "enumeration_unsupported",
           message:
-            'The configured vector store does not support enumeration. ' +
-            'Wire an EnumerableVectorStore (default InMemoryVectorStore ' +
-            'or SqliteVectorStore) to surface the registry in the console.',
+            "The configured vector store does not support enumeration. " +
+            "Wire an EnumerableVectorStore (default InMemoryVectorStore " +
+            "or SqliteVectorStore) to surface the registry in the console.",
         });
         return;
       }
-      const rawKind = typeof req.query.kind === 'string' ? req.query.kind : undefined;
-      const allowedKinds = ['template', 'organism', 'molecule', 'atom'] as const;
+      const rawKind = typeof req.query.kind === "string" ? req.query.kind : undefined;
+      const allowedKinds = ["template", "organism", "molecule", "atom"] as const;
       type AllowedKind = (typeof allowedKinds)[number];
-      const kind: AllowedKind | undefined = rawKind !== undefined
-        ? (allowedKinds.find((k) => k === rawKind) as AllowedKind | undefined)
-        : undefined;
+      const kind: AllowedKind | undefined =
+        rawKind !== undefined
+          ? (allowedKinds.find((k) => k === rawKind) as AllowedKind | undefined)
+          : undefined;
       if (rawKind !== undefined && kind === undefined) {
         res.status(400).json({
-          error: 'invalid_kind',
-          message: `kind must be one of ${allowedKinds.join(', ')}; got '${rawKind}'.`,
+          error: "invalid_kind",
+          message: `kind must be one of ${allowedKinds.join(", ")}; got '${rawKind}'.`,
         });
         return;
       }
@@ -6536,7 +6184,7 @@ export function createGguiServer(
         const blueprints = await listBlueprints(
           { vectorStore: vectors },
           DEFAULT_BUILDER_APP_ID,
-          kind,
+          kind
         );
         // Project to a wire-friendly view — `componentCode` is large
         // and not load-bearing for the operator listing; surface a
@@ -6560,9 +6208,9 @@ export function createGguiServer(
         }));
         res.json({ entries, total: entries.length });
       } catch (err) {
-        logger.warn('console_registry_list_failed', { error: String(err) });
+        logger.warn("console_registry_list_failed", { error: String(err) });
         res.status(500).json({
-          error: 'registry_unavailable',
+          error: "registry_unavailable",
           message:
             err instanceof Error
               ? `Registry list failed — ${err.message}`
@@ -6592,14 +6240,14 @@ export function createGguiServer(
     if (requestHasAdminAuthShared) {
       const adminGuardForReadEndpoints = requestHasAdminAuthShared;
       for (const path of [
-        '/ggui/console/info',
-        '/ggui/console/sessions',
-        '/ggui/console/config',
-        '/ggui/console/llm-trace',
-        '/ggui/console/validator',
-        '/ggui/console/cache',
-        '/ggui/console/payloads',
-        '/ggui/console/timeline',
+        "/ggui/console/info",
+        "/ggui/console/sessions",
+        "/ggui/console/config",
+        "/ggui/console/llm-trace",
+        "/ggui/console/validator",
+        "/ggui/console/cache",
+        "/ggui/console/payloads",
+        "/ggui/console/timeline",
       ]) {
         app.use(path, (req, res, next) => {
           // The per-session meta route (`/ggui/console/sessions/:id/meta`)
@@ -6608,15 +6256,12 @@ export function createGguiServer(
           // possession. Exempt it from this admin-token middleware so
           // both gates compose cleanly (admin token for `/sessions` list,
           // cookie for per-session meta).
-          if (
-            path === '/ggui/console/sessions' &&
-            /^\/[^/]+\/meta\/?$/.test(req.path)
-          ) {
+          if (path === "/ggui/console/sessions" && /^\/[^/]+\/meta\/?$/.test(req.path)) {
             return next();
           }
           if (adminGuardForReadEndpoints(req)) return next();
           applyDevtoolSecurityHeaders(res);
-          res.status(401).json({ error: 'admin_auth_required' });
+          res.status(401).json({ error: "admin_auth_required" });
         });
       }
     }
@@ -6680,7 +6325,7 @@ export function createGguiServer(
     // Zero-config shape: `{ sessions: [], total: 0 }` when no
     // renderStore is wired (e.g. pure-MCP dev boot with neither
     // sessionChannel nor mcpApps enabled).
-    app.get('/ggui/console/sessions', async (req, res) => {
+    app.get("/ggui/console/sessions", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
       interface SessionSummary {
         readonly sessionId: string;
@@ -6689,12 +6334,12 @@ export function createGguiServer(
         readonly stackSize: number;
         readonly lastActivityAt: number;
         readonly createdAt: number;
-        readonly status: 'active';
+        readonly status: "active";
       }
 
-      const limitRaw = req.query['limit'];
+      const limitRaw = req.query["limit"];
       let limit = 25;
-      if (typeof limitRaw === 'string') {
+      if (typeof limitRaw === "string") {
         const parsed = Number.parseInt(limitRaw, 10);
         if (Number.isFinite(parsed) && parsed > 0) {
           limit = Math.min(100, parsed);
@@ -6708,7 +6353,7 @@ export function createGguiServer(
 
       try {
         const sessions = await renderStore.list({
-          status: 'active',
+          status: "active",
           limit,
         });
         const summaries: SessionSummary[] = [];
@@ -6716,13 +6361,11 @@ export function createGguiServer(
           let shortCode: string | null = null;
           if (opts.shortCodeIndex) {
             try {
-              shortCode = await opts.shortCodeIndex.findByRenderId(
-                session.id,
-              );
+              shortCode = await opts.shortCodeIndex.findByRenderId(session.id);
             } catch (err) {
               // Best-effort — the session row is still honest
               // without a shortCode.
-              logger.warn('console_sessions_shortcode_lookup_failed', {
+              logger.warn("console_sessions_shortcode_lookup_failed", {
                 sessionId: session.id,
                 error: String(err),
               });
@@ -6739,7 +6382,7 @@ export function createGguiServer(
             stackSize: 1,
             lastActivityAt: session.lastActivityAt,
             createdAt: session.createdAt,
-            status: 'active',
+            status: "active",
           });
         }
         // Most-recent activity first. Tiebreak on sessionId for
@@ -6751,11 +6394,11 @@ export function createGguiServer(
         });
         res.json({ sessions: summaries, total: summaries.length });
       } catch (err) {
-        logger.warn('console_sessions_list_failed', {
+        logger.warn("console_sessions_list_failed", {
           error: String(err),
         });
         res.status(500).json({
-          error: 'sessions_unavailable',
+          error: "sessions_unavailable",
           message:
             err instanceof Error
               ? `Session store failed to list — ${err.message}`
@@ -6782,7 +6425,7 @@ export function createGguiServer(
     // converter doesn't yet support) reports `{}` for that field
     // and warn-logs — operators still see name + description, just
     // without typed input/output detail.
-    app.get('/ggui/console/mcp/tools', async (_req, res) => {
+    app.get("/ggui/console/mcp/tools", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);
       interface ToolInfo {
         readonly name: string;
@@ -6796,7 +6439,7 @@ export function createGguiServer(
         try {
           return z.toJSONSchema(z.object(shape));
         } catch (err) {
-          logger.warn('console_mcp_tools_schema_conversion_failed', {
+          logger.warn("console_mcp_tools_schema_conversion_failed", {
             error: String(err),
           });
           return {};
@@ -6838,14 +6481,14 @@ export function createGguiServer(
     //
     // Read-only. Form controls on the same payload and a PATCH
     // endpoint with atomic write + conflict detection layer on top.
-    app.get('/ggui/console/config', async (_req, res) => {
+    app.get("/ggui/console/config", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);
       const searchedFrom = process.cwd();
       const safeSchema = (() => {
         try {
           return z.toJSONSchema(GguiJsonV1);
         } catch (err) {
-          logger.warn('console_config_schema_conversion_failed', {
+          logger.warn("console_config_schema_conversion_failed", {
             error: String(err),
           });
           return {};
@@ -6861,15 +6504,14 @@ export function createGguiServer(
       }
       let raw: string | null = null;
       try {
-        raw = readFileSync(path, 'utf-8');
+        raw = readFileSync(path, "utf-8");
       } catch (err) {
-        logger.warn('console_config_read_failed', { path, error: String(err) });
+        logger.warn("console_config_read_failed", { path, error: String(err) });
       }
       const result = safeLoadGguiJson(path);
       if (!result.success) {
         const cause = result.error.cause;
-        const errorMessage =
-          cause instanceof Error ? cause.message : result.error.message;
+        const errorMessage = cause instanceof Error ? cause.message : result.error.message;
         res.json({
           source: {
             found: true as const,
@@ -6889,7 +6531,7 @@ export function createGguiServer(
       });
     });
 
-    app.get('/ggui/console/info', async (_req, res) => {
+    app.get("/ggui/console/info", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);
       // Pairing block: `enabled` reflects whether the server was
       // composed with `pairing: true|{...}`. `pending` is the current
@@ -6898,9 +6540,7 @@ export function createGguiServer(
       // copy paths against this shape (disabled / enabled-but-idle /
       // enabled-with-pending) so the client never has to compose
       // state from multiple optional fields.
-      let pending: Awaited<
-        ReturnType<PairingService['activeInit']>
-      > = null;
+      let pending: Awaited<ReturnType<PairingService["activeInit"]>> = null;
       if (pairingService) {
         try {
           pending = await pairingService.activeInit();
@@ -6908,7 +6548,7 @@ export function createGguiServer(
           // `activeInit` is a read — failure here shouldn't 500 the
           // landing page. Log + return null; operator sees "no pending
           // pair code" which matches reality (we couldn't read one).
-          logger.warn('console_active_init_failed', {
+          logger.warn("console_active_init_failed", {
             error: String(err),
           });
           pending = null;
@@ -6941,14 +6581,14 @@ export function createGguiServer(
           const list = await opts.uiRegistry.list();
           blueprintCount = list.length;
         } catch (err) {
-          logger.warn('console_info_blueprint_count_failed', {
+          logger.warn("console_info_blueprint_count_failed", {
             error: String(err),
           });
         }
       }
       const primitiveCount = (opts.primitiveCatalogs ?? []).reduce(
         (sum, c) => sum + c.manifest.primitives.length,
-        0,
+        0
       );
       // Generation probe — `wired` reports dep binding; `hasCredentials`
       // actually resolves BYOK credentials via the same seam the push
@@ -6971,7 +6611,7 @@ export function createGguiServer(
           });
           generationHasCredentials = probeResult !== null;
         } catch (err) {
-          logger.warn('console_info_credential_probe_failed', {
+          logger.warn("console_info_credential_probe_failed", {
             error: String(err),
           });
         }
@@ -6997,20 +6637,14 @@ export function createGguiServer(
       // leakage (e.g., "InMemoryRenderStore") would couple the wire
       // to class names that are not part of the public contract.
       const storage = {
-        renderStore: (opts.renderStore ? 'custom' : 'memory') as
-          | 'memory'
-          | 'custom',
-        vectorStore: (opts.vectors ? 'custom' : 'memory') as
-          | 'memory'
-          | 'custom',
+        renderStore: (opts.renderStore ? "custom" : "memory") as "memory" | "custom",
+        vectorStore: (opts.vectors ? "custom" : "memory") as "memory" | "custom",
       };
 
       res.json({
         server: info.name,
         version: info.version,
-        ...(info.description !== undefined
-          ? { description: info.description }
-          : {}),
+        ...(info.description !== undefined ? { description: info.description } : {}),
         mode,
         pairing: {
           enabled: pairingEnabled,
@@ -7064,47 +6698,46 @@ export function createGguiServer(
     // generation/`) without a copy change.
     const pushHandlerForChat =
       generationWithCache !== undefined
-        ? handlers.find((h) => h.name === 'ggui_render')
+        ? handlers.find((h) => h.name === "ggui_render")
         : undefined;
     const handshakeHandlerForChat =
       pushHandlerForChat !== undefined
-        ? handlers.find((h) => h.name === 'ggui_handshake')
+        ? handlers.find((h) => h.name === "ggui_handshake")
         : undefined;
-    app.post('/ggui/console/chat/message', async (req, res) => {
+    app.post("/ggui/console/chat/message", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
       const body = (req.body ?? {}) as {
         text?: unknown;
         threadId?: unknown;
         sessionId?: unknown;
       };
-      const text =
-        typeof body.text === 'string' ? body.text.trim() : '';
+      const text = typeof body.text === "string" ? body.text.trim() : "";
       if (text.length === 0) {
         res.status(400).json({
-          error: 'invalid_request',
-          message: '`text` (non-empty string) is required',
+          error: "invalid_request",
+          message: "`text` (non-empty string) is required",
         });
         return;
       }
       if (text.length > 4000) {
         res.status(400).json({
-          error: 'invalid_request',
-          message: '`text` must be <= 4000 chars',
+          error: "invalid_request",
+          message: "`text` must be <= 4000 chars",
         });
         return;
       }
       const threadId =
-        typeof body.threadId === 'string' && body.threadId.length > 0
+        typeof body.threadId === "string" && body.threadId.length > 0
           ? body.threadId
           : `chat-${randomUUID()}`;
       const requestedSessionId =
-        typeof body.sessionId === 'string' && body.sessionId.length > 0
+        typeof body.sessionId === "string" && body.sessionId.length > 0
           ? body.sessionId
           : undefined;
       const now = Date.now();
       const userMessage = {
         id: `msg-${randomUUID()}`,
-        role: 'user' as const,
+        role: "user" as const,
         text,
         createdAt: now,
       };
@@ -7134,14 +6767,14 @@ export function createGguiServer(
           if (requestedSessionId) {
             handshakeInput.session = { id: requestedSessionId };
           }
-          const hsRaw = await handshakeHandlerForChat.handler(
-            handshakeInput,
-            { appId: DEFAULT_BUILDER_APP_ID, requestId },
-          );
+          const hsRaw = await handshakeHandlerForChat.handler(handshakeInput, {
+            appId: DEFAULT_BUILDER_APP_ID,
+            requestId,
+          });
           const handshakeId = (hsRaw as { handshakeId: string }).handshakeId;
           const raw = await pushHandlerForChat.handler(
             { handshakeId, contract: {} },
-            { appId: DEFAULT_BUILDER_APP_ID, requestId },
+            { appId: DEFAULT_BUILDER_APP_ID, requestId }
           );
           const result = raw as {
             sessionId: string;
@@ -7163,18 +6796,17 @@ export function createGguiServer(
           // per turn; cookie is same-origin HttpOnly.
           if (sessionCookieEnabled) {
             const secret = sharedTokenSecret as string;
-            const cookieTtlSec = (
-              typeof opts.console === 'object' &&
+            const cookieTtlSec =
+              typeof opts.console === "object" &&
               opts.console !== null &&
-              typeof opts.console.sessionCookie === 'object' &&
+              typeof opts.console.sessionCookie === "object" &&
               opts.console.sessionCookie !== null
                 ? opts.console.sessionCookie.ttlSec
-                : undefined
-            );
+                : undefined;
             const cookieSecure =
-              typeof opts.console === 'object' &&
+              typeof opts.console === "object" &&
               opts.console !== null &&
-              typeof opts.console.sessionCookie === 'object' &&
+              typeof opts.console.sessionCookie === "object" &&
               opts.console.sessionCookie !== null &&
               opts.console.sessionCookie.secure === true;
             const mint = mintDevtoolCookie({
@@ -7189,52 +6821,52 @@ export function createGguiServer(
               ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
               secure: cookieSecure,
             });
-            res.setHeader('Set-Cookie', mint.setCookieHeader);
+            res.setHeader("Set-Cookie", mint.setCookieHeader);
           }
           if (result.codeReady) {
             agentText = result.cache?.hit
-              ? 'Reused a matching UI from cache for your request.'
-              : 'Generated a UI for your request.';
+              ? "Reused a matching UI from cache for your request."
+              : "Generated a UI for your request.";
           } else {
             // Generator ran but produced no code (no BYOK, generator
             // error, or placeholder mode). Honest text so the
             // operator knows why the surface didn't render a UI.
             agentText =
-              'I received your message, but generation did not produce a UI ' +
-              '(no BYOK key configured, or the provider declined). Export ' +
-              'ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / ' +
-              'OPENROUTER_API_KEY and retry.';
+              "I received your message, but generation did not produce a UI " +
+              "(no BYOK key configured, or the provider declined). Export " +
+              "ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / " +
+              "OPENROUTER_API_KEY and retry.";
             // Drop the ui payload — no code ready means nothing to
             // render inline. The agent text carries the diagnosis.
             ui = undefined;
           }
         } catch (err) {
-          logger.warn?.('console_chat_push_failed', {
+          logger.warn?.("console_chat_push_failed", {
             threadId,
             error: err instanceof Error ? err.message : String(err),
           });
           agentText =
-            'Generation failed: ' +
+            "Generation failed: " +
             (err instanceof Error ? err.message : String(err)) +
-            '. The chat surface is still live — retry or try a different prompt.';
+            ". The chat surface is still live — retry or try a different prompt.";
           ui = undefined;
         }
       }
 
       const agentMessage = {
         id: `msg-${randomUUID()}`,
-        role: 'agent' as const,
+        role: "agent" as const,
         text:
           agentText ??
           // No push handler at all — text-only fallback. Keeps the
           // Lane-1 chat-page spec green by preserving the exact copy
           // it asserts against.
-          'Message received. OSS agent generation is not yet wired — ' +
-            'this is the text-only dev chat. Full responses ' +
-            'and generated UIs arrive once the generator port lands.',
+          "Message received. OSS agent generation is not yet wired — " +
+            "this is the text-only dev chat. Full responses " +
+            "and generated UIs arrive once the generator port lands.",
         createdAt: now + 1,
       };
-      logger.debug?.('console_chat_message', {
+      logger.debug?.("console_chat_message", {
         threadId,
         userMessageId: userMessage.id,
         textLength: text.length,
@@ -7257,57 +6889,53 @@ export function createGguiServer(
     if (sessionCookieEnabled) {
       const secret = sharedTokenSecret as string; // verified set above
       const shortCodeIndex = opts.shortCodeIndex as ShortCodeIndex; // precondition
-      const cookieTtlSec =
-        sessionCookieConfig.ttlSec; // undefined → helper default (8h)
+      const cookieTtlSec = sessionCookieConfig.ttlSec; // undefined → helper default (8h)
       const cookieSecure = sessionCookieConfig.secure === true;
       const cookieLogger = logger.child({
-        component: 'console-cookie',
+        component: "console-cookie",
       });
 
-      app.post(
-        '/ggui/console/session-cookie',
-        async (req: Request, res: Response) => {
-          applyDevtoolSecurityHeaders(res);
-          const body = (req.body ?? {}) as { shortCode?: unknown };
-          if (typeof body.shortCode !== 'string' || body.shortCode.length === 0) {
-            res.status(400).json({
-              error: 'invalid_request',
-              message: '`shortCode` (string) is required',
-            });
-            return;
-          }
-          let binding: Awaited<ReturnType<ShortCodeIndex['lookup']>>;
-          try {
-            binding = await shortCodeIndex.lookup(body.shortCode);
-          } catch (err) {
-            cookieLogger.error('short_code_lookup_failed', {
-              error: String(err),
-            });
-            res.status(500).json({ error: 'internal_error' });
-            return;
-          }
-          if (!binding) {
-            res.status(404).json({
-              error: 'unknown_short_code',
-              message: 'Short-code does not resolve to any session on this server',
-            });
-            return;
-          }
-          const mint = mintDevtoolCookie({
-            renderId: binding.renderId,
-            appId: binding.appId,
-            secret,
-            ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
-            secure: cookieSecure,
+      app.post("/ggui/console/session-cookie", async (req: Request, res: Response) => {
+        applyDevtoolSecurityHeaders(res);
+        const body = (req.body ?? {}) as { shortCode?: unknown };
+        if (typeof body.shortCode !== "string" || body.shortCode.length === 0) {
+          res.status(400).json({
+            error: "invalid_request",
+            message: "`shortCode` (string) is required",
           });
-          res.setHeader('Set-Cookie', mint.setCookieHeader);
-          res.json({
-            renderId: mint.renderId,
-            appId: mint.appId,
-            expiresAt: mint.expiresAt,
+          return;
+        }
+        let binding: Awaited<ReturnType<ShortCodeIndex["lookup"]>>;
+        try {
+          binding = await shortCodeIndex.lookup(body.shortCode);
+        } catch (err) {
+          cookieLogger.error("short_code_lookup_failed", {
+            error: String(err),
           });
-        },
-      );
+          res.status(500).json({ error: "internal_error" });
+          return;
+        }
+        if (!binding) {
+          res.status(404).json({
+            error: "unknown_short_code",
+            message: "Short-code does not resolve to any session on this server",
+          });
+          return;
+        }
+        const mint = mintDevtoolCookie({
+          renderId: binding.renderId,
+          appId: binding.appId,
+          secret,
+          ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
+          secure: cookieSecure,
+        });
+        res.setHeader("Set-Cookie", mint.setCookieHeader);
+        res.json({
+          renderId: mint.renderId,
+          appId: mint.appId,
+          expiresAt: mint.expiresAt,
+        });
+      });
 
       // Console session-resource pair. The console's `SessionViewer`
       // runs the production iframe path:
@@ -7362,24 +6990,22 @@ export function createGguiServer(
       const gateDevtoolSessionRequest = async (
         req: Request,
         res: Response,
-        explicitSessionId?: string,
+        explicitSessionId?: string
       ): Promise<{ renderId: string; appId: string } | null> => {
         const sessionIdRaw =
-          explicitSessionId !== undefined
-            ? explicitSessionId
-            : req.query['session'];
-        if (typeof sessionIdRaw !== 'string' || sessionIdRaw.length === 0) {
+          explicitSessionId !== undefined ? explicitSessionId : req.query["session"];
+        if (typeof sessionIdRaw !== "string" || sessionIdRaw.length === 0) {
           res.status(400).json({
-            error: 'invalid_request',
+            error: "invalid_request",
             message:
-              '`session` query parameter (or :sessionId path parameter on the meta route) is required',
+              "`session` query parameter (or :sessionId path parameter on the meta route) is required",
           });
           return null;
         }
         const rawCookie = readDevtoolCookieFromHeaders(req.headers);
         if (!rawCookie) {
           res.status(401).json({
-            error: 'missing_cookie',
+            error: "missing_cookie",
             message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/session-cookie first)`,
           });
           return null;
@@ -7387,14 +7013,14 @@ export function createGguiServer(
         const claims = verifyDevtoolCookie(rawCookie, secret);
         if (!claims) {
           res.status(401).json({
-            error: 'invalid_cookie',
-            message: 'Console cookie is invalid, expired, or for another server',
+            error: "invalid_cookie",
+            message: "Console cookie is invalid, expired, or for another server",
           });
           return null;
         }
         if (claims.renderId !== sessionIdRaw) {
           res.status(403).json({
-            error: 'cookie_session_mismatch',
+            error: "cookie_session_mismatch",
             message: `Console cookie is bound to session '${claims.renderId}' but request targets '${sessionIdRaw}'`,
           });
           return null;
@@ -7403,29 +7029,29 @@ export function createGguiServer(
         // route we honestly answer
         // 404 instead of leaking an HTML blob for a session the server
         // doesn't know about.
-        let session: Awaited<ReturnType<RenderStore['get']>> = null;
+        let session: Awaited<ReturnType<RenderStore["get"]>> = null;
         if (renderStore) {
           try {
             session = await renderStore.get(claims.renderId);
           } catch (err) {
-            cookieLogger.error('session_resource_store_failed', {
+            cookieLogger.error("session_resource_store_failed", {
               error: String(err),
               sessionId: claims.renderId,
             });
-            res.status(500).json({ error: 'internal_error' });
+            res.status(500).json({ error: "internal_error" });
             return null;
           }
         }
         if (!session) {
           res.status(404).json({
-            error: 'session_not_found',
+            error: "session_not_found",
             message: `Session '${claims.renderId}' is not on this server`,
           });
           return null;
         }
         if (session.appId !== claims.appId) {
           res.status(403).json({
-            error: 'app_mismatch',
+            error: "app_mismatch",
             message: `Cookie bound to app '${claims.appId}' but session is on app '${session.appId}'`,
           });
           return null;
@@ -7438,24 +7064,21 @@ export function createGguiServer(
       //   blob. NO inlined bootstrap — console fetches the bootstrap
       //   separately (route below) and threads it via
       //   `<McpAppIframe bootstrap={...}>`.
-      app.get(
-        '/ggui/console/session-resource',
-        async (req: Request, res: Response) => {
-          applyDevtoolSecurityHeaders(res);
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          const verified = await gateDevtoolSessionRequest(req, res);
-          if (!verified) return;
-          res.status(200).json({
-            contents: [
-              {
-                uri: GGUI_RENDER_RESOURCE_URI,
-                mimeType: GGUI_RENDER_RESOURCE_MIME,
-                text: GGUI_RENDER_SHELL_HTML,
-              },
-            ],
-          });
-        },
-      );
+      app.get("/ggui/console/session-resource", async (req: Request, res: Response) => {
+        applyDevtoolSecurityHeaders(res);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        const verified = await gateDevtoolSessionRequest(req, res);
+        if (!verified) return;
+        res.status(200).json({
+          contents: [
+            {
+              uri: GGUI_RENDER_RESOURCE_URI,
+              mimeType: GGUI_RENDER_RESOURCE_MIME,
+              text: GGUI_RENDER_SHELL_HTML,
+            },
+          ],
+        });
+      });
 
       // GET /ggui/console/sessions/:sessionId/meta
       // → slice-envelope JSON (`{ "ai.ggui/render": {...}, "ai.ggui/render": {...} }`,
@@ -7463,126 +7086,113 @@ export function createGguiServer(
       //   console is hosting the renderer behind `<McpAppIframe>` and
       //   needs to feed the iframe a meta-pair. `mcpApps: true` is
       //   required (mintWsToken/mintBootstrap presence) — 503 otherwise.
-      app.get(
-        '/ggui/console/sessions/:sessionId/meta',
-        async (req: Request, res: Response) => {
-          applyDevtoolSecurityHeaders(res);
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          const sessionIdFromPath = req.params['sessionId'];
-          const verified = await gateDevtoolSessionRequest(
-            req,
-            res,
-            sessionIdFromPath,
-          );
-          if (!verified) return;
-          if (!mintBootstrap) {
-            res.status(503).json({
-              error: 'mcp_apps_disabled',
-              message:
-                'sessions/:id/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.',
-            });
-            return;
-          }
-          const minted = mintBootstrap(verified.renderId, verified.appId);
-          // Console/srcdoc absolute-URL fix: `<McpAppIframe>`
-          // mounts the resource via `srcdoc`, so the iframe's URL
-          // is `about:srcdoc` and any relative URL would resolve
-          // against that, not the dev server. Rewrite the
-          // same-origin `runtimeUrl` to absolute based on the
-          // request host. The `wsUrl` minted at server-boot
-          // defaults to `ws://localhost/ws` — also rewrite that
-          // to the request-host's actual host:port when its
-          // hostname is `localhost`, so the iframe's WebSocket
-          // open lands on the same listener. Operators who
-          // configured a CDN / external `wsUrl` / `runtime.url`
-          // are passed through unchanged.
-          const requestHost = req.get('host') ?? '';
-          const absoluteRendererUrl = /^https?:\/\//i.test(
-            runtimeBootstrapUrl,
-          )
-            ? runtimeBootstrapUrl
-            : `${req.protocol}://${requestHost}${runtimeBootstrapUrl}`;
-          let resolvedWsUrl = minted.wsUrl;
-          try {
-            const wsParsed = new URL(minted.wsUrl);
-            if (
-              (wsParsed.hostname === 'localhost' ||
-                wsParsed.hostname === '127.0.0.1') &&
-              requestHost.length > 0
-            ) {
-              const wsScheme = req.protocol === 'https' ? 'wss' : 'ws';
-              resolvedWsUrl = `${wsScheme}://${requestHost}${wsParsed.pathname}${wsParsed.search}`;
-            }
-          } catch {
-            // Malformed `wsUrl` — leave it as-is so the renderer
-            // surfaces the failure through its own bootstrap-failed
-            // envelope rather than us silently rewriting a string
-            // we don't understand.
-          }
-          // Content-addressable contract-validator bundle (#109) for
-          // the active stack item. The renderer iframe's strict CSP
-          // forbids the `new Function` codegen `ajv.compile()` needs,
-          // so the server compiles + writes the bundle to its
-          // CodeStore at push time and threads the URL here. The
-          // iframe fetches the URL + dynamic-imports to resolve
-          // validators. Best-effort: a missing bundle degrades to no
-          // client-side validation; server-side `assertActionContract`
-          // remains authoritative.
-          let renderContractHash: string | undefined;
-          let renderValidatorsUrl: string | undefined;
-          if (renderStore && opts.codeStore) {
-            try {
-              const stored = await renderStore.get(verified.renderId);
-              if (
-                stored !== null
-                && stored.render.type !== 'mcpApps'
-                && stored.render.type !== 'system'
-                && typeof stored.render.componentCode === 'string'
-                && stored.render.componentCode.length > 0
-              ) {
-                const bundle = await deriveContractBundle(stored.render);
-                if (bundle) {
-                  await opts.codeStore.put(
-                    bundle.contractHash,
-                    bundle.bundleSource,
-                  );
-                  renderContractHash = bundle.contractHash;
-                  const baseForValidators = opts.publicBaseUrl
-                    ? opts.publicBaseUrl.replace(/\/$/, '')
-                    : `${req.protocol}://${requestHost}`;
-                  renderValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
-                }
-              }
-            } catch (err) {
-              cookieLogger.warn('render_meta_validators_failed', {
-                error: String(err),
-                renderId: verified.renderId,
-              });
-            }
-          }
-          // Slice-envelope response (Phase B: single ai.ggui/render
-          // slice) — same shape as the wire `_meta` and the inline
-          // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
-          // RenderViewer parses with `parseMcpAppAiGguiRenderMeta`.
-          const renderMeta: McpAppAiGguiRenderMeta = {
-            renderId: verified.renderId,
-            appId: verified.appId,
-            runtimeUrl: absoluteRendererUrl,
-            wsUrl: resolvedWsUrl,
-            wsToken: minted.token,
-            expiresAt: minted.expiresAt,
-            ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
-              ? {
-                  contractHash: renderContractHash,
-                  validatorsUrl: renderValidatorsUrl,
-                }
-              : {}),
-          };
-          res.status(200).json({
-            [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
+      app.get("/ggui/console/sessions/:sessionId/meta", async (req: Request, res: Response) => {
+        applyDevtoolSecurityHeaders(res);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        const sessionIdFromPath = req.params["sessionId"];
+        const verified = await gateDevtoolSessionRequest(req, res, sessionIdFromPath);
+        if (!verified) return;
+        if (!mintBootstrap) {
+          res.status(503).json({
+            error: "mcp_apps_disabled",
+            message:
+              "sessions/:id/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
           });
-        },
-      );
+          return;
+        }
+        const minted = mintBootstrap(verified.renderId, verified.appId);
+        // Console/srcdoc absolute-URL fix: `<McpAppIframe>`
+        // mounts the resource via `srcdoc`, so the iframe's URL
+        // is `about:srcdoc` and any relative URL would resolve
+        // against that, not the dev server. Rewrite the
+        // same-origin `runtimeUrl` to absolute based on the
+        // request host. The `wsUrl` minted at server-boot
+        // defaults to `ws://localhost/ws` — also rewrite that
+        // to the request-host's actual host:port when its
+        // hostname is `localhost`, so the iframe's WebSocket
+        // open lands on the same listener. Operators who
+        // configured a CDN / external `wsUrl` / `runtime.url`
+        // are passed through unchanged.
+        const requestHost = req.get("host") ?? "";
+        const absoluteRendererUrl = /^https?:\/\//i.test(runtimeBootstrapUrl)
+          ? runtimeBootstrapUrl
+          : `${req.protocol}://${requestHost}${runtimeBootstrapUrl}`;
+        let resolvedWsUrl = minted.wsUrl;
+        try {
+          const wsParsed = new URL(minted.wsUrl);
+          if (
+            (wsParsed.hostname === "localhost" || wsParsed.hostname === "127.0.0.1") &&
+            requestHost.length > 0
+          ) {
+            const wsScheme = req.protocol === "https" ? "wss" : "ws";
+            resolvedWsUrl = `${wsScheme}://${requestHost}${wsParsed.pathname}${wsParsed.search}`;
+          }
+        } catch {
+          // Malformed `wsUrl` — leave it as-is so the renderer
+          // surfaces the failure through its own bootstrap-failed
+          // envelope rather than us silently rewriting a string
+          // we don't understand.
+        }
+        // Content-addressable contract-validator bundle (#109) for
+        // the active stack item. The renderer iframe's strict CSP
+        // forbids the `new Function` codegen `ajv.compile()` needs,
+        // so the server compiles + writes the bundle to its
+        // CodeStore at push time and threads the URL here. The
+        // iframe fetches the URL + dynamic-imports to resolve
+        // validators. Best-effort: a missing bundle degrades to no
+        // client-side validation; server-side `assertActionContract`
+        // remains authoritative.
+        let renderContractHash: string | undefined;
+        let renderValidatorsUrl: string | undefined;
+        if (renderStore && opts.codeStore) {
+          try {
+            const stored = await renderStore.get(verified.renderId);
+            if (
+              stored !== null &&
+              stored.render.type !== "mcpApps" &&
+              stored.render.type !== "system" &&
+              typeof stored.render.componentCode === "string" &&
+              stored.render.componentCode.length > 0
+            ) {
+              const bundle = await deriveContractBundle(stored.render);
+              if (bundle) {
+                await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+                renderContractHash = bundle.contractHash;
+                const baseForValidators = opts.publicBaseUrl
+                  ? opts.publicBaseUrl.replace(/\/$/, "")
+                  : `${req.protocol}://${requestHost}`;
+                renderValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
+              }
+            }
+          } catch (err) {
+            cookieLogger.warn("render_meta_validators_failed", {
+              error: String(err),
+              renderId: verified.renderId,
+            });
+          }
+        }
+        // Slice-envelope response (Phase B: single ai.ggui/render
+        // slice) — same shape as the wire `_meta` and the inline
+        // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
+        // RenderViewer parses with `parseMcpAppAiGguiRenderMeta`.
+        const renderMeta: McpAppAiGguiRenderMeta = {
+          renderId: verified.renderId,
+          appId: verified.appId,
+          runtimeUrl: absoluteRendererUrl,
+          wsUrl: resolvedWsUrl,
+          wsToken: minted.token,
+          expiresAt: minted.expiresAt,
+          ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
+            ? {
+                contractHash: renderContractHash,
+                validatorsUrl: renderValidatorsUrl,
+              }
+            : {}),
+        };
+        res.status(200).json({
+          [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
+        });
+      });
 
       // GET /ggui/console/render?render=<renderId>
       // → `{render, eventSequence}` JSON.
@@ -7614,60 +7224,56 @@ export function createGguiServer(
       // passing into `<RenderInspector>` (which only accepts the
       // ComponentRender variant since the inspector reads actionSpec /
       // streamSpec / propsSpec — fields McpAppsRender doesn't carry).
-      app.get(
-        '/ggui/console/render',
-        async (req: Request, res: Response) => {
-          applyDevtoolSecurityHeaders(res);
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          const verified = await gateDevtoolSessionRequest(req, res);
-          if (!verified) return;
-          if (!renderStore) {
-            res.status(503).json({
-              error: 'render_store_unavailable',
-              message:
-                'Render observation requires sessionChannel: true on the server so the render store is wired. Enable `sessionChannel` on createGguiServer() and retry.',
-            });
-            return;
-          }
-          let stored: Awaited<ReturnType<RenderStore['get']>> = null;
-          try {
-            stored = await renderStore.get(verified.renderId);
-          } catch (err) {
-            cookieLogger.error('render_store_failed', {
-              error: String(err),
-              renderId: verified.renderId,
-            });
-            res.status(500).json({ error: 'internal_error' });
-            return;
-          }
-          if (!stored) {
-            // Race: gate verified existence above but the render
-            // could expire between calls. Honest 404.
-            res.status(404).json({
-              error: 'render_not_found',
-              message: `Render '${verified.renderId}' is not on this server`,
-            });
-            return;
-          }
-          res.status(200).json({
-            render: stored.render,
-            eventSequence: stored.eventSequence,
+      app.get("/ggui/console/render", async (req: Request, res: Response) => {
+        applyDevtoolSecurityHeaders(res);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        const verified = await gateDevtoolSessionRequest(req, res);
+        if (!verified) return;
+        if (!renderStore) {
+          res.status(503).json({
+            error: "render_store_unavailable",
+            message:
+              "Render observation requires sessionChannel: true on the server so the render store is wired. Enable `sessionChannel` on createGguiServer() and retry.",
           });
-        },
-      );
+          return;
+        }
+        let stored: Awaited<ReturnType<RenderStore["get"]>> = null;
+        try {
+          stored = await renderStore.get(verified.renderId);
+        } catch (err) {
+          cookieLogger.error("render_store_failed", {
+            error: String(err),
+            renderId: verified.renderId,
+          });
+          res.status(500).json({ error: "internal_error" });
+          return;
+        }
+        if (!stored) {
+          // Race: gate verified existence above but the render
+          // could expire between calls. Honest 404.
+          res.status(404).json({
+            error: "render_not_found",
+            message: `Render '${verified.renderId}' is not on this server`,
+          });
+          return;
+        }
+        res.status(200).json({
+          render: stored.render,
+          eventSequence: stored.eventSequence,
+        });
+      });
 
       // Bind cookieAuth into the session channel. Declared `let`
       // above so createRenderChannelServer can reference it below.
       consoleCookieAuth = {
         readCookie: readDevtoolCookieFromHeaders,
-        verify: (cookieValue: string) =>
-          verifyDevtoolCookie(cookieValue, secret),
+        verify: (cookieValue: string) => verifyDevtoolCookie(cookieValue, secret),
       };
 
       // Reference the cookie name to keep the export alive for
       // downstream consumers + lint. The name is the single source
       // of truth; avoid duplicating the string anywhere.
-      cookieLogger.debug?.('console_cookie_ready', {
+      cookieLogger.debug?.("console_cookie_ready", {
         cookieName: CONSOLE_COOKIE_NAME,
       });
     }
@@ -7688,7 +7294,7 @@ export function createGguiServer(
     // access tokens (the current paste-key flow has access_token ===
     // paired bearer).
     if (oauthEnabled) {
-      app.get('/ggui/console/oauth-clients', async (_req, res) => {
+      app.get("/ggui/console/oauth-clients", async (_req, res) => {
         applyDevtoolSecurityHeaders(res);
         try {
           const clients = await oauthStorage.listClients();
@@ -7704,11 +7310,11 @@ export function createGguiServer(
             })),
           });
         } catch (err) {
-          logger.warn('console_oauth_clients_list_failed', {
+          logger.warn("console_oauth_clients_list_failed", {
             error: String(err),
           });
           res.status(500).json({
-            error: 'list_failed',
+            error: "list_failed",
             message:
               err instanceof Error
                 ? `Client list failed — ${err.message}`
@@ -7717,40 +7323,37 @@ export function createGguiServer(
         }
       });
 
-      app.delete(
-        '/ggui/console/oauth-clients/:clientId',
-        async (req, res) => {
-          applyDevtoolSecurityHeaders(res);
-          const clientId = req.params['clientId'];
-          if (typeof clientId !== 'string' || clientId.length === 0) {
-            res.status(400).json({
-              error: 'missing_client_id',
-              message:
-                'clientId required in path segment (e.g. DELETE /ggui/console/oauth-clients/abc123).',
-            });
-            return;
-          }
-          try {
-            await oauthStorage.deleteClient(clientId);
-            // 204 whether the id was present or not — `deleteClient`
-            // is idempotent at the storage layer (matches DELETE
-            // /blueprints/cached/:id semantics).
-            res.status(204).end();
-          } catch (err) {
-            logger.warn('console_oauth_clients_delete_failed', {
-              error: String(err),
-              clientId,
-            });
-            res.status(500).json({
-              error: 'delete_failed',
-              message:
-                err instanceof Error
-                  ? `Client delete failed — ${err.message}`
-                  : `Client delete failed — ${String(err)}`,
-            });
-          }
-        },
-      );
+      app.delete("/ggui/console/oauth-clients/:clientId", async (req, res) => {
+        applyDevtoolSecurityHeaders(res);
+        const clientId = req.params["clientId"];
+        if (typeof clientId !== "string" || clientId.length === 0) {
+          res.status(400).json({
+            error: "missing_client_id",
+            message:
+              "clientId required in path segment (e.g. DELETE /ggui/console/oauth-clients/abc123).",
+          });
+          return;
+        }
+        try {
+          await oauthStorage.deleteClient(clientId);
+          // 204 whether the id was present or not — `deleteClient`
+          // is idempotent at the storage layer (matches DELETE
+          // /blueprints/cached/:id semantics).
+          res.status(204).end();
+        } catch (err) {
+          logger.warn("console_oauth_clients_delete_failed", {
+            error: String(err),
+            clientId,
+          });
+          res.status(500).json({
+            error: "delete_failed",
+            message:
+              err instanceof Error
+                ? `Client delete failed — ${err.message}`
+                : `Client delete failed — ${String(err)}`,
+          });
+        }
+      });
     }
 
     // ── Admin-gated keys plane ─────────────────────────────────────
@@ -7784,7 +7387,7 @@ export function createGguiServer(
     if (resolvedAdminToken !== null && pairingService) {
       const adminTokenForGate = resolvedAdminToken;
       const pairingForKeys = pairingService;
-      const ADMIN_COOKIE_NAME = 'ggui_console_admin';
+      const ADMIN_COOKIE_NAME = "ggui_console_admin";
 
       const requestHasAdminAuth = (req: Request): boolean => {
         // Header path — `Authorization: Bearer <token>`. Constant-time
@@ -7792,17 +7395,17 @@ export function createGguiServer(
         // local network attacker model; the token also has 72 bits of
         // entropy, so a timing-side-channel attack would still need
         // ~2^36 attempts on average to materialize. Skip the cost.
-        const authHeader = req.headers['authorization'];
-        if (typeof authHeader === 'string') {
+        const authHeader = req.headers["authorization"];
+        if (typeof authHeader === "string") {
           const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
           if (match && match[1] === adminTokenForGate) return true;
         }
         // Cookie path — same name the admin-login route sets.
-        const cookieHeader = req.headers['cookie'];
-        if (typeof cookieHeader === 'string') {
-          for (const raw of cookieHeader.split(';')) {
+        const cookieHeader = req.headers["cookie"];
+        if (typeof cookieHeader === "string") {
+          for (const raw of cookieHeader.split(";")) {
             const trimmed = raw.trim();
-            const eq = trimmed.indexOf('=');
+            const eq = trimmed.indexOf("=");
             if (eq <= 0) continue;
             const name = trimmed.slice(0, eq);
             if (name !== ADMIN_COOKIE_NAME) continue;
@@ -7826,16 +7429,16 @@ export function createGguiServer(
       const buildAdminCookie = (req: Request, value: string): string => {
         const attrs = [
           `${ADMIN_COOKIE_NAME}=${encodeURIComponent(value)}`,
-          'Path=/',
+          "Path=/",
           // 8-hour TTL — same posture as the console session cookie.
           // Operators staying in the keys page longer than that just
           // re-paste the admin token (printed on the boot banner).
-          'Max-Age=28800',
-          'SameSite=Lax',
-          'HttpOnly',
+          "Max-Age=28800",
+          "SameSite=Lax",
+          "HttpOnly",
         ];
-        if (req.secure) attrs.push('Secure');
-        return attrs.join('; ');
+        if (req.secure) attrs.push("Secure");
+        return attrs.join("; ");
       };
 
       // POST /ggui/console/admin-login — bearer-paste → cookie exchange.
@@ -7844,19 +7447,15 @@ export function createGguiServer(
       // backcompat: there's no rate-limiter wired in — this is a
       // local-host route, lock-out via wider posture (tunnel access
       // control, Cloudflare WAF) belongs to the operator.
-      app.post('/ggui/console/admin-login', (req, res) => {
+      app.post("/ggui/console/admin-login", (req, res) => {
         applyDevtoolSecurityHeaders(res);
         const body = req.body as { token?: unknown } | undefined;
-        const candidate =
-          typeof body?.token === 'string' ? body.token : '';
+        const candidate = typeof body?.token === "string" ? body.token : "";
         if (candidate.length === 0 || candidate !== adminTokenForGate) {
-          res.status(401).json({ error: 'invalid_token' });
+          res.status(401).json({ error: "invalid_token" });
           return;
         }
-        res.setHeader(
-          'Set-Cookie',
-          buildAdminCookie(req, adminTokenForGate),
-        );
+        res.setHeader("Set-Cookie", buildAdminCookie(req, adminTokenForGate));
         res.status(204).end();
       });
 
@@ -7865,17 +7464,17 @@ export function createGguiServer(
       // trailing slashes / sub-paths so `/keys/abc` + `/keys` both
       // hit. We only mount the keys routes BELOW this so the gate is
       // genuinely the only ingress.
-      app.use('/ggui/console/keys', (req, res, next) => {
+      app.use("/ggui/console/keys", (req, res, next) => {
         if (requestHasAdminAuth(req)) return next();
         applyDevtoolSecurityHeaders(res);
-        res.status(401).json({ error: 'admin_auth_required' });
+        res.status(401).json({ error: "admin_auth_required" });
       });
 
       // GET /ggui/console/keys — list pairings + plaintext bearer.
       // Wire shape: `{ keys: [{pairingId, deviceName, createdAt,
       // lastUsedAt?, token}] }`. Plaintext exposure is intentional;
       // see PairingWithToken JSDoc for the threat model.
-      app.get('/ggui/console/keys', async (_req, res) => {
+      app.get("/ggui/console/keys", async (_req, res) => {
         applyDevtoolSecurityHeaders(res);
         try {
           const rows = await pairingForKeys.listPairingsWithTokens();
@@ -7884,18 +7483,16 @@ export function createGguiServer(
               pairingId: row.pairingId,
               deviceName: row.deviceName,
               createdAt: row.createdAt,
-              ...(row.lastUsedAt !== undefined
-                ? { lastUsedAt: row.lastUsedAt }
-                : {}),
+              ...(row.lastUsedAt !== undefined ? { lastUsedAt: row.lastUsedAt } : {}),
               token: row.token,
             })),
           });
         } catch (err) {
-          logger.warn('console_keys_list_failed', {
+          logger.warn("console_keys_list_failed", {
             error: String(err),
           });
           res.status(500).json({
-            error: 'list_failed',
+            error: "list_failed",
             message:
               err instanceof Error
                 ? `Keys list failed — ${err.message}`
@@ -7912,18 +7509,14 @@ export function createGguiServer(
       // they're already authenticated by the admin token. Returns the
       // full `PairingCompletion` so the SPA can show the plaintext
       // bearer in a one-time copy callout.
-      app.post('/ggui/console/keys', async (req, res) => {
+      app.post("/ggui/console/keys", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
         const body = req.body as { deviceName?: unknown } | undefined;
-        const deviceName =
-          typeof body?.deviceName === 'string'
-            ? body.deviceName.trim()
-            : '';
+        const deviceName = typeof body?.deviceName === "string" ? body.deviceName.trim() : "";
         if (deviceName.length === 0 || deviceName.length > 256) {
           res.status(400).json({
-            error: 'invalid_device_name',
-            message:
-              '`deviceName` is required (non-empty string, ≤256 chars).',
+            error: "invalid_device_name",
+            message: "`deviceName` is required (non-empty string, ≤256 chars).",
           });
           return;
         }
@@ -7940,11 +7533,11 @@ export function createGguiServer(
             deviceName: completion.deviceName,
           });
         } catch (err) {
-          logger.warn('console_keys_mint_failed', {
+          logger.warn("console_keys_mint_failed", {
             error: String(err),
           });
           res.status(500).json({
-            error: 'mint_failed',
+            error: "mint_failed",
             message:
               err instanceof Error
                 ? `Mint failed — ${err.message}`
@@ -7954,37 +7547,33 @@ export function createGguiServer(
       });
 
       // DELETE /ggui/console/keys/:pairingId — revoke (idempotent).
-      app.delete(
-        '/ggui/console/keys/:pairingId',
-        async (req, res) => {
-          applyDevtoolSecurityHeaders(res);
-          const pairingId = req.params['pairingId'];
-          if (typeof pairingId !== 'string' || pairingId.length === 0) {
-            res.status(400).json({
-              error: 'missing_pairing_id',
-              message:
-                'pairingId required in path segment (e.g. DELETE /ggui/console/keys/pair-1).',
-            });
-            return;
-          }
-          try {
-            await pairingForKeys.revokePairing(pairingId);
-            res.status(204).end();
-          } catch (err) {
-            logger.warn('console_keys_revoke_failed', {
-              error: String(err),
-              pairingId,
-            });
-            res.status(500).json({
-              error: 'revoke_failed',
-              message:
-                err instanceof Error
-                  ? `Revoke failed — ${err.message}`
-                  : `Revoke failed — ${String(err)}`,
-            });
-          }
-        },
-      );
+      app.delete("/ggui/console/keys/:pairingId", async (req, res) => {
+        applyDevtoolSecurityHeaders(res);
+        const pairingId = req.params["pairingId"];
+        if (typeof pairingId !== "string" || pairingId.length === 0) {
+          res.status(400).json({
+            error: "missing_pairing_id",
+            message: "pairingId required in path segment (e.g. DELETE /ggui/console/keys/pair-1).",
+          });
+          return;
+        }
+        try {
+          await pairingForKeys.revokePairing(pairingId);
+          res.status(204).end();
+        } catch (err) {
+          logger.warn("console_keys_revoke_failed", {
+            error: String(err),
+            pairingId,
+          });
+          res.status(500).json({
+            error: "revoke_failed",
+            message:
+              err instanceof Error
+                ? `Revoke failed — ${err.message}`
+                : `Revoke failed — ${String(err)}`,
+          });
+        }
+      });
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -8009,19 +7598,19 @@ export function createGguiServer(
       const resolvedAdminTokenForTheme = resolvedAdminToken;
       const requestHasAdminAuthForTheme = (req: Request): boolean => {
         if (resolvedAdminTokenForTheme === null) return false;
-        const authHeader = req.headers['authorization'];
-        if (typeof authHeader === 'string') {
+        const authHeader = req.headers["authorization"];
+        if (typeof authHeader === "string") {
           const m = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
           if (m && m[1] === resolvedAdminTokenForTheme) return true;
         }
-        const cookieHeader = req.headers['cookie'];
-        if (typeof cookieHeader === 'string') {
-          for (const raw of cookieHeader.split(';')) {
+        const cookieHeader = req.headers["cookie"];
+        if (typeof cookieHeader === "string") {
+          for (const raw of cookieHeader.split(";")) {
             const trimmed = raw.trim();
-            const eq = trimmed.indexOf('=');
+            const eq = trimmed.indexOf("=");
             if (eq <= 0) continue;
             const name = trimmed.slice(0, eq);
-            if (name !== 'ggui_console_admin') continue;
+            if (name !== "ggui_console_admin") continue;
             const value = decodeURIComponent(trimmed.slice(eq + 1));
             if (value === resolvedAdminTokenForTheme) return true;
           }
@@ -8030,9 +7619,9 @@ export function createGguiServer(
       };
 
       const initialThemeConfig: ThemeConfig | null =
-        opts.theme === undefined || opts.theme.source === 'default'
+        opts.theme === undefined || opts.theme.source === "default"
           ? null
-          : opts.theme.source === 'file'
+          : opts.theme.source === "file"
             ? { file: opts.theme.path, mode: opts.theme.mode }
             : {
                 preset: opts.theme.preset,
@@ -8044,12 +7633,8 @@ export function createGguiServer(
         app,
         initialConfig: initialThemeConfig,
         ...(opts.themeWriter ? { themeWriter: opts.themeWriter } : {}),
-        ...(opts.themeFileUploader
-          ? { themeFileUploader: opts.themeFileUploader }
-          : {}),
-        ...(opts.onThemeConfigChange
-          ? { onConfigChange: opts.onThemeConfigChange }
-          : {}),
+        ...(opts.themeFileUploader ? { themeFileUploader: opts.themeFileUploader } : {}),
+        ...(opts.onThemeConfigChange ? { onConfigChange: opts.onThemeConfigChange } : {}),
         requestHasAdminAuth: requestHasAdminAuthForTheme,
       });
     }
@@ -8073,41 +7658,38 @@ export function createGguiServer(
     // key is a one-way paste (operator already has the key elsewhere; the
     // server is just persisting it). The presence + source signal is
     // enough for the /settings UI.
-    const providerKeysGateMode: 'admin-token' | 'auth-adapter' =
-      opts.providerKeysGate ?? 'admin-token';
+    const providerKeysGateMode: "admin-token" | "auth-adapter" =
+      opts.providerKeysGate ?? "admin-token";
     const mountLlmKeysRoute =
       opts.providerKeys !== undefined &&
-      (providerKeysGateMode === 'auth-adapter' || resolvedAdminToken !== null);
+      (providerKeysGateMode === "auth-adapter" || resolvedAdminToken !== null);
     if (mountLlmKeysRoute && opts.providerKeys) {
       const providerKeyStore = opts.providerKeys;
       const adminTokenForLlm = resolvedAdminToken;
-      const defaultScope = (
-        _req: Request,
-        identity: AuthResult | null,
-      ): string => {
+      const defaultScope = (_req: Request, identity: AuthResult | null): string => {
         if (identity) {
-          if (identity.identity.kind === 'user') {
+          if (identity.identity.kind === "user") {
             return identity.identity.userId;
           }
-          if (identity.identity.kind === 'app') {
+          if (identity.identity.kind === "app") {
             return identity.identity.appId;
           }
         }
-        return 'global';
+        return "global";
       };
       const scopeFromRequest = opts.providerKeyScope ?? defaultScope;
-      const ADMIN_COOKIE_NAME_LLM = 'ggui_console_admin';
+      const ADMIN_COOKIE_NAME_LLM = "ggui_console_admin";
 
       // The LLM_PROVIDERS allowlist matches `LlmProvider` minus `bedrock`
       // (which is IAM-based and never paste-resolvable — see byok-resolver
       // PROVIDER_ENV_NAMES bedrock note). Order is the operator-facing
       // display order: anthropic first since the OSS triad ships claude
       // as the default model.
-      const LLM_PROVIDERS: ReadonlyArray<Exclude<LlmProvider, 'bedrock'>> = [
-        'anthropic',
-        'openai',
-        'google',
-        'openrouter',
+      const LLM_PROVIDERS: ReadonlyArray<Exclude<LlmProvider, "bedrock">> = [
+        "anthropic",
+        "openai",
+        "google",
+        "openrouter",
       ];
 
       // Mirror of `byok-resolver.ts::PROVIDER_ENV_NAMES` — env-var name
@@ -8115,26 +7697,26 @@ export function createGguiServer(
       // than imported because `@ggui-ai/cli` is downstream of this
       // package and we can't depend back the other direction.
       const PROVIDER_ENV_NAMES: Readonly<
-        Record<Exclude<LlmProvider, 'bedrock'>, readonly string[]>
+        Record<Exclude<LlmProvider, "bedrock">, readonly string[]>
       > = {
-        anthropic: ['ANTHROPIC_API_KEY'],
-        google: ['GOOGLE_API_KEY', 'GEMINI_API_KEY'],
-        openai: ['OPENAI_API_KEY'],
-        openrouter: ['OPENROUTER_API_KEY'],
+        anthropic: ["ANTHROPIC_API_KEY"],
+        google: ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+        openai: ["OPENAI_API_KEY"],
+        openrouter: ["OPENROUTER_API_KEY"],
       };
 
       const requestHasAdminAuthLlm = (req: Request): boolean => {
         if (adminTokenForLlm === null) return false;
-        const authHeader = req.headers['authorization'];
-        if (typeof authHeader === 'string') {
+        const authHeader = req.headers["authorization"];
+        if (typeof authHeader === "string") {
           const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
           if (match && match[1] === adminTokenForLlm) return true;
         }
-        const cookieHeader = req.headers['cookie'];
-        if (typeof cookieHeader === 'string') {
-          for (const raw of cookieHeader.split(';')) {
+        const cookieHeader = req.headers["cookie"];
+        if (typeof cookieHeader === "string") {
+          for (const raw of cookieHeader.split(";")) {
             const trimmed = raw.trim();
-            const eq = trimmed.indexOf('=');
+            const eq = trimmed.indexOf("=");
             if (eq <= 0) continue;
             const name = trimmed.slice(0, eq);
             if (name !== ADMIN_COOKIE_NAME_LLM) continue;
@@ -8161,22 +7743,22 @@ export function createGguiServer(
       //   auth-adapter → calls `resolveIdentity(auth, req)`. `kind:'builder'`
       //                  is rejected with 401 — the multi-tenant posture
       //                  is meaningless without a real per-caller id.
-      app.use('/ggui/console/llm-keys', (req, res, next) => {
-        if (providerKeysGateMode === 'admin-token') {
+      app.use("/ggui/console/llm-keys", (req, res, next) => {
+        if (providerKeysGateMode === "admin-token") {
           if (requestHasAdminAuthLlm(req)) return next();
           applyDevtoolSecurityHeaders(res);
-          res.status(401).json({ error: 'admin_auth_required' });
+          res.status(401).json({ error: "admin_auth_required" });
           return;
         }
         // 'auth-adapter' — the multi-tenant gate.
         resolveIdentity(auth, req)
           .then((identity) => {
-            if (identity.identity.kind === 'builder') {
+            if (identity.identity.kind === "builder") {
               applyDevtoolSecurityHeaders(res);
               res.status(401).json({
-                error: 'tenant_required',
+                error: "tenant_required",
                 message:
-                  'Multi-tenant /llm-keys requires an end-user or app identity. ' +
+                  "Multi-tenant /llm-keys requires an end-user or app identity. " +
                   'The configured AuthAdapter resolved kind:"builder" — pair a ' +
                   'real user/app bearer or use providerKeysGate:"admin-token".',
               });
@@ -8188,11 +7770,11 @@ export function createGguiServer(
           .catch((err: unknown) => {
             applyDevtoolSecurityHeaders(res);
             if (err instanceof UnauthenticatedError) {
-              res.status(401).json({ error: 'unauthenticated' });
+              res.status(401).json({ error: "unauthenticated" });
               return;
             }
-            logger.warn('console_llm_keys_auth_failed', { error: String(err) });
-            res.status(500).json({ error: 'auth_unexpected_error' });
+            logger.warn("console_llm_keys_auth_failed", { error: String(err) });
+            res.status(500).json({ error: "auth_unexpected_error" });
           });
       });
 
@@ -8205,13 +7787,11 @@ export function createGguiServer(
       //   - envNames:   the env-var names this provider accepts
       //                 (informational — the /settings UI shows them so
       //                 operators know they can `export` instead of pasting)
-      app.get('/ggui/console/llm-keys', async (req, res) => {
+      app.get("/ggui/console/llm-keys", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
         try {
           const scope = scopeFromRequest(req, getRequestIdentity(req));
-          const filePresent = new Set(
-            await providerKeyStore.listProviders(scope),
-          );
+          const filePresent = new Set(await providerKeyStore.listProviders(scope));
           // Build rows with an optional 12-char prefix preview so the
           // operator can confirm WHICH key is loaded without exposing
           // the secret. 12 chars covers the discriminating prefix
@@ -8232,8 +7812,8 @@ export function createGguiServer(
                 }
               }
               const inFile = filePresent.has(provider);
-              const source: 'env' | 'file' | null =
-                envHit !== undefined ? 'env' : inFile ? 'file' : null;
+              const source: "env" | "file" | null =
+                envHit !== undefined ? "env" : inFile ? "file" : null;
               let keyPreview: string | undefined;
               if (envValue !== undefined) {
                 keyPreview = envValue.slice(0, 12);
@@ -8254,18 +7834,18 @@ export function createGguiServer(
                 inFile,
                 ...(keyPreview !== undefined ? { keyPreview } : {}),
               };
-            }),
+            })
           );
           res.json({
             providers: rows,
             scope,
           });
         } catch (err) {
-          logger.warn('console_llm_keys_list_failed', {
+          logger.warn("console_llm_keys_list_failed", {
             error: String(err),
           });
           res.status(500).json({
-            error: 'list_failed',
+            error: "list_failed",
             message:
               err instanceof Error
                 ? `LLM keys list failed — ${err.message}`
@@ -8280,30 +7860,27 @@ export function createGguiServer(
       // `envOverridden: true` means the operator pasted a key but env
       // var also set — the resolver still picks env. The /settings UI
       // surfaces this so operators don't think their paste is in effect.
-      app.post('/ggui/console/llm-keys', async (req, res) => {
+      app.post("/ggui/console/llm-keys", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
-        const body = req.body as
-          | { provider?: unknown; key?: unknown }
-          | undefined;
-        const provider =
-          typeof body?.provider === 'string' ? body.provider : '';
-        const key = typeof body?.key === 'string' ? body.key.trim() : '';
+        const body = req.body as { provider?: unknown; key?: unknown } | undefined;
+        const provider = typeof body?.provider === "string" ? body.provider : "";
+        const key = typeof body?.key === "string" ? body.key.trim() : "";
         if (!LLM_PROVIDERS.includes(provider as never)) {
           res.status(400).json({
-            error: 'invalid_provider',
-            message: `provider must be one of ${LLM_PROVIDERS.join(', ')}.`,
+            error: "invalid_provider",
+            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
           });
           return;
         }
         if (key.length === 0 || key.length > 4096) {
           res.status(400).json({
-            error: 'invalid_key',
-            message: '`key` is required (non-empty string, ≤4096 chars).',
+            error: "invalid_key",
+            message: "`key` is required (non-empty string, ≤4096 chars).",
           });
           return;
         }
         try {
-          const typedProvider = provider as Exclude<LlmProvider, 'bedrock'>;
+          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
           const scope = scopeFromRequest(req, getRequestIdentity(req));
           await providerKeyStore.set(scope, typedProvider, key);
           const envNames = PROVIDER_ENV_NAMES[typedProvider];
@@ -8317,17 +7894,17 @@ export function createGguiServer(
           }
           res.json({
             provider: typedProvider,
-            source: 'file' as const,
+            source: "file" as const,
             envOverridden: envOverride !== undefined,
             ...(envOverride !== undefined ? { envName: envOverride } : {}),
           });
         } catch (err) {
-          logger.warn('console_llm_keys_set_failed', {
+          logger.warn("console_llm_keys_set_failed", {
             error: String(err),
             provider,
           });
           res.status(500).json({
-            error: 'set_failed',
+            error: "set_failed",
             message:
               err instanceof Error
                 ? `LLM key set failed — ${err.message}`
@@ -8339,28 +7916,28 @@ export function createGguiServer(
       // DELETE /ggui/console/llm-keys/:provider — clear (idempotent).
       // 204 even when the key wasn't set; mirrors `ProviderKeyStore.delete`
       // contract. NEVER touches env — the operator owns env separately.
-      app.delete('/ggui/console/llm-keys/:provider', async (req, res) => {
+      app.delete("/ggui/console/llm-keys/:provider", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
-        const provider = req.params['provider'];
+        const provider = req.params["provider"];
         if (!LLM_PROVIDERS.includes(provider as never)) {
           res.status(400).json({
-            error: 'invalid_provider',
-            message: `provider must be one of ${LLM_PROVIDERS.join(', ')}.`,
+            error: "invalid_provider",
+            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
           });
           return;
         }
         try {
-          const typedProvider = provider as Exclude<LlmProvider, 'bedrock'>;
+          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
           const scope = scopeFromRequest(req, getRequestIdentity(req));
           await providerKeyStore.delete(scope, typedProvider);
           res.status(204).end();
         } catch (err) {
-          logger.warn('console_llm_keys_delete_failed', {
+          logger.warn("console_llm_keys_delete_failed", {
             error: String(err),
             provider,
           });
           res.status(500).json({
-            error: 'delete_failed',
+            error: "delete_failed",
             message:
               err instanceof Error
                 ? `LLM key delete failed — ${err.message}`
@@ -8376,8 +7953,8 @@ export function createGguiServer(
       // without branching on HTTP status. NEVER returns or logs the key
       // value (latency + ok-flag + provider name only).
       const probeProvider = async (
-        provider: Exclude<LlmProvider, 'bedrock'>,
-        key: string,
+        provider: Exclude<LlmProvider, "bedrock">,
+        key: string
       ): Promise<{
         ok: boolean;
         latencyMs: number;
@@ -8391,23 +7968,23 @@ export function createGguiServer(
         try {
           let url: string;
           const headers: Record<string, string> = {};
-          if (provider === 'anthropic') {
-            url = 'https://api.anthropic.com/v1/models?limit=1';
-            headers['x-api-key'] = key;
-            headers['anthropic-version'] = '2023-06-01';
-          } else if (provider === 'openai') {
-            url = 'https://api.openai.com/v1/models';
-            headers['Authorization'] = `Bearer ${key}`;
-          } else if (provider === 'google') {
+          if (provider === "anthropic") {
+            url = "https://api.anthropic.com/v1/models?limit=1";
+            headers["x-api-key"] = key;
+            headers["anthropic-version"] = "2023-06-01";
+          } else if (provider === "openai") {
+            url = "https://api.openai.com/v1/models";
+            headers["Authorization"] = `Bearer ${key}`;
+          } else if (provider === "google") {
             // Google uses query-param key auth — no Authorization header.
             url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(key)}`;
           } else {
             // openrouter — auth/key endpoint validates without listing.
-            url = 'https://openrouter.ai/api/v1/auth/key';
-            headers['Authorization'] = `Bearer ${key}`;
+            url = "https://openrouter.ai/api/v1/auth/key";
+            headers["Authorization"] = `Bearer ${key}`;
           }
           const res = await globalThis.fetch(url, {
-            method: 'GET',
+            method: "GET",
             headers,
             signal: ac.signal,
           });
@@ -8415,7 +7992,7 @@ export function createGguiServer(
           if (res.ok) {
             return { ok: true, latencyMs };
           }
-          let detail = '';
+          let detail = "";
           try {
             const body = (await res.json()) as {
               error?: unknown;
@@ -8423,17 +8000,16 @@ export function createGguiServer(
             };
             const errField = body.error;
             const errMessage =
-              typeof errField === 'string'
+              typeof errField === "string"
                 ? errField
-                : errField !== null
-                    && typeof errField === 'object'
-                    && 'message' in errField
-                    && typeof (errField as { message?: unknown }).message
-                      === 'string'
+                : errField !== null &&
+                    typeof errField === "object" &&
+                    "message" in errField &&
+                    typeof (errField as { message?: unknown }).message === "string"
                   ? (errField as { message: string }).message
-                  : typeof body.message === 'string'
+                  : typeof body.message === "string"
                     ? body.message
-                    : '';
+                    : "";
             if (errMessage.length > 0) detail = ` ${errMessage}`;
           } catch {
             // Non-JSON body — error code alone is enough for the dot.
@@ -8455,18 +8031,18 @@ export function createGguiServer(
         }
       };
 
-      app.post('/ggui/console/llm-keys/:provider/probe', async (req, res) => {
+      app.post("/ggui/console/llm-keys/:provider/probe", async (req, res) => {
         applyDevtoolSecurityHeaders(res);
-        const provider = req.params['provider'];
+        const provider = req.params["provider"];
         if (!LLM_PROVIDERS.includes(provider as never)) {
           res.status(400).json({
-            error: 'invalid_provider',
-            message: `provider must be one of ${LLM_PROVIDERS.join(', ')}.`,
+            error: "invalid_provider",
+            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
           });
           return;
         }
         try {
-          const typedProvider = provider as Exclude<LlmProvider, 'bedrock'>;
+          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
           // Resolve env-first-then-file, mirroring the GET handler's
           // source rule. Env wins on collision so the probe matches what
           // the generation pipeline would actually send.
@@ -8487,23 +8063,23 @@ export function createGguiServer(
             }
           }
           if (resolvedKey === null) {
-            res.status(400).json({ ok: false, error: 'not_configured' });
+            res.status(400).json({ ok: false, error: "not_configured" });
             return;
           }
           const result = await probeProvider(typedProvider, resolvedKey);
-          logger.info('console_llm_keys_probe', {
+          logger.info("console_llm_keys_probe", {
             provider: typedProvider,
             ok: result.ok,
             latencyMs: result.latencyMs,
           });
           res.json(result);
         } catch (err) {
-          logger.warn('console_llm_keys_probe_failed', {
+          logger.warn("console_llm_keys_probe_failed", {
             error: String(err),
             provider,
           });
           res.status(500).json({
-            error: 'probe_failed',
+            error: "probe_failed",
             message:
               err instanceof Error
                 ? `LLM key probe failed — ${err.message}`
@@ -8511,7 +8087,6 @@ export function createGguiServer(
           });
         }
       });
-
     }
 
     if (existsSync(consoleDistDir)) {
@@ -8521,21 +8096,21 @@ export function createGguiServer(
       // `/devtools` link without a `/info` round-trip flicker. Mode
       // changes require a server restart — same shape as every other
       // `CreateGguiServerOptions` field, no live-toggle ceremony.
-      const indexPath = path.join(consoleDistDir, 'index.html');
+      const indexPath = path.join(consoleDistDir, "index.html");
       const META_TAG = `<meta name="ggui-mode" content="${mode}">`;
       let indexHtml: string;
       try {
-        const raw = readFileSync(indexPath, 'utf-8');
+        const raw = readFileSync(indexPath, "utf-8");
         // Inject right after `<head>` so the meta is available before
         // any subsequent `<script>` tag executes. Idempotent: if a
         // previous build somehow already inlined the meta, the
         // injection still produces a valid (duplicate but harmless)
         // tag — `mode.ts` reads the first hit.
-        indexHtml = raw.includes('<head>')
-          ? raw.replace('<head>', `<head>${META_TAG}`)
+        indexHtml = raw.includes("<head>")
+          ? raw.replace("<head>", `<head>${META_TAG}`)
           : raw.replace(/^/, `${META_TAG}\n`);
       } catch (err) {
-        logger.warn('console_index_read_failed', {
+        logger.warn("console_index_read_failed", {
           path: indexPath,
           error: String(err),
         });
@@ -8543,7 +8118,7 @@ export function createGguiServer(
       }
       const sendConsoleHtml = (res: Response): void => {
         applyDevtoolSecurityHeaders(res);
-        res.type('text/html').send(indexHtml);
+        res.type("text/html").send(indexHtml);
       };
 
       // Welcome HTML — server-rendered landing for `consolePath === '/'`
@@ -8553,14 +8128,11 @@ export function createGguiServer(
       // operator-login affordance. No JS, no SPA mount, same security
       // headers as `sendConsoleHtml`.
       const welcomePageOpts = opts.welcomePage;
-      const welcomeEnabled =
-        welcomePageOpts !== undefined && consolePath === '/';
+      const welcomeEnabled = welcomePageOpts !== undefined && consolePath === "/";
       const sendWelcomeHtml = welcomeEnabled
         ? (res: Response): void => {
             applyDevtoolSecurityHeaders(res);
-            res
-              .type('text/html')
-              .send(renderWelcomeHtml(welcomePageOpts, info.name));
+            res.type("text/html").send(renderWelcomeHtml(welcomePageOpts, info.name));
           }
         : null;
 
@@ -8568,9 +8140,7 @@ export function createGguiServer(
       // would otherwise serve `index.html` for `GET /` directly and
       // never give the SPA fallback (or this redirect) a chance.
       const landingRedirectFn =
-        typeof opts.console === 'object'
-          ? opts.console.landingRedirect
-          : undefined;
+        typeof opts.console === "object" ? opts.console.landingRedirect : undefined;
       app.get(consolePath, (req, res, next) => {
         // Static middleware fires on the trailing-slash variant when
         // consolePath !== '/'. Both shapes route here.
@@ -8609,7 +8179,7 @@ export function createGguiServer(
           // to the SPA fallback below are covered by the fallback's
           // explicit `applyDevtoolSecurityHeaders` call.
           setHeaders: applyDevtoolSecurityHeaders,
-        }),
+        })
       );
       // Admin-HTML gate. The SPA's `/admin/*` and `/devtools/*` zones
       // are operator-only — without this gate, every admin page is a
@@ -8636,7 +8206,7 @@ export function createGguiServer(
       if (requestHasAdminAuthShared !== null) {
         const adminAuth = requestHasAdminAuthShared;
         app.get(/^\/(admin|devtools)(\/.*)?$/, (req, res, next) => {
-          if (req.path === '/admin-login') return next();
+          if (req.path === "/admin-login") return next();
           if (adminAuth(req)) return next();
           applyDevtoolSecurityHeaders(res);
           const next_ = encodeURIComponent(req.originalUrl || req.path);
@@ -8655,36 +8225,31 @@ export function createGguiServer(
       // here matches the admin-gate pattern at L7738 above and
       // avoids the parser-version churn.
       const spaFallbackPattern =
-        consolePath === '/'
+        consolePath === "/"
           ? /^\/.*$/
-          : new RegExp(`^${consolePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/.*$`);
-      app.get(
-        spaFallbackPattern,
-        (req, res, next) => {
-          // Only fallback for GET of non-asset, non-API paths.
-          // `express.static` already served any asset that exists;
-          // an `/assets/foo.js` that doesn't exist SHOULD 404 rather
-          // than returning HTML.
-          if (req.path.startsWith('/ggui/')) return next();
-          if (req.path.startsWith(`${consolePath === '/' ? '' : consolePath}/assets/`)) {
-            return next();
-          }
-          sendConsoleHtml(res);
-        },
-      );
+          : new RegExp(`^${consolePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/.*$`);
+      app.get(spaFallbackPattern, (req, res, next) => {
+        // Only fallback for GET of non-asset, non-API paths.
+        // `express.static` already served any asset that exists;
+        // an `/assets/foo.js` that doesn't exist SHOULD 404 rather
+        // than returning HTML.
+        if (req.path.startsWith("/ggui/")) return next();
+        if (req.path.startsWith(`${consolePath === "/" ? "" : consolePath}/assets/`)) {
+          return next();
+        }
+        sendConsoleHtml(res);
+      });
     } else {
-      logger.warn('console_dist_missing', {
+      logger.warn("console_dist_missing", {
         distDir: consoleDistDir,
-        hint: 'Run `pnpm --filter @ggui-ai/console build` to produce the static bundle. Serving 503 from the mount point until the bundle exists.',
+        hint: "Run `pnpm --filter @ggui-ai/console build` to produce the static bundle. Serving 503 from the mount point until the bundle exists.",
       });
       app.use(consolePath, (_req, res) => {
         applyDevtoolSecurityHeaders(res);
         res
           .status(503)
-          .type('text/plain')
-          .send(
-            'console bundle not built. Run:\n  pnpm --filter @ggui-ai/console build\n',
-          );
+          .type("text/plain")
+          .send("console bundle not built. Run:\n  pnpm --filter @ggui-ai/console build\n");
       });
     }
   }
@@ -8702,25 +8267,20 @@ export function createGguiServer(
   // entry on key conflict — otherwise the two maps merge layer-wise.
   const composedReservedValidators = mergeReservedValidators(
     composePreviewReservedValidator(),
-    opts.extraReservedValidators,
+    opts.extraReservedValidators
   );
   const channel: RenderChannelServer | null = opts.sessionChannel
     ? createRenderChannelServer({
         renderStore: renderStore ?? new InMemoryRenderStore(),
         auth,
-        logger: logger.child({ component: 'session-channel' }),
-        path:
-          typeof opts.sessionChannel === 'object'
-            ? opts.sessionChannel.path
-            : undefined,
-        streamBuffer: streamBuffer ?? new InMemorySessionStreamBuffer() /* hoist guarantees non-null when opts.sessionChannel truthy; fallback only for TS narrowing */,
+        logger: logger.child({ component: "session-channel" }),
+        path: typeof opts.sessionChannel === "object" ? opts.sessionChannel.path : undefined,
+        streamBuffer:
+          streamBuffer ??
+          new InMemorySessionStreamBuffer() /* hoist guarantees non-null when opts.sessionChannel truthy; fallback only for TS narrowing */,
         ...(channelBootstrap ? { bootstrap: channelBootstrap } : {}),
-        ...(consoleCookieAuth
-          ? { cookieAuth: consoleCookieAuth }
-          : {}),
-        ...(opts.wiredActionRouter
-          ? { wiredActionRouter: opts.wiredActionRouter }
-          : {}),
+        ...(consoleCookieAuth ? { cookieAuth: consoleCookieAuth } : {}),
+        ...(opts.wiredActionRouter ? { wiredActionRouter: opts.wiredActionRouter } : {}),
         ...(opts.wiredActionTimeoutMs !== undefined
           ? { wiredActionTimeoutMs: opts.wiredActionTimeoutMs }
           : {}),
@@ -8733,21 +8293,13 @@ export function createGguiServer(
         ...(opts.streamWebSocketLocalTools
           ? { streamWebSocketLocalTools: opts.streamWebSocketLocalTools }
           : {}),
-        ...(opts.sanitizeCausedBy
-          ? { sanitizeCausedBy: opts.sanitizeCausedBy }
-          : {}),
+        ...(opts.sanitizeCausedBy ? { sanitizeCausedBy: opts.sanitizeCausedBy } : {}),
         ...(composedReservedValidators
           ? { extraReservedValidators: composedReservedValidators }
           : {}),
-        ...(opts.versionPolicy !== undefined
-          ? { versionPolicy: opts.versionPolicy }
-          : {}),
-        ...(opts.onFirstSubscriber
-          ? { onFirstSubscriber: opts.onFirstSubscriber }
-          : {}),
-        ...(opts.onLastSubscriberGone
-          ? { onLastSubscriberGone: opts.onLastSubscriberGone }
-          : {}),
+        ...(opts.versionPolicy !== undefined ? { versionPolicy: opts.versionPolicy } : {}),
+        ...(opts.onFirstSubscriber ? { onFirstSubscriber: opts.onFirstSubscriber } : {}),
+        ...(opts.onLastSubscriberGone ? { onLastSubscriberGone: opts.onLastSubscriberGone } : {}),
         // Shared TelemetrySink — bound once at composition so wired-
         // tool dispatches on the live channel emit `wired-tool.invoked`
         // telemetry alongside the existing server.composed signal.
@@ -8766,7 +8318,7 @@ export function createGguiServer(
   // an audit event — it's a lossy health beacon, not a privileged
   // action.
   telemetry.emit({
-    name: 'server.composed',
+    name: "server.composed",
     at: Date.now(),
     attributes: {
       serverName: info.name,
@@ -8777,7 +8329,7 @@ export function createGguiServer(
       mcpApps: mcpAppsEnabled,
       console: consoleEnabled,
       primitiveCatalogs: opts.primitiveCatalogs?.length ?? 0,
-      themeSource: opts.theme?.source ?? 'default',
+      themeSource: opts.theme?.source ?? "default",
       // Named mount bundles aggregated onto `/mcp`. Zero by default;
       // surfaces the mount count so operators running `ggui serve`
       // with external fixtures can see the composition at boot.
@@ -8788,8 +8340,9 @@ export function createGguiServer(
   // Snapshot the catalogs once so the returned handle + any future
   // read surfaces share one frozen-shape reference. Also normalizes
   // `undefined` → empty array so consumers don't need to null-check.
-  const primitiveCatalogs: readonly DiscoveredPrimitiveCatalog[] =
-    opts.primitiveCatalogs ? [...opts.primitiveCatalogs] : [];
+  const primitiveCatalogs: readonly DiscoveredPrimitiveCatalog[] = opts.primitiveCatalogs
+    ? [...opts.primitiveCatalogs]
+    : [];
 
   // Theme: accept the caller's `LoadedTheme` as-is; fall back to the
   // shipped default when absent. `loadTheme({ projectRoot: '/', ... })`
@@ -8802,11 +8355,11 @@ export function createGguiServer(
     opts.theme ??
     (() => {
       const result = loadTheme({
-        projectRoot: '/',
+        projectRoot: "/",
         manifest: {
-          schema: '1',
-          protocol: '1.1',
-          app: { slug: 'oss', name: 'OSS' },
+          schema: "1",
+          protocol: "1.1",
+          app: { slug: "oss", name: "OSS" },
           blueprints: { include: [] },
           primitives: { packages: [], local: [] },
           // `mcpMounts` became required on the manifest type when
@@ -8823,9 +8376,7 @@ export function createGguiServer(
         // never touches the schema validator. If the invariant ever
         // breaks we want a hard crash at boot, not a silent fallback
         // to some third theme the rest of the code doesn't expect.
-        throw new Error(
-          `createGguiServer: default theme failed to load — ${result.issue.message}`,
-        );
+        throw new Error(`createGguiServer: default theme failed to load — ${result.issue.message}`);
       }
       return result.theme;
     })();
@@ -8844,39 +8395,34 @@ export function createGguiServer(
     blueprintStore,
     blueprintSelector,
     blueprintSearch,
-    async listen(port = 0, host = '127.0.0.1'): Promise<NodeHttpServer> {
+    async listen(port = 0, host = "127.0.0.1"): Promise<NodeHttpServer> {
       return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
           const addr = server.address();
-          const boundPort =
-            addr && typeof addr !== 'string' ? addr.port : port;
-          logger.info('listening', {
+          const boundPort = addr && typeof addr !== "string" ? addr.port : port;
+          logger.info("listening", {
             host,
             port: boundPort,
             tools: handlers.length,
             sessionChannel: channel ? channel.path : null,
             ...(resolvedAdminToken !== null
               ? {
-                  adminTokenHint:
-                    'console /keys gate — see banner for token value',
+                  adminTokenHint: "console /keys gate — see banner for token value",
                 }
               : {}),
           });
           httpServer = server;
           resolve(server);
         });
-        server.on('error', reject);
+        server.on("error", reject);
         // Wire live-channel upgrade handling onto the same http server.
         // Only routes matching the channel path actually become WebSockets;
         // other paths (or a future second WS endpoint) are rejected.
         if (channel) {
-          server.on('upgrade', (req, socket, head) => {
-            const url = new URL(req.url ?? '/', 'http://localhost');
+          server.on("upgrade", (req, socket, head) => {
+            const url = new URL(req.url ?? "/", "http://localhost");
             if (url.pathname !== channel.path) {
-              socket.write(
-                'HTTP/1.1 404 Not Found\r\n' +
-                  'Connection: close\r\n\r\n',
-              );
+              socket.write("HTTP/1.1 404 Not Found\r\n" + "Connection: close\r\n\r\n");
               socket.destroy();
               return;
             }
@@ -8900,16 +8446,16 @@ export function createGguiServer(
 /**
  * 18-char URL-safe shortCode for `POST /ggui/console/blueprint/:id/try`
  * — visually distinct from the 16-char push-minted shortCodes in
- * `@ggui-ai/mcp-server-handlers/session-mutations/push.ts` so operators
+ * `@ggui-ai/mcp-server-handlers/renders/push.ts` so operators
  * reading logs can tell a try-live session from an agent-pushed one
  * at a glance. Same confusable-free alphabet
  * (`[a-z0-9]` minus `1lI0Oo`) so the code stays hand-typable. Entropy
  * ≈ 18 × log₂(31) ≈ 89 bits.
  */
 function generateTryLiveShortCode(): string {
-  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
   const bytes = randomBytes(18);
-  let out = '';
+  let out = "";
   for (let i = 0; i < 18; i += 1) {
     out += alphabet[bytes[i] % alphabet.length];
   }
@@ -8950,23 +8496,17 @@ function buildResourceValidator(opts: {
   // even when the advertised resource (per /.well-known/oauth-
   // protected-resource) has none — strict-equality rejects them as
   // invalid_target. Normalize both sides before comparing.
-  const stripTrailingSlash = (url: string): string =>
-    url.endsWith('/') ? url.slice(0, -1) : url;
+  const stripTrailingSlash = (url: string): string => (url.endsWith("/") ? url.slice(0, -1) : url);
   return (issuer: string, resource: string): boolean => {
-    const universalResource =
-      universalMcpPath === '/' ? issuer : `${issuer}${universalMcpPath}`;
-    if (stripTrailingSlash(resource) === stripTrailingSlash(universalResource))
-      return true;
+    const universalResource = universalMcpPath === "/" ? issuer : `${issuer}${universalMcpPath}`;
+    if (stripTrailingSlash(resource) === stripTrailingSlash(universalResource)) return true;
     if (!perAppRouting) return false;
-    const { paramPattern, pathPrefix = '' } = perAppRouting;
+    const { paramPattern, pathPrefix = "" } = perAppRouting;
     // Anchor both ends so partial matches like
     // `${issuer}/apps/<id>/extra` don't slip through. Allow optional
     // trailing slash on per-app resources for the same client-canonical
     // -form reason as universal above.
-    const prefixEscaped = `${issuer}${pathPrefix}/`.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&',
-    );
+    const prefixEscaped = `${issuer}${pathPrefix}/`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`^${prefixEscaped}(?:${paramPattern})/?$`);
     return re.test(resource);
   };
@@ -8991,13 +8531,10 @@ function buildResourceValidator(opts: {
  * an obviously-wrong `${pathPrefix}//.well-known/...` URL — falling
  * back to universal is the safer behavior.
  */
-function resolveWwwAuthResourcePath(
-  req: Request,
-  opts: CreateGguiServerOptions,
-): string {
-  if (opts.perAppRouting === undefined) return '';
-  const { paramName, pathPrefix = '' } = opts.perAppRouting;
+function resolveWwwAuthResourcePath(req: Request, opts: CreateGguiServerOptions): string {
+  if (opts.perAppRouting === undefined) return "";
+  const { paramName, pathPrefix = "" } = opts.perAppRouting;
   const appId = req.params[paramName];
-  if (typeof appId !== 'string' || appId.length === 0) return '';
+  if (typeof appId !== "string" || appId.length === 0) return "";
   return `${pathPrefix}/${appId}`;
 }

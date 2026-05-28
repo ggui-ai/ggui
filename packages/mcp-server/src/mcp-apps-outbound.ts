@@ -32,33 +32,27 @@
  *   same `@ggui-ai/mcp-server` instance that mints the bootstrap.
  */
 
-import { createHash } from 'node:crypto';
+import type { RenderStore, VectorStore } from "@ggui-ai/mcp-server-core";
 import {
-  ResourceTemplate,
-  type McpServer,
-} from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { RenderStore, VectorStore } from '@ggui-ai/mcp-server-core';
-import type { Render } from '@ggui-ai/protocol';
-import {
-  deriveContextDefault,
-  type ContextSpec,
-} from '@ggui-ai/protocol';
-import {
-  deriveRenderMeta,
-  derivePublicEnvProjection,
-  deriveContractBundle,
   deriveBundleOrigins,
+  deriveContractBundle,
+  derivePublicEnvProjection,
+  deriveRenderMeta,
   findBlueprintExact,
   type Blueprint,
-} from '@ggui-ai/mcp-server-handlers/session-mutations';
+} from "@ggui-ai/mcp-server-handlers/renders";
+import type { Render } from "@ggui-ai/protocol";
+import { deriveContextDefault, type ContextSpec } from "@ggui-ai/protocol";
 import {
-  MCP_APPS_UI_CAPABILITY,
-  GGUI_RENDER_RESOURCE_URI,
   GGUI_RENDER_RESOURCE_MIME,
+  GGUI_RENDER_RESOURCE_URI,
+  MCP_APPS_UI_CAPABILITY,
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   deriveContextName,
   type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
+} from "@ggui-ai/protocol/integrations/mcp-apps";
+import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createHash } from "node:crypto";
 
 /**
  * Thin-shell body served from `ui://ggui/render` (C8 pivot).
@@ -395,11 +389,9 @@ export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
  * path where the host is `<McpAppIframe>` and the parent SPA owns
  * the CSP it inherits.
  */
-export const GGUI_RENDER_SHELL_SCRIPT_HASH: string = `'sha256-${createHash(
-  'sha256',
-)
+export const GGUI_RENDER_SHELL_SCRIPT_HASH: string = `'sha256-${createHash("sha256")
   .update(GGUI_RENDER_SHELL_SCRIPT_BODY)
-  .digest('base64')}'`;
+  .digest("base64")}'`;
 
 /**
  * Register `ui://ggui/render` as a readable resource on an `McpServer`.
@@ -448,7 +440,7 @@ function buildCspMeta(
    * references `:6786/_ggui/iframe-runtime.js`) trips a `script-src`
    * violation that blanks the iframe — verified live 2026-05-27.
    */
-  runtimeUrl?: string,
+  runtimeUrl?: string
 ):
   | {
       readonly ui: {
@@ -464,7 +456,7 @@ function buildCspMeta(
   try {
     const parsed = new URL(source);
     const origin = parsed.origin;
-    const wsScheme = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsScheme = parsed.protocol === "https:" ? "wss:" : "ws:";
     const wsOrigin = `${wsScheme}//${parsed.host}`;
     return {
       ui: {
@@ -482,7 +474,7 @@ function buildCspMeta(
 export function registerGguiRenderResource(
   server: McpServer,
   shellHtml: string = GGUI_RENDER_SHELL_HTML,
-  publicBaseUrl?: string,
+  publicBaseUrl?: string
 ): void {
   let cspMeta:
     | {
@@ -507,7 +499,7 @@ export function registerGguiRenderResource(
       // diagnosis case). Declare BOTH schemes so the same physical
       // origin is reachable via HTTPS (`/api/bootstrap`, `/_ggui/
       // iframe-runtime.js`) AND wss (live-channel subscribe).
-      const wsScheme = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsScheme = parsed.protocol === "https:" ? "wss:" : "ws:";
       const wsOrigin = `${wsScheme}//${parsed.host}`;
       cspMeta = {
         ui: {
@@ -527,14 +519,14 @@ export function registerGguiRenderResource(
   }
 
   server.registerResource(
-    'ggui-render',
+    "ggui-render",
     GGUI_RENDER_RESOURCE_URI,
     {
       // `title` / `description` show up in MCP clients that surface
       // resource metadata. Short + concrete.
-      title: 'ggui render',
+      title: "ggui render",
       description:
-        'Thin-shell iframe bundle that bootstraps a ggui render. MCP Apps hosts fetch this when they see `_meta.ui.resourceUri` on a ggui_render result.',
+        "Thin-shell iframe bundle that bootstraps a ggui render. MCP Apps hosts fetch this when they see `_meta.ui.resourceUri` on a ggui_render result.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     async (uri) => ({
@@ -546,7 +538,7 @@ export function registerGguiRenderResource(
           ...(cspMeta !== undefined ? { _meta: cspMeta } : {}),
         },
       ],
-    }),
+    })
   );
 }
 
@@ -659,7 +651,7 @@ export interface SelfContainedShellInputs {
    * `LoadedTheme.mode` for preset/file forms; default-source themes
    * omit this field entirely.
    */
-  readonly themeMode?: 'light' | 'dark';
+  readonly themeMode?: "light" | "dark";
   /**
    * Optional pre-serialized props (must be a JSON string) forwarded
    * to the renderer. Server inlines the string verbatim — the
@@ -678,12 +670,12 @@ export interface SelfContainedShellInputs {
    * Empty / absent → no fallout: the runtime's dispatch routes every
    * action through Pattern β.
    */
-  readonly appCallableTools?: McpAppAiGguiRenderMeta['appCallableTools'];
+  readonly appCallableTools?: McpAppAiGguiRenderMeta["appCallableTools"];
   /**
    * Per-action wired-tool mapping for the active render, mirrored
    * from {@link McpAppAiGguiRenderMeta.actionNextSteps}.
    */
-  readonly actionNextSteps?: McpAppAiGguiRenderMeta['actionNextSteps'];
+  readonly actionNextSteps?: McpAppAiGguiRenderMeta["actionNextSteps"];
   /**
    * Per-slot data for the active render's `contextSpec`, mirrored
    * from {@link McpAppAiGguiRenderMeta.contextSlots}. The runtime
@@ -691,7 +683,7 @@ export interface SelfContainedShellInputs {
    * Without this field, contextSpec UIs render with un-seeded
    * Providers.
    */
-  readonly contextSlots?: McpAppAiGguiRenderMeta['contextSlots'];
+  readonly contextSlots?: McpAppAiGguiRenderMeta["contextSlots"];
   /**
    * Permissions-Policy directive list derived from the active render's
    * `clientCapabilities.gadgets[*].permission`.
@@ -714,7 +706,7 @@ export interface SelfContainedShellInputs {
    * and `resources/read` iframes don't render as STDLIB-only when the
    * contract declares wrappers.
    */
-  readonly gadgets?: McpAppAiGguiRenderMeta['gadgets'];
+  readonly gadgets?: McpAppAiGguiRenderMeta["gadgets"];
   /**
    * Content-addressable hash for the active render's compiled
    * contract validators, mirrored from
@@ -723,7 +715,7 @@ export interface SelfContainedShellInputs {
    * import. Paired with {@link validatorsUrl} — present together or
    * absent together.
    */
-  readonly contractHash?: McpAppAiGguiRenderMeta['contractHash'];
+  readonly contractHash?: McpAppAiGguiRenderMeta["contractHash"];
   /**
    * URL serving the content-addressable contract-validator bundle,
    * mirrored from {@link McpAppAiGguiRenderMeta.validatorsUrl}.
@@ -731,7 +723,7 @@ export interface SelfContainedShellInputs {
    * and `resources/read` iframes resolve validators exactly as the
    * MCP-Apps postMessage path does.
    */
-  readonly validatorsUrl?: McpAppAiGguiRenderMeta['validatorsUrl'];
+  readonly validatorsUrl?: McpAppAiGguiRenderMeta["validatorsUrl"];
   /**
    * Server-filtered public env values that declared wrappers'
    * `requires` cover (minimum-disclosure subset of `App.publicEnv`).
@@ -739,7 +731,7 @@ export interface SelfContainedShellInputs {
    * transport that produces the meta MUST forward this field so
    * wrappers' `getPublicEnv()` reads land.
    */
-  readonly publicEnv?: McpAppAiGguiRenderMeta['publicEnv'];
+  readonly publicEnv?: McpAppAiGguiRenderMeta["publicEnv"];
   /**
    * Live-mode WebSocket URL the iframe-runtime opens to receive
    * `props_update` / `stack_*` frames. When set alongside `token` +
@@ -770,7 +762,7 @@ export interface SelfContainedShellInputs {
    * Absent in pre-R7 envelopes (back-compat); post-R7 it MUST be
    * present.
    */
-  readonly lastSequence?: McpAppAiGguiRenderMeta['lastSequence'];
+  readonly lastSequence?: McpAppAiGguiRenderMeta["lastSequence"];
   /**
    * Wire-stamped polling fallback URL — `${base}/api/renders/<id>/events?wsToken=<...>`.
    * When the iframe-runtime's WS transport reaches `'failed'` (CSP
@@ -782,7 +774,7 @@ export interface SelfContainedShellInputs {
    * fallback path lit up MUST thread this through (the canvas/inline
    * shell builders do; callers composing their own shells SHOULD).
    */
-  readonly pollingUrl?: McpAppAiGguiRenderMeta['pollingUrl'];
+  readonly pollingUrl?: McpAppAiGguiRenderMeta["pollingUrl"];
 }
 
 /**
@@ -816,16 +808,16 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // (e.g. codeUrl + live-mode credentials for an iframe that mounts
   // statically but subscribes for updates); the iframe-runtime parser
   // picks per its priority order.
-  const isSystem =
-    typeof opts.systemKind === 'string' && opts.systemKind.length > 0;
-  const hasCodeUrl =
-    typeof opts.codeUrl === 'string' && opts.codeUrl.length > 0;
+  const isSystem = typeof opts.systemKind === "string" && opts.systemKind.length > 0;
+  const hasCodeUrl = typeof opts.codeUrl === "string" && opts.codeUrl.length > 0;
   const hasLive =
-    typeof opts.wsUrl === 'string' && opts.wsUrl.length > 0
-    && typeof opts.token === 'string' && opts.token.length > 0;
+    typeof opts.wsUrl === "string" &&
+    opts.wsUrl.length > 0 &&
+    typeof opts.token === "string" &&
+    opts.token.length > 0;
   if (!isSystem && !hasCodeUrl && !hasLive) {
     throw new Error(
-      'buildSelfContainedShell: at least one of `codeUrl`, `systemKind`, or live-mode (`wsUrl` + `token`) must be set',
+      "buildSelfContainedShell: at least one of `codeUrl`, `systemKind`, or live-mode (`wsUrl` + `token`) must be set"
     );
   }
   // Build the single render slice (Phase B: ai.ggui/render collapsed
@@ -853,9 +845,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // (/r/<shortCode>, resources/read) would render as STDLIB-only —
     // wrapper-using contracts (Leaflet, Mapbox) destructure unknown
     // hooks at runtime.
-    ...(opts.gadgets !== undefined && opts.gadgets.length > 0
-      ? { gadgets: opts.gadgets }
-      : {}),
+    ...(opts.gadgets !== undefined && opts.gadgets.length > 0 ? { gadgets: opts.gadgets } : {}),
     // Server-filtered public env values that declared wrappers'
     // `requires` cover. Symmetric forward; without it, wrappers
     // calling `getPublicEnv()` throw at hook-mount on the
@@ -877,9 +867,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // WS-only mode (legacy behavior). See SelfContainedShellInputs
     // .pollingUrl for the URL shape.
     ...(opts.pollingUrl !== undefined ? { pollingUrl: opts.pollingUrl } : {}),
-    ...(opts.lastSequence !== undefined
-      ? { lastSequence: opts.lastSequence }
-      : {}),
+    ...(opts.lastSequence !== undefined ? { lastSequence: opts.lastSequence } : {}),
     // Visible-bits surface — what the iframe is mounting right now.
     // Static-content discriminators (codeUrl / kind) are mutually
     // exclusive; the iframe-runtime rejects the both-set mix.
@@ -891,8 +879,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
         }
       : {}),
     ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
-    ...(opts.actionNextSteps !== undefined &&
-    Object.keys(opts.actionNextSteps).length > 0
+    ...(opts.actionNextSteps !== undefined && Object.keys(opts.actionNextSteps).length > 0
       ? { actionNextSteps: opts.actionNextSteps }
       : {}),
     ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
@@ -923,20 +910,20 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // that JSON allows but JS parsers historically choked on; modern
   // engines accept them in strings but the escape is cheap insurance.
   const json = JSON.stringify(bootstrap)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 
   // HTML-escape the runtimeUrl for the `src` attribute. Server
   // operators control this string but a defensive escape avoids any
   // surprise if a future code path lets user-derived data flow here.
   const safeRuntimeUrl = opts.runtimeUrl
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>ggui render</title></head>
@@ -965,10 +952,10 @@ export function buildSelfContainedLoadingShell(renderId: string): string {
 <html lang="en"><head><meta charset="utf-8"><title>ggui render</title></head>
 <body>
 <div id="ggui-root" data-ggui-shell="loading" data-ggui-render-id="${renderId
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')}">Generating UI…</div>
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")}">Generating UI…</div>
 </body></html>`;
 }
 
@@ -992,7 +979,7 @@ export interface GguiRenderResourceTemplateOptions {
    * compiled component (the static-component channel cannot deliver
    * without a URL).
    */
-  readonly codeStore?: import('@ggui-ai/mcp-server-core').CodeStore;
+  readonly codeStore?: import("@ggui-ai/mcp-server-core").CodeStore;
   /**
    * Base URL the code-blob route resolves to. Paired with {@link codeStore}.
    */
@@ -1006,7 +993,7 @@ export interface GguiRenderResourceTemplateOptions {
    */
   readonly themeId?: string;
   /** Theme color mode resolved from `ggui.json#theme.mode`. */
-  readonly themeMode?: 'light' | 'dark';
+  readonly themeMode?: "light" | "dark";
   /**
    * Per-app metadata store the resource handler reads to resolve
    * `App.publicEnv` for the bootstrap projection.
@@ -1015,7 +1002,7 @@ export interface GguiRenderResourceTemplateOptions {
    * resource-served bootstrap (wrappers calling `getPublicEnv` throw
    * at hook-mount with a clear "not provided" message).
    */
-  readonly appMetadataStore?: import('@ggui-ai/mcp-server-core').AppMetadataStore;
+  readonly appMetadataStore?: import("@ggui-ai/mcp-server-core").AppMetadataStore;
   /**
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
@@ -1083,17 +1070,17 @@ type RenderRenderable =
 
 function pickComponentFromRender(render: Render | null | undefined): RenderRenderable | null {
   if (!render) return null;
-  if (render.type === 'mcpApps') return null;
-  const propsRaw = 'props' in render ? render.props : undefined;
+  if (render.type === "mcpApps") return null;
+  const propsRaw = "props" in render ? render.props : undefined;
   const props =
     propsRaw !== undefined &&
     propsRaw !== null &&
-    typeof propsRaw === 'object' &&
+    typeof propsRaw === "object" &&
     !Array.isArray(propsRaw)
       ? (propsRaw as Record<string, unknown>)
       : undefined;
-  if (render.type === 'system') {
-    if (typeof render.kind === 'string' && render.kind.length > 0) {
+  if (render.type === "system") {
+    if (typeof render.kind === "string" && render.kind.length > 0) {
       return {
         id: render.id,
         kind: render.kind,
@@ -1104,7 +1091,7 @@ function pickComponentFromRender(render: Render | null | undefined): RenderRende
     return null;
   }
   const code = render.componentCode;
-  if (typeof code === 'string' && code.length > 0) {
+  if (typeof code === "string" && code.length > 0) {
     return {
       id: render.id,
       componentCode: code,
@@ -1139,7 +1126,7 @@ function pickComponentFromRender(render: Render | null | undefined): RenderRende
  */
 export function registerGguiRenderResourceTemplate(
   server: McpServer,
-  opts: GguiRenderResourceTemplateOptions,
+  opts: GguiRenderResourceTemplateOptions
 ): void {
   // TWO templates registered against the same handler core:
   //
@@ -1156,19 +1143,16 @@ export function registerGguiRenderResourceTemplate(
   //      the render is gone but the blueprint is still cached
   //      (renders the original card with default props/context
   //      instead of the dead loading shell).
-  const legacyTemplate = new ResourceTemplate(
-    `${GGUI_RENDER_RESOURCE_URI}/{renderId}`,
-    {
-      // No list-callback — the resource set is unbounded per render
-      // count, and `resources/list` would leak render ids across
-      // tenants. Hosts discover specific URIs via per-call `_meta.ui.
-      // resourceUri` instead.
-      list: undefined,
-    },
-  );
+  const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{renderId}`, {
+    // No list-callback — the resource set is unbounded per render
+    // count, and `resources/list` would leak render ids across
+    // tenants. Hosts discover specific URIs via per-call `_meta.ui.
+    // resourceUri` instead.
+    list: undefined,
+  });
   const resumeTemplate = new ResourceTemplate(
     `${GGUI_RENDER_RESOURCE_URI}/{renderId}/{blueprintKey}`,
-    { list: undefined },
+    { list: undefined }
   );
 
   // CSP-meta block forwarded on every shell response when the
@@ -1198,19 +1182,14 @@ export function registerGguiRenderResourceTemplate(
    * absent — first-party same-origin host).
    */
   const augmentCspMeta = (
-    gadgetOrigins:
-      | ReturnType<typeof deriveBundleOrigins>
-      | undefined,
+    gadgetOrigins: ReturnType<typeof deriveBundleOrigins> | undefined
   ): CspMeta | undefined => {
     if (templateCspMeta === undefined) return undefined;
     if (gadgetOrigins === undefined) return templateCspMeta;
     return {
       ui: {
         csp: {
-          connectDomains: [
-            ...templateCspMeta.ui.csp.connectDomains,
-            ...gadgetOrigins.connect,
-          ],
+          connectDomains: [...templateCspMeta.ui.csp.connectDomains, ...gadgetOrigins.connect],
           resourceDomains: [
             ...templateCspMeta.ui.csp.resourceDomains,
             ...gadgetOrigins.script,
@@ -1223,7 +1202,7 @@ export function registerGguiRenderResourceTemplate(
   const shellContents = (
     uri: URL,
     text: string,
-    cspMeta: CspMeta | undefined = templateCspMeta,
+    cspMeta: CspMeta | undefined = templateCspMeta
   ): { contents: ShellContent[] } => ({
     contents: [
       {
@@ -1242,19 +1221,16 @@ export function registerGguiRenderResourceTemplate(
   // absent for the legacy single-segment shape.
   async function handle(
     uri: URL,
-    variables: Record<string, string | string[]>,
+    variables: Record<string, string | string[]>
   ): Promise<{ contents: ShellContent[] }> {
-    const renderIdRaw = variables['renderId'];
+    const renderIdRaw = variables["renderId"];
     const renderId = Array.isArray(renderIdRaw) ? renderIdRaw[0] : renderIdRaw;
-    if (typeof renderId !== 'string' || renderId.length === 0) {
-      return loadingShell(uri, 'unknown');
+    if (typeof renderId !== "string" || renderId.length === 0) {
+      return loadingShell(uri, "unknown");
     }
-    const blueprintKeyRaw = variables['blueprintKey'];
-    const blueprintKey = Array.isArray(blueprintKeyRaw)
-      ? blueprintKeyRaw[0]
-      : blueprintKeyRaw;
-    const hasResumeKey =
-      typeof blueprintKey === 'string' && blueprintKey.length > 0;
+    const blueprintKeyRaw = variables["blueprintKey"];
+    const blueprintKey = Array.isArray(blueprintKeyRaw) ? blueprintKeyRaw[0] : blueprintKeyRaw;
+    const hasResumeKey = typeof blueprintKey === "string" && blueprintKey.length > 0;
 
     // Parallel lookup. The render and the blueprint registry are
     // independent — even though the render's componentCode could feed
@@ -1268,8 +1244,8 @@ export function registerGguiRenderResourceTemplate(
         ? findBlueprintExact(
             { vectorStore: opts.vectorStore },
             opts.defaultAppIdFallback,
-            'template',
-            blueprintKey,
+            "template",
+            blueprintKey
           )
         : Promise.resolve(null),
     ]);
@@ -1303,7 +1279,7 @@ export function registerGguiRenderResourceTemplate(
             const hash = opts.codeStore.hashOf(picked.componentCode);
             await opts.codeStore.put(hash, picked.componentCode);
             codeHash = hash;
-            const base = opts.codeBaseUrl.replace(/\/$/, '');
+            const base = opts.codeBaseUrl.replace(/\/$/, "");
             codeUrl = `${base}/code/${hash}.js`;
           } catch {
             // Silent — falls through to loading shell below.
@@ -1314,7 +1290,7 @@ export function registerGguiRenderResourceTemplate(
             if (bundle) {
               await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
               contractHash = bundle.contractHash;
-              const base = opts.codeBaseUrl.replace(/\/$/, '');
+              const base = opts.codeBaseUrl.replace(/\/$/, "");
               validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
             }
           } catch {
@@ -1336,16 +1312,11 @@ export function registerGguiRenderResourceTemplate(
         // iframe matches the MCP-Apps postMessage path. Without this,
         // wrapper-using contracts rendered through `resources/read`
         // mount as STDLIB-only.
-        let resourcePublicEnv:
-          | Readonly<Record<string, string>>
-          | undefined;
+        let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
         if (opts.appMetadataStore) {
           try {
             const appRecord = await opts.appMetadataStore.get(stored.appId);
-            resourcePublicEnv = derivePublicEnvProjection(
-              picked.source,
-              appRecord?.publicEnv,
-            );
+            resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
           } catch {
             // Silent — wrappers calling getPublicEnv throw clearly.
           }
@@ -1363,24 +1334,18 @@ export function registerGguiRenderResourceTemplate(
           ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
           ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-          ...(view.actionNextSteps !== undefined
-            ? { actionNextSteps: view.actionNextSteps }
-            : {}),
-          ...(view.contextSlots !== undefined
-            ? { contextSlots: view.contextSlots }
-            : {}),
+          ...(view.actionNextSteps !== undefined ? { actionNextSteps: view.actionNextSteps } : {}),
+          ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
           ...(view.permissionsPolicy !== undefined
             ? { permissionsPolicy: view.permissionsPolicy }
             : {}),
-          ...(view.gadgets !== undefined &&
-          view.gadgets.length > 0
+          ...(view.gadgets !== undefined && view.gadgets.length > 0
             ? { gadgets: view.gadgets }
             : {}),
           ...(contractHash !== undefined && validatorsUrl !== undefined
             ? { contractHash, validatorsUrl }
             : {}),
-          ...(resourcePublicEnv !== undefined &&
-          Object.keys(resourcePublicEnv).length > 0
+          ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
             ? { publicEnv: resourcePublicEnv }
             : {}),
           // R6 — ledger cursor stamp for polling-cursor alignment.
@@ -1427,27 +1392,27 @@ export function registerGguiRenderResourceTemplate(
   }
 
   server.registerResource(
-    'ggui-render-self-contained',
+    "ggui-render-self-contained",
     legacyTemplate,
     {
-      title: 'ggui render (self-contained, legacy URI)',
+      title: "ggui render (self-contained, legacy URI)",
       description:
-        'Per-render self-contained shell — single-segment URI shape predating the resume contract. Falls back to loading shell when the render is gone (no blueprintKey to do registry-only render).',
+        "Per-render self-contained shell — single-segment URI shape predating the resume contract. Falls back to loading shell when the render is gone (no blueprintKey to do registry-only render).",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
-    handle,
+    handle
   );
 
   server.registerResource(
-    'ggui-session-self-contained-resume',
+    "ggui-session-self-contained-resume",
     resumeTemplate,
     {
-      title: 'ggui render (self-contained, resume URI)',
+      title: "ggui render (self-contained, resume URI)",
       description:
-        'Per-render self-contained shell — two-segment URI shape carrying both renderId AND blueprintKey. Resource handler runs Promise.all over render + registry; falls back to registry-only static render when the render has been evicted but the blueprint is still cached.',
+        "Per-render self-contained shell — two-segment URI shape carrying both renderId AND blueprintKey. Resource handler runs Promise.all over render + registry; falls back to registry-only static render when the render has been evicted but the blueprint is still cached.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
-    handle,
+    handle
   );
 }
 
@@ -1470,8 +1435,8 @@ async function buildShellFromBlueprint(args: {
   blueprint: Blueprint;
   runtimeUrl: string;
   themeId?: string;
-  themeMode?: 'light' | 'dark';
-  codeStore?: import('@ggui-ai/mcp-server-core').CodeStore;
+  themeMode?: "light" | "dark";
+  codeStore?: import("@ggui-ai/mcp-server-core").CodeStore;
   codeBaseUrl?: string;
 }): Promise<string | undefined> {
   const { blueprint } = args;
@@ -1480,15 +1445,15 @@ async function buildShellFromBlueprint(args: {
   }
   const contract = blueprint.contract ?? {};
   const propsSpec =
-    'props' in contract && contract.props !== undefined
-      ? (contract.props as { properties: Record<string, { schema: { default?: unknown }; default?: unknown }> })
+    "props" in contract && contract.props !== undefined
+      ? (contract.props as {
+          properties: Record<string, { schema: { default?: unknown }; default?: unknown }>;
+        })
       : undefined;
-  const propsJson = propsSpec
-    ? JSON.stringify(deriveDefaultPropsValues(propsSpec))
-    : undefined;
+  const propsJson = propsSpec ? JSON.stringify(deriveDefaultPropsValues(propsSpec)) : undefined;
   const contextSlots = deriveDefaultContextSlots(contract.contextSpec);
   const actionNextSteps =
-    'actionSpec' in contract && contract.actionSpec !== undefined
+    "actionSpec" in contract && contract.actionSpec !== undefined
       ? deriveWiredActionToolsFromSpec(contract.actionSpec)
       : undefined;
   let codeUrl: string;
@@ -1496,7 +1461,7 @@ async function buildShellFromBlueprint(args: {
   try {
     codeHash = args.codeStore.hashOf(blueprint.componentCode);
     await args.codeStore.put(codeHash, blueprint.componentCode);
-    const base = args.codeBaseUrl.replace(/\/$/, '');
+    const base = args.codeBaseUrl.replace(/\/$/, "");
     codeUrl = `${base}/code/${codeHash}.js`;
   } catch {
     return undefined;
@@ -1515,9 +1480,9 @@ async function buildShellFromBlueprint(args: {
   });
 }
 
-function deriveDefaultPropsValues(
-  spec: { properties: Record<string, { schema?: { default?: unknown }; default?: unknown }> },
-): Record<string, unknown> {
+function deriveDefaultPropsValues(spec: {
+  properties: Record<string, { schema?: { default?: unknown }; default?: unknown }>;
+}): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(spec.properties)) {
     if (entry.default !== undefined) {
@@ -1530,14 +1495,14 @@ function deriveDefaultPropsValues(
 }
 
 function deriveDefaultContextSlots(
-  spec: ContextSpec | undefined,
-): McpAppAiGguiRenderMeta['contextSlots'] {
+  spec: ContextSpec | undefined
+): McpAppAiGguiRenderMeta["contextSlots"] {
   if (!spec) return undefined;
-  const collected: NonNullable<McpAppAiGguiRenderMeta['contextSlots']>[number][] = [];
+  const collected: NonNullable<McpAppAiGguiRenderMeta["contextSlots"]>[number][] = [];
   for (const [name, entry] of Object.entries(spec)) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     if (entry.schema === undefined || entry.schema === null) continue;
-    if (typeof entry.schema !== 'object') continue;
+    if (typeof entry.schema !== "object") continue;
     const fallback = deriveContextDefault(entry);
     collected.push({
       name,
@@ -1551,14 +1516,14 @@ function deriveDefaultContextSlots(
 }
 
 function deriveWiredActionToolsFromSpec(
-  spec: import('@ggui-ai/protocol').ActionSpec,
+  spec: import("@ggui-ai/protocol").ActionSpec
 ): Record<string, string> | undefined {
   const collected: Record<string, string> = {};
   for (const [name, entry] of Object.entries(spec)) {
     if (
       entry &&
-      typeof entry === 'object' &&
-      typeof entry.nextStep === 'string' &&
+      typeof entry === "object" &&
+      typeof entry.nextStep === "string" &&
       entry.nextStep.length > 0
     ) {
       collected[name] = entry.nextStep;
@@ -1600,7 +1565,7 @@ export function installMcpAppsOutbound(
      * there via `<McpAppIframe>`.
      */
     readonly publicBaseUrl?: string;
-  } = {},
+  } = {}
 ): void {
   advertiseMcpAppsUiCapability(server);
   registerGguiRenderResource(server, opts.shellHtml, opts.publicBaseUrl);
@@ -1608,4 +1573,3 @@ export function installMcpAppsOutbound(
     registerGguiRenderResourceTemplate(server, opts.selfContained);
   }
 }
-

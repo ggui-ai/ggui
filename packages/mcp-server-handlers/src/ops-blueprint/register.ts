@@ -36,43 +36,35 @@
  *     ops_generate — schema-compat + hygiene-3 lint live elsewhere.
  */
 
-import { randomUUID, createHash } from 'node:crypto';
-import { z } from 'zod';
+import type {
+  AppMetadataStore,
+  BlueprintStore,
+  GeneratorRegistry,
+  TelemetrySink,
+} from "@ggui-ai/mcp-server-core";
 import {
   opsRegisterBlueprintInputSchema,
   type Blueprint,
   type DataContract,
   type OpsRegisterBlueprintInput,
   type OpsRegisterBlueprintOutput,
-} from '@ggui-ai/protocol';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
-import type {
-  AppMetadataStore,
-  BlueprintStore,
-  GeneratorRegistry,
-  TelemetrySink,
-} from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
-import {
-  findNearDuplicatePersona,
-  normalizePersona,
-} from './persona-normalization.js';
-import {
-  registerBlueprint,
-  type BlueprintRegistryDeps,
-} from '../session-mutations/index.js';
-import { assertGadgetsRegistered } from '../session-mutations/assert-gadgets.js';
-import { assertContractNoRetiredFields } from '../session-mutations/assert-contract-no-retired-fields.js';
-import type { PutCodeHook } from './generate.js';
+} from "@ggui-ai/protocol";
+import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import { createHash, randomUUID } from "node:crypto";
+import { z } from "zod";
+import { assertContractNoRetiredFields } from "../renders/assert-contract-no-retired-fields.js";
+import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
+import { registerBlueprint, type BlueprintRegistryDeps } from "../renders/index.js";
+import type { HandlerContext, SharedHandler } from "../types.js";
+import type { PutCodeHook } from "./generate.js";
+import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
 
 const opsInputSchema = opsRegisterBlueprintInputSchema.shape;
-const opsOutputSchema = z
-  .object({
-    blueprintId: z.string().min(1),
-    codeHash: z.string().min(1),
-    generator: z.string().min(1),
-  })
-  .shape;
+const opsOutputSchema = z.object({
+  blueprintId: z.string().min(1),
+  codeHash: z.string().min(1),
+  generator: z.string().min(1),
+}).shape;
 
 /**
  * Deps for `ggui_ops_register_blueprint`. Mirrors `*_generate_*`'s
@@ -141,42 +133,34 @@ export interface GguiOpsRegisterBlueprintDeps {
 }
 
 export function createGguiOpsRegisterBlueprintHandler(
-  deps: GguiOpsRegisterBlueprintDeps,
-): SharedHandler<
-  typeof opsInputSchema,
-  typeof opsOutputSchema,
-  OpsRegisterBlueprintOutput
-> {
+  deps: GguiOpsRegisterBlueprintDeps
+): SharedHandler<typeof opsInputSchema, typeof opsOutputSchema, OpsRegisterBlueprintOutput> {
   const now = deps.now ?? (() => new Date().toISOString());
-  const mintBlueprintId =
-    deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
+  const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
 
   return {
-    name: 'ggui_ops_register_blueprint',
-    title: 'Register blueprint',
-    audience: ['ops'],
+    name: "ggui_ops_register_blueprint",
+    title: "Register blueprint",
+    audience: ["ops"],
     description:
       "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, generator}` where `generator` is the resolved registry-default slug or the supplied override (audit/provenance only — no code is generated).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
       rawInput: Record<string, unknown>,
-      ctx: HandlerContext,
+      ctx: HandlerContext
     ): Promise<OpsRegisterBlueprintOutput> {
       if (!ctx.appId) {
-        throw new Error(
-          'ggui_ops_register_blueprint: missing caller identity (appId empty)',
-        );
+        throw new Error("ggui_ops_register_blueprint: missing caller identity (appId empty)");
       }
-      const parsed: OpsRegisterBlueprintInput =
-        opsRegisterBlueprintInputSchema.parse(rawInput);
+      const parsed: OpsRegisterBlueprintInput = opsRegisterBlueprintInputSchema.parse(rawInput);
 
       // Reject retired top-level contract fields BEFORE any
       // persistence so an operator-supplied row can't smuggle
       // deprecated vocabulary (`terminal`, `consumeSpec`,
       // `interaction`, `commandSpec`, `behaviorSpec`) into the
       // registry. The same gate fires on the push + handshake seams
-      // in `session-mutations/`.
+      // in `renders/`.
       assertContractNoRetiredFields(parsed.contract);
 
       // Every `contract.clientCapabilities.gadgets[*]` MUST resolve
@@ -185,10 +169,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       // mutation. No-op when no `appMetadataStore` is bound.
       if (deps.appMetadataStore) {
         const appRecord = await deps.appMetadataStore.get(ctx.appId);
-        assertGadgetsRegistered(
-          parsed.contract,
-          appRecord?.gadgets,
-        );
+        assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
       }
 
       // 1. Normalize the persona + run near-dup detection. Same
@@ -199,15 +180,12 @@ export function createGguiOpsRegisterBlueprintHandler(
           const allForApp = await deps.listAllForApp(ctx.appId);
           const existingPersonas: ReadonlyArray<string> = allForApp
             .map((bp) => bp.variance.persona)
-            .filter((p): p is string => typeof p === 'string');
-          const dup = findNearDuplicatePersona(
-            normalizedPersona,
-            existingPersonas,
-          );
+            .filter((p): p is string => typeof p === "string");
+          const dup = findNearDuplicatePersona(normalizedPersona, existingPersonas);
           if (dup && dup.nearestExisting !== null) {
             try {
               deps.telemetry?.emit({
-                name: 'near-duplicate-persona',
+                name: "near-duplicate-persona",
                 at: Date.now(),
                 attributes: {
                   appId: ctx.appId,
@@ -240,9 +218,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       const contract: DataContract = parsed.contract;
       const contractHash = blueprintKey(contract);
       const componentCode = parsed.componentCode;
-      const codeHash = createHash('sha256')
-        .update(componentCode)
-        .digest('hex');
+      const codeHash = createHash("sha256").update(componentCode).digest("hex");
 
       const blueprintId = mintBlueprintId();
       const blueprint: Blueprint = {
@@ -252,19 +228,13 @@ export function createGguiOpsRegisterBlueprintHandler(
         codeHash,
         generator: resolvedGeneratorSlug,
         variance: {
-          ...(normalizedPersona !== undefined
-            ? { persona: normalizedPersona }
-            : {}),
-          ...(parsed.aesthetic !== undefined
-            ? { aesthetic: parsed.aesthetic }
-            : {}),
+          ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
+          ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
           ...(parsed.context !== undefined ? { context: parsed.context } : {}),
-          ...(parsed.seedPrompt !== undefined
-            ? { seedPrompt: parsed.seedPrompt }
-            : {}),
+          ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
         },
         createdAt: now(),
-        createdBy: 'operator',
+        createdBy: "operator",
         contract,
       };
 
@@ -285,23 +255,23 @@ export function createGguiOpsRegisterBlueprintHandler(
             normalizedPersona ??
             `operator-registered blueprint (${blueprintId})`;
           await registerBlueprint(deps.cacheRegistry, ctx.appId, {
-            kind: 'template',
+            kind: "template",
             contract,
             intent: intentForCache,
             componentCode,
-            provenance: 'register',
+            provenance: "register",
           });
         } catch (err) {
           try {
             deps.telemetry?.emit({
-              name: 'blueprint.cache_mirror_failed',
+              name: "blueprint.cache_mirror_failed",
               at: Date.now(),
               attributes: {
                 appId: ctx.appId,
                 requestId: ctx.requestId,
                 blueprintId,
                 contractHash,
-                errorClass: err instanceof Error ? err.name : 'unknown',
+                errorClass: err instanceof Error ? err.name : "unknown",
                 errorMessage: err instanceof Error ? err.message : String(err),
               },
             });
@@ -318,7 +288,7 @@ export function createGguiOpsRegisterBlueprintHandler(
 
       try {
         deps.telemetry?.emit({
-          name: 'blueprint.registered',
+          name: "blueprint.registered",
           at: Date.now(),
           attributes: {
             appId: ctx.appId,
@@ -326,7 +296,7 @@ export function createGguiOpsRegisterBlueprintHandler(
             blueprintId,
             contractHash,
             generator: resolvedGeneratorSlug,
-            createdBy: 'operator',
+            createdBy: "operator",
             setAsOperatorDefault: parsed.setAsOperatorDefault === true,
           },
         });

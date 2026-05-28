@@ -49,7 +49,7 @@
  *     per-channel quiescence enforcement. Producers SHOULD NOT emit
  *     after `complete: true`; this helper doesn't reject if they do.
  *
- * Seam-free, pure + injectable. Lives in session-mutations alongside
+ * Seam-free, pure + injectable. Lives in renders alongside
  * `assertStreamContract` (payload validator) and `resolveStreamChannel`
  * (semantics lookup) — both of which this helper composes on.
  *
@@ -57,22 +57,14 @@
  * `{sessionId, stack[], currentStackIndex}` target shape into a single
  * `RenderStreamTarget` — every render IS the addressable scope.
  */
-import type {
-  GguiEmitInput,
-  GguiEmitOutput,
-  JsonValue,
-  StreamSpec,
-} from '@ggui-ai/protocol';
+import type { GguiEmitInput, GguiEmitOutput, JsonValue, StreamSpec } from "@ggui-ai/protocol";
 import {
   DEFAULT_STREAM_CHANNEL_MODE,
   resolveStreamChannel,
   type StreamChannelMode,
-} from '@ggui-ai/protocol';
-import { assertStreamContract } from './assert-stream-contract.js';
-import {
-  ChannelNotDeclaredError,
-  InvalidCompleteError,
-} from './errors.js';
+} from "@ggui-ai/protocol";
+import { assertStreamContract } from "./assert-stream-contract.js";
+import { ChannelNotDeclaredError, InvalidCompleteError } from "./errors.js";
 
 /**
  * Minimum shape the helper needs from a resolved render. Callers
@@ -87,8 +79,8 @@ export interface RenderStreamTarget {
 /**
  * The envelope-input shape the helper hands to `sendEnvelope`. Structural
  * peer of `StreamEnvelopeInput` from `@ggui-ai/mcp-server-core` —
- * duplicated here to keep session-mutations free of a mcp-server-core
- * dependency (session-mutations sits below core in the layering).
+ * duplicated here to keep renders free of a mcp-server-core
+ * dependency (renders sits below core in the layering).
  *
  * Consumers that accept `StreamEnvelopeInput` can assign this directly.
  */
@@ -115,9 +107,7 @@ export interface SendEnvelopeResult {
  * local fan-out). Errors propagate to the tool handler — `handleStream`
  * does not wrap them.
  */
-export type SendEnvelopeFn = (
-  envelope: HandleStreamEnvelope,
-) => Promise<SendEnvelopeResult>;
+export type SendEnvelopeFn = (envelope: HandleStreamEnvelope) => Promise<SendEnvelopeResult>;
 
 export interface HandleStreamDeps {
   readonly render: RenderStreamTarget;
@@ -134,7 +124,7 @@ export interface HandleStreamDeps {
  */
 export async function handleStream<TPayload extends JsonValue = JsonValue>(
   input: GguiEmitInput<TPayload>,
-  deps: HandleStreamDeps,
+  deps: HandleStreamDeps
 ): Promise<GguiEmitOutput> {
   const { render, sendEnvelope } = deps;
 
