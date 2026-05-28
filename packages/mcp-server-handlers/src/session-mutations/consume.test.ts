@@ -189,9 +189,9 @@ describe('createGguiConsumeHandler', () => {
       expect(result.events[0].type).toBe('submit');
     });
 
-    it('long-poll short-circuits when status flips to completed', async () => {
+    it('long-poll short-circuits when status flips to expired', async () => {
       await seedRender('render-1', 'app-1');
-      consumer.markStatus('render-1', 'completed');
+      consumer.markStatus('render-1', 'expired');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
@@ -201,13 +201,13 @@ describe('createGguiConsumeHandler', () => {
         { renderId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
       );
-      // First fetchAndClearSafe sees status=completed → no long-poll wait.
+      // First fetchAndClearSafe sees status=expired → no long-poll wait.
       expect(Date.now() - start).toBeLessThan(500);
       expect(result.events).toEqual([]);
-      expect(result.status).toBe('completed');
+      expect(result.status).toBe('expired');
     });
 
-    it('mid-poll render-disappeared returns completed status (no throw)', async () => {
+    it('mid-poll render-disappeared returns expired status (no throw)', async () => {
       await seedRender('render-1', 'app-1');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
@@ -221,8 +221,8 @@ describe('createGguiConsumeHandler', () => {
         { renderId: 'render-1', timeout: 3 },
         { appId: 'app-1', requestId: 'r1' },
       );
-      // PendingPipeNotFoundError mid-poll is converted to completed status.
-      expect(result.status).toBe('completed');
+      // PendingPipeNotFoundError mid-poll is converted to expired status.
+      expect(result.status).toBe('expired');
       expect(result.events).toEqual([]);
     });
   });

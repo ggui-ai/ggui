@@ -237,7 +237,7 @@ export function createGguiConsumeHandler(
     title: 'Consume',
     audience: ['agent'],
     description:
-      'Long-poll for buffered events on a render. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by renderId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"completed".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
+      'Long-poll for buffered events on a render. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by renderId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
     inputSchema,
     outputSchema,
     async handler(
@@ -284,12 +284,12 @@ export function createGguiConsumeHandler(
         );
 
         // Long-poll loop — only engages when the first read returned
-        // nothing AND the pipe is still active. Completed pipes
+        // nothing AND the pipe is still active. Expired pipes
         // short-circuit because there will never be new events.
         if (
           cappedTimeout > 0 &&
           result.events.length === 0 &&
-          result.status !== 'completed'
+          result.status !== 'expired'
         ) {
           // emit consume_polling:open so the canvas animator
           // transitions to its `listening` state. We only emit once
@@ -309,7 +309,7 @@ export function createGguiConsumeHandler(
               renderId,
               ttlMs,
             );
-            if (result.events.length > 0 || result.status === 'completed') {
+            if (result.events.length > 0 || result.status === 'expired') {
               break;
             }
           }
@@ -437,11 +437,11 @@ async function fetchAndClearSafe(
         err.name === 'RenderNotFoundError' ||
         err.name === 'SessionNotFoundError')
     ) {
-      // Treat mid-long-poll disappearance as 'completed' to unblock
+      // Treat mid-long-poll disappearance as 'expired' to unblock
       // callers without forcing them to handle yet another error.
       // (`SessionNotFoundError` retained for older cloud adapters that
       // still throw the legacy name.)
-      return { events: [], status: 'completed' };
+      return { events: [], status: 'expired' };
     }
     throw err;
   }
