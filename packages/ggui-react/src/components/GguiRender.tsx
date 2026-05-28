@@ -11,7 +11,6 @@ import type {
   ProgressPayload,
   SystemPayload,
   JsonValue,
-  JsonObject,
 } from '@ggui-ai/protocol';
 import { BRIDGE_EVENTS, CLIENT_SUPPORTED_VERSIONS, UpgradeRequiredError } from '@ggui-ai/protocol';
 import {
