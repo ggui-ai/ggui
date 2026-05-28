@@ -53,7 +53,7 @@ import type { McpAppsRender } from '../integrations/mcp-apps';
  * matching renderer fall through to a generic "system message" card so
  * an old runtime + new server still produce something visible.
  */
-export type SystemStackItemKind =
+export type SystemRenderKind =
   | 'no-credentials'
   | 'mcp-apps-probe'
   // Future kinds: 'rate-limited' | 'quota-exceeded' | 'server-down' …
@@ -314,7 +314,7 @@ export interface SystemRender<TProps extends JsonObject = JsonObject>
    * never breaks an older runtime; it just falls through to a generic
    * card carrying the props as raw JSON.
    */
-  readonly kind: SystemStackItemKind;
+  readonly kind: SystemRenderKind;
   /** Props forwarded to the built-in renderer. */
   readonly props?: TProps;
   /** Optional descriptive text the server can attach (telemetry, logs). */

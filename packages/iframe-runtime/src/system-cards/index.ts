@@ -13,7 +13,7 @@
  *   1. Author `MyNewCard.tsx` in this directory.
  *   2. Add an entry to {@link SYSTEM_CARD_REGISTRY} below.
  *   3. (Optional) Add the new kind string to
- *      `SystemStackItemKind` in `@ggui-ai/protocol` for IDE autocomplete.
+ *      `SystemRenderKind` in `@ggui-ai/protocol` for IDE autocomplete.
  */
 import * as React from 'react';
 import { ThemeProvider, lightTheme, darkTheme } from '@ggui-ai/design/themes';
@@ -106,7 +106,7 @@ function UnknownSystemCard({
 
 /**
  * Registered system-card kinds. Keep keys aligned with
- * `SystemStackItemKind` in `@ggui-ai/protocol` so wire + bundle stay
+ * `SystemRenderKind` in `@ggui-ai/protocol` so wire + bundle stay
  * in sync. New kinds added without a registry entry render as
  * {@link UnknownSystemCard}.
  */
