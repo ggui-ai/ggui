@@ -147,5 +147,10 @@ export function hoistedBin(name: string): string {
  * suite's loaders, which resolve the same `<OSS-root>/.env.local`.
  */
 export function envFilePath(): string {
+  // Prefer the outermost workspace root's .env.local — the monorepo
+  // convention. Fall back to the nearest workspace root for the OSS
+  // standalone layout where they're the same path.
+  const outermost = resolve(OUTERMOST_ROOT, '.env.local');
+  if (existsSync(outermost)) return outermost;
   return resolve(PACKAGES_ROOT, '.env.local');
 }

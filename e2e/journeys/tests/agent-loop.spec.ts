@@ -50,7 +50,8 @@ const MATRIX: readonly MatrixEntry[] = [
 ];
 
 const TODO_PROMPT =
-  'Create a todo list with 3 items: buy milk, walk the dog, write code. Then show me the list.';
+  'Render an interactive todo list UI with these 3 items: buy milk, walk the dog, write code. ' +
+  'Show the list as a rendered UI component, not as a plain text reply.';
 const EXPECTED_TODOS = ['buy milk', 'walk', 'write code'];
 
 const CLICK_LOOP_PROMPT =
@@ -131,10 +132,10 @@ for (const entry of MATRIX) {
       // rendered state, without a new agent turn.
       //
       // Mechanics:
-      //   1. Open the page — URL gets redirected to `?session=<chatSessionId>`
-      //      by `getOrCreateChatSessionId`.
+      //   1. Open the page — URL gets redirected to `?chat=<chatId>`
+      //      by `getOrCreateChatId`.
       //   2. Send a prompt → agent renders an iframe with known content.
-      //   3. Capture the resolved URL (now carries `?session=<id>`).
+      //   3. Capture the resolved URL (now carries `?chat=<id>`).
       //   4. page.reload() — same URL, fresh React tree, no /chat call.
       //   5. Frontend's on-mount /chat/restore returns the prior
       //      session's bootstrap envelope, iframe re-mounts.
@@ -165,10 +166,10 @@ for (const entry of MATRIX) {
         timeout: 120_000,
       });
 
-      // Capture the resolved URL — must include the `?session=` param
+      // Capture the resolved URL — must include the `?chat=` param
       // the frontend wrote so the reload-pass goes to the same chat.
       const resumeUrl = page.url();
-      expect(resumeUrl).toContain('?session=');
+      expect(resumeUrl).toContain('?chat=');
 
       // Hard reload — same URL, fresh DOM, no /chat call. The frontend
       // calls /chat/restore on mount and re-mounts the prior iframe.
