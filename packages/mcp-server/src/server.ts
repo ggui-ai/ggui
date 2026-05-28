@@ -6472,7 +6472,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const searchedFrom = process.cwd();
       const safeSchema = (() => {
         try {
-          return z.toJSONSchema(GguiJsonV1);
+          // `unrepresentable: 'any'` keeps fields backed by `.transform()`
+          // (e.g. `generation.model`, parsed at the schema boundary into
+          // a typed `LlmRoute`) in the JSON Schema as `{}` instead of
+          // throwing. Transforms are runtime-only; the JSON-Schema view
+          // serves the console SPA as documentation, so a permissive
+          // shape is the honest projection.
+          return z.toJSONSchema(GguiJsonV1, { unrepresentable: "any" });
         } catch (err) {
           logger.warn("console_config_schema_conversion_failed", {
             error: String(err),
