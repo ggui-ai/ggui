@@ -1139,8 +1139,9 @@ export type SubmitActionEnvelope =
  *     pipe is closed/missing (closed/never opened), the handler returns
  *     `{ok:false, code:'PIPE_NOT_FOUND'}` and the iframe-runtime falls
  *     through to a `ui/message` envelope carrying
- *     `_meta.ggui.userAction` (see {@link GguiUserActionMeta}) so the
- *     gesture still reaches the agent on its next turn.
+ *     `content[0]._meta["ai.ggui/userAction"]` (see
+ *     {@link GguiUserActionMeta}) so the gesture still reaches the
+ *     agent on its next turn.
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit — the
  *     user-visible host effect already fired iframe-side via
  *     `ui/open-link` / `ui/request-display-mode`. The server records
@@ -1229,9 +1230,15 @@ export function isGguiSubmitActionInput(
 
 /**
  * Discriminator the iframe-runtime stamps on a `ui/message` envelope's
- * `params._meta.ggui.userAction` when a user gesture inside a ggui-
- * rendered iframe needs to flow to the agent through chat (rather than
- * direct WS drain via `ggui_consume`).
+ * `content[0]._meta["ai.ggui/userAction"]` when a user gesture inside
+ * a ggui-rendered iframe needs to flow to the agent through chat
+ * (rather than direct WS drain via `ggui_consume`).
+ *
+ * Spec-canonical extension point: MCP Apps closes `params._meta` via
+ * `additionalProperties: false`, but each content block has its own
+ * open `_meta` record (per the base MCP spec). The `ai.ggui/*` key
+ * prefix matches our other protocol extensions
+ * (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
  *
  * Discriminated by `kind`:
  *
@@ -1261,8 +1268,9 @@ export function isGguiSubmitActionInput(
 export type GguiUserActionMeta = QueuedUserActionMeta | InlineUserActionMeta;
 
 /**
- * `_meta.ggui.userAction` variant — pipe has the event; agent dispatches
- * the prepared `ggui_consume` call to drain. See {@link GguiUserActionMeta}.
+ * `content[0]._meta["ai.ggui/userAction"]` variant — pipe has the
+ * event; agent dispatches the prepared `ggui_consume` call to drain.
+ * See {@link GguiUserActionMeta}.
  *
  * @public
  */
@@ -1294,9 +1302,10 @@ export interface QueuedUserActionMeta {
 }
 
 /**
- * `_meta.ggui.userAction` variant — pipe is gone; action + ui context
- * delivered inline. Agent acts on `payload` directly; MUST NOT call
- * `ggui_consume` for `renderId` (no pipe to drain).
+ * `content[0]._meta["ai.ggui/userAction"]` variant — pipe is gone;
+ * action + ui context delivered inline. Agent acts on `payload`
+ * directly; MUST NOT call `ggui_consume` for `renderId` (no pipe to
+ * drain).
  *
  * `nextStep` is optional — when the original `actionSpec[intent]` declared
  * a `nextStep` (the bound agent tool), it's surfaced here as a string
@@ -1350,9 +1359,9 @@ export interface InlineUserActionMeta {
 /**
  * Type guard for {@link GguiUserActionMeta}. Validates the
  * discriminated shape on a `ui/message` envelope's
- * `params._meta.ggui.userAction` field.
+ * `content[0]._meta["ai.ggui/userAction"]` field.
  *
- * Designed for `_meta.ggui.userAction`-aware consumers (sample agent
+ * Designed for `ai.ggui/userAction`-aware consumers (sample agent
  * dispatcher, e2e assertions, future SDKs) to route deterministically
  * without speculative shape coercion.
  *

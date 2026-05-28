@@ -496,10 +496,11 @@
  *      error; iframe emits the action inline via `ui/message`). No
  *      timer, no rescue, no race between two atomic-pop callers.
  *
- *   t2. **`_meta.ggui.userAction` unifies `fallback` + `nudge`.** New
- *      single discriminator on `ui/message` envelopes replacing the
- *      separate `_meta.ggui.fallback` (reason: pipe_not_found | timeout)
- *      + `_meta.ggui.nudge` (no_active_consumer) split:
+ *   t2. **`content[0]._meta["ai.ggui/userAction"]` unifies `fallback` +
+ *      `nudge`.** New single discriminator on `ui/message` envelopes
+ *      replacing the separate `_meta.ggui.fallback` (reason:
+ *      pipe_not_found | timeout) + `_meta.ggui.nudge`
+ *      (no_active_consumer) split:
  *
  *        - `kind: 'queued'` — pipe HAS the event; agent SHOULD dispatch
  *          the prepared `{tool: 'ggui_consume', args: {stackItemId}}`

@@ -1494,6 +1494,16 @@ function callAppRequestDisplayMode(
   });
 }
 
+function callAppSendMessage(
+  params: Parameters<App['sendMessage']>[0],
+): void {
+  const app = getCurrentApp();
+  if (app === null) return;
+  void app.sendMessage(params).catch(() => {
+    // Detached / host-rejected — drop silently per the helper contract.
+  });
+}
+
 /**
  * Production {@link ContextSnapshotPoster} — the seam the
  * context-observer factories consume. Splits the two destinations:
@@ -1827,11 +1837,11 @@ function readLocalUiContext(): Record<string, unknown> {
 
 /**
  * Emit a `ui/message` envelope tagged with
- * `_meta.ggui.userAction.kind === 'inline'`. Fires when `submit_action`
- * did NOT successfully append to the pipe (PIPE_NOT_FOUND, transport
- * error, or the host has no relay). The full action payload travels
- * inline so the agent can act WITHOUT calling `ggui_consume` for this
- * stack item (the pipe is gone).
+ * `content[0]._meta["ai.ggui/userAction"].kind === 'inline'`. Fires
+ * when `submit_action` did NOT successfully append to the pipe
+ * (PIPE_NOT_FOUND, transport error, or the host has no relay). The
+ * full action payload travels inline so the agent can act WITHOUT
+ * calling `ggui_consume` for this render (the pipe is gone).
  *
  * `nextStep` is optional — when the contract bound `actionSpec[intent]`
  * to a specific agent tool we forward that hint; absent when the
@@ -1852,10 +1862,10 @@ function emitUserActionInline(args: {
   // and tripped claude.ai's prompt-injection classifier — even on the
   // user-trusted `ui/message` channel — so the message got flagged
   // before reasoning. The fix is structural: keep structured data
-  // ONLY on `_meta.ggui.userAction.payload` (where MCP Apps hosts read
-  // it through the spec's trusted path) and let the text carry a
-  // natural-language summary that no classifier can mistake for a
-  // tool-call injection.
+  // ONLY on `content[0]._meta["ai.ggui/userAction"].payload` (where
+  // MCP Apps hosts read it through the spec's trusted path) and let
+  // the text carry a natural-language summary that no classifier can
+  // mistake for a tool-call injection.
   const description = `User fired ${args.intent} on ${args.renderId}`;
   const text =
     `User fired "${args.intent}" on render ${args.renderId}. ` +
@@ -1863,27 +1873,20 @@ function emitUserActionInline(args: {
     `message instead of queued on the consume pipe. Use the userAction ` +
     `payload to handle it directly; do NOT call ggui_consume for this ` +
     `render.`;
-  // TODO(#276): Replace with `app.sendMessage(...)` once ext-apps's
-  // `McpUiMessageRequest` schema honors the spec's `_meta` extension
-  // surface. The base MCP spec defines `_meta` as `{ [key: string]:
-  // unknown }` — a namespaced extension point. Other ext-apps
-  // schemas (toolresult, hostcontextchanged) carry `_meta`; only
-  // McpUiMessageRequest's closed zod schema silently strips it.
-  // Until an upstream fix (`.passthrough()` or an explicit `_meta`
-  // field), raw postMessage is the only path that preserves our
-  // `_meta.ggui.userAction.*` payload — the structured channel the
-  // agent reads on the chat-thread escape hatch when the canonical
-  // `submit_action` → `ggui_consume` pipe is broken.
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/message',
-    params: {
-      role: 'user',
-      content: [{ type: 'text', text }],
-      _meta: {
-        ggui: {
-          userAction: {
+  // Spec-canonical shape: `_meta` lives on the CONTENT BLOCK (the spec
+  // closes `params._meta` via `additionalProperties: false`, but each
+  // content block has its own `_meta: { [key: string]: unknown }` open
+  // record — the proper extension point). Namespaced under
+  // `ai.ggui/userAction` to match our other protocol extensions
+  // (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
+  callAppSendMessage({
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text,
+        _meta: {
+          'ai.ggui/userAction': {
             kind: 'inline',
             description,
             renderId: args.renderId,
@@ -1898,17 +1901,17 @@ function emitUserActionInline(args: {
           },
         },
       },
-    },
+    ],
   });
 }
 
 /**
  * Emit a `ui/message` envelope tagged with
- * `_meta.ggui.userAction.kind === 'queued'`. Fires when `submit_action`
- * succeeded BUT the server reported `consumerPresent: false` — the
- * action IS on the pipe; the agent just needs to call `ggui_consume`
- * to drain it. Carries the prepared `{tool, args}` so the SDK can
- * dispatch verbatim.
+ * `content[0]._meta["ai.ggui/userAction"].kind === 'queued'`. Fires
+ * when `submit_action` succeeded BUT the server reported
+ * `consumerPresent: false` — the action IS on the pipe; the agent
+ * just needs to call `ggui_consume` to drain it. Carries the prepared
+ * `{tool, args}` so the SDK can dispatch verbatim.
  */
 function emitUserActionQueued(args: {
   readonly intent: string;
@@ -1923,25 +1926,23 @@ function emitUserActionQueued(args: {
   // channel: data that looks like a tool-call injection IS treated as
   // one, regardless of who supplied it. The renderId + next-tool
   // hint stay in prose; the canonical machine-readable form lives on
-  // `_meta.ggui.userAction.nextStep`.
+  // `content[0]._meta["ai.ggui/userAction"].nextStep`.
   const description = `User fired ${args.intent} on ${args.renderId}`;
   const text =
     `User fired "${args.intent}" on render ${args.renderId}. ` +
     `The gesture is queued on the consume pipe but no consumer is active — ` +
     `call ggui_consume with this renderId next to drain the canonical payload.`;
-  // TODO(#276): Replace with `app.sendMessage(...)` once ext-apps's
-  // McpUiMessageRequest schema honors `_meta` extensions. See
-  // `emitUserActionInline` for the full rationale.
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'ui/message',
-    params: {
-      role: 'user',
-      content: [{ type: 'text', text }],
-      _meta: {
-        ggui: {
-          userAction: {
+  // Spec-canonical shape: `_meta` on the content block, namespaced
+  // under `ai.ggui/userAction`. See `emitUserActionInline` for full
+  // rationale on the location + naming choice.
+  callAppSendMessage({
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text,
+        _meta: {
+          'ai.ggui/userAction': {
             kind: 'queued',
             description,
             renderId: args.renderId,
@@ -1955,7 +1956,7 @@ function emitUserActionQueued(args: {
           },
         },
       },
-    },
+    ],
   });
 }
 

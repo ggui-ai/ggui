@@ -172,12 +172,11 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         dispatchToolName: 'ggui_runtime_submit_action',
       });
 
-      // Both ui/update-model-context AND tools/call submit_action now
-      // flow through the App transport post-#275. The send is async
-      // (queueMicrotask round-trip), so drain microtasks before
-      // asserting on transport.sent. postMessageSpy stays empty for
-      // the synchronous fan-out — only the ui/message fallback (if
-      // submit_action errors) hits raw postMessage.
+      // ui/update-model-context, tools/call submit_action, AND the
+      // ui/message fallback (if submit_action errors) all flow through
+      // the App transport post-#276 — none of them touch raw postMessage.
+      // The send is async (queueMicrotask round-trip), so drain
+      // microtasks before asserting on transport.sent.
       expect(postMessageSpy).not.toHaveBeenCalled();
       await tick();
 
@@ -239,10 +238,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       await tick();
       await tick();
 
-      const postMessageMethods = postMessageSpy.mock.calls.map(
-        (call) => (call[0] as { method?: unknown }).method,
-      );
-      expect(postMessageMethods).not.toContain('ui/message');
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string');
+      expect(transportMethods).not.toContain('ui/message');
     });
 
     it('on relay response {ok:false, code:PIPE_NOT_FOUND} → ui/message fallback fires', async () => {
@@ -268,15 +267,30 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       await tick();
       await tick();
 
-      const postMessageMethods = postMessageSpy.mock.calls.map(
-        (call) => (call[0] as { method?: unknown }).method,
-      );
-      expect(postMessageMethods).toContain('ui/message');
-      const uiMessage = postMessageSpy.mock.calls.find(
-        (call) => (call[0] as { method?: unknown }).method === 'ui/message',
-      )?.[0] as Record<string, unknown>;
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string');
+      expect(transportMethods).toContain('ui/message');
+
+      const uiMessage = transport.sent.find(
+        (msg) => (msg as { method?: unknown }).method === 'ui/message',
+      ) as Record<string, unknown>;
       const params = uiMessage.params as Record<string, unknown>;
       expect(params.role).toBe('user');
+
+      // Spec-canonical shape (post-#276): structured payload lives on
+      // content[0]._meta["ai.ggui/userAction"], NOT on params._meta.
+      const content = params.content as Array<Record<string, unknown>>;
+      expect(content).toHaveLength(1);
+      const firstBlock = content[0];
+      expect(firstBlock.type).toBe('text');
+      const blockMeta = firstBlock._meta as Record<string, unknown>;
+      const userAction = blockMeta['ai.ggui/userAction'] as Record<
+        string,
+        unknown
+      >;
+      expect(userAction.kind).toBe('inline');
+      expect(userAction.renderId).toBe('render_1');
     });
 
     it('on relay response with JSON-RPC error → ui/message fallback fires', async () => {
@@ -299,10 +313,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       await tick();
       await tick();
 
-      const postMessageMethods = postMessageSpy.mock.calls.map(
-        (call) => (call[0] as { method?: unknown }).method,
-      );
-      expect(postMessageMethods).toContain('ui/message');
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string');
+      expect(transportMethods).toContain('ui/message');
     });
   });
 
