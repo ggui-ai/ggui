@@ -167,7 +167,7 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    // Slice J (2026-04-26) wired `<SessionInspector>` into production
+    // Slice J (2026-04-26) wired `<RenderInspector>` into production
     // `<RenderViewer>` via a new `<StackInspectorList>` pane that
     // renders one inspector per stack entry. Post Phase-B stack
     // collapse the data source is now `GET /ggui/console/render?render=<id>`

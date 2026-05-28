@@ -180,7 +180,7 @@ function resolveGadgetUrlsImpl(
  * optional `nextStep` field names the agent-side tool the agent
  * INTENDS to call next. The renderer surfaces this map as
  * `actionNextSteps` to keep the bootstrap-meta shape stable —
- * downstream tooling (renderer dev console, SessionInspector) reads it
+ * downstream tooling (renderer dev console, RenderInspector) reads it
  * as "which actions hint at which tools." Entries without `nextStep`
  * are omitted.
  */

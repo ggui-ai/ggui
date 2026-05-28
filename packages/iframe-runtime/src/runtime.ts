@@ -1926,7 +1926,7 @@ export function dispatchWiredAction(args: {
  * PIPE-2 design note: Pattern α deliberately does NOT fire
  * `submit_action` — a pipe append would queue the gesture for the
  * agent's `ggui_consume` long-poll, causing double-processing
- * (host's tool relay AND agent's reaction). SessionInspector loses
+ * (host's tool relay AND agent's reaction). RenderInspector loses
  * Pattern α observability for now; re-add via a dedicated audit-only
  * gesture kind if operators need it.
  *

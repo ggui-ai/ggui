@@ -1059,7 +1059,7 @@ export function isMcpAppLifecycleMessage(
  * Audit is **fail-soft** at the client: if the `tools/call` envelope
  * fails to deliver (host rejects, postMessage on detached parent), the
  * primary host effect MUST still proceed. The audit miss surfaces as a
- * diagnostic on the operator side (gap in the SessionInspector activity
+ * diagnostic on the operator side (gap in the RenderInspector activity
  * row), not as a user-facing failure. This mirrors today's `dispatch`
  * audit-fire posture so semantics stay uniform.
  *
@@ -1144,7 +1144,7 @@ export type SubmitActionEnvelope =
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit — the
  *     user-visible host effect already fired iframe-side via
  *     `ui/open-link` / `ui/request-display-mode`. The server records
- *     the gesture for the SessionInspector feed.
+ *     the gesture for the RenderInspector feed.
  *
  * Required fields:
  *   - `renderId` / `appId`: bootstrap-issued; server cross-checks.

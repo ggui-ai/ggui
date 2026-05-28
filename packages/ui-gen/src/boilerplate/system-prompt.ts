@@ -371,7 +371,7 @@ Choose by what the user is DOING, not where the result goes — the runtime hand
 | Open external link | Plain \`<a href="https://...">\` (or \`target="_blank"\`) | External cross-origin clicks are intercepted and routed through the host (security warnings, app-internal navigation, audit). Same-origin links and \`#fragment\` jumps stay native. |
 | Toggle fullscreen / chrome | Plain \`el.requestFullscreen()\` / \`document.exitFullscreen()\` | The native browser API is intercepted; the host adjusts iframe chrome accordingly. Returns a resolved promise so \`.then()\` / \`await\` chains don't break. |
 
-Every gesture fires a uniform server-side audit envelope (\`ggui_runtime_submit_action\`) so operators see all three patterns in SessionInspector with the same shape.
+Every gesture fires a uniform server-side audit envelope (\`ggui_runtime_submit_action\`) so operators see all three patterns in RenderInspector with the same shape.
 
 **Don't import wire hooks for link / display-mode.** \`useAction\` is the only wire hook for user gestures; links and fullscreen use plain HTML / browser APIs.
 

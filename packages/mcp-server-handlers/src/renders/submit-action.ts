@@ -44,7 +44,7 @@
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit. The
  *     user-visible host effect (ui/open-link, ui/request-display-mode)
  *     already fired iframe-side; the server just records the gesture
- *     for the SessionInspector feed.
+ *     for the RenderInspector feed.
  *
  * **Failure modes:**
  *   - Malformed envelope → `{ok:false, code:'INVALID_ACTION_KIND',
@@ -203,7 +203,7 @@ export interface GguiSubmitActionHandlerDeps {
    * `pending-event-consumer.ts`): queue drains on every consume,
    * ledger is append-only retained. The dual-write restores the
    * audit visibility the pre-spec-mig WS `handleInboundAction` path
-   * had (operator-side SessionInspector queries, cross-process
+   * had (operator-side RenderInspector queries, cross-process
    * replay, hosted multi-pod observability).
    *
    * Absence is tolerated — the handler falls back to queue-only

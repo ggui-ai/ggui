@@ -534,7 +534,7 @@ export interface RenderChannelOptions {
    *
    * The contract-error envelope flows on `_ggui:contract-error` with
    * `replay: 'all'`, so anything that lands in `causedBy` persists in
-   * the session ring buffer and surfaces in SessionInspector. Accepting
+   * the session ring buffer and surfaces in RenderInspector. Accepting
    * raw `err.stack` verbatim is a credential-leak footgun; the default
    * sanitizer is load-bearing.
    */

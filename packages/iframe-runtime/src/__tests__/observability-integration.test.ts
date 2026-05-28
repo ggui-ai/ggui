@@ -33,7 +33,7 @@ import {
   type ObservabilityMessage,
 } from '../observability.js';
 
-// --- Consumer-side classifier (mirrors console/SessionInspector) ---
+// --- Consumer-side classifier (mirrors console/RenderInspector) ---
 
 type ActivityTab = 'All' | 'Actions' | 'Errors' | 'Version' | 'Subscribe';
 

@@ -980,7 +980,7 @@ export function defaultHandlers(deps: {
     // spec §401 so iframe-issued `tools/call` invocations land here
     // instead of being rejected. Dual-writes every dispatch to BOTH
     // `pendingEventConsumer` (wakes `ggui_consume`) AND `renderStore`
-    // (audit ledger for SessionInspector + cross-process replay) —
+    // (audit ledger for RenderInspector + cross-process replay) —
     // restores the audit visibility the pre-spec-mig WS handler
     // (`handleInboundAction`) used to provide. `renderStore` is
     // optional — passed through from `deps.push.renderStore` when

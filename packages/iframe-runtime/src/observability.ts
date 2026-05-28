@@ -7,7 +7,7 @@
  *     protocol violation or transport error).
  *   - `ObservabilityEvent` fires on HAPPY PATHS + failures alike
  *     (telemetry + inspection signal the host can display in a
- *     SessionInspector-style view).
+ *     RenderInspector-style view).
  *
  * The host wrapper passes events through to `onObserve` opaquely.
  *
@@ -40,7 +40,7 @@ export type ObservabilityEvent =
 
 /**
  * Fired when a wired action successfully dispatched to a registered
- * MCP tool. Hosts surface this as a dispatch row in SessionInspector.
+ * MCP tool. Hosts surface this as a dispatch row in RenderInspector.
  * Emitted by the server-side router (session-channel.ts) via
  * postMessage relay through the renderer.
  *
@@ -152,7 +152,7 @@ export interface AuthRequiredEvent {
 /**
  * Fired by the channel-transport router when it picks a transport
  * for a `streamSpec[ch].source.tool` channel. Hosts can inspect the
- * WS-vs-poll decision per channel in the SessionInspector activity
+ * WS-vs-poll decision per channel in the RenderInspector activity
  * feed.
  *
  * @public

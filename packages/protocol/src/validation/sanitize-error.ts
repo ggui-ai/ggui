@@ -9,7 +9,7 @@
 // and env-var dumps. The envelope flows on the reserved
 // `_ggui:contract-error` channel with `replay: 'all'`, so anything that
 // lands in `causedBy` persists in the session ring buffer and is visible
-// in operator tools (SessionInspector activity panels). If an operator
+// in operator tools (RenderInspector activity panels). If an operator
 // shares a bug report with that data, the credential leaks externally.
 //
 // This module's default posture is "sanitize before emission": the
