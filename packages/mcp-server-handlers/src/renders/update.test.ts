@@ -68,12 +68,15 @@ describe('createGguiUpdateHandler', () => {
       expect(handler.name).toBe('ggui_update');
     });
 
-    it('declares the lean updateOutputSchema shape — {renderId, updated}', () => {
+    it('declares the updateOutputSchema shape — {renderId, resourceUri, updated}', () => {
       const store = new InMemoryRenderStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
       const outKeys = Object.keys(handler.outputSchema).sort();
       // Phase-B (flatten-render-identity): stackItemId → renderId.
-      expect(outKeys).toEqual(['renderId', 'updated']);
+      // `resourceUri` is the spec-canonical MCP-Apps entry-point — same
+      // `ui://ggui/render/{id}` URI `ggui_render` stamped on the initial
+      // mount, surfaced to SDKs that strip `_meta`.
+      expect(outKeys).toEqual(['renderId', 'resourceUri', 'updated']);
     });
 
     it('does NOT carry any MCP Apps _meta stamp — update is a pure mutation', () => {
@@ -94,7 +97,11 @@ describe('createGguiUpdateHandler', () => {
         ctx(),
       );
 
-      expect(out).toEqual({ renderId, updated: true });
+      expect(out).toEqual({
+        renderId,
+        updated: true,
+        resourceUri: `ui://ggui/render/${renderId}`,
+      });
       const after = await store.get(renderId);
       // The render's wire-shape payload narrows to ComponentRender here
       // — the seed produced a `type: 'component'` row.
@@ -115,7 +122,11 @@ describe('createGguiUpdateHandler', () => {
         { ...ctx(), renderId },
       );
 
-      expect(out).toEqual({ renderId, updated: true });
+      expect(out).toEqual({
+        renderId,
+        updated: true,
+        resourceUri: `ui://ggui/render/${renderId}`,
+      });
     });
 
     it('wire input overrides HandlerContext when both are present', async () => {
@@ -194,7 +205,11 @@ describe('createGguiUpdateHandler', () => {
         ctx(),
       );
 
-      expect(out).toEqual({ renderId, updated: true });
+      expect(out).toEqual({
+        renderId,
+        updated: true,
+        resourceUri: `ui://ggui/render/${renderId}`,
+      });
       const after = await store.get(renderId);
       // Only `temp` changes; `condition` and `city` carry through.
       expect((after?.render as ComponentRender).props).toEqual({
