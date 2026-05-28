@@ -98,6 +98,7 @@
     "url": "https://github.com/ggui-ai/ggui/issues"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "canonicalize": "^2.0.0",

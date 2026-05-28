@@ -4,7 +4,7 @@
  * the agent can reason about device/host capabilities on subsequent turns.
  *
  * The MCP Apps spec (`@modelcontextprotocol/ext-apps`) defines a rich
- * `McpUiHostContext` (theme, styles, displayMode, availableDisplayModes,
+ * {@link McpUiHostContext} (theme, styles, displayMode, availableDisplayModes,
  * containerDimensions, locale, timeZone, userAgent, platform,
  * deviceCapabilities). ggui captures it iframe-side at `ui/initialize` and
  * echoes a TRIMMED projection back over the live channel (via the
@@ -44,21 +44,28 @@
 import type { JsonValue } from './data-contract';
 
 // =============================================================================
-// Display modes (mirror of `@modelcontextprotocol/ext-apps` enum)
+// Spec types — re-exported from `@modelcontextprotocol/ext-apps`.
+//
+// The protocol package owns ggui's TRIMMED projection
+// ({@link HostContextProjection}); it re-exports the raw spec types
+// {@link McpUiDisplayMode} / {@link McpUiHostContext} /
+// {@link McpUiHostCapabilities} so downstream consumers (iframe-runtime,
+// cloud, etc.) can import them through one path without each pulling a
+// direct dep on the SDK. Re-exporting (not re-declaring) is the
+// drift-proof posture — when the spec widens a literal or adds a field,
+// every consumer sees it the next time the SDK version bumps. Pre-1.19b
+// this module re-declared `McpUiDisplayMode` to keep the protocol
+// package SDK-free; the SDK is small and tree-shakes cleanly on the
+// type-only path, so the dep is worth the structural guarantee.
 // =============================================================================
 
-/**
- * The three display modes the MCP Apps spec defines. Mirror of
- * `McpUiDisplayMode` from `@modelcontextprotocol/ext-apps` — re-declared
- * here so the protocol package doesn't take a runtime dependency on the
- * SDK (the SDK is consumed in iframe-runtime + system-card; the protocol
- * package stays SDK-free per the layering boundary).
- *
- * Stay in sync with the SDK literal: `'inline' | 'fullscreen' | 'pip'`.
- * If the spec adds a fourth mode, widen here and in
- * `iframe-runtime`'s capability-resolution helpers in lockstep.
- */
-export type McpUiDisplayMode = 'inline' | 'fullscreen' | 'pip';
+export type {
+  McpUiDisplayMode,
+  McpUiHostContext,
+  McpUiHostCapabilities,
+} from '@modelcontextprotocol/ext-apps';
+
+import type { McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 
 // =============================================================================
 // Container dimensions (mirror of `McpUiHostContext.containerDimensions`)
