@@ -235,7 +235,7 @@ describe('StreamSpec / ActionSpec / PropsSpec boundary lock (type-level)', () =>
 });
 
 describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-level)', () => {
-  // `SubscribePayload.bootstrap` and `AckPayload.sessionToken` are
+  // `SubscribePayload.bootstrap` and `AckPayload.renderToken` are
   // deliberately framed as GENERAL transport-bootstrap credentials
   // (opaque strings), NOT as MCP-Apps-typed fields. This lock ensures
   // a future change doesn't accidentally narrow them to
@@ -263,13 +263,13 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
     expect(s2).toBeDefined();
   });
 
-  it('AckPayload.sessionToken is a string, not a typed credential object', () => {
+  it('AckPayload.renderToken is a string, not a typed credential object', () => {
     const a: AckPayload = {
       sequence: 1,
       timestamp: 0,
-      sessionToken: 'opaque',
+      renderToken: 'opaque',
     };
-    expect(typeof a.sessionToken).toBe('string');
+    expect(typeof a.renderToken).toBe('string');
   });
 });
 

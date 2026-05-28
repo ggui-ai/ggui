@@ -326,7 +326,7 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
         type: 'ack',
         payload: {
           stack: [],
-          sessionToken: 't',
+          renderToken: 't',
           serverVersion: '999.0.0',
         },
       }),

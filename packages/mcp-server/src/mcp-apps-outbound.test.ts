@@ -5,7 +5,7 @@
  * `ggui_render` tool call with bootstrap `_meta` on the result,
  * `resources/read ui://ggui/render` serving the thin shell, and a
  * real live-channel subscribe with the minted bootstrap token producing
- * an ack with a reconnect `sessionToken`.
+ * an ack with a reconnect `renderToken`.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
@@ -240,7 +240,7 @@ describe('end-to-end outbound flow', () => {
       'token',
       'bootstrap',
       'bootstrapToken',
-      'sessionToken',
+      'renderToken',
       'expiresAt',
     ]) {
       expect(scKeys).not.toContain(bootstrapKey);
@@ -401,7 +401,7 @@ async function bootOutboundServerWith(
   return { server, httpServer, httpBase, wsUrl };
 }
 
-describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
+describe('end-to-end bootstrap subscribe → ack renderToken', () => {
   let fx: Fixture;
   let client: Client;
 
@@ -441,7 +441,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     };
   }
 
-  it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {
+  it('bootstrap-auth subscribe succeeds and ack carries renderToken', async () => {
     const bootstrap = await mintRenderBootstrap();
     // Open WS with ?wsToken= gate — upgrade-time AuthAdapter is skipped.
     const ws = new WebSocket(
@@ -452,12 +452,12 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
       ws.once('error', reject);
     });
 
-    const ackPromise = new Promise<{ sequence: number; sessionToken?: string; stack?: unknown[] }>(
+    const ackPromise = new Promise<{ sequence: number; renderToken?: string; stack?: unknown[] }>(
       (resolve, reject) => {
         ws.on('message', (raw) => {
           const msg = JSON.parse(raw.toString()) as {
             type: string;
-            payload: { sequence: number; sessionToken?: string; stack?: unknown[]; code?: string };
+            payload: { sequence: number; renderToken?: string; stack?: unknown[]; code?: string };
           };
           if (msg.type === 'ack') resolve(msg.payload);
           else if (msg.type === 'error') reject(new Error(msg.payload.code));
@@ -478,8 +478,8 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
 
     const ack = await ackPromise;
     expect(ack.sequence).toBeDefined();
-    expect(typeof ack.sessionToken).toBe('string');
-    expect((ack.sessionToken as string).length).toBeGreaterThan(10);
+    expect(typeof ack.renderToken).toBe('string');
+    expect((ack.renderToken as string).length).toBeGreaterThan(10);
     expect(ack.stack).toEqual([]);
     ws.close();
   });
@@ -495,7 +495,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     // on a server-side jti-claim Map.
     const bootstrap = await mintRenderBootstrap();
 
-    async function subscribeWithBootstrap(): Promise<{ ok: true; sessionToken?: string } | { ok: false; code: string }> {
+    async function subscribeWithBootstrap(): Promise<{ ok: true; renderToken?: string } | { ok: false; code: string }> {
       const ws = new WebSocket(
         `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
       );
@@ -504,14 +504,14 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
         ws.once('error', reject);
       });
       const result = await new Promise<
-        { ok: true; sessionToken?: string } | { ok: false; code: string }
+        { ok: true; renderToken?: string } | { ok: false; code: string }
       >((resolve) => {
         ws.on('message', (raw) => {
           const msg = JSON.parse(raw.toString()) as {
             type: string;
-            payload: { sessionToken?: string; code?: string };
+            payload: { renderToken?: string; code?: string };
           };
-          if (msg.type === 'ack') resolve({ ok: true, sessionToken: msg.payload.sessionToken });
+          if (msg.type === 'ack') resolve({ ok: true, renderToken: msg.payload.renderToken });
           else if (msg.type === 'error') resolve({ ok: false, code: msg.payload.code as string });
         });
         ws.send(
@@ -535,9 +535,9 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     const second = await subscribeWithBootstrap();
     expect(second.ok).toBe(true);
     if (second.ok) {
-      // Each subscribe still mints a fresh sessionToken — that's the
+      // Each subscribe still mints a fresh renderToken — that's the
       // longer-TTL reconnect credential and is per-subscribe by design.
-      expect(typeof second.sessionToken).toBe('string');
+      expect(typeof second.renderToken).toBe('string');
     }
   });
 

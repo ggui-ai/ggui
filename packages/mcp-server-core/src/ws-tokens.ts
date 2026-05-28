@@ -19,7 +19,7 @@
  *
  *   - **Session token** — longer-TTL, reusable, minted by the live-
  *     channel server on the FIRST successful ws-token-authed subscribe
- *     and returned in `AckPayload.sessionToken`. The iframe uses it for
+ *     and returned in `AckPayload.renderToken`. The iframe uses it for
  *     live-channel reconnects (over the standard bearer path) so the
  *     original token source doesn't need to re-mint.
  *
@@ -191,7 +191,7 @@ export function mintWsToken(
  * Mint a longer-TTL reusable session token.
  *
  * Issued by the live-channel server on the FIRST successful
- * ws-token-authed subscribe and returned in `AckPayload.sessionToken`.
+ * ws-token-authed subscribe and returned in `AckPayload.renderToken`.
  * The iframe persists it (sessionStorage / equivalent) and uses it
  * on reconnects via the standard `Authorization: Bearer <...>` or
  * `?token=<...>` paths. Not single-use.

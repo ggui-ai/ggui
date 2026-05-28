@@ -2163,7 +2163,7 @@ export interface CreateGguiServerOptions {
    *   4. Each `ggui_render` result carries the `ai.ggui/render` slice
    *      with wsUrl + short-TTL token + expiresAt. The session-channel
    *      server accepts that token on `subscribe` and issues a
-   *      longer-TTL `sessionToken` in the ack for iframe reconnects.
+   *      longer-TTL `renderToken` in the ack for iframe reconnects.
    */
   readonly mcpApps?:
     | boolean

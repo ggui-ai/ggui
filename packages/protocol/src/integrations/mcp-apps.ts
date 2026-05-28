@@ -21,7 +21,7 @@
  * drift is bounded to callers that explicitly import from here.
  *
  * Core still carries two fields that make the bootstrap flow work —
- * `SubscribePayload.bootstrap?: string` and `AckPayload.sessionToken?:
+ * `SubscribePayload.bootstrap?: string` and `AckPayload.renderToken?:
  * string`. Those are deliberately framed as **general transport bootstrap
  * credentials** (opaque strings), not MCP-Apps-specific. Any future
  * bootstrap mechanism (short-code auto-login, signed-URL bootstrap, etc.)

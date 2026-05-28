@@ -15,7 +15,7 @@
  *      `resultMeta._meta.ggui.bootstrap`, the host opens the iframe
  *      with the bootstrap token + WS URL.
  *   4. WebSocket subscribe — iframe runtime connects with the
- *      bootstrap token, gets an ack with a reconnect `sessionToken`,
+ *      bootstrap token, gets an ack with a reconnect `renderToken`,
  *      then receives event frames pushed by the server.
  *   5. **Wired-action bridge** (separate slice T2.5) — when the
  *      iframe renders a wired button + the user "clicks" it, the
@@ -121,7 +121,7 @@ export interface CallToolResult {
 /**
  * WebSocket ack frame the iframe runtime expects after subscribe.
  * Mirrors the live-channel wire shape:
- *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, render } }`
+ *   - Ack:   `{ type: 'ack', payload: { renderToken, sequence, render } }`
  *   - Error: `{ type: 'error', payload: { code } }`
  *
  * The simulator normalises both into a single discriminator on `kind`
@@ -130,7 +130,7 @@ export interface CallToolResult {
 export interface SubscribeAck {
   readonly kind: "ack" | "error";
   /** Set on `ack` — the reconnect token replacing the bootstrap one. */
-  readonly sessionToken?: string;
+  readonly renderToken?: string;
   /** Set on `ack` — current sequence number for reconnect resume. */
   readonly sequence?: number;
   /** Set on `error` — wire error code (BOOTSTRAP_INVALID, …). */
@@ -583,7 +583,7 @@ export class HostSimulator {
    * Open a WebSocket to the bootstrap's `wsUrl`, send a `subscribe`
    * frame with the token, await the ack. Returns the parsed ack
    * frame — the test can assert `kind === 'ack'` and pull the
-   * `sessionToken` for reconnect tests.
+   * `renderToken` for reconnect tests.
    *
    * Does NOT keep the socket open beyond ack; the caller can pass
    * `keepOpen: true` to retain the WS for streaming-event tests.
@@ -629,8 +629,8 @@ export class HostSimulator {
           const payload = parsed.payload ?? {};
           resolve({
             kind,
-            ...(typeof payload["sessionToken"] === "string"
-              ? { sessionToken: payload["sessionToken"] }
+            ...(typeof payload["renderToken"] === "string"
+              ? { renderToken: payload["renderToken"] }
               : {}),
             ...(typeof payload["sequence"] === "number" ? { sequence: payload["sequence"] } : {}),
             ...(typeof payload["code"] === "string" ? { code: payload["code"] } : {}),

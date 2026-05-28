@@ -77,7 +77,7 @@ export interface SubscribePayload {
    *     can reconnect without a fresh handshake.
    *
    * On a successful ws-token-authed subscribe, the server SHOULD issue
-   * a longer-lived reconnect credential via {@link AckPayload.sessionToken}.
+   * a longer-lived reconnect credential via {@link AckPayload.renderToken}.
    *
    * Mutually compatible with upstream bearer-auth (`Authorization`
    * header / `?token=` query). When both are present, server behavior
@@ -193,14 +193,14 @@ export interface AckPayload {
    *   - Longer TTL than the ws token (minutes-to-hours).
    *   - Bound to the same `renderId` + `appId`.
    *   - Passed on reconnect via the standard bearer path
-   *     (`Authorization: Bearer <sessionToken>` or `?token=`), NOT in
+   *     (`Authorization: Bearer <renderToken>` or `?token=`), NOT in
    *     `SubscribePayload.wsToken` (which is short-TTL and credential-scoped).
    *
    * Absent when the subscribe was bearer-authed (no ws-token-bound
    * reconnect credential needed) and on servers that don't implement
    * ws-token auth.
    */
-  sessionToken?: string;
+  renderToken?: string;
   /**
    * Protocol schema version this server emits on. Advertised on every
    * successful ack. First-party servers populate this with

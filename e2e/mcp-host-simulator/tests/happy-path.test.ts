@@ -11,7 +11,7 @@
  *   3. `ggui_render` returns `_meta["ai.ggui/render"]` carrying the WS
  *      URL + token + renderId + appId + runtimeUrl.
  *   4. WebSocket subscribe with the bootstrap token yields an `ack`
- *      with a reconnect `sessionToken`.
+ *      with a reconnect `renderToken`.
  *
  * That's the minimum claude.ai does on a single user-message turn,
  * minus the LLM tool-selection layer (which is host-side, not
@@ -90,7 +90,7 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     expect(ack.kind, `WS ack expected, got code=${ack.code ?? '(none)'}`).toBe(
       'ack',
     );
-    expect(ack.sessionToken, 'ack must carry reconnect sessionToken').toBeTruthy();
+    expect(ack.renderToken, 'ack must carry reconnect renderToken').toBeTruthy();
   });
 
   it('caches tools/list — second listTools() call is idempotent', async () => {
