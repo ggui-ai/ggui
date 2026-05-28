@@ -241,6 +241,49 @@ function createDefaultApp(): { app: App; transport: Transport } {
 }
 
 /**
+ * Module-level connected App handle. Set by `bootProduction` /
+ * `bootSelfContained` once `app.connect()` resolves; consumed by the
+ * outbound dispatch path (`tools/call` via `app.callServerTool`) so
+ * spec-compliant frame routing is used in place of the legacy
+ * hand-rolled JSON-RPC pump.
+ *
+ * `null` between the moment the module loads and the moment one of
+ * the boot paths assigns it — `dispatchWiredAction`'s callsites are
+ * gated on this, so calls fired pre-boot drop with a console warning.
+ */
+let currentApp: App | null = null;
+
+/**
+ * Assign the module-level App handle. Replaces any previous handle —
+ * production runs bootSequence exactly once per iframe lifecycle, so
+ * a replace only happens in tests that reuse the module across
+ * scenarios (and want each spec to bind its own App).
+ *
+ * @internal — only the boot paths call this; tests stub via the
+ *   module-level export.
+ */
+function setCurrentApp(app: App): void {
+  currentApp = app;
+}
+
+/**
+ * Read the connected App handle. Returns `null` when neither boot
+ * path has run yet. Outbound dispatch sites that depend on it MUST
+ * handle the null case (typically by logging + dropping the call).
+ */
+function getCurrentApp(): App | null {
+  return currentApp;
+}
+
+/**
+ * @internal — exported for unit tests to reset module state between
+ * scenarios.
+ */
+export function __resetAppForTest(): void {
+  currentApp = null;
+}
+
+/**
  * Connect an App over its transport; map any thrown error to the
  * `ConnectAppResult` shape so callers don't need an `instanceof Error`
  * dance to fill `UI_INITIALIZE_FAILED`.
@@ -637,6 +680,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     emitBootFailure('UI_INITIALIZE_FAILED', initResult.message);
     return { ok: false, mountedRender };
   }
+
+  // Connected — expose the App on the module-level slot so outbound
+  // `tools/call` (dispatchWiredAction, channel-transport router)
+  // routes through `app.callServerTool` instead of the legacy raw
+  // postMessage pump. Idempotent: re-boot with the same App is a
+  // no-op; a different App throws (the iframe is single-tenant).
+  setCurrentApp(app);
 
   // Slice-meta resolution — spec-canonical primary, no in-house
   // Reading-B (retired Phase 1.19b.3 with the App-class swap; the
@@ -1383,21 +1433,55 @@ function postToParent(envelope: unknown): void {
 }
 
 /**
- * Request-response JSON-RPC postMessage. Fires the envelope up to
- * `window.parent` and resolves when the parent echoes back a message
- * with the matching `id`. Used by the channel-transport router's
- * iframe-polling fallback to fire `tools/call` directly (Pattern α)
- * without an LLM consent loop.
+ * Outbound `tools/call` shim. When the module-level App handle is set
+ * (production: bootSequence calls `setCurrentApp(app)` after handshake;
+ * tests: opt-in via `setCurrentApp` or fall through), the call routes
+ * through the spec-canonical `app.callServerTool` API. Otherwise the
+ * legacy raw-postMessage pump fires — preserved so unit tests that
+ * exercise dispatch routing without an App keep passing.
  *
- * Detached parent → rejects with a synchronous error. Single
- * shared listener per iframe lifecycle (added on first call) so the
- * router doesn't churn `'message'` handlers per poll tick.
+ * Returns a `JsonRpcResponse`-shaped object for source-compatibility
+ * with the previous direct postMessage path: callers parse
+ * `resp.result.structuredContent` to read submit_action's `{ok, code,
+ * consumerPresent}` envelope. The App branch wraps the parsed
+ * `CallToolResult` in `{result: ...}`; the raw-postMessage branch
+ * delivers the envelope verbatim.
  *
- * Distinct from {@link makeJsonRpcCaller} which is a CLOSURE-scoped
- * caller bound to the bootstrap-mode `ui/initialize` flow. This one
- * is a top-level helper the renderer setup uses for every `tools/call`
- * — moving it here keeps the channel-transport router pure (no
- * `window.addEventListener` inside).
+ * @internal — retiring with the rest of the legacy JSON-RPC pump
+ *   once the channel-transport router + dispatchWiredAction migrate
+ *   to `app.callServerTool` directly.
+ */
+async function callServerToolSpec(
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<JsonRpcResponse> {
+  const app = getCurrentApp();
+  if (app !== null) {
+    try {
+      const result = await app.callServerTool({
+        name: toolName,
+        arguments: args,
+      });
+      return { jsonrpc: '2.0', result: result as unknown };
+    } catch (err) {
+      return {
+        error: {
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
+  }
+  return postRpcToParentLegacy('tools/call', { name: toolName, arguments: args });
+}
+
+/**
+ * Legacy raw-postMessage `tools/call` pump. Used as the fallback when
+ * the App handle isn't set (test runs that bypass `bootSequence`).
+ * Production never hits this branch post-boot.
+ *
+ * Detached parent → rejects with a synchronous error. Single shared
+ * listener per iframe lifecycle (added on first call) so the router
+ * doesn't churn `'message'` handlers per poll tick.
  */
 let postRpcToParentInited = false;
 const postRpcToParentPending = new Map<
@@ -1414,13 +1498,6 @@ function ensurePostRpcToParentListener(): void {
     if (data === null || typeof data !== 'object') return;
     const id = (data as { id?: unknown }).id;
     if (typeof id !== 'number') return;
-    // Filter for RESPONSES — must carry `result` or `error`. Bare
-    // requests with `method` set are not responses. This matters in
-    // `/r/<shortCode>` top-level mode where `window.parent === window`,
-    // so the outbound `tools/call` echoes back through this same
-    // listener before any relay's response arrives; without the filter
-    // the pending promise resolves with the request itself and the
-    // real response is dropped.
     if (!('result' in data) && !('error' in data)) return;
     const resolver = postRpcToParentPending.get(id);
     if (resolver === undefined) return;
@@ -1428,13 +1505,13 @@ function ensurePostRpcToParentListener(): void {
     resolver(data as JsonRpcResponse);
   });
 }
-function postRpcToParent(
+function postRpcToParentLegacy(
   method: string,
   params: unknown,
 ): Promise<JsonRpcResponse> {
   if (typeof window === 'undefined') {
     return Promise.resolve({
-      error: { message: 'postRpcToParent: no window' },
+      error: { message: 'postRpcToParentLegacy: no window' },
     });
   }
   ensurePostRpcToParentListener();
@@ -1903,22 +1980,19 @@ export function dispatchWiredAction(args: {
   // gesture payload + uiContext so the agent can act without calling
   // ggui_consume (the pipe is gone).
   void (async () => {
-    let resp: Awaited<ReturnType<typeof postRpcToParent>> | null = null;
+    let resp: JsonRpcResponse | null = null;
     try {
-      resp = await postRpcToParent('tools/call', {
-        name: toolName,
-        arguments: {
-          kind: 'dispatch',
-          payload: {
-            intent,
-            actionData: data ?? null,
-            uiContext,
-          },
-          renderId,
-          appId,
-          actionId,
-          firedAt,
+      resp = await callServerToolSpec(toolName, {
+        kind: 'dispatch',
+        payload: {
+          intent,
+          actionData: data ?? null,
+          uiContext,
         },
+        renderId,
+        appId,
+        actionId,
+        firedAt,
       });
     } catch {
       showActionToast(`⚠ ${intent} — transport error`, 'error');
@@ -3385,16 +3459,15 @@ async function bootProduction(opts: {
           : {}),
         send: (msg) => manager.send(msg),
         toolsCall: async ({ toolName, args }) => {
-          // Iframe-polling transport — `tools/call` over the parent
-          // MCP host's JSON-RPC channel. Pattern α direct call
-          // (no LLM consent loop). Returns the tool's
-          // structuredContent (or `content[0]` if that's where the
-          // payload landed) as a JsonValue. On RPC error we throw —
-          // the router catches and silently retries on the next tick.
-          const resp = await postRpcToParent('tools/call', {
-            name: toolName,
-            arguments: args,
-          });
+          // Iframe-polling transport — `tools/call` against the
+          // parent MCP host via `app.callServerTool` (spec-canonical)
+          // when the App handle is set; falls back to raw postMessage
+          // pre-handshake or in tests. Pattern α direct call (no LLM
+          // consent loop). Returns the tool's structuredContent (or
+          // `content[0]` if that's where the payload landed) as a
+          // JsonValue. On RPC error we throw — the router catches
+          // and silently retries on the next tick.
+          const resp = await callServerToolSpec(toolName, args);
           if (resp.error !== undefined) {
             throw new Error(resp.error.message ?? 'tools/call failed');
           }
