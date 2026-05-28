@@ -1,8 +1,8 @@
 /**
  * Agent-loop harness — boots the four-process ggui demo
- * (ggui + mcp-todo + sample-agent + ggui-basic-nextjs) via workspace
+ * (ggui + mcp-todo + sample-agent + ggui-basic-web) via workspace
  * `pnpm --filter` against `oss/samples/*`, then returns handles so a
- * spec can drive the browser against the Next.js frontend URL.
+ * spec can drive the browser against the Vite SPA frontend URL.
  *
  * Why this exists separately from `ggui-serve-harness.ts`:
  *
@@ -25,15 +25,15 @@
  * Architecture (frontend/backend split, 2026-05-28):
  *   - `sample-agent` is a brand-agnostic MCP-Apps-spec backend (one
  *     per SDK). Pure HTTP API. No bundled chat shell.
- *   - `ggui-basic-nextjs` is the reference frontend. ONE Next.js app
+ *   - `ggui-basic-web` is the reference frontend. ONE Vite SPA
  *     consumed by all 3 SDKs, swapped via
- *     `NEXT_PUBLIC_AGENT_ENDPOINT_URL`.
+ *     `VITE_AGENT_ENDPOINT_URL`.
  *
  * Beacons consumed:
  *   - ggui CLI       `READY http://<host>:<port>\n`
  *   - mcp-todo       `[mcp-todo] ready: http://localhost:<port>/mcp`
  *   - sample-agent   `[sample-agent] chat UI ready: http://localhost:<port>`
- *   - nextjs         `Ready in <n>ms` (next dev's standard ready line)
+ *   - web (vite)     `Local:   http://<host>:<port>/` (Vite's ready line)
  */
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -61,12 +61,12 @@ export const HARNESS_PORTS = {
     'google-adk': 6792,
   },
   /**
-   * Next.js frontend port. Single value across all SDKs — the SAME
-   * Next.js app drives every backend, swapped via
-   * `NEXT_PUBLIC_AGENT_ENDPOINT_URL`. Matches the `next dev --port`
-   * value pinned in `oss/samples/apps/ggui-basic-nextjs/package.json`.
+   * Vite SPA frontend port. Single value across all SDKs — the SAME
+   * Vite app drives every backend, swapped via `VITE_AGENT_ENDPOINT_URL`.
+   * Matches the `server.port` pinned in
+   * `oss/samples/apps/ggui-basic-web/vite.config.ts`.
    */
-  nextjs: 6890,
+  web: 6890,
 } as const;
 
 /**
@@ -101,10 +101,10 @@ const WORKSPACE_ROOT = resolve(PACKAGES_ROOT, '..');
 /** Handle returned by {@link spawnAgentLoop}. */
 export interface AgentLoopHandle {
   /**
-   * URL Playwright navigates to. Points at the Next.js frontend
+   * URL Playwright navigates to. Points at the Vite SPA frontend
    * (port 6890) — which in turn fetches the agent backend via
-   * `NEXT_PUBLIC_AGENT_ENDPOINT_URL`. The agent backend URL is
-   * internal to the harness and not surfaced here.
+   * `VITE_AGENT_ENDPOINT_URL`. The agent backend URL is internal to
+   * the harness and not surfaced here.
    */
   readonly agentUrl: string;
   /** ggui MCP base URL. */
@@ -118,14 +118,14 @@ export interface AgentLoopHandle {
     ggui: string;
     todo: string;
     agent: string;
-    nextjs: string;
+    web: string;
   };
   /** Captured stderr from each spawn, for failure dumps. */
   stderr: () => {
     ggui: string;
     todo: string;
     agent: string;
-    nextjs: string;
+    web: string;
   };
 }
 
@@ -185,7 +185,7 @@ export async function spawnAgentLoop(
       port: agentPort + 1000,
       label: `sandbox-proxy (${opts.sdk})`,
     },
-    { port: ports.nextjs, label: 'nextjs' },
+    { port: ports.web, label: 'web' },
   ];
   let squatted = portsToCheck.filter(({ port }) => portInUse(port));
   for (let i = 0; i < 15 && squatted.length > 0; i++) {
@@ -200,7 +200,7 @@ export async function spawnAgentLoop(
     );
   }
 
-  const procs: { ggui?: Proc; todo?: Proc; agent?: Proc; nextjs?: Proc } = {};
+  const procs: { ggui?: Proc; todo?: Proc; agent?: Proc; web?: Proc } = {};
   let closed = false;
 
   const close = async (): Promise<void> => {
@@ -214,14 +214,14 @@ export async function spawnAgentLoop(
     // Wait up to 10s for our ports to actually clear so the next
     // describe doesn't trip on its own predecessor.
     // Drain matches pre-flight — include sandbox-proxy (agent + 1000)
-    // and the Next.js port so the next describe's pre-flight doesn't
+    // and the Vite SPA port so the next describe's pre-flight doesn't
     // see a stale bind.
     const myPorts = [
       ports.ggui,
       ports.todo,
       agentPort,
       agentPort + 1000,
-      ports.nextjs,
+      ports.web,
     ];
     for (let i = 0; i < 10; i++) {
       if (myPorts.every((p) => !portInUse(p))) return;
@@ -246,8 +246,9 @@ export async function spawnAgentLoop(
     });
     await waitForBeacon(procs.todo, /\[mcp-todo\] ready:/, 30_000, 'todo');
 
-    // 3. agent — pure API backend (no vite bundle since the 2026-05-28
-    // frontend-split). Boots quickly once tsx finishes typechecking.
+    // 3. agent — pure API backend (no bundled frontend since the
+    // 2026-05-28 frontend-split). Boots quickly once tsx finishes
+    // typechecking.
     procs.agent = spawnChild({
       label: opts.sdk,
       pkg: cfg.agentPackage,
@@ -265,29 +266,34 @@ export async function spawnAgentLoop(
       'agent',
     );
 
-    // 4. Next.js frontend — reads the agent backend URL from the
-    // env var below. ONE Next.js app drives all 3 SDKs; the swap is
+    // 4. Vite SPA frontend — reads the agent backend URL from the
+    // env var below. ONE Vite app drives all 3 SDKs; the swap is
     // purely the endpoint URL, no per-SDK frontend bundle.
     //
-    // `next dev` does its own compile-on-first-request, so the "Ready"
-    // beacon fires once the dev server is listening — actual page
-    // compilation kicks in on the first Playwright navigation. We
-    // still allow a generous timeout because next-16's first boot does
-    // a chunk of cold dependency analysis.
-    procs.nextjs = spawnChild({
-      label: 'nextjs',
-      pkg: '@ggui-samples/app-ggui-basic-nextjs',
+    // Vite's dev server transforms on demand (no upfront bundle), so
+    // the "Local:" beacon fires once it's listening — module compilation
+    // happens on the first Playwright navigation. Boot is cheap (~1-2s
+    // typical) but we allow a generous timeout for cold dependency
+    // pre-bundling on first run.
+    //
+    // Port is pinned in `oss/samples/apps/ggui-basic-web/vite.config.ts`
+    // (`server.port: 6890, strictPort: true`); the harness pre-flight
+    // check guarantees that port is free before spawn. We do NOT set
+    // `PORT` env var because Vite ignores it — the config is the
+    // source of truth for the bind.
+    procs.web = spawnChild({
+      label: 'web',
+      pkg: '@ggui-samples/app-ggui-basic-web',
       env: {
         ...baseEnv,
-        PORT: String(ports.nextjs),
-        NEXT_PUBLIC_AGENT_ENDPOINT_URL: `http://localhost:${agentPort}`,
+        VITE_AGENT_ENDPOINT_URL: `http://localhost:${agentPort}`,
       },
     });
     await waitForBeacon(
-      procs.nextjs,
-      /Ready in |started server on|Local:\s+http/,
+      procs.web,
+      /ready in |Local:\s+http/i,
       120_000,
-      'nextjs',
+      'web',
     );
   } catch (err) {
     await close();
@@ -295,7 +301,7 @@ export async function spawnAgentLoop(
   }
 
   return {
-    agentUrl: `http://localhost:${ports.nextjs}`,
+    agentUrl: `http://localhost:${ports.web}`,
     gguiUrl: `http://localhost:${ports.ggui}`,
     todoUrl: `http://localhost:${ports.todo}/mcp`,
     close,
@@ -303,13 +309,13 @@ export async function spawnAgentLoop(
       ggui: procs.ggui?.stdout() ?? '',
       todo: procs.todo?.stdout() ?? '',
       agent: procs.agent?.stdout() ?? '',
-      nextjs: procs.nextjs?.stdout() ?? '',
+      web: procs.web?.stdout() ?? '',
     }),
     stderr: () => ({
       ggui: procs.ggui?.stderr() ?? '',
       todo: procs.todo?.stderr() ?? '',
       agent: procs.agent?.stderr() ?? '',
-      nextjs: procs.nextjs?.stderr() ?? '',
+      web: procs.web?.stderr() ?? '',
     }),
   };
 }
