@@ -260,7 +260,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       // Canvas-mode host-context capture.
       'host_context_observed',
       // R7 — ledger replay frame.
-      'session_event',
+      'render_event',
     ];
     expect(types).toHaveLength(24);
     // Structural lock: ConnectionStatus values also stable.
