@@ -92,7 +92,7 @@ export interface UseInvokeOptions {
   /**
    * Fired for every `tool_use` content block the agent emits. Protocol v1.1
    * emits two kinds of tool_use that clients care about:
-   *   - `ggui_push` / `ggui_update` / `ggui_handshake` — paired by
+   *   - `ggui_render` / `ggui_update` / `ggui_handshake` — paired by
    *     `tool_use_id` with an inline `tool_result` block on the same
    *     assistant turn. Consumers watch for the pair and mount their
    *     renderer (e.g. `<McpAppIframe>` on the web SDK) using the
@@ -300,7 +300,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
               options.onToolUse?.(block);
             }
             // Snap sessionId off the first tool_result that surfaces one —
-            // agent-side tools like `ggui_push` / `ggui_handshake` inline
+            // agent-side tools like `ggui_render` / `ggui_handshake` inline
             // their result on the same assistant turn with a sessionId
             // payload. Subsequent sends reuse this so the server threads
             // user messages to the same session instead of minting a new

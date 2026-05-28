@@ -169,7 +169,7 @@ export type {
 // the canonical implementation directly rather than wrap it.
 //
 // **Where ggui's bootstrap envelope flows.** `_meta["ai.ggui/bootstrap"]`
-// on `ggui_push` / `ggui_handshake` tool results uses the spec-canonical
+// on `ggui_render` / `ggui_handshake` tool results uses the spec-canonical
 // `_meta` extension grammar (SEP-2133: `{reverse-dns-prefix}/{name}`); a
 // spec-compliant host (including `<AppRenderer>`) MUST forward
 // `_meta` from tool results to the view via `ui/notifications/tool-result`.
