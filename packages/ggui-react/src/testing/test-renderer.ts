@@ -189,7 +189,7 @@ export function validateControllerCode(code: string): ValidationResult {
  */
 export interface TestContextOptions {
   appId?: string;
-  sessionId?: string;
+  renderId?: string;
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;

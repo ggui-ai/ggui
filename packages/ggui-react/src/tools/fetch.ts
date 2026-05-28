@@ -100,10 +100,11 @@ export const fetchTool = defineTool<FetchToolConfig['config'], unknown>({
     const baseUrl = context.apiBaseUrl || '';
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-    // Check cache for GET requests — scope by renderId to prevent cross-render leaks
-    // TODO(two-role-sessionId): pending S4-flagged GguiProvider decision —
-    // this cache was historically conversation-scoped (hostSessionId), now
-    // render-scoped per Phase B identity collapse. Verify desired semantics.
+    // Check cache for GET requests — scope by renderId so two concurrent
+    // renders (same app, same fetch key) cannot leak each other's cached
+    // responses. The cache is render-scoped, NOT conversation-scoped:
+    // distinct renders have distinct fetch caches even within the same
+    // host conversation.
     const rawCacheKey = cacheConfig?.key || url;
     const cacheKey = context.renderId ? `${context.renderId}:${rawCacheKey}` : rawCacheKey;
     if (method === 'GET' && cacheConfig?.ttl) {

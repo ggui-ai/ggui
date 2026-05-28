@@ -21,21 +21,18 @@ import type {
 /**
  * Get tool context from GguiProvider.
  *
- * Reads appId, sessionId, apiBaseUrl, and auth from the GguiContext
+ * Reads appId, renderId, apiBaseUrl, and auth from the GguiContext
  * provided by GguiProvider. The `resolved` field starts empty and is
- * populated per-tool-call during binding resolution.
+ * populated per-tool-call during binding resolution. `renderId` is
+ * the per-render scope (distinct from `hostSessionId`, the conversation
+ * envelope used by `useInvoke`).
  */
 function useToolContext(): ToolContext {
   const ctx = useGguiContext();
   return {
     resolved: {},
     appId: ctx.appId,
-    // TODO(two-role-sessionId): GguiContext.sessionId is the conversation
-    // envelope (hostSessionId-shaped); ToolContext.renderId is render-scoped
-    // per Phase B. Pending S4-flagged decision on whether to split or
-    // rename GguiContext.sessionId — until then, threading as renderId for
-    // typecheck. Cache-scope semantics may need adjustment.
-    renderId: ctx.sessionId ?? '',
+    renderId: ctx.renderId ?? '',
     auth: ctx.auth ?? { isAuthenticated: false },
     apiBaseUrl: ctx.apiBaseUrl,
   };

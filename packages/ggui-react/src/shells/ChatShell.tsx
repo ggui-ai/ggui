@@ -334,7 +334,7 @@ export function ChatShell({ primaryColor, endpointUrl, renderResourceOrigin }: C
   const { messages, send, isStreaming, error } = useInvoke({
     ...(endpointUrl !== undefined ? { endpointUrl } : {}),
     bearerToken: gguiCtx.auth?.token,
-    sessionId: gguiCtx.sessionId,
+    hostSessionId: gguiCtx.hostSessionId,
   });
 
   // Theme — derive shell accent from app's design theme when primaryColor

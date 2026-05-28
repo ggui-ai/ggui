@@ -77,8 +77,13 @@ type RNRequestInit = RequestInit & {
 export interface UseInvokeOptions {
   /** Override `appConfig.endpointUrl`. */
   endpointUrl?: string;
-  /** Continue an existing conversation. Absent → new session each call. */
-  sessionId?: string;
+  /**
+   * Continue an existing conversation. Absent → new session each call.
+   * Forwarded to the agent as the `X-Ggui-Session-Id` header — this is
+   * the conversation envelope identity (the chat thread), distinct from
+   * any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
+   */
+  hostSessionId?: string;
   /** End-user JWT for authenticated apps. */
   bearerToken?: string;
   /**
@@ -173,11 +178,13 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   // Always-current snapshot for building `history` without re-creating `send`.
   const messagesRef = useRef<ConversationMessage[]>(messages);
   messagesRef.current = messages;
-  // Tracks the sessionId the agent surfaces via `tool_result` on turn 1 so
-  // subsequent `send()` calls can carry `X-Ggui-Session-Id` — without this
-  // the agent mints a new session per POST and turn-2 render events never
-  // reach the already-mounted `<GguiRender>`. Mirrors the web hook's fix.
-  const sessionIdRef = useRef<string | null>(options.sessionId ?? null);
+  // Tracks the hostSessionId the agent surfaces via `tool_result` on turn 1
+  // so subsequent `send()` calls can carry `X-Ggui-Session-Id` — without
+  // this the agent mints a new session per POST and turn-2 render events
+  // never reach the already-mounted `<GguiRender>`. Mirrors the web hook's
+  // fix. Names the conversation envelope (the chat thread), distinct from
+  // any per-render `renderId`.
+  const hostSessionIdRef = useRef<string | null>(options.hostSessionId ?? null);
 
   const send = useCallback(
     async (message: string, opts?: { clientMessageId?: string }): Promise<void> => {
@@ -228,10 +235,12 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
           'X-Ggui-Protocol-Version': PROTOCOL_VERSION,
           'X-Ggui-App-Id': ctx.appId,
         };
-        // options.sessionId wins for explicit-resume callers; otherwise
-        // fall back to the sessionId surfaced on a prior turn's tool_result.
-        const effectiveSessionId = options.sessionId ?? sessionIdRef.current;
-        if (effectiveSessionId) headers['X-Ggui-Session-Id'] = effectiveSessionId;
+        // options.hostSessionId wins for explicit-resume callers; otherwise
+        // fall back to the hostSessionId surfaced on a prior turn's
+        // tool_result. The wire header name stays `X-Ggui-Session-Id` —
+        // the option just gets a clearer name on the SDK surface.
+        const effectiveHostSessionId = options.hostSessionId ?? hostSessionIdRef.current;
+        if (effectiveHostSessionId) headers['X-Ggui-Session-Id'] = effectiveHostSessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 
         const init: RNRequestInit = {
@@ -299,15 +308,16 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
             if (block.type === 'tool_use') {
               options.onToolUse?.(block);
             }
-            // Snap sessionId off the first tool_result that surfaces one —
-            // agent-side tools like `ggui_render` / `ggui_handshake` inline
-            // their result on the same assistant turn with a sessionId
-            // payload. Subsequent sends reuse this so the server threads
-            // user messages to the same session instead of minting a new
-            // one per POST.
-            if (block.type === 'tool_result' && !sessionIdRef.current) {
-              const maybe = extractSessionIdFromContent(block.content);
-              if (maybe) sessionIdRef.current = maybe;
+            // Snap hostSessionId off the first tool_result that surfaces
+            // one — agent-side tools like `ggui_render` / `ggui_handshake`
+            // inline their result on the same assistant turn with a
+            // sessionId payload (the conversation envelope identity, not
+            // a per-render id). Subsequent sends reuse this so the server
+            // threads user messages to the same session instead of minting
+            // a new one per POST.
+            if (block.type === 'tool_result' && !hostSessionIdRef.current) {
+              const maybe = extractHostSessionIdFromContent(block.content);
+              if (maybe) hostSessionIdRef.current = maybe;
             }
             continue;
           }
@@ -366,9 +376,9 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
     setMessages([]);
     setError(null);
     setIsStreaming(false);
-    // Clear the derived sessionId — reset() implies a fresh conversation.
-    sessionIdRef.current = options.sessionId ?? null;
-  }, [options.sessionId]);
+    // Clear the derived hostSessionId — reset() implies a fresh conversation.
+    hostSessionIdRef.current = options.hostSessionId ?? null;
+  }, [options.hostSessionId]);
 
   return { messages, send, isStreaming, error, abort, reset };
 }
@@ -398,11 +408,14 @@ function makeTransportError(message: string): InvokeError {
 }
 
 /**
- * Pull a `sessionId` string out of a tool_result's content payload if one
- * is present. Tolerant of arbitrary nested shapes — agents may put the id
- * directly on the result or under a wrapper like `{ result: { sessionId } }`.
+ * Pull a `sessionId` string (the conversation envelope = hostSessionId)
+ * out of a tool_result's content payload if one is present. Tolerant of
+ * arbitrary nested shapes — agents may put the id directly on the result
+ * or under a wrapper like `{ result: { sessionId } }`. The field on the
+ * wire is still spelled `sessionId` (agent-side payload contract); the
+ * SDK-side name `hostSessionId` clarifies the role.
  */
-function extractSessionIdFromContent(content: unknown): string | null {
+function extractHostSessionIdFromContent(content: unknown): string | null {
   if (typeof content !== 'object' || content === null) return null;
   const record = content as Record<string, unknown>;
   if (typeof record.sessionId === 'string') return record.sessionId;

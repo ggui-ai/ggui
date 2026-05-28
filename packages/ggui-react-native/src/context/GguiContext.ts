@@ -56,7 +56,21 @@ export interface GguiContextValue {
     token?: string;
     isAuthenticated: boolean;
   };
-  /** Render ID for tools system */
+  /**
+   * Conversation envelope identity. Forwarded by {@link useInvoke} as
+   * the `X-Ggui-Session-Id` header so the agent threads multi-turn
+   * invokes through its own keyed conversation state. Distinct from
+   * {@link renderId} — this names the chat thread, not a render.
+   */
+  hostSessionId?: string;
+  /**
+   * Per-render scope identity for the client-side tool system. Used by
+   * {@link useTool} / {@link useBindings} as `ToolContext.renderId` —
+   * scopes the in-memory fetch cache so two concurrent renders cannot
+   * leak each other's cached responses. Distinct from
+   * {@link hostSessionId} — this names a single render, not the
+   * conversation envelope.
+   */
   renderId?: string;
   /** Base URL for API calls (used by fetch tool) */
   apiBaseUrl?: string;

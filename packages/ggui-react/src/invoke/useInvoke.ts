@@ -30,8 +30,13 @@ const PROTOCOL_VERSION = '1';
 export interface UseInvokeOptions {
   /** Override `appConfig.endpointUrl`. */
   endpointUrl?: string;
-  /** Continue an existing conversation. Absent → new session each call. */
-  sessionId?: string;
+  /**
+   * Continue an existing conversation. Absent → new session each call.
+   * Forwarded to the agent as the `X-Ggui-Session-Id` header — this is
+   * the conversation envelope identity (the chat thread), distinct from
+   * any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
+   */
+  hostSessionId?: string;
   /** End-user JWT for authenticated apps. */
   bearerToken?: string;
   /**
@@ -204,9 +209,11 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
         // Forward the conversation/host-session id when the caller supplies
         // one — the agent threads multi-turn invokes through its own keyed
         // state on `X-Ggui-Session-Id`. This is the conversation envelope
-        // identity (not a per-render id); the render slice on
-        // `_meta["ai.ggui/render"]` carries the per-render `renderId`.
-        if (options.sessionId) headers['X-Ggui-Session-Id'] = options.sessionId;
+        // identity (`hostSessionId`, distinct from any per-render
+        // `renderId` carried on `_meta["ai.ggui/render"]`). The wire
+        // header name stays `X-Ggui-Session-Id` — the option just gets
+        // a clearer name on the SDK surface.
+        if (options.hostSessionId) headers['X-Ggui-Session-Id'] = options.hostSessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 
         // Dev-mode bridge: the pod expects POSTs at `{gatewayUrl}/{appId}` —

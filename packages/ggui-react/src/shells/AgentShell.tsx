@@ -229,7 +229,7 @@ export function AgentShell({
   const { messages, send, isStreaming, error } = useInvoke({
     ...(endpointUrl !== undefined ? { endpointUrl } : {}),
     bearerToken: gguiCtx.auth?.token,
-    sessionId: gguiCtx.sessionId,
+    hostSessionId: gguiCtx.hostSessionId,
   });
 
   const uiMoments = useMemo(
