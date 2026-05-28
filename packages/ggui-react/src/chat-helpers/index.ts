@@ -10,3 +10,14 @@ export {
   conversationMessagesToInvokeHistory,
   type ContentGroup,
 } from './message-groups';
+export { useMcpAppsChat } from './useMcpAppsChat';
+export type {
+  UseMcpAppsChatOptions,
+  UseMcpAppsChatResult,
+} from './useMcpAppsChat';
+export type {
+  ChatEntry,
+  HostDisplayMode,
+  RenderRef,
+  ToolCallEntry,
+} from './mcp-apps-chat-types';
