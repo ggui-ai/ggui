@@ -37,7 +37,15 @@
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
-import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+import {
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  type McpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  callTool,
+  unwrapStructured,
+  type JsonRpcResponse,
+} from '../fixtures/mcp-client.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
@@ -64,7 +72,6 @@ interface HandshakeOut {
 
 interface RenderOut {
   renderId: string;
-  url?: string;
 }
 
 interface BootstrapJson {
@@ -99,36 +106,26 @@ const REGISTER_TEST_CONTRACT = {
 const REGISTER_TEST_COMPONENT_CODE =
   "export default function PreBuiltCard() { return null; }\n";
 
-function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
-  if (typeof renderUrl !== 'string') {
-    throw new Error(`render output missing url: ${String(renderUrl)}`);
-  }
-  const parsed = new URL(renderUrl);
-  const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
-  if (!codeMatch || typeof codeMatch[1] !== 'string') {
-    throw new Error(`url has no /r/<shortCode>: ${renderUrl}`);
-  }
-  return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
-}
-
-async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromRenderUrl(renderUrl), {
-    headers: { Accept: 'application/json' },
-  });
-  if (!resp.ok) {
+/**
+ * Post-Phase-B: `ggui_render` no longer surfaces a `url` field on its
+ * structured output (output schema is `{renderId, nextStep?, action}`).
+ * The bootstrap payload — including `codeUrl` / `codeHash` — rides on
+ * the result's `_meta["ai.ggui/render"]` slice instead. Reading the
+ * slice directly off the render response skips the `/r/<shortCode>`
+ * round-trip the legacy `?url=` flow needed.
+ */
+function readRenderBootstrap(resp: JsonRpcResponse): BootstrapJson {
+  const slice = resp.result?._meta?.[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+    | McpAppAiGguiRenderMeta
+    | undefined;
+  if (slice === undefined) {
     throw new Error(
-      `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
+      `render response missing ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta)}`,
     );
   }
-  // R4: slice envelope — flatten the render slice into the legacy
-  // shape the test consumes.
-  const envelope = (await resp.json()) as Record<string, unknown>;
-  const renderSlice =
-    (envelope['ai.ggui/render'] as Record<string, unknown> | undefined) ??
-    {};
   const out: BootstrapJson = {};
-  if (typeof renderSlice['codeUrl'] === 'string') out.codeUrl = renderSlice['codeUrl'];
-  if (typeof renderSlice['codeHash'] === 'string') out.codeHash = renderSlice['codeHash'];
+  if (typeof slice.codeUrl === 'string') out.codeUrl = slice.codeUrl;
+  if (typeof slice.codeHash === 'string') out.codeHash = slice.codeHash;
   return out;
 }
 
@@ -173,14 +170,14 @@ describe(
 
         // ── 3. render.accept reuses the cached blueprint ──────────
         const renderStart = Date.now();
-        const render = unwrapStructured<RenderOut>(
-          await callTool(MCP_URL, 'ggui_render', {
-            handshakeId: handshake.handshakeId,
-            decision: { kind: 'accept' },
-          }),
-        );
+        const renderResp = await callTool(MCP_URL, 'ggui_render', {
+          handshakeId: handshake.handshakeId,
+          decision: { kind: 'accept' },
+        });
+        const render = unwrapStructured<RenderOut>(renderResp);
         const renderLatencyMs = Date.now() - renderStart;
-        const bootstrap = await fetchBootstrap(render.url);
+        expect(typeof render.renderId).toBe('string');
+        const bootstrap = readRenderBootstrap(renderResp);
 
         expect(bootstrap.codeHash).toBe(expectedCodeHash);
         expect(renderLatencyMs).toBeLessThan(5_000);

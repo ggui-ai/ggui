@@ -34,6 +34,10 @@ import {
   type DataContract,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
+import {
+  MCP_APP_AI_GGUI_RENDER_META_KEY,
+  type McpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 
 const GGUI_MAPBOX_PORT = Number.parseInt(
@@ -61,19 +65,6 @@ interface HandshakeOut {
 
 const SCENARIO_INTENT =
   'render a small map preview — scenario 20 (public env channel gate)';
-
-interface RenderResultBootstrap {
-  readonly renderId?: string;
-  readonly appId?: string;
-  // GG.8.2 — the bootstrap gadget channel is per-PACKAGE: one entry
-  // per registered package, keyed by `package` (no per-hook entries).
-  readonly gadgets?: ReadonlyArray<{ package: string }>;
-  readonly publicEnv?: Readonly<Record<string, string>>;
-}
-
-interface RenderResultMeta {
-  readonly ggui?: { readonly bootstrap?: RenderResultBootstrap };
-}
 
 async function handshakeOnly(args: {
   contract: DataContract;
@@ -105,11 +96,15 @@ function readToolErrorMessage(resp: {
   return resp.result.content?.[0]?.text ?? '';
 }
 
+// Post-Phase-B: the render slice meta lives at
+// `_meta["ai.ggui/render"]` (was `_meta.ggui.bootstrap` pre-rename).
+// `McpAppAiGguiRenderMeta` carries `renderId`, `appId`, `gadgets`,
+// `publicEnv`, and the rest of the iframe-mount payload directly.
 function readBootstrap(resp: {
   result?: { _meta?: Record<string, unknown> };
-}): RenderResultBootstrap | undefined {
-  const meta = resp.result?._meta as RenderResultMeta | undefined;
-  return meta?.ggui?.bootstrap;
+}): McpAppAiGguiRenderMeta | undefined {
+  const slice = resp.result?._meta?.[MCP_APP_AI_GGUI_RENDER_META_KEY];
+  return slice as McpAppAiGguiRenderMeta | undefined;
 }
 
 describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
