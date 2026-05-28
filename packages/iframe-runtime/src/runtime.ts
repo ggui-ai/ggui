@@ -46,6 +46,7 @@ import type {
 import { projectHostContext } from '@ggui-ai/protocol';
 import type { ModuleNamespace } from './globals.js';
 import {
+  applyHostContextStyling,
   attachListener as attachHostContextListener,
   seed as seedHostContext,
 } from './host-context-emitter.js';
@@ -681,13 +682,23 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // payload would otherwise be ignored. Project it independently so
   // canvas-mode display-mode escalation works uniformly across
   // delivery channels.
+  //
+  // Apply the RAW hostContext to the iframe DOM via the spec-canonical
+  // ext-apps helpers (theme + style variables + fonts) regardless of
+  // whether the projection picked up new fields. Projection drops
+  // theme / styles (they live in ggui's own theming pipeline); the
+  // DOM-apply path is what surfaces them to LLM-generated UI so
+  // host-native primitives render consistently with the rest of chat.
+  const initResultBag =
+    initResp.result !== null
+    && typeof initResp.result === 'object'
+    && !Array.isArray(initResp.result)
+      ? (initResp.result as Record<string, unknown>)
+      : undefined;
+  if (initResultBag !== undefined) {
+    applyHostContextStyling(initResultBag['hostContext']);
+  }
   if (parsed.ok && parsed.hostContext === undefined) {
-    const initResultBag =
-      initResp.result !== null
-      && typeof initResp.result === 'object'
-      && !Array.isArray(initResp.result)
-        ? (initResp.result as Record<string, unknown>)
-        : undefined;
     const hostContext = projectHostContext(initResultBag?.['hostContext']);
     if (hostContext !== undefined) {
       parsed = { ...parsed, hostContext };

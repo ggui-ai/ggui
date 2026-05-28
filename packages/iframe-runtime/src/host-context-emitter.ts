@@ -1,5 +1,5 @@
 /**
- * Host-context emitter.
+ * Host-context emitter + DOM application.
  *
  * Responsibilities:
  *
@@ -14,29 +14,50 @@
  *      shape) — avoids server-side write traffic when a notification
  *      arrives but no projection-visible field actually changed (e.g.,
  *      the host's `theme` updated but ggui doesn't project theme).
+ *   4. Apply host theme + styles + fonts to the iframe DOM via the
+ *      spec-canonical {@link applyDocumentTheme} /
+ *      {@link applyHostStyleVariables} / {@link applyHostFonts} helpers
+ *      from `@modelcontextprotocol/ext-apps`. Fires on EVERY raw
+ *      `McpUiHostContext` the runtime observes (initial + change
+ *      notifications). The application path is INDEPENDENT of the
+ *      WS-echo path — projection drops `theme` / `styles` (they live in
+ *      ggui's own theming pipeline), but the DOM still needs them to
+ *      render the host's native primitives consistently.
  *
  * Lifecycle:
  *
  *   - Initial seed: `seed(projection, renderId)` called from
  *     `bootProduction` right after the WS transport is attached and we
  *     know the initial projection from `parseMetaFromUiInitialize.hostContext`.
+ *     {@link applyHostContextStyling} fires separately from
+ *     `bootSequence` against the RAW `ui/initialize.result.hostContext`
+ *     so the spec-canonical helpers see the full `McpUiHostContext`
+ *     (projection drops fields they need).
  *   - Live updates: `attachListener()` installs a `window`-scoped
  *     `message` listener for the spec-defined notification method
  *     `'ui/notifications/host-context-changed'`. The notification's
- *     `params` carry a partial `McpUiHostContext`; we merge into the
- *     held projection and emit if changed.
+ *     `params` carry a partial `McpUiHostContext`; we apply the raw
+ *     fields to the DOM, merge the projection into the held value,
+ *     and WS-echo if the projection changed.
  *   - Teardown: `detach()` removes the listener and clears state.
  *     Used by tests + future host-switch flows.
  *
  * Why a dedicated module:
  *
- *   - `runtime.ts` is already ~3100 lines; adding another postMessage
+ *   - `runtime.ts` is already ~3500 lines; adding another postMessage
  *     listener + state slot bloats it.
- *   - The emission policy (seed + change-merge + dedupe) is testable in
- *     isolation without the WS transport / slice-meta parse / DOM mount.
+ *   - The emission policy (seed + change-merge + dedupe) + DOM-apply
+ *     policy is testable in isolation without the WS transport /
+ *     slice-meta parse / DOM mount.
  *   - Future widening (echo more fields, debounce burst changes, etc.)
  *     happens in one place.
  */
+import {
+  applyDocumentTheme,
+  applyHostFonts,
+  applyHostStyleVariables,
+  type McpUiHostContext,
+} from '@modelcontextprotocol/ext-apps';
 import {
   hostContextProjectionsEqual,
   projectHostContext,
@@ -192,6 +213,66 @@ export function subscribeLocal(
 }
 
 // =============================================================================
+// DOM application — spec-canonical theme / styles / fonts.
+// =============================================================================
+
+/**
+ * Apply the host's `theme`, `styles.variables`, `styles.css.fonts`, and
+ * `safeAreaInsets` to the iframe DOM via the canonical
+ * `@modelcontextprotocol/ext-apps` helpers. Defensive in two ways:
+ *
+ *   1. Accepts `unknown` so callers (the listener; `bootSequence`'s
+ *      initial-application path) don't have to gate-check before calling.
+ *   2. Per-field optionality is respected — every helper is called only
+ *      when the corresponding field is present + structurally valid.
+ *      Malformed input drops the field silently rather than throwing
+ *      and breaking the boot.
+ *
+ * Fire-and-forget: a helper throwing (e.g. when running outside a
+ * browser DOM context, or under jsdom limits) is caught + swallowed so
+ * the WS-echo path stays alive. Theme application is a UX nicety,
+ * never load-bearing for agent visibility.
+ *
+ * @public
+ */
+export function applyHostContextStyling(raw: unknown): void {
+  if (!isPlainObject(raw)) return;
+  const ctx = raw as McpUiHostContext;
+  try {
+    if (ctx.theme === 'light' || ctx.theme === 'dark') {
+      applyDocumentTheme(ctx.theme);
+    }
+  } catch {
+    // jsdom may not implement every documentElement API the helper
+    // touches; swallow + carry on with the remaining fields.
+  }
+  try {
+    const variables = ctx.styles?.variables;
+    if (variables !== undefined && variables !== null) {
+      applyHostStyleVariables(variables);
+    }
+  } catch {
+    // Same posture — best-effort. A subscriber throwing must not stop
+    // the WS-echo half of the listener.
+  }
+  try {
+    const fontsCss = ctx.styles?.css?.fonts;
+    if (typeof fontsCss === 'string' && fontsCss.length > 0) {
+      applyHostFonts(fontsCss);
+    }
+  } catch {
+    // applyHostFonts injects a <style> tag; jsdom may reject the
+    // operation under strict modes. Swallow.
+  }
+  // safeAreaInsets — the spec carries these for mobile chrome
+  // letterboxing. ext-apps doesn't ship a canonical helper (apps
+  // typically apply per-component); the system-card reference applies
+  // as root padding. ggui's iframe contains LLM-generated UI which has
+  // its own responsive concerns — skip safe-area for now; revisit when
+  // a concrete mobile use case appears.
+}
+
+// =============================================================================
 // Internals
 // =============================================================================
 
@@ -214,6 +295,13 @@ function handleHostContextChangedMessage(raw: unknown): void {
   if (raw['method'] !== 'ui/notifications/host-context-changed') return;
   const params = raw['params'];
   if (!isPlainObject(params)) return;
+
+  // Apply spec-canonical theme/styles/fonts to the iframe DOM BEFORE
+  // the WS-echo path. The DOM-apply path covers fields the projection
+  // drops (theme, styles) so the LLM-generated UI inside the iframe
+  // re-paints to match a host theme switch even when nothing
+  // projection-visible changed (e.g., dark/light toggle).
+  applyHostContextStyling(params);
 
   // Spec: the notification's params carry a partial McpUiHostContext.
   // Project it (defensive — malformed inputs drop to undefined fields)

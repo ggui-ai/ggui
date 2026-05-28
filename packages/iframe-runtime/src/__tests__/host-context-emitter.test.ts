@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { HostContextObservedPayload } from '@ggui-ai/protocol';
 import {
   _peekCurrent,
+  applyHostContextStyling,
   attachListener,
   detach,
   seed,
@@ -248,5 +249,94 @@ describe('host-context-emitter', () => {
     // Single emit despite three attachListener() calls — only one
     // registered listener.
     expect(sent).toHaveLength(2);
+  });
+});
+
+/**
+ * Tests for `applyHostContextStyling` — the spec-canonical
+ * theme/styles/fonts application path via `@modelcontextprotocol/ext-apps`
+ * helpers (Phase 1.19b.2, 2026-05-28). Behavior:
+ *
+ *   - When `theme` is `'light'` or `'dark'`, write `data-theme` +
+ *     `color-scheme` on the documentElement (via `applyDocumentTheme`).
+ *   - When `styles.variables` is present, set each as a CSS custom
+ *     property on the documentElement (via `applyHostStyleVariables`).
+ *   - When `styles.css.fonts` is a non-empty string, inject a single
+ *     `<style>` tag with the font CSS (via `applyHostFonts`).
+ *   - Malformed / missing fields drop silently — every call is
+ *     fire-and-forget.
+ */
+describe('applyHostContextStyling', () => {
+  afterEach(() => {
+    // Reset document state between scenarios — applyDocumentTheme
+    // mutates the documentElement; subsequent specs would see stale
+    // attrs without a reset.
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.removeProperty('color-scheme');
+    document.documentElement.style.removeProperty(
+      '--color-background-primary',
+    );
+    // applyHostFonts injects a <style> tag with a known id; remove it
+    // so the idempotency-by-id of the helper doesn't carry across
+    // scenarios.
+    const styleEls = document.head.querySelectorAll('style[data-mcp-ui-fonts]');
+    styleEls.forEach((el) => el.remove());
+  });
+
+  it('applies theme to documentElement when ctx.theme is "dark"', () => {
+    applyHostContextStyling({ theme: 'dark' });
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('applies theme to documentElement when ctx.theme is "light"', () => {
+    applyHostContextStyling({ theme: 'light' });
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('applies styles.variables as CSS custom properties', () => {
+    applyHostContextStyling({
+      styles: {
+        variables: { '--color-background-primary': '#123456' },
+      },
+    });
+    expect(
+      document.documentElement.style.getPropertyValue(
+        '--color-background-primary',
+      ),
+    ).toBe('#123456');
+  });
+
+  it('is a no-op for non-object input', () => {
+    expect(() => applyHostContextStyling(null)).not.toThrow();
+    expect(() => applyHostContextStyling(undefined)).not.toThrow();
+    expect(() => applyHostContextStyling('hello')).not.toThrow();
+    expect(() => applyHostContextStyling(42)).not.toThrow();
+    expect(() => applyHostContextStyling([1, 2])).not.toThrow();
+    expect(document.documentElement.getAttribute('data-theme')).toBeNull();
+  });
+
+  it('skips invalid theme values silently', () => {
+    applyHostContextStyling({ theme: 'rainbow' });
+    expect(document.documentElement.getAttribute('data-theme')).toBeNull();
+  });
+
+  it('handles empty object gracefully (no theme, no styles)', () => {
+    expect(() => applyHostContextStyling({})).not.toThrow();
+    expect(document.documentElement.getAttribute('data-theme')).toBeNull();
+  });
+
+  it('applies theme + variables together', () => {
+    applyHostContextStyling({
+      theme: 'dark',
+      styles: {
+        variables: { '--color-background-primary': '#000000' },
+      },
+    });
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(
+      document.documentElement.style.getPropertyValue(
+        '--color-background-primary',
+      ),
+    ).toBe('#000000');
   });
 });
