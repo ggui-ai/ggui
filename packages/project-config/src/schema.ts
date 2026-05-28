@@ -352,9 +352,9 @@ export const ThemeConfigSchema = z.union([
  * adapters; no surface ever silently creates a file on disk without
  * the operator declaring it here.
  *
- * ## Why `{sessions, vectors}` together
+ * ## Why `{renders, vectors}` together
  *
- * Sessions + vectors are the two substantial persistence surfaces
+ * Renders + vectors are the two substantial persistence surfaces
  * the OSS server honors today. Shipping them in the same block from
  * v1 avoids a second schema churn when vectors or a future store
  * (e.g. threads) lands — there's one `storage` shape and each known
@@ -367,14 +367,14 @@ export const ThemeConfigSchema = z.union([
  * Explicit driver makes the choice visible at a glance — both to
  * the operator reading the file and to future adapters that land
  * against the same interfaces (`postgres`, `redis`, `libsql`, …).
- * A flat `sessions: "./path.sqlite"` shape would bake sqlite into
+ * A flat `renders: "./path.sqlite"` shape would bake sqlite into
  * the schema and force a breaking redesign the first time another
  * driver landed.
  *
  * ## Why per-surface `path` instead of a shared root
  *
- * Sessions + vectors can (and typically should) live in separate
- * files: session data is small + hot-path; vector data is large +
+ * Renders + vectors can (and typically should) live in separate
+ * files: render data is small + hot-path; vector data is large +
  * append-heavy. Coupling them into one file conflates two different
  * IO profiles. Operators who want co-located storage can point both
  * paths at the same file — but the schema doesn't force that.
@@ -394,7 +394,7 @@ export const ThemeConfigSchema = z.union([
  *
  * ## Strictness
  *
- * Root `storage` is strict — unknown surface keys (`sesions: …`,
+ * Root `storage` is strict — unknown surface keys (`rendrs: …`,
  * `vectros: …`, `blueprints: …`) fail parse. Per-surface shapes
  * are discriminated on `driver`; each variant is strict so typos
  * like `{driver: 'sqlite', paht: './x'}` fail immediately.
@@ -423,9 +423,9 @@ const StorageSurfaceSchema = z.discriminatedUnion('driver', [
 ]);
 
 const StorageSchema = z.strictObject({
-  /** Session persistence (events + stack + identity). Absent =
-   * in-memory (sessions reset on restart). */
-  sessions: StorageSurfaceSchema.optional(),
+  /** Render persistence (events + identity). Absent = in-memory
+   * (renders reset on restart). */
+  renders: StorageSurfaceSchema.optional(),
   /** Vector index persistence (RAG, blueprint embeddings). Absent =
    * in-memory (index rebuilds on restart). */
   vectors: StorageSurfaceSchema.optional(),
@@ -434,13 +434,13 @@ const StorageSchema = z.strictObject({
    * deployment Portal's self-hosted flow talks to). Pair with
    * `driver: 'sqlite'` + a `path` for durable local storage; the
    * `@ggui-ai/mcp-server-core/sqlite#SqliteThreadStore` reference
-   * impl consumes the same file-per-surface layout the sessions/
+   * impl consumes the same file-per-surface layout the renders/
    * vectors drivers already use. */
   threads: StorageSurfaceSchema.optional(),
 });
 
 /**
- * Public type alias for one storage surface's config (sessions or
+ * Public type alias for one storage surface's config (renders or
  * vectors). Callers instantiating adapters from a parsed manifest
  * pattern-match on `driver`.
  */
@@ -597,7 +597,7 @@ export const GguiJsonV1 = z.strictObject({
    * — no surface silently creates a file on disk. See
    * {@link StorageConfig}. */
   storage: StorageSchema.optional().describe(
-    'Per-surface storage adapter declarations. Absent = every persistence surface (sessions, threads, vectors, kv) stays in-memory (zero-config OSS default). Present = opt-in per surface; no surface silently creates a file on disk.',
+    'Per-surface storage adapter declarations. Absent = every persistence surface (renders, threads, vectors, kv) stays in-memory (zero-config OSS default). Present = opt-in per surface; no surface silently creates a file on disk.',
   ),
 
   /**

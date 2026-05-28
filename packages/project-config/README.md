@@ -59,7 +59,7 @@ if (path) {
 
 `protocol` MUST match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version installed.
 
-Optional blocks: `storage` (sessions / vectors / threads via `memory` or `sqlite`), `theme`, `primitives`, `blueprints`, `mcpMounts`, and `operator`. See the exported Zod schema for the full, authoritative shape.
+Optional blocks: `storage` (renders / vectors / threads via `memory` or `sqlite`), `theme`, `primitives`, `blueprints`, `mcpMounts`, and `operator`. See the exported Zod schema for the full, authoritative shape.
 
 ## License
 

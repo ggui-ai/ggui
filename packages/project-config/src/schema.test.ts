@@ -373,12 +373,12 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
         vectors: { driver: 'sqlite', path: './ggui-vectors.sqlite' },
       },
     });
     expect(parsed.storage).toEqual({
-      sessions: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
+      renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
       vectors: { driver: 'sqlite', path: './ggui-vectors.sqlite' },
     });
   });
@@ -387,12 +387,12 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
       },
     });
-    expect(parsed.storage?.sessions).toEqual({
+    expect(parsed.storage?.renders).toEqual({
       driver: 'sqlite',
-      path: './ggui-sessions.sqlite',
+      path: './ggui-renders.sqlite',
     });
     expect(parsed.storage?.vectors).toBeUndefined();
   });
@@ -401,11 +401,11 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'memory' },
+        renders: { driver: 'memory' },
         vectors: { driver: 'sqlite', path: './v.sqlite' },
       },
     });
-    expect(parsed.storage?.sessions).toEqual({ driver: 'memory' });
+    expect(parsed.storage?.renders).toEqual({ driver: 'memory' });
     expect(parsed.storage?.vectors).toEqual({
       driver: 'sqlite',
       path: './v.sqlite',
@@ -415,7 +415,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
   it('rejects driver:"sqlite" without a path', () => {
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
-      storage: { sessions: { driver: 'sqlite' } },
+      storage: { renders: { driver: 'sqlite' } },
     });
     expect(result.success).toBe(false);
   });
@@ -423,7 +423,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
   it('rejects driver:"sqlite" with an empty path', () => {
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
-      storage: { sessions: { driver: 'sqlite', path: '' } },
+      storage: { renders: { driver: 'sqlite', path: '' } },
     });
     expect(result.success).toBe(false);
   });
@@ -432,7 +432,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'memory', path: './x.sqlite' },
+        renders: { driver: 'memory', path: './x.sqlite' },
       },
     });
     expect(result.success).toBe(false);
@@ -442,7 +442,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'postgres', url: 'postgres://localhost/ggui' },
+        renders: { driver: 'postgres', url: 'postgres://localhost/ggui' },
       },
     });
     expect(result.success).toBe(false);
@@ -452,9 +452,9 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        // Typo — would silently leave sessions on the in-memory default
+        // Typo — would silently leave renders on the in-memory default
         // without strict parsing.
-        sesions: { driver: 'sqlite', path: './x.sqlite' },
+        rendrs: { driver: 'sqlite', path: './x.sqlite' },
       },
     });
     expect(result.success).toBe(false);
@@ -464,9 +464,9 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const result = safeParseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: {
+        renders: {
           driver: 'sqlite',
-          path: './ggui-sessions.sqlite',
+          path: './ggui-renders.sqlite',
           paht: './another.sqlite',
         },
       },
@@ -478,7 +478,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const once = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        sessions: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
         vectors: { driver: 'memory' },
       },
     });
