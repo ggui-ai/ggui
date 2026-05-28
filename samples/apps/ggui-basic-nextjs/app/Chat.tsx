@@ -397,12 +397,21 @@ function PanelView({
 }
 
 /**
- * Render one MCP-Apps resource by URI. Pure spec wiring: passes
- * `toolResourceUri` to `<AppRenderer>` and a relay-backed
- * `onReadResource` that proxies the read through the agent backend. No
- * vendor-specific knowledge — replace `@ggui-ai/react`'s `AppRenderer`
- * re-export with `@mcp-ui/client`'s direct import and this component
- * keeps working against any MCP-Apps-spec server.
+ * Render one MCP-Apps resource by URI. Pure spec wiring: pre-fetches
+ * the spec-canonical `resources/read` (via the agent backend relay),
+ * extracts the HTML body and the `_meta.ui.csp` block, and hands both
+ * to `<AppRenderer>` as `html` + `sandbox.csp`. The sandbox proxy
+ * applies that CSP via its `?csp=<json>` query param so the inner
+ * iframe can fetch the server-declared `script-src` / `connect-src`
+ * origins.
+ *
+ * Pre-fetching (instead of letting AppRenderer call onReadResource
+ * itself) is a host-side stopgap until AppRenderer extracts CSP from
+ * the resource _meta automatically. We don't parse the HTML body — the
+ * resource is opaque text. CSP shape is MCP-spec
+ * (`{connectDomains, resourceDomains, ...}`); replace this sample's
+ * relay with any MCP-UI server's `resources/read` and the wiring
+ * works unchanged.
  */
 function ResourceFrame({
   item,
@@ -417,9 +426,100 @@ function ResourceFrame({
   fillContainer?: boolean;
   onUiMessage?: (text: string) => void;
 }) {
+  // Pre-fetched resource state: `{ html, csp }`. Lazily populated by
+  // the effect below; AppRenderer holds the loading placeholder until
+  // both are ready.
+  const [resource, setResource] = useState<
+    | undefined
+    | {
+        readonly html: string;
+        readonly csp?: {
+          connectDomains?: string[];
+          resourceDomains?: string[];
+        };
+      }
+  >(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResource(undefined);
+    void (async () => {
+      try {
+        const resp = await fetch(`${agentEndpoint}/relay/resources-read`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uri: item.resourceUri }),
+        });
+        if (!resp.ok) {
+          console.warn(
+            '[ResourceFrame] resources/read relay non-2xx',
+            resp.status,
+          );
+          return;
+        }
+        const jsonRpc = (await resp.json()) as {
+          readonly result?: ReadResourceResult;
+          readonly error?: { readonly message?: string };
+        };
+        if (cancelled) return;
+        if (jsonRpc.error !== undefined || !jsonRpc.result) {
+          console.warn(
+            '[ResourceFrame] resources/read relay error',
+            jsonRpc.error,
+          );
+          return;
+        }
+        const first = jsonRpc.result.contents?.[0];
+        if (!first || typeof first !== 'object') return;
+        const text = (first as { text?: unknown }).text;
+        if (typeof text !== 'string') return;
+        // Pluck spec-canonical `_meta.ui.csp` if the server stamped it.
+        let csp:
+          | {
+              connectDomains?: string[];
+              resourceDomains?: string[];
+            }
+          | undefined;
+        const contentMeta = (first as { _meta?: unknown })._meta;
+        if (contentMeta !== null && typeof contentMeta === 'object') {
+          const uiBlock = (contentMeta as { ui?: unknown }).ui;
+          if (uiBlock !== null && typeof uiBlock === 'object') {
+            const cspBlock = (uiBlock as { csp?: unknown }).csp;
+            if (cspBlock !== null && typeof cspBlock === 'object') {
+              const c = cspBlock as {
+                connectDomains?: unknown;
+                resourceDomains?: unknown;
+              };
+              csp = {};
+              if (Array.isArray(c.connectDomains)) {
+                csp.connectDomains = c.connectDomains.filter(
+                  (s): s is string => typeof s === 'string',
+                );
+              }
+              if (Array.isArray(c.resourceDomains)) {
+                csp.resourceDomains = c.resourceDomains.filter(
+                  (s): s is string => typeof s === 'string',
+                );
+              }
+            }
+          }
+        }
+        setResource({ html: text, ...(csp ? { csp } : {}) });
+      } catch (err) {
+        console.warn('[ResourceFrame] resources/read failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentEndpoint, item.resourceUri]);
+
   const sandbox = useMemo(
-    () => ({ url: new URL(sandboxUrl) }),
-    [sandboxUrl],
+    () => ({
+      url: new URL(sandboxUrl),
+      ...(resource?.csp ? { csp: resource.csp } : {}),
+    }),
+    [sandboxUrl, resource?.csp],
   );
 
   // Spec-canonical tools/call proxy. The iframe holds no MCP client
@@ -469,15 +569,17 @@ function ResourceFrame({
     [agentEndpoint],
   );
 
-  // Spec-canonical resources/read proxy. AppRenderer calls this when it
-  // sees `toolResourceUri` set, gets back the iframe HTML, and srcdocs
-  // it into the inner sandbox iframe.
+  // Spec-canonical resources/read proxy. AppRenderer will call this if
+  // it ever needs to re-read the resource (e.g. via the guest's
+  // resources/list-changed flow). The initial mount comes from the
+  // pre-fetched `resource.html` above; this handler proxies any later
+  // reads through the agent backend relay.
   const onReadResource = useCallback(
     async (
       params: ReadResourceRequest['params'],
       _extra: RequestHandlerExtra,
     ): Promise<ReadResourceResult> => {
-      console.log('[ResourceFrame] resources/read', params.uri);
+      console.log('[ResourceFrame] resources/read (post-mount)', params.uri);
       const resp = await fetch(`${agentEndpoint}/relay/resources-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -534,18 +636,22 @@ function ResourceFrame({
         className="render-frame"
         style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
       >
-        <AppRenderer
-          key={item.resourceUri}
-          toolName="ggui_render"
-          sandbox={sandbox}
-          toolResourceUri={item.resourceUri}
-          onReadResource={onReadResource}
-          onCallTool={onCallTool}
-          onMessage={onMessage}
-          onError={(err) =>
-            console.warn('[ResourceFrame] AppRenderer error', err)
-          }
-        />
+        {resource ? (
+          <AppRenderer
+            key={item.resourceUri}
+            toolName="ggui_render"
+            sandbox={sandbox}
+            html={resource.html}
+            onReadResource={onReadResource}
+            onCallTool={onCallTool}
+            onMessage={onMessage}
+            onError={(err) =>
+              console.warn('[ResourceFrame] AppRenderer error', err)
+            }
+          />
+        ) : (
+          <div className="render-loading" aria-hidden="true" />
+        )}
       </div>
     </div>
   );
