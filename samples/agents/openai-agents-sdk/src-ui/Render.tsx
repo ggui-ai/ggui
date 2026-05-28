@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   AppRenderer,
   buildAppRendererToolResult,
@@ -65,15 +65,33 @@ export function Render({
   // Reconstruct the iframe HTML from the render meta. The meta carries
   // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
   // iframe-runtime reads everything off `window.__GGUI_META__` at
-  // boot. When meta hasn't landed yet, fall back to a "loading" placeholder
-  // that the next prop transition replaces.
-  const html = useMemo(() => {
-    if (!item.meta) {
-      return LOADING_HTML;
+  // boot. When meta hasn't landed yet, fall back to a "loading"
+  // placeholder that the next prop transition replaces.
+  //
+  // The shell builds ONCE per render lifetime — pinned in a ref because
+  // subsequent `ggui_update` calls mutate `item.meta` (the props patch),
+  // and AppRenderer re-navigates the inner sandbox iframe whenever its
+  // `html` prop string changes — that wipes the running React tree.
+  // Live props updates MUST flow through `toolResult` (forwarded as
+  // `ui/notifications/tool-result` postMessage) or the WS `props_update`
+  // frame instead. We reset the ref when the renderId changes
+  // (genuinely new mount target).
+  const htmlRef = useRef<{ renderId: string; html: string } | null>(null);
+  if (htmlRef.current !== null && htmlRef.current.renderId !== item.renderId) {
+    htmlRef.current = null;
+  }
+  let html: string;
+  if (!item.meta) {
+    html = LOADING_HTML;
+  } else {
+    if (htmlRef.current === null) {
+      htmlRef.current = {
+        renderId: item.renderId,
+        html: buildSelfContainedHtml(toMcpAppEnvelope(item.meta)),
+      };
     }
-    const envelope = toMcpAppEnvelope(item.meta);
-    return buildSelfContainedHtml(envelope);
-  }, [item.meta]);
+    html = htmlRef.current.html;
+  }
 
   // Build a CallToolResult from the render meta so AppRenderer forwards
   // it to the inner iframe via `ui/notifications/tool-result` — the

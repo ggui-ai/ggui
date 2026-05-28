@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import {
   AppRenderer,
   buildAppRendererToolResult,
@@ -116,15 +116,33 @@ export function Render({
   // `runtimeUrl`, `wsUrl + wsToken`, `codeUrl + propsJson`, etc. — the
   // iframe-runtime reads everything off `window.__GGUI_META__` at
   // boot. AppRenderer is mounted only once `item.meta` is defined (the
-  // placeholder branch handles the pre-meta tick), so this memo is
+  // placeholder branch handles the pre-meta tick), so this branch is
   // never invoked with a missing envelope.
-  const html = useMemo(
-    () =>
-      item.meta
-        ? buildSelfContainedHtml(toMcpAppEnvelope(item.meta))
-        : undefined,
-    [item.meta],
-  );
+  //
+  // The shell builds ONCE per render lifetime — pinned in a ref because
+  // subsequent `ggui_update` calls mutate `item.meta` (the props patch),
+  // and AppRenderer re-navigates the inner sandbox iframe whenever its
+  // `html` prop string changes — that wipes the running React tree.
+  // Live props updates MUST flow through `toolResult` (forwarded as
+  // `ui/notifications/tool-result` postMessage) or the WS `props_update`
+  // frame instead. We reset the ref when the renderId changes
+  // (genuinely new mount target).
+  const htmlRef = useRef<{ renderId: string; html: string } | null>(null);
+  if (htmlRef.current !== null && htmlRef.current.renderId !== item.renderId) {
+    htmlRef.current = null;
+  }
+  let html: string | undefined;
+  if (!item.meta) {
+    html = undefined;
+  } else {
+    if (htmlRef.current === null) {
+      htmlRef.current = {
+        renderId: item.renderId,
+        html: buildSelfContainedHtml(toMcpAppEnvelope(item.meta)),
+      };
+    }
+    html = htmlRef.current.html;
+  }
 
   // Build a CallToolResult from the render meta so AppRenderer forwards
   // it to the inner iframe via `ui/notifications/tool-result` — the
