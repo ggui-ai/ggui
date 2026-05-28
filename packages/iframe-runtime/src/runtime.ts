@@ -1863,15 +1863,17 @@ function emitUserActionInline(args: {
     `message instead of queued on the consume pipe. Use the userAction ` +
     `payload to handle it directly; do NOT call ggui_consume for this ` +
     `render.`;
-  // `ui/message` STAYS on raw postMessage. The spec's
-  // `McpUiMessageRequest.params` only defines `{role, content}`; the
-  // `@modelcontextprotocol/ext-apps` `App.sendMessage` validates with
-  // a closed zod schema and would silently strip our extended
+  // TODO(#276): Replace with `app.sendMessage(...)` once ext-apps's
+  // `McpUiMessageRequest` schema honors the spec's `_meta` extension
+  // surface. The base MCP spec defines `_meta` as `{ [key: string]:
+  // unknown }` — a namespaced extension point. Other ext-apps
+  // schemas (toolresult, hostcontextchanged) carry `_meta`; only
+  // McpUiMessageRequest's closed zod schema silently strips it.
+  // Until an upstream fix (`.passthrough()` or an explicit `_meta`
+  // field), raw postMessage is the only path that preserves our
   // `_meta.ggui.userAction.*` payload — the structured channel the
-  // agent reads to short-circuit `ggui_consume`. Until the spec
-  // accommodates a metadata extension point on `ui/message` (or we
-  // move the userAction payload onto a different surface), raw
-  // postMessage is the only way to preserve `_meta`.
+  // agent reads on the chat-thread escape hatch when the canonical
+  // `submit_action` → `ggui_consume` pipe is broken.
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -1927,9 +1929,9 @@ function emitUserActionQueued(args: {
     `User fired "${args.intent}" on render ${args.renderId}. ` +
     `The gesture is queued on the consume pipe but no consumer is active — ` +
     `call ggui_consume with this renderId next to drain the canonical payload.`;
-  // `ui/message` STAYS on raw postMessage. See `emitUserActionInline`
-  // for the rationale — the spec's closed schema would strip our
-  // `_meta.ggui.userAction.*` extension.
+  // TODO(#276): Replace with `app.sendMessage(...)` once ext-apps's
+  // McpUiMessageRequest schema honors `_meta` extensions. See
+  // `emitUserActionInline` for the full rationale.
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
