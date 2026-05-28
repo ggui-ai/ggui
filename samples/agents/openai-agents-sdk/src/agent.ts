@@ -24,6 +24,11 @@
  */
 import { Agent, MCPServerStreamableHttp, run } from '@openai/agents';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
+import {
+  FullResultMcpServerStreamableHttp,
+  dequeueFullResult,
+  type McpCallToolResult,
+} from './mcp-server-with-full-result.js';
 
 /**
  * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
@@ -88,6 +93,21 @@ const knownResponseIds = new Map<string, string>();
  * SDKMessage so the shared chat UI doesn't have to know which SDK is
  * upstream. Each per-SDK sample produces these shapes from its own
  * native event stream.
+ *
+ * `tool_use_result` (on the `user`/`tool_result` variant) is the
+ * spec-canonical channel for MCP-Apps extension metadata — it carries
+ * the FULL MCP `CallToolResult` (including `structuredContent` and
+ * `_meta`), letting the frontend hook (`useMcpAppsChat`) extract
+ * `_meta.ui.resourceUri` to mount iframes. Anthropic's SDKMessage
+ * preserves this as a sibling of `message` on each tool-result frame;
+ * we mirror the shape so a single normalizer parses every SDK.
+ *
+ * The OpenAI Agents SDK's MCP integration strips `_meta` /
+ * `structuredContent` at the SDK boundary (see
+ * `@openai/agents-core/dist/shims/mcp-server/node.js` →
+ * `callTool` extracting `parsed.content`). We work around this by
+ * issuing our own JSON-RPC call (see `FullResultMcpServerStreamableHttp`)
+ * and lifting the captured full result onto `tool_use_result` here.
  */
 export type NormalizedMessage =
   | {
@@ -114,6 +134,13 @@ export type NormalizedMessage =
           readonly is_error?: boolean;
         }>;
       };
+      /**
+       * Full MCP `CallToolResult` from `FullResultMcpServerStreamableHttp`'s
+       * side-channel queue. Mirrors Anthropic SDKMessage's
+       * `tool_use_result` sibling field; frontend hook reads
+       * `_meta.ui.resourceUri` from here to mount iframes.
+       */
+      readonly tool_use_result?: McpCallToolResult;
     }
   | { readonly type: 'result'; readonly subtype: string };
 
@@ -145,18 +172,25 @@ export async function* runAgent(
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
 
   // Translate the brand-agnostic `mcpServers` map into the OpenAI Agents
-  // SDK's native `MCPServerStreamableHttp[]` shape. The SDK's underlying
-  // client ultimately delegates to @modelcontextprotocol/sdk; the bearer
-  // header is plumbed via `requestInit` so every request carries
-  // `Authorization: Bearer <token>` for ggui's dev-mode auth. Map keys
-  // become each server's `name` so the SDK can prefix tool calls.
+  // SDK's native `MCPServerStreamableHttp[]` shape. Map keys become
+  // each server's `name` so the SDK can prefix tool calls.
+  //
+  // `FullResultMcpServerStreamableHttp` is a `MCPServerStreamableHttp`
+  // subclass that captures the FULL MCP CallToolResult on each
+  // `callTool` (instead of letting the SDK strip to `parsed.content`).
+  // The captured result lives on a per-server FIFO queue (one
+  // dequeue per `mcp_tool_output` event in the normalizer below),
+  // so `tool_use_result.{_meta,structuredContent}` survives end-to-end.
+  // Bearer is plumbed both ways: through `requestInit` for the SDK's
+  // own `initialize` / `tools/list` calls AND through the subclass's
+  // own fetch for `tools/call`.
   const mcpServers: MCPServerStreamableHttp[] = [];
   for (const [name, cfg] of Object.entries(opts.mcpServers)) {
     mcpServers.push(
-      new MCPServerStreamableHttp({
+      new FullResultMcpServerStreamableHttp({
         url: cfg.url,
         name,
-        requestInit: { headers: { Authorization: `Bearer ${bearer}` } },
+        bearer,
       }),
     );
   }
@@ -170,6 +204,19 @@ export async function* runAgent(
 
   try {
     for (const server of mcpServers) await server.connect();
+    // Build tool-name → server-name index so each `mcp_tool_output`
+    // event can be matched back to the server that produced it
+    // (needed to dequeue from the correct per-server full-result
+    // queue when multiple MCPs are configured, e.g. ggui + todo).
+    // `listTools` is cached by the SDK after `connect`, so this
+    // doesn't add a second round-trip.
+    const toolNameToServer = new Map<string, string>();
+    for (const server of mcpServers) {
+      const tools = await server.listTools();
+      for (const tool of tools) {
+        toolNameToServer.set(tool.name, server.name);
+      }
+    }
     // Multi-turn session continuity. The OpenAI Responses API stores
     // conversation state server-side, keyed by response id; passing
     // `previousResponseId` on the next turn loads that history before
@@ -271,6 +318,16 @@ export async function* runAgent(
       }
 
       // Tool outputs — the matching result for an earlier tool_called.
+      // The SDK strips `_meta` and `structuredContent` from the MCP
+      // response before this event fires (the `output` field here is
+      // already content-only). To recover the spec-canonical MCP-Apps
+      // fields, dequeue the matching full result from the subclass's
+      // side-channel queue (per-server FIFO ordered by arrival).
+      //
+      // Server lookup: each `FunctionCallResultItem.name` is the MCP
+      // tool's bare name. We pre-built `toolNameToServer` from each
+      // server's `listTools()`, so the name reliably identifies the
+      // owning server even when multiple MCPs are configured.
       if (
         ev.type === 'run_item_stream_event' &&
         typeof ev.name === 'string' &&
@@ -282,6 +339,7 @@ export async function* runAgent(
                 readonly callId?: string;
                 readonly tool_call_id?: string;
                 readonly id?: string;
+                readonly name?: string;
                 readonly output?: unknown;
                 readonly content?: unknown;
                 readonly isError?: boolean;
@@ -292,6 +350,11 @@ export async function* runAgent(
         const toolUseId = String(
           raw?.callId ?? raw?.tool_call_id ?? raw?.id ?? 'unknown',
         );
+        const toolName = typeof raw?.name === 'string' ? raw.name : undefined;
+        const serverName =
+          toolName !== undefined ? toolNameToServer.get(toolName) : undefined;
+        const fullResult =
+          serverName !== undefined ? dequeueFullResult(serverName) : undefined;
         const text = stringifyToolOutput(raw?.output ?? raw?.content);
         yield {
           type: 'user',
@@ -305,6 +368,7 @@ export async function* runAgent(
               },
             ],
           },
+          ...(fullResult ? { tool_use_result: fullResult } : {}),
         };
         continue;
       }

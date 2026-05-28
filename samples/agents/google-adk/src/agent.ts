@@ -79,6 +79,17 @@ export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
  * Normalized message shape — mirrors the relevant subset of Anthropic's
  * SDKMessage so the shared chat UI doesn't have to know which SDK is
  * upstream.
+ *
+ * `tool_use_result` (on the `user`/`tool_result` variant) is the
+ * spec-canonical channel for MCP-Apps extension metadata — it carries
+ * the FULL MCP `CallToolResult` (including `structuredContent` and
+ * `_meta`), letting the frontend hook (`useMcpAppsChat`) extract
+ * `_meta.ui.resourceUri` to mount iframes. Anthropic's SDKMessage
+ * preserves this as a sibling of `message` on each tool-result frame;
+ * we mirror the shape so a single normalizer parses every SDK.
+ *
+ * Without `tool_use_result`, the chat panel still renders but no iframe
+ * mounts — `_meta` is gone, the hook has nothing to pick up.
  */
 export type NormalizedMessage =
   | {
@@ -105,8 +116,29 @@ export type NormalizedMessage =
           readonly is_error?: boolean;
         }>;
       };
+      /**
+       * Full MCP `CallToolResult` from the underlying MCP client — kept
+       * verbatim alongside the LLM-facing `message.content` strip so the
+       * frontend hook can read `structuredContent` and `_meta.ui.*`.
+       * Mirrors Anthropic SDKMessage's `tool_use_result` sibling field.
+       */
+      readonly tool_use_result?: McpCallToolResult;
     }
   | { readonly type: 'result'; readonly subtype: string };
+
+/**
+ * Subset of MCP `CallToolResult` the frontend hook cares about. Index
+ * signature kept for forward-compat with extension fields that may land
+ * on future MCP spec revisions — the hook does its own runtime
+ * narrowing per `_meta.ui.*` SEP rules.
+ */
+export interface McpCallToolResult {
+  readonly content?: ReadonlyArray<unknown>;
+  readonly structuredContent?: Record<string, unknown>;
+  readonly _meta?: Record<string, unknown>;
+  readonly isError?: boolean;
+  readonly [key: string]: unknown;
+}
 
 /**
  * Module-scope agent state — singletons constructed lazily on the
@@ -419,7 +451,18 @@ export async function* runAgent(
         // Function response → tool_result. ADK pairs the response id
         // with the matching call id; we reuse it as tool_use_id so the
         // chat UI's call-result patcher matches them.
+        //
+        // `functionResponse.response` is the FULL MCP `CallToolResult`
+        // verbatim (ADK's MCPTool.runAsync returns the @modelcontextprotocol/sdk
+        // Client's callTool response unmodified, and ADK's
+        // `buildResponseEvent` parks it on `response` as-is when it's
+        // already an object). Lift it onto `tool_use_result` (sibling
+        // of `message`) so the frontend hook reads `structuredContent`
+        // and `_meta.ui.resourceUri` — the spec-canonical channel for
+        // MCP-Apps iframe-mount metadata. Matches Anthropic SDK's
+        // SDKMessage shape; one frontend normalizer for every SDK.
         if (part.functionResponse && part.functionResponse.id) {
+          const fullResult = extractCallToolResult(part.functionResponse.response);
           const text = stringifyToolOutput(part.functionResponse.response);
           yield {
             type: 'user',
@@ -432,6 +475,7 @@ export async function* runAgent(
                 },
               ],
             },
+            ...(fullResult ? { tool_use_result: fullResult } : {}),
           };
           continue;
         }
@@ -449,6 +493,22 @@ export async function* runAgent(
     // `tools/list` round trip on every turn. Shutdown is registered
     // as a SIGTERM/SIGINT handler inside `buildSharedState`.
   }
+}
+
+/**
+ * Narrow ADK's untyped `functionResponse.response` into our
+ * `McpCallToolResult` shape. Returns the original object (preserving
+ * `structuredContent` + `_meta`) when it looks like an MCP CallToolResult,
+ * `undefined` otherwise (primitive or no usable shape).
+ *
+ * We deliberately don't validate field-by-field — the MCP spec allows
+ * extension fields on `_meta`, and ADK's `buildResponseEvent` wraps
+ * non-object responses in `{result: <value>}` which is a separate shape
+ * the chat UI doesn't need to render as an iframe-mount anyway.
+ */
+function extractCallToolResult(response: unknown): McpCallToolResult | undefined {
+  if (response === null || typeof response !== 'object') return undefined;
+  return response as McpCallToolResult;
 }
 
 function stringifyToolOutput(output: unknown): string {
