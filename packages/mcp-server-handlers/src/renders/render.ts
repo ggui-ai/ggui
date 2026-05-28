@@ -883,9 +883,15 @@ const inputSchema = {
 /**
  * Output raw-shape — minimum LLM-actionable surface (2026-05-13).
  *
- * Pre-launch, no back-compat. Three fields, all load-bearing:
+ * Pre-launch, no back-compat. Four fields, all load-bearing:
  *   - `renderId` — agent's handle for follow-up tool calls
  *     (ggui_consume, ggui_update).
+ *   - `resourceUri` — spec-canonical MCP-Apps entry-point
+ *     (`ui://ggui/render/{renderId}[/{contractHash}]`). SDKs that
+ *     preserve `_meta` also receive this on `_meta.ui.resourceUri`,
+ *     but SDKs that strip `_meta` from tool_results (OpenAI Agents
+ *     SDK, Google ADK) reach the URI only via this LLM-visible field.
+ *     Mirrors the `resourceUri` surface `ggui_update` ships.
  *   - `nextStep` — terse recovery hint (tool + args). Emitted only
  *     when the contract has actionSpec; pure-display renders omit.
  *   - `action` — negotiator's decision (`create | reuse | update |
@@ -893,6 +899,7 @@ const inputSchema = {
  */
 const outputSchema = {
   renderId: z.string(),
+  resourceUri: z.string(),
   nextStep: z
     .object({
       tool: z.literal('ggui_consume'),
@@ -913,6 +920,7 @@ const outputSchema = {
 type RenderOutput = {
   // LLM-visible surface (matches outputSchema):
   renderId: string;
+  resourceUri: string;
   nextStep?: {
     readonly tool: 'ggui_consume';
     readonly args: { readonly renderId: string };
@@ -1775,8 +1783,18 @@ export function createGguiRenderHandler(
       //     the JSON-RPC `structuredContent` is built.
       //   - Internal seams (resultMeta, postSuccessHook, tests) read
       //     from this rich in-memory object.
+      // Per-render resource URI — same formula `resultMeta` uses to
+      // build `_meta.ui.resourceUri`. Surfacing it on the LLM-visible
+      // structuredContent too lets agent SDKs that strip `_meta` from
+      // tool_results (OpenAI Agents SDK, Google ADK) still hand a
+      // mount handle to their frontend without the side-channel.
+      const blueprintSegmentForOutput = resolvedContractHash
+        ? `/${resolvedContractHash}`
+        : '';
+      const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${renderId}${blueprintSegmentForOutput}`;
       const result: RenderOutput = {
         renderId,
+        resourceUri: resourceUriForOutput,
         action,
         shortCode,
         codeReady: generatedCodeReady,
@@ -1803,16 +1821,11 @@ export function createGguiRenderHandler(
     },
     resultMeta: async (output, _input, ctx) => {
       // Resource URI is the rehydrate handle — chat hosts persist this
-      // and re-fetch on history reload. Include the blueprint's
-      // canonical key alongside the renderId so the resource handler
-      // can run render + blueprint lookups in parallel (no data
-      // dependency between them) AND fall back to a registry-only
-      // render when the live render has been evicted but the blueprint
-      // is still cached.
-      const blueprintSegment = output.contractHash
-        ? `/${output.contractHash}`
-        : '';
-      const perCallResourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${output.renderId}${blueprintSegment}`;
+      // and re-fetch on history reload. Reuses the URI already computed
+      // by the handler (and surfaced on structuredContent for SDKs that
+      // strip `_meta`); a single source of truth means no chance of the
+      // two derivations drifting apart.
+      const perCallResourceUri = output.resourceUri;
       // `_meta.ui.displayMode` is the spec-native presentation hint
       // (MCP-Apps SEP-1865). When the app declares a default, stamp it
       // on every render so hosts can arrange this iframe accordingly.

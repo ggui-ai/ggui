@@ -268,6 +268,7 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
   it('round-trips a render output', () => {
     const out = {
       renderId: 'render_1',
+      resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
     };
     expect(renderOutputSchema.parse(out)).toEqual(out);
@@ -276,13 +277,18 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
     const parsed = renderOutputSchema.parse({
       renderId: 'render_1',
+      resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
       // Dead field — post-R5 the `/r/<shortCode>` route was deleted.
       // Defensive: a sender that hasn't migrated yet must not poison
       // the wire output with a hallucination-bait URL.
       url: 'https://stale-render.example.com/abc12345',
     } as unknown as Record<string, unknown>);
-    expect(parsed).toEqual({ renderId: 'render_1', action: 'create' });
+    expect(parsed).toEqual({
+      renderId: 'render_1',
+      resourceUri: 'ui://ggui/render/render_1',
+      action: 'create',
+    });
     expect(Object.keys(parsed)).not.toContain('url');
   });
 
@@ -290,6 +296,7 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
     expect(() =>
       renderOutputSchema.parse({
         renderId: 'render_1',
+        resourceUri: 'ui://ggui/render/render_1',
         action: 'compose',
       }),
     ).toThrow();

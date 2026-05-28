@@ -287,6 +287,15 @@ export const renderInputSchema = z.object({
  */
 export const renderOutputSchema = z.object({
   renderId: z.string(),
+  /**
+   * Spec-canonical MCP-Apps entry-point — same `ui://ggui/render/{id}`
+   * URI surfaced on `_meta.ui.resourceUri`. Surfacing it on the LLM-
+   * visible structuredContent too lets SDKs that strip `_meta` from
+   * tool_results (OpenAI Agents SDK, Google ADK) reach the mount URI;
+   * SDKs that preserve `_meta` see the same value on both fields.
+   * Mirrors the `resourceUri` field on `ggui_update`'s output.
+   */
+  resourceUri: z.string(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   /**
    * Wire-shape recovery hint for the next call. Emitted ONLY when the
