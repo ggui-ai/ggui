@@ -89,7 +89,7 @@ const RESERVED_CHANNEL_REPLAY_MAX = 256;
  *   `subscribe()` → first `ack` → render stack items → mount
  *   `mountProvisional` → it then calls `streamBus.subscribe('_ggui:
  *   preview', …)`. Server-side replay frames for `_ggui:preview` (the
- *   provisional A2UI preamble fired during the agent's `ggui_push`
+ *   provisional A2UI preamble fired during the agent's `ggui_render`
  *   BEFORE the user's browser navigated to the viewer) arrive over the
  *   WS in the window between ack-resolve and the provisional mount —
  *   they hit `emit()` before any listener has subscribed. Without a

@@ -15,7 +15,7 @@
  *     as they fire. Heartbeat every 15s to keep proxies awake.
  *
  * **Memory bound.** Default capacity = 100 events (vs LlmTraceSink's
- * 200). Each `ggui_push` payload may carry full componentCode, base64
+ * 200). Each `ggui_render` payload may carry full componentCode, base64
  * blobs, or a fat `story.context`, so cap is tighter to keep peak
  * memory bounded. At ~50 KB / event the worst-case ring is ~5 MB.
  * Operator can override at construction.

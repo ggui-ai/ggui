@@ -2,7 +2,7 @@
  * Schema compatibility check — verifies that a StackItem's declared
  * `actionSpec` / `streamSpec` schemas line up with the input/output
  * schemas of the tools they reference. Wired at two canonical check
- * points: `ggui_push` validation (defensive, fires when the
+ * points: `ggui_render` validation (defensive, fires when the
  * generator eventually emits contract) and blueprint registration
  * (the console blueprint-try endpoint — the real-world site where a
  * StackItem with pre-declared `actionSpec` / `streamSpec` and tool
@@ -177,7 +177,7 @@ export class SchemaCompatError extends Error {
  * the report is still available on `error.report`.
  *
  * `context` is a short string naming the call site (e.g.
- * `"ggui_push"`, `"console blueprint-try:<blueprintId>"`). Shows
+ * `"ggui_render"`, `"console blueprint-try:<blueprintId>"`). Shows
  * up in thrown error messages so an operator reading logs sees
  * which ingress surfaced the mismatch.
  */

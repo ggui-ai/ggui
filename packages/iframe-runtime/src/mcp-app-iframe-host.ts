@@ -27,7 +27,7 @@
  * at mount so the teardown message can still reach the view.
  *
  * Recursive mount safety: a foreign MCP App loaded inside this
- * iframe can in turn render a `ui://ggui/session` resource via its
+ * iframe can in turn render a `ui://ggui/render` resource via its
  * own host implementation. That recursion stays bounded because
  * each nested iframe runs the same adapter-boundary rule — outer
  * ggui state never leaks into the inner renderer's session through

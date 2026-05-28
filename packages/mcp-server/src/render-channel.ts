@@ -32,7 +32,7 @@
  * Not handled here:
  *
  *   - Pattern-B daemon-agent notification stream (GET /mcp SSE).
- *   - Short-lived session-token mint/consume — that's ggui_push-gated.
+ *   - Short-lived session-token mint/consume — that's ggui_render-gated.
  *     Dev-mode auth (any bearer via existing AuthAdapter) matches the
  *     `/mcp` endpoint's shape and is operator-replaceable.
  */
@@ -323,7 +323,7 @@ export interface RenderChannelBootstrap {
    * into a new envelope with a fresh TTL. Used by the
    * `ggui_runtime_refresh_bootstrap` MCP tool — iframes that see their
    * bootstrap drift out of the TTL window swap in the refreshed
-   * envelope without going back through `ggui_push`.
+   * envelope without going back through `ggui_render`.
    *
    * Stateless: verifies HMAC against the same secret used at mint,
    * checks the refresh window against the ORIGINAL `iat`, and mints
@@ -2118,7 +2118,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
 
     // WS-token-auth path. When `payload.wsToken` is present, the MCP
     // Apps iframe is asking us to authenticate it via the short-lived
-    // token minted by `ggui_push`. This REPLACES the upgrade-time
+    // token minted by `ggui_render`. This REPLACES the upgrade-time
     // AuthAdapter identity — iframes don't carry bearer tokens.
     // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
@@ -2208,9 +2208,9 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // Dev-mode session provisioning: look up first; if not present,
     // create with the client-provided id via the widened
     // CreateSessionInput.id seam. Matches the hosted model's shape
-    // (agent creates via ggui_push → client subscribes) in a single
+    // (agent creates via ggui_render → client subscribes) in a single
     // step — production deployments tighten this by supplying an
-    // AuthAdapter that mints session-scoped tokens on push.
+    // AuthAdapter that mints session-scoped tokens on render.
     let session = await opts.renderStore.get(payload.renderId);
     if (session) {
       if (session.appId !== payload.appId) {

@@ -1208,7 +1208,7 @@ function installResizeObserver(rootEl: Element): void {
  * Module-level guard for {@link installPostMountListener}. Ensures
  * exactly one persistent `ui/notifications/tool-result` listener is
  * attached even when `bootSelfContained` is called multiple times
- * (e.g. an agent fires a second `ggui_push` and we re-mount).
+ * (e.g. an agent fires a second `ggui_render` and we re-mount).
  */
 let postMountListenerInstalled = false;
 

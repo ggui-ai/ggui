@@ -835,7 +835,7 @@ describe('createGguiServer — console security headers', () => {
  * console viewer actually walks from "operator opens
  * /s/<shortCode>" to "agent push appears on the browser":
  *
- *   1. shortCodeIndex.put (simulates the write ggui_push does).
+ *   1. shortCodeIndex.put (simulates the write ggui_render does).
  *   2. POST /ggui/console/session-cookie → 200 + Set-Cookie.
  *   3. WebSocket upgrade to /ws carrying the cookie.
  *   4. subscribe → ack (cookie-bound, no bearer in sight).

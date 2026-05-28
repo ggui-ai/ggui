@@ -286,7 +286,7 @@ export type { InMemoryAuthAdapterOptions } from '@ggui-ai/mcp-server-core/in-mem
 
 // In-memory rate-limiter + quota-store reference adapters. Re-exported
 // for the same reason as `InMemoryAuthAdapter` — CLI hosts can compose
-// `--public-demo` posture (per-IP rate limit on ggui_push) without
+// `--public-demo` posture (per-IP rate limit on ggui_render) without
 // taking a direct `@ggui-ai/mcp-server-core` dep. The default fallback
 // inside `createGguiServer` is `NoopRateLimiter`; this is the smallest
 // non-trivial alternative.
@@ -351,7 +351,7 @@ export type {
   ThemeFileUploader,
 } from './console-theme-routes.js';
 
-// UiGenerator seam types — real generation is wired into `ggui_push`
+// UiGenerator seam types — real generation is wired into `ggui_render`
 // via the `generation` opt. Re-exported here so CLI
 // hosts (`ggui-cli::buildMcpServerBackend`) and embedding hosts can
 // compose the `GenerationDeps` bundle without a direct

@@ -39,7 +39,7 @@
  *
  * One LLM call per handshake (when creds resolve). Operators
  * concerned about cost can either (a) skip handshake and call
- * `ggui_push` directly with `{story}`, or (b) bind a different
+ * `ggui_render` directly with `{story}`, or (b) bind a different
  * negotiator (e.g., the cache-backed one for read-only cache
  * lookups) via `createGguiServer({handshake: {negotiator: ...}})`.
  *
@@ -410,7 +410,7 @@ export function createLlmBackedHandshakeNegotiator(
       if (!creds) {
         return buildCreateFallback(
           draftContract,
-          "no-creds: no BYOK credentials resolved for the configured provider; ggui_push will surface the same error and the handshake stays a no-op create.",
+          "no-creds: no BYOK credentials resolved for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.",
           estimatedLatencyMs
         );
       }
@@ -507,7 +507,7 @@ export function createLlmBackedHandshakeNegotiator(
         const errorClass = err instanceof Error ? err.name : "unknown";
         return buildCreateFallback(
           draftContract,
-          `negotiator-degraded: ${errorClass} during decision LLM call — ${message}. Falling back to bare-create; the paired ggui_push will still generate the UI.`,
+          `negotiator-degraded: ${errorClass} during decision LLM call — ${message}. Falling back to bare-create; the paired ggui_render will still generate the UI.`,
           estimatedLatencyMs
         );
       }

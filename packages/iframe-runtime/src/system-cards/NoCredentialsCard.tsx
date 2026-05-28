@@ -1,7 +1,7 @@
 /**
  * No-credentials system card.
  *
- * Rendered when the server processed a `ggui_push` for a session whose
+ * Rendered when the server processed a `ggui_render` for a session whose
  * LLM credentials are missing or unresolvable. The user needs to open
  * the server's `/settings` page in a real browser tab to paste an API
  * key.

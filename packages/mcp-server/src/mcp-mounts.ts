@@ -1,7 +1,7 @@
 /**
  * mcp-mounts — aggregate external MCP tool handler bundles onto the
  * ggui `/mcp` surface so one session can see ggui-native tools (e.g.
- * `ggui_push`) AND mounted tools (e.g. `tasks_*`) through a single
+ * `ggui_render`) AND mounted tools (e.g. `tasks_*`) through a single
  * MCP connection.
  *
  * Scope lock: a **mount** is a named bundle of `SharedHandler`
@@ -41,7 +41,7 @@ import type { WiredActionContext, WiredActionRouter } from "./render-channel.js"
  * narrow on `HandlerContext`. Widening that type would force every
  * shared handler (ggui-native + mounted) to acknowledge a wired-only
  * surface, even handlers that never run through the wired-action path
- * (e.g. `ggui_push`, blueprint search). The structural superset here
+ * (e.g. `ggui_render`, blueprint search). The structural superset here
  * keeps the canonical contract narrow without sacrificing access for
  * mount tools that opt in.
  */
@@ -350,9 +350,9 @@ export function composeHandlersWithMounts(
  *
  * Ownership + scoping:
  *   - Only MOUNT handlers participate. ggui-native handlers
- *     (`ggui_push`, `ggui_handshake`, etc.) are platform tools and
+ *     (`ggui_render`, `ggui_handshake`, etc.) are platform tools and
  *     deliberately NOT exposed as wire-dispatchable actions — a
- *     component that tried to dispatch `ggui_push` would bypass the
+ *     component that tried to dispatch `ggui_render` would bypass the
  *     agentic-loop contract.
  *   - Name collisions across mounts are prevented at aggregation
  *     time by {@link composeHandlersWithMounts}, so the first-match
