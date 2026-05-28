@@ -12,14 +12,13 @@ export type {
   TestCase,
   // Setup vocabulary
   SetupStep,
-  CreateSessionStep,
+  CreateRenderStep,
   RegisterToolStep,
   EmitEnvelopeStep,
   SeedChannelStep,
   UnknownSetupStep,
   // Teardown vocabulary
   TeardownStep,
-  CloseSessionStep,
   UnregisterToolStep,
   UnknownTeardownStep,
   // Expected-behavior vocabulary
