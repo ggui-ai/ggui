@@ -45,6 +45,7 @@ import {
   type Render,
 } from '@ggui-ai/protocol';
 import {
+  GGUI_RENDER_UI_META,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -255,11 +256,23 @@ const inputSchema = {
 const outputSchema = {
   renderId: z.string(),
   updated: z.boolean(),
+  /**
+   * Spec-canonical MCP-Apps entry-point — same `ui://ggui/render/{id}`
+   * URI `ggui_render` stamped on the initial mount. Updates carry it
+   * too so spec-compliant hosts can re-fetch the resource (returns the
+   * SAME shell HTML with refreshed `__GGUI_META__` baked in) and apply
+   * the props patch in-place. SDKs that strip `_meta` from tool_results
+   * (OpenAI Agents SDK, Google ADK) reach the URI via this LLM-visible
+   * field; SDKs that preserve `_meta` also see it on
+   * `_meta.ui.resourceUri`.
+   */
+  resourceUri: z.string(),
 } as const;
 
 interface UpdateOutput {
   renderId: string;
   updated: boolean;
+  resourceUri: string;
 }
 
 /**
@@ -432,9 +445,17 @@ export function createGguiUpdateHandler(
         }
       }
 
+      // resourceUri MUST be the SAME URI the initial ggui_render stamped
+      // — the iframe is mounted against that URI, and the host's
+      // `resources/read` re-fetch (spec-canonical refresh after every
+      // update tool_result) returns the fresh shell with new
+      // `__GGUI_META__` baked in. Single-segment is sufficient: both
+      // single + two-segment URI shapes route to the same handler.
+      const resourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${renderId}`;
       return {
         renderId,
         updated: true,
+        resourceUri,
       };
     },
     /**
