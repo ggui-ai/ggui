@@ -136,6 +136,13 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
   const model = opts.model ?? 'gemini-3.5-flash';
+  // Host-session metadata (the `ai.ggui/host-session` slice on each
+  // tools/call's request `_meta`) is the spec-canonical channel for
+  // chat-grouping continuity — Google ADK's MCPToolset transport
+  // doesn't currently expose a per-call `_meta` hook for it, so the
+  // sample's `/chat/restore` (server.ts) uses the server-side
+  // `ggui_list_renders` tool to rehydrate renders by `chatSessionId`.
+  // The LLM never needs to thread the host-session itself.
   const instruction =
     opts.systemPrompt === null
       ? ''
