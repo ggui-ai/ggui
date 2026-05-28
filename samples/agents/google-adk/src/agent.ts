@@ -12,8 +12,10 @@
  * MCP `initialize` instructions carry the actual wire-flow teaching).
  *
  * ADK runner events are normalized into the same SDKMessage-like
- * envelope the Claude sample emits, so the shared chat UI
- * (`src-ui/useChat.ts`) parses one shape across all sample agents.
+ * envelope the Claude sample emits, so any MCP-Apps-spec chat UI (the
+ * reference frontend at `oss/samples/apps/ggui-basic-web/` uses
+ * `useMcpAppsChat` from `@ggui-ai/react/chat-helpers`) parses one shape
+ * across all sample agents.
  */
 import { randomUUID } from 'node:crypto';
 import {
@@ -27,10 +29,26 @@ import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
 const APP_NAME = 'ggui-agent-google-adk';
 
+/**
+ * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
+ * `transport` is omitted because every ggui MCP server speaks Streamable
+ * HTTP and every supported SDK's MCP client defaults to it for `http(s)://`
+ * URLs. Production code with mixed transports should grow a `transport`
+ * field here.
+ */
+export interface McpServerConfig {
+  readonly url: string;
+}
+
 export interface RunAgentOptions {
   readonly prompt: string;
-  readonly mcpUrl: string;
-  readonly todoMcpUrl?: string;
+  /**
+   * MCP endpoints the LLM can discover + call. Keys are user-chosen names
+   * (`ggui`, `todo`, …); each becomes its own `MCPToolset`. `ggui` is the
+   * conventional name for the primary ggui MCP server; additional keys add
+   * domain MCPs alongside it.
+   */
+  readonly mcpServers: Record<string, McpServerConfig>;
   /** Default `gemini-3.5-flash`. Override via `GEMINI_MODEL`. */
   readonly model?: string;
   /** Default `process.env.GEMINI_API_KEY` (falls back to `GOOGLE_API_KEY`). */
@@ -112,11 +130,26 @@ interface SharedState {
   readonly runner: Runner;
   readonly tools: MCPToolset[];
   readonly userId: string;
-  readonly mcpUrl: string;
-  readonly todoMcpUrl: string | undefined;
+  /** Serialised form of `opts.mcpServers` — used for singleton-mismatch
+   * detection on subsequent runAgent calls. */
+  readonly mcpServersKey: string;
   readonly bearer: string;
   readonly model: string;
   readonly instruction: string;
+}
+
+/**
+ * Order-independent stable serialisation of an mcpServers map so two
+ * `runAgent` calls with the same servers (regardless of insertion order)
+ * compare equal under `assertSharedStateMatches`.
+ */
+function serialiseMcpServers(
+  mcpServers: Record<string, McpServerConfig>,
+): string {
+  const sorted = Object.entries(mcpServers)
+    .map(([name, cfg]) => [name, cfg.url] as const)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  return JSON.stringify(sorted);
 }
 
 let sharedStateInit: Promise<SharedState> | null = null;
@@ -149,38 +182,26 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
   const userId = opts.userId ?? 'sample-user';
 
-  // StreamableHTTPConnectionParams handles Streamable HTTP MCP
-  // endpoints — the `Accept: application/json, text/event-stream`
-  // header is the same content-negotiation the Streamable HTTP
-  // transport uses, so the same class connects whether the server
-  // speaks SSE or unary JSON responses. Bearer header carries ggui's
-  // dev-mode auth. (Renamed from `SseConnectionParams` in earlier
-  // `@google/adk` releases — the streamable-HTTP transport subsumed
-  // the SSE-only path.)
-  const tools: MCPToolset[] = [
-    new MCPToolset({
-      type: 'StreamableHTTPConnectionParams',
-      url: opts.mcpUrl,
-      header: {
-        Authorization: `Bearer ${bearer}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-    }),
-  ];
-  if (opts.todoMcpUrl) {
-    tools.push(
+  // Translate the brand-agnostic `mcpServers` map into one ADK MCPToolset
+  // per entry. StreamableHTTPConnectionParams handles Streamable HTTP MCP
+  // endpoints — the `Accept: application/json, text/event-stream` header
+  // is the same content-negotiation the Streamable HTTP transport uses,
+  // so the same class connects whether the server speaks SSE or unary
+  // JSON responses. Bearer header carries ggui's dev-mode auth. (Renamed
+  // from `SseConnectionParams` in earlier `@google/adk` releases — the
+  // streamable-HTTP transport subsumed the SSE-only path.)
+  const tools: MCPToolset[] = Object.values(opts.mcpServers).map(
+    (cfg) =>
       new MCPToolset({
         type: 'StreamableHTTPConnectionParams',
-        url: opts.todoMcpUrl,
+        url: cfg.url,
         header: {
           Authorization: `Bearer ${bearer}`,
           'Content-Type': 'application/json',
           Accept: 'application/json, text/event-stream',
         },
       }),
-    );
-  }
+  );
 
   const agent = new LlmAgent({
     name: 'ggui_agent',
@@ -225,8 +246,7 @@ function buildSharedState(opts: RunAgentOptions): SharedState {
     runner,
     tools,
     userId,
-    mcpUrl: opts.mcpUrl,
-    todoMcpUrl: opts.todoMcpUrl,
+    mcpServersKey: serialiseMcpServers(opts.mcpServers),
     bearer,
     model,
     instruction,
@@ -251,11 +271,10 @@ function assertSharedStateMatches(
     opts.systemPrompt === null
       ? ''
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
+  const expectMcpServersKey = serialiseMcpServers(opts.mcpServers);
   const mismatches: string[] = [];
-  if (state.mcpUrl !== opts.mcpUrl)
-    mismatches.push(`mcpUrl ${state.mcpUrl} → ${opts.mcpUrl}`);
-  if (state.todoMcpUrl !== opts.todoMcpUrl)
-    mismatches.push(`todoMcpUrl ${state.todoMcpUrl} → ${opts.todoMcpUrl}`);
+  if (state.mcpServersKey !== expectMcpServersKey)
+    mismatches.push(`mcpServers ${state.mcpServersKey} → ${expectMcpServersKey}`);
   if (state.bearer !== expectBearer)
     mismatches.push('bearer');
   if (state.model !== expectModel)

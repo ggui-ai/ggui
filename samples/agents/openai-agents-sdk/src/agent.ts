@@ -12,9 +12,10 @@
  * server `instructions` carry the actual wire-flow teaching).
  *
  * Stream events from the OpenAI SDK are normalized into the same
- * SDKMessage-like shape the Claude sample emits, so the shared chat
- * UI (`src-ui/useChat.ts`) parses one envelope shape across all
- * sample agents:
+ * SDKMessage-like shape the Claude sample emits, so any MCP-Apps-spec
+ * chat UI (the reference frontend at `oss/samples/apps/ggui-basic-web/`
+ * uses `useMcpAppsChat` from `@ggui-ai/react/chat-helpers`) parses one
+ * envelope shape across all sample agents:
  *
  *   { type: 'assistant', message: { content: [{type:'text', text}] } }
  *   { type: 'assistant', message: { content: [{type:'tool_use', id, name, input}] } }
@@ -24,10 +25,26 @@
 import { Agent, MCPServerStreamableHttp, run } from '@openai/agents';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 
+/**
+ * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
+ * `transport` is omitted because every ggui MCP server speaks Streamable
+ * HTTP and every supported SDK's MCP client defaults to it for `http(s)://`
+ * URLs. Production code with mixed transports should grow a `transport`
+ * field here.
+ */
+export interface McpServerConfig {
+  readonly url: string;
+}
+
 export interface RunAgentOptions {
   readonly prompt: string;
-  readonly mcpUrl: string;
-  readonly todoMcpUrl?: string;
+  /**
+   * MCP endpoints the LLM can discover + call. Keys are user-chosen names
+   * (`ggui`, `todo`, …); the SDK uses each key as the `MCPServerStreamableHttp`
+   * `name`. `ggui` is the conventional name for the primary ggui MCP
+   * server; additional keys add domain MCPs alongside it.
+   */
+  readonly mcpServers: Record<string, McpServerConfig>;
   /** Default `gpt-5.5-2026-04-23`. Override via `OPENAI_MODEL`. */
   readonly model?: string;
   /** Default `process.env.OPENAI_API_KEY`. */
@@ -127,22 +144,18 @@ export async function* runAgent(
       ? undefined
       : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
 
-  // Streamable HTTP transport for ggui MCP. The SDK's underlying client
-  // ultimately delegates to @modelcontextprotocol/sdk; the bearer header
-  // is plumbed via `requestInit` so every request carries
-  // `Authorization: Bearer <token>` for ggui's dev-mode auth.
-  const gguiMcp = new MCPServerStreamableHttp({
-    url: opts.mcpUrl,
-    name: 'ggui',
-    requestInit: { headers: { Authorization: `Bearer ${bearer}` } },
-  });
-
-  const mcpServers: Array<MCPServerStreamableHttp> = [gguiMcp];
-  if (opts.todoMcpUrl) {
+  // Translate the brand-agnostic `mcpServers` map into the OpenAI Agents
+  // SDK's native `MCPServerStreamableHttp[]` shape. The SDK's underlying
+  // client ultimately delegates to @modelcontextprotocol/sdk; the bearer
+  // header is plumbed via `requestInit` so every request carries
+  // `Authorization: Bearer <token>` for ggui's dev-mode auth. Map keys
+  // become each server's `name` so the SDK can prefix tool calls.
+  const mcpServers: MCPServerStreamableHttp[] = [];
+  for (const [name, cfg] of Object.entries(opts.mcpServers)) {
     mcpServers.push(
       new MCPServerStreamableHttp({
-        url: opts.todoMcpUrl,
-        name: 'todo',
+        url: cfg.url,
+        name,
         requestInit: { headers: { Authorization: `Bearer ${bearer}` } },
       }),
     );

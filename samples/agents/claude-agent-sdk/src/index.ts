@@ -1,13 +1,26 @@
 /* eslint-disable no-console */
 /**
- * Boot entry point — picks up env, starts the HTTP server.
+ * Boot entry point — wires environment variables to the HTTP server.
  *
- *   PORT            (default 6790)
- *   GGUI_MCP_URL    (default http://localhost:6781/mcp)
- *   SYSTEM_PROMPT   override the default ggui-agent system prompt
- *                   (set SYSTEM_PROMPT=none to disable entirely)
- *   ANTHROPIC_API_KEY  required (the agent fails-fast on first /chat
- *                       if absent — see agent.ts)
+ * Env vars consumed here:
+ *
+ *   PORT                Chat backend HTTP port (default 6790)
+ *   SANDBOX_PROXY_PORT  Spec-mandated second-origin sandbox port (default 7790)
+ *   GGUI_MCP_URL        Primary ggui MCP endpoint
+ *                       (default http://localhost:6781/mcp)
+ *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
+ *                       Omitted by default — the agent runs ggui-only.
+ *   MODEL               Override the default Claude model (default
+ *                       `claude-haiku-4-5` — see agent.ts)
+ *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
+ *                       Set to `none` to disable entirely (use the SDK's
+ *                       built-in default).
+ *   ANTHROPIC_API_KEY   Required. The agent fails-fast on first `/chat`
+ *                       if absent (see agent.ts).
+ *
+ * Adding another MCP server: one entry below + one env var. The agent
+ * also needs an `ALLOWED_TOOLS_BY_SERVER` entry in `agent.ts` for its
+ * tool prefix.
  *
  * Auto-loads `.env.local` walking up from this file, so a workspace-
  * root `.env.local` is picked up without explicit sourcing. External
@@ -22,6 +35,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
+import type { McpServerConfig } from './agent.js';
 import { startServer } from './server.js';
 
 // Walk up looking for the nearest `.env.local`. Picks up the
@@ -51,8 +65,6 @@ const PORT = Number(process.env.PORT ?? 6790);
 const SANDBOX_PROXY_PORT = process.env.SANDBOX_PROXY_PORT
   ? Number(process.env.SANDBOX_PROXY_PORT)
   : 7790;
-const MCP_URL = process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp';
-const TODO_MCP_URL = process.env.GGUI_TODO_MCP_URL;
 const MODEL = process.env.MODEL;
 const SYSTEM_PROMPT_ENV = process.env.SYSTEM_PROMPT;
 const systemPrompt =
@@ -62,11 +74,20 @@ const systemPrompt =
       ? SYSTEM_PROMPT_ENV
       : undefined; // undefined → agent.ts uses DEFAULT_SYSTEM_PROMPT
 
+// MCP servers the agent can call into. `ggui` is required (the relay
+// handlers in server.ts forward to this URL); add additional keys to
+// expose more MCPs to the LLM.
+const mcpServers: Record<string, McpServerConfig> = {
+  ggui: { url: process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp' },
+};
+if (process.env.GGUI_TODO_MCP_URL) {
+  mcpServers.todo = { url: process.env.GGUI_TODO_MCP_URL };
+}
+
 startServer({
   port: PORT,
   sandboxProxyPort: SANDBOX_PROXY_PORT,
-  mcpUrl: MCP_URL,
-  ...(TODO_MCP_URL ? { todoMcpUrl: TODO_MCP_URL } : {}),
+  mcpServers,
   ...(MODEL ? { model: MODEL } : {}),
   ...(systemPrompt !== undefined ? { systemPrompt } : {}),
 }).catch((err: unknown) => {

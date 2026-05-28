@@ -2,8 +2,8 @@
 /**
  * Brand-agnostic MCP-Apps-spec HTTP API for the OpenAI Agents SDK
  * sample. Pure backend — no static file serving, no bundled frontend.
- * The reference frontend lives at `oss/samples/apps/ggui-basic-nextjs/`
- * and binds to this URL via `NEXT_PUBLIC_AGENT_ENDPOINT_URL`.
+ * The reference frontend lives at `oss/samples/apps/ggui-basic-web/`
+ * and binds to this URL via `VITE_AGENT_ENDPOINT_URL`.
  *
  * Exposed routes:
  *
@@ -18,7 +18,8 @@
  * `@ggui-ai/dev-stack`'s `startSandboxProxyServer`) so AppRenderer's
  * spec-mandated different-origin sandbox host is available without
  * extra setup. The URL is surfaced via the `/sandbox-proxy-url`
- * endpoint above so any frontend can fetch + thread it.
+ * endpoint above so any frontend (Vite, Next.js, Remix, plain HTML)
+ * can fetch + thread it.
  *
  * No framework dependency — node:http only. Keeps the sample's
  * `node_modules/` tiny so the test harness boots fast.
@@ -29,7 +30,7 @@ import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
-import { runAgent, type NormalizedMessage } from './agent.js';
+import { runAgent, type McpServerConfig, type NormalizedMessage } from './agent.js';
 
 /**
  * Per-chat in-memory snapshot of the agent's normalized message stream.
@@ -63,9 +64,13 @@ function getOrCreateChatSnapshot(chatId: string): ChatStateSnapshot {
 
 export interface ServerOptions {
   readonly port: number;
-  readonly mcpUrl: string;
-  /** Optional secondary MCP endpoint (e.g. todo MCP for the e2e sample). */
-  readonly todoMcpUrl?: string;
+  /**
+   * MCP endpoints the agent's LLM is allowed to call into. Threaded
+   * through to `runAgent` on each `/chat` POST. Conventionally includes
+   * `ggui` for the primary ggui MCP server; additional keys add domain
+   * MCPs (e.g. `todo`).
+   */
+  readonly mcpServers: Record<string, McpServerConfig>;
   /** Model id passed to the OpenAI Agents SDK. */
   readonly model?: string;
   /** Optional override; passed straight through to runAgent. */
@@ -79,10 +84,16 @@ export interface ServerOptions {
 }
 
 export async function startServer(opts: ServerOptions): Promise<void> {
+  const gguiServer = opts.mcpServers.ggui;
+  if (!gguiServer) {
+    throw new Error(
+      `startServer: mcpServers must include a 'ggui' entry — got keys ${JSON.stringify(Object.keys(opts.mcpServers))}`,
+    );
+  }
   const sandboxProxyPort = opts.sandboxProxyPort ?? opts.port + 1000;
   const sandboxProxy = await startSandboxProxyServer({ port: sandboxProxyPort });
 
-  const ctx: ServerContext = { ...opts, sandboxProxy };
+  const ctx: ServerContext = { ...opts, gguiMcpUrl: gguiServer.url, sandboxProxy };
 
   const server = createServer((req, res) => {
     handleRequest(req, res, ctx).catch((err) => {
@@ -99,7 +110,9 @@ export async function startServer(opts: ServerOptions): Promise<void> {
       console.log(
         `[sample-agent] chat UI ready: http://localhost:${opts.port}`,
       );
-      console.log(`[sample-agent] talking to ggui MCP: ${opts.mcpUrl}`);
+      for (const [name, cfg] of Object.entries(opts.mcpServers)) {
+        console.log(`[sample-agent] mcp server '${name}': ${cfg.url}`);
+      }
       console.log(`[sample-agent] sandbox proxy: ${sandboxProxy.url}`);
       resolve();
     });
@@ -107,6 +120,13 @@ export async function startServer(opts: ServerOptions): Promise<void> {
 }
 
 interface ServerContext extends ServerOptions {
+  /**
+   * Cached `opts.mcpServers.ggui.url` — the relay handlers
+   * (`/relay/tools-call`, `/relay/resources-read`, `/api/renders/:id/state`)
+   * forward requests to the primary ggui MCP, never the secondary domain
+   * MCPs.
+   */
+  readonly gguiMcpUrl: string;
   readonly sandboxProxy: SandboxProxyServerHandle;
 }
 
@@ -117,11 +137,11 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // Wide-open CORS — the reference Next.js frontend runs on a different
-  // origin (port 6890 vs the agent backend's 6791), so every browser
-  // fetch is cross-origin. The agent backend is dev-only / sample-only;
-  // it never speaks to real users without an upstream auth layer that
-  // would override these headers anyway.
+  // Wide-open CORS — the reference frontend (`ggui-basic-web`) runs on a
+  // different origin (port 6890 vs the agent backend's 6791), so every
+  // browser fetch is cross-origin. The agent backend is dev-only /
+  // sample-only; it never speaks to real users without an upstream auth
+  // layer that would override these headers anyway.
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
@@ -194,7 +214,7 @@ async function handleRequest(
   if (req.method === 'GET' && stateMatch) {
     const renderId = stateMatch[1] ?? '';
     try {
-      const mcpOrigin = new URL(opts.mcpUrl);
+      const mcpOrigin = new URL(opts.gguiMcpUrl);
       mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
       // Forward the browser's wsToken query verbatim — the MCP server
       // gates this endpoint on token signature, render ownership, and
@@ -222,7 +242,7 @@ async function handleRequest(
   // to the ggui MCP server over HTTP. The iframe holds no auth
   // credential; this host (running in Node) is the protocol-defined
   // relay party. The browser-side <McpAppIframe onToolCall> calls
-  // POST /relay/tools-call which proxies to opts.mcpUrl.
+  // POST /relay/tools-call which proxies to opts.gguiMcpUrl.
   //
   // Keeps the browser on a single same-origin endpoint and avoids
   // having to CORS-enable the MCP server.
@@ -239,7 +259,7 @@ async function handleRequest(
         return;
       }
       const rpcId = Math.floor(Math.random() * 1e9);
-      const mcpReq = await fetch(opts.mcpUrl, {
+      const mcpReq = await fetch(opts.gguiMcpUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -297,7 +317,7 @@ async function handleRequest(
         return;
       }
       const rpcId = Math.floor(Math.random() * 1e9);
-      const mcpReq = await fetch(opts.mcpUrl, {
+      const mcpReq = await fetch(opts.gguiMcpUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -389,11 +409,8 @@ async function handleRequest(
       for await (const msg of runAgent({
         prompt,
         chatId,
-        mcpUrl: opts.mcpUrl,
+        mcpServers: opts.mcpServers,
         abortController,
-        ...(opts.todoMcpUrl !== undefined
-          ? { todoMcpUrl: opts.todoMcpUrl }
-          : {}),
         ...(opts.model !== undefined ? { model: opts.model } : {}),
         ...(opts.systemPrompt !== undefined
           ? { systemPrompt: opts.systemPrompt }

@@ -145,17 +145,31 @@ function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
   };
 }
 
+/**
+ * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
+ * `transport` is omitted because every ggui MCP server speaks Streamable
+ * HTTP and every supported SDK's MCP client defaults to it for `http(s)://`
+ * URLs. Production code with mixed transports should grow a `transport`
+ * field here.
+ */
+export interface McpServerConfig {
+  readonly url: string;
+}
+
 export interface RunAgentOptions {
   /** The user prompt to feed the agent. */
   readonly prompt: string;
-  /** ggui MCP endpoint, e.g. `http://localhost:6781/mcp`. */
-  readonly mcpUrl: string;
   /**
-   * Optional secondary MCP endpoint exposing domain tools (e.g. a todo
-   * server). When set, the agent registers it alongside the ggui MCP and
-   * its tools are added to `allowedTools` so the LLM can call them.
+   * MCP endpoints the LLM can discover + call. Keys are user-chosen names
+   * (`ggui`, `todo`, …); the SDK auto-namespaces tools as
+   * `mcp__<key>__<tool>`. `ggui` is the conventional name for the primary
+   * ggui MCP server; additional keys add domain MCPs alongside it.
+   *
+   * The `allowedTools` allowlist below recognises the conventional keys
+   * (`ggui`, `todo`). To add a third MCP that the LLM should be allowed to
+   * call, add its key here AND extend the allowlist mapping.
    */
-  readonly todoMcpUrl?: string;
+  readonly mcpServers: Record<string, McpServerConfig>;
   /** Default `claude-haiku-4-5`. */
   readonly model?: string;
   /** Default `process.env.ANTHROPIC_API_KEY`. */
@@ -232,26 +246,26 @@ const knownChats = new Set<string>();
 export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
 
 /**
- * The ggui MCP tools the LLM is allowed to invoke autonomously.
+ * Per-MCP-server allowlists, keyed by the `mcpServers` map key.
  * MCP tools are auto-namespaced by the SDK as `mcp__<server>__<tool>`.
+ * To allow a new server, drop another entry here keyed by its `mcpServers`
+ * map key.
  */
-const GGUI_ALLOWED_TOOLS = [
-  'mcp__ggui__ggui_handshake',
-  'mcp__ggui__ggui_render',
-  'mcp__ggui__ggui_update',
-  'mcp__ggui__ggui_emit',
-  'mcp__ggui__ggui_consume',
-];
-
-/**
- * Domain tools on the optional todo MCP (sample-only).
- */
-const TODO_ALLOWED_TOOLS = [
-  'mcp__todo__todo_list',
-  'mcp__todo__todo_add',
-  'mcp__todo__todo_toggle',
-  'mcp__todo__todo_delete',
-];
+const ALLOWED_TOOLS_BY_SERVER: Record<string, ReadonlyArray<string>> = {
+  ggui: [
+    'mcp__ggui__ggui_handshake',
+    'mcp__ggui__ggui_render',
+    'mcp__ggui__ggui_update',
+    'mcp__ggui__ggui_emit',
+    'mcp__ggui__ggui_consume',
+  ],
+  todo: [
+    'mcp__todo__todo_list',
+    'mcp__todo__todo_add',
+    'mcp__todo__todo_toggle',
+    'mcp__todo__todo_delete',
+  ],
+};
 
 export async function* runAgent(
   opts: RunAgentOptions,
@@ -278,23 +292,29 @@ export async function* runAgent(
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
 
-  const mcpServers: Record<
+  // Translate the brand-agnostic `mcpServers` map into the Claude Agent
+  // SDK's native shape (`{type:'http', url, headers}`). Bearer is applied
+  // uniformly across every configured server — every ggui-served MCP in
+  // this sample uses the same dev-mode auth.
+  const sdkMcpServers: Record<
     string,
     { type: 'http'; url: string; headers?: Record<string, string> }
-  > = {
-    ggui: {
+  > = {};
+  for (const [name, cfg] of Object.entries(opts.mcpServers)) {
+    sdkMcpServers[name] = {
       type: 'http',
-      url: opts.mcpUrl,
+      url: cfg.url,
       headers: { Authorization: `Bearer ${bearer}` },
-    },
-  };
-  if (opts.todoMcpUrl) {
-    mcpServers.todo = { type: 'http', url: opts.todoMcpUrl };
+    };
   }
 
-  const allowedTools = opts.todoMcpUrl
-    ? [...GGUI_ALLOWED_TOOLS, ...TODO_ALLOWED_TOOLS]
-    : GGUI_ALLOWED_TOOLS;
+  // Derive allowedTools from the configured server keys — adding a new
+  // MCP only needs ALLOWED_TOOLS_BY_SERVER updated, not this loop.
+  const allowedTools: string[] = [];
+  for (const name of Object.keys(opts.mcpServers)) {
+    const tools = ALLOWED_TOOLS_BY_SERVER[name];
+    if (tools) allowedTools.push(...tools);
+  }
 
   // Multi-turn session continuity. The Claude Agent SDK persists every
   // session to `~/.claude/projects/` and exposes two complementary
@@ -325,7 +345,7 @@ export async function* runAgent(
     prompt: opts.prompt,
     options: {
       model: opts.model ?? 'claude-haiku-4-5',
-      mcpServers,
+      mcpServers: sdkMcpServers,
       allowedTools,
       ...sessionOptions,
       tools: [], // disable built-in tools — purely MCP
