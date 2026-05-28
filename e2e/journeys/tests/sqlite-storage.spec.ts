@@ -1,14 +1,14 @@
 /**
  * Phase 5 `ggui` OSS — SQLite storage driver boot (advisory → GREEN).
  *
- * Closes §4.3 G11 ("SQLite driver boot — durable session store, WAL
+ * Closes §4.3 G11 ("SQLite driver boot — durable render store, WAL
  * artifact"). The blocking tier of Phase 5 exercises the in-memory
  * storage driver exclusively via every other spec in `journeys-ggui-oss`;
- * this one flips the `storage.{sessions,vectors,threads}.driver` knob
+ * this one flips the `storage.{renders,vectors,threads}.driver` knob
  * to `'sqlite'` through a fixture `ggui.json` and proves the CLI:
  *
  *   1. Status-reports the sqlite driver on the pre-banner stdout lines
- *      `storage: sessions → sqlite (./ggui-sessions.sqlite)` (plus
+ *      `storage: renders  → sqlite (./ggui-renders.sqlite)` (plus
  *      vectors/threads siblings). This pins the `describeStorageStatus`
  *      contract from `packages/ggui-cli/src/cli.ts` on the wire.
  *   2. Creates the actual `.sqlite` files on disk after boot — proof
@@ -118,8 +118,8 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     const stdout = handle.stdout();
     expect(
       stdout,
-      'CLI did not announce the sqlite sessions store',
-    ).toMatch(/storage: sessions\s+→ sqlite \(\.\/ggui-sessions\.sqlite\)/);
+      'CLI did not announce the sqlite renders store',
+    ).toMatch(/storage: renders\s+→ sqlite \(\.\/ggui-renders\.sqlite\)/);
     expect(
       stdout,
       'CLI did not announce the sqlite vectors store',
@@ -135,12 +135,12 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     //    dynamically imported and `better-sqlite3` loaded. The paths
     //    are relative to the ggui.json directory (the tempCwd) —
     //    same contract `resolveStorageFromConfig` consumes.
-    const sessionsDb = join(handle.tempCwd, 'ggui-sessions.sqlite');
+    const rendersDb = join(handle.tempCwd, 'ggui-renders.sqlite');
     const vectorsDb = join(handle.tempCwd, 'ggui-vectors.sqlite');
     const threadsDb = join(handle.tempCwd, 'ggui-threads.sqlite');
     expect(
-      existsSync(sessionsDb),
-      `sessions sqlite file missing at ${sessionsDb}`,
+      existsSync(rendersDb),
+      `renders sqlite file missing at ${rendersDb}`,
     ).toBe(true);
     expect(
       existsSync(vectorsDb),
@@ -153,7 +153,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
 
     // 3. Write-path proof — mint a pair token, fire a `ggui_render`
     //    against the sqlite-backed render store, then assert the
-    //    sessions db artifact family (main + `-wal` + `-shm`) grew
+    //    renders db artifact family (main + `-wal` + `-shm`) grew
     //    past the boot baseline. The particular byte count isn't
     //    load-bearing (depends on better-sqlite3 page size + journal
     //    mode); ">0 after mutation" is the honest signal that writes
@@ -163,7 +163,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     //    `sqliteFamilyBytes` helper.
     const baselineBytes = sqliteFamilyBytes(
       handle.tempCwd,
-      'ggui-sessions.sqlite',
+      'ggui-renders.sqlite',
     );
     const { token } = await mintPairToken(handle, 'sqlite-storage-spec');
     expect(token.length).toBeGreaterThan(0);
@@ -200,13 +200,13 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
 
     const postWriteBytes = sqliteFamilyBytes(
       handle.tempCwd,
-      'ggui-sessions.sqlite',
+      'ggui-renders.sqlite',
     );
     expect(
       postWriteBytes,
-      `sessions sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
+      `renders sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
         `The SqliteRenderStore may be silently falling through to in-memory. ` +
-        `(Sum spans ggui-sessions.sqlite + ggui-sessions.sqlite-wal + ggui-sessions.sqlite-shm.)`,
+        `(Sum spans ggui-renders.sqlite + ggui-renders.sqlite-wal + ggui-renders.sqlite-shm.)`,
     ).toBeGreaterThan(baselineBytes);
   });
 });

@@ -10,7 +10,7 @@
     "local": []
   },
   "storage": {
-    "sessions": { "driver": "sqlite", "path": "./ggui-sessions.sqlite" },
+    "renders": { "driver": "sqlite", "path": "./ggui-renders.sqlite" },
     "vectors": { "driver": "sqlite", "path": "./ggui-vectors.sqlite" },
     "threads": { "driver": "sqlite", "path": "./ggui-threads.sqlite" }
   }
