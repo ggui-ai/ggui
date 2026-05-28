@@ -24,8 +24,77 @@ import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
-import type { RenderSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  parseMcpAppAiGguiRenderMeta,
+  type McpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { runAgent } from './agent.js';
+
+/**
+ * Per-chat in-memory snapshot of everything the browser needs to
+ * rehydrate a tab on page refresh. Server-authoritative — the React
+ * panel just re-renders whatever the server hands back.
+ *
+ * `messages` is the verbatim stream of SDK messages from the streaming
+ * agent loop; replaying them through `useChat`'s `handleEvent` rebuilds
+ * the chat log (user prompts, assistant text, tool-call entries,
+ * embedded renders) without re-prompting the agent.
+ *
+ * `renders` is keyed by `renderId`; the value is the bootstrap envelope
+ * (`McpAppAiGguiRenderMeta`) captured from `tool_use_result._meta` at
+ * the moment the tool returned. The original wsToken inside the
+ * envelope may be aged by the time the user refreshes, but the
+ * iframe-runtime's bootstrap fetch (`/api/renders/<id>/state`) trades
+ * an aged-but-valid token for a fresh one server-side — so the stored
+ * snapshot stays usable across the entire token-issuance window.
+ *
+ * Kept in-process / non-durable on purpose: this slice mirrors how a
+ * chat shell stores its current session's artifacts; cross-restart
+ * persistence is a separate concern.
+ */
+interface ChatStateSnapshot {
+  readonly chatId: string;
+  readonly messages: SDKMessage[];
+  readonly renders: Map<string, McpAppAiGguiRenderMeta>;
+}
+
+const chatStore = new Map<string, ChatStateSnapshot>();
+
+function getOrCreateChatSnapshot(chatId: string): ChatStateSnapshot {
+  let snap = chatStore.get(chatId);
+  if (!snap) {
+    snap = { chatId, messages: [], renders: new Map() };
+    chatStore.set(chatId, snap);
+  }
+  return snap;
+}
+
+/**
+ * Sniff a SDK message for an embedded ggui render bootstrap envelope.
+ * Claude Agent SDK forwards every MCP `tool_result` to us as a `user`
+ * role message whose `tool_use_result._meta` preserves the original
+ * `_meta` block the MCP server stamped (the SDK strips `_meta` from
+ * `message.content[*]` for Anthropic-API compliance, but keeps it on
+ * the sibling `tool_use_result` field).
+ *
+ * Returns every `(renderId, meta)` slice attached to this message —
+ * one user-role frame can carry multiple tool_result blocks (parallel
+ * tool calls), each with its own `_meta`. Callers store them by id.
+ */
+function extractRenderMetas(
+  msg: SDKMessage,
+): ReadonlyArray<McpAppAiGguiRenderMeta> {
+  if (msg.type !== 'user') return [];
+  const out: McpAppAiGguiRenderMeta[] = [];
+  const tur = (msg as { tool_use_result?: unknown }).tool_use_result;
+  if (tur && typeof tur === 'object') {
+    const meta = (tur as { _meta?: unknown })._meta;
+    const parsed = parseMcpAppAiGguiRenderMeta(meta);
+    if (parsed.ok && parsed.meta) out.push(parsed.meta);
+  }
+  return out;
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Vite builds the React chat UI into `dist-ui/`. The Node server
@@ -104,87 +173,44 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://localhost:${opts.port}`);
 
-  // /chat/restore?chatId=<id> — host-side resume endpoint. The
-  // frontend hits this on mount when a `?chat=<id>` URL is present
-  // so the page can rehydrate iframes from prior conversation turns
-  // without re-prompting the agent. Implementation:
+  // GET /chat?chatId=<id> — server-authoritative chat snapshot.
   //
-  //   1. Call ggui_list_renders({hostName:'sample', hostSessionId})
-  //      via the ggui MCP server. Server returns matching renders
-  //      with fresh wsTokens + expiresAt (the mintWsToken seam fires
-  //      at the same call).
-  //   2. For each render id, fetch `/api/renders/<id>/state?wsToken=`
-  //      against the ggui server to get the full bootstrap envelope
-  //      the iframe needs to mount.
-  //   3. Return [{renderId, bootstrap}, ...] to the frontend.
+  // Returns the verbatim stream of SDK messages we observed for this
+  // chat plus the bootstrap envelopes for every render the agent
+  // produced. The frontend replays `messages[]` through its existing
+  // `handleEvent` to rebuild the chat panel exactly as it was, and
+  // mounts iframes from `renders[]` for any envelope that survived
+  // restart (no round-trip back to the ggui MCP server).
   //
-  // No per-process chat-message store yet — the iframe IS the
-  // conversation in ggui's worldview, and the page reload that
-  // triggers /chat/restore doesn't restart the server, so transient
-  // in-memory state isn't lost. Cross-restart durability is a
-  // separate slice.
-  if (req.method === 'GET' && url.pathname === '/chat/restore') {
+  // 404 on unknown chatId — distinguishes "fresh tab opened on a URL
+  // we don't know about" from "empty conversation" (the former gets a
+  // blank slate without spurious restore work).
+  if (req.method === 'GET' && url.pathname === '/chat') {
     const chatId = url.searchParams.get('chatId') ?? '';
     if (chatId.length === 0) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'chatId query required' }));
       return;
     }
-    try {
-      const listed = await callGguiTool(opts.mcpUrl, 'ggui_list_renders', {
-        hostName: 'sample',
-        hostSessionId: chatId,
-      });
-      const renders = extractRenderSummaries(listed);
-      // Resolve each render's bootstrap envelope via the existing
-      // state endpoint. Fire concurrently so N renders resolve in
-      // one network round-trip's worth of wall-clock time.
-      const bootstraps = await Promise.all(
-        renders.map(async (s) => {
-          if (!s.wsToken) return { renderId: s.renderId, bootstrap: null };
-          try {
-            const mcpOrigin = new URL(opts.mcpUrl);
-            // Normalize `localhost` → `127.0.0.1` on the host we hit
-            // ggui with. The ggui server stamps `codeUrl` /
-            // `validatorsUrl` on the bootstrap envelope using the
-            // request's Host header, but the sandbox iframe's CSP
-            // is built from `runtimeUrl` (which is statically
-            // `127.0.0.1:<port>` per the CLI's default
-            // `runtime.url` config). A hostname mismatch between
-            // `localhost` and `127.0.0.1` is two distinct origins
-            // to the browser — CSP blocks the bundle imports and
-            // the iframe boots blank.
-            if (mcpOrigin.hostname === 'localhost') {
-              mcpOrigin.hostname = '127.0.0.1';
-            }
-            mcpOrigin.pathname = `/api/renders/${encodeURIComponent(s.renderId)}/state`;
-            mcpOrigin.search = `?wsToken=${encodeURIComponent(s.wsToken)}`;
-            const r = await fetch(mcpOrigin.toString(), {
-              headers: { Accept: 'application/json' },
-            });
-            if (!r.ok) return { renderId: s.renderId, bootstrap: null };
-            const bootstrap = (await r.json()) as Record<string, unknown>;
-            return { renderId: s.renderId, bootstrap };
-          } catch {
-            return { renderId: s.renderId, bootstrap: null };
-          }
-        }),
-      );
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-      });
-      res.end(
-        JSON.stringify({
-          chatId,
-          renders: bootstraps.filter((b) => b.bootstrap !== null),
-        }),
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: `restore failed: ${message}` }));
+    const snap = chatStore.get(chatId);
+    if (!snap) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'chat not found' }));
+      return;
     }
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    });
+    res.end(
+      JSON.stringify({
+        chatId: snap.chatId,
+        messages: snap.messages,
+        renders: Array.from(snap.renders.entries()).map(
+          ([renderId, bootstrap]) => ({ renderId, bootstrap }),
+        ),
+      }),
+    );
     return;
   }
 
@@ -334,6 +360,8 @@ async function handleRequest(
     };
     req.on('close', onClientClose);
 
+    const snapshot = getOrCreateChatSnapshot(chatId);
+
     const startedAt = Date.now();
     let msgCount = 0;
     try {
@@ -362,6 +390,16 @@ async function handleRequest(
               console.log(`[sample-agent]   → tool_use: ${c.name}`);
             }
           }
+        }
+        // Snapshot capture — always happens, even when the client has
+        // disconnected. The agent loop keeps running until maxTurns or
+        // SDK completion regardless of the SSE socket state (we ALSO
+        // abort the SDK on client-close above; this just hedges the
+        // ordering race), so any final tool_result still gets recorded
+        // for the next browser refresh.
+        snapshot.messages.push(msg);
+        for (const meta of extractRenderMetas(msg)) {
+          snapshot.renders.set(meta.renderId, meta);
         }
         // Check abort BEFORE writing — otherwise the first
         // post-abort iteration writes one message to an
@@ -472,78 +510,6 @@ function parseMcpResponse(text: string): unknown {
       error: { message: `JSON parse failed: ${(err as Error).message}` },
     };
   }
-}
-
-/**
- * Server-side MCP `tools/call` against the ggui MCP server. Used by
- * /chat/restore to call `ggui_list_renders` without going through
- * the agent loop. Skips the `/relay/tools-call` path (browser-facing)
- * since we already have a server-side fetch primitive.
- *
- * Returns the parsed JSON-RPC envelope; caller inspects `.result` or
- * `.error` per JSON-RPC convention.
- */
-async function callGguiTool(
-  mcpUrl: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  const r = await fetch(mcpUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${process.env.GGUI_MCP_BEARER ?? 'dev'}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Math.floor(Math.random() * 1e9),
-      method: 'tools/call',
-      params: { name, arguments: args },
-    }),
-  });
-  const text = await r.text();
-  return parseMcpResponse(text);
-}
-
-/**
- * Subset of `RenderSummaryWire` that `/chat/restore` consumes — the
- * restore flow only needs the render id + the freshly-minted
- * wsToken to gate the state-endpoint fetch. Derived from the
- * canonical protocol type (`Pick<>`) so a field rename / addition
- * upstream is a compile error here, not silent drift.
- */
-type RestoreRenderSummary = Pick<RenderSummaryWire, 'renderId' | 'wsToken'>;
-
-/**
- * Pull the `renders[]` array out of a `ggui_list_renders` JSON-RPC
- * response. Tolerates both the SSE-wrapped and raw-JSON shapes that
- * `parseMcpResponse` returns. Defensive: an unexpected envelope
- * shape returns `[]` so /chat/restore degrades to "no renders to
- * rehydrate" rather than a 5xx.
- */
-function extractRenderSummaries(envelope: unknown): RestoreRenderSummary[] {
-  if (envelope === null || typeof envelope !== 'object') return [];
-  const result = (envelope as { result?: unknown }).result;
-  if (result === null || typeof result !== 'object') return [];
-  const content = (result as { structuredContent?: unknown }).structuredContent;
-  if (content === null || typeof content !== 'object') return [];
-  const rendersRaw = (content as { renders?: unknown }).renders;
-  if (!Array.isArray(rendersRaw)) return [];
-  const out: RestoreRenderSummary[] = [];
-  for (const entry of rendersRaw) {
-    if (entry === null || typeof entry !== 'object') continue;
-    const renderId = (entry as { renderId?: unknown }).renderId;
-    if (typeof renderId !== 'string' || renderId.length === 0) continue;
-    const wsToken = (entry as { wsToken?: unknown }).wsToken;
-    out.push({
-      renderId,
-      ...(typeof wsToken === 'string' && wsToken.length > 0
-        ? { wsToken }
-        : {}),
-    });
-  }
-  return out;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

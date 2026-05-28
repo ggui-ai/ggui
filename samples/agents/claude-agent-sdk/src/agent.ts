@@ -271,11 +271,10 @@ export async function* runAgent(
   // Host-session metadata (the `ai.ggui/host-session` slice on each
   // tools/call's request `_meta`) is the spec-canonical channel for
   // chat-grouping continuity — the Claude Agent SDK's MCP client
-  // doesn't currently expose a per-call `_meta` hook for it, so the
-  // sample's `/chat/restore` uses the server-side `ggui_list_renders`
-  // tool (called directly from `server.ts`, not via the LLM) to
-  // rehydrate renders by `chatId`. The LLM never needs to
-  // thread the host-session itself.
+  // doesn't currently expose a per-call `_meta` hook for it. The
+  // sample's GET /chat resume endpoint sidesteps the gap by keying
+  // its own server-side per-chat snapshot off the X-Chat-Id header,
+  // so the LLM never needs to thread the host-session itself.
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
 

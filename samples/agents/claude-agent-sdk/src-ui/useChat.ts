@@ -319,12 +319,16 @@ export function useChat(): UseChatResult {
   }, []);
 
   // On-mount rehydration. When the URL carries a `?chat=<id>` the
-  // user is opening a previously-visited conversation; ask the host
-  // for the list of ggui renders tied to that chatId and
-  // mount each as a fresh RenderRef. No chat-message history is
-  // restored here — the iframe IS the conversation in ggui's
-  // worldview, and the agent will pick up again on the next `send`
-  // whether or not text history is shown.
+  // user is opening a previously-visited conversation; pull the
+  // server-authoritative snapshot for that chat and re-feed it through
+  // the same `handleEvent` pipeline the live SSE stream uses. The
+  // server holds the entire SDKMessage stream verbatim plus the
+  // bootstrap envelopes captured on every tool_result, so replaying
+  // them rebuilds the chat panel AND mounts iframes without re-prompting
+  // the agent. The `renders` field is a hedge: handleEvent will mount
+  // iframes from each user-frame's `tool_use_result._meta`, but we
+  // also apply the explicit renders[] map to cover any envelope whose
+  // SDKMessage carrier dropped `_meta` in transit.
   useEffect(() => {
     const chatId = getOrCreateChatId();
     if (!chatId) return;
@@ -332,13 +336,43 @@ export function useChat(): UseChatResult {
     void (async () => {
       try {
         const res = await fetch(
-          `/chat/restore?chatId=${encodeURIComponent(chatId)}`,
+          `/chat?chatId=${encodeURIComponent(chatId)}`,
           { headers: { Accept: 'application/json' } },
         );
-        if (!res.ok || cancelled) return;
-        const body = (await res.json()) as {
-          readonly renders?: ReadonlyArray<RestoreBootstrap>;
-        };
+        // 404 = fresh chatId — no prior snapshot to restore; ignore
+        // silently so the React tree boots into an empty conversation.
+        if (res.status === 404 || cancelled) return;
+        if (!res.ok) {
+          console.warn('[useChat] GET /chat non-2xx', res.status);
+          return;
+        }
+        const body = (await res.json()) as ChatSnapshotResponse;
+        // Replay the SDK message stream through the same handler the
+        // live SSE pipe uses — rebuilds entries[] (user prompts,
+        // assistant text, tool calls, embedded renders) plus the
+        // host-display-mode hint exactly as the original conversation
+        // produced them.
+        let counter = 0;
+        for (const msg of body.messages ?? []) {
+          if (cancelled) return;
+          counter += 1;
+          handleEvent(
+            'message',
+            msg,
+            `restored.${counter}`,
+            append,
+            addRender,
+            setHostDisplayMode,
+            updateRenderMeta,
+            patchToolCall,
+            refetchStateById,
+          );
+        }
+        // Mount any renders whose envelope didn't ride inline on a
+        // recorded SDKMessage (defensive — `extractRenderMetas` on the
+        // server already captures these). Dedupes by renderId via
+        // addRender, so iframes already mounted from the replay above
+        // get their meta refreshed in place rather than duplicated.
         for (const entry of body.renders ?? []) {
           if (cancelled) return;
           if (!entry.bootstrap) continue;
@@ -352,14 +386,10 @@ export function useChat(): UseChatResult {
             meta: parsed.meta,
           };
           addRender(item);
-          append({
-            id: `restored.${renderId}`,
-            kind: 'render',
-            render: item,
-          });
+          updateRenderMeta(renderId, parsed.meta);
         }
       } catch (err) {
-        console.warn('[useChat] /chat/restore failed', err);
+        console.warn('[useChat] GET /chat failed', err);
       }
     })();
     return () => {
@@ -604,12 +634,20 @@ function getOrCreateChatId(): string {
 }
 
 /**
- * Restored bootstrap entry returned by GET /chat/restore. The frontend
- * uses this to spawn RenderRefs without going through a tool-result
- * round-trip — the iframe-runtime mounts straight from the bootstrap
- * envelope the server fetched on our behalf.
+ * Snapshot returned by GET /chat?chatId=<id>. `messages` is the
+ * verbatim SDK message stream the server observed during the live
+ * conversation (replayed through `handleEvent` to rebuild the chat
+ * panel); `renders` is a per-renderId bootstrap map (mounted directly
+ * for any iframe whose envelope didn't ride inline on a recorded
+ * SDKMessage).
  */
-interface RestoreBootstrap {
+interface ChatSnapshotResponse {
+  readonly chatId: string;
+  readonly messages?: ReadonlyArray<unknown>;
+  readonly renders?: ReadonlyArray<RestoredRender>;
+}
+
+interface RestoredRender {
   readonly renderId: string;
   readonly bootstrap: Record<string, unknown> | null;
 }
