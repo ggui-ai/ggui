@@ -115,6 +115,13 @@ export async function* runAgent(
 
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
   const model = opts.model ?? 'gpt-5.5-2026-04-23';
+  // Host-session metadata (the `ai.ggui/host-session` slice on each
+  // tools/call's request `_meta`) is the spec-canonical channel for
+  // chat-grouping continuity — the OpenAI Agents SDK's MCP client
+  // doesn't currently expose a per-call `_meta` hook for it, so the
+  // sample's `/chat/restore` (server.ts) uses the server-side
+  // `ggui_list_renders` tool to rehydrate renders by `chatSessionId`.
+  // The LLM never needs to thread the host-session itself.
   const instructions =
     opts.systemPrompt === null
       ? undefined
