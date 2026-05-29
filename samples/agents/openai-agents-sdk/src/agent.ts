@@ -115,10 +115,19 @@ async function* runOnce(args: {
     }
 
     const previousResponseId = knownResponseIds.get(input.chatId);
+    // We deliberately do NOT forward `input.abortSignal` to the SDK.
+    // `@openai/agents-core` reacts to an aborted signal by calling
+    // `ReadableStream.cancel()` on its result stream — but the `for await`
+    // below holds the reader lock, so that cancel throws
+    // `ERR_INVALID_STATE: ReadableStream is locked`. That throw fires inside
+    // the SDK's own AbortSignal listener (via process.nextTick), so it is
+    // UNCAUGHT and crashes the whole agent process on the first client
+    // disconnect / page reload. Instead we honor abort cooperatively: break
+    // the loop (below) and let the for-await's `iterator.return()` tear the
+    // stream down cleanly from the lock-holder side.
     const stream = await run(agent, input.prompt, {
       stream: true,
       ...(previousResponseId ? { previousResponseId } : {}),
-      signal: input.abortSignal,
     });
 
     let textBuf = '';
@@ -133,6 +142,12 @@ async function* runOnce(args: {
     };
 
     for await (const event of stream) {
+      // Cooperative abort: agent-server aborts `input.abortSignal` when the
+      // SSE client disconnects (reload). Stop consuming so the for-await's
+      // `iterator.return()` releases the reader and cancels the stream
+      // cleanly — instead of the SDK cancelling a reader-locked stream.
+      if (input.abortSignal.aborted) break;
+
       const ev = event as {
         readonly type?: string;
         readonly data?: {
