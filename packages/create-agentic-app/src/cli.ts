@@ -116,8 +116,8 @@ Positional:
 
 Options:
   --name <name>      npm package name. Defaults to <target>. kebab-case.
-  --scope <scope>    npm scope for servers/* packages (no leading @).
-                     Prompted if omitted.
+  --scope <scope>    npm scope for servers/* + apps/* packages (no leading @).
+                     Defaults to the project name.
   --agent <sdk>      One of: ${AGENTS.join(', ')}. Prompted if omitted.
   --install          Run \`pnpm install\` after scaffolding.
   --no-git           Skip \`git init\` + initial commit (done by default).
@@ -242,7 +242,10 @@ function gitInitAndCommit(targetDir: string): boolean {
     return r.status ?? 1;
   };
 
-  if (run(['init', '-q']) !== 0) return false;
+  // Initialize on 'main' (the canonical default branch) regardless of the
+  // user's global `init.defaultBranch` — `-c` is honored by git >= 2.28 and
+  // ignored harmlessly by older versions.
+  if (run(['-c', 'init.defaultBranch=main', 'init', '-q']) !== 0) return false;
   run(['add', '-A']);
 
   let status = run(['commit', '-q', '-m', INITIAL_COMMIT_MSG]);
@@ -282,19 +285,23 @@ async function main(): Promise<void> {
   let scope = args.scope;
   let agent = args.agent;
 
-  const needsPrompt = !target || !scope || !agent;
+  const needsPrompt = !target || !agent;
   if (needsPrompt) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     try {
       if (!target) target = await ask(rl, 'Project directory (kebab-case): ', validName);
       if (!name) name = target;
-      if (!scope) scope = await ask(rl, 'npm scope (without @): ', validName);
       if (!agent) {
         console.log('\nAgent SDK options:');
         AGENTS.forEach((a, i) => console.log(`  ${i + 1}. ${a}`));
-        agent = (await ask(rl, 'Agent SDK: ', (v) =>
-          (AGENTS as readonly string[]).includes(v),
-        )) as Agent;
+        // Accept the menu number (1-3), the full name, or empty for the default.
+        const choice = await ask(rl, 'Agent SDK [1-3 or name, default 1]: ', (v) => {
+          if (v === '') return true;
+          const n = Number(v);
+          return (Number.isInteger(n) && n >= 1 && n <= AGENTS.length) || AGENTS.some((a) => a === v);
+        });
+        const byNumber = AGENTS[Number(choice) - 1];
+        agent = byNumber ?? AGENTS.find((a) => a === choice) ?? AGENTS[0];
       }
     } finally {
       rl.close();
@@ -305,10 +312,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   if (!name) name = target;
-  if (!scope) {
-    console.error('✗ --scope required.');
-    process.exit(1);
-  }
+  // Scope defaults to the project name — no prompt. Override with --scope.
+  if (!scope) scope = name;
   if (!agent) {
     console.error('✗ --agent required.');
     process.exit(1);
@@ -387,12 +392,13 @@ async function main(): Promise<void> {
   console.log(`  ${step++}. cd ${target}`);
   if (!args.install) console.log(`  ${step++}. pnpm install`);
   console.log(`  ${step++}. Add your key to .env.local → ${apiKeyVar}=…`);
-  console.log(`  ${step++}. Run the four servers in separate terminals:`);
+  console.log(`  ${step++}. pnpm dev    # starts every server + opens http://localhost:6890`);
+  console.log('');
+  console.log('  Prefer separate terminals? Run these individually instead:');
   console.log('       pnpm dev:ggui   # ggui MCP server   → http://localhost:6781/mcp');
-  console.log('       pnpm dev:todo   # todo MCP server   → http://localhost:6782/mcp');
+  console.log('       pnpm dev:mcps   # your MCP servers  → http://localhost:6782/mcp, …');
   console.log(`       pnpm dev:agent  # agent backend     → http://localhost:${port}`);
   console.log('       pnpm dev:web    # frontend SPA      → http://localhost:6890');
-  console.log(`  ${step++}. Open http://localhost:6890 and chat.`);
   console.log(
     '\nInside Claude Code, run `/bootstrap` to tailor README + CLAUDE.md for your project.',
   );

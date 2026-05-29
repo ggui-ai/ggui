@@ -17,17 +17,17 @@ npx @ggui-ai/create-agentic-app \
 
 ## Options
 
-| Flag              | Effect                                                                                   |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `--name <name>`   | npm package name. Defaults to `<target>`. kebab-case.                                    |
-| `--scope <scope>` | npm scope for the `servers/*` + `apps/*` packages (no leading `@`). Prompted if omitted. |
-| `--agent <sdk>`   | One of the SDKs below. Prompted if omitted.                                              |
-| `--install`       | Run `pnpm install` after scaffolding.                                                    |
-| `--no-git`        | Skip `git init` + initial commit (done by default — see below).                          |
-| `--force`         | Overwrite the target directory if it exists and is non-empty.                            |
-| `--ref <ref>`     | git ref of the templates repo to clone (default: `main`).                                |
-| `--list-agents`   | Print the supported agent SDKs and exit.                                                 |
-| `--help`, `-h`    | Show help.                                                                               |
+| Flag              | Effect                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `--name <name>`   | npm package name. Defaults to `<target>`. kebab-case.                                             |
+| `--scope <scope>` | npm scope for the `servers/*` + `apps/*` packages (no leading `@`). Defaults to the project name. |
+| `--agent <sdk>`   | One of the SDKs below. Prompted if omitted.                                                       |
+| `--install`       | Run `pnpm install` after scaffolding.                                                             |
+| `--no-git`        | Skip `git init` + initial commit (done by default — see below).                                   |
+| `--force`         | Overwrite the target directory if it exists and is non-empty.                                     |
+| `--ref <ref>`     | git ref of the templates repo to clone (default: `main`).                                         |
+| `--list-agents`   | Print the supported agent SDKs and exit.                                                          |
+| `--help`, `-h`    | Show help.                                                                                        |
 
 ## Agent SDKs
 
