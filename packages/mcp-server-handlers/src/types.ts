@@ -117,6 +117,30 @@ export interface HandlerContext {
    * slice is present.
    */
   readonly requestMeta?: Readonly<Record<string, unknown>>;
+  /**
+   * Per-request abort signal, fired when the inbound `tools/call`
+   * request is cancelled by the caller — either via the MCP
+   * `notifications/cancelled` notification (the canonical cancellation
+   * path; an aborting agent SDK sends this) OR via transport close
+   * (the HTTP connection dropping; `@ggui-ai/mcp-server` wires
+   * `res.on("close") → transport.close()`, which aborts every in-flight
+   * request handler). The MCP SDK exposes it on
+   * `RequestHandlerExtra.signal`; the transport layer threads it here.
+   *
+   * The one handler that reads it today is `ggui_consume`, whose inline
+   * long-poll races each poll tick against this signal so a
+   * disconnected consumer stops long-polling — and therefore stops
+   * being counted by the active-consumer registry — PROMPTLY, rather
+   * than holding `hasActive: true` until its deadline (the
+   * zombie-consumer bug that suppresses the recovery doorbell on a
+   * post-reload user gesture).
+   *
+   * `undefined` for in-process invocations (wired-action dispatch,
+   * console inspector, contract-test fixtures) where there is no
+   * upstream MCP request. Handlers MUST treat it as optional — a missing
+   * signal simply means "no cancellation channel," not "never cancel."
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**

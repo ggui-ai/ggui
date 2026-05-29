@@ -303,7 +303,28 @@ export function createGguiConsumeHandler(
             renderId,
           });
           while (Date.now() < deadline) {
-            await sleep(POLL_INTERVAL_MS);
+            // Abort-awareness. `ctx.signal` fires when the inbound
+            // `tools/call` is cancelled — the agent SDK aborting its
+            // loop (browser reload → agent-server SSE abort → SDK
+            // abort) surfaces here as a `notifications/cancelled` OR a
+            // transport close. Breaking promptly lets `finally` run
+            // `activeConsumerRegistry.exit(renderId)` NOW, so a
+            // concurrent post-reload `ggui_runtime_submit_action`
+            // reads `hasActive: false` and the iframe rings the
+            // recovery doorbell instead of suppressing it against a
+            // zombie consumer that would only drain into the void.
+            //
+            // Check at the top of each tick (catches an abort that
+            // landed during the prior `fetchAndClearSafe`) and again by
+            // racing the sleep below (catches a mid-sleep abort without
+            // waiting out the full 1.5s tick).
+            if (ctx.signal?.aborted) {
+              break;
+            }
+            await sleepUntilAbort(POLL_INTERVAL_MS, ctx.signal);
+            if (ctx.signal?.aborted) {
+              break;
+            }
             result = await fetchAndClearSafe(
               deps.pendingEventConsumer,
               renderId,
@@ -478,6 +499,31 @@ function resolveTtlMs(
   return defaultTtlSeconds * 1000;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Sleep for `ms` OR until `signal` aborts, whichever comes first —
+ * always resolving (never rejecting), so the long-poll loop's own
+ * `ctx.signal?.aborted` checks own the break decision and an aborted
+ * consume returns a clean empty result rather than throwing an
+ * unhandled `AbortError`.
+ *
+ * When `signal` is already aborted on entry the timer is never armed —
+ * resolves on the next microtask. The abort listener is removed on
+ * resolve so a long-lived signal (one request, many poll ticks)
+ * doesn't accumulate listeners across the loop.
+ */
+function sleepUntilAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }

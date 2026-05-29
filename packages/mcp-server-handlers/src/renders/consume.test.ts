@@ -561,4 +561,95 @@ describe('createGguiConsumeHandler', () => {
       expect(registry.hasActive('render-1')).toBe(false);
     });
   });
+
+  describe('abort-aware long-poll (zombie-consumer kill)', () => {
+    it('breaks the long-poll promptly when ctx.signal aborts mid-wait', async () => {
+      // The zombie-consumer bug: when an agent's loop is aborted
+      // (browser reload → agent-server SSE abort → SDK abort → MCP
+      // `notifications/cancelled` / transport close), the consume
+      // long-poll must STOP — not keep polling to its deadline holding
+      // `hasActive: true`, which would suppress the recovery doorbell on
+      // the user's post-reload gesture. With a 60s timeout the loop
+      // would normally run for a full minute; aborting after the first
+      // poll tick must release it in well under a second.
+      await seedRender('render-1', 'app-1');
+      const registry = new InMemoryActiveConsumerRegistry();
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+        activeConsumerRegistry: registry,
+      });
+      const controller = new AbortController();
+      const start = Date.now();
+      const promise = handler.handler(
+        { renderId: 'render-1', timeout: 60 },
+        { appId: 'app-1', requestId: 'r1', signal: controller.signal },
+      );
+      // Yield so the handler runs up through `enter()` + into the loop.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(registry.hasActive('render-1')).toBe(true);
+      // Abort mid-wait — the sleepUntilAbort race resolves immediately
+      // rather than waiting out the 1.5s poll tick.
+      controller.abort();
+      const result = await promise;
+      const elapsed = Date.now() - start;
+      // (a) Returns PROMPTLY — far below the 60_000ms deadline AND below
+      //     a single 1.5s poll tick (the mid-sleep abort short-circuit).
+      expect(elapsed).toBeLessThan(1000);
+      // (a') Clean empty result — no throw, no partial events; matches
+      //      the fetchAndClearSafe empty-shape contract.
+      expect(result.events).toEqual([]);
+      expect(result.status).toBe('active');
+      // (b) Registry released — a subsequent submit-action now reads
+      //     hasActive:false and the iframe rings the recovery doorbell.
+      expect(registry.hasActive('render-1')).toBe(false);
+    });
+
+    it('returns immediately without arming a poll tick when already aborted', async () => {
+      // A signal that's already aborted before the loop body runs must
+      // not park on a 1.5s sleep even once.
+      await seedRender('render-1', 'app-1');
+      const registry = new InMemoryActiveConsumerRegistry();
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+        activeConsumerRegistry: registry,
+      });
+      const controller = new AbortController();
+      controller.abort();
+      const start = Date.now();
+      const result = await handler.handler(
+        { renderId: 'render-1', timeout: 60 },
+        { appId: 'app-1', requestId: 'r1', signal: controller.signal },
+      );
+      expect(Date.now() - start).toBeLessThan(500);
+      expect(result.events).toEqual([]);
+      expect(result.status).toBe('active');
+      expect(registry.hasActive('render-1')).toBe(false);
+    });
+
+    it('still long-polls normally when no signal is supplied', async () => {
+      // Absent signal (in-process invocation) must preserve today's
+      // behavior: the loop waits for an event up to the deadline.
+      await seedRender('render-1', 'app-1');
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+      });
+      setTimeout(() => {
+        void consumer.append('render-1', {
+          id: 'evt-late',
+          envelope: JSON.stringify({ type: 'submit' }),
+          sequence: 1,
+          createdAt: new Date().toISOString(),
+        });
+      }, 200);
+      const result = await handler.handler(
+        { renderId: 'render-1', timeout: 5 },
+        { appId: 'app-1', requestId: 'r1' },
+      );
+      expect(result.events.length).toBeGreaterThan(0);
+      expect(result.events[0].type).toBe('submit');
+    });
+  });
 });

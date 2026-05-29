@@ -186,21 +186,33 @@ export function buildMcpServer(
     ) {
       continue;
     }
-    const cb = async (input: Record<string, unknown>, extra: { _meta?: unknown }) => {
-      // Thread per-request `_meta` onto the canonical context. The MCP
-      // SDK already parses `params._meta` for us and exposes it on
-      // `RequestHandlerExtra._meta`; handlers that read host-channel
-      // slices (e.g. `ai.ggui/host-session` on `ggui_handshake`)
-      // pick it up via `ctx.requestMeta` without touching the SDK
-      // surface themselves.
+    const cb = async (
+      input: Record<string, unknown>,
+      extra: { _meta?: unknown; signal?: AbortSignal },
+    ) => {
+      // Thread per-request `_meta` AND the cancellation `signal` onto the
+      // canonical context. The MCP SDK already parses `params._meta` for
+      // us and exposes it on `RequestHandlerExtra._meta`; handlers that
+      // read host-channel slices (e.g. `ai.ggui/host-session` on
+      // `ggui_handshake`) pick it up via `ctx.requestMeta` without
+      // touching the SDK surface themselves. The same
+      // `RequestHandlerExtra` carries `signal: AbortSignal` — fired by
+      // the SDK on a `notifications/cancelled` from the caller OR on
+      // transport close (this server wires `res.on("close") →
+      // transport.close()`, which aborts every in-flight request
+      // handler). `ggui_consume` reads `ctx.signal` to break its
+      // long-poll promptly on a disconnected consumer, releasing the
+      // active-consumer count instead of zombie-holding it to the
+      // deadline. Both ride the canonical context without leaking the
+      // SDK type into the handlers package.
       const baseCtx = getContext();
-      const ctx: HandlerContext =
-        extra?._meta !== undefined
-          ? {
-              ...baseCtx,
-              requestMeta: extra._meta as Readonly<Record<string, unknown>>,
-            }
-          : baseCtx;
+      const ctx: HandlerContext = {
+        ...baseCtx,
+        ...(extra?._meta !== undefined
+          ? { requestMeta: extra._meta as Readonly<Record<string, unknown>> }
+          : {}),
+        ...(extra?.signal !== undefined ? { signal: extra.signal } : {}),
+      };
       const start = Date.now();
       try {
         const data = await handler.handler(input, ctx);
