@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@ggui-ai/agent-server.svg)](https://www.npmjs.com/package/@ggui-ai/agent-server)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
-This package owns everything a ggui-aware MCP-Apps host needs to expose an agent over HTTP — the wire shape, MCP discovery, tool-result resource inlining, directive synthesis for `_meta["ai.ggui/userAction"]`, server-allocated chat ids, guest + bearer auth with chat ownership — so each per-SDK integration only has to implement a thin `AgentAdapter` (prompt + chatId in → normalized message stream out).
+This package owns everything an MCP-Apps host needs to expose an agent over HTTP — the wire shape, MCP discovery, tool-result resource inlining, server-allocated chat ids, guest + bearer auth with chat ownership — so each per-SDK integration only has to implement a thin `AgentAdapter` (prompt + chatId in → normalized message stream out). The prompt is forwarded to the adapter verbatim; the package has no ggui-protocol knowledge (guest-gesture directives are authored in the iframe's `ui/message` text and pass straight through).
 
 Pairs with [`@ggui-ai/react/chat-helpers`](https://www.npmjs.com/package/@ggui-ai/react) on the frontend.
 
@@ -125,7 +125,6 @@ const teamAuth: AuthAdapter = {
 | Auth                    | `AuthAdapter`, `Principal`, `createGuestTokenAuth`, `createBearerTokenAuth` |
 | Chat ownership          | `ChatRow`, `ChatRecord`, `defaultAuthorizeChat`                             |
 | Tool-result interceptor | `interceptToolResult` — inlines `_meta.ui.resourceUri`                      |
-| Directive synthesis     | `synthesizeUserActionPrompt`                                                |
 | MCP wire helpers        | `callMcpResourcesRead`, `callMcpToolsCall`, `parseMcpResponse`              |
 
 Richer auth flows (JWT/JWKS, OAuth Authorization Code + PKCE, signed-header platform trust, multi-device chat claim) are deferred to #289 and will ship as `@ggui-ai/agent-server-auth-extras` — same `AuthAdapter` contract, no handler rewrites needed.

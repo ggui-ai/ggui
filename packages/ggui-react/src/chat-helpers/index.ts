@@ -15,11 +15,11 @@ export type {
   UseMcpAppsChatOptions,
   UseMcpAppsChatResult,
 } from './useMcpAppsChat';
-// `synthesizeUserActionPrompt` moved to `@ggui-ai/agent-server` —
-// directive synthesis happens server-side now so every per-SDK
-// backend formats the same imperative prose. Clients just forward
-// the spec-canonical `_meta["ai.ggui/userAction"]` slice in the POST
-// body's `data.meta`.
+// No userAction directive synthesis lives here (or anywhere server-
+// side): the iframe-runtime authors the full "call ggui_consume…"
+// directive in the `ui/message` text. The hook's `handleAppMessage`
+// forwards that text as the prompt + the content block's `_meta`
+// opaquely — this package stays ggui-protocol-agnostic.
 export type {
   ChatEntry,
   HostDisplayMode,

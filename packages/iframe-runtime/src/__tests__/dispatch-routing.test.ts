@@ -320,6 +320,22 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       expect(content).toHaveLength(1);
       const firstBlock = content[0];
       expect(firstBlock.type).toBe('text');
+
+      // THE DIRECTIVE LIVES IN THE TEXT — every host (including
+      // `_meta`-agnostic ones) forwards this to the model verbatim. It
+      // MUST carry the imperative ggui_consume instruction on its own,
+      // and name ONLY the render pointer (never the action), so it can't
+      // tempt a pre-consume action.
+      const text = firstBlock.text as string;
+      expect(text).toContain('REQUIRED FIRST TOOL CALL');
+      expect(text).toContain('ggui_consume');
+      expect(text).toContain('Do not respond conversationally');
+      expect(text).toContain('<ggui_directive kind="user-action">');
+      expect(text).toContain('<render_id>render_1</render_id>');
+      expect(text).toContain('<next_args>{"renderId":"render_1"}</next_args>');
+
+      // Spec-canonical structured mirror: pointer lives on
+      // content[0]._meta["ai.ggui/userAction"], NOT on params._meta.
       const blockMeta = firstBlock._meta as Record<string, unknown>;
       const userAction = blockMeta['ai.ggui/userAction'] as Record<
         string,

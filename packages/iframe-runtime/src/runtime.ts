@@ -32,7 +32,10 @@ import type {
   Render,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type {
+  McpAppAiGguiRenderMeta,
+  GguiUserActionMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ValidatedMcpAppAiGguiMeta } from './types.js';
 import {
   parseMetaFromGlobal,
@@ -1858,24 +1861,58 @@ function emitUserActionDoorbell(args: {
   readonly actionId: string;
   readonly submittedAt: string;
 }): void {
-  // EXPLICIT, functional text — NOT a metadata-only pretty one-liner.
-  // Agnostic hosts (claude.ai, chatgpt.com) may ignore `_meta` entirely
-  // and act ONLY on this human-readable text, so it MUST carry the
-  // "call ggui_consume" instruction on its own. It is deliberately
-  // GENERIC (render pointer only, never the action specifics) — naming
-  // what the user did would tempt the agent to act before consuming =
-  // the double-trigger this slice exists to kill.
+  // THE DIRECTIVE LIVES IN THIS TEXT. Every host (claude.ai,
+  // chatgpt.com, ggui-aware SDKs) forwards the `ui/message` text to the
+  // model verbatim — none of them runs a ggui-side synthesizer. So the
+  // iframe-runtime is the single directive-authoring point. The
+  // wording below is the empirically-validated XML-tagged
+  // imperative-first shape (REQUIRED FIRST TOOL CALL + `<ggui_directive>`
+  // tags + gesture framing) that was previously synthesized
+  // server-side. The imperative-first phrasing — "Call <tool> NOW. ...
+  // Do not respond conversationally." — is load-bearing for Gemini,
+  // which otherwise summarizes the situation back to the user instead
+  // of dispatching the prepared tool call.
   //
-  // Prose-only, no fenced ```json``` block: a verbatim copy of a
-  // tool-call wire shape trips claude.ai's prompt-injection classifier
-  // even on the user-trusted `ui/message` channel. The machine-readable
-  // pointer lives on `content[0]._meta["ai.ggui/userAction"]`.
+  // It is deliberately GENERIC: it names the render pointer, never the
+  // action specifics. Naming what the user did would tempt the agent to
+  // act before consuming = the double-trigger this whole shape exists
+  // to kill. The agent gets the actionable data EXCLUSIVELY from
+  // `ggui_consume`.
+  //
+  // Prose + XML tags only, no fenced ```json``` block: a verbatim copy
+  // of a tool-call wire shape trips claude.ai's prompt-injection
+  // classifier even on the user-trusted `ui/message` channel.
+  const nextArgs = JSON.stringify({ renderId: args.renderId });
+  const text = [
+    `Your REQUIRED FIRST TOOL CALL is ggui_consume with arguments ${nextArgs}. Call it NOW to retrieve and process the pending interaction. Do not respond conversationally; do not summarize. Issue the tool call as your next action.`,
+    '',
+    `<ggui_directive kind="user-action">`,
+    `  <render_id>${args.renderId}</render_id>`,
+    `  <next_tool>ggui_consume</next_tool>`,
+    `  <next_args>${nextArgs}</next_args>`,
+    `</ggui_directive>`,
+    '',
+    `The user interacted with render ${args.renderId} while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_update on the SAME renderId (${args.renderId}).`,
+  ].join('\n');
+  // Structured mirror of the directive for ggui-aware programmatic
+  // consumers. OPTIONAL — nothing in the loop depends on a server-side
+  // parse of this; an `_meta`-agnostic host acts on the text above
+  // alone. Typed against the protocol interface (no runtime guard
+  // exists — the shape is locked at compile time here).
   const description =
     `User interacted with render ${args.renderId}; call ggui_consume to retrieve and process it.`;
-  const text =
-    `The user interacted with render ${args.renderId}. ` +
-    `Call ggui_consume({ renderId: "${args.renderId}" }) to retrieve and ` +
-    `process the pending interaction.`;
+  const userAction: GguiUserActionMeta = {
+    kind: 'user-action',
+    description,
+    renderId: args.renderId,
+    actionId: args.actionId,
+    submittedAt: args.submittedAt,
+    intent: args.intent,
+    nextStep: {
+      tool: 'ggui_consume',
+      args: { renderId: args.renderId },
+    },
+  };
   // Spec-canonical shape: `_meta` lives on the CONTENT BLOCK (the spec
   // closes `params._meta` via `additionalProperties: false`, but each
   // content block has its own `_meta: { [key: string]: unknown }` open
@@ -1889,18 +1926,7 @@ function emitUserActionDoorbell(args: {
         type: 'text',
         text,
         _meta: {
-          'ai.ggui/userAction': {
-            kind: 'user-action',
-            description,
-            renderId: args.renderId,
-            actionId: args.actionId,
-            submittedAt: args.submittedAt,
-            intent: args.intent,
-            nextStep: {
-              tool: 'ggui_consume',
-              args: { renderId: args.renderId },
-            },
-          },
+          'ai.ggui/userAction': userAction,
         },
       },
     ],

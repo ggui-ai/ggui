@@ -39,7 +39,6 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { isGguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   defaultAuthorizeChat,
   principalId,
@@ -48,7 +47,6 @@ import {
 } from './auth.js';
 import { callMcpToolsCall } from './mcp-client.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
-import { synthesizeUserActionPrompt } from './user-action-prompt.js';
 import { mintChatId, type ChatStore } from './chat-store.js';
 import type { AgentAdapter, McpServerConfig } from './types.js';
 
@@ -248,23 +246,17 @@ export function createAgentApp(
       chatId = mintChatId();
     }
 
-    // Pull the spec-canonical `ai.ggui/userAction` slice off the
-    // request body's `data.meta` when present and synthesize the
-    // imperative-first directive prompt server-side.
-    const rawUserAction = body.data?.meta?.['ai.ggui/userAction'];
-    const userAction = isGguiUserActionMeta(rawUserAction)
-      ? rawUserAction
-      : undefined;
-    const promptForLlm =
-      userAction !== undefined
-        ? synthesizeUserActionPrompt({
-            originalPrompt: body.prompt,
-            userAction,
-          })
-        : body.prompt;
+    // Pure prompt-forwarder: the prompt feeds the adapter verbatim. The
+    // server has ZERO ggui-protocol knowledge — when a user gesture
+    // needs to wake the agent, the directive ("call ggui_consume…")
+    // already lives in the iframe-authored `ui/message` text the client
+    // forwarded as `body.prompt`. (`body.data.meta` is a generic
+    // forward-compat extension carrier; the server does not special-case
+    // any key in it.)
+    const promptForLlm = body.prompt;
 
     log(
-      `[agent-server] POST /agent chat=${chatId} owner=${ownerId} prompt=${JSON.stringify(body.prompt.slice(0, 80))}${userAction ? ` (userAction kind=${userAction.kind} renderId=${userAction.renderId})` : ''}`,
+      `[agent-server] POST /agent chat=${chatId} owner=${ownerId} prompt=${JSON.stringify(body.prompt.slice(0, 80))}`,
     );
 
     return streamSSE(c, async (stream) => {
@@ -428,9 +420,12 @@ export function createAgentApp(
 /**
  * Shape the client (`useMcpAppsChat.send`) sends on every POST.
  *
- * `data.meta` carries the spec-canonical extension slice — only
- * `ai.ggui/userAction` is recognized today; future ggui-meta keys
- * (e.g. `ai.ggui/host-session`) thread through here too.
+ * `data.meta` is a GENERIC forward-compat extension carrier — an opaque
+ * record the client may attach. The server is a pure prompt-forwarder
+ * with ZERO ggui-protocol knowledge: it does NOT inspect or special-case
+ * any key here. (The "call ggui_consume…" directive a guest gesture
+ * needs already lives in the iframe-authored `ui/message` text, which
+ * the client forwards as `prompt`.)
  *
  * `chatId` is optional — when absent the server allocates one and
  * returns it as the first SSE event. When supplied for an existing

@@ -1262,8 +1262,14 @@ export function isGguiSubmitActionInput(
  * (it lacks the `actionData` payload), so its presence doesn't tempt a
  * pre-consume action.
  *
- * Presence is the fingerprint — agnostic hosts ignore the field;
- * ggui-aware consumers route via {@link isGguiUserActionMeta}.
+ * **The directive lives in the `ui/message` TEXT, not here.** The
+ * iframe-runtime authors a `ui/message` whose human-readable text
+ * carries the full "call `ggui_consume`" directive — that text is what
+ * EVERY host (claude.ai, chatgpt.com, ggui-aware SDKs) forwards to the
+ * model. This `_meta` slice is the OPTIONAL structured mirror for
+ * ggui-aware programmatic consumers; an `_meta`-agnostic host ignores
+ * it and acts on the text alone. No part of the loop depends on a
+ * server-side parse of this slice.
  *
  * @public
  */
@@ -1278,45 +1284,4 @@ export interface GguiUserActionMeta {
     readonly tool: 'ggui_consume';
     readonly args: { readonly renderId: string };
   };
-}
-
-/**
- * Type guard for {@link GguiUserActionMeta}. Validates the single
- * pure-doorbell shape on a `ui/message` envelope's
- * `content[0]._meta["ai.ggui/userAction"]` field.
- *
- * Designed for `ai.ggui/userAction`-aware consumers (the agent-server
- * directive synthesizer, e2e assertions, future SDKs) to route
- * deterministically without speculative shape coercion.
- *
- * @public
- */
-export function isGguiUserActionMeta(
-  meta: unknown,
-): meta is GguiUserActionMeta {
-  if (meta === null || typeof meta !== 'object') return false;
-  const m = meta as Record<string, unknown>;
-  if (m.kind !== 'user-action') return false;
-  if (typeof m.description !== 'string' || m.description.length === 0) {
-    return false;
-  }
-  if (typeof m.renderId !== 'string' || m.renderId.length === 0) {
-    return false;
-  }
-  if (typeof m.actionId !== 'string' || m.actionId.length === 0) {
-    return false;
-  }
-  if (typeof m.submittedAt !== 'string' || m.submittedAt.length === 0) {
-    return false;
-  }
-  if (typeof m.intent !== 'string' || m.intent.length === 0) return false;
-  if (m.nextStep === null || typeof m.nextStep !== 'object') return false;
-  const ns = m.nextStep as Record<string, unknown>;
-  if (ns.tool !== 'ggui_consume') return false;
-  if (ns.args === null || typeof ns.args !== 'object') return false;
-  const args = ns.args as Record<string, unknown>;
-  if (typeof args.renderId !== 'string' || args.renderId.length === 0) {
-    return false;
-  }
-  return true;
 }

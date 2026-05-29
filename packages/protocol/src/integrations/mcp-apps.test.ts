@@ -19,7 +19,6 @@ import {
   parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
   deriveContextName,
-  isGguiUserActionMeta,
   isMcpAppsRender,
   isMcpAppLifecycleMessage,
   isGguiSubmitActionInput,
@@ -33,6 +32,7 @@ import {
   type McpAppsToolVisibility,
   type SubmitActionKind,
   type GguiSubmitActionInput,
+  type GguiUserActionMeta,
 } from './mcp-apps';
 
 describe('MCP Apps outbound constants', () => {
@@ -405,140 +405,32 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
   });
 });
 
-describe('isGguiUserActionMeta type guard — single pure-doorbell shape', () => {
-  const baseTimestamps = {
-    actionId: '8f3a2b1c',
-    submittedAt: '2026-05-14T00:00:00.000Z',
-    renderId: 'r_1',
-    intent: 'toggle',
-  };
-
-  it('accepts a well-shaped user-action doorbell', () => {
-    expect(
-      isGguiUserActionMeta({
-        kind: 'user-action',
-        description:
-          'User interacted with render r_1; call ggui_consume to retrieve and process it.',
-        ...baseTimestamps,
-        nextStep: {
-          tool: 'ggui_consume',
-          args: { renderId: 'r_1' },
-        },
-      }),
-    ).toBe(true);
-  });
-
-  it.each([
-    [
-      'missing description',
-      {
-        kind: 'user-action',
-        ...baseTimestamps,
-        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-      },
-    ],
-    [
-      'missing intent',
-      {
-        kind: 'user-action',
-        description: 'd',
-        actionId: 'a',
-        submittedAt: 's',
-        renderId: 'i',
-        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-      },
-    ],
-    [
-      'missing actionId',
-      {
-        kind: 'user-action',
-        description: 'd',
-        submittedAt: 's',
-        renderId: 'i',
-        intent: 'toggle',
-        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-      },
-    ],
-    [
-      'missing submittedAt',
-      {
-        kind: 'user-action',
-        description: 'd',
-        actionId: 'a',
-        renderId: 'i',
-        intent: 'toggle',
-        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-      },
-    ],
-    [
-      'nextStep.tool not ggui_consume',
-      {
-        kind: 'user-action',
-        description: 'd',
-        ...baseTimestamps,
-        nextStep: { tool: 'something_else', args: { renderId: 'r' } },
-      },
-    ],
-    [
-      'nextStep.args missing renderId',
-      {
-        kind: 'user-action',
-        description: 'd',
-        ...baseTimestamps,
-        nextStep: { tool: 'ggui_consume', args: {} },
-      },
-    ],
-    [
-      'nextStep absent',
-      { kind: 'user-action', description: 'd', ...baseTimestamps },
-    ],
-  ])('rejects %s', (_label, value) => {
-    expect(isGguiUserActionMeta(value)).toBe(false);
-  });
-
-  describe('rejects retired + foreign shapes', () => {
-    it.each([
-      ['null', null],
-      ['non-object', 'string'],
-      ['empty object', {}],
-      [
-        'retired queued kind',
-        {
-          kind: 'queued',
-          description: 'd',
-          ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-        },
-      ],
-      [
-        'retired inline kind (carried a payload)',
-        {
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { actionData: { id: 2 }, uiContext: {} },
-        },
-      ],
-      [
-        'doorbell shape but unknown kind',
-        {
-          kind: 'whatever',
-          description: 'd',
-          ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-        },
-      ],
-      [
-        'legacy pipe_not_found shape (reason-based, no kind)',
-        {
-          reason: 'pipe_not_found',
-          renderId: 'r_1',
-          submittedAt: '2026-05-14T00:00:00.000Z',
-        },
-      ],
-    ])('rejects %s', (_label, value) => {
-      expect(isGguiUserActionMeta(value)).toBe(false);
-    });
+describe('GguiUserActionMeta — single pure-doorbell shape lock', () => {
+  // There is NO runtime guard for this slice (deleted in #290): the
+  // actionable directive lives in the iframe-authored `ui/message`
+  // TEXT that every host forwards to the model, and the backend is a
+  // pure prompt-forwarder with zero ggui knowledge. This `_meta` slice
+  // is the OPTIONAL structured mirror for ggui-aware programmatic
+  // consumers; the iframe-runtime constructs/types against this
+  // interface. The test below locks the shape at the type level.
+  it('is a pure pointer — single kind, ggui_consume nextStep, no payload', () => {
+    const meta: GguiUserActionMeta = {
+      kind: 'user-action',
+      description:
+        'The user interacted with render r_1. Call ggui_consume to retrieve it.',
+      renderId: 'r_1',
+      actionId: '8f3a2b1c',
+      submittedAt: '2026-05-14T00:00:00.000Z',
+      intent: 'toggle',
+      nextStep: { tool: 'ggui_consume', args: { renderId: 'r_1' } },
+    };
+    expect(meta.kind).toBe('user-action');
+    expect(meta.nextStep.tool).toBe('ggui_consume');
+    expect(meta.nextStep.args.renderId).toBe('r_1');
+    // The slice carries no action payload — pointer only. (A `payload`
+    // key would be a compile error against the interface; this runtime
+    // assertion documents the absence for readers.)
+    expect('payload' in meta).toBe(false);
   });
 });
 

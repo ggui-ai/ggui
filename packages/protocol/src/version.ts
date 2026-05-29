@@ -490,32 +490,31 @@
  *
  *   t1. **`ggui_runtime_claim_pending` retired.** The iframe-side rescue
  *      drain + its 10s claim timer + per-action `pendingActions` map
- *      are gone. The pipe is now the single source of truth: every
- *      `submit_action` either succeeds (event lands on the pipe; agent
- *      drains via `ggui_consume`) or fails (`PIPE_NOT_FOUND` / transport
- *      error; iframe emits the action inline via `ui/message`). No
- *      timer, no rescue, no race between two atomic-pop callers.
+ *      are gone. The pipe is the single source of truth: the agent
+ *      retrieves every gesture EXCLUSIVELY via `ggui_consume`. When the
+ *      event lands on the pipe but no consume long-poll is listening
+ *      (`consumerPresent: false`), the iframe emits a pure-pointer
+ *      `ui/message` doorbell so a fresh turn drains it; on enqueue
+ *      failure (`PIPE_NOT_FOUND` / transport error) the gesture is on no
+ *      pipe, so a local toast surfaces and no `ui/message` is sent. No
+ *      timer, no rescue, no inline payload, no race between atomic-pop
+ *      callers.
  *
- *   t2. **`content[0]._meta["ai.ggui/userAction"]` unifies `fallback` +
- *      `nudge`.** New single discriminator on `ui/message` envelopes
- *      replacing the separate `_meta.ggui.fallback` (reason:
- *      pipe_not_found | timeout) + `_meta.ggui.nudge`
- *      (no_active_consumer) split:
- *
- *        - `kind: 'queued'` — pipe HAS the event; agent SHOULD dispatch
- *          the prepared `{tool: 'ggui_consume', args: {stackItemId}}`
- *          nextStep to drain. Emitted when `submit_action` returned
- *          `{ok:true, consumerPresent:false}`.
- *        - `kind: 'inline'` — pipe is GONE; action data + uiContext
- *          delivered inline in `payload`. Agent MUST act directly on
- *          `payload.actionData`; calling `ggui_consume` would return
- *          empty. Emitted when `submit_action` returned PIPE_NOT_FOUND,
- *          INVALID_ACTION_KIND, or any transport/relay error. Optional
- *          `nextStep: string` hint surfaces the contract's bound agent
- *          tool when present.
- *
- *      Type guard `isGguiUserActionMeta` lives on
- *      `@ggui-ai/protocol/integrations/mcp-apps`.
+ *   t2. **`content[0]._meta["ai.ggui/userAction"]` PURE DOORBELL.** A
+ *      single `kind: 'user-action'` slice on `ui/message` envelopes
+ *      (it replaced the earlier `fallback`/`nudge` split, and then the
+ *      `queued`/`inline` discriminated union — the `inline` variant's
+ *      inline payload was a double-trigger hazard). The slice carries
+ *      ONLY a pointer to the render whose pipe holds the gesture
+ *      (`renderId` + the prepared `{tool: 'ggui_consume', args:
+ *      {renderId}}` nextStep); the agent retrieves the action
+ *      EXCLUSIVELY via `ggui_consume`, so it fires exactly once.
+ *      Emitted when `submit_action` returned `{ok:true,
+ *      consumerPresent:false}`. The actionable directive lives in the
+ *      iframe-authored `ui/message` TEXT (every host forwards it to the
+ *      model); this `_meta` slice is the OPTIONAL structured mirror —
+ *      `GguiUserActionMeta` on `@ggui-ai/protocol/integrations/
+ *      mcp-apps`. No part of the loop depends on a server-side parse.
  *
  *   t3. **Per-event `uiContext` on the pipe.** `submit_action`'s
  *      `dispatch` payload reshaped from `{intent, data}` to `{intent,

@@ -1,12 +1,13 @@
 /**
  * Public types for the brand-agnostic agent-server contract.
  *
- * The split that matters: the LIBRARY owns every ggui-coupled concern
- * (HTTP, SSE, MCP discovery, tool-result resource inlining, directive
- * synthesis); the per-SDK ADAPTER owns nothing but mapping the agent
- * loop to / from {@link NormalizedMessage}s. An adapter author never
- * needs to know about renderId, userAction, host-session, or any
- * `_meta.ui.*` key.
+ * The split that matters: the LIBRARY owns the host plumbing (HTTP,
+ * SSE, MCP discovery, tool-result resource inlining, server-allocated
+ * chat ids, auth); the per-SDK ADAPTER owns nothing but mapping the
+ * agent loop to / from {@link NormalizedMessage}s. Neither knows about
+ * renderId, host-session, or any `_meta.ui.*` key — the prompt is
+ * forwarded verbatim, so guest-gesture directives (authored in the
+ * iframe's `ui/message` text) pass straight through.
  *
  * One normalized envelope shape across every SDK keeps the frontend
  * hook (`useMcpAppsChat`) parsing one wire.
@@ -96,16 +97,16 @@ export type NormalizedMessage =
  *
  * The library populates every field — adapter authors don't have to
  * mint chat ids, resolve env vars, or thread cancellation. The
- * `prompt` arrives ready to feed the LLM (directive synthesis has
- * already happened when `_meta["ai.ggui/userAction"]` was present on
- * the request).
+ * `prompt` is the client-supplied prompt verbatim; the library is a
+ * pure forwarder with no ggui-protocol awareness.
  */
 export interface AgentInput {
   /**
-   * The user prompt to feed the LLM. When the client posted a
-   * `_meta["ai.ggui/userAction"]` slice, the library has already
-   * woven it into the prompt via {@link synthesizeUserActionPrompt} —
-   * adapters see one string regardless.
+   * The user prompt to feed the LLM, forwarded verbatim from the
+   * `POST /agent` body. When a guest gesture needs to wake the agent,
+   * the "call ggui_consume…" directive already lives in the
+   * iframe-authored `ui/message` text the client posts as the prompt —
+   * the library never rewrites it.
    */
   readonly prompt: string;
   /**
@@ -149,8 +150,9 @@ export interface AgentInput {
  *
  * Adapters MUST stay brand-agnostic: no imports of
  * `@ggui-ai/protocol/integrations/mcp-apps`, no awareness of
- * `renderId` / `userAction` / `host-session`. The library handles
- * every ggui-coupled concern around the adapter.
+ * `renderId` / `host-session`. The library is a pure prompt-forwarder
+ * + host plumbing around the adapter — neither layer has ggui-protocol
+ * knowledge.
  */
 export interface AgentAdapter {
   /**

@@ -36,8 +36,6 @@ export type {
   ChatStateSnapshot,
 } from './types.js';
 
-export { synthesizeUserActionPrompt } from './user-action-prompt.js';
-
 export {
   interceptToolResult,
   selectMcpServerForResource,
