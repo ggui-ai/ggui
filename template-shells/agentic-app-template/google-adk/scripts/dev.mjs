@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * `pnpm dev` — start the whole app with ONE command, a clear banner, and an
- * auto-opened browser. By default the servers' logs are HIDDEN so the
- * "open this URL" guidance stays on screen; add `--verbose` (or `-v`) to stream
- * the full labeled output. (A crashing service still dumps its recent output,
- * even in quiet mode, so failures are never silent.)
+ * `pnpm dev` — start the whole app with ONE command. The banner lists every
+ * server and its port (so you always know what's running in the background),
+ * and the app opens automatically. Server logs are HIDDEN by default so that
+ * map stays on screen; add `--verbose` (or `-v`) to stream the full labeled
+ * output. A crashing service still dumps its recent output even in quiet mode.
  *
  *   ggui   UI-generator MCP server            backend
  *   mcps   every server under servers/mcps/*  backend — your domain tools
@@ -12,45 +12,47 @@
  *   web    the app you actually open          ← visit this
  *
  * Each group runs in its own process group; Ctrl-C tears down the whole tree
- * (no orphaned servers holding ports). `pnpm dev:stop` is the backstop.
- * Adding an MCP server? Drop it under `servers/mcps/` — `dev:mcps` globs the
- * whole directory, so it starts automatically with no edit here.
+ * (no orphaned servers holding ports). `pnpm dev:stop` is the backstop. Adding
+ * an MCP server? Drop it under `servers/mcps/` — `dev:mcps` globs the whole
+ * directory, so it starts automatically with no edit here.
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 const WEB_URL = `http://localhost:${process.env.WEB_PORT ?? 6890}`;
+const AGENT_PORT = 6792; // per shell — claude=6790, openai=6791, google=6792
 const POSIX = process.platform !== 'win32';
 const VERBOSE =
   process.argv.slice(2).some((a) => a === '--verbose' || a === '-v') ||
   process.env.DEV_VERBOSE === '1';
 
-// name → ANSI color + the package.json script that starts it.
+// name → color, the package.json script, where it listens, and a one-liner.
 const SERVICES = [
-  { name: 'ggui', color: 34, script: 'dev:ggui' }, // blue
-  { name: 'mcps', color: 35, script: 'dev:mcps' }, // magenta
-  { name: 'agent', color: 32, script: 'dev:agent' }, // green
-  { name: 'web', color: 36, script: 'dev:web' }, // cyan
+  { name: 'ggui', color: 34, script: 'dev:ggui', where: 'http://localhost:6781/mcp', note: 'UI generator (backend)' },
+  { name: 'mcps', color: 35, script: 'dev:mcps', where: 'http://localhost:6782/mcp', note: 'your tools · every servers/mcps/*' },
+  { name: 'agent', color: 32, script: 'dev:agent', where: `http://localhost:${AGENT_PORT}`, note: 'LLM backend' },
+  { name: 'web', color: 36, script: 'dev:web', where: WEB_URL, note: 'the app you open  ←' },
 ];
-const width = Math.max(...SERVICES.map((s) => s.name.length));
-const tag = (s) => `\x1b[${s.color}m[${s.name.padEnd(width)}]\x1b[0m`;
+const nameW = Math.max(...SERVICES.map((s) => s.name.length));
+const whereW = Math.max(...SERVICES.map((s) => s.where.length));
+const tag = (s) => `\x1b[${s.color}m[${s.name.padEnd(nameW)}]\x1b[0m`;
+const table = SERVICES.map(
+  (s) => `    \x1b[${s.color}m${s.name.padEnd(nameW)}\x1b[0m  ${s.where.padEnd(whereW)}  ${s.note}`,
+).join('\n');
 
 const logHint = VERBOSE
   ? `Streaming logs, labeled ${SERVICES.map(tag).join(' ')}.`
   : 'Logs are hidden — run \x1b[1mpnpm dev --verbose\x1b[0m to stream them.';
 
 process.stdout.write(`
-  Starting your ggui app — ${SERVICES.length} services, one command.
+  Starting your ggui app — ${SERVICES.length} servers, one command:
 
-    ggui    UI-generator MCP     backend · nothing to open here
-    mcps    your domain tools    backend · every servers/mcps/* starts here
-    agent   LLM backend          backend · nothing to open here
-    web     the app you open  →  ${WEB_URL}
+${table}
 
-  \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens automatically once 'web' is ready)
-
+  \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens automatically once 'web' is ready).
+  The other three are backend servers; all ${SERVICES.length} run in the BACKGROUND until
+  you press Ctrl-C, which stops every one of them (or \x1b[1mpnpm dev:stop\x1b[0m if a port sticks).
   ${logHint}
-  Ctrl-C stops everything; if a port stays stuck, run \x1b[1mpnpm dev:stop\x1b[0m.
 
 `);
 
