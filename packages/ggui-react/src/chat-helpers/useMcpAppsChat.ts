@@ -1,12 +1,39 @@
 /* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   ChatEntry,
   HostDisplayMode,
   RenderRef,
   ToolCallEntry,
 } from './mcp-apps-chat-types';
+
+/**
+ * Opaque `_meta` record forwarded verbatim from a guest `ui/message`
+ * content block to the agent backend's `POST /agent` body as
+ * `data.meta`. This hook is deliberately ggui-protocol-AGNOSTIC: it
+ * never parses, validates, or even names any `ai.ggui/*` key. The
+ * agent-server backend is the SOLE trust boundary — it picks out the
+ * keys it recognizes (e.g. `ai.ggui/userAction`) and guards them. A
+ * client-side guard would be redundant.
+ */
+type OpaqueMessageMeta = { readonly [key: string]: unknown };
+
+/**
+ * Minimal shape of a guest `ui/message` request the hook needs to
+ * forward. Structurally compatible with `@mcp-ui/client`'s
+ * `<AppRenderer onMessage>` param (`McpUiMessageRequest['params']`) —
+ * wire `onMessage={chat.handleAppMessage}` directly. We read only
+ * `content[*].text` (to build the prompt) and `content[*]._meta` (to
+ * forward opaquely); everything else is ignored.
+ */
+interface GuestMessageParams {
+  readonly role?: string;
+  readonly content?: ReadonlyArray<{
+    readonly type?: string;
+    readonly text?: string;
+    readonly _meta?: OpaqueMessageMeta;
+  }>;
+}
 
 /**
  * Public options for {@link useMcpAppsChat}.
@@ -114,19 +141,35 @@ export interface UseMcpAppsChatResult {
    * Post a fresh user prompt. Trimmed empty strings are no-ops. Opens
    * an SSE stream to the chat endpoint and merges every frame.
    *
-   * Optional `opts.userAction` is the spec-canonical
-   * `_meta["ai.ggui/userAction"]` slice (stamped by iframe-runtime
-   * when a gesture must reach the agent via `ui/message`). When
-   * present, the hook forwards the slice verbatim as
-   * `data.meta["ai.ggui/userAction"]` in the POST body — the
-   * agent-server library synthesizes the LLM-facing directive
-   * prompt server-side so every ggui-coupled formatting lives in
-   * one place across SDKs.
+   * Optional `opts.meta` is an OPAQUE `_meta` record the hook forwards
+   * verbatim as `data.meta` in the POST body. The hook never inspects
+   * it; the agent-server backend recognizes + guards any keys it cares
+   * about (e.g. the spec-canonical `ai.ggui/userAction` doorbell) and
+   * synthesizes the LLM-facing directive server-side. Most callers use
+   * {@link handleAppMessage} instead of threading `meta` by hand.
    */
   readonly send: (
     prompt: string,
-    opts?: { readonly userAction?: GguiUserActionMeta },
+    opts?: { readonly meta?: OpaqueMessageMeta },
   ) => Promise<void>;
+  /**
+   * Drop-in handler for `@mcp-ui/client`'s `<AppRenderer onMessage>`.
+   * A guest iframe emits a spec-canonical `ui/message` notification
+   * when a gesture needs to reach the agent through chat (e.g. the
+   * `ai.ggui/userAction` doorbell stamped by iframe-runtime when no
+   * `ggui_consume` long-poll is listening). This handler joins the
+   * content blocks' text into the prompt and forwards the first
+   * content block's `_meta` OPAQUELY as `data.meta` — no ggui-protocol
+   * knowledge, no key names, no validation. Wire it directly:
+   * `<AppRenderer onMessage={chat.handleAppMessage} />`.
+   *
+   * Returns `{}` on a forwarded message and `{ isError: true }` when
+   * the message carried no text to forward — matching the
+   * `McpUiMessageResult` contract the host expects.
+   */
+  readonly handleAppMessage: (
+    params: GuestMessageParams,
+  ) => Promise<Record<string, unknown>>;
   /**
    * Abort the in-flight stream. Cancels the `fetch` via its
    * AbortController, which propagates as a network-level abort on the
@@ -250,37 +293,34 @@ export function useMcpAppsChat(
   const send = useCallback(
     async (
       prompt: string,
-      sendOpts?: { readonly userAction?: GguiUserActionMeta },
+      sendOpts?: { readonly meta?: OpaqueMessageMeta },
     ) => {
       const trimmed = prompt.trim();
       if (!trimmed) return;
       const turnId = mintTurnId();
-      // Chat panel shows the user's verbatim prose — the
-      // [GGUI_USER_ACTION] directive synthesis below only changes
-      // what crosses the wire to the agent, never what the user
-      // sees in their own message bubble.
+      // Chat panel shows the user's verbatim prose — the optional
+      // `meta` payload below only adds out-of-band context the agent
+      // backend may act on, never what the user sees in their bubble.
       append({ id: `${turnId}.user`, kind: 'user', text: trimmed });
       setSending(true);
       const controller = new AbortController();
       abortControllerRef.current = controller;
       try {
-        // Forward the spec-canonical `_meta.ai.ggui/userAction` slice
-        // verbatim in `data.meta` when present. The agent-server
-        // library synthesizes the imperative-first LLM directive
-        // server-side — one place across SDKs, no client-side prose
-        // formatting.
+        // Forward the guest message's `_meta` record OPAQUELY in
+        // `data.meta` when present. The hook never inspects it; the
+        // agent-server backend recognizes + guards the keys it cares
+        // about (e.g. `ai.ggui/userAction`) and synthesizes the
+        // imperative-first LLM directive server-side.
         const body: {
           prompt: string;
           chatId?: string;
-          data?: { meta?: { 'ai.ggui/userAction': GguiUserActionMeta } };
+          data?: { meta?: OpaqueMessageMeta };
         } = { prompt: trimmed };
         if (chatId !== undefined && chatId.length > 0) {
           body.chatId = chatId;
         }
-        if (sendOpts?.userAction !== undefined) {
-          body.data = {
-            meta: { 'ai.ggui/userAction': sendOpts.userAction },
-          };
+        if (sendOpts?.meta !== undefined) {
+          body.data = { meta: sendOpts.meta };
         }
         const doFetch = async (): Promise<Response> => {
           const token = await Promise.resolve(getAuthTokenRef.current?.());
@@ -382,6 +422,30 @@ export function useMcpAppsChat(
     abortControllerRef.current?.abort();
   }, []);
 
+  const handleAppMessage = useCallback(
+    async (params: GuestMessageParams): Promise<Record<string, unknown>> => {
+      const blocks = params.content ?? [];
+      const text = blocks
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
+        .map((c) => c.text ?? '')
+        .join('\n')
+        .trim();
+      if (text.length === 0) {
+        // Nothing to forward — match the host's McpUiMessageResult
+        // error contract instead of silently POSTing an empty prompt.
+        return { isError: true };
+      }
+      // Forward the FIRST content block's `_meta` opaquely. The
+      // iframe-runtime stamps the doorbell on the single text block it
+      // emits; we don't merge across blocks (there is one) and we never
+      // read any key inside the record.
+      const meta = blocks.find((c) => c._meta !== undefined)?._meta;
+      await send(text, meta !== undefined ? { meta } : undefined);
+      return {};
+    },
+    [send],
+  );
+
   // On-mount rehydration. When the host provides a chatId for a
   // previously-visited conversation, pull the server-authoritative
   // snapshot and re-feed it through the same `handleEvent` pipeline the
@@ -468,7 +532,15 @@ export function useMcpAppsChat(
     // double-fire if the IDs ever change identity.
   }, [chatId, snapshotEndpoint, append, addRender, patchToolCall]);
 
-  return { entries, renders, hostDisplayMode, sending, send, abort };
+  return {
+    entries,
+    renders,
+    hostDisplayMode,
+    sending,
+    send,
+    handleAppMessage,
+    abort,
+  };
 }
 
 /**

@@ -18,17 +18,23 @@ import {
   type ChatEntry,
   type RenderRef,
   type ToolCallEntry,
+  type UseMcpAppsChatResult,
 } from '@ggui-ai/react/chat-helpers';
-import {
-  isGguiUserActionMeta,
-  type GguiUserActionMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   CallToolRequest,
   CallToolResult,
   ReadResourceRequest,
   ReadResourceResult,
 } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * The hook's drop-in `<AppRenderer onMessage>` handler. The sample
+ * stays ggui-protocol-agnostic for the `ui/message` path — it forwards
+ * the guest message verbatim through this handler; the agent-server
+ * backend is the sole party that recognizes + guards any `ai.ggui/*`
+ * `_meta` keys.
+ */
+type AppMessageHandler = UseMcpAppsChatResult['handleAppMessage'];
 
 type LayoutMode = 'inline' | 'panel';
 
@@ -170,7 +176,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
     });
   }, []);
 
-  const { entries, renders, hostDisplayMode, sending, send, abort } =
+  const { entries, renders, hostDisplayMode, sending, send, handleAppMessage, abort } =
     useMcpAppsChat({
       chatEndpoint: `${agentEndpoint}/agent`,
       snapshotEndpoint: `${agentEndpoint}/agent`,
@@ -183,18 +189,6 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
   const [prompt, setPrompt] = useState('');
   const [layout, setLayout] = useState<LayoutMode>('inline');
   const historyRef = useRef<HTMLDivElement | null>(null);
-
-  // `userAction` is the spec-canonical `_meta.ai.ggui/userAction` slice
-  // iframe-runtime stamps on `ui/message` envelopes when a click can't
-  // reach the agent via the consume pipe. Forwarded to `send(...)` so
-  // the agent-server library synthesizes the imperative-first directive
-  // server-side.
-  const onUiMessage = useCallback(
-    (text: string, userAction?: GguiUserActionMeta) => {
-      void send(text, userAction !== undefined ? { userAction } : undefined);
-    },
-    [send],
-  );
 
   useEffect(() => {
     if (hostDisplayMode === undefined) return;
@@ -293,7 +287,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
               sandboxUrl={sandboxUrl}
               agentEndpoint={agentEndpoint}
               getAuthToken={getAuthToken}
-              onUiMessage={onUiMessage}
+              onAppMessage={handleAppMessage}
             />
           ))}
         </div>
@@ -343,7 +337,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
             getAuthToken={getAuthToken}
-            onUiMessage={onUiMessage}
+            onAppMessage={handleAppMessage}
           />
         </main>
       ) : null}
@@ -372,14 +366,14 @@ function ChatEntryView({
   sandboxUrl,
   agentEndpoint,
   getAuthToken,
-  onUiMessage,
+  onAppMessage,
 }: {
   entry: ChatEntry;
   renderInline: boolean;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
-  onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
+  onAppMessage: AppMessageHandler;
 }) {
   if (entry.kind === 'render') {
     if (renderInline) {
@@ -390,7 +384,7 @@ function ChatEntryView({
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
             getAuthToken={getAuthToken}
-            onUiMessage={onUiMessage}
+            onAppMessage={onAppMessage}
           />
         </div>
       );
@@ -468,13 +462,13 @@ function PanelView({
   sandboxUrl,
   agentEndpoint,
   getAuthToken,
-  onUiMessage,
+  onAppMessage,
 }: {
   renders: ReadonlyArray<RenderRef>;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
-  onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
+  onAppMessage: AppMessageHandler;
 }) {
   const top = useMemo(() => renders[renders.length - 1], [renders]);
   if (!top) {
@@ -491,7 +485,7 @@ function PanelView({
         sandboxUrl={sandboxUrl}
         agentEndpoint={agentEndpoint}
         getAuthToken={getAuthToken}
-        onUiMessage={onUiMessage}
+        onAppMessage={onAppMessage}
         fillContainer
       />
     </div>
@@ -513,14 +507,14 @@ function ResourceFrame({
   agentEndpoint,
   getAuthToken,
   fillContainer = false,
-  onUiMessage,
+  onAppMessage,
 }: {
   item: RenderRef;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
   fillContainer?: boolean;
-  onUiMessage?: (text: string, userAction?: GguiUserActionMeta) => void;
+  onAppMessage?: AppMessageHandler;
 }) {
   // Inlined resource ride-along from the library's interceptor wins.
   // No fetch needed — render straight from `inlinedResource.text`.
@@ -618,36 +612,10 @@ function ResourceFrame({
     [],
   );
 
-  const onMessage = useCallback(
-    async (params: {
-      role: 'user';
-      content: ReadonlyArray<{
-        type: string;
-        text?: string;
-        _meta?: { readonly [key: string]: unknown };
-      }>;
-    }): Promise<Record<string, unknown>> => {
-      const text = params.content
-        .filter((c) => c.type === 'text' && typeof c.text === 'string')
-        .map((c) => c.text ?? '')
-        .join('\n')
-        .trim();
-      if (text.length === 0 || onUiMessage === undefined) {
-        return { isError: true };
-      }
-      let userAction: GguiUserActionMeta | undefined;
-      for (const block of params.content) {
-        const slice = block._meta?.['ai.ggui/userAction'];
-        if (slice !== undefined && isGguiUserActionMeta(slice)) {
-          userAction = slice;
-          break;
-        }
-      }
-      onUiMessage(text, userAction);
-      return {};
-    },
-    [onUiMessage],
-  );
+  // No local `ui/message` parsing: the hook's `handleAppMessage`
+  // joins the text + forwards the content block's `_meta` opaquely.
+  // This sample stays ggui-protocol-agnostic — the agent-server backend
+  // is the sole party that recognizes + guards `ai.ggui/*` keys.
 
   return (
     <div className="render">
@@ -667,7 +635,7 @@ function ResourceFrame({
             html={html}
             onReadResource={onReadResource}
             onCallTool={onCallTool}
-            onMessage={onMessage}
+            {...(onAppMessage !== undefined ? { onMessage: onAppMessage } : {})}
             onError={(err) =>
               console.warn('[ResourceFrame] AppRenderer error', err)
             }
