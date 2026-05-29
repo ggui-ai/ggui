@@ -1,21 +1,28 @@
 /**
  * Unit coverage for `synthesizeUserActionPrompt`. Locks the wire
- * shape (imperative-first phrasing + XML tags around structured
- * fields) that every LLM backend depends on for deterministic
- * dispatch after a rehydrated iframe gesture.
+ * shape (imperative-first phrasing + XML tags around the structured
+ * render pointer) that every LLM backend depends on for deterministic
+ * dispatch after an iframe doorbell.
  *
  * If a future tweak softens the imperative phrasing (e.g. drops
  * "NOW" or removes "Do not respond conversationally"), Gemini Step
  * 4 regresses to summarizing instead of dispatching the prepared
- * tool call. The matchers below guard the load-bearing tokens.
+ * `ggui_consume` call. The matchers below guard the load-bearing
+ * tokens.
+ *
+ * The slice is a PURE DOORBELL: a single `user-action` kind that
+ * points at the render whose pipe holds the gesture. The directive
+ * MUST NOT embed action data — the agent retrieves it EXCLUSIVELY via
+ * `ggui_consume`.
  */
 import { describe, expect, it } from 'vitest';
 import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { synthesizeUserActionPrompt } from './user-action-prompt.js';
 
-const QUEUED_SAMPLE: GguiUserActionMeta = {
-  kind: 'queued',
-  description: 'user clicked submit',
+const DOORBELL_SAMPLE: GguiUserActionMeta = {
+  kind: 'user-action',
+  description:
+    'User interacted with render r_abc123; call ggui_consume to retrieve and process it.',
   renderId: 'r_abc123',
   actionId: 'deadbeef',
   submittedAt: '2026-05-29T10:00:00Z',
@@ -26,111 +33,47 @@ const QUEUED_SAMPLE: GguiUserActionMeta = {
   },
 };
 
-const INLINE_SAMPLE_WITH_NEXTSTEP: GguiUserActionMeta = {
-  kind: 'inline',
-  description: 'user toggled item 2',
-  renderId: 'r_xyz789',
-  actionId: 'cafef00d',
-  submittedAt: '2026-05-29T10:05:00Z',
-  intent: 'toggle',
-  payload: {
-    actionData: { itemId: 2 },
-    uiContext: { count: 3 },
-  },
-  nextStep: 'todo_toggle',
-};
-
-const INLINE_SAMPLE_WITHOUT_NEXTSTEP: GguiUserActionMeta = {
-  kind: 'inline',
-  description: 'user clicked a free intent',
-  renderId: 'r_free',
-  actionId: 'baddcafe',
-  submittedAt: '2026-05-29T10:10:00Z',
-  intent: 'free-choice',
-  payload: {
-    actionData: null,
-    uiContext: {},
-  },
-};
-
 describe('synthesizeUserActionPrompt', () => {
-  describe('queued kind', () => {
-    const out = synthesizeUserActionPrompt({
-      originalPrompt: 'hello there',
-      userAction: QUEUED_SAMPLE,
-    });
-
-    it('opens with an imperative dispatch directive (no preamble)', () => {
-      expect(out.split('\n')[0]).toContain(
-        'Call ggui_consume with arguments',
-      );
-      expect(out.split('\n')[0]).toContain('NOW');
-    });
-
-    it('says "Do not respond conversationally" verbatim', () => {
-      expect(out).toContain('Do not respond conversationally');
-    });
-
-    it('embeds renderId as a structured XML tag', () => {
-      expect(out).toContain('<render_id>r_abc123</render_id>');
-    });
-
-    it('embeds the next-tool args as JSON inside a structured tag', () => {
-      expect(out).toContain(
-        '<next_args>{"renderId":"r_abc123"}</next_args>',
-      );
-    });
-
-    it('wraps the original prompt in an <original_user_message> tag', () => {
-      expect(out).toContain('<original_user_message>');
-      expect(out).toContain('hello there');
-      expect(out).toContain('</original_user_message>');
-    });
+  const out = synthesizeUserActionPrompt({
+    originalPrompt: 'hello there',
+    userAction: DOORBELL_SAMPLE,
   });
 
-  describe('inline kind with nextStep', () => {
-    const out = synthesizeUserActionPrompt({
-      originalPrompt: 'do the thing',
-      userAction: INLINE_SAMPLE_WITH_NEXTSTEP,
-    });
-
-    it('opens with an imperative dispatch directive naming the next tool', () => {
-      expect(out.split('\n')[0]).toContain('Call todo_toggle NOW');
-    });
-
-    it('forbids ggui_consume in the inline case', () => {
-      expect(out).toContain('Do NOT call ggui_consume');
-    });
-
-    it('inlines actionData + uiContext as JSON in XML tags', () => {
-      expect(out).toContain('<action_data>{"itemId":2}</action_data>');
-      expect(out).toContain('<ui_context>{"count":3}</ui_context>');
-    });
-
-    it('embeds renderId in a structured XML tag', () => {
-      expect(out).toContain('<render_id>r_xyz789</render_id>');
-    });
+  it('opens with an imperative ggui_consume dispatch directive (no preamble)', () => {
+    const firstLine = out.split('\n')[0];
+    expect(firstLine).toContain('REQUIRED FIRST TOOL CALL');
+    expect(firstLine).toContain('ggui_consume');
+    expect(firstLine).toContain('NOW');
   });
 
-  describe('inline kind without nextStep', () => {
-    const out = synthesizeUserActionPrompt({
-      originalPrompt: 'pick something',
-      userAction: INLINE_SAMPLE_WITHOUT_NEXTSTEP,
-    });
+  it('says "Do not respond conversationally" verbatim', () => {
+    expect(out).toContain('Do not respond conversationally');
+  });
 
-    it('asks the LLM to choose a domain tool (no specific name)', () => {
-      expect(out.split('\n')[0]).toContain(
-        'Choose the appropriate domain tool',
-      );
-      expect(out.split('\n')[0]).toContain('NOW');
-    });
+  it('tags the slice with the single user-action kind', () => {
+    expect(out).toContain('<kind>user-action</kind>');
+    // Retired discriminators must not leak into the directive.
+    expect(out).not.toContain('<kind>queued</kind>');
+    expect(out).not.toContain('<kind>inline</kind>');
+  });
 
-    it('still forbids ggui_consume', () => {
-      expect(out).toContain('Do NOT call ggui_consume');
-    });
+  it('embeds renderId as a structured XML tag', () => {
+    expect(out).toContain('<render_id>r_abc123</render_id>');
+  });
 
-    it('omits the <next_tool> tag when none was declared', () => {
-      expect(out).not.toContain('<next_tool>');
-    });
+  it('embeds the next-tool args as JSON inside a structured tag', () => {
+    expect(out).toContain('<next_args>{"renderId":"r_abc123"}</next_args>');
+  });
+
+  it('never embeds action data (pure doorbell — agent consumes for it)', () => {
+    // No payload tags: the gesture is retrieved EXCLUSIVELY via the pipe.
+    expect(out).not.toContain('<action_data>');
+    expect(out).not.toContain('<ui_context>');
+  });
+
+  it('wraps the original prompt in an <original_user_message> tag', () => {
+    expect(out).toContain('<original_user_message>');
+    expect(out).toContain('hello there');
+    expect(out).toContain('</original_user_message>');
   });
 });

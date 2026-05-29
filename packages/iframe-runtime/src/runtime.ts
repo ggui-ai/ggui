@@ -1836,43 +1836,46 @@ function readLocalUiContext(): Record<string, unknown> {
 }
 
 /**
- * Emit a `ui/message` envelope tagged with
- * `content[0]._meta["ai.ggui/userAction"].kind === 'inline'`. Fires
- * when `submit_action` did NOT successfully append to the pipe
- * (PIPE_NOT_FOUND, transport error, or the host has no relay). The
- * full action payload travels inline so the agent can act WITHOUT
- * calling `ggui_consume` for this render (the pipe is gone).
+ * Emit the `ai.ggui/userAction` PURE DOORBELL on a `ui/message`
+ * envelope. Fires when `submit_action` succeeded BUT the server
+ * reported `consumerPresent: false` — no `ggui_consume` long-poll is
+ * currently listening on this render's pipe (the agent's persistent
+ * consume loop has ended, e.g. after a page reload). The gesture is
+ * ALREADY on the pipe from the just-completed `submit_action` append;
+ * this doorbell only wakes a fresh agent turn so it calls
+ * `ggui_consume({renderId})` to drain it.
  *
- * `nextStep` is optional — when the contract bound `actionSpec[intent]`
- * to a specific agent tool we forward that hint; absent when the
- * author left it free.
+ * SINGLE SOURCE OF TRUTH: the pipe. This carries ONLY a pointer to the
+ * render — never the action payload or uiContext. Carrying the payload
+ * here would let the agent act on the inline copy AND drain the pipe =
+ * a double-trigger (the action fires twice). Pointer-only ⇒ the agent
+ * retrieves the gesture EXCLUSIVELY via `ggui_consume`, so it's
+ * exactly-once by construction.
  */
-function emitUserActionInline(args: {
+function emitUserActionDoorbell(args: {
   readonly intent: string;
-  readonly actionData: unknown;
-  readonly uiContext: Record<string, unknown>;
-  readonly actionId: string;
   readonly renderId: string;
+  readonly actionId: string;
   readonly submittedAt: string;
-  readonly nextStep?: string;
 }): void {
-  // Prose-only text. Earlier revisions embedded a fenced ```json``` block
-  // with the full payload so hosts that strip `_meta` could still read
-  // it. That format mirrored Anthropic's tool-use JSON shape too closely
-  // and tripped claude.ai's prompt-injection classifier — even on the
-  // user-trusted `ui/message` channel — so the message got flagged
-  // before reasoning. The fix is structural: keep structured data
-  // ONLY on `content[0]._meta["ai.ggui/userAction"].payload` (where
-  // MCP Apps hosts read it through the spec's trusted path) and let
-  // the text carry a natural-language summary that no classifier can
-  // mistake for a tool-call injection.
-  const description = `User fired ${args.intent} on ${args.renderId}`;
+  // EXPLICIT, functional text — NOT a metadata-only pretty one-liner.
+  // Agnostic hosts (claude.ai, chatgpt.com) may ignore `_meta` entirely
+  // and act ONLY on this human-readable text, so it MUST carry the
+  // "call ggui_consume" instruction on its own. It is deliberately
+  // GENERIC (render pointer only, never the action specifics) — naming
+  // what the user did would tempt the agent to act before consuming =
+  // the double-trigger this slice exists to kill.
+  //
+  // Prose-only, no fenced ```json``` block: a verbatim copy of a
+  // tool-call wire shape trips claude.ai's prompt-injection classifier
+  // even on the user-trusted `ui/message` channel. The machine-readable
+  // pointer lives on `content[0]._meta["ai.ggui/userAction"]`.
+  const description =
+    `User interacted with render ${args.renderId}; call ggui_consume to retrieve and process it.`;
   const text =
-    `User fired "${args.intent}" on render ${args.renderId}. ` +
-    `The action pipe was unavailable, so the gesture is inlined on this ` +
-    `message instead of queued on the consume pipe. Use the userAction ` +
-    `payload to handle it directly; do NOT call ggui_consume for this ` +
-    `render.`;
+    `The user interacted with render ${args.renderId}. ` +
+    `Call ggui_consume({ renderId: "${args.renderId}" }) to retrieve and ` +
+    `process the pending interaction.`;
   // Spec-canonical shape: `_meta` lives on the CONTENT BLOCK (the spec
   // closes `params._meta` via `additionalProperties: false`, but each
   // content block has its own `_meta: { [key: string]: unknown }` open
@@ -1887,63 +1890,7 @@ function emitUserActionInline(args: {
         text,
         _meta: {
           'ai.ggui/userAction': {
-            kind: 'inline',
-            description,
-            renderId: args.renderId,
-            actionId: args.actionId,
-            submittedAt: args.submittedAt,
-            intent: args.intent,
-            payload: {
-              actionData: args.actionData ?? null,
-              uiContext: args.uiContext,
-            },
-            ...(args.nextStep !== undefined ? { nextStep: args.nextStep } : {}),
-          },
-        },
-      },
-    ],
-  });
-}
-
-/**
- * Emit a `ui/message` envelope tagged with
- * `content[0]._meta["ai.ggui/userAction"].kind === 'queued'`. Fires
- * when `submit_action` succeeded BUT the server reported
- * `consumerPresent: false` — the action IS on the pipe; the agent
- * just needs to call `ggui_consume` to drain it. Carries the prepared
- * `{tool, args}` so the SDK can dispatch verbatim.
- */
-function emitUserActionQueued(args: {
-  readonly intent: string;
-  readonly renderId: string;
-  readonly actionId: string;
-  readonly submittedAt: string;
-}): void {
-  // Prose-only text. Earlier revisions appended a fenced ```json``` block
-  // shaped as `{"tool":"ggui_consume","args":{...}}` — a verbatim copy
-  // of Anthropic's tool-call wire shape. claude.ai's prompt-injection
-  // classifier flagged this even on the user-trusted `ui/message`
-  // channel: data that looks like a tool-call injection IS treated as
-  // one, regardless of who supplied it. The renderId + next-tool
-  // hint stay in prose; the canonical machine-readable form lives on
-  // `content[0]._meta["ai.ggui/userAction"].nextStep`.
-  const description = `User fired ${args.intent} on ${args.renderId}`;
-  const text =
-    `User fired "${args.intent}" on render ${args.renderId}. ` +
-    `The gesture is queued on the consume pipe but no consumer is active — ` +
-    `call ggui_consume with this renderId next to drain the canonical payload.`;
-  // Spec-canonical shape: `_meta` on the content block, namespaced
-  // under `ai.ggui/userAction`. See `emitUserActionInline` for full
-  // rationale on the location + naming choice.
-  callAppSendMessage({
-    role: 'user',
-    content: [
-      {
-        type: 'text',
-        text,
-        _meta: {
-          'ai.ggui/userAction': {
-            kind: 'queued',
+            kind: 'user-action',
             description,
             renderId: args.renderId,
             actionId: args.actionId,
@@ -1967,16 +1914,9 @@ export function dispatchWiredAction(args: {
   readonly data: unknown;
   readonly renderId: string;
   readonly appId: string;
-  /**
-   * Optional `actionSpec[intent].nextStep` hint forwarded by the
-   * caller. Surfaced on the inline-userAction envelope when the pipe
-   * isn't available, so the agent has a strong steer toward the right
-   * tool.
-   */
-  readonly nextStep?: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, intent, data, renderId, appId, nextStep } = args;
+  const { toolName, intent, data, renderId, appId } = args;
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
@@ -2017,14 +1957,18 @@ export function dispatchWiredAction(args: {
   // `consumerPresent`:
   //   - true (or undefined): toast stays `pending`; drain_ack will
   //     dismiss it when the agent's ggui_consume drains the event.
-  //   - false: no consumer is registered; emit a queued userAction
-  //     nudge IMMEDIATELY so the agent's next turn drains the pipe.
-  //     No timer, no rescue — the pipe holds the data.
+  //   - false: no `ggui_consume` long-poll is currently listening
+  //     (the agent's persistent consume loop has ended — e.g. after a
+  //     page reload). Emit the `ai.ggui/userAction` PURE DOORBELL on a
+  //     `ui/message` so a fresh agent turn calls `ggui_consume` to
+  //     drain the gesture we just enqueued. No timer, no rescue, no
+  //     payload — the pipe is the single source of truth.
   //
-  // (3) On any non-success outcome (PIPE_NOT_FOUND, transport error,
-  // host has no relay), emit an inline userAction with the full
-  // gesture payload + uiContext so the agent can act without calling
-  // ggui_consume (the pipe is gone).
+  // On any non-success outcome (PIPE_NOT_FOUND, transport error, host
+  // has no relay) the gesture could NOT be enqueued; there is nothing
+  // to point a doorbell at, so we surface a toast and stop. Post-reload
+  // recovery for the abort-aware long-poll is a separate server-side
+  // concern (#292); this client never inlines the action payload.
   void (async () => {
     let resp: JsonRpcResponse | null = null;
     try {
@@ -2051,7 +1995,7 @@ export function dispatchWiredAction(args: {
           `💬 ${intent}${dataPart} — agent not listening, sent to chat`,
           'action_required',
         );
-        emitUserActionQueued({
+        emitUserActionDoorbell({
           intent,
           renderId,
           actionId,
@@ -2065,21 +2009,10 @@ export function dispatchWiredAction(args: {
       return;
     }
 
-    // Pipe gone or transport failed. Emit inline userAction so the
-    // agent can act on the gesture without calling ggui_consume.
-    showActionToast(
-      `💬 ${intent}${dataPart} — press send in chat to forward`,
-      'action_required',
-    );
-    emitUserActionInline({
-      intent,
-      actionData: data ?? null,
-      uiContext,
-      actionId,
-      renderId,
-      submittedAt: firedAt,
-      ...(nextStep !== undefined ? { nextStep } : {}),
-    });
+    // Enqueue failed (pipe gone / transport error). The gesture is not
+    // on any pipe, so a doorbell would point at an empty queue. Surface
+    // the failure as a toast; no `ui/message` is emitted.
+    showActionToast(`⚠ ${intent} — could not reach the agent`, 'error');
   })();
 }
 
@@ -2184,19 +2117,18 @@ export function routeDispatch(args: {
       data,
     });
   } else {
-    // `actionNextSteps[actionName]` is the agent-side nextStep hint —
-    // when present, surface it on the inline-userAction envelope so
-    // the agent has a strong steer toward the right tool if the pipe
-    // is unavailable. Pattern β (this branch) is also the path where
-    // `actionSpec[*].dispatch.kind === 'agent'` lands — in that case
-    // `actionNextSteps[actionName]` is absent and `nextStep` is too.
+    // Pattern β: enqueue the gesture onto the render's pending-event
+    // pipe via `submit_action`. The agent retrieves it EXCLUSIVELY via
+    // `ggui_consume` — the gesture never travels inline, so there is no
+    // `nextStep` hint to forward (the doorbell carries only a pointer to
+    // the render). This branch is also where
+    // `actionSpec[*].dispatch.kind === 'agent'` lands.
     dispatchWiredAction({
       toolName: dispatchToolName,
       intent: actionName,
       data,
       renderId: meta.renderId,
       appId: meta.appId,
-      ...(tool !== undefined ? { nextStep: tool } : {}),
     });
   }
 }

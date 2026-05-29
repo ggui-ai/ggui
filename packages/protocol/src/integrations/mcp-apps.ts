@@ -1135,13 +1135,17 @@ export type SubmitActionEnvelope =
  *   - `kind === 'dispatch'`: server appends a consume-entry onto the
  *     render-keyed pending-events pipe (`{type:'action', renderId,
  *     intent, actionData, uiContext, actionId, firedAt}`) so the agent's
- *     `ggui_consume` long-poll unblocks in the same chat turn. When the
- *     pipe is closed/missing (closed/never opened), the handler returns
- *     `{ok:false, code:'PIPE_NOT_FOUND'}` and the iframe-runtime falls
- *     through to a `ui/message` envelope carrying
- *     `content[0]._meta["ai.ggui/userAction"]` (see
- *     {@link GguiUserActionMeta}) so the gesture still reaches the
- *     agent on its next turn.
+ *     `ggui_consume` long-poll unblocks in the same chat turn. The
+ *     handler's response carries `consumerPresent` — whether a
+ *     `ggui_consume` long-poll is currently listening on this render's
+ *     pipe. When `consumerPresent === false` (no loop is listening —
+ *     e.g. the agent's persistent consume loop ended after a page
+ *     reload), the iframe-runtime ALSO emits a `ui/message` doorbell
+ *     carrying `content[0]._meta["ai.ggui/userAction"]` (see
+ *     {@link GguiUserActionMeta}) so a fresh agent turn calls
+ *     `ggui_consume({renderId})` to drain the just-enqueued gesture.
+ *     The doorbell is a PURE POINTER — the gesture stays solely on the
+ *     pipe, making the action exactly-once.
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit — the
  *     user-visible host effect already fired iframe-side via
  *     `ui/open-link` / `ui/request-display-mode`. The server records
@@ -1229,10 +1233,7 @@ export function isGguiSubmitActionInput(
 }
 
 /**
- * Discriminator the iframe-runtime stamps on a `ui/message` envelope's
- * `content[0]._meta["ai.ggui/userAction"]` when a user gesture inside
- * a ggui-rendered iframe needs to flow to the agent through chat
- * (rather than direct WS drain via `ggui_consume`).
+ * `content[0]._meta["ai.ggui/userAction"]` — a PURE DOORBELL.
  *
  * Spec-canonical extension point: MCP Apps closes `params._meta` via
  * `additionalProperties: false`, but each content block has its own
@@ -1240,61 +1241,39 @@ export function isGguiSubmitActionInput(
  * prefix matches our other protocol extensions
  * (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
  *
- * Discriminated by `kind`:
+ * Stamped by the iframe-runtime on a `ui/message` envelope when a user
+ * gesture needs to wake the agent because no `ggui_consume` long-poll is
+ * currently listening (the agent's persistent consume loop has ended —
+ * e.g. after a page reload). The gesture itself was ALREADY enqueued onto
+ * the render's server-side pending-event pipe by the iframe's
+ * `ggui_runtime_submit_action` call (relayed by the host) BEFORE this
+ * notification fired; this slice's only job is to make a fresh agent turn
+ * call `ggui_consume({renderId})` to drain it.
  *
- *   - **`'queued'`** — pipe HAS the event; agent should call
- *     `ggui_consume({renderId})` to drain. The prepared call lives
- *     in `nextStep` as `{tool: 'ggui_consume', args: {renderId}}`
- *     so the SDK can dispatch verbatim without arg-construction.
+ * SINGLE SOURCE OF TRUTH: the pending-event queue. This slice carries ONLY
+ * a pointer to the render whose queue holds the gesture — never the action
+ * payload. The agent retrieves the action EXCLUSIVELY via `ggui_consume`.
+ * Carrying the payload here would let the agent both act on it AND drain
+ * the queue = a double-trigger; the pointer-only shape makes the action
+ * exactly-once.
  *
- *   - **`'inline'`** — pipe is GONE (closed / never opened). Action
- *     data is carried inline in `payload`. The agent MUST act on this
- *     directly; calling `ggui_consume` for this `renderId` would return
- *     empty.
+ * `intent` is metadata (which `actionSpec[*]` entry fired) — NOT the
+ * actionable data. The agent can't react meaningfully on `intent` alone
+ * (it lacks the `actionData` payload), so its presence doesn't tempt a
+ * pre-consume action.
  *
- * The accompanying `ui/message` text mirrors the structure in human-
- * readable form so agnostic LLMs without `_meta` awareness still get
- * the right instruction.
- *
- * **Presence is the fingerprint** — agnostic hosts ignore the field;
+ * Presence is the fingerprint — agnostic hosts ignore the field;
  * ggui-aware consumers route via {@link isGguiUserActionMeta}.
  *
- * Unified shape with a `kind` discriminator (`queued` | `inline`)
- * parallels the protocol's other discriminated unions, e.g.
- * {@link SubmitActionEnvelope}'s `kind`.
- *
  * @public
  */
-export type GguiUserActionMeta = QueuedUserActionMeta | InlineUserActionMeta;
-
-/**
- * `content[0]._meta["ai.ggui/userAction"]` variant — pipe has the
- * event; agent dispatches the prepared `ggui_consume` call to drain.
- * See {@link GguiUserActionMeta}.
- *
- * @public
- */
-export interface QueuedUserActionMeta {
-  readonly kind: 'queued';
-  /**
-   * Human-readable one-liner summary for logs / SDK debug surfaces.
-   * Mirrors the chat-visible text but as a structured field so
-   * consumers don't need to parse natural language.
-   */
+export interface GguiUserActionMeta {
+  readonly kind: 'user-action';
   readonly description: string;
-  /** Render the gesture targeted. */
   readonly renderId: string;
-  /** 8-hex FNV-1a correlation id of the gesture. */
   readonly actionId: string;
-  /** ISO 8601 UTC timestamp of the gesture (iframe local clock). */
   readonly submittedAt: string;
-  /** Which `actionSpec[*]` entry the iframe dispatched against. */
   readonly intent: string;
-  /**
-   * Prepared tool call the agent SHOULD dispatch verbatim. Embeds the
-   * `renderId` so the SDK doesn't have to thread it manually — reduces
-   * "wrong/missing args" failure modes.
-   */
   readonly nextStep: {
     readonly tool: 'ggui_consume';
     readonly args: { readonly renderId: string };
@@ -1302,68 +1281,13 @@ export interface QueuedUserActionMeta {
 }
 
 /**
- * `content[0]._meta["ai.ggui/userAction"]` variant — pipe is gone;
- * action + ui context delivered inline. Agent acts on `payload`
- * directly; MUST NOT call `ggui_consume` for `renderId` (no pipe to
- * drain).
- *
- * `nextStep` is optional — when the original `actionSpec[intent]` declared
- * a `nextStep` (the bound agent tool), it's surfaced here as a string
- * hint so the LLM has a strong steer toward the right tool. When the
- * contract author left `nextStep` undeclared, the agent is fully free
- * to choose how to react.
- *
- * @public
- */
-export interface InlineUserActionMeta {
-  readonly kind: 'inline';
-  /**
-   * Human-readable one-liner summary for logs / SDK debug surfaces.
-   */
-  readonly description: string;
-  /** Render the gesture targeted. */
-  readonly renderId: string;
-  /** 8-hex FNV-1a correlation id of the gesture. */
-  readonly actionId: string;
-  /** ISO 8601 UTC timestamp of the gesture (iframe local clock). */
-  readonly submittedAt: string;
-  /** Which `actionSpec[*]` entry the iframe dispatched against. */
-  readonly intent: string;
-  /**
-   * Both halves of the gesture, captured atomically at gesture time:
-   *
-   *   - `actionData` — typed payload satisfying `actionSpec[intent].schema`.
-   *                    `null` for no-payload gestures (bare button click).
-   *   - `uiContext`  — snapshot of the iframe's contextSpec values at
-   *                    the moment the user fired the gesture. Typed by
-   *                    the contract's `contextSpec`.
-   *
-   * The pair is the SEMANTIC UNIT — what the user did AND what they
-   * were looking at when they did it. Captured at gesture time (not
-   * drain time) for honest history.
-   */
-  readonly payload: {
-    readonly actionData: JsonValue | null;
-    readonly uiContext: JsonObject;
-  };
-  /**
-   * Optional hint: the agent tool the original `actionSpec[intent].nextStep`
-   * declared. Present when the contract bound this intent to a specific
-   * tool; absent when the author left it free. The agent reads this as
-   * a strong suggestion, not a binding directive (in the inline case
-   * the LLM composes the call, including any context-derived args).
-   */
-  readonly nextStep?: string;
-}
-
-/**
- * Type guard for {@link GguiUserActionMeta}. Validates the
- * discriminated shape on a `ui/message` envelope's
+ * Type guard for {@link GguiUserActionMeta}. Validates the single
+ * pure-doorbell shape on a `ui/message` envelope's
  * `content[0]._meta["ai.ggui/userAction"]` field.
  *
- * Designed for `ai.ggui/userAction`-aware consumers (sample agent
- * dispatcher, e2e assertions, future SDKs) to route deterministically
- * without speculative shape coercion.
+ * Designed for `ai.ggui/userAction`-aware consumers (the agent-server
+ * directive synthesizer, e2e assertions, future SDKs) to route
+ * deterministically without speculative shape coercion.
  *
  * @public
  */
@@ -1372,6 +1296,7 @@ export function isGguiUserActionMeta(
 ): meta is GguiUserActionMeta {
   if (meta === null || typeof meta !== 'object') return false;
   const m = meta as Record<string, unknown>;
+  if (m.kind !== 'user-action') return false;
   if (typeof m.description !== 'string' || m.description.length === 0) {
     return false;
   }
@@ -1385,33 +1310,13 @@ export function isGguiUserActionMeta(
     return false;
   }
   if (typeof m.intent !== 'string' || m.intent.length === 0) return false;
-  if (m.kind === 'queued') {
-    if (m.nextStep === null || typeof m.nextStep !== 'object') return false;
-    const ns = m.nextStep as Record<string, unknown>;
-    if (ns.tool !== 'ggui_consume') return false;
-    if (ns.args === null || typeof ns.args !== 'object') return false;
-    const args = ns.args as Record<string, unknown>;
-    if (
-      typeof args.renderId !== 'string' ||
-      args.renderId.length === 0
-    ) {
-      return false;
-    }
-    return true;
+  if (m.nextStep === null || typeof m.nextStep !== 'object') return false;
+  const ns = m.nextStep as Record<string, unknown>;
+  if (ns.tool !== 'ggui_consume') return false;
+  if (ns.args === null || typeof ns.args !== 'object') return false;
+  const args = ns.args as Record<string, unknown>;
+  if (typeof args.renderId !== 'string' || args.renderId.length === 0) {
+    return false;
   }
-  if (m.kind === 'inline') {
-    if (m.payload === null || typeof m.payload !== 'object') return false;
-    const p = m.payload as Record<string, unknown>;
-    if (p.actionData === undefined) return false; // explicit null OK
-    if (p.uiContext === null || typeof p.uiContext !== 'object') return false;
-    if (Array.isArray(p.uiContext)) return false;
-    if (
-      m.nextStep !== undefined &&
-      (typeof m.nextStep !== 'string' || m.nextStep.length === 0)
-    ) {
-      return false;
-    }
-    return true;
-  }
-  return false;
+  return true;
 }

@@ -14,7 +14,7 @@
  *     host-relay-fires-the-tool AND agent-reacts-to-pipe double-
  *     processing pitfall.
  *
- *   - **Pattern β** (submit_action with ui/message fallback): everything
+ *   - **Pattern β** (submit_action with ui/message doorbell): everything
  *     else (cross-server tool, no wired tool, tool not in
  *     `appCallableTools`). Synchronously fires:
  *       (1) `ui/update-model-context` — silent LLM hint.
@@ -22,10 +22,18 @@
  *           the spec-canonical `app.callServerTool` API. Awaits the
  *           response.
  *     Then asynchronously, on relay response:
- *       (3) On `{ok:true}` (pipe append succeeded) → DONE.
- *       (3') On `{ok:false}` (PIPE_NOT_FOUND, INVALID_ACTION_KIND, or
- *           transport error) → `ui/message` chat-shortcut so the
- *           gesture reaches the agent on its next turn.
+ *       (3) On `{ok:true, consumerPresent:true}` (or `consumerPresent`
+ *           absent) → DONE; the agent's active `ggui_consume` long-poll
+ *           drains the just-enqueued gesture.
+ *       (3') On `{ok:true, consumerPresent:false}` (no consume loop is
+ *           listening — e.g. after a page reload) → emit the
+ *           `ai.ggui/userAction` PURE DOORBELL on a `ui/message` so a
+ *           fresh agent turn calls `ggui_consume({renderId})` to drain
+ *           it. Pointer-only — the gesture stays solely on the pipe.
+ *       (3'') On `{ok:false}` / JSON-RPC error → the enqueue FAILED; the
+ *           gesture is on no pipe, so NO `ui/message` is emitted (a
+ *           doorbell would point at an empty queue). Surfaces a toast
+ *           only.
  *
  * Post-Phase-1.19b.3 (2026-05-28): outbound `tools/call` from
  * `dispatchWiredAction` flows through `app.callServerTool` on the
@@ -157,7 +165,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
     expect(toolsCallsOnTransport).toHaveLength(0);
   });
 
-  describe('Pattern β (submit_action with ui/message fallback)', () => {
+  describe('Pattern β (submit_action with ui/message doorbell)', () => {
     it('fires ui/update-model-context + tools/call submit_action through App transport (post-#275)', async () => {
       routeDispatch({
         actionName: 'archive',
@@ -217,9 +225,9 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       });
     });
 
-    it('on relay response {ok:true} → no ui/message fallback', async () => {
+    it('on relay response {ok:true, consumerPresent:true} → no ui/message doorbell', async () => {
       transport.queueResponse('tools/call', {
-        result: { structuredContent: { ok: true } },
+        result: { structuredContent: { ok: true, consumerPresent: true } },
       });
 
       routeDispatch({
@@ -244,7 +252,92 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       expect(transportMethods).not.toContain('ui/message');
     });
 
-    it('on relay response {ok:false, code:PIPE_NOT_FOUND} → ui/message fallback fires', async () => {
+    it('on relay response {ok:true} with consumerPresent absent → no ui/message doorbell', async () => {
+      // Agnostic host stripped `consumerPresent`; an active consume loop
+      // is assumed, so no doorbell fires.
+      transport.queueResponse('tools/call', {
+        result: { structuredContent: { ok: true } },
+      });
+
+      routeDispatch({
+        actionName: 'archive',
+        data: { id: 'msg_1' },
+        meta: {
+          renderId: 'render_1',
+          appId: 'app_1',
+          actionNextSteps: { archive: 'gmail_archive' },
+          appCallableTools: ['ggui_runtime_submit_action'],
+        },
+        dispatchToolName: 'ggui_runtime_submit_action',
+      });
+
+      await tick();
+      await tick();
+
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string');
+      expect(transportMethods).not.toContain('ui/message');
+    });
+
+    it('on relay response {ok:true, consumerPresent:false} → pure-doorbell ui/message fires (pointer only, no payload)', async () => {
+      transport.queueResponse('tools/call', {
+        result: {
+          structuredContent: { ok: true, consumerPresent: false },
+        },
+      });
+
+      routeDispatch({
+        actionName: 'archive',
+        data: { id: 'msg_1' },
+        meta: {
+          renderId: 'render_1',
+          appId: 'app_1',
+          actionNextSteps: { archive: 'gmail_archive' },
+          appCallableTools: ['ggui_runtime_submit_action'],
+        },
+        dispatchToolName: 'ggui_runtime_submit_action',
+      });
+
+      // Wait for the async doorbell to fire.
+      await tick();
+      await tick();
+
+      const transportMethods = transport.sent
+        .map((msg) => (msg as { method?: unknown }).method)
+        .filter((m): m is string => typeof m === 'string');
+      expect(transportMethods).toContain('ui/message');
+
+      const uiMessage = transport.sent.find(
+        (msg) => (msg as { method?: unknown }).method === 'ui/message',
+      ) as Record<string, unknown>;
+      const params = uiMessage.params as Record<string, unknown>;
+      expect(params.role).toBe('user');
+
+      // Spec-canonical shape: structured pointer lives on
+      // content[0]._meta["ai.ggui/userAction"], NOT on params._meta.
+      const content = params.content as Array<Record<string, unknown>>;
+      expect(content).toHaveLength(1);
+      const firstBlock = content[0];
+      expect(firstBlock.type).toBe('text');
+      const blockMeta = firstBlock._meta as Record<string, unknown>;
+      const userAction = blockMeta['ai.ggui/userAction'] as Record<
+        string,
+        unknown
+      >;
+      // PURE DOORBELL: kind === 'user-action', pointer to the render,
+      // nextStep === ggui_consume. NO action payload, NO uiContext, NO
+      // inline kind — the gesture stays solely on the pipe.
+      expect(userAction.kind).toBe('user-action');
+      expect(userAction.renderId).toBe('render_1');
+      expect(userAction.payload).toBeUndefined();
+      expect(userAction.nextStep).toEqual({
+        tool: 'ggui_consume',
+        args: { renderId: 'render_1' },
+      });
+    });
+
+    it('on relay response {ok:false, code:PIPE_NOT_FOUND} → NO ui/message (enqueue failed, nothing to drain)', async () => {
       transport.queueResponse('tools/call', {
         result: {
           structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' },
@@ -263,37 +356,16 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         dispatchToolName: 'ggui_runtime_submit_action',
       });
 
-      // Wait for the async fallback to fire.
       await tick();
       await tick();
 
       const transportMethods = transport.sent
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
-      expect(transportMethods).toContain('ui/message');
-
-      const uiMessage = transport.sent.find(
-        (msg) => (msg as { method?: unknown }).method === 'ui/message',
-      ) as Record<string, unknown>;
-      const params = uiMessage.params as Record<string, unknown>;
-      expect(params.role).toBe('user');
-
-      // Spec-canonical shape (post-#276): structured payload lives on
-      // content[0]._meta["ai.ggui/userAction"], NOT on params._meta.
-      const content = params.content as Array<Record<string, unknown>>;
-      expect(content).toHaveLength(1);
-      const firstBlock = content[0];
-      expect(firstBlock.type).toBe('text');
-      const blockMeta = firstBlock._meta as Record<string, unknown>;
-      const userAction = blockMeta['ai.ggui/userAction'] as Record<
-        string,
-        unknown
-      >;
-      expect(userAction.kind).toBe('inline');
-      expect(userAction.renderId).toBe('render_1');
+      expect(transportMethods).not.toContain('ui/message');
     });
 
-    it('on relay response with JSON-RPC error → ui/message fallback fires', async () => {
+    it('on relay response with JSON-RPC error → NO ui/message (enqueue failed)', async () => {
       transport.queueResponse('tools/call', {
         error: { code: -32601, message: 'no relay wired' },
       });
@@ -316,7 +388,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       const transportMethods = transport.sent
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
-      expect(transportMethods).toContain('ui/message');
+      expect(transportMethods).not.toContain('ui/message');
     });
   });
 

@@ -405,7 +405,7 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
   });
 });
 
-describe('isGguiUserActionMeta type guard', () => {
+describe('isGguiUserActionMeta type guard — single pure-doorbell shape', () => {
   const baseTimestamps = {
     actionId: '8f3a2b1c',
     submittedAt: '2026-05-14T00:00:00.000Z',
@@ -413,163 +413,114 @@ describe('isGguiUserActionMeta type guard', () => {
     intent: 'toggle',
   };
 
-  describe('queued kind', () => {
-    it('accepts a well-shaped queued envelope', () => {
-      expect(
-        isGguiUserActionMeta({
-          kind: 'queued',
-          description: 'User fired toggle on r_1',
-          ...baseTimestamps,
-          nextStep: {
-            tool: 'ggui_consume',
-            args: { renderId: 'r_1' },
-          },
-        }),
-      ).toBe(true);
-    });
-
-    it.each([
-      [
-        'missing description',
-        {
-          kind: 'queued',
-          ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+  it('accepts a well-shaped user-action doorbell', () => {
+    expect(
+      isGguiUserActionMeta({
+        kind: 'user-action',
+        description:
+          'User interacted with render r_1; call ggui_consume to retrieve and process it.',
+        ...baseTimestamps,
+        nextStep: {
+          tool: 'ggui_consume',
+          args: { renderId: 'r_1' },
         },
-      ],
-      [
-        'missing intent',
-        {
-          kind: 'queued',
-          description: 'd',
-          actionId: 'a',
-          submittedAt: 's',
-          renderId: 'i',
-          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
-        },
-      ],
-      [
-        'nextStep.tool not ggui_consume',
-        {
-          kind: 'queued',
-          description: 'd',
-          ...baseTimestamps,
-          nextStep: { tool: 'something_else', args: { renderId: 'r' } },
-        },
-      ],
-      [
-        'nextStep.args missing renderId',
-        {
-          kind: 'queued',
-          description: 'd',
-          ...baseTimestamps,
-          nextStep: { tool: 'ggui_consume', args: {} },
-        },
-      ],
-      [
-        'nextStep absent',
-        { kind: 'queued', description: 'd', ...baseTimestamps },
-      ],
-    ])('rejects %s', (_label, value) => {
-      expect(isGguiUserActionMeta(value)).toBe(false);
-    });
+      }),
+    ).toBe(true);
   });
 
-  describe('inline kind', () => {
-    it('accepts a well-shaped inline envelope (with nextStep hint)', () => {
-      expect(
-        isGguiUserActionMeta({
-          kind: 'inline',
-          description: 'User fired toggle on r_1 with {id:2}',
-          ...baseTimestamps,
-          payload: {
-            actionData: { id: 2 },
-            uiContext: { search: 'hello' },
-          },
-          nextStep: 'todo_toggle',
-        }),
-      ).toBe(true);
-    });
-
-    it('accepts a well-shaped inline envelope WITHOUT nextStep (contract had none)', () => {
-      expect(
-        isGguiUserActionMeta({
-          kind: 'inline',
-          description: 'User fired toggle on r_1 with {id:2}',
-          ...baseTimestamps,
-          payload: {
-            actionData: { id: 2 },
-            uiContext: {},
-          },
-        }),
-      ).toBe(true);
-    });
-
-    it('accepts inline with null actionData (no-payload gesture)', () => {
-      expect(
-        isGguiUserActionMeta({
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { actionData: null, uiContext: {} },
-        }),
-      ).toBe(true);
-    });
-
-    it.each([
-      [
-        'missing payload',
-        { kind: 'inline', description: 'd', ...baseTimestamps },
-      ],
-      [
-        'payload.actionData absent (vs explicit null)',
-        {
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { uiContext: {} },
-        },
-      ],
-      [
-        'payload.uiContext is array (must be JsonObject)',
-        {
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { actionData: null, uiContext: [] },
-        },
-      ],
-      [
-        'payload.uiContext is null',
-        {
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { actionData: null, uiContext: null },
-        },
-      ],
-      [
-        'nextStep present but empty',
-        {
-          kind: 'inline',
-          description: 'd',
-          ...baseTimestamps,
-          payload: { actionData: null, uiContext: {} },
-          nextStep: '',
-        },
-      ],
-    ])('rejects %s', (_label, value) => {
-      expect(isGguiUserActionMeta(value)).toBe(false);
-    });
+  it.each([
+    [
+      'missing description',
+      {
+        kind: 'user-action',
+        ...baseTimestamps,
+        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+      },
+    ],
+    [
+      'missing intent',
+      {
+        kind: 'user-action',
+        description: 'd',
+        actionId: 'a',
+        submittedAt: 's',
+        renderId: 'i',
+        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+      },
+    ],
+    [
+      'missing actionId',
+      {
+        kind: 'user-action',
+        description: 'd',
+        submittedAt: 's',
+        renderId: 'i',
+        intent: 'toggle',
+        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+      },
+    ],
+    [
+      'missing submittedAt',
+      {
+        kind: 'user-action',
+        description: 'd',
+        actionId: 'a',
+        renderId: 'i',
+        intent: 'toggle',
+        nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+      },
+    ],
+    [
+      'nextStep.tool not ggui_consume',
+      {
+        kind: 'user-action',
+        description: 'd',
+        ...baseTimestamps,
+        nextStep: { tool: 'something_else', args: { renderId: 'r' } },
+      },
+    ],
+    [
+      'nextStep.args missing renderId',
+      {
+        kind: 'user-action',
+        description: 'd',
+        ...baseTimestamps,
+        nextStep: { tool: 'ggui_consume', args: {} },
+      },
+    ],
+    [
+      'nextStep absent',
+      { kind: 'user-action', description: 'd', ...baseTimestamps },
+    ],
+  ])('rejects %s', (_label, value) => {
+    expect(isGguiUserActionMeta(value)).toBe(false);
   });
 
-  describe('cross-kind rejection', () => {
+  describe('rejects retired + foreign shapes', () => {
     it.each([
       ['null', null],
       ['non-object', 'string'],
       ['empty object', {}],
       [
-        'unknown kind',
+        'retired queued kind',
+        {
+          kind: 'queued',
+          description: 'd',
+          ...baseTimestamps,
+          nextStep: { tool: 'ggui_consume', args: { renderId: 'r' } },
+        },
+      ],
+      [
+        'retired inline kind (carried a payload)',
+        {
+          kind: 'inline',
+          description: 'd',
+          ...baseTimestamps,
+          payload: { actionData: { id: 2 }, uiContext: {} },
+        },
+      ],
+      [
+        'doorbell shape but unknown kind',
         {
           kind: 'whatever',
           description: 'd',
