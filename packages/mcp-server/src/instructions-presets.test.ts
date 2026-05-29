@@ -97,6 +97,26 @@ describe('resolveMcpInstructions', () => {
     );
   });
 
+  it('rehydrated-gesture section teaches "renderId in user message → ggui_consume, not handshake"', () => {
+    // Phase 2.0b experiment (#281): Gemini was reliably failing Step 4
+    // (post-rehydration undo click) by calling ggui_handshake instead
+    // of ggui_consume when the user message named a renderId. The fix
+    // is a persistent-surface teaching: when the agent sees a
+    // user-message-borne renderId, the first tool call is
+    // ggui_consume on THAT id. Survives whether the directive is
+    // synthesized agent-side (per-SDK bridge) OR client-side (hook).
+    //
+    // Lock the load-bearing wording so the section can't drift back
+    // to weaker framing or get accidentally dropped.
+    for (const key of ['default', 'aggressive', 'always'] as const) {
+      const text = MCP_INSTRUCTIONS_PRESETS[key];
+      expect(text).toContain('REHYDRATED USER GESTURES');
+      expect(text).toMatch(/renderId.*identifies an EXISTING/);
+      expect(text).toMatch(/REQUIRED first tool call: `ggui_consume/);
+      expect(text).toMatch(/DO NOT call `ggui_handshake`/);
+    }
+  });
+
   it('no preset carries imperative behavior-nudge language', () => {
     // Audit caught us overclaiming earlier: server `instructions` is
     // a "hint" per MCP spec, not enforcement. Imperatives like
