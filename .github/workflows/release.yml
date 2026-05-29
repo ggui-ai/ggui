@@ -34,8 +34,9 @@ name: Release
 #       prerelease will have `latest` = that prerelease until a stable ships.
 #       So a brand-new package's first publish should be a stable
 #       (prerelease: none) release to seed `latest` correctly;
-#     - SKIPS the heavyweight publish-gate (matches the old alpha flow — see
-#       the publish-gate job) but STILL runs the post-publish consumer smoke.
+#     - ALPHA skips the heavyweight publish-gate (fast throwaway iteration,
+#       matches the old alpha flow); BETA and RC run the full gate like a
+#       stable release. All channels still run the post-publish consumer smoke.
 #   Stable releases are unaffected: `prerelease: none` (the default) reads
 #   committed versions verbatim and never touches package.json.
 #
@@ -404,7 +405,12 @@ jobs:
           if [ "$PRERELEASE" != "none" ]; then
             echo "**Prerelease channel:** \`$PRERELEASE\` → computed target \`$TARGET_VERSION\` (dist-tag \`$PRERELEASE\`)" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "> ⚠️ Prerelease mode rewrites every package.json version to \`$TARGET_VERSION\` **in-runner only** — git stays at the committed base. The publish-gate is skipped (post-publish smoke still runs)." >> "$GITHUB_STEP_SUMMARY"
+            if [ "$PRERELEASE" = "alpha" ]; then
+              GATE_NOTE="The publish-gate is SKIPPED (alpha = fast iteration)."
+            else
+              GATE_NOTE="The publish-gate RUNS (beta/rc get the full clean-room gate, like a stable release)."
+            fi
+            echo "> ⚠️ Prerelease mode rewrites every package.json version to \`$TARGET_VERSION\` **in-runner only** — git stays at the committed base. $GATE_NOTE Post-publish smoke runs either way." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "**Channel:** stable (committed versions, published verbatim)" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -537,13 +543,14 @@ jobs:
   # iteration; the heavyweight gate is reserved for real publishes.
   publish-gate:
     needs: preflight
-    # Skipped on dry-run (fast iteration) AND on prerelease channels. The old
-    # alpha-publish.yml deliberately skipped this gate; prereleases churn fast
-    # and the in-runner version rewrite (which this reusable workflow's fresh
-    # checkout never sees) would test the committed base anyway. Prereleases
-    # still get the post-publish consumer smoke. Flip the prerelease half off
-    # here if you ever want gated alphas.
-    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' && needs.preflight.outputs.effective_prerelease == 'none' }}
+    # Skipped on dry-run (fast iteration) AND on the ALPHA channel only.
+    #   - alpha = fast, throwaway iteration → skip the heavyweight clean-room
+    #     gate (alpha still gets the post-publish consumer smoke);
+    #   - beta / rc = release candidates → run the FULL gate, same as a stable
+    #     release. The in-runner version rewrite happens later in the publish
+    #     job, after this gate's own fresh checkout, so the gate validates the
+    #     committed base — which is the right thing to gate before promoting.
+    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' && needs.preflight.outputs.effective_prerelease != 'alpha' }}
     uses: ./.github/workflows/publish-gate.yml
     secrets: inherit
 
