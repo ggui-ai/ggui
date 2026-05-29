@@ -14,3 +14,9 @@ packages:
   # These globs match nothing until you scaffold one.
   - "blueprints/*"
   - "gadgets/*"
+
+# pnpm 11 defaults that would otherwise prompt during `pnpm dev:*` runs
+# in non-TTY contexts (CI, Railway buildpacks).
+verifyDepsBeforeRun: false
+strictDepBuilds: false
+autoInstallPeers: true
