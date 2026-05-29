@@ -22,6 +22,25 @@
  * Correlation: `callTool` ⇄ `mcp_tool_output` is FIFO per-server (the
  * Agents SDK awaits each `callTool` before emitting the matching
  * output event). The normalizer dequeues in arrival order.
+ *
+ * Upstream tracking: OpenAI Agents SDK PR #1360 adds
+ * `MCPServer.customDataExtractor` — a per-call hook that receives the
+ * raw `CallToolResult` (`{resultMeta, structuredContent, isError,
+ * toolOutput}`) and attaches the result to
+ * `RunToolCallOutputItem.customData`. When that PR lands + ships,
+ * this entire file (~220 LOC) + the dequeue logic in `agent.ts` can
+ * be replaced by a small `customDataExtractor` callback.
+ *
+ *   PR: https://github.com/openai/openai-agents-js/pull/1360
+ *
+ * Earlier attempts to expose `structuredContent` were reverted
+ * (PR #471 → PR #553) citing user-reported breakage; the strip is
+ * the SDK's intentional contract today. See research at
+ * `/workspaces/ggui-workspace/...` (Phase 2 — OpenAI SDK deep
+ * research) for the full audit. Subclass-and-override of
+ * `MCPServerStreamableHttp` IS the sanctioned extension point
+ * (`MCPServer` is a public exported interface; `BaseMCPServer*` are
+ * abstract).
  */
 import { MCPServerStreamableHttp } from '@openai/agents';
 
