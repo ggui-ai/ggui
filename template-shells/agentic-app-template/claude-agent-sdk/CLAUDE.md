@@ -2,132 +2,112 @@
 
 Guidance for Claude Code working in this repository.
 
+<!-- bootstrap:onboarding -->
+## Start here
+
+If the root `package.json` still says `"name": "agentic-app-template"`, this was
+just scaffolded and hasn't been made yours yet. Run **`/bootstrap`** — it shows
+you the app working, helps you pick what to build, scaffolds your first tool,
+and themes it. (`/bootstrap` deletes this section when you're done.)
+<!-- /bootstrap:onboarding -->
+
 ## What this is
 
 A template for building **agentic apps** on the **ggui protocol** — apps where
-the agent doesn't just reply in text but renders an interactive UI, reads the
-user's clicks back, and reacts. It is a pnpm monorepo with three backend
-servers + a frontend SPA, all present and runnable. The agent is built on
+the agent doesn't just reply in text, it renders an interactive UI, reads the
+user's clicks back, and reacts. It's a pnpm monorepo with three backend servers
++ a frontend SPA, all present and runnable. The agent here is built on
 Anthropic's `@anthropic-ai/claude-agent-sdk`.
 
-## First-run housekeeping
+## The one idea: you only build TOOLS
 
-If the root `package.json` still says `"name": "agentic-app-template"`, the
-user has just scaffolded this from the template and the project still has its
-template identity. Run **`/bootstrap`** to rename the workspace, tailor the
-docs, and delete this section.
+ggui is **invisible infrastructure**. You never write UI code, no SDK to import
+in the agent, no polling loops, no event handlers. You give the agent **tools**
+(MCP servers) and a **system prompt**; ggui generates the interface for each
+turn from the agent's natural-language description, and routes the user's
+interactions back. The whole skill is: *expose good tools, write a good posture
+prompt.*
 
-## Architecture — the ggui loop
+## How the ggui loop works
 
 ```
-Browser SPA (apps/web) ──HTTP──▶ servers/agent ──MCP──▶ servers/ggui      generates + serves the UI
-   ▲                                  │        └─MCP──▶ servers/mcps/todo  domain tools
-   └─ embeds servers/ggui's /r/<shortCode> in <McpAppIframe>
+apps/web (browser SPA)                          servers/agent (LLM backend)
+   │  prompt ───────────────────────────────────▶  │ ──MCP──▶ servers/ggui      (renders the UI)
+   │                                                │ ──MCP──▶ servers/mcps/*    (your domain tools)
+   │  ◀── reply with the UI inlined ────────────────┘
+   └─ mounts it with <AppRenderer> (@ggui-ai/react); the rendered iframe loads
+      ggui's runtime + a live channel directly from servers/ggui
+   │  user clicks ── action relayed to the agent ──▶ agent drains it, re-renders
 ```
 
-1. The user types a prompt in `apps/web`.
-2. The SPA POSTs it to `servers/agent` over SSE.
-3. The agent has **no built-in tools** — only the MCP tools exposed by the
-   servers it points at: `ggui_*` (render UI) and `todo_*` (domain logic).
-4. To answer, the LLM calls domain tools, then `ggui_handshake` →
-   `ggui_render`. `servers/ggui` generates the React UI and serves it at
-   `/r/<shortCode>`; the SPA embeds that route in an iframe via
-   `<AppRenderer>` from `@ggui-ai/react`.
-5. The user clicks something in that UI. The interaction is forwarded to
-   the agent backend via `POST /relay/tools-call`.
-6. Next turn, the agent drains it with `ggui_consume`, calls the relevant
-   domain tool, and `ggui_render`-s an updated UI.
+1. The user types a prompt in `apps/web`; it POSTs to `servers/agent`.
+2. The agent has **no built-in tools** — only the MCP tools of the servers it
+   connects to: `ggui_*` (render) and your domain tools (e.g. `todo_*`).
+3. To answer, the agent calls a domain tool for data, then **`ggui_render`**,
+   *describing the UI in natural language*. `servers/ggui` generates a React UI
+   and returns it as an MCP **resource**; the agent backend reads it
+   (`resources/read`) and inlines it into the reply.
+4. `apps/web` mounts that UI with **`<AppRenderer>`**. The sandboxed iframe then
+   loads ggui's runtime bundle + opens a live channel **directly from
+   `servers/ggui`** (so ggui must be reachable from the browser).
+5. The user clicks something; the interaction is relayed back to the agent.
+6. Next turn, the agent drains it with **`ggui_consume`**, calls the relevant
+   domain tool, and `ggui_render`s an updated UI.
 
-**"Zero Agent Code":** the only ggui-specific thing in `servers/agent` is the
-MCP server URL. Every `ggui_*` tool is discovered via the standard MCP
-handshake — see `servers/agent/src/agent.ts`.
+The agent-facing render tools (discovered via the standard MCP handshake, so
+they need zero glue in `servers/agent`): `ggui_handshake` → `ggui_render` (draw
+a surface) → `ggui_update` / `ggui_emit` (mutate or stream into it) →
+`ggui_consume` (await the next user action) → `ggui_get_render` (read current
+state). You rarely think about these — the tool descriptions teach the agent;
+you just write tools + a posture prompt.
 
-## Building your app
+## Building your app — four layers
 
-You own four layers. The template gives you a working version of each — make
-them yours.
+The template ships a working version of each. Make them yours.
 
 ### 1. The agent — its system prompt
+`servers/agent/src/` holds the loop. The **system prompt** sets the agent's
+*domain posture* (a restaurant agent greets diners and reasons about menus; a
+support agent triages tickets). Edit it for your domain. Keep it posture-only —
+the ggui wire flow is taught by the tools' own descriptions; don't restate it.
+If the agent calls a tool wrong, fix the tool's **description**, not the prompt.
 
-`servers/agent/src/` holds the agent loop. The **system prompt** sets the
-agent's *domain posture*: a restaurant agent greets diners and reasons about
-menus; a support agent triages tickets. Edit it for your domain.
-
-Keep it posture-only. The ggui wire flow (`handshake → render → consume`) is
-taught by the MCP tools' own descriptions — don't restate it in the prompt.
-If the agent calls tools wrong, fix the tool descriptions, not the prompt.
-
-### 2. Tools — MCP servers
-
+### 2. Tools = MCP servers
 An agent is only as capable as its tools, and tools arrive as **MCP servers**.
-`servers/mcps/todo` is the worked example: a standalone MCP exposing
-`todo_list/add/toggle/delete`.
-
-Building, say, a restaurant agent? Write a restaurant MCP — `menu_search`,
-`place_order`, `table_availability`:
-
+`servers/mcps/todo` is the worked example (`todo_list/add/toggle/delete`). To
+add your own:
 1. Copy `servers/mcps/todo` → `servers/mcps/<domain>`, rename the package.
-2. Implement your tools in `src/handlers.ts`.
-3. Register its URL + allowed tool names in `servers/agent/src/agent.ts`.
+2. Implement your tools in `src/handlers.ts` (zod input schema + a handler that
+   returns `structuredContent`). Write **user-facing tool descriptions** — the
+   agent reads them to decide what to call.
+3. Register it with the agent: add its URL env var in `servers/agent/src/index.ts`
+   and its tool-prefix to the allowlist in `servers/agent/src/agent.ts`.
 
-Or skip authoring entirely and point the agent at an **existing third-party
-MCP** — add its URL to the agent's MCP config.
+Or skip authoring and point the agent at an **existing third-party MCP** — just
+add its URL to the agent's MCP config.
 
 ### 3. The frontend
-
-`apps/web` is a Vite SPA that calls the agent backend and mounts its renders
-in iframes via `<AppRenderer>`. Edit `apps/web/src/App.tsx` to tweak the chat
-shell — header, layout, theming.
+`apps/web` is a Vite SPA that calls the agent backend and mounts renders via
+`<AppRenderer>`. Edit `apps/web/src/App.tsx` to tweak the chat shell (header,
+layout). It owns no secrets and runs no server logic.
 
 ### 4. The ggui server
-
-`servers/ggui` is a stock `ggui serve` config — zero customization. The UI
-itself is generated by the agent at runtime; you shape the shell via
-`ggui.json` (theme, declared blueprints + gadgets). The two features below
-are how you steer what gets generated.
-
-### Blueprints — cache your common screens
-
-A **blueprint** is a cached UI template for a recurring pattern (a login
-screen, an order summary). ggui renders in two stages — a fast blueprint
-match, then full LLM generation only on a miss — so a blueprint makes a known
-screen cheap, fast, and visually consistent.
-
-Author one with **`/blueprint`**, or by hand: `ggui blueprint create`,
-implement the TSX, `ggui blueprint publish`, `ggui blueprint install`.
-
-### Gadgets — give the generator client-side libraries
-
-A **gadget** wraps a browser library or capability — maps, charts, camera,
-clipboard — as a stable React hook/component the generated UI can use.
-
-Author one with **`/gadget`**, or by hand: `ggui gadget create`, wrap the
-library with `createGguiGadget`, `ggui gadget publish`, `ggui gadget install`.
-
-### Hosting
-
-`railway.toml` declares four Railway services. Create a project from this
-repo, set your `ANTHROPIC_API_KEY`, and open the `web` service's public URL.
-
-Later you can offload pieces — **ggui.ai** to host the ggui server,
-**guuey.com** to host the agent, and a **portal** to render the client UI
-instead of running your own.
-
-## Layout
-
-| Path                 | Role                                                                       |
-| -------------------- | -------------------------------------------------------------------------- |
-| `servers/agent`      | The agent — `@anthropic-ai/claude-agent-sdk` HTTP API.                     |
-| `servers/ggui`       | Vendored `ggui serve` operator config (`ggui.json`). Renders agent UI.     |
-| `servers/mcps/todo`  | Vendored MCP server — `todo_list/add/toggle/delete`. Copy when authoring your own domain MCP. |
-| `apps/web`           | Vite SPA frontend — `@ggui-ai/react` `<AppRenderer>` + `useMcpAppsChat`.   |
-| `blueprints/*`       | Blueprints you author with `/blueprint` (empty until you create one).      |
-| `gadgets/*`          | Gadgets you author with `/gadget` (empty until you create one).            |
+`servers/ggui` is a stock `ggui serve` config — the UI is generated at runtime;
+you shape the *shell* via `servers/ggui/ggui.json`. Three levers:
+- **Theme** — `ggui.json#theme` (a preset, or a custom DTCG `theme.json`). ggui's
+  two-layer theming means the agent-generated UI adopts your brand with zero UI
+  code — the `/bootstrap` "make it yours" moment. Full guide + a valid starter:
+  `.reference/theming.md` + `.reference/theme.example.json`.
+- **Blueprints** — cached UI templates for recurring screens. ggui matches a
+  blueprint first (fast) and only generates on a miss, so a known screen is
+  cheap, fast, and visually consistent. Author with **`/blueprint`**.
+- **Gadgets** — wrap a browser library (maps, charts, camera, clipboard) as a
+  stable component the generated UI can use. Author with **`/gadget`**.
 
 ## Running locally
 
-Four processes, four terminals. Start them in this order; the agent connects
-to the two MCP servers, and the SPA hits the agent:
+Four processes, four terminals (start in this order — the agent connects to the
+MCP servers, the SPA hits the agent):
 
 ```bash
 pnpm dev:ggui    # ggui MCP server   → http://localhost:6781/mcp
@@ -139,39 +119,57 @@ pnpm dev:web     # frontend SPA      → http://localhost:6890
 Open http://localhost:6890 and type a prompt.
 
 ### Environment
+Set in `.env.local` (copy from `.env.example`). The agent and `pnpm dev:ggui`
+both read it via `dotenv-cli`.
 
-Set in `.env.local` (copy from `.env.example`). Both the agent AND
-`pnpm dev:ggui` read this file via dotenv-cli.
-
-| Var                       | Required | Default                     | Purpose                                            |
-| ------------------------- | -------- | --------------------------- | -------------------------------------------------- |
-| `ANTHROPIC_API_KEY`       | yes      | —                           | LLM credential — drives both the agent and ggui's own UI generation. |
-| `GGUI_TODO_MCP_URL`       | demo     | —                           | Set to `http://localhost:6782/mcp` to wire the todo tools into the agent. |
-| `GGUI_MCP_URL`            | no       | `http://localhost:6781/mcp` | Where the agent finds the ggui MCP.                |
-| `GGUI_MCP_BEARER`         | no       | `dev`                       | Bearer for the ggui MCP (`--dev-allow-all` accepts any). |
-| `MODEL`                   | no       | `claude-haiku-4-5-20251001` | Claude model the AGENT runs on. |
-| `PORT`                    | no       | `6790`                      | Agent backend port. |
-| `VITE_AGENT_ENDPOINT_URL` | no       | `http://localhost:6790`     | Where the SPA reaches the agent backend. |
+| Var                       | Required | Purpose                                                          |
+| ------------------------- | -------- | ---------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`       | yes      | Drives both the agent AND ggui's UI generation.                  |
+| `RAILWAY_API_TOKEN`       | deploy   | Account token for `pnpm deploy:railway` (see Deploy).            |
+| `GGUI_TODO_MCP_URL`       | demo     | `http://localhost:6782/mcp` — wires the todo tools into the agent. |
+| `GGUI_MCP_URL`            | no       | Where the agent finds the ggui MCP (default `…:6781/mcp`).       |
+| `MODEL`                   | no       | Claude model the agent runs on.                                  |
+| `PORT`                    | no       | Agent backend port (default 6790).                               |
+| `VITE_AGENT_ENDPOINT_URL` | no       | Where the browser bundle reaches the agent backend.              |
 
 The ggui server reads its model from `servers/ggui/ggui.json#generation.model`,
-NOT from an env var. Both canonical (`provider:model`) and LiteLLM (`provider/model`)
-forms are accepted.
+not an env var.
+
+## Deploy
+
+`pnpm deploy:railway` — one command. It reads `.env.local`, creates a Railway
+project, provisions all four services, wires the public/private URLs between
+them, pushes your API key, and gives the web + agent + ggui services public
+domains. Requires `RAILWAY_API_TOKEN` (an **account** token from
+https://railway.com/account/tokens). Run `pnpm deploy:railway -- --dry-run`
+first to see exactly what it will do. Implementation: `scripts/deploy-railway.mjs`.
+
+## Layout
+
+| Path                | Role                                                                  |
+| ------------------- | --------------------------------------------------------------------- |
+| `servers/agent`     | The agent — `@anthropic-ai/claude-agent-sdk` HTTP API.                |
+| `servers/ggui`      | Vendored `ggui serve` config (`ggui.json`). Renders the agent's UI.   |
+| `servers/mcps/todo` | Worked-example MCP server. **Copy this** to author your own domain MCP. |
+| `apps/web`          | Vite SPA — `@ggui-ai/react` `<AppRenderer>`.                          |
+| `blueprints/*`      | Blueprints you author with `/blueprint` (empty until you create one). |
+| `gadgets/*`         | Gadgets you author with `/gadget` (empty until you create one).       |
 
 ## Conventions
 
-- **pnpm workspace**, packages under `servers/*` + `apps/*` (plus `blueprints/*`,
-  `gadgets/*`). ESM everywhere (`"type": "module"`).
-- TypeScript run via `tsx` in dev; `tsc -b` for builds.
-- The `@ggui-ai/*` dependencies (`protocol`, `react`, `cli`, `dev-stack`)
-  resolve from npm.
+- **pnpm workspace**; packages under `servers/*` + `apps/*`. ESM everywhere.
+- TypeScript via `tsx` in dev; `tsc -b` for builds. `pnpm typecheck` checks all.
+- `@ggui-ai/*` dependencies resolve from npm.
 
 ## Reference
 
-- **ggui docs MCP** — `.mcp.json` wires `https://mcp.ggui.ai/docs` as a
-  project MCP server (`ggui-docs`), pre-approved via `enabledMcpjsonServers`.
-  Query it for ggui protocol / API / blueprint / gadget details before guessing.
-- ggui — https://github.com/ggui-ai/ggui
+- **`.reference/`** — local GGUI guides for this template (the Claude Code here
+  can't read ggui's source, so read these first): `ggui-overview.md` (the loop),
+  `ggui-tools.md`, `writing-mcp-tools.md`, `ggui-json.md`, `theming.md`
+  (+ `theme.example.json`). Index: `.reference/README.md`.
+- **ggui docs MCP** — `.mcp.json` wires `https://mcp.ggui.ai/docs` as the
+  `ggui-docs` project MCP server (pre-approved). Query it for protocol / API /
+  blueprint / gadget details before guessing.
+- Docs — **https://docs.ggui.ai** · ggui — https://github.com/ggui-ai/ggui
 - Claude Agent SDK — https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk
-- `ggui` CLI — from `@ggui-ai/cli`; `ggui serve`, `ggui blueprint …`,
-  `ggui gadget …`. Run via `pnpm --filter ./servers/ggui exec ggui` if not on `PATH`.
 - Each server's own `README.md` has standalone run instructions.

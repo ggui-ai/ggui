@@ -1,0 +1,79 @@
+{
+  "$name": "Brand starter",
+  "$description": "Starter ggui theme (DTCG). Copy to servers/ggui/theme.json, change color.primary to your brand, then point ggui.json#theme at it: { \"file\": \"./theme.json\" }. Validate with: pnpm --filter ./servers/ggui exec ggui theme validate ./theme.json",
+  "color": {
+    "primary": {
+      "50":  { "$type": "color", "$value": "#eef2ff" },
+      "100": { "$type": "color", "$value": "#e0e7ff" },
+      "200": { "$type": "color", "$value": "#c7d2fe" },
+      "300": { "$type": "color", "$value": "#a5b4fc" },
+      "400": { "$type": "color", "$value": "#818cf8" },
+      "500": { "$type": "color", "$value": "#6366f1" },
+      "600": { "$type": "color", "$value": "#4f46e5" },
+      "700": { "$type": "color", "$value": "#4338ca" },
+      "800": { "$type": "color", "$value": "#3730a3" },
+      "900": { "$type": "color", "$value": "#312e81" }
+    },
+    "error": {
+      "500": { "$type": "color", "$value": "#ef4444" },
+      "600": { "$type": "color", "$value": "#dc2626" }
+    },
+    "background": { "$type": "color", "$value": "#0b0b12" },
+    "surface":    { "$type": "color", "$value": "#15151f" },
+    "onSurface":  { "$type": "color", "$value": "#e7e7ee" },
+    "outline":    { "$type": "color", "$value": "#2c2c3a" }
+  },
+  "spacing": {
+    "1": { "$type": "dimension", "$value": "4px" },
+    "2": { "$type": "dimension", "$value": "8px" },
+    "3": { "$type": "dimension", "$value": "12px" },
+    "4": { "$type": "dimension", "$value": "16px" },
+    "6": { "$type": "dimension", "$value": "24px" },
+    "8": { "$type": "dimension", "$value": "32px" }
+  },
+  "font": {
+    "family": {
+      "sans": { "$type": "fontFamily", "$value": ["Inter", "system-ui", "sans-serif"] },
+      "mono": { "$type": "fontFamily", "$value": ["ui-monospace", "monospace"] }
+    },
+    "size": {
+      "sm": { "$type": "dimension", "$value": "14px" },
+      "md": { "$type": "dimension", "$value": "16px" },
+      "lg": { "$type": "dimension", "$value": "20px" },
+      "xl": { "$type": "dimension", "$value": "28px" }
+    },
+    "weight": {
+      "regular": { "$type": "fontWeight", "$value": 400 },
+      "medium":  { "$type": "fontWeight", "$value": 500 },
+      "bold":    { "$type": "fontWeight", "$value": 700 }
+    },
+    "lineHeight": {
+      "tight":  { "$type": "number", "$value": 1.25 },
+      "normal": { "$type": "number", "$value": 1.5 }
+    }
+  },
+  "shape": {
+    "radius": {
+      "sm":   { "$type": "dimension", "$value": "6px" },
+      "md":   { "$type": "dimension", "$value": "10px" },
+      "lg":   { "$type": "dimension", "$value": "16px" },
+      "full": { "$type": "dimension", "$value": "9999px" }
+    },
+    "shadow": {
+      "sm": { "$type": "shadow", "$value": "0 1px 2px rgba(0,0,0,.06)" },
+      "md": { "$type": "shadow", "$value": "0 4px 12px rgba(0,0,0,.12)" }
+    }
+  },
+  "motion": {
+    "duration": {
+      "fast": { "$type": "duration", "$value": "120ms" },
+      "base": { "$type": "duration", "$value": "200ms" }
+    },
+    "easing": {
+      "standard": { "$type": "cubicBezier", "$value": "cubic-bezier(0.4, 0, 0.2, 1)" }
+    },
+    "transition": {
+      "base": { "$type": "transition", "$value": "all 200ms cubic-bezier(0.4,0,0.2,1)" }
+    }
+  }
+}
