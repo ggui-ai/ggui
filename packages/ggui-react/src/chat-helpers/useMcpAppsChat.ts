@@ -66,6 +66,28 @@ export interface UseMcpAppsChatOptions {
    * happens — the server uses the supplied id directly).
    */
   readonly onChatAllocated?: (chatId: string) => void;
+  /**
+   * Resolve the bearer token the hook should send on every request
+   * as `Authorization: Bearer <token>`. Called per fetch so the host
+   * can refresh or rotate tokens transparently. Return `undefined`
+   * (or omit the option) to send no Authorization header.
+   *
+   * Pairs with `@ggui-ai/agent-server`'s default
+   * `createGuestTokenAuth()` adapter — see the package README for
+   * the client-side guest-token flow (POST /auth/guest → store
+   * token → pass through this callback).
+   */
+  readonly getAuthToken?: () => string | undefined | Promise<string | undefined>;
+  /**
+   * Optional hook for 401 responses. Lets the host re-mint a guest
+   * token, update its store, and retry the request once. Return
+   * `true` to signal "I refreshed; retry"; return `false` to give
+   * up and surface the error to the chat panel.
+   *
+   * Called once per failed request — re-failure on retry surfaces as
+   * a normal error without another retry attempt.
+   */
+  readonly onUnauthenticated?: () => boolean | Promise<boolean>;
 }
 
 /**
@@ -149,6 +171,8 @@ export function useMcpAppsChat(
     chatId,
     snapshotEndpoint = chatEndpoint,
     onChatAllocated,
+    getAuthToken,
+    onUnauthenticated,
   } = opts;
 
   const [entries, setEntries] = useState<ChatEntry[]>([]);
@@ -166,6 +190,10 @@ export function useMcpAppsChat(
   // its identity (avoiding remount cascades on the consumer side).
   const onChatAllocatedRef = useRef(onChatAllocated);
   onChatAllocatedRef.current = onChatAllocated;
+  const getAuthTokenRef = useRef(getAuthToken);
+  getAuthTokenRef.current = getAuthToken;
+  const onUnauthenticatedRef = useRef(onUnauthenticated);
+  onUnauthenticatedRef.current = onUnauthenticated;
 
   const append = useCallback((entry: ChatEntry) => {
     setEntries((prev) => [...prev, entry]);
@@ -244,12 +272,30 @@ export function useMcpAppsChat(
             meta: { 'ai.ggui/userAction': sendOpts.userAction },
           };
         }
-        const res = await fetch(chatEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
+        const doFetch = async (): Promise<Response> => {
+          const token = await Promise.resolve(getAuthTokenRef.current?.());
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (typeof token === 'string' && token.length > 0) {
+            headers.Authorization = `Bearer ${token}`;
+          }
+          return fetch(chatEndpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        };
+        let res = await doFetch();
+        if (res.status === 401 && onUnauthenticatedRef.current) {
+          const refreshed = await Promise.resolve(
+            onUnauthenticatedRef.current(),
+          );
+          if (refreshed) {
+            res = await doFetch();
+          }
+        }
         if (!res.body) {
           append({
             id: `${turnId}.err`,
@@ -338,10 +384,31 @@ export function useMcpAppsChat(
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(
+        const buildHeaders = async (): Promise<Record<string, string>> => {
+          const headers: Record<string, string> = {
+            Accept: 'application/json',
+          };
+          const token = await Promise.resolve(getAuthTokenRef.current?.());
+          if (typeof token === 'string' && token.length > 0) {
+            headers.Authorization = `Bearer ${token}`;
+          }
+          return headers;
+        };
+        let res = await fetch(
           `${snapshotEndpoint}?chatId=${encodeURIComponent(chatId)}`,
-          { headers: { Accept: 'application/json' } },
+          { headers: await buildHeaders() },
         );
+        if (res.status === 401 && onUnauthenticatedRef.current) {
+          const refreshed = await Promise.resolve(
+            onUnauthenticatedRef.current(),
+          );
+          if (refreshed) {
+            res = await fetch(
+              `${snapshotEndpoint}?chatId=${encodeURIComponent(chatId)}`,
+              { headers: await buildHeaders() },
+            );
+          }
+        }
         // 404 = fresh chatId — no prior snapshot. Ignore silently so the
         // React tree boots into an empty conversation.
         if (res.status === 404 || cancelled) return;
