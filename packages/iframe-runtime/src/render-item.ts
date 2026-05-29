@@ -39,7 +39,7 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { Render } from '@ggui-ai/protocol';
+import type { Render, SystemRender } from '@ggui-ai/protocol';
 import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
@@ -108,7 +108,7 @@ export interface RenderItemOptions {
  * 'mcpApps' is terminal for its lifetime (mcp-apps renders never
  * become components + vice versa).
  */
-type MountedKind = 'provisional' | 'react' | 'mcpApps' | 'none';
+type MountedKind = 'provisional' | 'react' | 'mcpApps' | 'system' | 'none';
 
 export interface RenderItemHandle {
   /**
@@ -128,13 +128,14 @@ export interface RenderItemHandle {
 // Kind detection
 // =============================================================================
 
-function detectKind(render: Render): 'mcpApps' | 'react' | 'provisional' {
+function detectKind(render: Render): 'mcpApps' | 'react' | 'provisional' | 'system' {
   if (render.type === 'mcpApps') return 'mcpApps';
-  // System renders don't route through this render dispatcher — the
-  // self-contained boot path renders them via `SystemCardHost` directly.
-  // If one accidentally lands here, fall through to provisional so the
-  // user at least sees the A2UI placeholder rather than a crash.
-  if (render.type === 'system') return 'provisional';
+  // System renders mount via the built-in `SystemCardHost` registry
+  // (the `'system'` branch in `mountByKind`). This is the single mount
+  // surface for server-emitted `kind` cards post boot-consolidation —
+  // the old self-contained path that hand-rolled `SystemCardHost` is
+  // gone, so this MUST route to `'system'`, not the A2UI placeholder.
+  if (render.type === 'system') return 'system';
   const code = render.componentCode;
   if (typeof code === 'string' && code.trim().length > 0) return 'react';
   return 'provisional';
@@ -154,6 +155,11 @@ export async function mountRender(
   let provisionalMount: ProvisionalMount | null = null;
   let mcpMount: McpAppIframeMount | null = null;
   let previewUnsubscribe: (() => void) | null = null;
+  // System-card mount (type:'system'). The render-only `SystemCardHost`
+  // tree has no wire/context wrap; we hold the react-dom Root for
+  // teardown + a re-render closure for same-kind prop updates.
+  let systemRoot: { render: (node: ReactNode) => void; unmount: () => void } | null = null;
+  let systemRerender: ((render: SystemRender) => void) | null = null;
 
   function teardown(): void {
     if (reactMount !== null) {
@@ -168,6 +174,11 @@ export async function mountRender(
       mcpMount.unmount();
       mcpMount = null;
     }
+    if (systemRoot !== null) {
+      systemRoot.unmount();
+      systemRoot = null;
+      systemRerender = null;
+    }
     if (previewUnsubscribe !== null) {
       previewUnsubscribe();
       previewUnsubscribe = null;
@@ -175,7 +186,7 @@ export async function mountRender(
     currentKind = 'none';
   }
 
-  async function mountByKind(kind: 'mcpApps' | 'react' | 'provisional'): Promise<void> {
+  async function mountByKind(kind: 'mcpApps' | 'react' | 'provisional' | 'system'): Promise<void> {
     if (kind === 'mcpApps') {
       // Render narrows to McpAppsRender when type='mcpApps'.
       const render = currentOpts.render as McpAppsRender;
@@ -187,6 +198,39 @@ export async function mountRender(
           : {}),
       });
       currentKind = 'mcpApps';
+      return;
+    }
+
+    if (kind === 'system') {
+      // System card — server-emitted `kind` mapped to a built-in
+      // `.tsx` via `SystemCardHost`. Render-only: no `__ggui__` shim,
+      // no GguiWireProvider, no contextSpec wrap (system cards don't
+      // dispatch wire actions or read contexts). The registry handles
+      // unknown kinds via a typed fallback. Dynamic-import keeps the
+      // system-cards module out of the base graph (boot.test.ts +
+      // non-system mounts never pull it).
+      const render = currentOpts.render;
+      if (render.type !== 'system') return;
+      const [reactDomClient, systemCardsMod] = await Promise.all([
+        import('react-dom/client'),
+        import('./system-cards/index.js'),
+      ]);
+      const root = reactDomClient.createRoot(container);
+      const renderCard = (r: SystemRender): void => {
+        root.render(
+          createElement(systemCardsMod.SystemCardHost, {
+            kind: r.kind,
+            props: r.props ?? {},
+            ...(currentOpts.themeId !== undefined
+              ? { themeId: currentOpts.themeId }
+              : {}),
+          }),
+        );
+      };
+      renderCard(render);
+      systemRoot = root;
+      systemRerender = renderCard;
+      currentKind = 'system';
       return;
     }
 
@@ -302,6 +346,17 @@ export async function mountRender(
             : {}),
           renderWrapper: wrapInScopedProvider,
         });
+        return;
+      }
+
+      // Same-kind system update — re-render the card with new props
+      // through the retained root (no teardown). System cards are
+      // pure functions of (kind, props); a props delta just re-renders.
+      if (nextKind === 'system' && systemRerender !== null) {
+        const render = next.render;
+        if (render.type !== 'system') return;
+        systemRerender(render);
+        return;
       }
       // provisional / mcpApps same-kind: no in-place update surface.
       // Provisional keeps accumulating envelopes; mcpApps iframe
