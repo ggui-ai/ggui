@@ -1,0 +1,272 @@
+name: Alpha publish
+
+# Manual dispatch ONLY. Skips the standard publish-gate.
+#
+# Auto-computes the next 0.2.0-alpha.<N> by querying npm for every
+# @ggui-ai/* package's published versions, taking the max alpha index
+# across the cohort, and incrementing. The committed package.json
+# version stays at the BASE target (0.2.0) — the alpha suffix is added
+# in-runner and never committed back. That means:
+#
+#   - Push main once → dispatch this workflow freely for each alpha.
+#   - The 0.2.0 base is never published; alphas churn under `--tag alpha`.
+#   - Consumers opt in via `npm install @ggui-ai/cli@alpha`; `@next` and
+#     `@latest` are untouched.
+#
+# OIDC trusted-publisher config on npmjs.com must list this workflow's
+# filename for every @ggui-ai/* package, OR allow both release.yml and
+# alpha-publish.yml.
+#
+# Lives under `oss/.github/workflows/` in the monorepo; the subtree
+# split strips the `oss/` prefix, so it runs as
+# `.github/workflows/alpha-publish.yml` in the public repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "yes" to confirm. Publishes the next 0.2.0-alpha.<N> across all 35 @ggui-ai/* packages.'
+        required: true
+        type: string
+        default: "no"
+
+concurrency:
+  group: alpha-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: ${{ inputs.confirm == 'yes' }}
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    timeout-minutes: 30
+    outputs:
+      target: ${{ steps.target.outputs.target }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.2.2
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          # Intentionally NO registry-url: setup-node would write a
+          # broken ${NODE_AUTH_TOKEN} placeholder. OIDC handles auth.
+
+      # ─── Compute target version from npm registry truth ───
+      - name: Compute next 0.2.0-alpha.<N>
+        id: target
+        run: |
+          set -euo pipefail
+          echo "::group::Querying npm for current alpha state across cohort"
+          MAX_N=-1
+          for dir in packages/*/; do
+            [ -f "$dir/package.json" ] || continue
+            private=$(node -pe "require('./$dir/package.json').private || false")
+            [ "$private" = "true" ] && continue
+            name=$(node -pe "require('./$dir/package.json').name")
+            urlname=$(printf '%s' "$name" | sed 's|@|%40|;s|/|%2F|')
+            # `npm view` would do this too, but raw curl avoids a
+            # double-install + works without registry auth.
+            n=$(curl -s "https://registry.npmjs.org/$urlname" \
+              | node -e '
+                let s = "";
+                process.stdin.on("data", d => s += d);
+                process.stdin.on("end", () => {
+                  try {
+                    const d = JSON.parse(s);
+                    const ns = Object.keys(d.versions || {})
+                      .filter(v => /^0\.2\.0-alpha\.\d+$/.test(v))
+                      .map(v => parseInt(v.split(".").pop(), 10));
+                    console.log(ns.length ? Math.max(...ns) : -1);
+                  } catch { console.log(-1); }
+                });
+              ')
+            if [ "$n" -gt "$MAX_N" ]; then
+              MAX_N=$n
+              echo "  $name → max alpha.$n"
+            fi
+          done
+          echo "::endgroup::"
+          NEXT=$((MAX_N + 1))
+          TARGET="0.2.0-alpha.$NEXT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "## Target version" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**\`$TARGET\`** (highest existing alpha across cohort was \`$MAX_N\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Target: $TARGET"
+
+      # ─── Rewrite all package.json versions in-runner ───
+      - name: Rewrite package.json versions
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const target = process.env.TARGET;
+            const dirs = fs.readdirSync("packages").map(d => "packages/" + d);
+            let n = 0;
+            for (const dir of dirs) {
+              const p = dir + "/package.json";
+              if (!fs.existsSync(p)) continue;
+              const raw = fs.readFileSync(p, "utf8");
+              const j = JSON.parse(raw);
+              if (j.private) continue;
+              j.version = target;
+              const trailing = raw.endsWith("\n") ? "\n" : "";
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + trailing);
+              n++;
+            }
+            console.log(`Rewrote ${n} package.jsons to ${target}`);
+          '
+
+      # ─── Collision check ───
+      #
+      # Belt-and-braces against a race: if two operators dispatch the
+      # workflow concurrently, both compute the same N at "compute"
+      # time; this check catches the loser before publish so we never
+      # double-publish the same alpha version.
+      - name: Collision check
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: |
+          set -euo pipefail
+          COLLISIONS=()
+          for dir in packages/*/; do
+            [ -f "$dir/package.json" ] || continue
+            private=$(node -pe "require('./$dir/package.json').private || false")
+            [ "$private" = "true" ] && continue
+            name=$(node -pe "require('./$dir/package.json').name")
+            urlname=$(printf '%s' "$name" | sed 's|@|%40|;s|/|%2F|')
+            code=$(curl -sf -o /dev/null -w "%{http_code}" \
+              "https://registry.npmjs.org/$urlname/$TARGET" || echo "000")
+            if [ "$code" = "200" ]; then
+              COLLISIONS+=("$name@$TARGET")
+            fi
+          done
+          if [ "${#COLLISIONS[@]}" -gt 0 ]; then
+            echo "::error::Target version already published: ${COLLISIONS[*]}"
+            exit 1
+          fi
+          echo "::notice::No collisions — $TARGET is free across the cohort"
+
+      # ─── Build ───
+      #
+      # No frozen-lockfile: the version rewrite above changed package.json
+      # version fields, which pnpm 11 *may* trip --frozen-lockfile on
+      # (lockfile hashes the package.json). Workspace internal links
+      # (`workspace:*`) don't pin versions in the lockfile, so the
+      # actual dep graph is unchanged; unfrozen is safe in-runner.
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+
+      # ─── Publish leaf-first under --tag alpha ───
+      #
+      # `--provenance` requires (a) `id-token: write` (set at job level),
+      # (b) GitHub Actions' OIDC issuer, (c) each package.json's
+      # `repository.url` matching this repo. All three hold; each
+      # tarball gets a public attestation linking it to this commit.
+      - name: Publish
+        env:
+          TARGET: ${{ steps.target.outputs.target }}
+        run: |
+          set -euo pipefail
+          # Leaf-first order: protocol/types first, consumers (cli,
+          # create-agentic-app) last. Mirrors release.yml's order
+          # with the post-rc.3 additions (agent-server, create-agentic-app)
+          # slotted in topologically.
+          PUBLISH_ORDER=(
+            protocol artifact-manifest gadget-signing wire live-channel
+            design gadgets ui-gen blueprint-probe predefined preview-a2ui
+            iframe-runtime ggui-react ggui-react-native chat-self-hosted
+            agent-runtime agent-server mcp-server-core mcp-server-handlers
+            mcp-server negotiator registry-core registry-server ui-registry
+            project-config dev-stack sandbox embedding-local console shared
+            protocol-conformance protocol-reference-server ui-visual-tester
+            create-agentic-app ggui-cli
+          )
+          PUBLISHED=()
+          for dir in "${PUBLISH_ORDER[@]}"; do
+            if [ ! -f "packages/$dir/package.json" ]; then
+              echo "::warning::missing packages/$dir, skipping"
+              continue
+            fi
+            name=$(node -pe "require('./packages/$dir/package.json').name")
+            echo "::group::Publishing $name@$TARGET"
+            (cd "packages/$dir" && pnpm publish \
+              --access public \
+              --no-git-checks \
+              --tag alpha \
+              --provenance)
+            echo "::endgroup::"
+            PUBLISHED+=("$name")
+          done
+          echo "## Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "${#PUBLISHED[@]} packages live at \`$TARGET\` under dist-tag \`alpha\`:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for name in "${PUBLISHED[@]}"; do
+            echo "- $name" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install: \`npm install @ggui-ai/cli@alpha\` or \`@$TARGET\`" >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Wait for npm CDN replication
+        env:
+          TARGET: ${{ needs.publish.outputs.target }}
+        run: |
+          set -uo pipefail
+          # Alpha publishes don't need the 60-min budget release.yml
+          # uses for stable; CDN replication is typically <5 min and an
+          # alpha that's still propagating after 10 min is a real
+          # incident, not a normal wait. Cap at 10 min, poll every 30s.
+          DEADLINE=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            code=$(curl -sf -o /dev/null -w "%{http_code}" \
+              "https://registry.npmjs.org/@ggui-ai%2Fcli/$TARGET" \
+              || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "::notice::@ggui-ai/cli@$TARGET retrievable"
+              exit 0
+            fi
+            echo "  cli@$TARGET still replicating (HTTP $code), waiting…"
+            sleep 30
+          done
+          echo "::error::Timed out after 10 min waiting for cli@$TARGET to replicate"
+          exit 1
+
+      - name: Install + smoke-run @ggui-ai/cli@alpha
+        env:
+          TARGET: ${{ needs.publish.outputs.target }}
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          npm init -y >/dev/null
+          # Pin to exact version — defense against an unrelated dist-tag
+          # race or stale-cache install.
+          npm install "@ggui-ai/cli@$TARGET"
+          installed=$(./node_modules/.bin/ggui --version | tr -d '[:space:]')
+          if [ "$installed" != "$TARGET" ]; then
+            echo "::error::version mismatch — installed '$installed' vs expected '$TARGET'"
+            exit 1
+          fi
+          ./node_modules/.bin/ggui --help > /dev/null
+          echo "::notice::Smoke OK — @ggui-ai/cli@$TARGET installs and runs"
