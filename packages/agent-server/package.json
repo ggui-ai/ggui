@@ -1,0 +1,63 @@
+{
+  "name": "@ggui-ai/agent-server",
+  "version": "0.1.0-rc.3",
+  "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, and directive synthesis for `_meta[\"ai.ggui/userAction\"]` so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
+  "keywords": [
+    "ggui",
+    "mcp",
+    "mcp-apps",
+    "agent",
+    "hono",
+    "directive-synthesis"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@ggui-ai/dev-stack": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@hono/node-server": "^1.19.11",
+    "hono": "^4.12.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ggui-ai/ggui.git",
+    "directory": "packages/agent-server"
+  },
+  "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/agent-server",
+  "bugs": {
+    "url": "https://github.com/ggui-ai/ggui/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "ggui contributors <hello@ggui.ai>"
+}
