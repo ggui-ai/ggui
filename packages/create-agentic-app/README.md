@@ -77,12 +77,14 @@ re-author the commit under your own identity, `git commit --amend --reset-author
 
 1. `cd my-app && pnpm install` (skip if you passed `--install`)
 2. Add your API key to `.env.local` (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`)
-3. Run the four servers in separate terminals:
+3. `pnpm dev` starts all four servers (labeled `[ggui] [mcps] [agent] [web]`)
+   and opens the app at http://localhost:6890 when it's ready. To run them in
+   separate terminals instead:
    - `pnpm dev:ggui` → http://localhost:6781/mcp
-   - `pnpm dev:todo` → http://localhost:6782/mcp
+   - `pnpm dev:mcps` → every `servers/mcps/*` (todo on http://localhost:6782/mcp)
    - `pnpm dev:agent` → agent backend on 6790 / 6791 / 6792 depending on SDK
    - `pnpm dev:web` → frontend SPA on http://localhost:6890
-4. Open http://localhost:6890 and chat.
+4. Open http://localhost:6890 and chat (`pnpm dev` opens it for you).
 5. Inside Claude Code, run `/bootstrap` — it tailors the README + CLAUDE.md
    prose for your domain, walks you through building your first tool, and
    removes its own one-time onboarding block when done.

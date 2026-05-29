@@ -106,8 +106,16 @@ you shape the *shell* via `servers/ggui/ggui.json`. Three levers:
 
 ## Running locally
 
-Four processes, four terminals (start in this order — the agent connects to the
-MCP servers, the SPA hits the agent):
+One command starts all four (color-labeled) and opens the app in your browser
+once it's ready:
+
+```bash
+pnpm dev
+```
+
+Prefer separate terminals (to read one server's logs in isolation)? The agent
+connects to the MCP servers and the SPA hits the agent, so this start order is
+the most predictable (`dev:mcps` starts every `servers/mcps/*` at once):
 
 ```bash
 pnpm dev:ggui    # ggui MCP server   → http://localhost:6781/mcp

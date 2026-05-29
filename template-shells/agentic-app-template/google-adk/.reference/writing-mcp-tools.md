@@ -42,8 +42,9 @@ To make your own:
    - **Claude SDK only:** also add the tool prefixes to `DEFAULT_ALLOWED_TOOLS`
      in `servers/agent/src/agent.ts` (e.g. `mcp__<name>__menu_search`). The
      OpenAI + Google agents have no allowlist — the env entry is enough.
-4. **Run it:** add a `dev:<name>` script (mirror `dev:todo`) and start it
-   alongside the others.
+4. **Run it:** nothing to wire — `pnpm dev` starts every `servers/mcps/*`
+   automatically (the `dev:mcps` script globs the directory, so the folder _is_
+   the list). To run just yours: `pnpm --filter ./servers/mcps/<your-domain> dev`.
 
 ## The render side (you don't write this — the agent does it)
 

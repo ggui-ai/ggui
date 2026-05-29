@@ -10,7 +10,9 @@
     "node": ">=20"
   },
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "dev:ggui": "dotenv -e .env.local -- pnpm --filter ./servers/ggui start",
+    "dev:mcps": "pnpm --parallel --filter \"./servers/mcps/*\" run dev",
     "dev:todo": "pnpm --filter ./servers/mcps/todo dev",
     "dev:agent": "dotenv -e .env.local -- pnpm --filter ./servers/agent dev",
     "dev:web": "pnpm --filter ./apps/web dev",
