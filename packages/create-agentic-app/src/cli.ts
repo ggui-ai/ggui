@@ -26,6 +26,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
   copyFileSync,
 } from 'node:fs';
@@ -161,29 +162,40 @@ function shallowClone(ref: string, dest: string): void {
 /**
  * Replace `@agentic-app-template/<leaf>` → `@<scope>/<leaf>` and
  * the root `"name": "agentic-app-template"` marker → `"name": "<name>"`.
- * Only the package.json files at root + servers/* are rewritten —
- * docs intentionally keep their original wording until the user runs
- * `/bootstrap` (the Claude Code slash command) to tailor them.
+ * Walks the whole tree (skipping node_modules) — the assembled template
+ * has packages under `servers/agent`, `servers/ggui`, `servers/mcps/*`,
+ * AND `apps/*`. Docs intentionally keep their original wording until the
+ * user runs `/bootstrap` (the Claude Code slash command) to tailor them.
  */
 function renameProject(targetDir: string, name: string, scope: string): void {
+  // 1. Root package.json gets the user's project name.
   const pkgRootPath = join(targetDir, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgRootPath, 'utf8')) as { name?: string };
   pkg.name = name;
   writeFileSync(pkgRootPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-  // Server package.jsons live at servers/*/package.json — rename each.
-  const serversDir = join(targetDir, 'servers');
-  if (existsSync(serversDir)) {
-    for (const leaf of readdirSync(serversDir)) {
-      const sp = join(serversDir, leaf, 'package.json');
-      if (!existsSync(sp)) continue;
-      const sPkg = JSON.parse(readFileSync(sp, 'utf8')) as { name?: string };
-      if (typeof sPkg.name === 'string' && sPkg.name.startsWith('@agentic-app-template/')) {
-        sPkg.name = sPkg.name.replace('@agentic-app-template/', `@${scope}/`);
-        writeFileSync(sp, `${JSON.stringify(sPkg, null, 2)}\n`);
+  // 2. Every nested package.json with a @agentic-app-template/* name
+  // gets the user's scope. Walk the tree; the layout has packages under
+  // servers/agent, servers/ggui, servers/mcps/*, apps/*, blueprints/*,
+  // gadgets/*. Future templates may grow more — recursion makes adding
+  // them zero-touch for this script.
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      if (entry === 'node_modules' || entry === '.git') continue;
+      const p = join(dir, entry);
+      const st = statSync(p);
+      if (st.isDirectory()) {
+        visit(p);
+      } else if (entry === 'package.json' && p !== pkgRootPath) {
+        const sPkg = JSON.parse(readFileSync(p, 'utf8')) as { name?: string };
+        if (typeof sPkg.name === 'string' && sPkg.name.startsWith('@agentic-app-template/')) {
+          sPkg.name = sPkg.name.replace('@agentic-app-template/', `@${scope}/`);
+          writeFileSync(p, `${JSON.stringify(sPkg, null, 2)}\n`);
+        }
       }
     }
-  }
+  };
+  visit(targetDir);
 }
 
 function seedEnvLocal(targetDir: string): boolean {
@@ -324,11 +336,12 @@ async function main(): Promise<void> {
   console.log(`  ${step++}. cd ${target}`);
   if (!args.install) console.log(`  ${step++}. pnpm install`);
   console.log(`  ${step++}. Add your key to .env.local → ${apiKeyVar}=…`);
-  console.log(`  ${step++}. Run the three servers in separate terminals:`);
+  console.log(`  ${step++}. Run the four servers in separate terminals:`);
   console.log('       pnpm dev:ggui   # ggui MCP server   → http://localhost:6781/mcp');
   console.log('       pnpm dev:todo   # todo MCP server   → http://localhost:6782/mcp');
-  console.log(`       pnpm dev:agent  # agent + chat UI   → http://localhost:${port}`);
-  console.log(`  ${step++}. Open http://localhost:${port} and chat.`);
+  console.log(`       pnpm dev:agent  # agent backend     → http://localhost:${port}`);
+  console.log('       pnpm dev:web    # frontend SPA      → http://localhost:6890');
+  console.log(`  ${step++}. Open http://localhost:6890 and chat.`);
   console.log(
     '\nInside Claude Code, run `/bootstrap` to tailor README + CLAUDE.md for your project.',
   );
