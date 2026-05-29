@@ -8,8 +8,14 @@
  * session's artifacts; cross-restart persistence is a separate
  * concern handled (when needed) by a custom `ChatStore`
  * implementation injected at server boot.
+ *
+ * Ownership: every chat row carries an `ownerId` stamped at
+ * create-time (the principal id resolved by the configured
+ * {@link AuthAdapter}). Read paths check ownership before returning
+ * the snapshot.
  */
 import { randomBytes } from 'node:crypto';
+import type { ChatRow } from './auth.js';
 import type { ChatStateSnapshot, NormalizedMessage } from './types.js';
 
 const BASE62 =
@@ -35,6 +41,15 @@ export function mintChatId(): string {
 }
 
 /**
+ * Snapshot + ownership metadata returned together. The chat handler
+ * reads both: snapshot for rehydration, row for authorization.
+ */
+export interface ChatRecord {
+  readonly row: ChatRow;
+  readonly snapshot: ChatStateSnapshot;
+}
+
+/**
  * Minimal in-memory snapshot store. Constructed once per
  * `startAgentServer` call and held by the request handlers.
  *
@@ -43,30 +58,53 @@ export function mintChatId(): string {
  * stays narrow — three operations — so swap is cheap.
  */
 export interface ChatStore {
-  /** Return the snapshot for `chatId`, or `undefined` if unknown. */
-  get(chatId: string): ChatStateSnapshot | undefined;
+  /** Return the record for `chatId`, or `undefined` if unknown. */
+  get(chatId: string): ChatRecord | undefined;
   /**
-   * Append a message to the snapshot, creating the row on first
-   * write. Implementations MUST be safe across concurrent writers
-   * for the same chatId (the SSE write loop is single-writer per
-   * chat, but a future implementation might multiplex).
+   * Create the row on first write with the given `ownerId`; append
+   * the message to the snapshot. Implementations MUST be safe across
+   * concurrent writers for the same chatId. The first append wins
+   * the `ownerId` write — subsequent appends for the same chatId
+   * leave ownership untouched (a malicious second principal can't
+   * hijack ownership by racing in).
    */
-  append(chatId: string, message: NormalizedMessage): void;
+  append(args: {
+    readonly chatId: string;
+    readonly ownerId: string;
+    readonly message: NormalizedMessage;
+    readonly now?: number;
+  }): void;
 }
 
 export function createInMemoryChatStore(): ChatStore {
-  const map = new Map<string, ChatStateSnapshot>();
+  const map = new Map<string, ChatRecord>();
   return {
     get(chatId) {
       return map.get(chatId);
     },
-    append(chatId, message) {
-      let snap = map.get(chatId);
-      if (!snap) {
-        snap = { chatId, messages: [] };
-        map.set(chatId, snap);
+    append({ chatId, ownerId, message, now }) {
+      const ts = now ?? Date.now();
+      const existing = map.get(chatId);
+      if (existing) {
+        existing.snapshot.messages.push(message);
+        // Replace the row to bump updatedAt; ownerId is preserved
+        // from the FIRST write (writing principal owns the chat).
+        map.set(chatId, {
+          row: {
+            chatId: existing.row.chatId,
+            ownerId: existing.row.ownerId,
+            createdAt: existing.row.createdAt,
+            updatedAt: ts,
+          },
+          snapshot: existing.snapshot,
+        });
+        return;
       }
-      snap.messages.push(message);
+      const snapshot: ChatStateSnapshot = { chatId, messages: [message] };
+      map.set(chatId, {
+        row: { chatId, ownerId, createdAt: ts, updatedAt: ts },
+        snapshot,
+      });
     },
   };
 }

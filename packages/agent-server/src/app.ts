@@ -1,39 +1,51 @@
 /**
  * Hono app factory + request handlers for the brand-agnostic agent
- * server. Three routes, all sharing one {@link AgentAdapter}:
+ * server. Three core routes + an adapter-mounted `/auth/*` sub-router:
  *
  *   GET  /                     — `{name, sandboxProxyUrl, mcpServers}`
  *                                manifest, used by frontends to bind.
  *   GET  /agent?chatId=X       — server-authoritative chat snapshot
- *                                (replayed through the same handler the
- *                                live SSE stream uses).
- *   POST /agent                — { data: { meta?: { ai.ggui/userAction
- *                                ... } }, prompt, chatId? } → SSE stream
- *                                of normalized SDK messages.
+ *                                (replayed through the same handler
+ *                                the live SSE stream uses). Auth +
+ *                                ownership gated.
+ *   POST /agent                — { prompt, chatId?, data?: {meta?} }
+ *                                → SSE stream of normalized SDK
+ *                                messages. First event is always
+ *                                `chat-allocated` carrying the
+ *                                server-allocated chat id.
  *
- *   POST /agent/relay/tools-call  — iframe-issued tools/call → MCP relay.
- *                                Preserved because the browser still
- *                                needs same-origin access to the MCP
- *                                without CORS; `/relay/resources-read`
- *                                is RETIRED because the tool-result
- *                                interceptor inlines the resource
- *                                alongside the result on the way out.
+ *   /auth/*                    — RESERVED for AuthAdapter.mount().
+ *                                Library never registers a route here
+ *                                itself. Guest-token adapter mounts
+ *                                POST /auth/guest, GET /auth/me,
+ *                                POST /auth/logout; bearer adapter
+ *                                mounts GET /auth/me only.
+ *
+ *   POST /agent/relay/tools-call  — iframe-issued tools/call → MCP
+ *                                relay. Preserved because the browser
+ *                                still needs same-origin access to the
+ *                                MCP without CORS; `/relay/resources-
+ *                                read` is RETIRED because the tool-
+ *                                result interceptor inlines the
+ *                                resource alongside the result on the
+ *                                way out.
  *
  *   GET  /sandbox-proxy-url    — `{url}` for the second-origin sandbox
- *                                (per MCP-Apps spec). Surfaced as its
- *                                own endpoint so the frontend can fetch
- *                                + thread before mount; also folded
- *                                into the root manifest for
- *                                single-fetch frontends.
+ *                                (per MCP-Apps spec).
  *
  *   GET  /api/renders/:id/state — proxy to the ggui MCP server's
  *                                state endpoint (wsToken-gated).
- *                                Same-origin so the browser doesn't
- *                                need CORS on the MCP server.
  */
 import { Hono } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { isGguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  defaultAuthorizeChat,
+  principalId,
+  type AuthAdapter,
+  type Principal,
+} from './auth.js';
 import { callMcpToolsCall } from './mcp-client.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import { synthesizeUserActionPrompt } from './user-action-prompt.js';
@@ -47,6 +59,8 @@ import type { AgentAdapter, McpServerConfig } from './types.js';
 export interface AgentAppDeps {
   readonly adapter: AgentAdapter;
   readonly chatStore: ChatStore;
+  /** Auth adapter — resolves Principal + (optionally) mounts /auth/*. */
+  readonly auth: AuthAdapter;
   /**
    * Already-resolved MCP-server map keyed by operator-chosen name.
    * Each entry includes the bearer the library will thread through
@@ -68,9 +82,16 @@ export interface AgentAppDeps {
   /**
    * Optional logger — receives one line per significant event
    * (request received, interceptor outcome, errors). Defaults to a
-   * `console.log` no-op fallback when omitted at server boot.
+   * no-op fallback when omitted at server boot.
    */
   readonly log?: (line: string) => void;
+}
+
+// Hono Variables typing for the `principal` stash. Set by the
+// gated-route middleware; consumed by the handler.
+interface AgentAppVariables {
+  principal: Principal;
+  authResponseHeaders?: HeadersInit;
 }
 
 /**
@@ -78,11 +99,13 @@ export interface AgentAppDeps {
  * via `@hono/node-server`. Returned as a plain `Hono` so embeds can
  * mount sub-routes if needed.
  */
-export function createAgentApp(deps: AgentAppDeps): Hono {
-  const { adapter, chatStore, mcpServers, sandboxProxyUrl } = deps;
+export function createAgentApp(
+  deps: AgentAppDeps,
+): Hono<{ Variables: AgentAppVariables }> {
+  const { adapter, chatStore, mcpServers, sandboxProxyUrl, auth } = deps;
   const log = deps.log ?? ((): void => {});
 
-  const app = new Hono();
+  const app = new Hono<{ Variables: AgentAppVariables }>();
 
   // CORS — the reference frontend (`ggui-basic-web`) runs on a
   // different origin (port 6890 vs the agent backend's 67xx). Every
@@ -96,7 +119,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Accept, X-Chat-Id',
+          'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization',
         },
       });
     }
@@ -105,15 +128,44 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
     c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     c.res.headers.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Accept, X-Chat-Id',
+      'Content-Type, Accept, Authorization',
     );
   });
 
+  // Adapter-mounted /auth/* sub-router. `/auth/*` is RESERVED — the
+  // library never registers a route under it itself.
+  const authRouter = new Hono();
+  auth.mount?.(authRouter);
+  app.route('/auth', authRouter);
+
+  // Per-request principal resolver. Used on every endpoint that
+  // needs identity. Stashes the principal + any response headers
+  // from the adapter onto `c.var` so the handler reads one copy.
+  const requireAuth: MiddlewareHandler<{
+    Variables: AgentAppVariables;
+  }> = async (c, next) => {
+    const result = await auth.authenticate(c.req.raw);
+    if (!result) {
+      return c.json({ error: 'unauthenticated' }, 401);
+    }
+    c.set('principal', result.principal);
+    if (result.responseHeaders !== undefined) {
+      c.set('authResponseHeaders', result.responseHeaders);
+    }
+    await next();
+    // Merge adapter response headers (Set-Cookie etc.) onto the
+    // final response. Skip when the adapter declined to attach any.
+    if (result.responseHeaders !== undefined) {
+      const merged = new Headers(result.responseHeaders);
+      merged.forEach((value, key) => {
+        c.res.headers.append(key, value);
+      });
+    }
+  };
+
   // ── GET / — Manifest ────────────────────────────────────────────────
   // Single-fetch manifest for frontends that want one round-trip on
-  // mount. Carries the same `sandboxProxyUrl` the dedicated endpoint
-  // returns, plus the configured MCP-server URLs (so a frontend can
-  // wire its iframe relay).
+  // mount. Public — no auth required (no per-principal data).
   app.get('/', (c) =>
     c.json({
       name: adapter.name,
@@ -131,31 +183,34 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
 
   // ── GET /agent?chatId=X — snapshot ──────────────────────────────────
   // Returns the verbatim stream of normalized messages we observed
-  // for this chat. The frontend hook replays `messages[]` through
-  // the same handler the live SSE stream uses, rebuilding the chat
-  // panel and re-mounting iframes from each tool_result's `_meta`
-  // slice — no separate per-render store needed server-side.
-  //
-  // 404 on unknown chatId — distinguishes "fresh tab opened on a URL
-  // we don't know about" from "empty conversation".
-  app.get('/agent', (c) => {
+  // for this chat. Auth + ownership gated: 401 with no principal,
+  // 404 on unknown chatId, 403 on chat owned by another principal,
+  // 200 on success.
+  app.get('/agent', requireAuth, async (c) => {
     const chatId = c.req.query('chatId') ?? '';
     if (chatId.length === 0) {
       return c.json({ error: 'chatId query required' }, 400);
     }
-    const snap = chatStore.get(chatId);
-    if (!snap) {
+    const rec = chatStore.get(chatId);
+    if (!rec) {
       return c.json({ error: 'chat not found' }, 404);
     }
+    const principal = c.get('principal');
+    const allowed = auth.authorizeChat
+      ? await auth.authorizeChat(principal, rec.row)
+      : defaultAuthorizeChat(principal, rec.row);
+    if (!allowed) {
+      return c.json({ error: 'forbidden' }, 403);
+    }
     return c.json(
-      { chatId: snap.chatId, messages: snap.messages },
+      { chatId: rec.snapshot.chatId, messages: rec.snapshot.messages },
       200,
       { 'Cache-Control': 'no-store' },
     );
   });
 
   // ── POST /agent — main agent loop, SSE stream ───────────────────────
-  app.post('/agent', async (c) => {
+  app.post('/agent', requireAuth, async (c) => {
     let body: PostAgentBody;
     try {
       body = (await c.req.json()) as PostAgentBody;
@@ -166,19 +221,36 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
       return c.json({ error: 'prompt must be a non-empty string' }, 400);
     }
 
-    // Server-allocated chatId — client never mints. Returned to the
-    // browser as the first SSE event so the URL / localStorage can
-    // pin it for resume.
-    const chatId =
-      typeof body.chatId === 'string' && body.chatId.length > 0
-        ? body.chatId
-        : mintChatId();
+    const principal = c.get('principal');
+    const ownerId = principalId(principal);
+
+    // Resolve / allocate chatId. When the client supplied one, verify
+    // they own it before letting the new prompt write to that chat;
+    // otherwise allocate fresh.
+    let chatId: string;
+    if (typeof body.chatId === 'string' && body.chatId.length > 0) {
+      const existing = chatStore.get(body.chatId);
+      if (existing) {
+        const allowed = auth.authorizeChat
+          ? await auth.authorizeChat(principal, existing.row)
+          : defaultAuthorizeChat(principal, existing.row);
+        if (!allowed) {
+          return c.json({ error: 'forbidden' }, 403);
+        }
+      }
+      // Unknown chatId on POST = client previously had one but the
+      // server forgot it (process restart with in-memory store).
+      // Accept the id; the next append creates the row with the
+      // CURRENT principal as owner. Reasonable for the in-memory
+      // default; durable stores can enforce stricter semantics.
+      chatId = body.chatId;
+    } else {
+      chatId = mintChatId();
+    }
 
     // Pull the spec-canonical `ai.ggui/userAction` slice off the
     // request body's `data.meta` when present and synthesize the
-    // imperative-first directive prompt server-side. The client
-    // (`useMcpAppsChat.send`) just forwards the slice — every
-    // ggui-coupled formatting lives here.
+    // imperative-first directive prompt server-side.
     const rawUserAction = body.data?.meta?.['ai.ggui/userAction'];
     const userAction = isGguiUserActionMeta(rawUserAction)
       ? rawUserAction
@@ -192,13 +264,13 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
         : body.prompt;
 
     log(
-      `[agent-server] POST /agent chat=${chatId} prompt=${JSON.stringify(body.prompt.slice(0, 80))}${userAction ? ` (userAction kind=${userAction.kind} renderId=${userAction.renderId})` : ''}`,
+      `[agent-server] POST /agent chat=${chatId} owner=${ownerId} prompt=${JSON.stringify(body.prompt.slice(0, 80))}${userAction ? ` (userAction kind=${userAction.kind} renderId=${userAction.renderId})` : ''}`,
     );
 
     return streamSSE(c, async (stream) => {
-      // The first SSE event is ALWAYS the chatId allocation echo so
-      // the client can stamp it into URL / localStorage even on the
-      // first POST that didn't carry one.
+      // First SSE event is always the chatId allocation echo so the
+      // client can stamp it into URL / localStorage on the first POST
+      // that didn't carry one.
       const chatAllocated: ChatAllocatedEvent = {
         type: 'chat-allocated',
         chatId,
@@ -209,10 +281,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
       });
 
       const abortController = new AbortController();
-      const onAbort = (): void => abortController.abort();
-      stream.onAbort(() => {
-        onAbort();
-      });
+      stream.onAbort(() => abortController.abort());
 
       const startedAt = Date.now();
       let msgCount = 0;
@@ -235,7 +304,11 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
             signal: abortController.signal,
             log,
           });
-          chatStore.append(chatId, msg);
+          chatStore.append({
+            chatId,
+            ownerId,
+            message: msg,
+          });
           if (abortController.signal.aborted) break;
           await stream.writeSSE({
             event: 'message',
@@ -267,10 +340,14 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
   // ── POST /agent/relay/tools-call — iframe → MCP relay ───────────────
   // Forwards iframe-issued `tools/call` (postMessage) to the matching
   // MCP server over HTTP. The iframe holds no auth credential; this
-  // host is the protocol-defined relay party. Browser-side
-  // `<AppRenderer onCallTool>` POSTs here; we proxy + return the
-  // JSON-RPC envelope verbatim.
-  app.post('/agent/relay/tools-call', async (c) => {
+  // host is the protocol-defined relay party.
+  //
+  // Auth-gated: only the chat owner (or any authenticated principal —
+  // tools/call doesn't carry a chatId binding it to a specific chat)
+  // can use the relay. Reasoning: this surface speaks to the MCP
+  // server on behalf of the host; leaving it unauth'd would let
+  // anyone issue tools/call through the proxy.
+  app.post('/agent/relay/tools-call', requireAuth, async (c) => {
     let body: RelayToolsCallBody;
     try {
       body = (await c.req.json()) as RelayToolsCallBody;
@@ -280,11 +357,6 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
     if (typeof body.name !== 'string' || body.name.length === 0) {
       return c.json({ error: 'name required' }, 400);
     }
-    // Pick the MCP server — same routing logic as the resource
-    // interceptor's URL-host match, then `ggui` fallback. Tools/call
-    // doesn't carry a URI we can route on, so we always go to the
-    // primary `ggui` MCP unless the operator routed differently
-    // (extension point for future relay-route override).
     const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
     if (!primary) {
       return c.json({ error: 'no MCP server configured' }, 500);
@@ -311,39 +383,44 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
   // The state endpoint replaced the bearer-by-obscurity `/r/<shortCode>`
   // URL; the browser fetches via this same-origin path so the MCP
   // server doesn't need CORS. wsToken query is forwarded verbatim —
-  // the MCP gates on token signature, render ownership, appId match.
-  app.get('/api/renders/:renderId/state', async (c) => {
-    const renderId = c.req.param('renderId');
-    if (typeof renderId !== 'string' || renderId.length === 0) {
-      return c.json({ error: 'renderId required' }, 400);
-    }
-    const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
-    if (!primary) {
-      return c.json({ error: 'no MCP server configured' }, 500);
-    }
-    try {
-      const mcpOrigin = new URL(primary.url);
-      mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
-      // Forward the browser's full query string (wsToken etc.).
-      const incoming = new URL(c.req.url);
-      mcpOrigin.search = incoming.search;
-      const upstream = await fetch(mcpOrigin.toString(), {
-        headers: { Accept: 'application/json' },
-      });
-      const text = await upstream.text();
-      return new Response(text, {
-        status: upstream.status,
-        headers: {
-          'Content-Type':
-            upstream.headers.get('Content-Type') ?? 'application/json',
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return c.json({ error: `state proxy error: ${message}` }, 502);
-    }
-  });
+  // the MCP gates on token signature, render ownership, appId match,
+  // so we don't double-gate here (any authenticated principal can
+  // forward; the MCP's token is the actual gate).
+  app.get(
+    '/api/renders/:renderId/state',
+    requireAuth,
+    async (c: Context<{ Variables: AgentAppVariables }>) => {
+      const renderId = c.req.param('renderId');
+      if (typeof renderId !== 'string' || renderId.length === 0) {
+        return c.json({ error: 'renderId required' }, 400);
+      }
+      const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
+      if (!primary) {
+        return c.json({ error: 'no MCP server configured' }, 500);
+      }
+      try {
+        const mcpOrigin = new URL(primary.url);
+        mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
+        const incoming = new URL(c.req.url);
+        mcpOrigin.search = incoming.search;
+        const upstream = await fetch(mcpOrigin.toString(), {
+          headers: { Accept: 'application/json' },
+        });
+        const text = await upstream.text();
+        return new Response(text, {
+          status: upstream.status,
+          headers: {
+            'Content-Type':
+              upstream.headers.get('Content-Type') ?? 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return c.json({ error: `state proxy error: ${message}` }, 502);
+      }
+    },
+  );
 
   return app;
 }
@@ -356,7 +433,8 @@ export function createAgentApp(deps: AgentAppDeps): Hono {
  * (e.g. `ai.ggui/host-session`) thread through here too.
  *
  * `chatId` is optional — when absent the server allocates one and
- * returns it as the first SSE event.
+ * returns it as the first SSE event. When supplied for an existing
+ * chat, the principal MUST own it (403 otherwise).
  */
 interface PostAgentBody {
   readonly prompt?: unknown;
@@ -383,8 +461,4 @@ export interface ChatAllocatedEvent {
   readonly chatId: string;
 }
 
-/**
- * Type-only re-export so consumers of the app factory see the same
- * brand-agnostic MCP-server shape from one import.
- */
 export type { McpServerConfig };

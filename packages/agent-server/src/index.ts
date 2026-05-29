@@ -5,7 +5,8 @@
  * implement the {@link AgentAdapter} contract + call
  * {@link startAgentServer} — every ggui-coupled concern (HTTP,
  * SSE, MCP routing, tool-result resource inlining, directive
- * synthesis, server-allocated chat ids) lives in this package.
+ * synthesis, server-allocated chat ids, auth, chat ownership) lives
+ * in this package.
  */
 export {
   startAgentServer,
@@ -13,11 +14,16 @@ export {
   type AgentServerHandle,
 } from './server.js';
 
-export { createAgentApp, type AgentAppDeps, type ChatAllocatedEvent } from './app.js';
+export {
+  createAgentApp,
+  type AgentAppDeps,
+  type ChatAllocatedEvent,
+} from './app.js';
 
 export {
   createInMemoryChatStore,
   mintChatId,
+  type ChatRecord,
   type ChatStore,
 } from './chat-store.js';
 
@@ -43,3 +49,17 @@ export {
   callMcpToolsCall,
   parseMcpResponse,
 } from './mcp-client.js';
+
+export {
+  createGuestTokenAuth,
+  createBearerTokenAuth,
+  defaultAuthorizeChat,
+  mintGuestId,
+  principalId,
+  type AuthAdapter,
+  type AuthResult,
+  type BearerTokenAuthOptions,
+  type ChatRow,
+  type GuestTokenAuthOptions,
+  type Principal,
+} from './auth.js';

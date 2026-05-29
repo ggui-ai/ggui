@@ -38,27 +38,58 @@ describe('createInMemoryChatStore', () => {
     expect(store.get('chat_missing')).toBeUndefined();
   });
 
-  it('creates a snapshot on first append and returns it', () => {
+  it('creates a row with the appending principal as owner', () => {
     const store = createInMemoryChatStore();
-    store.append('chat_a', ASSISTANT_MSG);
-    const snap = store.get('chat_a');
-    expect(snap?.chatId).toBe('chat_a');
-    expect(snap?.messages).toEqual([ASSISTANT_MSG]);
+    store.append({
+      chatId: 'chat_a',
+      ownerId: 'guest_x',
+      message: ASSISTANT_MSG,
+      now: 1000,
+    });
+    const rec = store.get('chat_a');
+    expect(rec?.row.ownerId).toBe('guest_x');
+    expect(rec?.row.createdAt).toBe(1000);
+    expect(rec?.row.updatedAt).toBe(1000);
+    expect(rec?.snapshot.messages).toEqual([ASSISTANT_MSG]);
   });
 
-  it('appends in insertion order across multiple writes', () => {
+  it('preserves ownerId on subsequent appends — second writer cant hijack', () => {
     const store = createInMemoryChatStore();
-    store.append('chat_b', ASSISTANT_MSG);
-    store.append('chat_b', RESULT_MSG);
-    const snap = store.get('chat_b');
-    expect(snap?.messages).toEqual([ASSISTANT_MSG, RESULT_MSG]);
+    store.append({
+      chatId: 'chat_b',
+      ownerId: 'guest_first',
+      message: ASSISTANT_MSG,
+      now: 1000,
+    });
+    store.append({
+      chatId: 'chat_b',
+      ownerId: 'guest_attacker',
+      message: RESULT_MSG,
+      now: 2000,
+    });
+    const rec = store.get('chat_b');
+    expect(rec?.row.ownerId).toBe('guest_first');
+    // updatedAt advanced to the second write's timestamp.
+    expect(rec?.row.updatedAt).toBe(2000);
+    expect(rec?.row.createdAt).toBe(1000);
+    expect(rec?.snapshot.messages).toEqual([ASSISTANT_MSG, RESULT_MSG]);
   });
 
   it('keeps snapshots independent across chats', () => {
     const store = createInMemoryChatStore();
-    store.append('chat_x', ASSISTANT_MSG);
-    store.append('chat_y', RESULT_MSG);
-    expect(store.get('chat_x')?.messages).toEqual([ASSISTANT_MSG]);
-    expect(store.get('chat_y')?.messages).toEqual([RESULT_MSG]);
+    store.append({
+      chatId: 'chat_x',
+      ownerId: 'guest_x',
+      message: ASSISTANT_MSG,
+    });
+    store.append({
+      chatId: 'chat_y',
+      ownerId: 'guest_y',
+      message: RESULT_MSG,
+    });
+    expect(store.get('chat_x')?.snapshot.messages).toEqual([ASSISTANT_MSG]);
+    expect(store.get('chat_y')?.snapshot.messages).toEqual([RESULT_MSG]);
+    expect(store.get('chat_x')?.row.ownerId).toBe('guest_x');
+    expect(store.get('chat_y')?.row.ownerId).toBe('guest_y');
   });
 });

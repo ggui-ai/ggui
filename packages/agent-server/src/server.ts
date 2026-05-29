@@ -3,8 +3,10 @@
  * sandbox-proxy server (per MCP-Apps spec) AND the brand-agnostic
  * Hono app from {@link createAgentApp} on the operator-chosen port.
  *
- * One async function per-SDK samples call to stand up a full backend
- * in ~10 lines.
+ * Default auth: {@link createGuestTokenAuth} (token-based, no cookie
+ * jar — works across browser, RN, CLI). Pass an explicit `auth`
+ * option to swap in bearer-token / OAuth / JWT / platform-trust
+ * adapters.
  */
 /* eslint-disable no-console */
 import { serve } from '@hono/node-server';
@@ -13,6 +15,7 @@ import {
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
 import { createAgentApp } from './app.js';
+import { createGuestTokenAuth, type AuthAdapter } from './auth.js';
 import { createInMemoryChatStore, type ChatStore } from './chat-store.js';
 import type { AgentAdapter, McpServerConfig } from './types.js';
 
@@ -38,17 +41,22 @@ export interface AgentServerOptions {
    */
   readonly adapter: AgentAdapter;
   /**
+   * Auth adapter — resolves a {@link Principal} for every request.
+   * Defaults to {@link createGuestTokenAuth} (signed bearer token,
+   * client mints via POST /auth/guest) when omitted, so the zero-
+   * config path natively supports anonymous guests.
+   *
+   * Pass `createBearerTokenAuth({tokens})` for static authenticated
+   * deployments, or `createGuestTokenAuth({signingSecret})` for
+   * production guest stability across restarts.
+   */
+  readonly auth?: AuthAdapter;
+  /**
    * Port for the sandbox-proxy server (default: `port + 1000`).
-   * MCP-Apps spec mandates the sandbox lives on a different origin
-   * from the host. Pass `0` to let the OS pick.
    */
   readonly sandboxProxyPort?: number;
   /**
    * Optional system prompt the adapter sees on every `AgentInput`.
-   * Adapters MAY ignore (most SDKs prefer their own instruction
-   * parameter); when omitted, the adapter chooses its own default
-   * (typically `GGUI_AGENT_SYSTEM_PROMPT`). Pass `null` to disable
-   * explicitly.
    */
   readonly systemPrompt?: string | null;
   /**
@@ -71,8 +79,7 @@ export interface AgentServerOptions {
 
 /**
  * Handle returned by {@link startAgentServer} — exposes the bound
- * port + a `close()` for graceful shutdown. Used by tests + future
- * orchestrators that want to multi-instance the server in one process.
+ * port + a `close()` for graceful shutdown.
  */
 export interface AgentServerHandle {
   readonly port: number;
@@ -99,6 +106,16 @@ export async function startAgentServer(
   );
   const log = opts.log ?? ((line: string): void => console.log(line));
   const chatStore = opts.chatStore ?? createInMemoryChatStore();
+  // Default auth is token-based guest. Honors GUEST_TOKEN_SECRET for
+  // stability across restarts; otherwise emits the standard
+  // "ephemeral secret" warning once.
+  const auth =
+    opts.auth ??
+    createGuestTokenAuth(
+      process.env.GUEST_TOKEN_SECRET
+        ? { signingSecret: process.env.GUEST_TOKEN_SECRET }
+        : {},
+    );
 
   const sandboxProxyPort = opts.sandboxProxyPort ?? opts.port + 1000;
   const sandboxProxy = await startSandboxProxyServer({
@@ -107,6 +124,7 @@ export async function startAgentServer(
 
   const app = createAgentApp({
     adapter: opts.adapter,
+    auth,
     chatStore,
     mcpServers: resolvedServers,
     systemPrompt: opts.systemPrompt ?? null,
