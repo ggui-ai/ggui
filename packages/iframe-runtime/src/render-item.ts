@@ -72,6 +72,18 @@ export interface RenderItemOptions {
   readonly streamBus: StreamBus;
   /** Render id — used by the mcp-apps iframe host for proxy URLs. */
   readonly renderId: string;
+  /**
+   * 3rd-party gadget package names whose direct imports the rewriter
+   * must resolve to per-package shims. FALLBACK source used only when
+   * the render carries no `gadgetDescriptors` sidecar — i.e. the static
+   * seed mount ({@link RenderSeedInput}, which has no descriptors). The
+   * caller threads the bootstrap's `meta.gadgets` package names here so a
+   * generated component importing a non-STDLIB gadget on a no-WS host
+   * (claude.ai / ChatGPT) still resolves its shim on first paint. A
+   * WS-delivered full `Render` carries `gadgetDescriptors` and ignores
+   * this. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
+   */
+  readonly gadgetPackages?: readonly string[];
   /** ggui-server base URL (for mcp-apps proxy). Empty = same-origin. */
   readonly mcpAppsServerBaseUrl?: string;
   /** Theme id passed to ReactComponentRenderer for scoped CSS. */
@@ -255,7 +267,7 @@ export async function mountRender(
     const gadgetPackages =
       'gadgetDescriptors' in render && render.gadgetDescriptors !== undefined
         ? render.gadgetDescriptors.map((d) => d.package)
-        : undefined;
+        : currentOpts.gadgetPackages;
     reactMount = await mountReactRoot(container, {
       render: {
         ...(render.id !== undefined ? { id: render.id } : {}),

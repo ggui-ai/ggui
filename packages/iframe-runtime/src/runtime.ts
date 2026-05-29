@@ -955,6 +955,23 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
       return { ok: false, mountedRender };
     }
+    // Host-context wiring for the no-WS static mount (claude.ai / ChatGPT
+    // / Claude Desktop). The INITIAL host theme/style/fonts were already
+    // applied at boot (applyHostContextStyling, above); attach the
+    // spec-canonical `hostcontextchanged` listener so a post-boot host
+    // theme toggle still re-paints the iframe. There is no WS to echo
+    // context back to a server, so the emitter's `send` is a no-op —
+    // `seed()` needs it only to initialize emitter state, and
+    // `handleHostContextChangedParams` applies the DOM styling BEFORE the
+    // (no-op) echo. WS hosts get the real echo on the live-trio path below.
+    if (parsed.hostContext !== undefined) {
+      seedHostContext({
+        renderId: meta.renderId,
+        send: () => {},
+        initial: parsed.hostContext,
+      });
+      attachHostContextListener({ app });
+    }
     setConnectedStatus(refs);
     return { ok: true, mountedRender };
   }
@@ -3094,6 +3111,13 @@ async function bootProduction(opts: {
           scopedWireConfig: buildScopedWireFor(render),
           streamBus,
           renderId: meta.renderId,
+          // Thread the bootstrap's 3rd-party gadget packages so the import
+          // rewriter resolves non-STDLIB gadget imports even for a static
+          // seed mount (which carries no gadgetDescriptors). A full
+          // WS-delivered Render carries gadgetDescriptors and ignores this.
+          ...(meta.gadgets !== undefined
+            ? { gadgetPackages: meta.gadgets.map((g) => g.package) }
+            : {}),
           ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
           ...(meta.themeMode !== undefined
             ? { themeMode: meta.themeMode }
