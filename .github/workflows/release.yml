@@ -14,11 +14,39 @@ name: Release
 #   - If a target `name@version` is already on npm, the publish step fails
 #     cleanly for that package. Nothing auto-increments.
 #
+# Prerelease channels (the ONE exception to "publish what's in git"):
+#   The `prerelease` dispatch input (alpha | beta | rc) turns on
+#   auto-numbered prerelease publishing. It absorbs the old standalone
+#   alpha-publish.yml — npm Trusted Publishing allows ONE workflow file
+#   per package, so prerelease and stable publishing must share release.yml.
+#   When prerelease != none the workflow:
+#     - reads the committed BASE version (e.g. 0.2.0), strips any suffix,
+#       then queries npm for the highest existing `<base>-<channel>.<N>`
+#       across the whole cohort and computes the next `<base>-<channel>.<N+1>`;
+#     - REWRITES every publishable package.json version to that target
+#       IN-RUNNER (never committed, never pushed) — this is the sole,
+#       deliberate exception to the immutability invariant above. The git
+#       tree keeps the stable base; the suffix lives only inside this run;
+#     - publishes under `--tag <channel>` so plain `npm i @ggui-ai/cli`
+#       keeps resolving to the latest STABLE — consumers opt in via `@alpha`.
+#       CAVEAT: npm pins `latest` to a package's VERY FIRST published version
+#       regardless of `--tag`. A package whose first-ever publish is a
+#       prerelease will have `latest` = that prerelease until a stable ships.
+#       So a brand-new package's first publish should be a stable
+#       (prerelease: none) release to seed `latest` correctly;
+#     - SKIPS the heavyweight publish-gate (matches the old alpha flow — see
+#       the publish-gate job) but STILL runs the post-publish consumer smoke.
+#   Stable releases are unaffected: `prerelease: none` (the default) reads
+#   committed versions verbatim and never touches package.json.
+#
 # Triggers:
 #
-#   1. `workflow_dispatch` — operator preflight / dry-run / subset testing.
+#   1. `workflow_dispatch` — operator preflight / dry-run / subset testing,
+#      AND the prerelease channel path (alpha/beta/rc, see above).
 #      Default is dry-run so a misclick cannot ship. Full live publish from
-#      dispatch requires `dry-run: false` AND `confirm_version_set: yes`.
+#      dispatch requires `dry-run: false` AND `confirm_version_set: yes`
+#      (a prerelease channel publish needs that same pair plus
+#      `prerelease: alpha|beta|rc`).
 #
 #   2. `release: [published]` — the real npm-publish event. Cutting a
 #      GitHub Release on github.com IS the human acknowledgement. On this
@@ -48,6 +76,16 @@ on:
         description: "Dispatch-only. Must be exactly 'yes' to allow a non-dry-run dispatch publish. Release-triggered runs treat the GitHub Release event as the confirmation."
         required: false
         default: "no"
+      prerelease:
+        description: "Dispatch-only. Prerelease channel. 'none' = publish committed (stable) versions verbatim. alpha/beta/rc = auto-number the next <base>-<channel>.<N>, rewrite versions in-runner (never committed), and publish under that dist-tag. Release-triggered runs always behave as 'none'."
+        required: false
+        type: choice
+        default: "none"
+        options:
+          - none
+          - alpha
+          - beta
+          - rc
   release:
     types:
       - published
@@ -67,6 +105,7 @@ jobs:
     outputs:
       filter: ${{ steps.resolve.outputs.filter }}
       effective_dry_run: ${{ steps.route.outputs.effective_dry_run }}
+      effective_prerelease: ${{ steps.route.outputs.effective_prerelease }}
       target_version: ${{ steps.version.outputs.target_version }}
     steps:
       - uses: actions/checkout@v6
@@ -95,21 +134,41 @@ jobs:
               REQ_PKGS="${{ github.event.inputs.packages }}"
               DRY_RUN="${{ github.event.inputs.dry-run }}"
               CONFIRM="${{ github.event.inputs.confirm_version_set }}"
+              PRERELEASE="${{ github.event.inputs.prerelease }}"
               # Normalise empty dispatch defaults (shouldn't happen given the
               # schema, but belt-and-braces so later shell comparisons are
               # deterministic).
-              [ -z "$REQ_PKGS" ] && REQ_PKGS="all"
-              [ -z "$DRY_RUN" ]  && DRY_RUN="true"
-              [ -z "$CONFIRM" ]  && CONFIRM="no"
+              [ -z "$REQ_PKGS" ]   && REQ_PKGS="all"
+              [ -z "$DRY_RUN" ]    && DRY_RUN="true"
+              [ -z "$CONFIRM" ]    && CONFIRM="no"
+              [ -z "$PRERELEASE" ] && PRERELEASE="none"
+              # Prerelease channel publishes the full coordinated set; subset
+              # selection is meaningless when every version is rewritten to a
+              # single computed target. Force "all" so the closure check and
+              # workspace:* substitution stay consistent.
+              if [ "$PRERELEASE" != "none" ]; then
+                REQ_PKGS="all"
+              fi
               ;;
             release)
               # Release event IS the human confirmation; no subset games.
+              # Release events never use the auto-numbered prerelease channel —
+              # they publish committed versions (a committed `-`suffix maps to
+              # the `next` dist-tag in the publish step, unchanged).
               REQ_PKGS="all"
               DRY_RUN="false"
               CONFIRM="yes"
+              PRERELEASE="none"
               ;;
             *)
               echo "::error::Unsupported event '$EVENT'. This workflow accepts only workflow_dispatch and release[published]."
+              exit 1
+              ;;
+          esac
+          case "$PRERELEASE" in
+            none|alpha|beta|rc) ;;
+            *)
+              echo "::error::Invalid prerelease channel '$PRERELEASE'. Expected one of: none, alpha, beta, rc."
               exit 1
               ;;
           esac
@@ -117,6 +176,7 @@ jobs:
           echo "effective_req_pkgs=$REQ_PKGS" >> "$GITHUB_OUTPUT"
           echo "effective_dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
           echo "effective_confirm=$CONFIRM" >> "$GITHUB_OUTPUT"
+          echo "effective_prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
       # Release-event safety: don't publish off a non-default branch.
       # `target_commitish` on a UI-created release is the branch the
@@ -202,6 +262,7 @@ jobs:
             dev-stack
             embedding-local
             console
+            agent-server
             mcp-server-core
             negotiator
             sandbox
@@ -209,6 +270,7 @@ jobs:
             ui-gen
             mcp-server-handlers
             mcp-server
+            create-agentic-app
             ggui-cli
             predefined
             protocol-conformance
@@ -249,15 +311,74 @@ jobs:
       - name: Detect target version
         id: version
         # Every package in the wave is coordinated to the same version
-        # (validated downstream by version-collision detection). Read it
-        # off the first filter entry so smoke can poll npm for exactly
-        # the version we shipped and assert install equality.
+        # (validated downstream by version-collision detection).
+        #
+        #   - Stable (prerelease=none): read it off the first filter entry —
+        #     the committed version IS the target; smoke polls npm for exactly
+        #     that and asserts install equality.
+        #   - Prerelease channel: the committed version is the BASE (e.g.
+        #     0.2.0). Strip any suffix, then query npm for the highest existing
+        #     `<base>-<channel>.<N>` across the WHOLE cohort and compute
+        #     <base>-<channel>.<N+1>. The publish job rewrites every
+        #     package.json to this target in-runner (never committed).
+        env:
+          EFFECTIVE_PRERELEASE: ${{ steps.route.outputs.effective_prerelease }}
         run: |
           set -euo pipefail
           FIRST=$(echo "${{ steps.resolve.outputs.filter }}" | awk '{print $1}')
-          VER=$(node -pe "require('./packages/$FIRST/package.json').version")
-          echo "target_version=$VER" >> "$GITHUB_OUTPUT"
-          echo "target version: $VER (from packages/$FIRST/package.json)"
+          COMMITTED=$(node -pe "require('./packages/$FIRST/package.json').version")
+
+          if [ "$EFFECTIVE_PRERELEASE" = "none" ]; then
+            echo "target_version=$COMMITTED" >> "$GITHUB_OUTPUT"
+            echo "stable target version: $COMMITTED (from packages/$FIRST/package.json)"
+            exit 0
+          fi
+
+          CHANNEL="$EFFECTIVE_PRERELEASE"
+          # Base = committed version with any pre-existing prerelease suffix
+          # stripped (`0.2.0-alpha.3` → `0.2.0`; a clean `0.2.0` is unchanged).
+          BASE="${COMMITTED%%-*}"
+          echo "::group::Computing next $BASE-$CHANNEL.<N> across cohort from npm"
+          MAX_N=-1
+          for pkg in ${{ steps.resolve.outputs.filter }}; do
+            name=$(node -pe "require('./packages/$pkg/package.json').name")
+            urlname=$(printf '%s' "$name" | sed 's|@|%40|;s|/|%2F|')
+            # Raw curl (not `npm view`): no auth needed for public reads and
+            # no extra install. Capture the body with `|| true` FIRST so that
+            # both an HTTP 404 (curl exits 0, body is a JSON error) AND a
+            # transport failure (DNS/timeout/reset — curl exits non-zero, body
+            # empty) degrade to a body the node script turns into -1. Piping
+            # curl directly into node would, under `set -euo pipefail`,
+            # propagate curl's non-zero exit through the pipe and abort the
+            # whole step on a single transient network blip across the cohort.
+            body=$(curl -s "https://registry.npmjs.org/$urlname" || true)
+            n=$(printf '%s' "$body" | BASE="$BASE" CHANNEL="$CHANNEL" node -e '
+                let s = "";
+                process.stdin.on("data", (d) => (s += d));
+                process.stdin.on("end", () => {
+                  try {
+                    const d = JSON.parse(s);
+                    const baseEsc = process.env.BASE.replace(/[.]/g, "\\.");
+                    const re = new RegExp(
+                      "^" + baseEsc + "-" + process.env.CHANNEL + "\\.(\\d+)$",
+                    );
+                    const ns = Object.keys(d.versions || {})
+                      .map((v) => { const m = v.match(re); return m ? parseInt(m[1], 10) : null; })
+                      .filter((x) => x !== null);
+                    console.log(ns.length ? Math.max(...ns) : -1);
+                  } catch { console.log(-1); }
+                });
+              ')
+            if [ "$n" -gt "$MAX_N" ]; then
+              MAX_N=$n
+              echo "  $name → max $CHANNEL.$n"
+            fi
+          done
+          echo "::endgroup::"
+          NEXT=$((MAX_N + 1))
+          TARGET="$BASE-$CHANNEL.$NEXT"
+          echo "target_version=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "::notice::Prerelease target: $TARGET (highest existing $CHANNEL across cohort was $MAX_N)"
 
       - name: Print intended publish plan
         run: |
@@ -265,6 +386,8 @@ jobs:
           EVENT="${{ steps.route.outputs.event }}"
           DRY_RUN="${{ steps.route.outputs.effective_dry_run }}"
           CONFIRM="${{ steps.route.outputs.effective_confirm }}"
+          PRERELEASE="${{ steps.route.outputs.effective_prerelease }}"
+          TARGET_VERSION="${{ steps.version.outputs.target_version }}"
 
           echo "## Publish plan" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -278,13 +401,26 @@ jobs:
             echo "**Dispatch dry-run:** \`$DRY_RUN\`" >> "$GITHUB_STEP_SUMMARY"
             echo "**Dispatch confirmation:** \`$CONFIRM\`" >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [ "$PRERELEASE" != "none" ]; then
+            echo "**Prerelease channel:** \`$PRERELEASE\` → computed target \`$TARGET_VERSION\` (dist-tag \`$PRERELEASE\`)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ⚠️ Prerelease mode rewrites every package.json version to \`$TARGET_VERSION\` **in-runner only** — git stays at the committed base. The publish-gate is skipped (post-publish smoke still runs)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Channel:** stable (committed versions, published verbatim)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| # | Package | Version | Source path |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---------|---------|-------------|" >> "$GITHUB_STEP_SUMMARY"
           i=1
           for pkg in ${{ steps.resolve.outputs.filter }}; do
             name=$(node -pe "require('./packages/$pkg/package.json').name")
-            ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            # Stable shows the committed version; prerelease shows the single
+            # computed target every package will be rewritten to in-runner.
+            if [ "$PRERELEASE" != "none" ]; then
+              ver="$TARGET_VERSION"
+            else
+              ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            fi
             echo "| $i | \`$name\` | \`$ver\` | \`packages/$pkg/\` |" >> "$GITHUB_STEP_SUMMARY"
             i=$((i+1))
           done
@@ -345,12 +481,24 @@ jobs:
           fi
 
       - name: Detect version collisions on npm
+        # Stable: each committed version must be free. Prerelease: the
+        # auto-numbered target is N+1 above the cohort max, so a collision is
+        # only possible under a concurrent dispatch — but `concurrency: release`
+        # serialises runs, so this stays belt-and-braces. Every package shares
+        # the single computed target in prerelease mode.
+        env:
+          EFFECTIVE_PRERELEASE: ${{ steps.route.outputs.effective_prerelease }}
+          TARGET_VERSION: ${{ steps.version.outputs.target_version }}
         run: |
           set -euo pipefail
           FAIL=0
           for pkg in ${{ steps.resolve.outputs.filter }}; do
             name=$(node -pe "require('./packages/$pkg/package.json').name")
-            ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            if [ "$EFFECTIVE_PRERELEASE" = "none" ]; then
+              ver=$(node -pe "require('./packages/$pkg/package.json').version")
+            else
+              ver="$TARGET_VERSION"
+            fi
             # `npm view name@ver version` exits non-zero on 404 (= free to publish).
             if out=$(npm view "$name@$ver" version 2>&1); then
               if [ -n "$out" ] && [ "$out" != "npm warn"* ]; then
@@ -389,7 +537,13 @@ jobs:
   # iteration; the heavyweight gate is reserved for real publishes.
   publish-gate:
     needs: preflight
-    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' }}
+    # Skipped on dry-run (fast iteration) AND on prerelease channels. The old
+    # alpha-publish.yml deliberately skipped this gate; prereleases churn fast
+    # and the in-runner version rewrite (which this reusable workflow's fresh
+    # checkout never sees) would test the committed base anyway. Prereleases
+    # still get the post-publish consumer smoke. Flip the prerelease half off
+    # here if you ever want gated alphas.
+    if: ${{ needs.preflight.outputs.effective_dry_run != 'true' && needs.preflight.outputs.effective_prerelease == 'none' }}
     uses: ./.github/workflows/publish-gate.yml
     secrets: inherit
 
@@ -447,6 +601,46 @@ jobs:
           # `.npmrc` auth line — which we don't want anyway.
 
       - run: pnpm install --frozen-lockfile
+
+      # Prerelease channels ONLY: rewrite every publishable package.json
+      # version to the computed <base>-<channel>.<N> IN-RUNNER, after the
+      # frozen install (so the dep graph stays lockfile-verified) but before
+      # build+publish. This is the sole, deliberate exception to this
+      # workflow's "never mutates package.json" invariant — the edit lives
+      # only on this runner's disk, is never committed, and is gated on
+      # `effective_prerelease != 'none'` so stable releases are untouched.
+      # pnpm replaces each `workspace:*` edge with the dependency's on-disk
+      # version at publish time; rewriting ALL non-private packages keeps that
+      # substitution coherent (every internal edge resolves to the same
+      # target). Stable releases skip this entirely and publish committed
+      # versions verbatim.
+      - name: Rewrite package.json versions (prerelease channel)
+        if: ${{ needs.preflight.outputs.effective_prerelease != 'none' }}
+        env:
+          TARGET_VERSION: ${{ needs.preflight.outputs.target_version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const target = process.env.TARGET_VERSION;
+            if (!target || !/-/.test(target)) {
+              console.error("Refusing to rewrite: TARGET_VERSION is not a prerelease (" + target + ")");
+              process.exit(1);
+            }
+            let n = 0;
+            for (const dir of fs.readdirSync("packages")) {
+              const p = "packages/" + dir + "/package.json";
+              if (!fs.existsSync(p)) continue;
+              const raw = fs.readFileSync(p, "utf8");
+              const j = JSON.parse(raw);
+              if (j.private) continue;
+              j.version = target;
+              const trailing = raw.endsWith("\n") ? "\n" : "";
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + trailing);
+              n++;
+            }
+            console.log("Rewrote " + n + " package.json versions to " + target);
+          '
+
       - run: pnpm -r --filter "./packages/*" build
 
       - name: Publish (leaf-first)
@@ -462,6 +656,7 @@ jobs:
         run: |
           set -euo pipefail
           DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
+          PRERELEASE="${{ needs.preflight.outputs.effective_prerelease }}"
           # `--provenance` requires (a) `id-token: write` permission on
           # this job (set above), (b) the OIDC issuer (GitHub Actions
           # always supplies one when permission is granted), and (c) each
@@ -469,10 +664,14 @@ jobs:
           # hold; the result is a public attestation on npm linking each
           # tarball to this commit. Dry-run runs cannot mint provenance,
           # so omit the flag on dispatch dry-run.
-          # Tag prereleases (versions with a `-` suffix) under the
-          # `next` dist-tag so plain `npm install @ggui-ai/cli`
-          # keeps resolving to the latest STABLE rather than an rc.
-          # Users who want prereleases install via `@next`.
+          # Dist-tag strategy (per package, below):
+          #   - prerelease channel (alpha/beta/rc): publish under that tag, so
+          #     plain `npm install @ggui-ai/cli` is untouched and consumers opt
+          #     in via `@alpha` / `@beta` / `@rc`. (Exception: a package whose
+          #     FIRST-ever publish is a prerelease gets `latest` pinned to it by
+          #     npm until a stable ships — seed new packages with a stable pub.)
+          #   - stable release of a committed `-`suffix version: `next`;
+          #   - stable release of a clean version: `latest`.
           PUBLISH_ARGS=(--access public --no-git-checks)
           if [ "$DRY_RUN" = "true" ]; then
             PUBLISH_ARGS+=(--dry-run)
@@ -483,7 +682,11 @@ jobs:
           for pkg in ${{ needs.preflight.outputs.filter }}; do
             name=$(node -pe "require('./packages/$pkg/package.json').name")
             ver=$(node -pe "require('./packages/$pkg/package.json').version")
-            if [[ "$ver" == *-* ]]; then
+            if [ "$PRERELEASE" != "none" ]; then
+              # `ver` was rewritten in-runner to the computed target above,
+              # so it already carries the channel suffix.
+              TAG_ARGS=(--tag "$PRERELEASE")
+            elif [[ "$ver" == *-* ]]; then
               TAG_ARGS=(--tag next)
             else
               TAG_ARGS=(--tag latest)
@@ -542,6 +745,7 @@ jobs:
             registry-core registry-server ui-registry cli project-config
             dev-stack sandbox embedding-local console shared
             protocol-conformance protocol-reference-server ui-visual-tester
+            agent-server create-agentic-app
           )
           DEADLINE=$(( $(date +%s) + 3600 ))   # +60 min
           attempt=0
