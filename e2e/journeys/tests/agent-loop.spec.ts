@@ -49,10 +49,18 @@ const MATRIX: readonly MatrixEntry[] = [
   },
 ];
 
+// The prompt deliberately points the agent at the TODO MCP server so the
+// rendered list is BACKEND-BACKED (todo_add → render from backend → on
+// click todo_toggle + ggui_update), not a self-contained client-only
+// `useState` widget. That distinction is the whole point of the
+// reload-restore step: a backend-backed toggle persists server-side, so
+// rehydration re-reads the checked state; a client-only toggle would be
+// lost on reload (and was the original source of this spec's flakiness).
 const JOURNEY_PROMPT =
-  'Create a todo list with 3 items: buy milk, walk the dog, write code. ' +
-  'Make each item toggleable so I can click to mark it done. ' +
-  'Keep listening for my clicks and update the UI in place when I toggle one.';
+  'Please use the todo MCP server to add these items to my todo list: ' +
+  'buy milk, walk the dog, write code. Then show me my todo list as an ' +
+  'interactive UI where I can click an item to mark it done. When I toggle ' +
+  'an item, update it in the todo MCP so my list stays in sync.';
 const EXPECTED_TODOS = ['buy milk', 'walk', 'write code'];
 
 for (const entry of MATRIX) {
