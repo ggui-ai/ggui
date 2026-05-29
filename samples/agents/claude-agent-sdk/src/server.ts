@@ -31,10 +31,6 @@ import {
   type SandboxProxyServerHandle,
 } from '@ggui-ai/dev-stack';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import {
-  isGguiUserActionMeta,
-  type GguiUserActionMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { runAgent, type McpServerConfig } from './agent.js';
 
 /**
@@ -349,30 +345,15 @@ async function handleRequest(
   if (req.method === 'POST' && url.pathname === '/chat') {
     const body = await readBody(req);
     let prompt: string;
-    // Spec-canonical `_meta["ai.ggui/userAction"]` slice forwarded by
-    // the frontend when a rehydrated-iframe click reached the host via
-    // `ui/message`. Validated at the trust boundary via the protocol's
-    // own type guard — a malformed slice fails closed (falls through
-    // to prose-only delivery rather than corrupting agent state).
-    let userAction: GguiUserActionMeta | undefined;
     try {
-      const parsed = JSON.parse(body) as {
-        readonly prompt?: unknown;
-        readonly userAction?: unknown;
-      };
+      const parsed = JSON.parse(body) as { readonly prompt?: unknown };
       if (typeof parsed.prompt !== 'string') {
         throw new Error('prompt must be a string');
       }
       prompt = parsed.prompt;
-      if (
-        parsed.userAction !== undefined &&
-        isGguiUserActionMeta(parsed.userAction)
-      ) {
-        userAction = parsed.userAction;
-      }
     } catch {
       res.writeHead(400, { 'Content-Type': 'text/plain' });
-      res.end('expected JSON body with { prompt: string, userAction?: GguiUserActionMeta }');
+      res.end('expected JSON body with { prompt: string }');
       return;
     }
     if (prompt.length === 0) {
@@ -438,7 +419,6 @@ async function handleRequest(
         ...(opts.systemPrompt !== undefined
           ? { systemPrompt: opts.systemPrompt }
           : {}),
-        ...(userAction !== undefined ? { userAction } : {}),
       })) {
         msgCount += 1;
         console.log(`[sample-agent] sdk message #${msgCount}: ${msg.type}`);

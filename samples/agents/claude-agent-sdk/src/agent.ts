@@ -22,8 +22,6 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
-import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { synthesizeUserActionPrompt } from './user-action-bridge.js';
 
 /**
  * Locate the Claude Agent SDK's bundled `cli.js`.
@@ -211,19 +209,6 @@ export interface RunAgentOptions {
    * `options.resume` keyed by this id.
    */
   readonly chatId?: string;
-  /**
-   * Spec-canonical `_meta["ai.ggui/userAction"]` slice forwarded by
-   * the frontend when a user gesture inside a rehydrated iframe
-   * reached the host via `ui/message` (no active `ggui_consume`
-   * long-poll to drain the pipe). See `synthesizeUserActionPrompt`
-   * for the bridge that drains the pipe (when `kind: 'queued'`) and
-   * synthesizes a structured prompt that delivers the action as
-   * machine-extractable fields rather than LLM-parsed prose.
-   *
-   * Absent for ordinary user-typed chat messages — those go straight
-   * through as `opts.prompt` unmodified.
-   */
-  readonly userAction?: GguiUserActionMeta;
 }
 
 /**
@@ -356,24 +341,14 @@ export async function* runAgent(
     }
   }
 
-  // When the frontend forwarded a `_meta["ai.ggui/userAction"]` slice
-  // (rehydrated-iframe click without an active consume long-poll),
-  // rewrite the user-facing prompt into a structured
-  // [GGUI_USER_ACTION] directive carrying the renderId as a typed
-  // field plus a "Next tool call: ggui_consume({renderId})" nudge.
-  // The LLM issues the REAL consume call; the MCP server's pipe
-  // stays the single source of truth (no double-drain). See
-  // `user-action-bridge.ts` for the design rationale.
-  const promptForLlm =
-    opts.userAction !== undefined
-      ? synthesizeUserActionPrompt({
-          originalPrompt: opts.prompt,
-          userAction: opts.userAction,
-        })
-      : opts.prompt;
-
+  // Rehydrated-iframe click handling lives on the FRONTEND now —
+  // `@ggui-ai/react/chat-helpers` synthesizes the
+  // `[GGUI_USER_ACTION]` directive prompt client-side before POSTing
+  // to `/chat`, so this backend stays brand-agnostic and never sees
+  // the MCP-Apps `_meta["ai.ggui/userAction"]` slice itself. The
+  // prompt arrives ready to feed the LLM.
   const response = query({
-    prompt: promptForLlm,
+    prompt: opts.prompt,
     options: {
       model: opts.model ?? 'claude-haiku-4-5',
       mcpServers: sdkMcpServers,

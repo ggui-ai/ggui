@@ -1,19 +1,25 @@
 /**
- * User-action bridge — rewrites the chat prompt for the LLM when the
- * frontend forwarded a spec-canonical `_meta["ai.ggui/userAction"]`
- * slice (rehydrated-iframe click without an active `ggui_consume`
- * long-poll on the agent side).
+ * Client-side directive synthesis for spec-canonical
+ * `_meta["ai.ggui/userAction"]` slices forwarded out of a rehydrated
+ * iframe (a click that reached the host via `ui/message` without an
+ * active `ggui_consume` long-poll on the agent side).
  *
- * Design rule: SDK/framework-agnostic. No private SDK injection paths,
- * no synthetic tool-result fabrication. Just a stronger user-message
- * directive that gives the LLM a clear next-tool-call signal with the
- * `renderId` as a structured field instead of a prose substring.
+ * Lives in the client (this hook package) — not in the agent backend —
+ * because the conversion is deterministic prose-formatting and the
+ * client already extracts the same slice off `_meta` to decide whether
+ * to forward it at all. Keeping the synthesis here means:
+ *
+ *   - Agent backends stay brand-agnostic. They receive `{prompt}` only,
+ *     never an MCP-Apps slice. Drop-in compatible with any MCP host.
+ *   - One place to tune directive wording across every LLM backend.
+ *   - `/chat` POST body shrinks to `{prompt: string}` — pure
+ *     MCP-Apps-spec-shape transport, no ggui-specific extension field.
  *
  * Two sub-shapes per the protocol type `GguiUserActionMeta`:
  *
  *   - `kind: 'queued'` — pipe HAS the event. The MCP server's
  *     `ggui_consume({renderId})` will drain it when the agent calls
- *     it. We do NOT drain server-side: that would create a
+ *     it. We do NOT drain client-side: that would create a
  *     double-truth bug (server pipe still has the event AND a fake
  *     consume return claims it was drained). Instead the directive
  *     tells the LLM "next tool call: ggui_consume({renderId: X})";
@@ -45,8 +51,8 @@ import type { GguiUserActionMeta } from '@ggui-ai/protocol/integrations/mcp-apps
  * iframe-runtime); the [GGUI_USER_ACTION] prefix carries the
  * structured fields the LLM actually acts on.
  *
- * Pure function — no MCP round-trip, no server drain, no SDK
- * coupling. Same shape across every per-SDK sample agent.
+ * Pure function — no MCP round-trip, no server drain, no React /
+ * SDK coupling. Importable from any host (React, RN, plain Node).
  */
 export function synthesizeUserActionPrompt(args: {
   readonly originalPrompt: string;

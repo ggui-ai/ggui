@@ -15,6 +15,7 @@ export type {
   UseMcpAppsChatOptions,
   UseMcpAppsChatResult,
 } from './useMcpAppsChat';
+export { synthesizeUserActionPrompt } from './user-action-prompt';
 export type {
   ChatEntry,
   HostDisplayMode,

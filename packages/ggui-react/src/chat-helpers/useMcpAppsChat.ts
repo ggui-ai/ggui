@@ -7,6 +7,7 @@ import type {
   RenderRef,
   ToolCallEntry,
 } from './mcp-apps-chat-types';
+import { synthesizeUserActionPrompt } from './user-action-prompt';
 
 /**
  * Public options for {@link useMcpAppsChat}.
@@ -72,15 +73,18 @@ export interface UseMcpAppsChatResult {
    * Post a fresh user prompt. Trimmed empty strings are no-ops. Opens
    * an SSE stream to the chat endpoint and merges every frame.
    *
-   * Optional `opts.userAction` threads the spec-canonical
-   * `_meta.ai.ggui/userAction` slice (stamped by iframe-runtime when a
-   * gesture must reach the agent via `ui/message`) end-to-end as
-   * structured data. Without it, the agent only sees the prose text
-   * and must natural-language-parse the renderId — fragile because the
-   * agent may re-handshake instead of reusing the live render. With
-   * it, the agent backend gets the renderId + actionData as typed
-   * fields and can drive the correct consume/update path without
-   * prose extraction.
+   * Optional `opts.userAction` is the spec-canonical
+   * `_meta["ai.ggui/userAction"]` slice (stamped by iframe-runtime
+   * when a gesture must reach the agent via `ui/message`). When
+   * present, the hook synthesizes a structured `[GGUI_USER_ACTION]`
+   * directive prompt CLIENT-SIDE — embedding the renderId + actionId
+   * + nextStep as machine-extractable fields — and POSTs the
+   * synthesized prompt as a plain string. The agent backend never
+   * sees the slice itself, so it stays brand-agnostic; only the
+   * `{prompt: string}` MCP-Apps-spec-shape transport crosses the
+   * wire. Without it, the agent only sees the prose text and must
+   * natural-language-parse the renderId — fragile because the agent
+   * may re-handshake instead of reusing the live render.
    */
   readonly send: (
     prompt: string,
@@ -188,24 +192,34 @@ export function useMcpAppsChat(
       const trimmed = prompt.trim();
       if (!trimmed) return;
       const turnId = mintTurnId();
+      // Chat panel shows the user's verbatim prose — the
+      // [GGUI_USER_ACTION] directive synthesis below only changes
+      // what crosses the wire to the agent, never what the user
+      // sees in their own message bubble.
       append({ id: `${turnId}.user`, kind: 'user', text: trimmed });
       setSending(true);
       const controller = new AbortController();
       abortControllerRef.current = controller;
       try {
-        const body: {
-          readonly prompt: string;
-          readonly userAction?: GguiUserActionMeta;
-        } = sendOpts?.userAction !== undefined
-          ? { prompt: trimmed, userAction: sendOpts.userAction }
-          : { prompt: trimmed };
+        // Synthesize the rehydration-directive prompt client-side
+        // when a `_meta.ai.ggui/userAction` slice rode out of the
+        // iframe via `ui/message`. The agent backend receives a
+        // plain string and stays brand-agnostic — no MCP-Apps
+        // extension fields cross the `/chat` wire boundary.
+        const promptForWire =
+          sendOpts?.userAction !== undefined
+            ? synthesizeUserActionPrompt({
+                originalPrompt: trimmed,
+                userAction: sendOpts.userAction,
+              })
+            : trimmed;
         const res = await fetch(chatEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Chat-Id': chatId,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ prompt: promptForWire }),
           signal: controller.signal,
         });
         if (!res.body) {
