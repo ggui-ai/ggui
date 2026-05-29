@@ -115,6 +115,8 @@ import {
   assertContractSchemasValid,
   dataContractSchema,
   STDLIB_GADGETS,
+  renderOutputSchema,
+  type GguiRenderOutput,
 } from '@ggui-ai/protocol';
 import {
   emitCacheTraceEvent,
@@ -897,35 +899,23 @@ const inputSchema = {
  *   - `action` — negotiator's decision (`create | reuse | update |
  *     replace | compose`). May inform the agent's follow-up prompt.
  */
-const outputSchema = {
-  renderId: z.string(),
-  resourceUri: z.string(),
-  nextStep: z
-    .object({
-      tool: z.literal('ggui_consume'),
-      args: z.object({ renderId: z.string() }),
-    })
-    .optional(),
-  action: z.enum(['create', 'reuse', 'update', 'replace', 'compose']),
-} as const;
+/**
+ * Canonical wire output shape — pulled from `@ggui-ai/protocol`'s
+ * `renderOutputSchema` so the handler's wire shape can't drift from
+ * the protocol declaration. `.shape` unpacks the zod object back to a
+ * field-record for SharedHandler's type-level inference.
+ */
+const outputSchema = renderOutputSchema.shape;
 
 /**
  * Internal handler-output type — carries the FULL field set that
  * downstream seams need (resultMeta, postSuccessHook, cloud
  * persistence, test assertions). The LLM-visible serialization is
- * the smaller `outputSchema` subset (`{renderId, nextStep?, action}`);
- * zod's `.parse()` strips the extras before they land on
- * `structuredContent`.
+ * the `GguiRenderOutput` subset (`{renderId, resourceUri, nextStep?,
+ * action}`); zod's `.parse()` strips the extras (`shortCode`,
+ * `codeReady`, etc.) before they land on `structuredContent`.
  */
-type RenderOutput = {
-  // LLM-visible surface (matches outputSchema):
-  renderId: string;
-  resourceUri: string;
-  nextStep?: {
-    readonly tool: 'ggui_consume';
-    readonly args: { readonly renderId: string };
-  };
-  action: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
+type RenderOutput = GguiRenderOutput & {
   // Internal seams (stripped from JSON-RPC envelope by outputSchema):
   shortCode: string;
   codeReady: boolean;
@@ -1772,6 +1762,9 @@ export function createGguiRenderHandler(
       const nextStep = hasActions
         ? {
             tool: 'ggui_consume' as const,
+            description:
+              'Drain the action pipe for this render — long-polls until a user gesture arrives or 15s timeout.',
+            example: `ggui_consume({ renderId: "${renderId}" })`,
             args: { renderId },
           }
         : undefined;
