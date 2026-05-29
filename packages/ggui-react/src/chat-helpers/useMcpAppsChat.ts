@@ -228,12 +228,22 @@ export function useMcpAppsChat(
   const addRender = useCallback((item: RenderRef) => {
     setRenders((prev) => {
       // Dedupe by resourceUri — re-emits (e.g. *_update returning the
-      // same URI) land on the same bucket rather than spawning a new
-      // iframe each time. The iframe stays mounted; live updates flow
-      // through whichever channel the server-rendered HTML wired up
-      // (typically a WebSocket baked into the shell).
-      if (prev.some((p) => p.resourceUri === item.resourceUri)) return prev;
-      return [...prev, item];
+      // same URI) coalesce onto the same iframe entry rather than
+      // spawning a new iframe each time. When the new emission
+      // carries a fresher `inlinedResource` (the agent-server
+      // interceptor stamps the latest server HTML on every result),
+      // merge it onto the existing entry so the LATEST HTML wins —
+      // critical for snapshot rehydration, where the replay walks
+      // every recorded tool_use_result in order and the LAST inlined
+      // HTML reflects the current state. Live mounts skip this work
+      // (the iframe stays mounted; live updates flow through the
+      // server-rendered HTML's own channel, typically a WebSocket).
+      const idx = prev.findIndex((p) => p.resourceUri === item.resourceUri);
+      if (idx < 0) return [...prev, item];
+      if (item.inlinedResource === undefined) return prev;
+      const next = prev.slice();
+      next[idx] = { ...prev[idx]!, inlinedResource: item.inlinedResource };
+      return next;
     });
   }, []);
 

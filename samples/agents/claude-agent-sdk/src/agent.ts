@@ -13,6 +13,7 @@
  * every `_meta.ui.*` / `_meta.ai.ggui/*` slice.
  */
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -226,11 +227,18 @@ async function* runOnce(args: {
   }
 
   // Multi-turn session continuity via the SDK's filesystem store.
+  // The SDK requires a UUID-shaped sessionId; the library mints
+  // `chat_<22-char base62>` chat ids that don't match. Derive a
+  // deterministic UUID from the chat id (SHA-256 hash → first 16
+  // bytes shaped as UUIDv4) so the same chat keeps the same SDK
+  // session across turns, while the library's wire shape stays
+  // brand-agnostic.
+  const sdkSessionId = chatIdToUuid(input.chatId);
   const sessionOptions: { resume?: string; sessionId?: string } = {};
   if (knownChats.has(input.chatId)) {
-    sessionOptions.resume = input.chatId;
+    sessionOptions.resume = sdkSessionId;
   } else {
-    sessionOptions.sessionId = input.chatId;
+    sessionOptions.sessionId = sdkSessionId;
     knownChats.add(input.chatId);
   }
 
@@ -279,6 +287,21 @@ async function* runOnce(args: {
   } finally {
     input.abortSignal.removeEventListener('abort', onAbort);
   }
+}
+
+/**
+ * Map any opaque chat id to a deterministic UUID v4-shaped string —
+ * SHA-256 the chat id, take the first 16 bytes, force version + variant
+ * bits to match RFC 4122. Same input always yields the same UUID so
+ * the SDK's session store keys stay stable across turns.
+ */
+function chatIdToUuid(chatId: string): string {
+  const hash = createHash('sha256').update(chatId).digest();
+  // RFC 4122 v4: bits 12-15 = 0100 (version), bits 6-7 of clock_seq_hi = 10 (variant)
+  hash[6] = (hash[6]! & 0x0f) | 0x40;
+  hash[8] = (hash[8]! & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**
