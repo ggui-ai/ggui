@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/react-native",
-  "version": "0.1.0-rc.3",
+  "version": "0.2.0",
   "description": "React Native SDK for ggui — components and hooks for embedding agent-generated UIs in mobile apps.",
   "keywords": [
     "ggui",

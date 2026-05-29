@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/mcp-server",
-  "version": "0.1.0-rc.3",
+  "version": "0.2.0",
   "description": "Self-hosted MCP server for the ggui protocol. An HTTP/MCP binding layer over @ggui-ai/mcp-server-handlers and the reference adapters from @ggui-ai/mcp-server-core — run it via `ggui serve`.",
   "keywords": [
     "ggui",

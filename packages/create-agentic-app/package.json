@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/create-agentic-app",
-  "version": "0.1.0-rc.1",
+  "version": "0.2.0",
   "description": "Scaffold a ggui agentic app from one of the official templates (claude-agent-sdk, openai-agents-sdk, google-adk). One-time-use; meant to be invoked via `npx @ggui-ai/create-agentic-app`.",
   "license": "Apache-2.0",
   "type": "module",

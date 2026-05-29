@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/wire",
-  "version": "0.1.0-rc.3",
+  "version": "0.2.0",
   "description": "ggui wire — runtime hooks for generated component ↔ agent communication",
   "license": "Apache-2.0",
   "keywords": [
