@@ -188,7 +188,9 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
     });
 
   const [prompt, setPrompt] = useState('');
-  const [layout, setLayout] = useState<LayoutMode>('inline');
+  // Default to panel (side-pane) layout; the agent's `hostDisplayMode`
+  // hint (if any) still overrides via the effect below.
+  const [layout, setLayout] = useState<LayoutMode>('panel');
   const historyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -202,13 +204,17 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
   }, [entries.length]);
 
   const newSession = useCallback(() => {
-    // Drop the URL chat param + local state. Next POST allocates a
-    // fresh server-side chatId, which lands via onChatAllocated.
+    // Stop any in-flight stream so its tail doesn't bleed into the fresh
+    // conversation, then drop the URL chat param + local state. Clearing
+    // `chatId` makes useMcpAppsChat reset entries/renders; the next POST
+    // allocates a fresh server-side chatId, which lands via
+    // onChatAllocated.
+    abort();
     const url = new URL(window.location.href);
     url.searchParams.delete(URL_CHAT_PARAM);
     window.history.replaceState({}, '', url.toString());
     setChatId(undefined);
-  }, []);
+  }, [abort]);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
