@@ -358,19 +358,17 @@ export async function* runAgent(
 
   // When the frontend forwarded a `_meta["ai.ggui/userAction"]` slice
   // (rehydrated-iframe click without an active consume long-poll),
-  // rewrite the user-facing prompt into a synthetic `ggui_consume`
-  // return envelope. The LLM sees a familiar consume-shaped payload
-  // — its existing `consume → domain-tool → ggui_update` loop takes
-  // over without needing to natural-language-parse a renderId out of
-  // prose. See `user-action-bridge.ts`.
-  const gguiServerForBridge = opts.mcpServers.ggui;
+  // rewrite the user-facing prompt into a structured
+  // [GGUI_USER_ACTION] directive carrying the renderId as a typed
+  // field plus a "Next tool call: ggui_consume({renderId})" nudge.
+  // The LLM issues the REAL consume call; the MCP server's pipe
+  // stays the single source of truth (no double-drain). See
+  // `user-action-bridge.ts` for the design rationale.
   const promptForLlm =
-    opts.userAction !== undefined && gguiServerForBridge !== undefined
-      ? await synthesizeUserActionPrompt({
+    opts.userAction !== undefined
+      ? synthesizeUserActionPrompt({
           originalPrompt: opts.prompt,
           userAction: opts.userAction,
-          gguiMcpUrl: gguiServerForBridge.url,
-          bearer,
         })
       : opts.prompt;
 
