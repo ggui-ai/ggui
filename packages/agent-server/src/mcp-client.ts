@@ -7,18 +7,19 @@
  * Kept self-contained because the library can't pull in
  * `@modelcontextprotocol/sdk` without inheriting its full client +
  * transport machinery, which is overkill for the two server-to-server
- * RPCs this package needs. Three call sites total:
+ * RPCs this package needs. Call sites:
  *
- *   1. `POST /agent` tool-result interceptor — `resources/read` to
- *      inline the iframe HTML for a `_meta.ui.resourceUri`.
- *   2. (Future) MCP discovery — `tools/list` to learn what each
+ *   1. `GET /agent` rehydration + `POST /agent` tool-result interceptor
+ *      — `resources/read` to inline the iframe HTML for a
+ *      `_meta.ui.resourceUri` (fresh on replay, first-mount on live).
+ *   2. `POST /agent { kind:'tool-call' }` — `tools/call` relay
+ *      (iframe → host → MCP). The iframe holds no MCP credential; this
+ *      host forwards the call and returns the JSON-RPC envelope.
+ *   3. (Future) MCP discovery — `tools/list` to learn what each
  *      configured server exposes.
- *   3. (Removed) `/relay/resources-read` — replaced by the
- *      interceptor inlining the resource alongside the tool result.
  *
- * The `tools/call` relay (iframe → host → MCP) is still served
- * directly out of the Hono app at `POST /agent/relay/tools-call`; it
- * uses {@link parseMcpResponse} on the upstream body.
+ * Both `callMcpToolsCall` and `callMcpResourcesRead` use
+ * {@link parseMcpResponse} on the upstream body.
  */
 
 /**

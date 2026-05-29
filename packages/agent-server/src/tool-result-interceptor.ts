@@ -118,26 +118,49 @@ export function selectMcpServerForResource(
  * Pure-functional: never mutates the input. The library forwards the
  * returned message through SSE + records it in the snapshot, so
  * rehydrations see the same inlined resource on `GET /agent`.
+ *
+ * Two call paths with opposite freshness semantics:
+ *
+ *   - LIVE (`POST /agent` stream, default): skip when the result is
+ *     already inlined — the inlined HTML is the first-mount
+ *     optimization and re-fetching mid-stream would be wasted work.
+ *   - REPLAY (`GET /agent` rehydration, `forceReinline: true`): IGNORE
+ *     the record-time inlined resource and re-issue `resources/read`
+ *     so the replayed message carries the CURRENT server-authoritative
+ *     HTML (latest props). The frozen record-time resource captured the
+ *     initial render; a `*_update` delivered live over WS afterward
+ *     never re-baked into the snapshot, so the replay MUST re-fetch to
+ *     reflect current state — otherwise a reload shows pre-click HTML.
  */
 export async function interceptToolResult(args: {
   readonly message: NormalizedMessage;
   readonly mcpServers: InterceptorMcpServers;
   readonly signal?: AbortSignal;
   readonly log?: (line: string) => void;
+  /**
+   * Replay-path flag. When `true`, re-fetch the resource even if it's
+   * already inlined, overwriting the record-time HTML with the current
+   * server state. Defaults to `false` (live-stream behavior — skip the
+   * already-inlined no-op).
+   */
+  readonly forceReinline?: boolean;
 }): Promise<NormalizedMessage> {
-  const { message, mcpServers, signal, log } = args;
+  const { message, mcpServers, signal, log, forceReinline = false } = args;
   if (message.type !== 'user') return message;
   const fullResult = message.tool_use_result;
   const uri = extractResourceUri(fullResult);
   if (uri === undefined || fullResult === undefined) return message;
 
   // Skip when the resource has already been inlined (idempotent
-  // replay path: when the snapshot is re-fed through the interceptor
-  // on rehydration the second pass is a no-op).
-  const existingUi = (fullResult._meta as { ui?: unknown } | undefined)?.ui as
-    | { resource?: unknown }
-    | undefined;
-  if (existingUi?.resource !== undefined) return message;
+  // live path: a second pass over an already-inlined result is a
+  // no-op) — UNLESS the caller forces a fresh re-inline (the
+  // `GET /agent` rehydration path, which MUST reflect current server
+  // state rather than the record-time HTML).
+  if (!forceReinline) {
+    const existingUi = (fullResult._meta as { ui?: unknown } | undefined)
+      ?.ui as { resource?: unknown } | undefined;
+    if (existingUi?.resource !== undefined) return message;
+  }
 
   const server = selectMcpServerForResource(uri, mcpServers);
   if (!server) {

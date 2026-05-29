@@ -214,4 +214,55 @@ describe('interceptToolResult', () => {
     expect(out).toBe(alreadyInlined);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('forceReinline re-fetches even when already inlined, overwriting with current state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            contents: [
+              {
+                uri: 'ui://ggui/render/r_1',
+                mimeType: 'text/html',
+                text: '<html>FRESH</html>',
+              },
+            ],
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const stale: NormalizedMessage = {
+      type: 'user',
+      message: { content: [] },
+      tool_use_result: {
+        _meta: {
+          ui: {
+            resourceUri: 'ui://ggui/render/r_1',
+            resource: {
+              uri: 'ui://ggui/render/r_1',
+              text: '<html>STALE</html>',
+            },
+          },
+        },
+      },
+    };
+    const out = await interceptToolResult({
+      message: stale,
+      mcpServers: SERVERS,
+      forceReinline: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    if (out.type !== 'user') throw new Error('expected user message');
+    const ui = (
+      out.tool_use_result?._meta as
+        | { ui: { resource: { text?: string } } }
+        | undefined
+    )?.ui;
+    expect(ui?.resource?.text).toBe('<html>FRESH</html>');
+  });
 });

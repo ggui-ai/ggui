@@ -11,7 +11,7 @@
  * e2e harness. Here we assert that the route returns 200 (or the
  * appropriate auth code) and the right Content-Type.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAgentApp } from './app.js';
 import { createGuestTokenAuth } from './auth.js';
 import { createInMemoryChatStore } from './chat-store.js';
@@ -150,15 +150,149 @@ describe('GET /agent', () => {
     );
     expect(res.status).toBe(403);
   });
+
+  it('re-inlines each render FRESH from the MCP before replay (Problem B)', async () => {
+    const { app, store } = buildApp();
+    const { guestToken, guestId } = await mintGuestBearer(app);
+    // Recorded message carries a STALE inlined resource (record-time
+    // HTML — the todo unchecked at first mount). A live ggui_update
+    // checked it afterward but never re-baked into this snapshot.
+    store.append({
+      chatId: 'chat_fresh',
+      ownerId: guestId,
+      message: {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tu_1',
+              content: [{ type: 'text', text: 'rendered' }],
+            },
+          ],
+        },
+        tool_use_result: {
+          content: [{ type: 'text', text: 'rendered' }],
+          _meta: {
+            ui: {
+              resourceUri: 'ui://ggui/render/r_1',
+              resource: {
+                uri: 'ui://ggui/render/r_1',
+                mimeType: 'text/html',
+                text: '<html>STALE unchecked</html>',
+              },
+            },
+          },
+        },
+      },
+    });
+    // MCP resources/read now returns the CURRENT (checked) HTML.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            contents: [
+              {
+                uri: 'ui://ggui/render/r_1',
+                mimeType: 'text/html',
+                text: '<html>FRESH checked</html>',
+              },
+            ],
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await app.request('http://localhost/agent?chatId=chat_fresh', {
+        headers: { Authorization: `Bearer ${guestToken}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        messages: Array<{
+          tool_use_result?: {
+            _meta?: { ui?: { resource?: { text?: string } } };
+          };
+        }>;
+      };
+      // The replayed message carries the FRESH HTML, not the stale
+      // record-time HTML — a fresh resources/read happened.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const replayedText =
+        body.messages[0]?.tool_use_result?._meta?.ui?.resource?.text;
+      expect(replayedText).toBe('<html>FRESH checked</html>');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('falls back to recorded HTML when the fresh MCP read fails', async () => {
+    const { app, store } = buildApp();
+    const { guestToken, guestId } = await mintGuestBearer(app);
+    store.append({
+      chatId: 'chat_evicted',
+      ownerId: guestId,
+      message: {
+        type: 'user',
+        message: { content: [] },
+        tool_use_result: {
+          _meta: {
+            ui: {
+              resourceUri: 'ui://ggui/render/r_gone',
+              resource: {
+                uri: 'ui://ggui/render/r_gone',
+                text: '<html>LAST KNOWN</html>',
+              },
+            },
+          },
+        },
+      },
+    });
+    // MCP read fails (e.g. TTL-evicted render) — interceptor passes the
+    // message through unchanged, preserving the recorded HTML.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: { message: 'render not found' },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await app.request(
+        'http://localhost/agent?chatId=chat_evicted',
+        { headers: { Authorization: `Bearer ${guestToken}` } },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        messages: Array<{
+          tool_use_result?: {
+            _meta?: { ui?: { resource?: { text?: string } } };
+          };
+        }>;
+      };
+      const replayedText =
+        body.messages[0]?.tool_use_result?._meta?.ui?.resource?.text;
+      expect(replayedText).toBe('<html>LAST KNOWN</html>');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });
 
-describe('POST /agent', () => {
+describe("POST /agent { kind:'chat' }", () => {
   it('returns 401 with no bearer', async () => {
     const { app } = buildApp();
     const res = await app.request('http://localhost/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'hi' }),
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi' }),
     });
     expect(res.status).toBe(401);
   });
@@ -172,7 +306,7 @@ describe('POST /agent', () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${guestToken}`,
       },
-      body: JSON.stringify({ prompt: 'hi' }),
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi' }),
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')?.toLowerCase()).toContain(
@@ -189,7 +323,22 @@ describe('POST /agent', () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${guestToken}`,
       },
-      body: JSON.stringify({ prompt: '' }),
+      body: JSON.stringify({ kind: 'chat', prompt: '' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the kind discriminator is missing', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      // The pre-discriminator shape `{prompt}` is no longer accepted.
+      body: JSON.stringify({ prompt: 'hi' }),
     });
     expect(res.status).toBe(400);
   });
@@ -209,9 +358,111 @@ describe('POST /agent', () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${bob.guestToken}`,
       },
-      body: JSON.stringify({ prompt: 'hi', chatId: 'chat_alice' }),
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi', chatId: 'chat_alice' }),
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /agent { kind:'tool-call' }", () => {
+  it('returns 401 with no bearer', async () => {
+    const { app } = buildApp();
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'tool-call', name: 'ggui_x', arguments: {} }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when name is missing', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      body: JSON.stringify({ kind: 'tool-call', arguments: {} }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('relays the tools/call to the MCP and returns the JSON-RPC result as JSON', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text: 'relayed' }] },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await app.request('http://localhost/agent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${guestToken}`,
+        },
+        body: JSON.stringify({
+          kind: 'tool-call',
+          name: 'ggui_runtime_submit_action',
+          arguments: { renderId: 'r_1', event: { name: 'click' } },
+        }),
+      });
+      expect(res.status).toBe(200);
+      // Not an SSE stream — the relay returns plain JSON.
+      expect(res.headers.get('Content-Type')?.toLowerCase()).toContain(
+        'application/json',
+      );
+      const body = (await res.json()) as {
+        result?: { content?: Array<{ text?: string }> };
+      };
+      expect(body.result?.content?.[0]?.text).toBe('relayed');
+      // The relay POSTed to the configured ggui MCP URL.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://localhost:9999/mcp');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+describe('deleted endpoints', () => {
+  it('GET /sandbox-proxy-url is gone (404) — sandboxProxyUrl comes from GET /', async () => {
+    const { app } = buildApp();
+    const res = await app.request('http://localhost/sandbox-proxy-url');
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /agent/relay/tools-call is gone (404) — folded into POST /agent', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const res = await app.request('http://localhost/agent/relay/tools-call', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      body: JSON.stringify({ name: 'ggui_x', arguments: {} }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('GET /api/renders/:id/state is gone (404) — freshness handled in GET /agent', async () => {
+    const { app } = buildApp();
+    const { guestToken } = await mintGuestBearer(app);
+    const res = await app.request('http://localhost/api/renders/r_1/state', {
+      headers: { Authorization: `Bearer ${guestToken}` },
+    });
+    expect(res.status).toBe(404);
   });
 });
 

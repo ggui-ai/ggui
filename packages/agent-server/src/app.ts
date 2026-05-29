@@ -1,18 +1,49 @@
 /**
  * Hono app factory + request handlers for the brand-agnostic agent
- * server. Three core routes + an adapter-mounted `/auth/*` sub-router:
+ * server. ONE agent endpoint (GET + POST `/agent`) + a manifest + an
+ * adapter-mounted `/auth/*` sub-router. There is no fragmented relay /
+ * proxy / sandbox-url surface — everything the frontend needs rides on
+ * these routes:
  *
  *   GET  /                     — `{name, sandboxProxyUrl, mcpServers}`
  *                                manifest, used by frontends to bind.
+ *                                The frontend reads `sandboxProxyUrl`
+ *                                FROM HERE (there is no separate
+ *                                `/sandbox-proxy-url` endpoint). Public
+ *                                — no auth required (no per-principal
+ *                                data).
+ *
  *   GET  /agent?chatId=X       — server-authoritative chat snapshot
  *                                (replayed through the same handler
  *                                the live SSE stream uses). Auth +
- *                                ownership gated.
- *   POST /agent                — { prompt, chatId?, data?: {meta?} }
- *                                → SSE stream of normalized SDK
- *                                messages. First event is always
- *                                `chat-allocated` carrying the
- *                                server-allocated chat id.
+ *                                ownership gated. Each recorded
+ *                                tool-result's MCP-Apps resource is
+ *                                RE-INLINED FRESH before replay (a
+ *                                fresh `resources/read` to the MCP) so
+ *                                rehydration reflects the CURRENT
+ *                                server-authoritative render state, not
+ *                                the frozen record-time HTML. There is
+ *                                no `/api/renders/:id/state` proxy —
+ *                                rehydration freshness is handled here.
+ *
+ *   POST /agent                — `kind`-discriminated body:
+ *                                  { kind:'chat', chatId?, prompt,
+ *                                    data?:{meta?} }
+ *                                    → SSE stream of normalized SDK
+ *                                      messages. First event is always
+ *                                      `chat-allocated` carrying the
+ *                                      server-allocated chat id.
+ *                                  { kind:'tool-call', chatId?, name,
+ *                                    arguments }
+ *                                    → iframe-issued `tools/call`
+ *                                      relayed to the MCP server;
+ *                                      returns the `CallToolResult`
+ *                                      JSON-RPC envelope as JSON (NOT
+ *                                      SSE). The browser holds no MCP
+ *                                      credential; this host is the
+ *                                      protocol-defined relay party.
+ *                                      (Folded in from the retired
+ *                                      `/agent/relay/tools-call`.)
  *
  *   /auth/*                    — RESERVED for AuthAdapter.mount().
  *                                Library never registers a route here
@@ -20,24 +51,9 @@
  *                                POST /auth/guest, GET /auth/me,
  *                                POST /auth/logout; bearer adapter
  *                                mounts GET /auth/me only.
- *
- *   POST /agent/relay/tools-call  — iframe-issued tools/call → MCP
- *                                relay. Preserved because the browser
- *                                still needs same-origin access to the
- *                                MCP without CORS; `/relay/resources-
- *                                read` is RETIRED because the tool-
- *                                result interceptor inlines the
- *                                resource alongside the result on the
- *                                way out.
- *
- *   GET  /sandbox-proxy-url    — `{url}` for the second-origin sandbox
- *                                (per MCP-Apps spec).
- *
- *   GET  /api/renders/:id/state — proxy to the ggui MCP server's
- *                                state endpoint (wsToken-gated).
  */
 import { Hono } from 'hono';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import {
   defaultAuthorizeChat,
@@ -174,16 +190,23 @@ export function createAgentApp(
     }),
   );
 
-  // ── GET /sandbox-proxy-url ──────────────────────────────────────────
-  app.get('/sandbox-proxy-url', (c) =>
-    c.json({ url: sandboxProxyUrl }, 200, { 'Cache-Control': 'no-store' }),
-  );
-
   // ── GET /agent?chatId=X — snapshot ──────────────────────────────────
-  // Returns the verbatim stream of normalized messages we observed
-  // for this chat. Auth + ownership gated: 401 with no principal,
-  // 404 on unknown chatId, 403 on chat owned by another principal,
-  // 200 on success.
+  // Returns the stream of normalized messages we observed for this
+  // chat, RE-INLINED FRESH. Auth + ownership gated: 401 with no
+  // principal, 404 on unknown chatId, 403 on chat owned by another
+  // principal, 200 on success.
+  //
+  // Rehydration freshness (Problem B): the recorded tool-results carry
+  // an `inlinedResource` FROZEN at record time (the initial render).
+  // Any `*_update` delivered live over WS afterwards never re-baked
+  // into the snapshot, so a naive replay would show stale pre-click
+  // HTML. Before returning, we re-run the tool-result interceptor with
+  // `forceReinline` so each render's resource is re-fetched from the
+  // MCP at its CURRENT state — the replayed messages then carry
+  // up-to-date HTML. Renders that no longer resolve fall back to their
+  // recorded HTML (the interceptor passes the message through on a
+  // failed `resources/read`), so a TTL-evicted render degrades to its
+  // last-known state rather than vanishing.
   app.get('/agent', requireAuth, async (c) => {
     const chatId = c.req.query('chatId') ?? '';
     if (chatId.length === 0) {
@@ -200,14 +223,28 @@ export function createAgentApp(
     if (!allowed) {
       return c.json({ error: 'forbidden' }, 403);
     }
+    const freshMessages = await Promise.all(
+      rec.snapshot.messages.map((message) =>
+        interceptToolResult({
+          message,
+          mcpServers,
+          forceReinline: true,
+          log,
+        }),
+      ),
+    );
     return c.json(
-      { chatId: rec.snapshot.chatId, messages: rec.snapshot.messages },
+      { chatId: rec.snapshot.chatId, messages: freshMessages },
       200,
       { 'Cache-Control': 'no-store' },
     );
   });
 
-  // ── POST /agent — main agent loop, SSE stream ───────────────────────
+  // ── POST /agent — kind-discriminated ────────────────────────────────
+  // `kind:'chat'`      → run the agent loop, SSE stream of normalized
+  //                      SDK messages (first event `chat-allocated`).
+  // `kind:'tool-call'` → relay an iframe-issued `tools/call` to the MCP
+  //                      server, return the JSON-RPC envelope as JSON.
   app.post('/agent', requireAuth, async (c) => {
     let body: PostAgentBody;
     try {
@@ -215,11 +252,52 @@ export function createAgentApp(
     } catch {
       return c.json({ error: 'expected JSON body' }, 400);
     }
+    if (body.kind !== 'chat' && body.kind !== 'tool-call') {
+      return c.json(
+        { error: "kind must be 'chat' or 'tool-call'" },
+        400,
+      );
+    }
+
+    const principal = c.get('principal');
+
+    // ── kind:'tool-call' — iframe → MCP relay (JSON, not SSE) ─────────
+    // Forwards the iframe-issued `tools/call` to the matching MCP
+    // server over HTTP. The iframe holds no auth credential; this host
+    // is the protocol-defined relay party. Auth-gated above — any
+    // authenticated principal may relay (tools/call doesn't bind to a
+    // chat). Generic MCP forwarding: ZERO ggui-protocol knowledge.
+    if (body.kind === 'tool-call') {
+      if (typeof body.name !== 'string' || body.name.length === 0) {
+        return c.json({ error: 'name required' }, 400);
+      }
+      const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
+      if (!primary) {
+        return c.json({ error: 'no MCP server configured' }, 500);
+      }
+      try {
+        const args =
+          body.arguments && typeof body.arguments === 'object'
+            ? body.arguments
+            : {};
+        const rpc = await callMcpToolsCall({
+          url: primary.url,
+          bearer: primary.bearer,
+          name: body.name,
+          arguments: args,
+        });
+        return c.json(rpc, 200);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return c.json({ error: `relay error: ${message}` }, 502);
+      }
+    }
+
+    // ── kind:'chat' — agent loop, SSE stream ──────────────────────────
     if (typeof body.prompt !== 'string' || body.prompt.length === 0) {
       return c.json({ error: 'prompt must be a non-empty string' }, 400);
     }
 
-    const principal = c.get('principal');
     const ownerId = principalId(principal);
 
     // Resolve / allocate chatId. When the client supplied one, verify
@@ -329,122 +407,51 @@ export function createAgentApp(
     });
   });
 
-  // ── POST /agent/relay/tools-call — iframe → MCP relay ───────────────
-  // Forwards iframe-issued `tools/call` (postMessage) to the matching
-  // MCP server over HTTP. The iframe holds no auth credential; this
-  // host is the protocol-defined relay party.
-  //
-  // Auth-gated: only the chat owner (or any authenticated principal —
-  // tools/call doesn't carry a chatId binding it to a specific chat)
-  // can use the relay. Reasoning: this surface speaks to the MCP
-  // server on behalf of the host; leaving it unauth'd would let
-  // anyone issue tools/call through the proxy.
-  app.post('/agent/relay/tools-call', requireAuth, async (c) => {
-    let body: RelayToolsCallBody;
-    try {
-      body = (await c.req.json()) as RelayToolsCallBody;
-    } catch {
-      return c.json({ error: 'expected JSON body' }, 400);
-    }
-    if (typeof body.name !== 'string' || body.name.length === 0) {
-      return c.json({ error: 'name required' }, 400);
-    }
-    const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
-    if (!primary) {
-      return c.json({ error: 'no MCP server configured' }, 500);
-    }
-    try {
-      const args =
-        body.arguments && typeof body.arguments === 'object'
-          ? (body.arguments as Record<string, unknown>)
-          : {};
-      const rpc = await callMcpToolsCall({
-        url: primary.url,
-        bearer: primary.bearer,
-        name: body.name,
-        arguments: args,
-      });
-      return c.json(rpc, 200);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return c.json({ error: `relay error: ${message}` }, 502);
-    }
-  });
-
-  // ── GET /api/renders/:renderId/state — MCP state proxy ──────────────
-  // The state endpoint replaced the bearer-by-obscurity `/r/<shortCode>`
-  // URL; the browser fetches via this same-origin path so the MCP
-  // server doesn't need CORS. wsToken query is forwarded verbatim —
-  // the MCP gates on token signature, render ownership, appId match,
-  // so we don't double-gate here (any authenticated principal can
-  // forward; the MCP's token is the actual gate).
-  app.get(
-    '/api/renders/:renderId/state',
-    requireAuth,
-    async (c: Context<{ Variables: AgentAppVariables }>) => {
-      const renderId = c.req.param('renderId');
-      if (typeof renderId !== 'string' || renderId.length === 0) {
-        return c.json({ error: 'renderId required' }, 400);
-      }
-      const primary = mcpServers.ggui ?? Object.values(mcpServers)[0];
-      if (!primary) {
-        return c.json({ error: 'no MCP server configured' }, 500);
-      }
-      try {
-        const mcpOrigin = new URL(primary.url);
-        mcpOrigin.pathname = `/api/renders/${encodeURIComponent(renderId)}/state`;
-        const incoming = new URL(c.req.url);
-        mcpOrigin.search = incoming.search;
-        const upstream = await fetch(mcpOrigin.toString(), {
-          headers: { Accept: 'application/json' },
-        });
-        const text = await upstream.text();
-        return new Response(text, {
-          status: upstream.status,
-          headers: {
-            'Content-Type':
-              upstream.headers.get('Content-Type') ?? 'application/json',
-            'Cache-Control': 'no-store, no-cache, must-revalidate',
-          },
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return c.json({ error: `state proxy error: ${message}` }, 502);
-      }
-    },
-  );
-
   return app;
 }
 
 /**
- * Shape the client (`useMcpAppsChat.send`) sends on every POST.
+ * `kind`-discriminated body the client posts to `POST /agent`.
  *
- * `data.meta` is a GENERIC forward-compat extension carrier — an opaque
- * record the client may attach. The server is a pure prompt-forwarder
- * with ZERO ggui-protocol knowledge: it does NOT inspect or special-case
- * any key here. (The "call ggui_consume…" directive a guest gesture
- * needs already lives in the iframe-authored `ui/message` text, which
- * the client forwards as `prompt`.)
+ *   kind:'chat'      — run the agent loop. `prompt` feeds the adapter
+ *                      verbatim; `data.meta` is a GENERIC forward-compat
+ *                      extension carrier (opaque record the client may
+ *                      attach). The server is a pure prompt-forwarder
+ *                      with ZERO ggui-protocol knowledge — it does NOT
+ *                      inspect or special-case any key in `data.meta`.
+ *                      (The "call ggui_consume…" directive a guest
+ *                      gesture needs already lives in the iframe-authored
+ *                      `ui/message` text the client forwards as
+ *                      `prompt`.) `chatId` optional — when absent the
+ *                      server allocates one and returns it as the first
+ *                      SSE event; when supplied for an existing chat the
+ *                      principal MUST own it (403 otherwise).
  *
- * `chatId` is optional — when absent the server allocates one and
- * returns it as the first SSE event. When supplied for an existing
- * chat, the principal MUST own it (403 otherwise).
+ *   kind:'tool-call' — relay an iframe-issued `tools/call` to the MCP
+ *                      server. `name` + `arguments` are forwarded
+ *                      verbatim. Generic MCP forwarding; not
+ *                      ggui-specific.
+ *
+ * Fields are typed `unknown` because this is the untrusted wire
+ * boundary — handlers narrow each before use.
  */
-interface PostAgentBody {
-  readonly prompt?: unknown;
-  readonly chatId?: unknown;
-  readonly data?: {
-    readonly meta?: {
-      readonly [key: string]: unknown;
+type PostAgentBody =
+  | {
+      readonly kind: 'chat';
+      readonly chatId?: unknown;
+      readonly prompt?: unknown;
+      readonly data?: {
+        readonly meta?: {
+          readonly [key: string]: unknown;
+        };
+      };
+    }
+  | {
+      readonly kind: 'tool-call';
+      readonly chatId?: unknown;
+      readonly name?: unknown;
+      readonly arguments?: Record<string, unknown>;
     };
-  };
-}
-
-interface RelayToolsCallBody {
-  readonly name?: unknown;
-  readonly arguments?: unknown;
-}
 
 /**
  * SSE event the server always writes first on a fresh `/agent` POST
