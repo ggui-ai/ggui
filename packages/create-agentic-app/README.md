@@ -15,15 +15,29 @@ npx @ggui-ai/create-agentic-app \
   --install
 ```
 
+## Options
+
+| Flag              | Effect                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `--name <name>`   | npm package name. Defaults to `<target>`. kebab-case.                                    |
+| `--scope <scope>` | npm scope for the `servers/*` + `apps/*` packages (no leading `@`). Prompted if omitted. |
+| `--agent <sdk>`   | One of the SDKs below. Prompted if omitted.                                              |
+| `--install`       | Run `pnpm install` after scaffolding.                                                    |
+| `--no-git`        | Skip `git init` + initial commit (done by default — see below).                          |
+| `--force`         | Overwrite the target directory if it exists and is non-empty.                            |
+| `--ref <ref>`     | git ref of the templates repo to clone (default: `main`).                                |
+| `--list-agents`   | Print the supported agent SDKs and exit.                                                 |
+| `--help`, `-h`    | Show help.                                                                               |
+
 ## Agent SDKs
 
 Pick one at scaffold time:
 
-| `--agent`           | LLM              | Port |
-| ------------------- | ---------------- | ---- |
-| `claude-agent-sdk`  | Anthropic Claude | 6790 |
-| `openai-agents-sdk` | OpenAI           | 6791 |
-| `google-adk`        | Google Gemini    | 6792 |
+| `--agent`           | LLM              | Agent port |
+| ------------------- | ---------------- | ---------- |
+| `claude-agent-sdk`  | Anthropic Claude | 6790       |
+| `openai-agents-sdk` | OpenAI           | 6791       |
+| `google-adk`        | Google Gemini    | 6792       |
 
 `npx @ggui-ai/create-agentic-app --list-agents` prints the current list.
 
@@ -34,28 +48,47 @@ A complete pnpm monorepo, ready to run:
 ```
 my-app/
 ├── servers/
-│   ├── agent/      # your chosen agent SDK + a React chat UI
-│   ├── ggui/       # `ggui serve --mcp-only` config
-│   └── mcp-todo/   # standalone MCP server (the worked example)
+│   ├── agent/          # your chosen agent SDK + the chat loop
+│   ├── ggui/           # `ggui serve` config — renders the agent's UI
+│   └── mcps/
+│       └── todo/       # worked-example MCP server — copy it for your domain
+├── apps/
+│   └── web/            # Vite SPA — @ggui-ai/react <AppRenderer>
+├── .reference/         # local ggui guides for the Claude Code in this repo
+├── .claude/            # Claude Code settings + /bootstrap slash command
+├── scripts/            # deploy-railway.mjs (powers `pnpm deploy:railway`)
 ├── .env.example
-├── .env.local      # seeded from .env.example
-├── package.json    # renamed to your project name
+├── .env.local          # seeded from .env.example
+├── .gitignore          # already excludes .env*.local, node_modules, dist
+├── .mcp.json           # wires the ggui-docs MCP for Claude Code
+├── railway.toml
+├── package.json        # renamed to your project name
 ├── pnpm-workspace.yaml
-├── CLAUDE.md       # Claude Code guidance for this project
+├── CLAUDE.md           # Claude Code guidance for this project
 └── README.md
 ```
 
-After scaffolding:
+It's also **already a git repository** with one initial commit — so you can add
+a remote and push immediately. The commit runs _after_ `--install`, so a
+generated `pnpm-lock.yaml` is included. Pass `--no-git` to skip it (or, to
+re-author the commit under your own identity, `git commit --amend --reset-author`).
+
+## After scaffolding
 
 1. `cd my-app && pnpm install` (skip if you passed `--install`)
 2. Add your API key to `.env.local` (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`)
-3. Run the three servers in separate terminals:
+3. Run the four servers in separate terminals:
    - `pnpm dev:ggui` → http://localhost:6781/mcp
    - `pnpm dev:todo` → http://localhost:6782/mcp
-   - `pnpm dev:agent` → chat UI on 6790 / 6791 / 6792 depending on SDK
-4. Inside Claude Code, run `/bootstrap` to tailor README + CLAUDE.md for your
-   project (renames the workspace identity, removes the boilerplate
-   one-time blocks).
+   - `pnpm dev:agent` → agent backend on 6790 / 6791 / 6792 depending on SDK
+   - `pnpm dev:web` → frontend SPA on http://localhost:6890
+4. Open http://localhost:6890 and chat.
+5. Inside Claude Code, run `/bootstrap` — it tailors the README + CLAUDE.md
+   prose for your domain, walks you through building your first tool, and
+   removes its own one-time onboarding block when done.
+
+Deploying? `pnpm deploy:railway` provisions all four services on Railway in one
+command (see the scaffolded project's `CLAUDE.md`).
 
 ## Environment
 
@@ -67,7 +100,8 @@ After scaffolding:
 ## Requirements
 
 - Node ≥ 20
-- `git` on PATH (used for the shallow clone)
+- `git` on PATH (used for the shallow clone **and** to initialize the project
+  repo + first commit, unless `--no-git`)
 - `pnpm` on PATH (used for `--install`; otherwise needed for the dev scripts)
 
 ## License
