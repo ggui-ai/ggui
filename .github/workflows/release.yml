@@ -664,51 +664,79 @@ jobs:
           set -euo pipefail
           DRY_RUN="${{ needs.preflight.outputs.effective_dry_run }}"
           PRERELEASE="${{ needs.preflight.outputs.effective_prerelease }}"
-          # `--provenance` requires (a) `id-token: write` permission on
-          # this job (set above), (b) the OIDC issuer (GitHub Actions
-          # always supplies one when permission is granted), and (c) each
-          # package.json's `repository.url` matching this repo. All three
-          # hold; the result is a public attestation on npm linking each
-          # tarball to this commit. Dry-run runs cannot mint provenance,
-          # so omit the flag on dispatch dry-run.
-          # Dist-tag strategy (per package, below):
-          #   - prerelease channel (alpha/beta/rc): publish under that tag, so
-          #     plain `npm install @ggui-ai/cli` is untouched and consumers opt
-          #     in via `@alpha` / `@beta` / `@rc`. (Exception: a package whose
-          #     FIRST-ever publish is a prerelease gets `latest` pinned to it by
-          #     npm until a stable ships — seed new packages with a stable pub.)
-          #   - stable release of a committed `-`suffix version: `next`;
-          #   - stable release of a clean version: `latest`.
-          PUBLISH_ARGS=(--access public --no-git-checks)
-          if [ "$DRY_RUN" = "true" ]; then
-            PUBLISH_ARGS+=(--dry-run)
-          else
-            PUBLISH_ARGS+=(--provenance)
-          fi
+          # `--provenance` requires (a) `id-token: write` on this job, (b) the
+          # OIDC issuer (auto-supplied when the permission is granted), and (c)
+          # each package.json's `repository.url` matching this repo. Dry-run
+          # cannot mint provenance, so the GATE pass below omits it; only the
+          # real pass carries `--provenance`.
+          # Dist-tag strategy (per package): prerelease channel (alpha/beta/rc)
+          # → `--tag <channel>` so plain `npm i @ggui-ai/cli` is untouched and
+          # consumers opt in via `@alpha`; stable `-`suffix → `next`; clean
+          # stable → `latest`. (A package whose FIRST-ever publish is a
+          # prerelease gets `latest` pinned to it by npm until a stable ships —
+          # seed new packages with a stable publish.)
+          tag_for() {
+            if [ "$PRERELEASE" != "none" ]; then printf '%s' "$PRERELEASE"
+            elif [[ "$1" == *-* ]]; then printf 'next'
+            else printf 'latest'; fi
+          }
 
+          # Idempotency: skip any target version already on npm, so a PARTIAL
+          # prior publish (some leaves landed, then a failure) re-runs cleanly
+          # instead of failing with E403 "cannot publish over the previously
+          # published versions". `npm view name@ver` prints the version iff it
+          # exists (empty + non-zero otherwise — swallowed by the `[ -n ]` test).
+          TODO=()
           for pkg in ${{ needs.preflight.outputs.filter }}; do
             name=$(node -pe "require('./packages/$pkg/package.json').name")
             ver=$(node -pe "require('./packages/$pkg/package.json').version")
-            if [ "$PRERELEASE" != "none" ]; then
-              # `ver` was rewritten in-runner to the computed target above,
-              # so it already carries the channel suffix.
-              TAG_ARGS=(--tag "$PRERELEASE")
-            elif [[ "$ver" == *-* ]]; then
-              TAG_ARGS=(--tag next)
-            else
-              TAG_ARGS=(--tag latest)
+            if [ -n "$(npm view "$name@$ver" version 2>/dev/null)" ]; then
+              echo "• $name@$ver already on npm — skipping"
+              continue
             fi
-            echo "::group::Publishing $name@$ver from packages/$pkg/"
-            (cd "packages/$pkg" && pnpm publish "${PUBLISH_ARGS[@]}" "${TAG_ARGS[@]}")
-            echo "::endgroup::"
+            TODO+=("$pkg")
           done
+
+          if [ "${#TODO[@]}" -eq 0 ]; then
+            echo "Nothing to publish — every target version is already on npm."
+          else
+            # ── Dry-run GATE: pack + validate EVERY target first. `set -e`
+            #    aborts the whole step (so the real publish below never runs) if
+            #    any dry-run fails — the real publish happens ONLY if the gate
+            #    passes across the entire cohort.
+            echo "::group::Dry-run gate (${#TODO[@]} package(s))"
+            for pkg in "${TODO[@]}"; do
+              name=$(node -pe "require('./packages/$pkg/package.json').name")
+              ver=$(node -pe "require('./packages/$pkg/package.json').version")
+              TAG=$(tag_for "$ver")
+              echo "  dry-run $name@$ver (--tag $TAG)"
+              (cd "packages/$pkg" && pnpm publish --access public --no-git-checks --dry-run --tag "$TAG")
+            done
+            echo "::endgroup::"
+
+            # ── Real publish — only when this is NOT a dispatch dry-run.
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dispatch dry-run requested — gate passed; skipping the real publish."
+            else
+              for pkg in "${TODO[@]}"; do
+                name=$(node -pe "require('./packages/$pkg/package.json').name")
+                ver=$(node -pe "require('./packages/$pkg/package.json').version")
+                TAG=$(tag_for "$ver")
+                echo "::group::Publishing $name@$ver from packages/$pkg/ (--tag $TAG)"
+                (cd "packages/$pkg" && pnpm publish --access public --no-git-checks --provenance --tag "$TAG")
+                echo "::endgroup::"
+              done
+            fi
+          fi
 
           echo "## Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "**Dry run — nothing landed on npm.**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${#TODO[@]}" -eq 0 ]; then
+            echo "**All target versions already on npm — nothing to publish.**" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$DRY_RUN" = "true" ]; then
+            echo "**Dry-run gate passed for ${#TODO[@]} package(s) — nothing landed on npm.**" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "**Real publish. Tarballs are live on https://registry.npmjs.org/**." >> "$GITHUB_STEP_SUMMARY"
+            echo "**Real publish of ${#TODO[@]} package(s). Tarballs are live on https://registry.npmjs.org/**." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   # ── Post-publish consumer smoke. Two-phase: (1) poll npm registry
