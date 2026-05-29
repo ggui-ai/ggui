@@ -51,6 +51,26 @@ export interface RenderRef {
    * tool-call entry that produced them.
    */
   readonly toolUseId?: string;
+  /**
+   * Inlined resource content the agent-server library pre-fetched and
+   * stamped under `_meta.ui.resource` on this tool result. When
+   * present, the host can pass `inlinedResource.text` as
+   * `<AppRenderer html=...>` and skip the `onReadResource` round-trip
+   * entirely.
+   *
+   * Absent for restored entries that didn't carry the inlined slice,
+   * or when the library's interceptor failed to fetch the resource
+   * (in which case the host's `onReadResource` is the fallback).
+   */
+  readonly inlinedResource?: {
+    readonly uri: string;
+    readonly mimeType?: string;
+    readonly text?: string;
+    readonly csp?: {
+      readonly connectDomains?: ReadonlyArray<string>;
+      readonly resourceDomains?: ReadonlyArray<string>;
+    };
+  };
 }
 
 /**

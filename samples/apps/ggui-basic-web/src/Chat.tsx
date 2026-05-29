@@ -35,10 +35,10 @@ type LayoutMode = 'inline' | 'panel';
 interface ChatProps {
   /**
    * MCP-Apps-spec agent backend base URL (e.g. `http://localhost:6790`).
-   * Wired into the `useMcpAppsChat` hook for POST /chat + GET /chat?
-   * chatId=X and into the iframe relay calls (`/relay/tools-call` +
-   * `/relay/resources-read`). The frontend stays SDK-agnostic — the
-   * backend decides which LLM it drives.
+   * Wired into the `useMcpAppsChat` hook for POST /agent + GET /agent?
+   * chatId=X and into the iframe relay call (`/agent/relay/tools-call`).
+   * The frontend stays SDK-agnostic — the backend decides which LLM it
+   * drives.
    */
   readonly agentEndpoint: string;
   /**
@@ -50,50 +50,134 @@ interface ChatProps {
   readonly sandboxUrl: string;
 }
 
-/**
- * Stable per-conversation chat id. Resolution:
- *
- *   1. URL `?chat=<id>` query param — authoritative. Every link to
- *      "this conversation" carries the id, so opening the URL in any
- *      tab/window restores that specific conversation.
- *   2. Mint fresh UUID and stamp it into the URL.
- *
- * Browser-only — this app is a pure Vite SPA, so no SSR/pre-hydration
- * dance is required (unlike the Next.js predecessor).
- */
+// localStorage keys for the guest-token flow. The token survives
+// reloads so a returning visitor lands on the same chats; the chatId
+// is URL-resident so cross-tab links land on the same conversation.
+const LS_GUEST_TOKEN = 'ggui-basic-web/guestToken';
 const URL_CHAT_PARAM = 'chat';
 
-function getOrCreateChatId(): string {
-  const url = new URL(window.location.href);
-  const fromUrl = url.searchParams.get(URL_CHAT_PARAM);
-  if (fromUrl && fromUrl.length > 0) return fromUrl;
-  const resolved = crypto.randomUUID();
-  url.searchParams.set(URL_CHAT_PARAM, resolved);
-  window.history.replaceState({}, '', url.toString());
-  return resolved;
+/**
+ * Read the URL `?chat=<id>` — returns the chatId when present so the
+ * hook rehydrates that specific conversation, else `undefined` so the
+ * server allocates a fresh id on the first POST.
+ */
+function getInitialChatId(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const fromUrl = new URL(window.location.href).searchParams.get(
+    URL_CHAT_PARAM,
+  );
+  return fromUrl && fromUrl.length > 0 ? fromUrl : undefined;
+}
+
+/**
+ * Mint a fresh guest token via the agent backend's
+ * `POST /auth/guest` mount (the spec-canonical endpoint mounted by
+ * `@ggui-ai/agent-server`'s default `createGuestTokenAuth()`).
+ */
+async function mintGuestToken(agentEndpoint: string): Promise<string> {
+  const res = await fetch(`${agentEndpoint}/auth/guest`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`POST /auth/guest returned ${res.status}`);
+  }
+  const body = (await res.json()) as { guestToken?: unknown };
+  if (typeof body.guestToken !== 'string' || body.guestToken.length === 0) {
+    throw new Error('POST /auth/guest response missing guestToken');
+  }
+  return body.guestToken;
 }
 
 /**
  * Chat panel + iframe area for an MCP-Apps-spec agent backend.
  *
- * Brand-agnostic by design: the sample agent backends only know about
- * the SDK message stream + relay paths. Every MCP-Apps spec parse —
- * `_meta.ui.resourceUri` extraction, render-URI dedup, display-mode
- * pickup — lives in {@link useMcpAppsChat}. Iframe mounting is the
- * stock `<AppRenderer>` from `@mcp-ui/client` (re-exported through
- * `@ggui-ai/react` for ergonomics).
+ * Auth: bearer guest token resolved at mount (or cached in
+ * localStorage). The token is the principal id the backend gates
+ * chat-ownership on; clearing localStorage = fresh guest = new
+ * conversations.
  */
 export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
-  // Pure browser env (Vite SPA) — resolve the chat id synchronously
-  // during mount. `useState` initializer runs once per mount; the
-  // returned id is then stable for the lifetime of the component.
-  const [chatId, setChatId] = useState<string>(() => getOrCreateChatId());
+  // Bearer token (kept in a ref so the per-fetch `getAuthToken`
+  // callback always sees the latest). null = not yet minted.
+  const guestTokenRef = useRef<string | null>(null);
+  const [guestTokenReady, setGuestTokenReady] = useState(false);
+
+  // Boot: pull cached token from localStorage; mint a fresh one if
+  // absent. Async; the chat panel guards against premature renders
+  // via `guestTokenReady`.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cached =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem(LS_GUEST_TOKEN)
+            : null;
+        if (cached && cached.length > 0) {
+          guestTokenRef.current = cached;
+          if (!cancelled) setGuestTokenReady(true);
+          return;
+        }
+        const fresh = await mintGuestToken(agentEndpoint);
+        if (cancelled) return;
+        guestTokenRef.current = fresh;
+        window.localStorage.setItem(LS_GUEST_TOKEN, fresh);
+        setGuestTokenReady(true);
+      } catch (err) {
+        console.warn('[Chat] guest-token mint failed', err);
+        // Surface as "ready" anyway — requests will 401 + show error
+        // entries; better than a permanent loading state.
+        if (!cancelled) setGuestTokenReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agentEndpoint]);
+
+  // Stable chat id from URL (initial) + server-allocated thereafter.
+  const [chatId, setChatId] = useState<string | undefined>(() =>
+    getInitialChatId(),
+  );
+
+  const getAuthToken = useCallback(
+    () => guestTokenRef.current ?? undefined,
+    [],
+  );
+
+  // 401 handler: clear the cached token, mint a fresh one, signal
+  // retry. The hook reissues the failing request once on `true`.
+  const onUnauthenticated = useCallback(async (): Promise<boolean> => {
+    try {
+      const fresh = await mintGuestToken(agentEndpoint);
+      guestTokenRef.current = fresh;
+      window.localStorage.setItem(LS_GUEST_TOKEN, fresh);
+      return true;
+    } catch (err) {
+      console.warn('[Chat] guest-token refresh failed', err);
+      return false;
+    }
+  }, [agentEndpoint]);
+
+  // Stamp the server-allocated chatId into URL + state once
+  // received. Quiet when the URL already carries the right id (this
+  // covers the rehydration path).
+  const onChatAllocated = useCallback((allocated: string) => {
+    setChatId((prev) => {
+      if (prev === allocated) return prev;
+      const url = new URL(window.location.href);
+      url.searchParams.set(URL_CHAT_PARAM, allocated);
+      window.history.replaceState({}, '', url.toString());
+      return allocated;
+    });
+  }, []);
 
   const { entries, renders, hostDisplayMode, sending, send, abort } =
     useMcpAppsChat({
-      chatEndpoint: `${agentEndpoint}/chat`,
-      snapshotEndpoint: `${agentEndpoint}/chat`,
-      chatId,
+      chatEndpoint: `${agentEndpoint}/agent`,
+      snapshotEndpoint: `${agentEndpoint}/agent`,
+      ...(chatId !== undefined ? { chatId } : {}),
+      onChatAllocated,
+      getAuthToken,
+      onUnauthenticated,
     });
 
   const [prompt, setPrompt] = useState('');
@@ -102,12 +186,9 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
 
   // `userAction` is the spec-canonical `_meta.ai.ggui/userAction` slice
   // iframe-runtime stamps on `ui/message` envelopes when a click can't
-  // reach the agent via the consume pipe (no active long-poll). Threading
-  // it through `send(...)` lets the backend extract renderId + actionData
-  // as structured fields, so the new agent loop targets the existing
-  // render with `ggui_update` instead of re-handshaking and orphaning the
-  // live iframe. Without this, the renderId only reaches the agent as a
-  // substring of the chat prose — fragile against LLM judgment drift.
+  // reach the agent via the consume pipe. Forwarded to `send(...)` so
+  // the agent-server library synthesizes the imperative-first directive
+  // server-side.
   const onUiMessage = useCallback(
     (text: string, userAction?: GguiUserActionMeta) => {
       void send(text, userAction !== undefined ? { userAction } : undefined);
@@ -115,8 +196,6 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
     [send],
   );
 
-  // Host-side displayMode hint pickup (MCP-Apps SEP-1865). User toggle
-  // still wins until the next render that carries a hint.
   useEffect(() => {
     if (hostDisplayMode === undefined) return;
     setLayout(hostDisplayMode === 'inline' ? 'inline' : 'panel');
@@ -128,11 +207,12 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
   }, [entries.length]);
 
   const newSession = useCallback(() => {
-    const fresh = crypto.randomUUID();
+    // Drop the URL chat param + local state. Next POST allocates a
+    // fresh server-side chatId, which lands via onChatAllocated.
     const url = new URL(window.location.href);
-    url.searchParams.set(URL_CHAT_PARAM, fresh);
+    url.searchParams.delete(URL_CHAT_PARAM);
     window.history.replaceState({}, '', url.toString());
-    setChatId(fresh);
+    setChatId(undefined);
   }, []);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -155,6 +235,14 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
       (e.currentTarget.form as HTMLFormElement).requestSubmit();
     }
   };
+
+  if (!guestTokenReady) {
+    return (
+      <div style={{ padding: 24, color: '#888', fontFamily: 'system-ui' }}>
+        Provisioning guest session…
+      </div>
+    );
+  }
 
   return (
     <div className={`layout layout-${layout}`}>
@@ -204,6 +292,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
               renderInline={layout === 'inline'}
               sandboxUrl={sandboxUrl}
               agentEndpoint={agentEndpoint}
+              getAuthToken={getAuthToken}
               onUiMessage={onUiMessage}
             />
           ))}
@@ -253,6 +342,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
             renders={renders}
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
+            getAuthToken={getAuthToken}
             onUiMessage={onUiMessage}
           />
         </main>
@@ -281,12 +371,14 @@ function ChatEntryView({
   renderInline,
   sandboxUrl,
   agentEndpoint,
+  getAuthToken,
   onUiMessage,
 }: {
   entry: ChatEntry;
   renderInline: boolean;
   sandboxUrl: string;
   agentEndpoint: string;
+  getAuthToken: () => string | undefined;
   onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
   if (entry.kind === 'render') {
@@ -297,6 +389,7 @@ function ChatEntryView({
             item={entry.render}
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
+            getAuthToken={getAuthToken}
             onUiMessage={onUiMessage}
           />
         </div>
@@ -374,11 +467,13 @@ function PanelView({
   renders,
   sandboxUrl,
   agentEndpoint,
+  getAuthToken,
   onUiMessage,
 }: {
   renders: ReadonlyArray<RenderRef>;
   sandboxUrl: string;
   agentEndpoint: string;
+  getAuthToken: () => string | undefined;
   onUiMessage: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
   const top = useMemo(() => renders[renders.length - 1], [renders]);
@@ -395,6 +490,7 @@ function PanelView({
         item={top}
         sandboxUrl={sandboxUrl}
         agentEndpoint={agentEndpoint}
+        getAuthToken={getAuthToken}
         onUiMessage={onUiMessage}
         fillContainer
       />
@@ -403,134 +499,54 @@ function PanelView({
 }
 
 /**
- * Render one MCP-Apps resource by URI. Pure spec wiring: pre-fetches
- * the spec-canonical `resources/read` (via the agent backend relay),
- * extracts the HTML body and the `_meta.ui.csp` block, and hands both
- * to `<AppRenderer>` as `html` + `sandbox.csp`. The sandbox proxy
- * applies that CSP via its `?csp=<json>` query param so the inner
- * iframe can fetch the server-declared `script-src` / `connect-src`
- * origins.
- *
- * Pre-fetching (instead of letting AppRenderer call onReadResource
- * itself) is a host-side stopgap until AppRenderer extracts CSP from
- * the resource _meta automatically. We don't parse the HTML body — the
- * resource is opaque text. CSP shape is MCP-spec
- * (`{connectDomains, resourceDomains, ...}`); replace this sample's
- * relay with any MCP-UI server's `resources/read` and the wiring
- * works unchanged.
+ * Render one MCP-Apps resource. Prefers the inlined resource
+ * `@ggui-ai/agent-server`'s tool-result interceptor stamped on
+ * `_meta.ui.resource` (zero-round-trip mount). Falls back to a
+ * `/agent/relay/resources-read` proxy when the interceptor didn't
+ * inline (rare — typically only on restored entries from an older
+ * snapshot, or when the upstream MCP's resources/read failed
+ * server-side).
  */
 function ResourceFrame({
   item,
   sandboxUrl,
   agentEndpoint,
+  getAuthToken,
   fillContainer = false,
   onUiMessage,
 }: {
   item: RenderRef;
   sandboxUrl: string;
   agentEndpoint: string;
+  getAuthToken: () => string | undefined;
   fillContainer?: boolean;
   onUiMessage?: (text: string, userAction?: GguiUserActionMeta) => void;
 }) {
-  // Pre-fetched resource state: `{ html, csp }`. Lazily populated by
-  // the effect below; AppRenderer holds the loading placeholder until
-  // both are ready.
-  const [resource, setResource] = useState<
-    | undefined
-    | {
-        readonly html: string;
-        readonly csp?: {
-          connectDomains?: string[];
-          resourceDomains?: string[];
-        };
-      }
-  >(undefined);
+  // Inlined resource ride-along from the library's interceptor wins.
+  // No fetch needed — render straight from `inlinedResource.text`.
+  const html = item.inlinedResource?.text;
+  const inlinedCsp = item.inlinedResource?.csp;
 
-  useEffect(() => {
-    let cancelled = false;
-    setResource(undefined);
-    void (async () => {
-      try {
-        const resp = await fetch(`${agentEndpoint}/relay/resources-read`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uri: item.resourceUri }),
-        });
-        if (!resp.ok) {
-          console.warn(
-            '[ResourceFrame] resources/read relay non-2xx',
-            resp.status,
-          );
-          return;
-        }
-        const jsonRpc = (await resp.json()) as {
-          readonly result?: ReadResourceResult;
-          readonly error?: { readonly message?: string };
-        };
-        if (cancelled) return;
-        if (jsonRpc.error !== undefined || !jsonRpc.result) {
-          console.warn(
-            '[ResourceFrame] resources/read relay error',
-            jsonRpc.error,
-          );
-          return;
-        }
-        const first = jsonRpc.result.contents?.[0];
-        if (!first || typeof first !== 'object') return;
-        const text = (first as { text?: unknown }).text;
-        if (typeof text !== 'string') return;
-        // Pluck spec-canonical `_meta.ui.csp` if the server stamped it.
-        let csp:
-          | {
-              connectDomains?: string[];
-              resourceDomains?: string[];
-            }
-          | undefined;
-        const contentMeta = (first as { _meta?: unknown })._meta;
-        if (contentMeta !== null && typeof contentMeta === 'object') {
-          const uiBlock = (contentMeta as { ui?: unknown }).ui;
-          if (uiBlock !== null && typeof uiBlock === 'object') {
-            const cspBlock = (uiBlock as { csp?: unknown }).csp;
-            if (cspBlock !== null && typeof cspBlock === 'object') {
-              const c = cspBlock as {
-                connectDomains?: unknown;
-                resourceDomains?: unknown;
-              };
-              csp = {};
-              if (Array.isArray(c.connectDomains)) {
-                csp.connectDomains = c.connectDomains.filter(
-                  (s): s is string => typeof s === 'string',
-                );
-              }
-              if (Array.isArray(c.resourceDomains)) {
-                csp.resourceDomains = c.resourceDomains.filter(
-                  (s): s is string => typeof s === 'string',
-                );
-              }
-            }
-          }
-        }
-        setResource({ html: text, ...(csp ? { csp } : {}) });
-      } catch (err) {
-        console.warn('[ResourceFrame] resources/read failed', err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [agentEndpoint, item.resourceUri]);
-
-  const sandbox = useMemo(
-    () => ({
-      url: new URL(sandboxUrl),
-      ...(resource?.csp ? { csp: resource.csp } : {}),
-    }),
-    [sandboxUrl, resource?.csp],
-  );
+  const sandbox = useMemo(() => {
+    if (!inlinedCsp) return { url: new URL(sandboxUrl) };
+    // SandboxConfig wants mutable string[] arrays; the RenderRef
+    // shape keeps them readonly so reassignment doesn't leak. Copy
+    // here at the boundary.
+    const csp: {
+      connectDomains?: string[];
+      resourceDomains?: string[];
+    } = {};
+    if (inlinedCsp.connectDomains) {
+      csp.connectDomains = [...inlinedCsp.connectDomains];
+    }
+    if (inlinedCsp.resourceDomains) {
+      csp.resourceDomains = [...inlinedCsp.resourceDomains];
+    }
+    return { url: new URL(sandboxUrl), csp };
+  }, [sandboxUrl, inlinedCsp]);
 
   // Spec-canonical tools/call proxy. The iframe holds no MCP client
-  // credential, so we relay through the agent backend (matches the
-  // pattern at `/relay/resources-read`).
+  // credential, so we relay through the agent backend.
   const onCallTool = useCallback(
     async (
       params: CallToolRequest['params'],
@@ -538,9 +554,14 @@ function ResourceFrame({
     ): Promise<CallToolResult> => {
       console.log('[ResourceFrame] tool_call', params);
       try {
-        const resp = await fetch(`${agentEndpoint}/relay/tools-call`, {
+        const token = getAuthToken();
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const resp = await fetch(`${agentEndpoint}/agent/relay/tools-call`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             name: params.name,
             arguments: params.arguments ?? {},
@@ -572,45 +593,29 @@ function ResourceFrame({
         return { isError: true, content: [] };
       }
     },
-    [agentEndpoint],
+    [agentEndpoint, getAuthToken],
   );
 
-  // Spec-canonical resources/read proxy. AppRenderer will call this if
-  // it ever needs to re-read the resource (e.g. via the guest's
-  // resources/list-changed flow). The initial mount comes from the
-  // pre-fetched `resource.html` above; this handler proxies any later
-  // reads through the agent backend relay.
+  // The frontend's `onReadResource` callback shouldn't normally fire
+  // any more — the library inlines the iframe HTML alongside every
+  // tool result. Keep a defensive implementation that throws a
+  // descriptive error, so any guest-initiated `resources/list-changed`
+  // → re-read surfaces a clear message in dev tools rather than
+  // hanging.
   const onReadResource = useCallback(
     async (
       params: ReadResourceRequest['params'],
       _extra: RequestHandlerExtra,
     ): Promise<ReadResourceResult> => {
-      console.log('[ResourceFrame] resources/read (post-mount)', params.uri);
-      const resp = await fetch(`${agentEndpoint}/relay/resources-read`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uri: params.uri }),
-      });
-      if (!resp.ok) {
-        throw new Error(
-          `[ResourceFrame] resources/read relay non-2xx: ${resp.status}`,
-        );
-      }
-      const jsonRpc = (await resp.json()) as {
-        readonly result?: ReadResourceResult;
-        readonly error?: { readonly message?: string };
-      };
-      if (jsonRpc.error !== undefined) {
-        throw new Error(
-          jsonRpc.error.message ?? '[ResourceFrame] resources/read relay error',
-        );
-      }
-      if (!jsonRpc.result) {
-        throw new Error('[ResourceFrame] resources/read relay empty result');
-      }
-      return jsonRpc.result;
+      throw new Error(
+        `[ResourceFrame] resources/read for ${params.uri} requested ` +
+          `post-mount, but the host doesnt operate a relay endpoint. ` +
+          `The agent-server library inlines resources on the FIRST tool ` +
+          `result; guest-initiated re-reads need the host to add a custom ` +
+          `relay (or upgrade to AppRenderer's built-in MCP client).`,
+      );
     },
-    [agentEndpoint],
+    [],
   );
 
   const onMessage = useCallback(
@@ -619,12 +624,6 @@ function ResourceFrame({
       content: ReadonlyArray<{
         type: string;
         text?: string;
-        // Spec-canonical extension point: per the base MCP spec, every
-        // content block has its own open `_meta` record. iframe-runtime
-        // stamps `ai.ggui/userAction` here for queued/inline gestures.
-        // The exact slice shape is validated below via
-        // `isGguiUserActionMeta` — keep the surface area minimally typed
-        // to match `@mcp-ui/client`'s onMessage signature.
         _meta?: { readonly [key: string]: unknown };
       }>;
     }): Promise<Record<string, unknown>> => {
@@ -636,12 +635,6 @@ function ResourceFrame({
       if (text.length === 0 || onUiMessage === undefined) {
         return { isError: true };
       }
-      // Extract the spec-canonical `ai.ggui/userAction` slice off the
-      // first content block that carries one — iframe-runtime stamps it
-      // on the SAME block as the prose text. Type-guarded by the
-      // protocol validator so a malformed slice fails closed (falls
-      // back to prose-only delivery rather than corrupting the backend
-      // signal).
       let userAction: GguiUserActionMeta | undefined;
       for (const block of params.content) {
         const slice = block._meta?.['ai.ggui/userAction'];
@@ -666,12 +659,12 @@ function ResourceFrame({
         className="render-frame"
         style={fillContainer ? { flex: 1, minHeight: 0 } : undefined}
       >
-        {resource ? (
+        {html !== undefined ? (
           <AppRenderer
             key={item.resourceUri}
             toolName="ggui_render"
             sandbox={sandbox}
-            html={resource.html}
+            html={html}
             onReadResource={onReadResource}
             onCallTool={onCallTool}
             onMessage={onMessage}
@@ -680,19 +673,18 @@ function ResourceFrame({
             }
           />
         ) : (
-          <div className="render-loading" aria-hidden="true" />
+          <div className="render-loading" aria-hidden="true">
+            <p style={{ padding: 12, fontSize: 13, color: '#888' }}>
+              Resource not inlined — the agent-server didn't pre-fetch the
+              iframe HTML for <code>{item.resourceUri}</code>.
+            </p>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-/**
- * Compact display label for a render. Uses the tool-use id when
- * available (matches the SDK's view of "which tool call mounted this
- * iframe"); falls back to the last URI segment so claude.ai-style
- * `ui://server/render/<id>` URIs still show something meaningful.
- */
 function shortLabel(item: RenderRef): string {
   if (item.toolUseId !== undefined && item.toolUseId.length > 0) {
     return `#${item.toolUseId.slice(0, 12)}`;

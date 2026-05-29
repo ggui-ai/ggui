@@ -558,6 +558,7 @@ export function handleEvent(
     // SEP-1865 / SEP-2133. Legacy `_meta['ui/resourceUri']` flat key is
     // checked as a fallback for older shells.
     let resourceUri: string | undefined;
+    let inlinedResource: RenderRef['inlinedResource'];
     if (tmRaw !== null && typeof tmRaw === 'object') {
       const uiBlock = (tmRaw as { ui?: unknown }).ui;
       if (uiBlock !== null && typeof uiBlock === 'object') {
@@ -574,6 +575,69 @@ export function handleEvent(
           .resourceUri;
         if (typeof rawResourceUri === 'string' && rawResourceUri.length > 0) {
           resourceUri = rawResourceUri;
+        }
+        // Inlined resource stamped by `@ggui-ai/agent-server`'s
+        // tool-result interceptor — when present, the host can mount
+        // the iframe straight from `inlinedResource.text` without an
+        // extra `resources/read` round-trip.
+        const inlined = (uiBlock as { resource?: unknown }).resource;
+        if (inlined !== null && typeof inlined === 'object') {
+          const r = inlined as {
+            uri?: unknown;
+            mimeType?: unknown;
+            text?: unknown;
+            _meta?: unknown;
+          };
+          if (typeof r.uri === 'string' && r.uri.length > 0) {
+            const built: {
+              uri: string;
+              mimeType?: string;
+              text?: string;
+              csp?: {
+                connectDomains?: string[];
+                resourceDomains?: string[];
+              };
+            } = { uri: r.uri };
+            if (typeof r.mimeType === 'string') built.mimeType = r.mimeType;
+            if (typeof r.text === 'string') built.text = r.text;
+            // CSP rides on the resource's own _meta.ui.csp slice
+            // (the same shape the spec-canonical resources/read
+            // response carries — preserved verbatim by the
+            // interceptor).
+            if (r._meta !== null && typeof r._meta === 'object') {
+              const innerUi = (r._meta as { ui?: unknown }).ui;
+              if (innerUi !== null && typeof innerUi === 'object') {
+                const cspBlock = (innerUi as { csp?: unknown }).csp;
+                if (cspBlock !== null && typeof cspBlock === 'object') {
+                  const c = cspBlock as {
+                    connectDomains?: unknown;
+                    resourceDomains?: unknown;
+                  };
+                  const csp: {
+                    connectDomains?: string[];
+                    resourceDomains?: string[];
+                  } = {};
+                  if (Array.isArray(c.connectDomains)) {
+                    csp.connectDomains = c.connectDomains.filter(
+                      (s): s is string => typeof s === 'string',
+                    );
+                  }
+                  if (Array.isArray(c.resourceDomains)) {
+                    csp.resourceDomains = c.resourceDomains.filter(
+                      (s): s is string => typeof s === 'string',
+                    );
+                  }
+                  if (
+                    csp.connectDomains?.length ||
+                    csp.resourceDomains?.length
+                  ) {
+                    built.csp = csp;
+                  }
+                }
+              }
+            }
+            inlinedResource = built;
+          }
         }
       }
       if (resourceUri === undefined) {
@@ -620,6 +684,7 @@ export function handleEvent(
         resourceUri,
         action: 'render',
         ...(toolUseId.length > 0 ? { toolUseId } : {}),
+        ...(inlinedResource !== undefined ? { inlinedResource } : {}),
       };
       addRender(item);
       append({
