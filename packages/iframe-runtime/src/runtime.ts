@@ -50,7 +50,7 @@ import { projectHostContext } from '@ggui-ai/protocol';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { ModuleNamespace } from './globals.js';
+import type { ModuleNamespace, GadgetPackageRegistry } from './globals.js';
 import {
   applyHostContextStyling,
   attachListener as attachHostContextListener,
@@ -597,6 +597,18 @@ export interface RendererHandle {
    * `connectViaRegistry` and consumed during handshake resolution.
    */
   readonly channelRegistry: ChannelRegistry;
+  /**
+   * 3rd-party gadget-package merge promise. `installGlobalRegistry`
+   * seeds `__ggui__.gadgets` synchronously with the STDLIB namespace;
+   * operator-registered packages merge in asynchronously. A static seed
+   * mount MUST `await` this (when the bootstrap declares `gadgets`)
+   * before the first `applyRender`, so a generated component importing a
+   * 3rd-party gadget sees a fully-populated catalog on first paint
+   * (otherwise the per-package data-URL shim resolves to `undefined` and
+   * crashes). Resolves to the STDLIB-only registry when no 3rd-party
+   * packages were declared.
+   */
+  readonly composedGadgets: Promise<GadgetPackageRegistry>;
 }
 
 export interface BootSequenceResult {
@@ -3412,6 +3424,27 @@ async function bootProduction(opts: {
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
+
+      // Native-idiom interceptors — the replacement for the retired
+      // openLink / requestDisplayMode wire primitives. Installed here
+      // (module-guarded, idempotent) so EVERY component render mounted
+      // through this single surface — the WS-ack render, the inline
+      // static seed, and re-mounts — has anchor-click + fullscreen
+      // capture live before the first `applyRender`. Pre-consolidation
+      // these lived only in `bootSelfContained`; the WS-driven path
+      // installed neither, so anchor clicks + fullscreen requests in a
+      // live-rendered component silently no-op'd.
+      installAnchorClickInterceptor({
+        dispatchToolName,
+        renderId: meta.renderId,
+        appId: meta.appId,
+      });
+      installFullscreenInterceptors({
+        dispatchToolName,
+        renderId: meta.renderId,
+        appId: meta.appId,
+      });
+
       const rootConfig = buildRootWireConfig({
         renderId: meta.renderId,
         appId: meta.appId,
@@ -3658,6 +3691,7 @@ async function bootProduction(opts: {
         manager,
         channelTransport,
         channelRegistry,
+        composedGadgets,
       };
     },
     attachManager: (handle, realManager) => {
