@@ -139,9 +139,12 @@ for (const entry of MATRIX) {
         findTodoCheckedIndicator(afterFirstClickFrame, /buy milk/i),
       ).toBeVisible({ timeout: 180_000 });
 
-      // URL should now carry ?chat=<id> — required precondition for
-      // the reload-restore step below.
-      expect(page.url()).toContain('?chat=');
+      // URL should now carry a `chat=<id>` query param — required
+      // precondition for the reload-restore step below. Matches both
+      // `?chat=` (only param) and `&chat=` (where the harness also
+      // threaded a `?agent=<url>` runtime-config param at navigate
+      // time — see `spawnAgentLoop`).
+      expect(page.url()).toMatch(/[?&]chat=/);
 
       // -----------------------------------------------------------------
       // STEP 3 — reload + verify hydration + click again to undo
