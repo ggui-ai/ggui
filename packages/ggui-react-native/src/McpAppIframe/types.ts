@@ -1,9 +1,21 @@
 /**
  * Public props + imperative-ref shape for `<McpAppIframe>` on React
- * Native — the generic MCP Apps iframe host exported from
- * `@ggui-ai/react-native`. Mirror of the web version at
- * `@ggui-ai/react::McpAppIframe/types.ts` — keep in lockstep so the
- * same app code can render against either platform.
+ * Native — the canonical MCP-Apps WebView host exported from
+ * `@ggui-ai/react-native`.
+ *
+ * The web side retired `<McpAppIframe>` in favor of `<AppRenderer>`
+ * from `@mcp-ui/client`. That migration relied on a two-iframe
+ * sandbox-proxy architecture (cross-origin iframe nesting) that has
+ * no meaningful WebView equivalent — a `react-native-webview` WebView
+ * is itself a top-level browser surface, not a nestable origin. So on
+ * RN, `<McpAppIframe>` IS the spec-canonical host primitive.
+ *
+ * Wire shape parity with `<AppRenderer>` is preserved on every other
+ * surface: spec-canonical `ui/initialize` handshake (adapter-boundary
+ * response), `ui/notifications/tool-result` for render-meta delivery,
+ * `tools/call` outbound routing, `ui/open-link` delegated to
+ * `Linking.openURL`, `ui/resource-teardown` notification at unmount,
+ * and observability / lifecycle envelopes posted upward.
  */
 
 import type { ResourceContents } from '@modelcontextprotocol/sdk/types.js';
@@ -99,25 +111,31 @@ export interface McpAppIframeProps {
   readonly permissions?: McpAppIframePermissions;
 
   /**
-   * Opt-in `ai.ggui/*` meta forwarding for first-party ggui renderer
-   * WebViews.
+   * Opt-in first-party `ai.ggui/render` meta delivery for ggui
+   * renderer WebViews.
    *
-   * **When set:** the host's `ui/initialize` response gains a
-   * `toolOutput._meta` envelope carrying the single
-   * `_meta["ai.ggui/render"]` slice from the supplied
-   * {@link McpAppAiGguiRenderMeta}, alongside the existing `theme` /
-   * `containerDimensions` / `locale` adapter-boundary fields. The
-   * renderer's slice-meta extraction
-   * (`packages/iframe-runtime/src/meta-parse.ts`,
-   * `parseMetaFromToolResult`'s `params.toolOutput._meta` back-compat
-   * branch) reads exactly that path and uses it to fetch the renderer
-   * bundle, open the WebSocket, and bootstrap the render.
+   * **When set:** the host fires a spec-canonical
+   * `ui/notifications/tool-result` JSON-RPC notification immediately
+   * after responding to the renderer's `ui/initialize` request,
+   * wrapping a `CallToolResult` whose `_meta` carries the single
+   * `ai.ggui/render` slice from the supplied {@link
+   * McpAppAiGguiRenderMeta}. The renderer's `parseMetaFromToolResult`
+   * extractor (`packages/iframe-runtime/src/meta-parse.ts`) reads
+   * `params._meta` and uses it to fetch the renderer bundle, open the
+   * WebSocket, and bootstrap the render. This matches the wire shape
+   * `<AppRenderer toolResult={...}>` forwards on web and the
+   * `McpUiToolResultNotification` shape in
+   * `@modelcontextprotocol/ext-apps/spec.types`. The `ui/initialize`
+   * response itself is unchanged — it carries the adapter-boundary
+   * `{theme, containerDimensions, locale}` fields ONLY.
    *
-   * **When absent (default):** behavior is unchanged — the host
-   * responds with `{theme, containerDimensions, locale}` only and
-   * NEVER leaks `_meta` to the WebView child. This is the correct
-   * posture for any third-party MCP App WebView — opt-in here would be
-   * a contract violation under the adapter-boundary rule.
+   * **When absent (default):** no `ui/notifications/tool-result`
+   * notification is sent. The renderer falls through to its other
+   * boot paths (inline `__GGUI_META__` global from a self-contained
+   * shell, or the per-app live channel). Third-party MCP App
+   * WebViews MUST NOT be given `meta` here — leaking outer-app state
+   * into a generic MCP App is exactly the adapter-boundary
+   * violation the rule exists to prevent.
    *
    * **Rule of thumb:** set this exactly when the WebView was spawned by
    * following ggui's own resource URI (`ui://ggui/render` or
@@ -130,10 +148,9 @@ export interface McpAppIframeProps {
    *
    * **Recursive case.** The renderer itself hosts third-party MCP App
    * iframes via `packages/iframe-runtime/src/mcp-app-iframe-host.ts`.
-   * That nested host MUST scrub `_meta` from its `ui/initialize`
-   * responses regardless of the outer host's posture — first-party
-   * forwarding does NOT cascade through to third-party content the
-   * renderer is itself hosting.
+   * That nested host MUST NOT forward `meta` regardless of the outer
+   * host's posture — first-party meta delivery does NOT cascade
+   * through to third-party content the renderer is itself hosting.
    */
   readonly meta?: McpAppAiGguiRenderMeta;
 

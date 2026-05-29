@@ -1,15 +1,17 @@
 /**
  * Platform-agnostic JSON-RPC dispatch for `<McpAppIframe>` on React
- * Native. Sibling of the web version at
- * `@ggui-ai/react::McpAppIframe/dispatch.ts` — the two ports MUST stay
- * structurally identical. Any protocol-shape change to one lands in
- * both at once.
+ * Native — the canonical RN MCP-Apps host primitive. The web side
+ * retired its `<McpAppIframe>` in favor of `<AppRenderer>` from
+ * `@mcp-ui/client`, which is built around iframes + a two-iframe
+ * sandbox-proxy model that has no meaningful WebView equivalent;
+ * `<McpAppIframe>` on RN stays as the host primitive for mobile.
  *
  * The host responds to:
  *
  *   - `ping` → `{ok: true, pong: true}`.
  *   - `ui/initialize` → `{theme, containerDimensions, locale}` ONLY
- *     — the adapter-boundary rule (no outer-app state leaks).
+ *     — the adapter-boundary rule (no outer-app state leaks). NEVER
+ *     carries `toolOutput._meta` — see "Reading-B retired" note below.
  *   - `ui/open-link` with http(s) URLs → caller opens externally;
  *     other schemes → reject `unsupported-scheme`.
  *   - `tools/call` → caller-provided handler, or reject
@@ -18,6 +20,25 @@
  *
  * Notifications (no `id`) return `null` — the caller MUST NOT post a
  * response back to the iframe.
+ *
+ * ── Reading-B retired (parity with iframe-runtime Phase 1.19b.3) ─────
+ *
+ * The legacy "stuff the `ai.ggui/render` slice on `ui/initialize`
+ * result.toolOutput._meta" path is retired here. iframe-runtime's
+ * App-class adoption means `App.connect()` does NOT expose
+ * `result.toolOutput`, so any meta crammed into the initialize
+ * response is silently dropped on the renderer side.
+ *
+ * The spec-canonical delivery channel is now {@link
+ * buildToolResultNotification} — a `ui/notifications/tool-result`
+ * notification (JSON-RPC) wrapping a `CallToolResult` whose `_meta`
+ * carries the single `ai.ggui/render` slice. The McpAppIframe host
+ * sends this notification immediately after the
+ * `ui/initialize` response when `meta` is supplied, so the renderer's
+ * `awaitToolResultMeta` window-message listener (autostart layer) or
+ * its App-mediated `toolresult` event catches the meta and boots the
+ * render. Wire shape matches what `@mcp-ui/client`'s `<AppRenderer
+ * toolResult={...}>` forwards on web.
  *
  * The shared host-role switch (`handleHostBridgeRequest`) lives in the
  * sibling `components/mcp-apps-bridge.ts`; it covers the same methods
@@ -61,34 +82,6 @@ export interface HostBridgeContext {
   readonly containerDimensions: McpAppIframeDimensions;
   readonly openLink: (url: string) => Promise<void> | void;
   readonly onToolCall?: McpAppIframeProps['onToolCall'];
-  /**
-   * Opt-in first-party `ai.ggui/*` meta forwarding.
-   *
-   * When present, `dispatchHostBridgeRequest`'s `ui/initialize`
-   * branch adds `toolOutput._meta` (carrying the
-   * `_meta["ai.ggui/render"]` slice from the supplied
-   * {@link McpAppAiGguiRenderMeta}) to the response alongside the
-   * existing `theme` / `containerDimensions` / `locale`
-   * adapter-boundary fields. The renderer's
-   * `parseMetaFromToolResult` extractor
-   * (`packages/iframe-runtime/src/meta-parse.ts`) reads this exact
-   * shape via its `params.toolOutput._meta` back-compat branch.
-   *
-   * When absent (default), the response is `{theme,
-   * containerDimensions, locale}` only — no `toolOutput`, no `_meta`.
-   * Third-party MCP App iframes MUST NOT be given `meta` here:
-   * leaking outer-app state into a generic MCP App's `ui/initialize`
-   * response is exactly the adapter-boundary violation the rule
-   * exists to prevent.
-   *
-   * Carrier shape mirrors the wire — the same
-   * {@link McpAppAiGguiRenderMeta} the server stamps onto the
-   * `ggui_render` tool result's `_meta["ai.ggui/render"]` slice ends
-   * up here verbatim. No transformation, no per-namespace
-   * whitelisting; the host's contract is "thread the forwarded meta
-   * through" and that's it.
-   */
-  readonly meta?: McpAppAiGguiRenderMeta;
 }
 
 export const DEFAULT_HOST_THEME: Readonly<Record<string, string>> = {
@@ -143,31 +136,18 @@ export async function dispatchHostBridgeRequest(
       return { jsonrpc: '2.0', id, result: { ok: true, pong: true } };
     }
     case 'ui/initialize': {
-      // ADAPTER BOUNDARY (default posture). The result carries
-      // `{theme, containerDimensions, locale}` ONLY — no outer-app
-      // state leaks into the iframe.
-      //
-      // READING-B EXCEPTION (opt-in via `ctx.meta`). When the
-      // host has explicitly threaded a `McpAppAiGguiRenderMeta` for a
-      // first-party ggui renderer iframe (see `McpAppIframeProps.
-      // meta` JSDoc), augment the result with
-      // `toolOutput._meta = toMcpAppEnvelope(ctx.meta)` (the wire
-      // envelope carrying the single `ai.ggui/render` slice). The
-      // renderer's `parseMetaFromToolResult` extractor reads this
-      // path via its `params.toolOutput._meta` back-compat branch.
-      // The adapter-boundary rule still applies to every other key —
-      // only the `ai.ggui/*` slice is forwarded, scoped by the ggui
-      // namespace.
+      // ADAPTER BOUNDARY. The result carries `{theme,
+      // containerDimensions, locale}` ONLY — no outer-app state
+      // leaks into the iframe. First-party `ai.ggui/render` meta is
+      // delivered via the separate spec-canonical
+      // `ui/notifications/tool-result` notification (see
+      // {@link buildToolResultNotification}), NOT via this initialize
+      // response.
       const result: Record<string, unknown> = {
         theme: ctx.theme,
         containerDimensions: ctx.containerDimensions,
         locale: ctx.locale,
       };
-      if (ctx.meta !== undefined) {
-        result['toolOutput'] = {
-          _meta: toMcpAppEnvelope(ctx.meta),
-        };
-      }
       return { jsonrpc: '2.0', id, result };
     }
     case 'ui/open-link': {
@@ -294,6 +274,52 @@ export function buildResourceTeardownNotification(): HostBridgeNotification {
     jsonrpc: '2.0',
     method: 'ui/resource-teardown',
     params: { reason: 'host_unmount' },
+  };
+}
+
+/**
+ * Build a spec-canonical `ui/notifications/tool-result` JSON-RPC
+ * notification carrying the `ai.ggui/render` slice on `params._meta`.
+ *
+ * Wire shape:
+ * ```
+ * {
+ *   jsonrpc: '2.0',
+ *   method: 'ui/notifications/tool-result',
+ *   params: {                       // CallToolResult per MCP spec
+ *     content: [],
+ *     structuredContent: {},
+ *     _meta: {
+ *       'ai.ggui/render': { renderId, appId, runtimeUrl, ... },
+ *     },
+ *   },
+ * }
+ * ```
+ *
+ * Mirrors what `@mcp-ui/client`'s `<AppRenderer toolResult={...}>`
+ * forwards to its inner iframe on web (per MCP-Apps SEP-1865 and
+ * `McpUiToolResultNotification` in
+ * `@modelcontextprotocol/ext-apps/spec.types`). The renderer's
+ * `parseMetaFromToolResult` extractor
+ * (`packages/iframe-runtime/src/meta-parse.ts`) reads `params._meta`
+ * exactly.
+ *
+ * Sent immediately after the `ui/initialize` response when the host
+ * was given a `meta` prop, so the renderer's pre-handshake
+ * `awaitToolResultMeta` listener (Tier 2 in `bootSequence`) catches
+ * it and boots the render.
+ */
+export function buildToolResultNotification(
+  meta: McpAppAiGguiRenderMeta,
+): HostBridgeNotification {
+  return {
+    jsonrpc: '2.0',
+    method: 'ui/notifications/tool-result',
+    params: {
+      content: [],
+      structuredContent: {},
+      _meta: toMcpAppEnvelope(meta),
+    },
   };
 }
 

@@ -39,6 +39,7 @@ type TestResource = ResourceContents | TextResourceContents | BlobResourceConten
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
+  buildToolResultNotification,
   classifyRendererEnvelope,
   deriveResourceMountSource,
   dispatchHostBridgeRequest,
@@ -128,46 +129,25 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     }
   });
 
-  it('ui/initialize READING-B — forwards toolOutput._meta ai.ggui slices when ctx.meta is set', async () => {
+  it('ui/initialize is invariant under ctx (Reading-B retired) — never carries toolOutput._meta', async () => {
+    // The dispatcher no longer accepts a `meta` on the context.
+    // Render-meta now flows through the separate spec-canonical
+    // `ui/notifications/tool-result` notification (see the
+    // `buildToolResultNotification` block below). This test pins the
+    // adapter-boundary posture by asserting the response is the same
+    // 3-key shape regardless of caller intent.
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 1, method: 'ui/initialize' },
-      makeCtx({ meta: SAMPLE_META }),
+      makeCtx(),
     );
     const result = res?.result as Record<string, unknown>;
-    expect(result).toHaveProperty('toolOutput');
-    const toolOutput = result['toolOutput'] as Record<string, unknown>;
-    // Narrow-exception invariant: ONLY `_meta` under toolOutput.
-    expect(Object.keys(toolOutput).sort()).toEqual(['_meta']);
-    const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
-    // ONLY the `ai.ggui/render` slice (single render-identity slice).
-    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/render']);
-    expect(metaEnv['ai.ggui/render']).toBe(SAMPLE_META);
-    // Adapter-boundary fields still present alongside the forwarded
-    // ai.ggui meta.
-    expect(result['theme']).toEqual({ '--color-primary': '#ff0000' });
-    expect(result['locale']).toBe('en-US');
-    expect(result['containerDimensions']).toEqual({ width: 640, height: 480 });
-  });
-
-  it('ui/initialize READING-B — toolOutput._meta path matches the renderer parser contract', async () => {
-    // Cross-check against the renderer's parser contract. The shape
-    // produced here MUST match what `parseMetaFromToolResult()` (in
-    // `packages/iframe-runtime/src/meta-parse.ts`) reads via its
-    // `params.toolOutput._meta` back-compat branch. This test
-    // structurally walks the same path the renderer does.
-    const res = await dispatchHostBridgeRequest(
-      { jsonrpc: '2.0', id: 7, method: 'ui/initialize' },
-      makeCtx({ meta: SAMPLE_META }),
-    );
-    const result = res?.result as Record<string, unknown>;
-    const toolOutput = result['toolOutput'] as Record<string, unknown>;
-    const metaEnv = toolOutput['_meta'] as Record<string, unknown>;
-    const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
-    expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
-    expect(render.wsToken).toBe(SAMPLE_META.wsToken);
-    expect(render.renderId).toBe(SAMPLE_META.renderId);
-    expect(render.appId).toBe(SAMPLE_META.appId);
-    expect(render.runtimeUrl).toBe(SAMPLE_META.runtimeUrl);
+    expect(result).not.toHaveProperty('toolOutput');
+    expect(result).not.toHaveProperty('_meta');
+    expect(Object.keys(result).sort()).toEqual([
+      'containerDimensions',
+      'locale',
+      'theme',
+    ]);
   });
 
   it('ui/open-link rejects non-http(s) schemes with unsupported-scheme', async () => {
@@ -237,6 +217,50 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
       makeCtx(),
     );
     expect(res?.error?.code).toBe(-32601);
+  });
+});
+
+describe('buildToolResultNotification (RN spec-canonical wire shape)', () => {
+  it('builds a JSON-RPC notification with method=ui/notifications/tool-result', () => {
+    const notif = buildToolResultNotification(SAMPLE_META);
+    expect(notif.jsonrpc).toBe('2.0');
+    expect(notif.method).toBe('ui/notifications/tool-result');
+    // Notifications carry no `id` — fire-and-forget per JSON-RPC.
+    expect(notif).not.toHaveProperty('id');
+  });
+
+  it('wraps the slice in a CallToolResult-shaped params._meta envelope', () => {
+    const notif = buildToolResultNotification(SAMPLE_META);
+    const params = notif.params as Record<string, unknown>;
+    // CallToolResult per MCP spec carries `content`,
+    // `structuredContent`, and our extension lives on `_meta`.
+    expect(params).toHaveProperty('content');
+    expect(params['content']).toEqual([]);
+    expect(params).toHaveProperty('structuredContent');
+    expect(params['structuredContent']).toEqual({});
+    expect(params).toHaveProperty('_meta');
+    const metaEnv = params['_meta'] as Record<string, unknown>;
+    // ONLY the `ai.ggui/render` slice (single render-identity slice
+    // per the protocol envelope).
+    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/render']);
+    expect(metaEnv['ai.ggui/render']).toBe(SAMPLE_META);
+  });
+
+  it('the wire shape matches what parseMetaFromToolResult reads via params._meta (spec-canonical branch)', () => {
+    // Cross-check against the renderer's parser contract. The shape
+    // produced here MUST match what `parseMetaFromToolResult()` (in
+    // `packages/iframe-runtime/src/meta-parse.ts`) reads via its
+    // spec-canonical `params._meta` branch. This test structurally
+    // walks the same path the renderer does.
+    const notif = buildToolResultNotification(SAMPLE_META);
+    const params = notif.params as Record<string, unknown>;
+    const metaEnv = params['_meta'] as Record<string, unknown>;
+    const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
+    expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
+    expect(render.wsToken).toBe(SAMPLE_META.wsToken);
+    expect(render.renderId).toBe(SAMPLE_META.renderId);
+    expect(render.appId).toBe(SAMPLE_META.appId);
+    expect(render.runtimeUrl).toBe(SAMPLE_META.runtimeUrl);
   });
 });
 
@@ -517,6 +541,197 @@ describe('<McpAppIframe> — lifecycle envelope integration', () => {
     });
     const host = tree.root.findByProps({ testID: 'mcp-app-iframe-host' });
     expect(host.props.accessibilityValue).toEqual({ text: 'code-ready' });
+    act(() => tree.unmount());
+  });
+});
+
+// =============================================================================
+// <McpAppIframe> — spec-canonical tool-result delivery integration.
+//
+// Verifies the host fires a `ui/notifications/tool-result` JSON-RPC
+// notification immediately after responding to the renderer's
+// `ui/initialize` request when `meta` is supplied — the Reading-B
+// replacement path.
+//
+// Coverage strategy: we observe `injectJavaScript` calls by attaching
+// a spy directly to the WebView ref `.current`. The `react-native-
+// webview` test-setup mock uses `R.forwardRef`, so the host's
+// `webViewRef.current` is populated to whatever the test sets. We
+// install the spy before sending the `ui/initialize` request so the
+// host's subsequent `deliverToWebView` calls are observable.
+// =============================================================================
+describe('<McpAppIframe> — spec-canonical tool-result delivery', () => {
+  it('fires ui/notifications/tool-result with the render slice after ui/initialize when meta is set', async () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} meta={SAMPLE_META} />,
+      );
+    });
+
+    // Attach an injectJavaScript spy on the WebView host the mock
+    // exposes via the forwarded ref. The mock renders a bare React
+    // element with the ref attached as a prop; we install a fake
+    // ref-target by mutating the rendered instance directly so the
+    // host's `webViewRef.current?.injectJavaScript(...)` call lands
+    // on our spy.
+    const injectJavaScript = vi.fn();
+    const webView = findWebView(tree);
+    if (!webView) throw new Error('WebView not yet mounted');
+    // The forwardRef wrapper inside the mock passes `ref` to the host
+    // through `R.createElement('WebView', { ref, ... })`. With
+    // react-test-renderer, we substitute the ref slot by invoking
+    // the ref callback / setting `.current` on the ref object
+    // directly. Iframe component uses `useRef`, so the host stores a
+    // mutable ref object as `webViewRef`. We can't access it from
+    // outside, but we CAN intercept calls by injecting a fake
+    // implementation through the WebView mock's ref-forwarding —
+    // when the WebView mounts, react-test-renderer calls
+    // `ref(instance)` and the host's `webViewRef.current` gets set
+    // to that instance. We control the instance by overriding the
+    // ref. Concretely: monkey-patch the props.ref function the host
+    // passed in.
+    const refProp = webView.props.ref as
+      | ((handle: unknown) => void)
+      | { current: unknown }
+      | null;
+    if (refProp === null || refProp === undefined) {
+      throw new Error('WebView did not receive a ref');
+    }
+    if (typeof refProp === 'function') {
+      refProp({ injectJavaScript });
+    } else {
+      (refProp as { current: unknown }).current = { injectJavaScript };
+    }
+
+    // Simulate the renderer issuing the `ui/initialize` request.
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ui/initialize',
+    });
+
+    // Two injectJavaScript calls expected, in order:
+    //   1. The `ui/initialize` response (adapter-boundary {theme,
+    //      containerDimensions, locale}).
+    //   2. The spec-canonical `ui/notifications/tool-result`
+    //      notification carrying the render slice on `params._meta`.
+    expect(injectJavaScript).toHaveBeenCalledTimes(2);
+
+    // Extract the embedded JSON from each delivery script (the
+    // delivery shape is `var data = JSON.parse(<json-stringified
+    // payload>); ...`). The script is fully encoded so we can pluck
+    // the JSON.parse argument and round-trip it.
+    function extractDeliveredMessage(script: unknown): Record<string, unknown> {
+      const text = String(script);
+      const match = /JSON\.parse\((.*?)\);/s.exec(text);
+      if (!match) throw new Error('no JSON.parse(...) match in script');
+      // The captured group is itself a JSON-stringified JSON string
+      // (double-stringified for safe injection), so we parse twice.
+      const outer = JSON.parse(match[1]!) as string;
+      return JSON.parse(outer) as Record<string, unknown>;
+    }
+
+    const initResponse = extractDeliveredMessage(injectJavaScript.mock.calls[0]?.[0]);
+    expect(initResponse['jsonrpc']).toBe('2.0');
+    expect(initResponse['id']).toBe(1);
+    const initResult = initResponse['result'] as Record<string, unknown>;
+    expect(Object.keys(initResult).sort()).toEqual([
+      'containerDimensions',
+      'locale',
+      'theme',
+    ]);
+    expect(initResult).not.toHaveProperty('toolOutput');
+    expect(initResult).not.toHaveProperty('_meta');
+
+    const toolResultNotif = extractDeliveredMessage(
+      injectJavaScript.mock.calls[1]?.[0],
+    );
+    expect(toolResultNotif['jsonrpc']).toBe('2.0');
+    expect(toolResultNotif['method']).toBe('ui/notifications/tool-result');
+    // Notification carries no `id` — fire-and-forget.
+    expect(toolResultNotif).not.toHaveProperty('id');
+    const params = toolResultNotif['params'] as Record<string, unknown>;
+    expect(params['content']).toEqual([]);
+    expect(params['structuredContent']).toEqual({});
+    const metaEnv = params['_meta'] as Record<string, unknown>;
+    // Spec-canonical: slice on `params._meta` (NOT `params.toolOutput._meta`).
+    expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/render']);
+    const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
+    expect(render.renderId).toBe(SAMPLE_META.renderId);
+    expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
+    expect(render.wsToken).toBe(SAMPLE_META.wsToken);
+
+    act(() => tree.unmount());
+  });
+
+  it('does NOT fire ui/notifications/tool-result after ui/initialize when meta is absent', async () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<McpAppIframe resource={makeResource()} />);
+    });
+    const injectJavaScript = vi.fn();
+    const webView = findWebView(tree);
+    if (!webView) throw new Error('WebView not yet mounted');
+    const refProp = webView.props.ref as
+      | ((handle: unknown) => void)
+      | { current: unknown }
+      | null;
+    if (refProp === null || refProp === undefined) {
+      throw new Error('WebView did not receive a ref');
+    }
+    if (typeof refProp === 'function') {
+      refProp({ injectJavaScript });
+    } else {
+      (refProp as { current: unknown }).current = { injectJavaScript };
+    }
+
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ui/initialize',
+    });
+
+    // ONE call only — the `ui/initialize` response. No tool-result
+    // follow-up when the host wasn't given a `meta` prop.
+    expect(injectJavaScript).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+  });
+
+  it('does NOT fire ui/notifications/tool-result after non-initialize requests even when meta is set', async () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} meta={SAMPLE_META} />,
+      );
+    });
+    const injectJavaScript = vi.fn();
+    const webView = findWebView(tree);
+    if (!webView) throw new Error('WebView not yet mounted');
+    const refProp = webView.props.ref as
+      | ((handle: unknown) => void)
+      | { current: unknown }
+      | null;
+    if (refProp === null || refProp === undefined) {
+      throw new Error('WebView did not receive a ref');
+    }
+    if (typeof refProp === 'function') {
+      refProp({ injectJavaScript });
+    } else {
+      (refProp as { current: unknown }).current = { injectJavaScript };
+    }
+
+    // Renderer pings — no tool-result delivery should fire.
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ping',
+    });
+
+    expect(injectJavaScript).toHaveBeenCalledTimes(1);
+    // The single call is the ping response, not a tool-result.
+    const text = String(injectJavaScript.mock.calls[0]?.[0]);
+    expect(text).not.toContain('ui/notifications/tool-result');
     act(() => tree.unmount());
   });
 });

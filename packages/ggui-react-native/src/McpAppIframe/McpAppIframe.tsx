@@ -64,6 +64,7 @@ import {
   DEFAULT_HOST_THEME,
   buildDispatchActionNotification,
   buildResourceTeardownNotification,
+  buildToolResultNotification,
   classifyRendererEnvelope,
   deriveResourceMountSource,
   dispatchHostBridgeRequest,
@@ -135,7 +136,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       containerDimensions: resolveContainerDimensions(containerDimensions),
       openLink: openLinkNative,
       onToolCall,
-      ...(meta !== undefined ? { meta } : {}),
     });
     useEffect(() => {
       ctxRef.current = {
@@ -144,9 +144,20 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
         containerDimensions: resolveContainerDimensions(containerDimensions),
         openLink: openLinkNative,
         onToolCall,
-        ...(meta !== undefined ? { meta } : {}),
       };
-    }, [theme, locale, containerDimensions, onToolCall, meta]);
+    }, [theme, locale, containerDimensions, onToolCall]);
+
+    // Track the current `meta` separately from `ctxRef`. `meta` no
+    // longer rides on `ui/initialize` (Reading-B retired); the host
+    // now delivers it via the spec-canonical
+    // `ui/notifications/tool-result` notification fired immediately
+    // after the initialize response. Stored in a ref so the
+    // initialize-branch dispatch can read the latest value without
+    // forcing a re-mount of the listener closure.
+    const metaRef = useRef<typeof meta>(meta);
+    useEffect(() => {
+      metaRef.current = meta;
+    }, [meta]);
 
     // Delivery helper — host → WebView. Reuses the existing synthesis
     // pattern: escape payload through JSON.parse(JSON.stringify(...))
@@ -249,6 +260,26 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             const req = payload as HostBridgeRequest;
             const response = await dispatchHostBridgeRequest(req, ctxRef.current);
             if (response) deliverToWebView(response);
+            // Spec-canonical render-meta delivery (Reading-B retired).
+            // When the renderer just completed its `ui/initialize`
+            // handshake AND the host was given a `meta` prop, fire the
+            // `ui/notifications/tool-result` notification right after
+            // the initialize response so the renderer's pre-handshake
+            // `awaitToolResultMeta` listener (Tier 2 of
+            // `bootSequence`) catches the slice. The renderer
+            // registers that listener BEFORE calling
+            // `app.connect(transport)`, so a notification sent
+            // immediately after we resolve `ui/initialize` arrives
+            // strictly after the listener is in place — no race.
+            //
+            // Filter: only fire on `ui/initialize` requests so a
+            // renderer that pings or re-issues an unrelated request
+            // doesn't re-trigger the delivery. (`meta` updates
+            // mid-mount are out of scope — the wire delivers a fresh
+            // tool-result on every `ggui_update` via the live channel.)
+            if (req.method === 'ui/initialize' && metaRef.current !== undefined) {
+              deliverToWebView(buildToolResultNotification(metaRef.current));
+            }
             return;
           }
           case 'unknown':
