@@ -4,11 +4,13 @@ packages:
   # is a workspace member but `private: true` — built, never published.
   # benchmark + benchmark-viewer are workspace-private under misc/.
   - "packages/agent-runtime"
+  - "packages/agent-server"
   - "packages/artifact-manifest"
   - "packages/blueprint-probe"
   - "packages/live-channel"
   - "packages/chat-self-hosted"
   - "packages/console"
+  - "packages/create-agentic-app"
   - "packages/design"
   - "packages/dev-stack"
   - "packages/embedding-local"
