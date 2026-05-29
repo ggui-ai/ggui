@@ -27,22 +27,19 @@ This repo is the **open protocol + reference runtime**. Self-host with `ggui ser
 
 ### 1. Build an agentic app from a template _(recommended for new apps)_
 
-The fastest path if you want to **ship an agent end-to-end**. Each template scaffolds a chat UI + agent loop + sample MCP servers in one repo, pinned to one agent SDK.
+The fastest path to **ship an agent end-to-end**. One command scaffolds a complete pnpm monorepo — chat UI + agent loop + a sample MCP server — pinned to your agent SDK; one more runs the whole thing.
 
 ```bash
 npx @ggui-ai/create-agentic-app --agent claude-agent-sdk my-app
-# or:  --agent openai-agents-sdk
-# or:  --agent google-adk
-cd my-app
+# or:  --agent openai-agents-sdk   |   --agent google-adk
+cd my-app && pnpm install
 cp .env.example .env.local   # add your LLM API key
-pnpm dev:ggui                # terminal 1 — ggui MCP server
-pnpm dev:todo                # terminal 2 — todo MCP server
-pnpm dev:agent               # terminal 3 — agent + chat UI
+pnpm dev                     # starts ggui + MCP servers + agent + web, then opens the app
 ```
 
-Open `http://localhost:6790` (claude) / `6791` (openai) / `6792` (google) to chat.
+`pnpm dev` brings all four services up together with labeled logs and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit. The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts.
 
-The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. Browse the templates at [github.com/ggui-ai/agentic-app-templates](https://github.com/ggui-ai/agentic-app-templates) — each subdir is a complete project with its own README + CLAUDE.md walking through customisation (system prompt, domain MCP, blueprints, gadgets).
+Each template subdir at [github.com/ggui-ai/agentic-app-templates](https://github.com/ggui-ai/agentic-app-templates) is a complete project with its own README + `CLAUDE.md` and a `/bootstrap` Claude Code command that walks you through customisation: the system prompt, your own MCP servers (drop a folder under `servers/mcps/` — it's auto-started by `pnpm dev` and auto-registered with the agent), blueprints, and gadgets.
 
 ### 2. Self-host the OSS MCP server + test from claude.ai
 
