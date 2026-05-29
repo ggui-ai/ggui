@@ -1,14 +1,16 @@
 /**
- * Claude Agent SDK loop wired to a ggui MCP server.
+ * Claude Agent SDK adapter for `@ggui-ai/agent-server`.
  *
- * The agent has no built-in tools; the only tools it can call are
- * the ggui_* MCP tools exposed by the server it's pointed at. The
- * LLM decides when to call ggui_handshake / ggui_render / ggui_update /
- * ggui_consume on its own based on the tool descriptions returned by
- * `tools/list`.
+ * Implements the `AgentAdapter` contract: receives prompt + chatId +
+ * MCP server map per request and yields normalized SDK messages.
+ * Every ggui-coupled concern (HTTP, SSE, MCP routing, tool-result
+ * resource inlining, directive synthesis, auth, chat ownership)
+ * lives in the library — this file only knows about the Claude
+ * Agent SDK's native event stream.
  *
- * This is what "Zero Agent Code" looks like in practice — the only
- * ggui-specific thing here is the MCP server URL.
+ * Brand-agnostic: no imports from
+ * `@ggui-ai/protocol/integrations/mcp-apps`. The library handles
+ * every `_meta.ui.*` / `_meta.ai.ggui/*` slice.
  */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -22,38 +24,29 @@ import {
   type SpawnedProcess,
 } from '@anthropic-ai/claude-agent-sdk';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
+import type {
+  AgentAdapter,
+  AgentInput,
+  NormalizedMessage,
+  McpCallToolResult,
+} from '@ggui-ai/agent-server';
 
 /**
- * Locate the Claude Agent SDK's bundled `cli.js`.
- *
- * The SDK ships a portable `#!/usr/bin/env node` `cli.js` AND optional
- * platform-native `claude` binaries (`@anthropic-ai/claude-agent-sdk-<plat>`).
- * Its default lookup prefers the native binary and hard-errors when the
- * matching optional package didn't install — which happens in CI / any
- * environment where the libc-specific variant isn't resolved. Pinning
- * `pathToClaudeCodeExecutable` at the bundled `cli.js` runs the agent
- * loop on plain Node everywhere, with no native-binary dependency.
- *
- * Two SDK versions coexist in this workspace — `0.2.76` (with bundled
- * `cli.js`) is pinned here; `0.2.123` (no bundled `cli.js`, uses
- * platform-native bins) is pulled in by `@ggui-ai/ui-gen`. pnpm in
- * hoisted mode places one at root, the other nested, and the choice
- * can flip between pnpm patch versions. So instead of trusting a
- * single resolved path, walk the `node_modules` chain upward and
- * accept the first SDK copy that actually contains `cli.js`.
+ * Locate the Claude Agent SDK's bundled `cli.js`. The SDK ships a
+ * portable `#!/usr/bin/env node` `cli.js` AND optional platform-
+ * native binaries (`@anthropic-ai/claude-agent-sdk-<plat>`); its
+ * default lookup prefers the native binary and hard-errors when the
+ * matching optional package didn't install. Pinning
+ * `pathToClaudeCodeExecutable` at the bundled `cli.js` runs the
+ * agent loop on plain Node everywhere.
  */
 function resolveClaudeCliPath(): string {
   const tried: string[] = [];
   const startDir = dirname(fileURLToPath(import.meta.url));
   let dir = startDir;
-  // Bounded walk — at most a handful of node_modules ancestors in practice.
   for (let depth = 0; depth < 20; depth++) {
     const candidates = [
-      // Same dir as the SDK that `require.resolve` picks from this level.
       tryResolveSdkDir(dir),
-      // Direct nested copy under this dir's node_modules (pnpm hoisted mode
-      // sometimes places version-conflicted copies here even when the
-      // resolver would walk up).
       join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
     ];
     for (const sdkDir of candidates) {
@@ -83,27 +76,7 @@ function tryResolveSdkDir(fromDir: string): string | null {
 
 const CLAUDE_CLI_PATH = resolveClaudeCliPath();
 
-/**
- * Spawn the SDK's CLI subprocess using `process.execPath` (the absolute
- * path to the current Node binary) rather than letting the SDK do its
- * default `spawn('node', ...)`.
- *
- * The SDK's `executable: 'node'` option resolves to `spawn('node', ...)`,
- * which depends on `node` being on the child's `PATH`. In CI runs that
- * spawn through pnpm → vite → tsx, the child's PATH has been observed
- * to omit the setup-node toolcache dir, causing `ENOENT` at spawn time
- * with a misleading "Claude Code executable not found at <cli.js>"
- * error. Using `process.execPath` bypasses the PATH lookup — same
- * Node binary, absolute path, no environment dependency.
- *
- * Returns Node's `ChildProcess`, which structurally satisfies the
- * SDK's `SpawnedProcess` interface.
- */
 function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
-  // Re-verify at spawn time so a missing cli.js surfaces with the
-  // actual path checked, rather than as a misleading SDK ENOENT
-  // (which can also fire on a missing `node` interpreter — different
-  // root cause, same wording in the SDK's own error message).
   if (!existsSync(CLAUDE_CLI_PATH)) {
     throw new Error(
       `spawnClaudeCli: cli.js missing at spawn time — was present at module ` +
@@ -117,17 +90,14 @@ function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  // Mirror the SDK's own stderr handling — the bundled CLI's startup
-  // failures (missing dep, syntax error, MCP-connect crash) come out on
-  // its stderr, and the caller wires `options.stderr` on the SDK side.
   child.stderr?.on('data', (chunk: Buffer) => {
     process.stderr.write(`[agent-cli] ${chunk.toString()}`);
   });
   const { stdin, stdout } = child;
   if (!stdin || !stdout) {
-    // `stdio: ['pipe', 'pipe', 'pipe']` guarantees both at runtime —
-    // narrow the nullable Node types into the SDK's non-null interface.
-    throw new Error('spawnClaudeCli: child stdin/stdout missing despite pipe stdio');
+    throw new Error(
+      'spawnClaudeCli: child stdin/stdout missing despite pipe stdio',
+    );
   }
   return {
     stdin,
@@ -145,113 +115,23 @@ function spawnClaudeCli(opts: SpawnOptions): SpawnedProcess {
   };
 }
 
-/**
- * One MCP endpoint the agent's LLM is allowed to call into. Sample-only —
- * `transport` is omitted because every ggui MCP server speaks Streamable
- * HTTP and every supported SDK's MCP client defaults to it for `http(s)://`
- * URLs. Production code with mixed transports should grow a `transport`
- * field here.
- */
-export interface McpServerConfig {
-  readonly url: string;
-}
-
-export interface RunAgentOptions {
-  /** The user prompt to feed the agent. */
-  readonly prompt: string;
-  /**
-   * MCP endpoints the LLM can discover + call. Keys are user-chosen names
-   * (`ggui`, `todo`, …); the SDK auto-namespaces tools as
-   * `mcp__<key>__<tool>`. `ggui` is the conventional name for the primary
-   * ggui MCP server; additional keys add domain MCPs alongside it.
-   *
-   * The `allowedTools` allowlist below recognises the conventional keys
-   * (`ggui`, `todo`). To add a third MCP that the LLM should be allowed to
-   * call, add its key here AND extend the allowlist mapping.
-   */
-  readonly mcpServers: Record<string, McpServerConfig>;
+export interface ClaudeAgentSdkAdapterOptions {
   /** Default `claude-haiku-4-5`. */
   readonly model?: string;
   /** Default `process.env.ANTHROPIC_API_KEY`. */
   readonly apiKey?: string;
-  /** Default 20. Caps the tool-use loop so a misbehaving agent can't infinite-loop. */
+  /** Default 50. Caps the tool-use loop. */
   readonly maxTurns?: number;
   /**
-   * Bearer token sent on every MCP request as `Authorization: Bearer <token>`.
-   * Defaults to `process.env.GGUI_MCP_BEARER ?? 'dev'`. The default value
-   * pairs with `ggui serve --dev-allow-all`, which accepts any non-empty
-   * bearer. For strict-auth servers, supply a real pair-minted token.
+   * Per-server tool allowlist. MCP tools auto-namespace as
+   * `mcp__<server>__<tool>`; this map declares which prefixes the
+   * agent is allowed to call. Conventional defaults are wired below;
+   * operators can override.
    */
-  readonly bearer?: string;
-  /**
-   * System prompt nudging the model to always reach for ggui_* tools
-   * instead of plain-text replies. Without this, the default Claude
-   * Code persona answers conversationally and never renders UIs.
-   * Pass an explicit string to override, or `null` to disable entirely
-   * (leaves the SDK's built-in default in place).
-   */
-  readonly systemPrompt?: string | null;
-  /**
-   * Cancellation surface. When the controller's signal aborts, the
-   * SDK stops the in-flight `query` and tears down its subprocess.
-   * The chat server creates one per /chat request and aborts on
-   * client disconnect so a closed browser tab doesn't leak an agent
-   * loop that keeps spending tokens.
-   */
-  readonly abortController?: AbortController;
-  /**
-   * Per-tab chat identifier from the browser's
-   * `X-Chat-Id` header (auto-minted server-side when absent).
-   * Keys per-chat agent state — conversation history, resume tokens,
-   * ggui renderId continuity — so multi-turn flows preserve context
-   * across `/chat` POSTs. Threaded through today; consumed by the
-   * multi-turn-resume slice that passes Claude Agent SDK's
-   * `options.resume` keyed by this id.
-   */
-  readonly chatId?: string;
+  readonly allowedToolsByServer?: Record<string, ReadonlyArray<string>>;
 }
 
-/**
- * Per-process record of which chat ids have already produced
- * at least one Claude Agent SDK turn. Used to choose between
- * `options.sessionId` (first turn — create a new session under our
- * id) and `options.resume` (subsequent turn — load the persisted
- * conversation from `~/.claude/projects/`). Persistence note: the
- * Claude SDK saves sessions to disk, so after a process restart the
- * SET is empty but the on-disk session still exists. We accept that
- * one edge case — a tab's first POST after a server restart starts
- * a new session id collision with the on-disk one. The fall-back is
- * a fresh, isolated turn, never an error.
- */
-const knownChats = new Set<string>();
-
-/**
- * Default system prompt — re-exported from `@ggui-ai/protocol`.
- *
- * The canonical posture-only prompt for ggui-aware agents on raw SDK
- * hosts (Claude Agent SDK, OpenAI Assistants, etc.) where the host
- * lacks a built-in tool-use baseline. Posture-only by design: the
- * wire flow (handshake → render → consume → react, with nextStep
- * routing, etc.) is taught by the protocol's own self-teaching
- * surfaces:
- *
- *   - Per-tool `description` strings on every `ggui_*` MCP tool.
- *   - The server's `instructions` field on `InitializeResult` (set
- *     via `mcpInstructions` operator option in `@ggui-ai/mcp-server`).
- *
- * If an agent isn't calling the right sequence, the bug lives in
- * those surfaces — patching the agent-side system prompt is patching
- * the wrong layer.
- */
-export const DEFAULT_SYSTEM_PROMPT = GGUI_AGENT_SYSTEM_PROMPT;
-
-/**
- * Per-MCP-server allowlists, keyed by the `mcpServers` map key.
- * MCP tools are auto-namespaced by the SDK as `mcp__<server>__<tool>`.
- * To allow a new server, drop another entry here keyed by its `mcpServers`
- * map key.
- */
-const ALLOWED_TOOLS_BY_SERVER: Record<string, ReadonlyArray<string>> = {
+const DEFAULT_ALLOWED_TOOLS: Record<string, ReadonlyArray<string>> = {
   ggui: [
     'mcp__ggui__ggui_handshake',
     'mcp__ggui__ggui_render',
@@ -267,137 +147,235 @@ const ALLOWED_TOOLS_BY_SERVER: Record<string, ReadonlyArray<string>> = {
   ],
 };
 
-export async function* runAgent(
-  opts: RunAgentOptions,
-): AsyncIterable<SDKMessage> {
+/**
+ * Per-process record of which chat ids have produced at least one
+ * Claude SDK turn. Drives sessionId-vs-resume:
+ *
+ *   - `sessionId: <id>` — first turn, create a new session under
+ *     our id.
+ *   - `resume: <id>` — subsequent turn, load the persisted session.
+ *
+ * The Claude SDK saves sessions to `~/.claude/projects/`, so the
+ * set is empty after a restart but the on-disk session still
+ * exists; the first POST after a restart starts a fresh
+ * `sessionId` collision with the on-disk one. Fall-back is a
+ * fresh isolated turn, never an error.
+ */
+const knownChats = new Set<string>();
+
+export function createClaudeAgentSdkAdapter(
+  opts: ClaudeAgentSdkAdapterOptions = {},
+): AgentAdapter {
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
-      'runAgent: ANTHROPIC_API_KEY required (env var or apiKey option).',
+      'createClaudeAgentSdkAdapter: ANTHROPIC_API_KEY required (env var or apiKey option).',
     );
   }
+  const model = opts.model ?? 'claude-haiku-4-5';
+  const maxTurns = opts.maxTurns ?? 50;
+  const allowedToolsByServer =
+    opts.allowedToolsByServer ?? DEFAULT_ALLOWED_TOOLS;
+
+  return {
+    name: 'claude-agent-sdk',
+    run(input: AgentInput): AsyncIterable<NormalizedMessage> {
+      return runOnce({
+        input,
+        apiKey,
+        model,
+        maxTurns,
+        allowedToolsByServer,
+      });
+    },
+  };
+}
+
+async function* runOnce(args: {
+  readonly input: AgentInput;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly maxTurns: number;
+  readonly allowedToolsByServer: Record<string, ReadonlyArray<string>>;
+}): AsyncIterable<NormalizedMessage> {
+  const { input, apiKey, model, maxTurns, allowedToolsByServer } = args;
 
   const systemPrompt =
-    opts.systemPrompt === null
+    input.systemPrompt === null
       ? undefined
-      : (opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT);
+      : (input.systemPrompt ?? GGUI_AGENT_SYSTEM_PROMPT);
 
-  // Host-session metadata (the `ai.ggui/host-session` slice on each
-  // tools/call's request `_meta`) is the spec-canonical channel for
-  // chat-grouping continuity — the Claude Agent SDK's MCP client
-  // doesn't currently expose a per-call `_meta` hook for it. The
-  // sample's GET /chat resume endpoint sidesteps the gap by keying
-  // its own server-side per-chat snapshot off the X-Chat-Id header,
-  // so the LLM never needs to thread the host-session itself.
-
-  const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
-
-  // Translate the brand-agnostic `mcpServers` map into the Claude Agent
-  // SDK's native shape (`{type:'http', url, headers}`). Bearer is applied
-  // uniformly across every configured server — every ggui-served MCP in
-  // this sample uses the same dev-mode auth.
+  // Translate the library's brand-agnostic mcpServers map into the
+  // SDK's native shape. Bearer is the library-resolved one.
   const sdkMcpServers: Record<
     string,
     { type: 'http'; url: string; headers?: Record<string, string> }
   > = {};
-  for (const [name, cfg] of Object.entries(opts.mcpServers)) {
+  for (const [name, cfg] of Object.entries(input.mcpServers)) {
     sdkMcpServers[name] = {
       type: 'http',
       url: cfg.url,
-      headers: { Authorization: `Bearer ${bearer}` },
+      headers: { Authorization: `Bearer ${cfg.bearer}` },
     };
   }
 
-  // Derive allowedTools from the configured server keys — adding a new
-  // MCP only needs ALLOWED_TOOLS_BY_SERVER updated, not this loop.
   const allowedTools: string[] = [];
-  for (const name of Object.keys(opts.mcpServers)) {
-    const tools = ALLOWED_TOOLS_BY_SERVER[name];
+  for (const name of Object.keys(input.mcpServers)) {
+    const tools = allowedToolsByServer[name];
     if (tools) allowedTools.push(...tools);
   }
 
-  // Multi-turn session continuity. The Claude Agent SDK persists every
-  // session to `~/.claude/projects/` and exposes two complementary
-  // entry points on `options`:
-  //
-  //   - `sessionId: <UUID>` — start a new session with our id.
-  //   - `resume: <UUID>`    — load the persisted history for that id.
-  //
-  // We use our caller's chat id (the per-tab UUID minted by
-  // `useChat.ts` and forwarded as `X-Chat-Id`) as the SDK
-  // session id, so the SDK's filesystem store is keyed by the same
-  // identifier the browser uses. First call → sessionId; remembered in
-  // a module-scope Set so subsequent calls → resume. Without a chat
-  // id (raw curl callers) we let the SDK mint its own id; that
-  // call won't be resumable from this server, but it still works.
-  const chatId = opts.chatId;
+  // Multi-turn session continuity via the SDK's filesystem store.
   const sessionOptions: { resume?: string; sessionId?: string } = {};
-  if (chatId) {
-    if (knownChats.has(chatId)) {
-      sessionOptions.resume = chatId;
-    } else {
-      sessionOptions.sessionId = chatId;
-      knownChats.add(chatId);
+  if (knownChats.has(input.chatId)) {
+    sessionOptions.resume = input.chatId;
+  } else {
+    sessionOptions.sessionId = input.chatId;
+    knownChats.add(input.chatId);
+  }
+
+  // Per-request AbortController bridging input.abortSignal into the
+  // SDK's `abortController` option. Created here (not threaded
+  // through the library) because the SDK accepts AbortController,
+  // not AbortSignal.
+  const sdkAbort = new AbortController();
+  const onAbort = (): void => sdkAbort.abort();
+  if (input.abortSignal.aborted) {
+    sdkAbort.abort();
+  } else {
+    input.abortSignal.addEventListener('abort', onAbort);
+  }
+
+  try {
+    const response = query({
+      prompt: input.prompt,
+      options: {
+        model,
+        mcpServers: sdkMcpServers,
+        allowedTools,
+        ...sessionOptions,
+        tools: [],
+        settingSources: [],
+        strictMcpConfig: true,
+        maxTurns,
+        env: { ANTHROPIC_API_KEY: apiKey },
+        pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+        spawnClaudeCodeProcess: spawnClaudeCli,
+        ...(systemPrompt ? { systemPrompt } : {}),
+        abortController: sdkAbort,
+      },
+    });
+
+    for await (const msg of response) {
+      // Each SDKMessage already matches NormalizedMessage's variants
+      // (the normalized envelope was modeled after Anthropic's SDK).
+      // `assistant`/`user` shapes ride through verbatim; the
+      // `tool_use_result` sibling field carries the full MCP
+      // CallToolResult (with `_meta.ui.*`) the library's
+      // tool-result interceptor needs.
+      const normalized = sdkMessageToNormalized(msg);
+      if (normalized) yield normalized;
     }
+  } finally {
+    input.abortSignal.removeEventListener('abort', onAbort);
   }
+}
 
-  // Rehydrated-iframe click handling lives on the FRONTEND now —
-  // `@ggui-ai/react/chat-helpers` synthesizes the
-  // `[GGUI_USER_ACTION]` directive prompt client-side before POSTing
-  // to `/chat`, so this backend stays brand-agnostic and never sees
-  // the MCP-Apps `_meta["ai.ggui/userAction"]` slice itself. The
-  // prompt arrives ready to feed the LLM.
-  const response = query({
-    prompt: opts.prompt,
-    options: {
-      model: opts.model ?? 'claude-haiku-4-5',
-      mcpServers: sdkMcpServers,
-      allowedTools,
-      ...sessionOptions,
-      tools: [], // disable built-in tools — purely MCP
-      // Isolation mode. The SDK's default is already "no filesystem
-      // settings loaded" when `settingSources` is omitted, but we set
-      // it explicitly to an empty array so a future SDK change can't
-      // silently re-enable auto-discovery from `~/.claude/settings.json`
-      // / `.claude/settings.json` / `.claude/settings.local.json`.
-      // Together with `strictMcpConfig` this guarantees the sample
-      // agent's tool catalog is exactly `mcpServers` above — no
-      // claude.ai-hosted MCPs (Figma/Gmail/etc.) leaking in from the
-      // operator's logged-in Claude Code account.
-      settingSources: [],
-      // Hard-fail if any `mcpServers` entry is malformed instead of
-      // silently dropping it. Catches typos in URLs / headers early.
-      strictMcpConfig: true,
-      // 50 covers a handful of multi-turn user interactions per chat.
-      // Each render+consume+react cycle is roughly 3-5 SDK turns
-      // (handshake + render + consume + handshake + render…).
-      maxTurns: opts.maxTurns ?? 50,
-      env: { ANTHROPIC_API_KEY: apiKey },
-      // Run the agent loop via the SDK's bundled portable `cli.js` — see
-      // CLAUDE_CLI_PATH. Avoids the native-binary lookup that hard-errors
-      // when the platform-specific optional package isn't installed.
-      // The actual subprocess spawn goes through `spawnClaudeCodeProcess`
-      // below — `pathToClaudeCodeExecutable` stays set so SDK internals
-      // that read the path (logging, telemetry) still see the right value.
-      pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
-      // Custom-spawn the CLI through `process.execPath` so we don't
-      // depend on `node` being on the child's `PATH`. The default
-      // `spawn('node', ...)` has been observed to `ENOENT` in CI under
-      // pnpm-script → vite → tsx execution chains, surfacing as a
-      // misleading "Claude Code executable not found at <cli.js>" error.
-      spawnClaudeCodeProcess: spawnClaudeCli,
-      ...(systemPrompt ? { systemPrompt } : {}),
-      // Cancellation. When the caller aborts (e.g. the chat server's
-      // SSE listener detects the browser tab closed), the SDK stops
-      // its in-flight query and tears down the subprocess. Without
-      // this, a closed tab leaks the agent loop until maxTurns.
-      ...(opts.abortController
-        ? { abortController: opts.abortController }
+/**
+ * Adapt one Claude SDK message into a NormalizedMessage. Returns
+ * `null` for SDK message types the chat UI doesn't surface
+ * (e.g. partial deltas the SDK might add in future).
+ */
+function sdkMessageToNormalized(
+  msg: SDKMessage,
+): NormalizedMessage | null {
+  // The SDKMessage union closely mirrors NormalizedMessage; we use a
+  // typed dispatch on `type` and reshape only as needed.
+  if (msg.type === 'assistant') {
+    const out: Array<
+      | { readonly type: 'text'; readonly text: string }
+      | {
+          readonly type: 'tool_use';
+          readonly id: string;
+          readonly name: string;
+          readonly input: unknown;
+        }
+    > = [];
+    for (const block of msg.message?.content ?? []) {
+      if (block.type === 'text' && typeof block.text === 'string') {
+        out.push({ type: 'text', text: block.text });
+      } else if (
+        block.type === 'tool_use' &&
+        typeof block.id === 'string' &&
+        typeof block.name === 'string'
+      ) {
+        out.push({
+          type: 'tool_use',
+          id: block.id,
+          name: block.name,
+          input: block.input ?? {},
+        });
+      }
+    }
+    if (out.length === 0) return null;
+    return { type: 'assistant', message: { content: out } };
+  }
+  if (msg.type === 'user') {
+    const rawContent = msg.message?.content;
+    const out: Array<{
+      readonly type: 'tool_result';
+      readonly tool_use_id: string;
+      readonly content: ReadonlyArray<{
+        readonly type: 'text';
+        readonly text: string;
+      }>;
+      readonly is_error?: boolean;
+    }> = [];
+    if (Array.isArray(rawContent)) {
+      for (const block of rawContent) {
+        if (block.type !== 'tool_result') continue;
+        const toolUseId =
+          typeof block.tool_use_id === 'string' ? block.tool_use_id : '';
+        let textBlocks: Array<{ type: 'text'; text: string }> = [];
+        if (Array.isArray(block.content)) {
+          for (const c of block.content) {
+            if (
+              c &&
+              typeof c === 'object' &&
+              (c as { type?: unknown }).type === 'text'
+            ) {
+              const text = (c as { text?: unknown }).text;
+              if (typeof text === 'string') {
+                textBlocks.push({ type: 'text', text });
+              }
+            }
+          }
+        } else if (typeof block.content === 'string') {
+          textBlocks = [{ type: 'text', text: block.content }];
+        }
+        out.push({
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: textBlocks,
+          ...(block.is_error === true ? { is_error: true } : {}),
+        });
+      }
+    }
+    if (out.length === 0) return null;
+    const full = (msg as { tool_use_result?: unknown }).tool_use_result;
+    return {
+      type: 'user',
+      message: { content: out },
+      ...(full && typeof full === 'object'
+        ? { tool_use_result: full as McpCallToolResult }
         : {}),
-    },
-  });
-
-  for await (const msg of response) {
-    yield msg;
+    };
   }
+  if (msg.type === 'result') {
+    return {
+      type: 'result',
+      subtype: String((msg as { subtype?: unknown }).subtype ?? 'ok'),
+    };
+  }
+  return null;
 }

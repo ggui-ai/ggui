@@ -12,9 +12,8 @@
   },
   "dependencies": {
     "@google/adk": "^1.1.0",
-    "@ggui-ai/dev-stack": "workspace:*",
+    "@ggui-ai/agent-server": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.27.0",
     "dotenv": "^16.4.5",
     "zod": "^3.23.0"
   },

@@ -28,7 +28,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
-import type { McpServerConfig } from './agent.js';
+import type { McpServerConfig } from '@ggui-ai/agent-server';
 import { startServer } from './server.js';
 
 function findEnvLocal(start: string): string | null {
