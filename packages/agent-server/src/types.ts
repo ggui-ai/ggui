@@ -128,13 +128,17 @@ export interface AgentInput {
     { readonly url: string; readonly bearer: string }
   >;
   /**
-   * System prompt the operator configured. Adapters MAY ignore (most
-   * SDKs prefer an SDK-native instruction parameter) or thread
-   * through. `null` means "operator asked for no system prompt"; the
-   * canonical `GGUI_AGENT_SYSTEM_PROMPT` default is the library's
-   * fallback when the operator left it unset.
+   * System prompt the operator configured, as a three-way the adapter
+   * MUST honor:
+   *   - `undefined` → operator left it unset; the adapter applies its
+   *     OWN default (e.g. the sample's `GGUI_AGENT_SYSTEM_PROMPT`).
+   *   - `null` → operator explicitly asked for NO system prompt.
+   *   - string → custom override.
+   * Adapters MAY still ignore it when their SDK prefers a native
+   * instruction parameter. The library MUST NOT collapse `undefined` to
+   * `null` — doing so silently kills the adapter's default.
    */
-  readonly systemPrompt: string | null;
+  readonly systemPrompt: string | null | undefined;
   /**
    * Fires when the client disconnects (SSE socket close, fetch abort).
    * Adapters MUST stop their in-flight LLM call when this signals;

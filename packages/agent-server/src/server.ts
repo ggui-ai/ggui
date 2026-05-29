@@ -127,7 +127,7 @@ export async function startAgentServer(
     auth,
     chatStore,
     mcpServers: resolvedServers,
-    systemPrompt: opts.systemPrompt ?? null,
+    systemPrompt: opts.systemPrompt,
     sandboxProxyUrl: sandboxProxy.url,
     log,
   });

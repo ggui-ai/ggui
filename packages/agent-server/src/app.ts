@@ -85,9 +85,16 @@ export interface AgentAppDeps {
     { readonly url: string; readonly bearer: string }
   >;
   /**
-   * Optional system prompt the operator configured.
+   * System prompt the operator configured, as a three-way the adapter
+   * MUST honor:
+   *   - `undefined` → operator left it unset; the adapter applies its
+   *     OWN default (e.g. the sample's `GGUI_AGENT_SYSTEM_PROMPT`).
+   *   - `null` → operator explicitly asked for NO system prompt.
+   *   - string → custom override.
+   * The library MUST NOT collapse `undefined` to `null` — doing so
+   * silently disables the adapter's default.
    */
-  readonly systemPrompt: string | null;
+  readonly systemPrompt: string | null | undefined;
   /**
    * URL of the second-origin sandbox proxy. Required because every
    * MCP-Apps iframe lives behind it.
