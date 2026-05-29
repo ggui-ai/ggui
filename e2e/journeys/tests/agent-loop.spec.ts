@@ -59,12 +59,15 @@ for (const entry of MATRIX) {
   test.describe(`agent loop - ${entry.sdk} (workspace mode)`, () => {
     let handle: AgentLoopHandle | undefined;
 
-    test.beforeAll(async (_fixtures, testInfo) => {
+    // eslint-disable-next-line no-empty-pattern
+    test.beforeAll(async ({}, testInfo) => {
       const hasKey = entry.byokEnvVars.some((k) => process.env[k]?.trim());
       test.skip(!hasKey, entry.byokInstruction);
       // `testInfo.parallelIndex` is a stable 0-based per-worker
       // integer. Threaded into the harness so each worker binds its
       // own port set (see `portsForWorker` in agent-loop-harness.ts).
+      // The `{}` destructure isn't optional — Playwright validates the
+      // beforeAll signature and rejects underscore params.
       handle = await spawnAgentLoop({
         sdk: entry.sdk,
         workerIndex: testInfo.parallelIndex,

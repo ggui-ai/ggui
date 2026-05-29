@@ -53,28 +53,28 @@ import { PACKAGES_ROOT } from './workspace-paths';
 /**
  * Per-worker port allocation.
  *
- * Each parallel Playwright worker gets a 100-port window — wide enough
- * to never collide with another worker's processes (we only need 5
- * ports per worker). The base values below are worker 0's allocation;
- * worker N adds `N * WORKER_PORT_OFFSET` to each.
+ * Each parallel Playwright worker gets a CONTIGUOUS 10-port window so
+ * no worker's process ever lands on another worker's port. The window
+ * size (`WORKER_WINDOW`) only needs to cover the 5 ports we spawn (ggui,
+ * todo, agent, sandbox, web) plus a small buffer; 10 leaves room for
+ * a future sixth child without re-tiling.
  *
- * Worker 0 → ggui 6781, todo 6782, agent 6790, sandbox 7790, web 6890
- * Worker 1 → ggui 6881, todo 6882, agent 6890, sandbox 7890, web 6990
- * Worker 2 → ggui 6981, todo 6982, agent 6990, sandbox 7990, web 7090
+ * Worker 0 → 7000-7009 (ggui 7000, todo 7001, agent 7002, sandbox 7003, web 7004)
+ * Worker 1 → 7010-7019 (...7010, 7011, 7012, 7013, 7014)
+ * Worker 2 → 7020-7029 (...7020, 7021, 7022, 7023, 7024)
+ *
+ * The base 7000 deliberately sits above the templates' published port
+ * choices (6781, 6782, 6790, 6890, 7790 — see each template's
+ * `playwright.config.ts`) so a developer running both the template e2e
+ * and the workspace e2e in parallel doesn't get a silent cross-cutting
+ * bind.
  *
  * The agent port is the same regardless of SDK — only one SDK's
- * backend is booted per worker. The SDK identity is purely a package
+ * backend is booted per worker. SDK identity is purely a package
  * selector now; ports are per-WORKER, not per-SDK.
  */
-const WORKER_PORT_OFFSET = 100;
-
-const PORT_BASE = {
-  ggui: 6781,
-  todo: 6782,
-  agent: 6790,
-  sandbox: 7790,
-  web: 6890,
-} as const;
+const WORKER_WINDOW = 10;
+const WORKER_BASE = 7000;
 
 export interface HarnessPortSet {
   readonly ggui: number;
@@ -85,13 +85,13 @@ export interface HarnessPortSet {
 }
 
 export function portsForWorker(workerIndex: number): HarnessPortSet {
-  const off = workerIndex * WORKER_PORT_OFFSET;
+  const base = WORKER_BASE + workerIndex * WORKER_WINDOW;
   return {
-    ggui: PORT_BASE.ggui + off,
-    todo: PORT_BASE.todo + off,
-    agent: PORT_BASE.agent + off,
-    sandbox: PORT_BASE.sandbox + off,
-    web: PORT_BASE.web + off,
+    ggui: base + 0,
+    todo: base + 1,
+    agent: base + 2,
+    sandbox: base + 3,
+    web: base + 4,
   };
 }
 
