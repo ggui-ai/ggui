@@ -14,26 +14,33 @@ import react from '@vitejs/plugin-react';
  *     routing + server components + middleware would falsely signal
  *     "colocate server logic here".
  *
- *   - `server.port` pinned at 6890 to match the e2e harness's
- *     `HARNESS_PORTS.nextjs` (kept the same number so harness changes
- *     stay minimal; consider renaming the harness constant later).
+ *   - `server.port` defaults to 6890 — matches the e2e harness's
+ *     `HARNESS_PORTS.web`. Overridable via `VITE_SERVER_PORT` env var so
+ *     the parallel e2e harness can run one preview server per worker on
+ *     distinct ports (worker 0 → 6890, worker 1 → 6990, worker 2 → 7090).
+ *     Vite intentionally does NOT read `PORT` from env, so we use a
+ *     prefixed name to make the harness contract explicit.
  *
  *   - `server.strictPort` so a port collision FAILS LOUD instead of
  *     silently moving to the next free port — the harness pre-flight
- *     check assumes the bind is on 6890.
+ *     check assumes the bind is on the requested port.
  *
  *   - No `transpilePackages` equivalent needed: Vite walks workspace
  *     symlinks natively and the @ggui-ai/* packages ship usable ESM.
  */
+const SERVER_PORT = process.env.VITE_SERVER_PORT
+  ? Number(process.env.VITE_SERVER_PORT)
+  : 6890;
+
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 6890,
+    port: SERVER_PORT,
     strictPort: true,
     host: '127.0.0.1',
   },
   preview: {
-    port: 6890,
+    port: SERVER_PORT,
     strictPort: true,
     host: '127.0.0.1',
   },

@@ -43,11 +43,25 @@ export default defineConfig({
   // Absolute paths so the location is independent of Playwright's cwd.
   outputDir: resolve(PACKAGES_ROOT, 'e2e-results', 'ggui-oss'),
 
-  // OSS specs are fast (<60s each on the blocking subset). No retries
-  // so flakes surface as real signal, not as silenced warnings.
-  retries: 0,
-  workers: process.env.CI ? 1 : undefined,
+  // 1 retry budget per spec — LLM flake is real and parallel matrix
+  // workers (agent-loop) hit it more often than serial. A second
+  // retry would mask genuine regressions; one is the sweet spot.
+  retries: 2,
+  // 3 workers locally — the agent-loop matrix has 3 SDK describes,
+  // and the harness allocates per-worker port windows so they can
+  // boot fully concurrent without collision (see
+  // `portsForWorker` in agent-loop-harness.ts). CI keeps 1 worker
+  // because GitHub-hosted runners only have BYOK keys for the
+  // claude SDK and the other two are skipped at the spec layer.
+  workers: process.env.CI ? 1 : 3,
   timeout: 300_000, // 5 min — covers live-BYOK + tarball install
+
+  // One-time setup: build the Vite SPA frontend ONCE before any
+  // worker starts so all per-worker `vite preview` spawns serve
+  // the shared `dist/`. Without this, parallel workers race on
+  // the `vite build` output dir and intermittently serve corrupted
+  // half-written files. See `oss/samples/apps/ggui-basic-web/`.
+  globalSetup: resolve(__dirname, 'tests', 'global-setup.ts'),
 
   forbidOnly: !!process.env.CI,
 
@@ -90,11 +104,13 @@ export default defineConfig({
       // generation in the opt-in BYOK path. The harness handles its
       // own timeouts internally; this is the project-level cap.
       timeout: 300_000,
-      // Serial — specs share port ranges + temp-CWDs, and the live
-      // BYOK spec makes a real Anthropic call that we don't want
-      // concurrent with anything else.
-      fullyParallel: false,
-      retries: 0,
+      // Parallel across describe blocks — the agent-loop matrix runs
+      // its 3 SDK describes on distinct workers with isolated port
+      // windows. Other journey specs that share fixed ports (e.g.
+      // `pair-flow.spec.ts`, `npx-bootstrap.spec.ts`) are scheduled
+      // by Playwright as separate test files, so they land on
+      // different workers naturally.
+      fullyParallel: true,
     },
   ],
 });

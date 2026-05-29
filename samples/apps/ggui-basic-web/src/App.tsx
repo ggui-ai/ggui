@@ -3,14 +3,33 @@ import { ThemeProvider, getRawTheme } from '@ggui-ai/design/themes';
 import { Chat } from './Chat';
 
 /**
- * Public agent backend URL. Wired at build/dev time via the
- * `VITE_AGENT_ENDPOINT_URL` env var. Falls back to the e2e harness
- * default (claude-agent-sdk on 6790) so a developer running `pnpm dev`
- * without `.env.local` configured still gets a working shell against a
- * stock harness.
+ * Public agent backend URL. Resolution order:
+ *
+ *   1. `?agent=<url>` URL query param. Lets one built bundle drive any
+ *      agent backend at runtime — the parallel e2e harness uses this
+ *      so all workers share a single Vite build but each navigates to
+ *      its own worker-local agent URL.
+ *   2. `VITE_AGENT_ENDPOINT_URL` env var (baked in at build time).
+ *      Right for single-tenant deployments where the backend URL is
+ *      known at build.
+ *   3. The e2e harness default (claude-agent-sdk on 6790) so a developer
+ *      running `pnpm dev` without `.env.local` still gets a working
+ *      shell against a stock harness.
+ *
+ * Resolved synchronously at module load. The query param is read once
+ * and never re-read — switching backends requires a new page load
+ * (deliberate; the conversation state is keyed by `chatId`, which is
+ * also URL-resident).
  */
-const AGENT_ENDPOINT =
-  import.meta.env.VITE_AGENT_ENDPOINT_URL ?? 'http://localhost:6790';
+function resolveAgentEndpoint(): string {
+  if (typeof window !== 'undefined') {
+    const fromUrl = new URL(window.location.href).searchParams.get('agent');
+    if (fromUrl !== null && fromUrl.length > 0) return fromUrl;
+  }
+  return import.meta.env.VITE_AGENT_ENDPOINT_URL ?? 'http://localhost:6790';
+}
+
+const AGENT_ENDPOINT = resolveAgentEndpoint();
 
 /**
  * Pair the chat shell with the SAME theme the iframe content uses

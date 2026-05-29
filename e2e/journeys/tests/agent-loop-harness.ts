@@ -50,30 +50,64 @@ import { resolve } from 'node:path';
 
 import { PACKAGES_ROOT } from './workspace-paths';
 
-/** Ports used by the harness. Match templates/* for parity. */
-export const HARNESS_PORTS = {
+/**
+ * Per-worker port allocation.
+ *
+ * Each parallel Playwright worker gets a 100-port window — wide enough
+ * to never collide with another worker's processes (we only need 5
+ * ports per worker). The base values below are worker 0's allocation;
+ * worker N adds `N * WORKER_PORT_OFFSET` to each.
+ *
+ * Worker 0 → ggui 6781, todo 6782, agent 6790, sandbox 7790, web 6890
+ * Worker 1 → ggui 6881, todo 6882, agent 6890, sandbox 7890, web 6990
+ * Worker 2 → ggui 6981, todo 6982, agent 6990, sandbox 7990, web 7090
+ *
+ * The agent port is the same regardless of SDK — only one SDK's
+ * backend is booted per worker. The SDK identity is purely a package
+ * selector now; ports are per-WORKER, not per-SDK.
+ */
+const WORKER_PORT_OFFSET = 100;
+
+const PORT_BASE = {
   ggui: 6781,
   todo: 6782,
-  /** Per-SDK agent backend port (API-only HTTP server). */
-  agent: {
-    'claude-agent-sdk': 6790,
-    'openai-agents-sdk': 6791,
-    'google-adk': 6792,
-  },
-  /**
-   * Vite SPA frontend port. Single value across all SDKs — the SAME
-   * Vite app drives every backend, swapped via `VITE_AGENT_ENDPOINT_URL`.
-   * Matches the `server.port` pinned in
-   * `oss/samples/apps/ggui-basic-web/vite.config.ts`.
-   */
+  agent: 6790,
+  sandbox: 7790,
   web: 6890,
 } as const;
+
+export interface HarnessPortSet {
+  readonly ggui: number;
+  readonly todo: number;
+  readonly agent: number;
+  readonly sandbox: number;
+  readonly web: number;
+}
+
+export function portsForWorker(workerIndex: number): HarnessPortSet {
+  const off = workerIndex * WORKER_PORT_OFFSET;
+  return {
+    ggui: PORT_BASE.ggui + off,
+    todo: PORT_BASE.todo + off,
+    agent: PORT_BASE.agent + off,
+    sandbox: PORT_BASE.sandbox + off,
+    web: PORT_BASE.web + off,
+  };
+}
+
+/**
+ * Convenience worker-0 port set. Preserved as a named export for spec
+ * authors who want to assert specific ports in custom flows. The real
+ * harness call path uses {@link portsForWorker} keyed by
+ * `testInfo.parallelIndex`.
+ */
+export const HARNESS_PORTS: HarnessPortSet = portsForWorker(0);
 
 /**
  * One of the three SDK identities. Drives which workspace package the
  * agent process is filtered to and which env var holds the BYOK key.
  */
-export type SdkId = keyof typeof HARNESS_PORTS.agent;
+export type SdkId = 'claude-agent-sdk' | 'openai-agents-sdk' | 'google-adk';
 
 /** Per-SDK constants — package filter + required BYOK env. */
 const SDK_CONFIG: Record<
@@ -101,10 +135,10 @@ const WORKSPACE_ROOT = resolve(PACKAGES_ROOT, '..');
 /** Handle returned by {@link spawnAgentLoop}. */
 export interface AgentLoopHandle {
   /**
-   * URL Playwright navigates to. Points at the Vite SPA frontend
-   * (port 6890) — which in turn fetches the agent backend via
-   * `VITE_AGENT_ENDPOINT_URL`. The agent backend URL is internal to
-   * the harness and not surfaced here.
+   * URL Playwright navigates to. Points at the Vite SPA preview
+   * server on the worker-local web port, with the agent backend URL
+   * threaded as the `?agent=<url>` query param so the SPA wires up to
+   * THIS worker's agent backend at runtime (no per-worker rebuild).
    */
   readonly agentUrl: string;
   /** ggui MCP base URL. */
@@ -131,19 +165,35 @@ export interface AgentLoopHandle {
 
 export interface SpawnAgentLoopOptions {
   readonly sdk: SdkId;
+  /**
+   * Playwright `testInfo.parallelIndex` — 0-based per-worker integer.
+   * Drives port allocation so concurrent workers don't collide on
+   * binds. Default 0 = the single-worker layout (back-compat for
+   * specs that haven't threaded the worker index yet).
+   */
+  readonly workerIndex?: number;
 }
 
 /**
- * Spawn ggui + todo + agent in workspace mode. Resolves once all three
- * boot beacons are observed. Hard-throws on any beacon timeout — the
- * journey then fails fast and the spec dump prints captured stdio.
+ * Spawn ggui + todo + agent + web in workspace mode for one Playwright
+ * worker. Resolves once all four boot beacons are observed. Hard-throws
+ * on any beacon timeout — the journey then fails fast and the spec
+ * dump prints captured stdio.
+ *
+ * Per-worker isolation: every spawned process binds a worker-local
+ * port (see {@link portsForWorker}), so up to 3 workers can run
+ * concurrently without collision. The Vite preview server uses the
+ * SAME built `dist/` for every worker — `playwright.config.ts`'s
+ * `globalSetup` builds it once before any worker starts, so build-race
+ * is impossible; only the preview bind port and the runtime `?agent=`
+ * URL query param vary per worker.
  */
 export async function spawnAgentLoop(
   opts: SpawnAgentLoopOptions,
 ): Promise<AgentLoopHandle> {
   const cfg = SDK_CONFIG[opts.sdk];
-  const ports = HARNESS_PORTS;
-  const agentPort = ports.agent[opts.sdk];
+  const workerIndex = opts.workerIndex ?? 0;
+  const ports = portsForWorker(workerIndex);
 
   // Each child inherits the caller's PATH so `pnpm` resolves. BYOK keys
   // are forwarded — these journeys are explicitly NOT clean-room.
@@ -171,21 +221,18 @@ export async function spawnAgentLoop(
   // (especially with WebSocket upgrades holding connections half-open).
   // Without this poll, back-to-back describes in the matrix would race
   // their teardown vs the next describe's pre-flight.
-  // Sample-agents auto-bind a sandbox-proxy server at `agent_port + 1000`
-  // (see `oss/samples/agents/<sdk>/src/index.ts` SANDBOX_PROXY_PORT
-  // default — 6790→7790, 6791→7791, 6792→7792). The proxy listener
-  // outlives a SIGTERM by the same OS-bind-release window as the agent
-  // itself, so we MUST include it in the pre-flight + drain loop or
-  // back-to-back describes in the matrix race their teardown.
+  //
+  // Sample-agents bind a sandbox-proxy server at the worker-local
+  // `ports.sandbox` (passed explicitly via SANDBOX_PROXY_PORT, see the
+  // agent spawn below). The proxy listener outlives a SIGTERM by the
+  // same OS-bind-release window as the agent itself, so we MUST
+  // include it in the pre-flight + drain loop.
   const portsToCheck: Array<{ port: number; label: string }> = [
-    { port: ports.ggui, label: 'ggui' },
-    { port: ports.todo, label: 'todo' },
-    { port: agentPort, label: `agent (${opts.sdk})` },
-    {
-      port: agentPort + 1000,
-      label: `sandbox-proxy (${opts.sdk})`,
-    },
-    { port: ports.web, label: 'web' },
+    { port: ports.ggui, label: `ggui (w${workerIndex})` },
+    { port: ports.todo, label: `todo (w${workerIndex})` },
+    { port: ports.agent, label: `agent (w${workerIndex} ${opts.sdk})` },
+    { port: ports.sandbox, label: `sandbox-proxy (w${workerIndex})` },
+    { port: ports.web, label: `web (w${workerIndex})` },
   ];
   let squatted = portsToCheck.filter(({ port }) => portInUse(port));
   for (let i = 0; i < 15 && squatted.length > 0; i++) {
@@ -212,15 +259,14 @@ export async function spawnAgentLoop(
     // After SIGKILL the OS still takes a beat to release the bind; the
     // next describe's pre-flight check in this matrix runs immediately.
     // Wait up to 10s for our ports to actually clear so the next
-    // describe doesn't trip on its own predecessor.
-    // Drain matches pre-flight — include sandbox-proxy (agent + 1000)
-    // and the Vite SPA port so the next describe's pre-flight doesn't
-    // see a stale bind.
+    // describe doesn't trip on its own predecessor. Drain matches
+    // pre-flight so a back-to-back run on the same worker index never
+    // sees a stale bind.
     const myPorts = [
       ports.ggui,
       ports.todo,
-      agentPort,
-      agentPort + 1000,
+      ports.agent,
+      ports.sandbox,
       ports.web,
     ];
     for (let i = 0; i < 10; i++) {
@@ -232,7 +278,7 @@ export async function spawnAgentLoop(
   try {
     // 1. ggui (workspace `@ggui-samples/ggui-default` → `ggui serve`)
     procs.ggui = spawnChild({
-      label: 'ggui',
+      label: `ggui-w${workerIndex}`,
       pkg: '@ggui-samples/ggui-default',
       env: { ...baseEnv, PORT: String(ports.ggui) },
     });
@@ -240,7 +286,7 @@ export async function spawnAgentLoop(
 
     // 2. mcp-todo
     procs.todo = spawnChild({
-      label: 'todo',
+      label: `todo-w${workerIndex}`,
       pkg: '@ggui-samples/mcp-todo',
       env: { ...baseEnv, PORT: String(ports.todo) },
     });
@@ -250,11 +296,12 @@ export async function spawnAgentLoop(
     // 2026-05-28 frontend-split). Boots quickly once tsx finishes
     // typechecking.
     procs.agent = spawnChild({
-      label: opts.sdk,
+      label: `${opts.sdk}-w${workerIndex}`,
       pkg: cfg.agentPackage,
       env: {
         ...baseEnv,
-        PORT: String(agentPort),
+        PORT: String(ports.agent),
+        SANDBOX_PROXY_PORT: String(ports.sandbox),
         GGUI_MCP_URL: `http://localhost:${ports.ggui}/mcp`,
         GGUI_TODO_MCP_URL: `http://localhost:${ports.todo}/mcp`,
       },
@@ -266,27 +313,30 @@ export async function spawnAgentLoop(
       'agent',
     );
 
-    // 4. Vite SPA frontend — reads the agent backend URL from the
-    // env var below. ONE Vite app drives all 3 SDKs; the swap is
-    // purely the endpoint URL, no per-SDK frontend bundle.
+    // 4. Vite SPA preview — serves the SHARED `dist/` on the
+    // worker-local web port. Playwright's `globalSetup` (see
+    // `playwright.config.ts`) builds `dist/` ONCE before any worker
+    // starts, so every worker's `vite preview` is a pure static-file
+    // serve — zero race on the build output.
     //
-    // Vite's dev server transforms on demand (no upfront bundle), so
-    // the "Local:" beacon fires once it's listening — module compilation
-    // happens on the first Playwright navigation. Boot is cheap (~1-2s
-    // typical) but we allow a generous timeout for cold dependency
-    // pre-bundling on first run.
+    // `VITE_SERVER_PORT` overrides the default 6890 baked into
+    // `oss/samples/apps/ggui-basic-web/vite.config.ts` so each
+    // worker's preview binds its own allocated web port. The agent
+    // backend URL is NOT baked in — App.tsx reads it from the
+    // `?agent=<url>` URL query param at runtime (see `navigateUrl`
+    // below), so the single shared build drives every worker's
+    // distinct backend.
     //
-    // Port is pinned in `oss/samples/apps/ggui-basic-web/vite.config.ts`
-    // (`server.port: 6890, strictPort: true`); the harness pre-flight
-    // check guarantees that port is free before spawn. We do NOT set
-    // `PORT` env var because Vite ignores it — the config is the
-    // source of truth for the bind.
+    // We explicitly run the `preview` script (not `start`, which
+    // would also rebuild) to make the build/preview split
+    // unambiguous and keep per-worker spawn fast.
     procs.web = spawnChild({
-      label: 'web',
+      label: `web-w${workerIndex}`,
       pkg: '@ggui-samples/app-ggui-basic-web',
+      script: 'preview',
       env: {
         ...baseEnv,
-        VITE_AGENT_ENDPOINT_URL: `http://localhost:${agentPort}`,
+        VITE_SERVER_PORT: String(ports.web),
         // Disable ANSI color codes — Vite's colorized output interleaves
         // escape sequences inside the text we beacon on, breaking the
         // `Local:\s+http` match (`Local[22m:` ≠ `Local:`).
@@ -305,8 +355,17 @@ export async function spawnAgentLoop(
     throw err;
   }
 
+  // Frontend bundle is agent-agnostic — runtime config selects the
+  // backend via `?agent=` URL query param. The navigate URL carries
+  // the worker-local agent URL so the SPA wires up to THIS worker's
+  // backend rather than any global default.
+  const agentEndpoint = `http://localhost:${ports.agent}`;
+  const navigateUrl =
+    `http://localhost:${ports.web}/?agent=` +
+    encodeURIComponent(agentEndpoint);
+
   return {
-    agentUrl: `http://localhost:${ports.web}`,
+    agentUrl: navigateUrl,
     gguiUrl: `http://localhost:${ports.ggui}`,
     todoUrl: `http://localhost:${ports.todo}/mcp`,
     close,
@@ -359,6 +418,13 @@ function spawnChild(opts: {
   label: string;
   pkg: string;
   env: NodeJS.ProcessEnv;
+  /**
+   * pnpm script name. Defaults to `start` which matches every sample
+   * package. The web spawn overrides to `preview` so each worker
+   * serves the SHARED globalSetup-built `dist/` instead of rebuilding
+   * per worker.
+   */
+  script?: string;
 }): Proc {
   // `--filter` is run from the monorepo root so pnpm can resolve the
   // workspace graph — the samples live at `oss/samples/*/*` per
@@ -373,9 +439,10 @@ function spawnChild(opts: {
   // — including the pnpm → sh → node CLI chain. Without this, SIGKILL
   // only reaches the outer pnpm wrapper; the actual ggui-serve / tsx
   // process is reparented to PID 1 and keeps holding port 6781.
+  const script = opts.script ?? 'start';
   const child: SpawnedChild = spawn(
     'pnpm',
-    ['--filter', opts.pkg, '--silent', 'start'],
+    ['--filter', opts.pkg, '--silent', script],
     {
       cwd: WORKSPACE_ROOT,
       env: opts.env,
