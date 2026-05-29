@@ -43,6 +43,7 @@ describe('useMcpAppsChat handleAppMessage', () => {
   });
 
   function lastPostBody(): {
+    kind?: string;
     prompt?: string;
     data?: { meta?: Record<string, unknown> };
   } {
@@ -84,6 +85,8 @@ describe('useMcpAppsChat handleAppMessage', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = lastPostBody();
+    // Single-endpoint discriminator: chat forwards ride kind:'chat'.
+    expect(body.kind).toBe('chat');
     expect(body.prompt).toBe('forward me');
     // Forwarded verbatim — same object shape, key intact.
     expect(body.data?.meta).toEqual({ 'ai.ggui/userAction': doorbell });

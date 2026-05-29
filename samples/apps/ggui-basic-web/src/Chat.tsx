@@ -41,16 +41,17 @@ type LayoutMode = 'inline' | 'panel';
 interface ChatProps {
   /**
    * MCP-Apps-spec agent backend base URL (e.g. `http://localhost:6790`).
-   * Wired into the `useMcpAppsChat` hook for POST /agent + GET /agent?
-   * chatId=X and into the iframe relay call (`/agent/relay/tools-call`).
-   * The frontend stays SDK-agnostic — the backend decides which LLM it
+   * Wired into the `useMcpAppsChat` hook for the single `POST /agent`
+   * endpoint (`kind:'chat'` for prompts, `kind:'tool-call'` for the
+   * iframe → MCP relay) + `GET /agent?chatId=X` rehydration. The
+   * frontend stays SDK-agnostic — the backend decides which LLM it
    * drives.
    */
   readonly agentEndpoint: string;
   /**
    * Sandbox-proxy origin (second-origin iframe host, per MCP-Apps spec).
-   * Fetched by {@link App} from `GET /sandbox-proxy-url` on the agent
-   * backend and threaded down here so a `<Chat>` mount always has a
+   * Read by {@link App} from the `GET /` manifest's `sandboxProxyUrl`
+   * field and threaded down here so a `<Chat>` mount always has a
    * resolved URL — no in-component loading state.
    */
   readonly sandboxUrl: string;
@@ -493,13 +494,13 @@ function PanelView({
 }
 
 /**
- * Render one MCP-Apps resource. Prefers the inlined resource
- * `@ggui-ai/agent-server`'s tool-result interceptor stamped on
- * `_meta.ui.resource` (zero-round-trip mount). Falls back to a
- * `/agent/relay/resources-read` proxy when the interceptor didn't
- * inline (rare — typically only on restored entries from an older
- * snapshot, or when the upstream MCP's resources/read failed
- * server-side).
+ * Render one MCP-Apps resource. Mounts straight from the inlined
+ * resource `@ggui-ai/agent-server`'s tool-result interceptor stamped
+ * on `_meta.ui.resource` (zero-round-trip mount). On rehydration the
+ * `GET /agent` replay re-inlines each render FRESH from the MCP, so
+ * the inlined HTML always reflects current server state. When no
+ * inlined HTML is present (a render that no longer resolves), the
+ * frame shows a small "not inlined" notice rather than fetching.
  */
 function ResourceFrame({
   item,
@@ -540,7 +541,8 @@ function ResourceFrame({
   }, [sandboxUrl, inlinedCsp]);
 
   // Spec-canonical tools/call proxy. The iframe holds no MCP client
-  // credential, so we relay through the agent backend.
+  // credential, so we relay through the agent backend's single
+  // `POST /agent` endpoint with the `kind:'tool-call'` discriminator.
   const onCallTool = useCallback(
     async (
       params: CallToolRequest['params'],
@@ -553,10 +555,11 @@ function ResourceFrame({
           'Content-Type': 'application/json',
         };
         if (token) headers.Authorization = `Bearer ${token}`;
-        const resp = await fetch(`${agentEndpoint}/agent/relay/tools-call`, {
+        const resp = await fetch(`${agentEndpoint}/agent`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
+            kind: 'tool-call',
             name: params.name,
             arguments: params.arguments ?? {},
           }),

@@ -39,12 +39,13 @@ const AGENT_ENDPOINT = resolveAgentEndpoint();
 const INDIGO_DARK = getRawTheme('indigo', 'dark');
 
 export function App() {
-  // Sandbox-proxy URL fetched once from the agent backend on mount.
-  // `<AppRenderer>` mandates a second-origin sandbox host per MCP Apps
-  // spec; the sample backends auto-bind a `sandbox.html` server on
-  // `agent_port + 1000` and expose the URL via `GET /sandbox-proxy-url`.
+  // Sandbox-proxy URL read once from the agent backend's `GET /`
+  // manifest on mount. `<AppRenderer>` mandates a second-origin sandbox
+  // host per MCP Apps spec; the sample backends auto-bind a
+  // `sandbox.html` server on `agent_port + 1000` and surface the URL as
+  // the manifest's `sandboxProxyUrl` field.
   //
-  // We fetch instead of hardcoding so a backend running on a different
+  // We read instead of hardcoding so a backend running on a different
   // port (or a future backend without the bundled proxy) still drives
   // this frontend.
   const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`${AGENT_ENDPOINT}/sandbox-proxy-url`, {
+        const res = await fetch(`${AGENT_ENDPOINT}/`, {
           headers: { Accept: 'application/json' },
         });
         if (cancelled) return;
@@ -62,12 +63,17 @@ export function App() {
           setSandboxError(`backend returned ${res.status}`);
           return;
         }
-        const body = (await res.json()) as { readonly url?: unknown };
-        if (typeof body.url !== 'string' || body.url.length === 0) {
-          setSandboxError('backend response missing url');
+        const body = (await res.json()) as {
+          readonly sandboxProxyUrl?: unknown;
+        };
+        if (
+          typeof body.sandboxProxyUrl !== 'string' ||
+          body.sandboxProxyUrl.length === 0
+        ) {
+          setSandboxError('backend manifest missing sandboxProxyUrl');
           return;
         }
-        setSandboxUrl(body.url);
+        setSandboxUrl(body.sandboxProxyUrl);
       } catch (err) {
         if (!cancelled) {
           setSandboxError(err instanceof Error ? err.message : String(err));

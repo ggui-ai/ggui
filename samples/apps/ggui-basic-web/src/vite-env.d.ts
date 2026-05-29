@@ -10,8 +10,9 @@
 interface ImportMetaEnv {
   /**
    * MCP-Apps-spec agent backend base URL (e.g. `http://localhost:6790`).
-   * Drives the chat SSE stream + relay endpoints. Optional — falls
-   * back to the e2e-harness default for `pnpm dev` without a `.env.local`.
+   * Drives the single `POST /agent` endpoint (chat + tool-call relay)
+   * and the `GET /` manifest. Optional — falls back to the e2e-harness
+   * default for `pnpm dev` without a `.env.local`.
    */
   readonly VITE_AGENT_ENDPOINT_URL?: string;
 }

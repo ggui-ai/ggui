@@ -311,11 +311,16 @@ export function useMcpAppsChat(
         // agent-server backend recognizes + guards the keys it cares
         // about (e.g. `ai.ggui/userAction`) and synthesizes the
         // imperative-first LLM directive server-side.
+        //
+        // `kind:'chat'` is the spec-canonical discriminator on the
+        // agent-server's single `POST /agent` endpoint (the sibling
+        // `kind:'tool-call'` branch handles the iframe → MCP relay).
         const body: {
+          kind: 'chat';
           prompt: string;
           chatId?: string;
           data?: { meta?: OpaqueMessageMeta };
-        } = { prompt: trimmed };
+        } = { kind: 'chat', prompt: trimmed };
         if (chatId !== undefined && chatId.length > 0) {
           body.chatId = chatId;
         }
