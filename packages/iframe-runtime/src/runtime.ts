@@ -1448,55 +1448,20 @@ function awaitToolResultMeta(
 let postMountListenerInstalled = false;
 
 /**
- * Lazy module-level App initializer for `bootSelfContained`. The
- * self-contained path doesn't run the WS-driven bootSequence, so it
- * has to construct + connect its own App to participate in the
- * spec-canonical primitives (autoResize, toolresult re-mounts,
- * callServerTool dispatch).
+ * Module-level handle to the active renderer's `applyRender`, published
+ * by `bootProduction`'s `setup()` once the renderer is built. The
+ * module-level {@link installPostMountListener} resolves this to re-mount
+ * on a host-re-emitted tool-result WITHOUT a fresh boot — no second mount
+ * stack, no second WS. This is the no-WS live-re-render channel for
+ * spec-compliant MCP-Apps hosts (claude.ai / ChatGPT / Claude Desktop)
+ * that re-broadcast the tool-result instead of pushing a WS frame.
  *
- * Idempotent: once connected, subsequent calls return the existing
- * handle. Re-mount paths reuse the App across bootSelfContained
- * invocations.
- *
- * Returns `null` and logs a warning when running outside a window
- * (vitest with `globals: false`, server-side render of the bundle
- * for SSG, etc.). Callers MUST handle the null case by skipping the
- * connect-only side-effects (toolresult listener, autoResize); the
- * mount still proceeds because `bootSelfContained` runs purely
- * client-side.
+ * `null` until a renderer is published (e.g. unit tests that drive
+ * `bootSequence` with no renderer never set it → the listener no-ops).
  */
-let selfContainedAppPromise: Promise<App | null> | null = null;
-function ensureAppForSelfContained(): Promise<App | null> {
-  if (selfContainedAppPromise !== null) return selfContainedAppPromise;
-  selfContainedAppPromise = (async () => {
-    if (typeof window === 'undefined') return null;
-    const { app, transport } = createDefaultApp();
-    const result = await connectApp(app, transport);
-    if (!result.ok) {
-      // App handshake failed — the self-contained path keeps working
-      // (it mounts client-side without needing the host channel) but
-      // outbound dispatch / re-mount listening won't.
-      // eslint-disable-next-line no-console -- operator-visible degradation hint
-      console.warn(
-        '[ggui:bootSelfContained] App.connect failed — outbound tools/call + toolresult re-mounts disabled:',
-        result.message,
-      );
-      return null;
-    }
-    setCurrentApp(app);
-    return app;
-  })();
-  return selfContainedAppPromise;
-}
-
-/**
- * @internal — exported for unit tests to reset the lazy App
- * initializer between scenarios.
- */
-export function __resetSelfContainedAppForTest(): void {
-  selfContainedAppPromise = null;
-  postMountListenerInstalled = false;
-}
+let activeApplyRender:
+  | ((render: Render | RenderSeedInput) => Promise<void>)
+  | null = null;
 
 /**
  * Module-level guard for {@link installAnchorClickInterceptor}. Same
@@ -2661,459 +2626,34 @@ function installPostMountListener(): void {
     ].join('|');
     if (key === lastMetaKey) return;
     lastMetaKey = key;
-    void bootSelfContained(window.document, meta).then(() => {
-      // Re-emit last-known contextSpec values after a successful
-      // re-mount. The host's WS to the agent server is opaque to the
-      // iframe, so "WS reopen ≈ re-mount" is the closest available
-      // proxy. Re-emitting keeps the LLM context fresh after a
-      // host-driven reconnect — the new mount's SingleSlotProviders
-      // will then take over via the regular debounced flow once the
-      // user's component begins mutating values.
-      //
-      // Filter to slot names declared by the FRESHLY mounted contract.
-      // An earlier version walked the entire `contextSlotLastValues`
-      // map, which leaked stale slot values across re-mounts with
-      // different contextSpecs. The new mount's SingleSlotProvider
-      // re-seeds from `slot.default` regardless, so cross-mount
-      // survival of stale entries was never load-bearing — only the
-      // active slot names are.
-      const activeSlotNames = new Set(
-        (meta.contextSlots ?? []).map((s) => s.name),
-      );
-      const reemitIdentity = {
-        renderId: meta.renderId,
-        appId: meta.appId,
-      };
-      reemitLastContextValues(
-        productionContextSnapshotPoster,
-        activeSlotNames,
-        reemitIdentity,
-      );
+    // Re-mount through the EXISTING renderer's `applyRender` (published
+    // module-level by bootProduction's setup) — NOT a fresh boot. One
+    // mount surface, one WS; the prior stale-closure / second-WS race
+    // (the #290 root cause) is structurally impossible. Project the new
+    // tool-result meta into a seed and re-apply it.
+    const apply = activeApplyRender;
+    if (apply === null) return; // no renderer published yet — no-op safely
+    void buildRenderSeedInput(meta).then((seed) => {
+      if (seed === null) return;
+      void apply(seed).then(() => {
+        // Re-emit last-known contextSpec values after a successful
+        // re-mount — keeps the LLM context fresh after a host-driven
+        // reconnect; the new mount's SingleSlotProviders take over via
+        // the regular debounced flow once the component mutates values.
+        // Filter to slot names declared by the FRESHLY mounted contract.
+        const activeSlotNames = new Set(
+          (meta.contextSlots ?? []).map((s) => s.name),
+        );
+        reemitLastContextValues(
+          productionContextSnapshotPoster,
+          activeSlotNames,
+          { renderId: meta.renderId, appId: meta.appId },
+        );
+      });
     });
   });
 }
 
-/**
- * Self-contained boot path. Mounts the compiled component into
- * `<div id="ggui-root">` (or a fresh container when absent) using the
- * same `mountReactRoot` pipeline the WS-driven path uses. No postMessage,
- * no WebSocket, no subscribe — the runtime is fully self-sufficient
- * once the bootstrap is in hand.
- *
- * Status surface: a parent-bound `ggui:renderer-ready` followed by a
- * `code-ready` lifecycle envelope on success. Failures emit a
- * `ggui:bootstrap-failed` envelope (`SELF_CONTAINED_MOUNT_FAILED`) +
- * an `error` lifecycle event so hosts pinning lifecycle selectors
- * still observe the terminal state.
- *
- * The implementation lives next to `bootProduction` so dynamic-imports
- * for the heavy module graph happen exactly once across both code
- * paths — the postMessage path's `import('react')` etc. resolves
- * against the same module instance.
- */
-async function bootSelfContained(
-  doc: Document,
-  meta: SelfContainedMcpAppAiGguiMeta,
-): Promise<void> {
-  // Post-Phase-B the slice is flat — `renderId` / `appId` / `runtimeUrl`
-  // / `codeUrl` / `kind` / `propsJson` etc. all live directly on `meta`.
-
-  // Lifecycle: `mounting` first, paired with `ggui:renderer-ready` so
-  // outer-DOM observers see the same sequence as the postMessage path.
-  postRendererReady();
-  postLifecycleToParent(makeLifecycleEvent('mounting'));
-
-  // Resolve the mount container. Hosts inline `<div id="ggui-root">`
-  // in the self-contained shell; if absent (defensive), append one to
-  // the body so the React root has somewhere to mount.
-  let container = doc.getElementById('ggui-root');
-  if (container === null) {
-    container = doc.createElement('div');
-    container.id = 'ggui-root';
-    doc.body.appendChild(container);
-  }
-
-  try {
-    // Install precompiled, eval-free contract validators before any
-    // wire dispatch can run. Self-contained ESM modules — no bundler /
-    // `__ggui__` dependency. System-card bootstraps carry none (the
-    // loader returns the empty set); harmless to call unconditionally.
-    setActiveValidatorSet(
-      await loadCompiledValidatorsFromUrl(meta.validatorsUrl),
-    );
-
-    // Parse propsJson up-front — both branches (system card + compiled
-    // component) consume props from the same field, just in different
-    // shapes downstream.
-    let props: Record<string, unknown> | undefined;
-    if (meta.propsJson !== undefined) {
-      try {
-        const parsed: unknown = JSON.parse(meta.propsJson);
-        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          props = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Malformed propsJson is shape-preserving-skip.
-      }
-    }
-
-    // System-card branch — kind keyed against the built-in registry.
-    // No componentCode evaluation, no `globalThis.__ggui__` shim install,
-    // no GguiWireProvider (system cards are render-only and don't
-    // dispatch wire actions). The registry handles unknown kinds via
-    // a typed fallback, so a new server emitting a kind this runtime
-    // doesn't know still surfaces something visible.
-    if (meta.kind !== undefined) {
-      const [reactMod, reactDomClient, systemCardsMod] = await Promise.all([
-        import('react'),
-        import('react-dom/client'),
-        import('./system-cards/index.js'),
-      ]);
-      const root = reactDomClient.createRoot(container);
-      root.render(
-        reactMod.createElement(
-          systemCardsMod.SystemCardHost,
-          { kind: meta.kind, props: props ?? {}, themeId: meta.themeId },
-        ),
-      );
-      postLifecycleToParent(
-        makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
-      );
-      // Connect the App (idempotent) so autoResize + toolresult
-      // re-mount listening are live. App.connect runs `ui/initialize`
-      // against the host; on success it also activates the
-      // spec-canonical `ResizeObserver` that emits
-      // `ui/notifications/size-changed` (autoResize: true).
-      await ensureAppForSelfContained();
-      installPostMountListener();
-      return;
-    }
-
-    // Compiled-component branch. Fetch the bytes from `codeUrl`
-    // (content-addressable, immutable cache). T3-1 (2026-05-13) retired
-    // the inline base64 `componentCode` channel — every static-component
-    // bootstrap is delivered via the URL.
-    if (meta.codeUrl === undefined) {
-      throw new Error(
-        'bootSelfContained: bootstrap missing codeUrl (static-component mode requires the URL channel)',
-      );
-    }
-    const res = await fetch(meta.codeUrl);
-    if (!res.ok) {
-      throw new Error(
-        `bootSelfContained: codeUrl fetch failed (${res.status}): ${meta.codeUrl}`,
-      );
-    }
-    const componentCode = await res.text();
-
-    // Dynamic-imports — same set as `bootProduction`, kept here so a
-    // postMessage path running in parallel hits the module cache.
-    const [
-      reactMod,
-      reactDomClient,
-      designPrimitives,
-      designComponents,
-      designCompositions,
-      designInteract,
-      designTokens,
-      wireMod,
-      gadgetsMod,
-    ] = await Promise.all([
-      import('react'),
-      import('react-dom/client'),
-      import('@ggui-ai/design/primitives'),
-      import('@ggui-ai/design/components'),
-      import('@ggui-ai/design/compositions'),
-      import('@ggui-ai/design/interact'),
-      import('@ggui-ai/design/tokens'),
-      import('@ggui-ai/wire'),
-      // Pre-load STDLIB gadget hooks so the data-URL shim resolves
-      // `import { useGeolocation } from '@ggui-ai/gadgets'` to a real
-      // callable at iframe boot. Without this, `__ggui__.gadgets` is
-      // empty and every hook lookup returns undefined, crashing the
-      // component.
-      import('@ggui-ai/gadgets'),
-    ]);
-    const [globalsMod, reactRendererMod, gadgetLoaderMod] =
-      await Promise.all([
-        import('./globals.js'),
-        import('./react-renderer.js'),
-        import('./gadget-loader.js'),
-      ]);
-
-    // Compose the gadget-package registry: STDLIB seed PLUS any
-    // operator-registered packages from the bootstrap. This path is
-    // async, so we await the merge BEFORE installing — the per-package
-    // data-URL shims see a fully-populated catalog from first render.
-    // (The WS-driven path uses an in-place mutation fallback because
-    // its `setup` callback is synchronous.)
-    const composedGadgets =
-      await gadgetLoaderMod.loadGadgetRegistry(
-        gadgetsMod,
-        meta.gadgets ?? [],
-      );
-
-    // Install `globalThis.__ggui__` BEFORE mountReactRoot — the data-
-    // URL shim rewrite reads it synchronously during module load.
-    // Same TOCTOU-critical ordering as the WS-driven path.
-    globalsMod.installGlobalRegistry({
-      react: reactMod,
-      reactDom: reactDomClient,
-      primitives: designPrimitives,
-      components: designComponents,
-      compositions: designCompositions,
-      interact: designInteract,
-      tokens: designTokens,
-      wire: wireMod,
-      // Per-package gadget registry — STDLIB namespace merged with
-      // operator-registered packages (composed above).
-      gadgets: composedGadgets,
-      // Server-filtered public env values for wrapper hooks to read
-      // via `getPublicEnv(key)`. Absent ⇒ empty record; wrappers
-      // needing values throw at hook-mount.
-      publicEnv: meta.publicEnv ?? {},
-    });
-
-    // Synthesize one React.createContext(default) per declared
-    // contextSpec slot and register under
-    // `globalThis.__ggui__.contexts[contextName]`. Idempotent: already-
-    // registered context names REUSE the existing Context (the LLM's
-    // destructured references must stay stable across re-mounts). Boot-
-    // ordering: AFTER installGlobalRegistry, BEFORE mountReactRoot, so
-    // the boilerplate's `globalThis.__ggui__.contexts` destructure
-    // resolves on the first mount paint.
-    const registry = globalsMod.getGlobalRegistry();
-    const resolvedSlots: ReadonlyArray<ResolvedContextSlot> =
-      registry !== undefined && meta.contextSlots !== undefined
-        ? installContextRegistry(
-            registry.contexts,
-            reactMod,
-            meta.contextSlots,
-          )
-        : [];
-
-    // Build a minimal WireConfig and pass it through `renderWrapper` so
-    // generated components that call `useAction` / `useStream` resolve
-    // their context. Without this, every self-contained mount whose
-    // component touches `@ggui-ai/wire` throws "useWireContext must be
-    // used within a WireProvider".
-    //
-    // Dispatch funnels through {@link dispatchWiredAction} — the
-    // empirically-validated three-message bridge (`tools/call` +
-    // `ui/update-model-context` + `ui/message`). See helper docstring
-    // for the spec §401 / §1032 reasoning. An earlier single-message
-    // dispatch only fired #1 and the LLM never saw the click on
-    // claude.ai (the host-side scope:['app'] firewall blocks
-    // tool-result feedback from reaching the model). Empirically
-    // confirmed in a protocol probe.
-    const dispatchToolName = resolveDispatchToolName();
-    const wireConfig: import('@ggui-ai/wire').WireConfig = {
-      app: { appId: meta.appId, appName: meta.appId },
-      render: { renderId: meta.renderId, isConnected: true },
-      auth: { isAuthenticated: false },
-      dispatch: (actionName, data) => {
-        // Per-action routing — extracted to {@link routeDispatch} as
-        // a pure helper so production + the dispatch-routing unit
-        // tests share one code path. Pattern α: same-server,
-        // app-visible target tool → direct `tools/call`. Pattern β:
-        // anything else → 3-message bridge.
-        routeDispatch({
-          actionName,
-          data,
-          meta: {
-            renderId: meta.renderId,
-            appId: meta.appId,
-            ...(meta.appCallableTools !== undefined
-              ? { appCallableTools: meta.appCallableTools }
-              : {}),
-            ...(meta.actionNextSteps !== undefined
-              ? { actionNextSteps: meta.actionNextSteps }
-              : {}),
-          },
-          dispatchToolName,
-        });
-      },
-      // Subscribe + wired-tools are no-ops in self-contained mode
-      // (no live channel). Generated components that subscribe
-      // receive nothing; the contract stays honest.
-      subscribe: () => () => {},
-      // `callWiredTool` is retired — `agentTools` is now a catalog
-      // the AGENT invokes, not a component hook surface.
-      // The `openLink` and `requestDisplayMode` host-control primitives
-      // ride native idioms (anchor click + Element.requestFullscreen) —
-      // see `installAnchorClickInterceptor` and
-      // `installFullscreenInterceptors` below. No first-class
-      // chat-shortcut primitive in v1; chat-shortcut UX degrades to the
-      // Pattern β consent prompt.
-    };
-    // Runtime owns Provider tree + useState per slot. ContextStateHost
-    // composes one SingleSlotProvider per declared slot around the
-    // user's component, so the user's `useGguiContext` reads each
-    // slot's live `[value, setValue]` tuple. An earlier design had
-    // the boilerplate emit useState + Provider INSIDE the user
-    // component while the runtime mounted observers as SIBLINGS —
-    // every observer read the createContext default, never the live
-    // state. Hoisting both useState and Provider into the runtime
-    // makes the boilerplate's destructure line resolve to the live
-    // tuple by construction.
-    const ContextStateHost = createContextStateHost({
-      react: reactMod,
-      poster: productionContextSnapshotPoster,
-      consoleWarn:
-        typeof console !== 'undefined' && typeof console.warn === 'function'
-          ? console.warn.bind(console)
-          : undefined,
-      identity: {
-        renderId: meta.renderId,
-        appId: meta.appId,
-      },
-    });
-
-    const renderWrapper = (mountedComponent: ReactNode): ReactNode =>
-      reactMod.createElement(
-        wireMod.GguiWireProvider,
-        {
-          config: wireConfig,
-          children: reactMod.createElement(ContextStateHost, {
-            slots: resolvedSlots,
-            children: mountedComponent,
-          }),
-        },
-      );
-
-    // Native-idiom interceptors. Install BEFORE mountReactRoot so the
-    // listeners are live the instant any generated component begins
-    // rendering. Both helpers are idempotent (module-level guards) —
-    // re-mounts via `installPostMountListener` re-call this without
-    // stacking.
-    installAnchorClickInterceptor({
-      dispatchToolName,
-      renderId: meta.renderId,
-      appId: meta.appId,
-    });
-    installFullscreenInterceptors({
-      dispatchToolName,
-      renderId: meta.renderId,
-      appId: meta.appId,
-    });
-
-    const mountOpts = {
-      render: {
-        id: meta.renderId,
-        componentCode,
-        ...(props !== undefined ? { props } : {}),
-      },
-      renderWrapper,
-      ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
-      ...(meta.themeMode !== undefined ? { themeMode: meta.themeMode } : {}),
-      // GG.8.2 — operator-registered 3rd-party gadget packages so the
-      // rewriter resolves each direct gadget import to its per-package
-      // shim. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
-      ...(meta.gadgets !== undefined
-        ? { gadgetPackages: meta.gadgets.map((g) => g.package) }
-        : {}),
-    };
-    const mount = await reactRendererMod.mountReactRoot(container, mountOpts);
-
-    postLifecycleToParent(
-      makeLifecycleEvent('code-ready', { renderId: meta.renderId }),
-    );
-    // Connect the App (idempotent) so autoResize + toolresult
-    // re-mount listening are live. See system-card branch above for
-    // the rationale.
-    await ensureAppForSelfContained();
-    installPostMountListener();
-
-    // B4 — when the bootstrap carries a live trio (wsUrl + token),
-    // open a WS subscription so `ggui_update` props_update frames
-    // reach the iframe. Without this the McpAppIframe-nested mount
-    // never subscribed and `ggui_update` silently dropped on the
-    // server's outbound side.
-    //
-    // Targeted scope: this path mounts a SINGLE component (not the
-    // full stack), so the only frame type we need is `props_update`
-    // matching THIS renderId. Other frame types are silently
-    // dropped — no handler registered means the registry's dispatch
-    // is a no-op for them.
-    //
-    // The subscribe call is fire-and-forget; failure is logged but
-    // doesn't break the mount (the static component renders fine
-    // without live updates). When the WS goes down, mount.update()
-    // simply stops firing — gracefully degrades.
-    if (
-      typeof meta.wsUrl === 'string' &&
-      meta.wsUrl.length > 0 &&
-      typeof meta.wsToken === 'string' &&
-      meta.wsToken.length > 0
-    ) {
-      const targetRenderId = meta.renderId;
-      const renderWsToken = meta.wsToken;
-      const subscribeRegistry = new ChannelRegistry({
-        subscribeFrameBuilder: () => ({
-          type: 'subscribe',
-          payload: {
-            renderId: meta.renderId,
-            appId: meta.appId,
-            wsToken: renderWsToken,
-          },
-        }),
-      });
-      // Register only the `props_update` handler — `connectViaRegistry`
-      // registers `ack` + `error` for the handshake. Other frame
-      // types arriving on the WS will be no-ops (no handler).
-      subscribeRegistry.register({
-        type: 'props_update',
-        onMessage: (payload) => {
-          const shaped = payload as {
-            readonly renderId?: unknown;
-            readonly props?: unknown;
-          };
-          if (shaped.renderId !== targetRenderId) return;
-          if (shaped.props === null || typeof shaped.props !== 'object') return;
-          void mount.update({
-            ...mountOpts,
-            render: {
-              ...mountOpts.render,
-              props: shaped.props as Record<string, unknown>,
-            },
-          });
-        },
-      });
-      void connectViaRegistry({
-        meta,
-        registry: subscribeRegistry,
-        onStatusChange: () => {
-          /* no-op — placeholder UI is not used in self-contained mode */
-        },
-      }).catch((err: unknown) => {
-        // Self-contained mode tolerates WS failure — the component
-        // still renders with initial props; only live updates stop.
-        // eslint-disable-next-line no-console -- operator-visible degradation hint
-        console.warn(
-          '[ggui:bootSelfContained] live-update WS subscribe failed; props_update frames will not reach the mount:',
-          err instanceof Error ? err.message : String(err),
-        );
-      });
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Reuse the existing failure envelope. The reason is a synthesized
-    // value because this code path is wholly outside the
-    // `McpAppAiGguiMetaParseFailureReason` set (no postMessage parse
-    // failed — there was no postMessage). Hosts pattern-matching legacy
-    // reason strings see a new value and ignore it; new hosts can
-    // route on the explicit code.
-    postBootFailure(
-      'UI_INITIALIZE_FAILED' as RendererBootFailureReason,
-      `self-contained mount failed: ${message}`,
-    );
-    postLifecycleToParent(
-      makeLifecycleEvent('error', {
-        error: { code: 'SELF_CONTAINED_MOUNT_FAILED', message },
-      }),
-    );
-  }
-}
 
 /**
  * Detect a live-channel bootstrap shape inlined onto `__GGUI_META__`.
@@ -3194,103 +2734,42 @@ function runBootProduction(preResolvedMeta?: ValidatedMcpAppAiGguiMeta): void {
 }
 
 if (shouldAutostart() && typeof window !== 'undefined') {
-  // Boot-source resolution. Three sources of slice meta + the
-  // dispatch between `bootSelfContained` (static, no WS) and
-  // `bootProduction` (live, opens WS subscribe).
+  // Boot-source resolution — collapsed post-consolidation. The
+  // static-vs-live FORK is gone: every meta flows through the ONE
+  // unified path (`runBootProduction` → `bootProduction` →
+  // `bootSequence`), which decides internally whether to seed-mount
+  // static content (codeUrl/kind), open a WS subscribe (wsUrl+wsToken),
+  // or both. The autostart layer's only job is to RESOLVE the meta from
+  // one of three delivery channels:
   //
-  //   1. Inline `__GGUI_META__` global — per-session shells
-  //      (`buildSelfContainedHtml`, `/r/` shells pre-R5, console
-  //      embeds) populate this synchronously before this bundle's
-  //      `<script type="module">` evaluates.
-  //
+  //   1. Inline `__GGUI_META__` global — first-party shells populate
+  //      this synchronously before this bundle evaluates.
   //   2. Buffered `__GGUI_PENDING_TOOL_RESULTS__` — minimal-shell
-  //      pattern. A shell installs a postMessage listener at
-  //      first-paint, buffers any `ui/notifications/tool-result`
-  //      arrivals into the array, and the runtime drains on load.
-  //      Covers the host-races-the-bundle case (postMessage arrives
-  //      BEFORE the runtime bundle finishes parsing).
-  //
+  //      pattern (postMessage arrived before the bundle parsed).
   //   3. Live `ui/notifications/tool-result` postMessage — the
-  //      spec-canonical delivery channel per MCP-Apps SEP-1865.
-  //      Listens via `awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS)`.
-  //      The ONLY path for spec-strict hosts (`<AppRenderer>`,
-  //      ChatGPT MCP-Apps connector, claude.ai). Caught meta is
-  //      threaded into `runBootProduction` via `preResolvedMeta` so
-  //      `bootSequence` doesn't re-await the same delivery.
+  //      spec-canonical channel for spec-strict hosts (`<AppRenderer>`,
+  //      ChatGPT, claude.ai). Caught meta threads through as
+  //      `preResolvedMeta` so `bootSequence` doesn't re-await it.
   //
-  //   4. `bootProduction` fallthrough — when ALL three sources
-  //      yield nothing (and `readLiveBootstrapShape` short-circuits
-  //      the wait), bootSequence internally walks its own resolver
-  //      chain (inline → Reading-B → postMessage) against the host.
-  //
-  // T3-1 (2026-05-13) — bootSelfContained requires static content
-  // (codeUrl or kind) to mount. Live-only metas (wsUrl+token
-  // without static content) MUST go through `bootProduction` so the
-  // stack item arrives via the live-channel WS subscribe. Pre-T3-1
-  // the inline `componentCode` channel made every push static.
-  // Post-drop, we dispatch on the static-content discriminator
-  // explicitly.
+  // `readLiveBootstrapShape` still short-circuits the 30s tool-result
+  // wait when a live-channel envelope is already inlined — OSS embedded
+  // shells that never emit a separate tool-result would otherwise hang
+  // at `mounting` for the full timeout.
   const inline = readSelfContainedMeta();
-  const inlineHasStatic =
-    inline !== null
-    && (typeof inline.codeUrl === 'string'
-      || typeof inline.kind === 'string');
-  if (inline !== null && inlineHasStatic) {
-    void bootSelfContained(document, inline);
-  } else if (inline !== null) {
-    // Live-only inline meta — hand to bootProduction with the
-    // pre-resolved slice so bootSequence skips re-parsing the same
-    // global it already validated here.
+  if (inline !== null) {
     runBootProduction(inline);
   } else {
     const buffered = readPendingToolResults();
-    const bufferedHasStatic =
-      buffered !== null
-      && (typeof buffered.codeUrl === 'string'
-        || typeof buffered.kind === 'string');
-    if (buffered !== null && bufferedHasStatic) {
-      void bootSelfContained(document, buffered);
-    } else if (buffered !== null) {
+    if (buffered !== null) {
       runBootProduction(buffered);
+    } else if (readLiveBootstrapShape()) {
+      runBootProduction();
     } else {
-      // Pre-empt the postMessage tool-result race when `__GGUI_META__`
-      // already carries a live-channel envelope (wsUrl + token +
-      // renderId + appId on `ai.ggui/render`) without static content —
-      // that shape doesn't trip `readSelfContainedMeta` (no codeUrl /
-      // kind to mount), but it IS the signal that a first-party shell
-      // (`/r/<shortCode>`, `ui://ggui/render/<renderId>`) has already
-      // inlined the WS-driven boot envelope. Skip the 30s tool-result
-      // wait and hand off to `bootProduction` directly — `bootProduction`
-      // re-issues `ui/initialize` to the host, which re-emits the same
-      // meta back via Reading-B, and the WS path proceeds without
-      // delay. Without this short-circuit, the OSS embedded-ui (which
-      // never sends a separate `ui/notifications/tool-result`) hangs at
-      // `mounting` for the full 30s timeout before `code-ready`.
-      const hasLiveMetaShape = readLiveBootstrapShape();
-      if (hasLiveMetaShape) {
-        runBootProduction();
-      } else {
-        // Race a postMessage listener against the legacy production
-        // boot. Tool-result wins if it arrives within the timeout;
-        // otherwise we hand off to the WS-driven path. Live-only
-        // arrivals thread the meta through to `runBootProduction`
-        // as `preResolvedMeta` so spec-strict hosts (AppRenderer,
-        // ChatGPT) don't re-await a second postMessage inside
-        // bootSequence.
-        void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
-          (postMessageMeta) => {
-            const hasStatic =
-              postMessageMeta !== null
-              && (typeof postMessageMeta.codeUrl === 'string'
-                || typeof postMessageMeta.kind === 'string');
-            if (postMessageMeta !== null && hasStatic) {
-              void bootSelfContained(document, postMessageMeta);
-              return;
-            }
-            runBootProduction(postMessageMeta ?? undefined);
-          },
-        );
-      }
+      void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
+        (postMessageMeta) => {
+          runBootProduction(postMessageMeta ?? undefined);
+        },
+      );
     }
   }
 }
@@ -3643,6 +3122,18 @@ async function bootProduction(opts: {
         }
         await renderHandle.update(buildOpts(render));
       };
+
+      // Publish `applyRender` module-level + install the persistent
+      // post-mount tool-result listener. On a host-re-emitted tool-result
+      // (claude.ai re-broadcast; the Anthropic-SDK-strips-_meta refetch),
+      // the listener re-mounts through THIS `applyRender` — no fresh boot,
+      // no second WS. The no-WS live-re-render channel; for WS hosts the
+      // render-frame handler already covers re-render, so it's a
+      // redundant-safe fallback (guarded by the renderId pin + liveTrio
+      // dedupe). Runs only on the production renderer path (tests that
+      // drive bootSequence without a renderer never reach setup()).
+      activeApplyRender = applyRender;
+      installPostMountListener();
 
       // Validator context — A2UI default for `_ggui:preview`; no
       // bootstrap-supplied overrides today (the
