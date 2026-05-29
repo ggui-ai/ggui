@@ -28,24 +28,28 @@ tools and renders a React UI → you click in that UI → the agent reacts.
 
 ```bash
 pnpm install
-cp .env.example .env.local
-# add your ANTHROPIC_API_KEY to .env.local
-pnpm dev:ggui    # terminal 1 — ggui MCP server   → http://localhost:6781/mcp
-pnpm dev:todo    # terminal 2 — todo MCP server   → http://localhost:6782/mcp
-pnpm dev:agent   # terminal 3 — agent backend     → http://localhost:6790
-pnpm dev:web     # terminal 4 — frontend SPA      → http://localhost:6890
+cp .env.example .env.local   # add your ANTHROPIC_API_KEY
+pnpm dev                     # starts all four servers, then opens the app
 ```
 
-Open http://localhost:6890 and type a prompt.
+`pnpm dev` brings up the ggui server, your MCP servers, the agent, and the web
+app together (labeled `[ggui] [mcps] [agent] [web]` logs) and opens
+**http://localhost:6890** once it's ready. Prefer separate terminals? Run
+`pnpm dev:ggui`, `pnpm dev:mcps` (every `servers/mcps/*`), `pnpm dev:agent`,
+and `pnpm dev:web` individually.
 
 ## Deploy to Railway
 
-`railway.toml` declares four services (`agent`, `ggui`, `todo`, `web`) wired
-together via Railway's internal DNS. Create a new Railway project from this
-repo, set `ANTHROPIC_API_KEY` on the `agent` + `ggui` services, and open the
-public URL of the `web` service.
+```bash
+pnpm deploy:railway          # add -- --dry-run first to preview
+```
 
-See `railway.toml` for the full config.
+One command provisions all four services on Railway, wires the public/private
+URLs between them, and pushes the API keys from `.env.local`. It needs a
+`RAILWAY_API_TOKEN` (an **account** token from
+https://railway.com/account/tokens) set in `.env.local`. Run
+`pnpm deploy:railway -- --dry-run` first to see exactly what it will do.
+Implementation: `scripts/deploy-railway.mjs`.
 
 ## How to build your app
 
@@ -67,6 +71,10 @@ itself through the MCP tool descriptions.
 todo CRUD surface. Copy it to `servers/mcps/<domain>/`, rename it, and
 implement your own tools. Or, if a tool already exists in the world as an
 **MCP server, connect to it directly** instead of writing your own.
+
+Either way, `pnpm dev` already starts every `servers/mcps/*` and the agent
+auto-registers each from a `GGUI_<NAME>_MCP_URL` env var — no wiring code. See
+`.reference/writing-mcp-tools.md` for the full path.
 
 ### 3. Customize the frontend
 
