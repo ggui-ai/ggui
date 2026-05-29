@@ -60,6 +60,7 @@ interface Args {
   scope?: string;
   agent?: Agent;
   install?: boolean;
+  git?: boolean;
   force?: boolean;
   ref?: string;
   listAgents?: boolean;
@@ -77,6 +78,7 @@ function parseArgs(argv: readonly string[]): Args {
     if (t === '--help' || t === '-h') a.help = true;
     else if (t === '--list-agents') a.listAgents = true;
     else if (t === '--install') a.install = true;
+    else if (t === '--no-git') a.git = false;
     else if (t === '--force') a.force = true;
     else if (t === '--name') a.name = argv[++i];
     else if (t === '--scope') a.scope = argv[++i];
@@ -118,6 +120,7 @@ Options:
                      Prompted if omitted.
   --agent <sdk>      One of: ${AGENTS.join(', ')}. Prompted if omitted.
   --install          Run \`pnpm install\` after scaffolding.
+  --no-git           Skip \`git init\` + initial commit (done by default).
   --force            Overwrite target if it exists (non-empty).
   --ref <ref>        git ref of ${REPO_URL} to clone from (default: ${REPO_REF}).
   --list-agents      Print the supported agent SDKs and exit.
@@ -212,6 +215,47 @@ function runInstall(targetDir: string): boolean {
   const r = spawnSync('pnpm', ['install'], { cwd: targetDir, stdio: 'inherit' });
   if (r.status !== 0) {
     console.error('\n✗ pnpm install failed.');
+    return false;
+  }
+  return true;
+}
+
+const INITIAL_COMMIT_MSG = 'Initial commit (scaffolded by @ggui-ai/create-agentic-app)';
+
+/**
+ * `git init` + first commit in the scaffolded project. The template
+ * `.gitignore` already excludes `.env*.local`, `node_modules`, and `dist`, so
+ * `git add -A` never captures secrets or build artifacts.
+ *
+ * Prefers the user's configured git identity; if none is set (fresh machine /
+ * CI), retries the commit with a generic identity so the first commit still
+ * lands — the user can re-author it with `git commit --amend --reset-author`.
+ * If even that fails, the half-initialized `.git` is removed and we report skip.
+ */
+function gitInitAndCommit(targetDir: string): boolean {
+  const run = (gitArgs: string[], extraEnv: Record<string, string> = {}): number => {
+    const r = spawnSync('git', gitArgs, {
+      cwd: targetDir,
+      stdio: 'ignore',
+      env: { ...process.env, ...extraEnv },
+    });
+    return r.status ?? 1;
+  };
+
+  if (run(['init', '-q']) !== 0) return false;
+  run(['add', '-A']);
+
+  let status = run(['commit', '-q', '-m', INITIAL_COMMIT_MSG]);
+  if (status !== 0) {
+    status = run(['commit', '-q', '-m', INITIAL_COMMIT_MSG], {
+      GIT_AUTHOR_NAME: 'ggui',
+      GIT_AUTHOR_EMAIL: 'ggui@users.noreply.github.com',
+      GIT_COMMITTER_NAME: 'ggui',
+      GIT_COMMITTER_EMAIL: 'ggui@users.noreply.github.com',
+    });
+  }
+  if (status !== 0) {
+    rmSync(join(targetDir, '.git'), { recursive: true, force: true });
     return false;
   }
   return true;
@@ -325,6 +369,13 @@ async function main(): Promise<void> {
   // 5. Optionally install.
   if (args.install) {
     if (!runInstall(targetAbs)) process.exit(1);
+  }
+
+  // 5.5 git init + first commit (default on; --no-git to skip). Runs after
+  // install so a generated pnpm-lock.yaml lands in the first commit.
+  if (args.git !== false) {
+    if (gitInitAndCommit(targetAbs)) console.log('✓ git repo initialized + first commit');
+    else console.log('• skipped git init — run `git init` yourself if you want version control');
   }
 
   // 6. Report.
