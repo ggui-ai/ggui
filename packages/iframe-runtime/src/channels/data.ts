@@ -23,6 +23,7 @@ import {
   type Render,
   type StreamEnvelope,
 } from '@ggui-ai/protocol';
+import type { RenderSeedInput } from '../types.js';
 
 import type {
   ObservabilityEmitter,
@@ -40,7 +41,7 @@ export interface DataHandlerDeps {
    * has been mounted yet — data frames received pre-mount have no
    * streamSpec to validate against and silently drop.
    */
-  readonly getCurrentRender: () => Render | null;
+  readonly getCurrentRender: () => Render | RenderSeedInput | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
   /**

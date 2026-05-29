@@ -34,6 +34,7 @@ import type {
   PropsUpdatePayload,
   Render,
 } from '@ggui-ai/protocol';
+import type { RenderSeedInput } from '../types.js';
 
 import { validateInboundPropsPayload } from '../validation.js';
 
@@ -45,12 +46,12 @@ export interface PropsUpdateHandlerDeps {
    * `props_update` before the first render frame has no React tree to
    * patch.
    */
-  readonly getCurrentRender: () => Render | null;
+  readonly getCurrentRender: () => Render | RenderSeedInput | null;
   /**
    * Re-apply the patched render to the single mount slot. Shared with
    * the render-frame handler so React updates flow through one path.
    */
-  readonly applyRender: (render: Render) => Promise<void>;
+  readonly applyRender: (render: Render | RenderSeedInput) => Promise<void>;
 }
 
 export function createPropsUpdateHandler(

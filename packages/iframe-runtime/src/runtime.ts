@@ -556,14 +556,14 @@ export interface RendererHandle {
    * Shared by the `render` and `props_update` channel handlers so React
    * updates flow through one path.
    */
-  applyRender(render: Render): Promise<void>;
+  applyRender(render: Render | RenderSeedInput): Promise<void>;
   /**
    * Read the currently-mounted render. `null` until the first
    * render frame lands. Read by the `props_update` + `data` channel
    * handlers to validate inbound payloads against the active render's
    * `propsSpec` / `streamSpec`.
    */
-  getCurrentRender(): Render | null;
+  getCurrentRender(): Render | RenderSeedInput | null;
   readonly validatorCtx: RendererValidatorContext;
   /**
    * Send surface for outbound frames. Wired by `setup()` to the WS
@@ -620,7 +620,7 @@ export interface BootSequenceResult {
    * render; this replaces the earlier `StackModel` return that wrapped
    * a multi-item model.
    */
-  readonly mountedRender: Render | null;
+  readonly mountedRender: Render | RenderSeedInput | null;
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
@@ -661,7 +661,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // that needs `propsSpec` / `streamSpec`. Tracked as a closure-scoped
   // ref so the failure-path returns can carry the same value through
   // `BootSequenceResult`.
-  let mountedRender: Render | null = null;
+  let mountedRender: Render | RenderSeedInput | null = null;
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
   notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
@@ -881,6 +881,85 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     }
   };
 
+  // `code-ready` is emitted exactly once per boot. The static seed mount
+  // emits it; the WS-ack reconcile path then becomes a silent repaint.
+  // Without this guard a static+live meta would fire `code-ready` twice
+  // (seed + ack), double-triggering host selectors / accessibility scanners.
+  let codeReadyEmitted = false;
+  const emitCodeReadyOnce = (): void => {
+    if (codeReadyEmitted) return;
+    codeReadyEmitted = true;
+    onLifecycle?.(makeLifecycleEvent('code-ready', { renderId: meta.renderId }));
+  };
+
+  // Mode discriminators. The mount surface is DECOUPLED from the live
+  // channel: static content (codeUrl/kind) paints immediately with no WS;
+  // the live trio (wsUrl+wsToken) is an OPTIONAL enhancement that
+  // delivers props_update / data / re-render frames. A bootstrap with
+  // NEITHER has nothing to show and nowhere to subscribe.
+  const hasStaticContent =
+    (typeof meta.codeUrl === 'string' && meta.codeUrl.length > 0) ||
+    (typeof meta.kind === 'string' && meta.kind.length > 0);
+  const hasLiveTrio =
+    typeof meta.wsUrl === 'string' &&
+    meta.wsUrl.length > 0 &&
+    typeof meta.wsToken === 'string' &&
+    meta.wsToken.length > 0;
+
+  // ── Static seed mount — zero-round-trip paint, no WS required. ──────
+  // The ONLY mount path for spec-compliant MCP-Apps hosts that expose no
+  // ggui live channel (claude.ai / ChatGPT / Claude Desktop), AND the
+  // instant first paint for first-party hosts that ALSO open a WS (the
+  // WS ack then reconciles in place — `applyRender` is idempotent on the
+  // pinned renderId, and the ack's componentCode is byte-identical to the
+  // seed's `codeUrl` bytes, so it's a props-only update, no remount).
+  if (renderer !== null && hasStaticContent) {
+    // Await the 3rd-party gadget merge before first paint when the
+    // bootstrap declares operator-registered packages — otherwise a
+    // component importing a non-STDLIB gadget hits an undefined shim and
+    // crashes. STDLIB-only bootstraps resolve this promise synchronously.
+    if (meta.gadgets !== undefined && meta.gadgets.length > 0) {
+      await renderer.composedGadgets;
+    }
+    let seed: RenderSeedInput | null = null;
+    try {
+      seed = await buildRenderSeedInput(meta);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!hasLiveTrio) {
+        // No WS fallback — a failed static fetch is terminal.
+        setStatus(refs, `static mount failed: ${message}`, 'error');
+        emitBootFailure('UI_INITIALIZE_FAILED', message);
+        return { ok: false, mountedRender };
+      }
+      // A live trio is present — the WS ack will deliver the render.
+      // The seed was best-effort; fall through to subscribe.
+      seed = null;
+    }
+    if (seed !== null) {
+      await renderer.applyRender(seed);
+      mountedRender = seed;
+      emitCodeReadyOnce();
+    }
+  }
+
+  // ── No live channel → static-only host. ────────────────────────────
+  // The static seed already painted (or there was nothing to paint).
+  // A bootstrap with neither static content nor a live trio is a
+  // misconfiguration — surface a typed boot failure.
+  if (!hasLiveTrio) {
+    if (mountedRender === null) {
+      const message =
+        'bootstrap carries neither static content (codeUrl/kind) nor a live trio (wsUrl/wsToken)';
+      setStatus(refs, message, 'error');
+      emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
+      return { ok: false, mountedRender };
+    }
+    setConnectedStatus(refs);
+    return { ok: true, mountedRender };
+  }
+
+  // ── Live-channel subscribe (conditional enhancement). ──────────────
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
@@ -936,8 +1015,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         : {}),
     });
   } catch (err) {
-    if (renderer !== null) rendererHooks?.teardown?.(renderer);
+    // UPGRADE_REQUIRED is TERMINAL even when static content already
+    // painted — the mounted code may be wire-incompatible with this
+    // runtime, so surfacing the upgrade prompt wins over a stale mount.
     if (isUpgradeRequiredErrorLike(err)) {
+      if (renderer !== null) rendererHooks?.teardown?.(renderer);
       const message = err.message;
       setStatus(refs, message, 'upgrade-required');
       // `UPGRADE_REQUIRED` already emits a typed `version` error via
@@ -948,6 +1030,17 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       return { ok: false, mountedRender };
     }
     const message = err instanceof Error ? err.message : String(err);
+    if (mountedRender !== null) {
+      // DEGRADE — a transport/auth failure AFTER a static seed already
+      // painted. Keep the mounted content, skip live updates (props_update
+      // simply stops arriving), and do NOT tear down or surface a
+      // bootstrap failure. connectFn already emitted the typed
+      // `subscribe-failed` observability event on its own onObserve path.
+      setStatus(refs, `live updates unavailable: ${message}`, 'connecting');
+      emitCodeReadyOnce();
+      return { ok: true, mountedRender };
+    }
+    if (renderer !== null) rendererHooks?.teardown?.(renderer);
     setStatus(refs, `WS handshake failed: ${message}`, 'error');
     emitBootFailure('WS_HANDSHAKE_FAILED', message);
     return { ok: false, mountedRender };
@@ -987,17 +1080,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // one implementation.
   await applyAck(handle.ack);
   setConnectedStatus(refs);
-  // Lifecycle `code-ready` — terminal happy state. The bundle has
-  // evaluated, the WS handshake completed, the first ack folded into
-  // the mount slot. Hosts pinning selectors on `code-ready` (E2E
-  // specs, accessibility scanners) re-resolve here. Forward the
-  // bootstrap's `renderId` so the host can mirror per-render
-  // lifecycle on the outer element keyed by render id.
-  onLifecycle?.(
-    makeLifecycleEvent('code-ready', {
-      renderId: meta.renderId,
-    }),
-  );
+  // Lifecycle `code-ready` — terminal happy state. Emitted ONCE per boot
+  // (a static+live meta already fired it from the seed mount, so this is
+  // a no-op there); for a live-only meta this is the first + only emit.
+  // Hosts pinning selectors on `code-ready` (E2E specs, accessibility
+  // scanners) re-resolve here.
+  emitCodeReadyOnce();
 
   return { ok: true, mountedRender };
 }
@@ -3420,7 +3508,7 @@ async function bootProduction(opts: {
       // render frame. The wire config + data channel handler read it
       // through `currentRender`-returning thunks so they always see the
       // latest snapshot without holding stale refs.
-      let currentRender: Render | null = null;
+      let currentRender: Render | RenderSeedInput | null = null;
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
@@ -3491,7 +3579,7 @@ async function bootProduction(opts: {
       // short-circuits to a Fragment, so the wrap is free for renders
       // with no contextSpec.
       const buildOuterWrapper = (
-        render: Render,
+        render: Render | RenderSeedInput,
       ): ((mountedTree: ReactNode) => ReactNode) | undefined => {
         if (render.type === 'mcpApps' || render.type === 'system') return undefined;
         return (mountedTree) =>
@@ -3507,7 +3595,7 @@ async function bootProduction(opts: {
       // Post-render-identity-collapse the WireConfig is bound to the
       // single render at boot, so there's no per-render scope factory
       // — every dispatch resolves through `getCurrentRender`.
-      const buildScopedWireFor = (render: Render): WireConfig | null => {
+      const buildScopedWireFor = (render: Render | RenderSeedInput): WireConfig | null => {
         if (render.type === 'mcpApps' || render.type === 'system') return null;
         return rootConfig;
       };
@@ -3520,7 +3608,7 @@ async function bootProduction(opts: {
       // the default ggui theme even when `_meta["ai.ggui/render"].themeId`
       // is `'indigo'`. Sibling `bootSelfContained` path threads the
       // same fields onto its `mountOpts` for parity.
-      const buildOpts = (render: Render): RenderItemOptions => {
+      const buildOpts = (render: Render | RenderSeedInput): RenderItemOptions => {
         const wrapOuter = buildOuterWrapper(render);
         return {
           render,
@@ -3547,7 +3635,7 @@ async function bootProduction(opts: {
        * layer just calls `applyRender(render)` without owning
        * lifecycle state.
        */
-      const applyRender = async (render: Render): Promise<void> => {
+      const applyRender = async (render: Render | RenderSeedInput): Promise<void> => {
         currentRender = render;
         if (renderHandle === null) {
           renderHandle = await mountRender(renderInto, buildOpts(render));

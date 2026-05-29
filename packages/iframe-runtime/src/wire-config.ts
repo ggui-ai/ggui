@@ -21,6 +21,7 @@ import type {
   Render,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
+import type { RenderSeedInput } from './types.js';
 import {
   ClientContractViolationError,
   buildActionEnvelope,
@@ -189,7 +190,7 @@ export interface BuildRootWireConfigOptions {
    * patches (which replace the render reference) without rebuilding
    * the WireConfig.
    */
-  readonly getCurrentRender: () => Render | null;
+  readonly getCurrentRender: () => Render | RenderSeedInput | null;
   /** Handle to the renderer's WS manager; used for outbound `action` + `feedback` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */

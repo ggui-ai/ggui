@@ -39,8 +39,9 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { Render, SystemRender } from '@ggui-ai/protocol';
+import type { Render } from '@ggui-ai/protocol';
 import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { RenderSeedInput } from './types.js';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
@@ -59,7 +60,7 @@ import type { StreamBus } from './wire-config.js';
 
 export interface RenderItemOptions {
   /** The render to mount. */
-  readonly render: Render;
+  readonly render: Render | RenderSeedInput;
   /** Wire config for this render — caller pre-scopes via the runtime's
    *  `buildScopedConfig(render)` (see
    *  `wire-config.ts::RootWireConfigBundle`). `null` ⇒ the component
@@ -128,7 +129,7 @@ export interface RenderItemHandle {
 // Kind detection
 // =============================================================================
 
-function detectKind(render: Render): 'mcpApps' | 'react' | 'provisional' | 'system' {
+function detectKind(render: Render | RenderSeedInput): 'mcpApps' | 'react' | 'provisional' | 'system' {
   if (render.type === 'mcpApps') return 'mcpApps';
   // System renders mount via the built-in `SystemCardHost` registry
   // (the `'system'` branch in `mountByKind`). This is the single mount
@@ -159,7 +160,7 @@ export async function mountRender(
   // tree has no wire/context wrap; we hold the react-dom Root for
   // teardown + a re-render closure for same-kind prop updates.
   let systemRoot: { render: (node: ReactNode) => void; unmount: () => void } | null = null;
-  let systemRerender: ((render: SystemRender) => void) | null = null;
+  let systemRerender: ((render: Render | RenderSeedInput) => void) | null = null;
 
   function teardown(): void {
     if (reactMount !== null) {
@@ -216,7 +217,8 @@ export async function mountRender(
         import('./system-cards/index.js'),
       ]);
       const root = reactDomClient.createRoot(container);
-      const renderCard = (r: SystemRender): void => {
+      const renderCard = (r: Render | RenderSeedInput): void => {
+        if (r.type !== 'system') return;
         root.render(
           createElement(systemCardsMod.SystemCardHost, {
             kind: r.kind,
