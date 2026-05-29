@@ -370,7 +370,16 @@ interface HandleEventDeps {
   ) => void;
 }
 
-function handleEvent(
+/**
+ * Internal SDK-message walker. Exported (named `handleEvent`) for unit
+ * tests that need to assert the spec-canonical `_meta.ui.{displayMode,
+ * resourceUri}` extraction without spinning up an SSE round trip. Not
+ * part of the public hook API — production callers go through
+ * {@link useMcpAppsChat}.
+ *
+ * @internal
+ */
+export function handleEvent(
   eventType: string,
   payload: unknown,
   baseId: string,
