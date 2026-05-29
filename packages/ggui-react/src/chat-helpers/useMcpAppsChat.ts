@@ -451,6 +451,25 @@ export function useMcpAppsChat(
     [send],
   );
 
+  // Conversation identity follows `chatId`. When it changes to a
+  // DIFFERENT conversation — cleared via a "new chat" affordance
+  // (→ `undefined`) or switched to another existing id — drop the prior
+  // conversation's UI state so it doesn't bleed into the next one. The
+  // server-allocation promotion (`undefined` → freshly-minted id for the
+  // CURRENT live conversation) is NOT a switch, so the streamed entries
+  // are preserved. `prev === chatId` guards against a dep-identity
+  // re-run (and StrictMode double-invoke) wiping a live conversation.
+  const prevChatIdRef = useRef<string | undefined>(chatId);
+  useEffect(() => {
+    const prev = prevChatIdRef.current;
+    prevChatIdRef.current = chatId;
+    if (prev === chatId) return;
+    if (prev === undefined && chatId !== undefined) return;
+    setEntries([]);
+    setRenders([]);
+    setHostDisplayMode(undefined);
+  }, [chatId]);
+
   // On-mount rehydration. When the host provides a chatId for a
   // previously-visited conversation, pull the server-authoritative
   // snapshot and re-feed it through the same `handleEvent` pipeline the
