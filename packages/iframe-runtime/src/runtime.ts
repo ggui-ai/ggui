@@ -29,6 +29,7 @@ import type { ReactNode } from 'react';
 import type {
   DrainAckPayload,
   JsonValue,
+  JsonObject,
   Render,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -36,7 +37,7 @@ import type {
   McpAppAiGguiRenderMeta,
   GguiUserActionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { ValidatedMcpAppAiGguiMeta } from './types.js';
+import type { ValidatedMcpAppAiGguiMeta, RenderSeedInput } from './types.js';
 import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
@@ -1137,6 +1138,78 @@ export type SelfContainedMcpAppAiGguiMeta = ValidatedMcpAppAiGguiMeta;
 export function readSelfContainedMeta(): SelfContainedMcpAppAiGguiMeta | null {
   const result = parseMetaFromGlobal();
   return result.ok ? result.meta : null;
+}
+
+/**
+ * Parse the bootstrap meta's `propsJson` string into a {@link JsonObject}.
+ * Malformed JSON or a non-object payload is a shape-preserving skip
+ * (returns `undefined`) — a bad `propsJson` must never block the mount.
+ * `JsonValue` narrows to `JsonObject` via the object/non-null/non-array
+ * guard, so no cast is needed.
+ */
+function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
+  if (propsJson === undefined) return undefined;
+  try {
+    const parsed: JsonValue = JSON.parse(propsJson);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return undefined;
+  } catch {
+    // Malformed propsJson is a shape-preserving skip — mount with no props.
+    return undefined;
+  }
+}
+
+/**
+ * Project the inline `__GGUI_META__` bootstrap into a
+ * {@link RenderSeedInput} the mount surface can paint immediately,
+ * BEFORE the authoritative wire `Render` arrives over the WS — and with
+ * no WS at all for spec-compliant MCP-Apps hosts that expose no ggui
+ * live channel (claude.ai / ChatGPT / Claude Desktop).
+ *
+ * Two static-content shapes (the autostart discriminator):
+ *   - `kind`    → a system-card seed (`type:'system'`); no fetch.
+ *   - `codeUrl` → a compiled-component seed; fetches the
+ *     content-addressable component bytes.
+ *
+ * Returns `null` when the meta carries NEITHER (a live-only meta has
+ * nothing to seed — the first WS ack mounts it). Throws when a `codeUrl`
+ * fetch fails so the caller can surface a typed boot failure. The four
+ * server-assigned ledger fields are intentionally absent — the first
+ * ack reconciles the seed to a full `Render` (no fabrication).
+ */
+export async function buildRenderSeedInput(
+  meta: SelfContainedMcpAppAiGguiMeta,
+): Promise<RenderSeedInput | null> {
+  const props = parseSeedProps(meta.propsJson);
+
+  // System-card mode — `kind` keyed against the built-in registry.
+  if (meta.kind !== undefined) {
+    return {
+      id: meta.renderId,
+      appId: meta.appId,
+      type: 'system',
+      kind: meta.kind,
+      ...(props !== undefined ? { props } : {}),
+    };
+  }
+
+  // Compiled-component mode — fetch the content-addressable bytes.
+  if (meta.codeUrl === undefined) return null;
+  const res = await fetch(meta.codeUrl);
+  if (!res.ok) {
+    throw new Error(
+      `buildRenderSeedInput: codeUrl fetch failed (${res.status}): ${meta.codeUrl}`,
+    );
+  }
+  const componentCode = await res.text();
+  return {
+    id: meta.renderId,
+    appId: meta.appId,
+    componentCode,
+    ...(props !== undefined ? { props } : {}),
+  };
 }
 
 /**
