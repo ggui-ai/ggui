@@ -32,7 +32,7 @@
  * Beacons consumed:
  *   - ggui CLI       `READY http://<host>:<port>\n`
  *   - mcp-todo       `[mcp-todo] ready: http://localhost:<port>/mcp`
- *   - sample-agent   `[sample-agent] chat UI ready: http://localhost:<port>`
+ *   - sample-agent   `[agent-server] chat backend ready: http://localhost:<port>`
  *   - web (vite)     `Local:   http://<host>:<port>/` (Vite's ready line)
  */
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
@@ -306,9 +306,12 @@ export async function spawnAgentLoop(
         GGUI_TODO_MCP_URL: `http://localhost:${ports.todo}/mcp`,
       },
     });
+    // Beacon line comes from `@ggui-ai/agent-server`'s
+    // `startAgentServer` (samples delegate to it post-#285) — the
+    // legacy `[sample-agent] chat UI ready` line is gone.
     await waitForBeacon(
       procs.agent,
-      /\[sample-agent\] chat UI ready:/,
+      /\[agent-server\] chat backend ready:/,
       60_000,
       'agent',
     );

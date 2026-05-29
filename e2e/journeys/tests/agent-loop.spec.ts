@@ -149,7 +149,7 @@ for (const entry of MATRIX) {
       // -----------------------------------------------------------------
       // STEP 3 — reload + verify hydration + click again to undo
       //   3a. Hard reload — fresh React tree.
-      //   3b. Frontend's on-mount GET /chat?chatId=X reads the stored
+      //   3b. Frontend's on-mount GET /agent?chatId=X reads the stored
       //       snapshot which carries the POST-CLICK bootstrap (propsJson
       //       reflects the checked state).
       //   3c. Iframe re-mounts with the checked todo visible — proving
