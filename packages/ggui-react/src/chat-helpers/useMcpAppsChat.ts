@@ -7,7 +7,6 @@ import type {
   RenderRef,
   ToolCallEntry,
 } from './mcp-apps-chat-types';
-import { synthesizeUserActionPrompt } from './user-action-prompt';
 
 /**
  * Public options for {@link useMcpAppsChat}.
@@ -24,8 +23,12 @@ export interface UseMcpAppsChatOptions {
   /**
    * POST endpoint for sending a new prompt. The hook opens an SSE
    * stream from this URL and feeds every `event: message\ndata: <json>`
-   * frame through the internal SDK-message handler. Sample default:
-   * `/chat` on the same origin.
+   * frame through the internal SDK-message handler.
+   *
+   * Backed by `@ggui-ai/agent-server`'s `POST /agent` route by
+   * default; any spec-compliant endpoint that returns SSE with
+   * `event: chat-allocated` (first) + `event: message` frames will
+   * work.
    */
   readonly chatEndpoint: string;
   /**
@@ -41,12 +44,28 @@ export interface UseMcpAppsChatOptions {
    */
   readonly snapshotEndpoint?: string;
   /**
-   * Stable per-conversation chat id. The hook adds this as the
-   * `X-Chat-Id` header on every POST. Host apps generate / persist the
-   * id however they like (URL query, localStorage, server cookie); the
-   * hook never mints one on its own.
+   * Stable per-conversation chat id, when one is known (e.g. user
+   * loaded the URL `?chat=<id>` for a previously-visited chat).
+   * Forwarded as the request body's `chatId` field on every POST so
+   * the server keys per-chat snapshot + resume state by the same
+   * value.
+   *
+   * Pass `undefined` for a fresh conversation — the server allocates
+   * an id and surfaces it via the SSE `chat-allocated` event; the
+   * host then writes it to URL / localStorage in
+   * {@link onChatAllocated}. The hook never mints client-side.
    */
-  readonly chatId: string;
+  readonly chatId?: string;
+  /**
+   * Fires when the server allocates a fresh chat id on the first
+   * POST that didn't carry one. Host apps stamp the id into URL /
+   * localStorage here so the next reload rehydrates the same
+   * conversation.
+   *
+   * Not called when {@link chatId} is supplied (no allocation
+   * happens — the server uses the supplied id directly).
+   */
+  readonly onChatAllocated?: (chatId: string) => void;
 }
 
 /**
@@ -76,15 +95,11 @@ export interface UseMcpAppsChatResult {
    * Optional `opts.userAction` is the spec-canonical
    * `_meta["ai.ggui/userAction"]` slice (stamped by iframe-runtime
    * when a gesture must reach the agent via `ui/message`). When
-   * present, the hook synthesizes a structured `[GGUI_USER_ACTION]`
-   * directive prompt CLIENT-SIDE — embedding the renderId + actionId
-   * + nextStep as machine-extractable fields — and POSTs the
-   * synthesized prompt as a plain string. The agent backend never
-   * sees the slice itself, so it stays brand-agnostic; only the
-   * `{prompt: string}` MCP-Apps-spec-shape transport crosses the
-   * wire. Without it, the agent only sees the prose text and must
-   * natural-language-parse the renderId — fragile because the agent
-   * may re-handshake instead of reusing the live render.
+   * present, the hook forwards the slice verbatim as
+   * `data.meta["ai.ggui/userAction"]` in the POST body — the
+   * agent-server library synthesizes the LLM-facing directive
+   * prompt server-side so every ggui-coupled formatting lives in
+   * one place across SDKs.
    */
   readonly send: (
     prompt: string,
@@ -129,7 +144,12 @@ export interface UseMcpAppsChatResult {
 export function useMcpAppsChat(
   opts: UseMcpAppsChatOptions,
 ): UseMcpAppsChatResult {
-  const { chatEndpoint, chatId, snapshotEndpoint = chatEndpoint } = opts;
+  const {
+    chatEndpoint,
+    chatId,
+    snapshotEndpoint = chatEndpoint,
+    onChatAllocated,
+  } = opts;
 
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [renders, setRenders] = useState<RenderRef[]>([]);
@@ -141,6 +161,11 @@ export function useMcpAppsChat(
   // `send`; consumed by `abort`. Ref (not state) because abort is fire-
   // and-forget — no re-render needed when it changes.
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Latest `onChatAllocated` callback. Ref-pinned so the stable
+  // `send` callback below sees fresh closure values without retaking
+  // its identity (avoiding remount cascades on the consumer side).
+  const onChatAllocatedRef = useRef(onChatAllocated);
+  onChatAllocatedRef.current = onChatAllocated;
 
   const append = useCallback((entry: ChatEntry) => {
     setEntries((prev) => [...prev, entry]);
@@ -201,25 +226,28 @@ export function useMcpAppsChat(
       const controller = new AbortController();
       abortControllerRef.current = controller;
       try {
-        // Synthesize the rehydration-directive prompt client-side
-        // when a `_meta.ai.ggui/userAction` slice rode out of the
-        // iframe via `ui/message`. The agent backend receives a
-        // plain string and stays brand-agnostic — no MCP-Apps
-        // extension fields cross the `/chat` wire boundary.
-        const promptForWire =
-          sendOpts?.userAction !== undefined
-            ? synthesizeUserActionPrompt({
-                originalPrompt: trimmed,
-                userAction: sendOpts.userAction,
-              })
-            : trimmed;
+        // Forward the spec-canonical `_meta.ai.ggui/userAction` slice
+        // verbatim in `data.meta` when present. The agent-server
+        // library synthesizes the imperative-first LLM directive
+        // server-side — one place across SDKs, no client-side prose
+        // formatting.
+        const body: {
+          prompt: string;
+          chatId?: string;
+          data?: { meta?: { 'ai.ggui/userAction': GguiUserActionMeta } };
+        } = { prompt: trimmed };
+        if (chatId !== undefined && chatId.length > 0) {
+          body.chatId = chatId;
+        }
+        if (sendOpts?.userAction !== undefined) {
+          body.data = {
+            meta: { 'ai.ggui/userAction': sendOpts.userAction },
+          };
+        }
         const res = await fetch(chatEndpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Chat-Id': chatId,
-          },
-          body: JSON.stringify({ prompt: promptForWire }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         if (!res.body) {
@@ -254,6 +282,17 @@ export function useMcpAppsChat(
             try {
               payload = JSON.parse(data);
             } catch {
+              continue;
+            }
+            // Server-allocated chat id — emitted as the first SSE
+            // event on every POST. Host stamps it into URL /
+            // localStorage so the next reload rehydrates the same
+            // conversation. Don't echo to the chat panel.
+            if (eventType === 'chat-allocated') {
+              const allocated = (payload as { chatId?: unknown }).chatId;
+              if (typeof allocated === 'string' && allocated.length > 0) {
+                onChatAllocatedRef.current?.(allocated);
+              }
               continue;
             }
             counter += 1;

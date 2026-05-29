@@ -15,7 +15,11 @@ export type {
   UseMcpAppsChatOptions,
   UseMcpAppsChatResult,
 } from './useMcpAppsChat';
-export { synthesizeUserActionPrompt } from './user-action-prompt';
+// `synthesizeUserActionPrompt` moved to `@ggui-ai/agent-server` —
+// directive synthesis happens server-side now so every per-SDK
+// backend formats the same imperative prose. Clients just forward
+// the spec-canonical `_meta["ai.ggui/userAction"]` slice in the POST
+// body's `data.meta`.
 export type {
   ChatEntry,
   HostDisplayMode,
