@@ -1,0 +1,23 @@
+{
+  "name": "agentic-app-template",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Template for building agentic apps on the ggui protocol — Claude Agent SDK variant.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:ggui": "dotenv -e .env.local -- pnpm --filter ./servers/ggui start",
+    "dev:todo": "pnpm --filter ./servers/mcps/todo dev",
+    "dev:agent": "dotenv -e .env.local -- pnpm --filter ./servers/agent dev",
+    "dev:web": "pnpm --filter ./apps/web dev",
+    "build": "pnpm --recursive run build",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0"
+  }
+}

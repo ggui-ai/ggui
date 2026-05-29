@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.turbo/
+
+# Per-project env — never commit secrets.
+.env
+.env.local
+.env.*.local
+
+# Playwright artifacts (if you add tests).
+/test-results/
+/playwright-report/
+**/playwright-report/
+
+# OS / editor noise.
+.DS_Store
+.vscode/
+.idea/

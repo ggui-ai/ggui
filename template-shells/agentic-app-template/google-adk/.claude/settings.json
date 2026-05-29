@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(pnpm bootstrap:*)",
+      "Bash(pnpm --filter:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm --recursive run:*)",
+      "Bash(node scripts/bootstrap.mjs:*)",
+      "Bash(ggui:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)"
+    ]
+  },
+  "enabledMcpjsonServers": ["ggui-docs"]
+}

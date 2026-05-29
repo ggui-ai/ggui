@@ -1,0 +1,16 @@
+packages:
+  # One agent backend — the SDK-specific server that talks to the LLM
+  # and orchestrates the MCP loop.
+  - "servers/agent"
+  # One ggui server — turns the agent's render calls into a live UI.
+  - "servers/ggui"
+  # MCP servers exposing domain tools. Plural — copy `todo/` and add
+  # your own (`mcps/restaurant/`, `mcps/calendar/`) as your app grows.
+  - "servers/mcps/*"
+  # Frontend SPAs. Plural so you can ship an admin panel alongside the
+  # main app without restructuring.
+  - "apps/*"
+  # Blueprints and gadgets you author with /blueprint and /gadget.
+  # These globs match nothing until you scaffold one.
+  - "blueprints/*"
+  - "gadgets/*"

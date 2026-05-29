@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ui/
+*.tsbuildinfo
+.turbo/
+
+# Environment — never commit secrets
+.env
+.env*.local
+
+# Claude Code — per-developer local settings (never commit)
+.claude/settings.local.json
+
+# ggui serve runtime state (sessions, render secrets, vector index)
+.ggui/
+
+# Test / coverage
+/coverage
+
+# Editor / OS
+.DS_Store
+*.pem
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
