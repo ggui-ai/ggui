@@ -74,14 +74,17 @@ const systemPrompt =
       ? SYSTEM_PROMPT_ENV
       : undefined; // undefined → agent.ts uses DEFAULT_SYSTEM_PROMPT
 
-// MCP servers the agent can call into. `ggui` is required (the relay
-// handlers in server.ts forward to this URL); add additional keys to
-// expose more MCPs to the LLM.
+// MCP servers the agent can call into. `ggui` is the one fixed render endpoint
+// (the relay handlers in server.ts forward to it). Every *other* MCP is a
+// domain server discovered from the env: any `GGUI_<NAME>_MCP_URL` registers as
+// `<name>`, so adding an MCP server needs no change here — just the env var
+// (e.g. `GGUI_TODO_MCP_URL` → `todo`, `GGUI_ORDERS_MCP_URL` → `orders`).
 const mcpServers: Record<string, McpServerConfig> = {
   ggui: { url: process.env.GGUI_MCP_URL ?? 'http://localhost:6781/mcp' },
 };
-if (process.env.GGUI_TODO_MCP_URL) {
-  mcpServers.todo = { url: process.env.GGUI_TODO_MCP_URL };
+for (const [key, url] of Object.entries(process.env)) {
+  const match = /^GGUI_(.+)_MCP_URL$/.exec(key);
+  if (match && url) mcpServers[match[1].toLowerCase()] = { url };
 }
 
 startServer({

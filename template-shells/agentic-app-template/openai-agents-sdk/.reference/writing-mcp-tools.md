@@ -35,13 +35,14 @@ To make your own:
      user-facing guidance ("Use after the diner confirms…"), never internal notes.
    - Hold state however you like (the todo sample uses an in-memory store; a
      real app uses a DB).
-3. **Register it with the agent** (this differs per SDK — see CLAUDE.md "Tools = MCP servers"):
-   - **All SDKs:** add a server entry in `servers/agent/src/index.ts`
-     (`mcpServers.<name> = { url: process.env.GGUI_<NAME>_MCP_URL }`) + the
-     matching `GGUI_<NAME>_MCP_URL` in `.env.example` / `.env.local`.
+3. **Register it with the agent** (see CLAUDE.md "Tools = MCP servers"):
+   - **All SDKs:** just set `GGUI_<NAME>_MCP_URL` in `.env.example` / `.env.local`
+     (e.g. `GGUI_ORDERS_MCP_URL=…`). The agent scans the env and auto-registers
+     it as `<name>` — no `servers/agent/src/index.ts` edit needed (`ggui` is the
+     one fixed endpoint; every other MCP is discovered this way).
    - **Claude SDK only:** also add the tool prefixes to `DEFAULT_ALLOWED_TOOLS`
      in `servers/agent/src/agent.ts` (e.g. `mcp__<name>__menu_search`). The
-     OpenAI + Google agents have no allowlist — the env entry is enough.
+     OpenAI + Google agents have no allowlist — the env var is enough.
 4. **Run it:** nothing to wire — `pnpm dev` starts every `servers/mcps/*`
    automatically (the `dev:mcps` script globs the directory, so the folder _is_
    the list). To run just yours: `pnpm --filter ./servers/mcps/<your-domain> dev`.
