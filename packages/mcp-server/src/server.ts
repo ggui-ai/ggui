@@ -1182,13 +1182,14 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // 2026-05-14 — `ggui_runtime_claim_pending` retired alongside the
-    // iframe-side 10s claim timer. The pipe is now the single source of
-    // truth: when no consumer is registered for a stack item, the
-    // server reports `consumerPresent: false` on the submit_action
-    // response and the iframe emits a `ui/message` with
-    // `_meta.ggui.userAction.kind === 'queued'` immediately (carrying
-    // a prepared `ggui_consume` nextStep). No timer, no rescue drain,
-    // no race between two atomic-pop callers.
+    // iframe-side 10s claim timer. The pipe is the single source of
+    // truth: when no consumer is registered for a render, the server
+    // reports `consumerPresent: false` on the submit_action response and
+    // the iframe emits the `ai.ggui/userAction` pure doorbell on a
+    // `ui/message` (`kind === 'user-action'`, carrying a prepared
+    // `ggui_consume` nextStep + the imperative directive in the message
+    // text). No timer, no rescue drain, no inline payload, no race
+    // between two atomic-pop callers.
     // ggui_get_render is a pure read off the RenderStore, registered
     // alongside the render-commit handler. (ggui_get_stack was deleted
     // — a render IS the addressable unit; there is no stack to read.

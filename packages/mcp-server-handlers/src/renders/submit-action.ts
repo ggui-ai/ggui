@@ -136,7 +136,8 @@ const outputSchema = {
    *     `pending` until the matching `drain_ack` frame arrives.
    *   - `false` — no consumer registered. The action IS on the pipe,
    *     but the agent won't wake on its own. Iframe SHOULD immediately
-   *     emit a `ui/message` with `content[0]._meta["ai.ggui/userAction"].kind: 'queued'`
+   *     emit the `ai.ggui/userAction` pure doorbell on a `ui/message`
+   *     (`content[0]._meta["ai.ggui/userAction"].kind: 'user-action'`)
    *     so the agent's next turn calls `ggui_consume({renderId})`.
    *   - `undefined` — server has no active-consumer registry wired
    *     (graceful degradation). Iframe assumes a consumer is present.
