@@ -1439,10 +1439,17 @@ export function formatWiredActionDataInline(data: unknown): string {
  * non-spec-canonical `ggui:*` outbound envelope that doesn't have an
  * App method equivalent. Detached parent → silent drop (non-fatal).
  *
- * Spec-canonical MCP-Apps notifications (`ui/update-model-context`,
- * `ui/message`, `ui/open-link`, `ui/request-display-mode`) flow
- * through the App method helpers below — they round-trip via the
- * bound `Transport` and follow the spec's request/response shape.
+ * Spec-canonical MCP-Apps notifications whose params are FULLY
+ * described by the spec schema (`ui/update-model-context`,
+ * `ui/open-link`, `ui/request-display-mode`) flow through the App
+ * method helpers below — they round-trip via the bound `Transport`
+ * and follow the spec's request/response shape.
+ *
+ * `ui/message` is the exception: its doorbell carries a content-block
+ * `_meta` extension that the host's closed `McpUiMessageRequestSchema`
+ * parse would strip (and empty the text). It posts its `ui/message`
+ * frame through this raw helper instead — see {@link
+ * emitUserActionDoorbell} for the full rationale.
  */
 function postToParent(envelope: unknown): void {
   if (typeof window === 'undefined') return;
@@ -1493,16 +1500,6 @@ function callAppRequestDisplayMode(
   const app = getCurrentApp();
   if (app === null) return;
   void app.requestDisplayMode(params).catch(() => {
-    // Detached / host-rejected — drop silently per the helper contract.
-  });
-}
-
-function callAppSendMessage(
-  params: Parameters<App['sendMessage']>[0],
-): void {
-  const app = getCurrentApp();
-  if (app === null) return;
-  void app.sendMessage(params).catch(() => {
     // Detached / host-rejected — drop silently per the helper contract.
   });
 }
@@ -1913,23 +1910,46 @@ function emitUserActionDoorbell(args: {
       args: { renderId: args.renderId },
     },
   };
+  // RAW postMessage — NOT `app.sendMessage`. The doorbell MUST bypass
+  // the App's `ui/message` request path because the host validates the
+  // incoming request through the spec's CLOSED `McpUiMessageRequestSchema`
+  // (`Protocol.setRequestHandler` → `parseWithCompat`). That schema's
+  // `content` array is the spec `ContentBlockSchema`, which has no place
+  // for our content-block `_meta` extension — the parse strips the
+  // extension AND (as observed on the first live post-reload doorbell)
+  // can leave the host's `handleAppMessage` with an empty
+  // `content[0].text`, so it rejects the doorbell with `isError` and no
+  // fresh agent turn fires.
+  //
+  // `postToParent` posts the JSON-RPC frame verbatim to the parent, so
+  // BOTH `content[0].text` (the load-bearing directive every host
+  // forwards to the model) AND `content[0]._meta["ai.ggui/userAction"]`
+  // (the optional structured mirror) survive intact. This is the same
+  // deliberate raw-postMessage decision `ui/message` carried in #275 —
+  // the userAction-collapse refactor regressed it onto `app.sendMessage`.
+  //
   // Spec-canonical shape: `_meta` lives on the CONTENT BLOCK (the spec
   // closes `params._meta` via `additionalProperties: false`, but each
   // content block has its own `_meta: { [key: string]: unknown }` open
   // record — the proper extension point). Namespaced under
   // `ai.ggui/userAction` to match our other protocol extensions
   // (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
-  callAppSendMessage({
-    role: 'user',
-    content: [
-      {
-        type: 'text',
-        text,
-        _meta: {
-          'ai.ggui/userAction': userAction,
+  postToParent({
+    jsonrpc: '2.0',
+    id: Math.floor(Math.random() * 1e9),
+    method: 'ui/message',
+    params: {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text,
+          _meta: {
+            'ai.ggui/userAction': userAction,
+          },
         },
-      },
-    ],
+      ],
+    },
   });
 }
 

@@ -27,9 +27,11 @@
  *           drains the just-enqueued gesture.
  *       (3') On `{ok:true, consumerPresent:false}` (no consume loop is
  *           listening — e.g. after a page reload) → emit the
- *           `ai.ggui/userAction` PURE DOORBELL on a `ui/message` so a
- *           fresh agent turn calls `ggui_consume({renderId})` to drain
- *           it. Pointer-only — the gesture stays solely on the pipe.
+ *           `ai.ggui/userAction` PURE DOORBELL on a `ui/message` (RAW
+ *           postMessage, bypassing the host's closed-schema parse so the
+ *           directive text + content-block `_meta` survive) so a fresh
+ *           agent turn calls `ggui_consume({renderId})` to drain it.
+ *           Pointer-only — the gesture stays solely on the pipe.
  *       (3'') On `{ok:false}` / JSON-RPC error → the enqueue FAILED; the
  *           gesture is on no pipe, so NO `ui/message` is emitted (a
  *           doorbell would point at an empty queue). Surfaces a toast
@@ -41,11 +43,17 @@
  * `MockTransport`-bound App via `setCurrentApp` so the `submit_action`
  * envelope round-trips through the spec-canonical API and the relay
  * response is delivered via `transport.queueResponse('tools/call', …)`
- * instead of a faked `MessageEvent`. Notifications
- * (`ui/update-model-context`, `ui/message`) and the Pattern α direct
- * `tools/call` (`fireDirectToolCall`) still flow through raw
- * `window.parent.postMessage`, so they remain asserted via the
- * `postMessageSpy`.
+ * instead of a faked `MessageEvent`. `ui/update-model-context` flows
+ * through the App method (`app.updateModelContext`) and is asserted on
+ * `transport.sent`. The Pattern α direct `tools/call`
+ * (`fireDirectToolCall`) and the Pattern β `ui/message` DOORBELL both
+ * ride raw `window.parent.postMessage`, so they are asserted via the
+ * `postMessageSpy`. The doorbell uses the raw path deliberately: the
+ * host validates an incoming `ui/message` request against the spec's
+ * closed `McpUiMessageRequestSchema`, which strips the content-block
+ * `_meta` extension and can empty the load-bearing directive text — the
+ * exact failure this suite's `consumerPresent:false` + post-reload
+ * regression cases lock down.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';
@@ -180,9 +188,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         dispatchToolName: 'ggui_runtime_submit_action',
       });
 
-      // ui/update-model-context, tools/call submit_action, AND the
-      // ui/message fallback (if submit_action errors) all flow through
-      // the App transport post-#276 — none of them touch raw postMessage.
+      // ui/update-model-context + tools/call submit_action flow through
+      // the App transport. No tools/call response is queued here, so the
+      // submit_action promise never resolves and the ui/message doorbell
+      // (raw postMessage, only on consumerPresent:false) cannot fire.
       // The send is async (queueMicrotask round-trip), so drain
       // microtasks before asserting on transport.sent.
       expect(postMessageSpy).not.toHaveBeenCalled();
@@ -250,6 +259,12 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
       expect(transportMethods).not.toContain('ui/message');
+      // The doorbell rides RAW postMessage when it fires; assert it did
+      // NOT fire on that channel either.
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).not.toContain('ui/message');
     });
 
     it('on relay response {ok:true} with consumerPresent absent → no ui/message doorbell', async () => {
@@ -278,9 +293,13 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
       expect(transportMethods).not.toContain('ui/message');
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).not.toContain('ui/message');
     });
 
-    it('on relay response {ok:true, consumerPresent:false} → pure-doorbell ui/message fires (pointer only, no payload)', async () => {
+    it('on relay response {ok:true, consumerPresent:false} → pure-doorbell ui/message fires via RAW postMessage (pointer only, no payload)', async () => {
       transport.queueResponse('tools/call', {
         result: {
           structuredContent: { ok: true, consumerPresent: false },
@@ -303,14 +322,28 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       await tick();
       await tick();
 
+      // The doorbell `ui/message` MUST go out via RAW
+      // `window.parent.postMessage` (postToParent), NOT `app.sendMessage`
+      // — the host's closed `McpUiMessageRequestSchema` parse would strip
+      // the content-block `_meta` extension and empty the text. So it
+      // NEVER appears on the App `transport.sent`; it appears on the raw
+      // postMessage spy instead.
       const transportMethods = transport.sent
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
-      expect(transportMethods).toContain('ui/message');
+      expect(transportMethods).not.toContain('ui/message');
 
-      const uiMessage = transport.sent.find(
-        (msg) => (msg as { method?: unknown }).method === 'ui/message',
-      ) as Record<string, unknown>;
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).toContain('ui/message');
+
+      const uiMessage = postMessageSpy.mock.calls
+        .map((call) => call[0] as Record<string, unknown>)
+        .find((msg) => msg.method === 'ui/message') as Record<string, unknown>;
+      // Raw frame is a full JSON-RPC envelope (jsonrpc + id + method +
+      // params), unlike the App-method path which only carried params.
+      expect(uiMessage.jsonrpc).toBe('2.0');
       const params = uiMessage.params as Record<string, unknown>;
       expect(params.role).toBe('user');
 
@@ -323,12 +356,14 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
 
       // THE DIRECTIVE LIVES IN THE TEXT — every host (including
       // `_meta`-agnostic ones) forwards this to the model verbatim. It
-      // MUST carry the imperative ggui_consume instruction on its own,
-      // and name ONLY the render pointer (never the action), so it can't
-      // tempt a pre-consume action.
+      // MUST be NON-EMPTY and carry the imperative ggui_consume
+      // instruction on its own, naming ONLY the render pointer (never the
+      // action), so it can't tempt a pre-consume action.
       const text = firstBlock.text as string;
+      expect(text.length).toBeGreaterThan(0);
       expect(text).toContain('REQUIRED FIRST TOOL CALL');
       expect(text).toContain('ggui_consume');
+      expect(text).toContain('render_1');
       expect(text).toContain('Do not respond conversationally');
       expect(text).toContain('<ggui_directive kind="user-action">');
       expect(text).toContain('<render_id>render_1</render_id>');
@@ -350,6 +385,67 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       expect(userAction.nextStep).toEqual({
         tool: 'ggui_consume',
         args: { renderId: 'render_1' },
+      });
+    });
+
+    it('post-reload re-mounted iframe → doorbell still carries NON-EMPTY directive text naming the renderId', async () => {
+      // Regression lock for the live bug: on the FIRST post-reload click
+      // (the agent's persistent ggui_consume long-poll has ended, so the
+      // server reports consumerPresent:false), the doorbell `ui/message`
+      // was going out with EMPTY content[0].text and the host rejected
+      // it. A re-mounted iframe carries a fresh, distinctly-shaped
+      // renderId; the doorbell text MUST be built reliably from THAT
+      // renderId and reach the host non-empty over the raw postMessage
+      // path.
+      const remountRenderId = 'render_8f3a-remounted-after-reload';
+      transport.queueResponse('tools/call', {
+        result: {
+          structuredContent: { ok: true, consumerPresent: false },
+        },
+      });
+
+      routeDispatch({
+        actionName: 'toggle',
+        data: { id: 'todo_2', done: true },
+        meta: {
+          renderId: remountRenderId,
+          appId: 'app_1',
+          actionNextSteps: { toggle: 'todo_toggle' },
+          appCallableTools: ['ggui_runtime_submit_action'],
+        },
+        dispatchToolName: 'ggui_runtime_submit_action',
+      });
+
+      await tick();
+      await tick();
+
+      const uiMessage = postMessageSpy.mock.calls
+        .map((call) => call[0] as Record<string, unknown>)
+        .find((msg) => msg.method === 'ui/message') as Record<string, unknown>;
+      expect(uiMessage).toBeDefined();
+      const params = uiMessage.params as Record<string, unknown>;
+      const content = params.content as Array<Record<string, unknown>>;
+      const text = content[0].text as string;
+
+      // The host's handleAppMessage rejects with isError ONLY when the
+      // joined+trimmed text is empty. Assert the exact condition that
+      // failed live: non-empty text carrying ggui_consume + the
+      // re-mounted renderId.
+      expect(text.trim().length).toBeGreaterThan(0);
+      expect(text).toContain('ggui_consume');
+      expect(text).toContain(remountRenderId);
+      expect(text).toContain(
+        `<next_args>{"renderId":"${remountRenderId}"}</next_args>`,
+      );
+
+      // Structured mirror points at the same re-mounted renderId.
+      const userAction = (content[0]._meta as Record<string, unknown>)[
+        'ai.ggui/userAction'
+      ] as Record<string, unknown>;
+      expect(userAction.renderId).toBe(remountRenderId);
+      expect(userAction.nextStep).toEqual({
+        tool: 'ggui_consume',
+        args: { renderId: remountRenderId },
       });
     });
 
@@ -379,6 +475,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
       expect(transportMethods).not.toContain('ui/message');
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).not.toContain('ui/message');
     });
 
     it('on relay response with JSON-RPC error → NO ui/message (enqueue failed)', async () => {
@@ -405,6 +505,10 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         .map((msg) => (msg as { method?: unknown }).method)
         .filter((m): m is string => typeof m === 'string');
       expect(transportMethods).not.toContain('ui/message');
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).not.toContain('ui/message');
     });
   });
 
