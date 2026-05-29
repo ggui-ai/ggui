@@ -37,7 +37,7 @@ cp .env.example .env.local   # add your LLM API key
 pnpm dev                     # starts ggui + MCP servers + agent + web, then opens the app
 ```
 
-`pnpm dev` brings all four services up together with labeled logs and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit. The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts.
+`pnpm dev` brings all four services up together and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit (server logs are hidden by default; `pnpm dev --verbose` streams them). The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts.
 
 Each template subdir at [github.com/ggui-ai/agentic-app-templates](https://github.com/ggui-ai/agentic-app-templates) is a complete project with its own README + `CLAUDE.md` and a `/bootstrap` Claude Code command that walks you through customisation: the system prompt, your own MCP servers (drop a folder under `servers/mcps/` — it's auto-started by `pnpm dev` and auto-registered with the agent), blueprints, and gadgets.
 

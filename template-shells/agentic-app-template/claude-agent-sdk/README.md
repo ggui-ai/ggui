@@ -33,8 +33,8 @@ pnpm dev                     # starts all four servers, then opens the app
 ```
 
 `pnpm dev` brings up the ggui server, your MCP servers, the agent, and the web
-app together (labeled `[ggui] [mcps] [agent] [web]` logs) and opens
-**http://localhost:6890** once it's ready. Prefer separate terminals? Run
+app together and opens **http://localhost:6890** once it's ready (logs are
+hidden by default — add `--verbose` to stream them). Prefer separate terminals? Run
 `pnpm dev:ggui`, `pnpm dev:mcps` (every `servers/mcps/*`), `pnpm dev:agent`,
 and `pnpm dev:web` individually.
 

@@ -106,8 +106,8 @@ you shape the *shell* via `servers/ggui/ggui.json`. Three levers:
 
 ## Running locally
 
-One command starts all four (color-labeled) and opens the app in your browser
-once it's ready:
+One command starts all four and opens the app in your browser once it's ready —
+server logs are hidden by default, so add `pnpm dev --verbose` to stream them:
 
 ```bash
 pnpm dev

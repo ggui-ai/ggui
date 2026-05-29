@@ -77,9 +77,9 @@ re-author the commit under your own identity, `git commit --amend --reset-author
 
 1. `cd my-app && pnpm install` (skip if you passed `--install`)
 2. Add your API key to `.env.local` (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`)
-3. `pnpm dev` starts all four servers (labeled `[ggui] [mcps] [agent] [web]`)
-   and opens the app at http://localhost:6890 when it's ready. To run them in
-   separate terminals instead:
+3. `pnpm dev` starts all four servers and opens the app at http://localhost:6890
+   when it's ready (logs hidden by default — `pnpm dev --verbose` streams them).
+   To run them in separate terminals instead:
    - `pnpm dev:ggui` → http://localhost:6781/mcp
    - `pnpm dev:mcps` → every `servers/mcps/*` (todo on http://localhost:6782/mcp)
    - `pnpm dev:agent` → agent backend on 6790 / 6791 / 6792 depending on SDK

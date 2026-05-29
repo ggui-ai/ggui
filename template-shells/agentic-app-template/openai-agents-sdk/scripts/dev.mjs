@@ -1,32 +1,29 @@
 #!/usr/bin/env node
 /**
- * `pnpm dev` — start the whole app with ONE command, a clear banner, labeled
- * logs, and an auto-opened browser, so you never have to wonder "which URL do
- * I open?".
- *
- * It runs four service groups (each is also runnable on its own via the
- * matching `dev:*` script in package.json):
+ * `pnpm dev` — start the whole app with ONE command, a clear banner, and an
+ * auto-opened browser. By default the servers' logs are HIDDEN so the
+ * "open this URL" guidance stays on screen; add `--verbose` (or `-v`) to stream
+ * the full labeled output. (A crashing service still dumps its recent output,
+ * even in quiet mode, so failures are never silent.)
  *
  *   ggui   UI-generator MCP server            backend
  *   mcps   every server under servers/mcps/*  backend — your domain tools
  *   agent  the LLM backend                    backend
  *   web    the app you actually open          ← visit this
  *
- * No third-party process runner: pnpm starts each group, and this script just
- * multiplexes their output under [name] prefixes, then opens the web app once
- * it answers. Adding an MCP server? Drop it under `servers/mcps/` — `dev:mcps`
- * globs the whole directory, so it starts automatically with no edit here.
- *
- * Ctrl-C tears down the WHOLE process tree: each group runs in its own process
- * group and we signal the group (not just the `pnpm` wrapper), so the dev
- * servers don't orphan and hold their ports. If one ever gets stuck anyway,
- * `pnpm dev:stop` frees the ports.
+ * Each group runs in its own process group; Ctrl-C tears down the whole tree
+ * (no orphaned servers holding ports). `pnpm dev:stop` is the backstop.
+ * Adding an MCP server? Drop it under `servers/mcps/` — `dev:mcps` globs the
+ * whole directory, so it starts automatically with no edit here.
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 const WEB_URL = `http://localhost:${process.env.WEB_PORT ?? 6890}`;
 const POSIX = process.platform !== 'win32';
+const VERBOSE =
+  process.argv.slice(2).some((a) => a === '--verbose' || a === '-v') ||
+  process.env.DEV_VERBOSE === '1';
 
 // name → ANSI color + the package.json script that starts it.
 const SERVICES = [
@@ -38,6 +35,10 @@ const SERVICES = [
 const width = Math.max(...SERVICES.map((s) => s.name.length));
 const tag = (s) => `\x1b[${s.color}m[${s.name.padEnd(width)}]\x1b[0m`;
 
+const logHint = VERBOSE
+  ? `Streaming logs, labeled ${SERVICES.map(tag).join(' ')}.`
+  : 'Logs are hidden — run \x1b[1mpnpm dev --verbose\x1b[0m to stream them.';
+
 process.stdout.write(`
   Starting your ggui app — ${SERVICES.length} services, one command.
 
@@ -46,14 +47,16 @@ process.stdout.write(`
     agent   LLM backend          backend · nothing to open here
     web     the app you open  →  ${WEB_URL}
 
-  \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens for you once 'web' is ready)
+  \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens automatically once 'web' is ready)
 
-  Logs below are labeled ${SERVICES.map(tag).join(' ')}.  Ctrl-C stops everything;
-  if a port stays stuck, run \x1b[1mpnpm dev:stop\x1b[0m.
+  ${logHint}
+  Ctrl-C stops everything; if a port stays stuck, run \x1b[1mpnpm dev:stop\x1b[0m.
 
 `);
 
 const children = [];
+const tails = new Map(); // name → recent output lines (for crash diagnostics in quiet mode)
+const TAIL_MAX = 40;
 let shuttingDown = false;
 
 // Signal a child's WHOLE process group (pnpm → tsx/vite → the dev servers) so
@@ -87,14 +90,31 @@ for (const s of SERVICES) {
   // down the whole subtree (pnpm only unreliably forwards signals to its kids).
   const child = spawn('pnpm', [s.script], { env: process.env, detached: POSIX });
   children.push(child);
+  tails.set(s.name, []);
+  // Always consume the pipes (so a full pipe buffer never blocks the child):
+  // verbose → print prefixed; quiet → keep only a recent-output ring buffer.
   for (const stream of [child.stdout, child.stderr]) {
-    createInterface({ input: stream }).on('line', (line) =>
-      process.stdout.write(`${tag(s)} ${line}\n`),
-    );
+    createInterface({ input: stream }).on('line', (line) => {
+      if (VERBOSE) {
+        process.stdout.write(`${tag(s)} ${line}\n`);
+      } else {
+        const buf = tails.get(s.name);
+        buf.push(line);
+        if (buf.length > TAIL_MAX) buf.shift();
+      }
+    });
   }
   child.on('exit', (code) => {
     if (!shuttingDown && code) {
-      process.stdout.write(`${tag(s)} exited (code ${code}) — stopping the others.\n`);
+      process.stdout.write(`\n${tag(s)} exited (code ${code}) — stopping the others.\n`);
+      if (!VERBOSE) {
+        const buf = tails.get(s.name) ?? [];
+        if (buf.length) {
+          process.stdout.write(`${tag(s)} recent output:\n`);
+          for (const l of buf) process.stdout.write(`  ${l}\n`);
+        }
+        process.stdout.write("(run `pnpm dev --verbose` to stream full logs)\n");
+      }
       shutdown(code);
     }
   });
