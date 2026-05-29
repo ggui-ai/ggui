@@ -16,11 +16,17 @@
  * multiplexes their output under [name] prefixes, then opens the web app once
  * it answers. Adding an MCP server? Drop it under `servers/mcps/` — `dev:mcps`
  * globs the whole directory, so it starts automatically with no edit here.
+ *
+ * Ctrl-C tears down the WHOLE process tree: each group runs in its own process
+ * group and we signal the group (not just the `pnpm` wrapper), so the dev
+ * servers don't orphan and hold their ports. If one ever gets stuck anyway,
+ * `pnpm dev:stop` frees the ports.
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
 const WEB_URL = `http://localhost:${process.env.WEB_PORT ?? 6890}`;
+const POSIX = process.platform !== 'win32';
 
 // name → ANSI color + the package.json script that starts it.
 const SERVICES = [
@@ -42,24 +48,44 @@ process.stdout.write(`
 
   \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens for you once 'web' is ready)
 
-  Logs below are labeled ${SERVICES.map(tag).join(' ')}.
+  Logs below are labeled ${SERVICES.map(tag).join(' ')}.  Ctrl-C stops everything;
+  if a port stays stuck, run \x1b[1mpnpm dev:stop\x1b[0m.
 
 `);
 
 const children = [];
 let shuttingDown = false;
 
+// Signal a child's WHOLE process group (pnpm → tsx/vite → the dev servers) so
+// nothing orphans and holds a port. On Windows, `taskkill /T` walks the tree.
+function killTree(child, signal) {
+  if (!child.pid) return;
+  try {
+    if (POSIX) process.kill(-child.pid, signal);
+    else spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  } catch {
+    /* already gone */
+  }
+}
+
 function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
-  for (const child of children) child.kill('SIGINT');
-  setTimeout(() => process.exit(code), 300);
+  for (const child of children) killTree(child, 'SIGTERM');
+  // Anything still alive after a grace period gets force-killed so ports free.
+  setTimeout(() => {
+    for (const child of children) killTree(child, 'SIGKILL');
+    process.exit(code);
+  }, 800).unref();
 }
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
+process.on('SIGHUP', () => shutdown(0));
 
 for (const s of SERVICES) {
-  const child = spawn('pnpm', [s.script], { env: process.env });
+  // `detached` puts each group in its own process group so killTree can take
+  // down the whole subtree (pnpm only unreliably forwards signals to its kids).
+  const child = spawn('pnpm', [s.script], { env: process.env, detached: POSIX });
   children.push(child);
   for (const stream of [child.stdout, child.stderr]) {
     createInterface({ input: stream }).on('line', (line) =>
