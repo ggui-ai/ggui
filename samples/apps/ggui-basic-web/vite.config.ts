@@ -14,23 +14,21 @@ import react from '@vitejs/plugin-react';
  *     routing + server components + middleware would falsely signal
  *     "colocate server logic here".
  *
- *   - `server.port` defaults to 6890 — matches the e2e harness's
- *     `HARNESS_PORTS.web`. Overridable via `VITE_SERVER_PORT` env var so
- *     the parallel e2e harness can run one preview server per worker on
- *     distinct ports (worker 0 → 6890, worker 1 → 6990, worker 2 → 7090).
- *     Vite intentionally does NOT read `PORT` from env, so we use a
- *     prefixed name to make the harness contract explicit.
+ *   - Port resolution: `VITE_SERVER_PORT` (the e2e harness's explicit
+ *     contract — worker 0 → 6890, 1 → 6990, 2 → 7090) takes priority, then
+ *     `PORT` (what a deploy host like Railway injects), then 6890.
+ *     `strictPort` so a collision FAILS LOUD instead of silently moving on.
  *
- *   - `server.strictPort` so a port collision FAILS LOUD instead of
- *     silently moving to the next free port — the harness pre-flight
- *     check assumes the bind is on the requested port.
+ *   - `preview` (the production serve — `vite build && vite preview`) binds
+ *     all interfaces and accepts the platform-assigned Host, so the built SPA
+ *     is reachable behind a deploy host such as Railway (`*.up.railway.app`).
+ *     Vite 6 otherwise blocks unknown Hosts in preview ("Blocked request").
+ *     The dev `server` stays loopback-only.
  *
  *   - No `transpilePackages` equivalent needed: Vite walks workspace
  *     symlinks natively and the @ggui-ai/* packages ship usable ESM.
  */
-const SERVER_PORT = process.env.VITE_SERVER_PORT
-  ? Number(process.env.VITE_SERVER_PORT)
-  : 6890;
+const SERVER_PORT = Number(process.env.VITE_SERVER_PORT ?? process.env.PORT ?? 6890);
 
 export default defineConfig({
   plugins: [react()],
@@ -42,7 +40,8 @@ export default defineConfig({
   preview: {
     port: SERVER_PORT,
     strictPort: true,
-    host: '127.0.0.1',
+    host: true,
+    allowedHosts: true,
   },
   build: {
     target: 'es2023',

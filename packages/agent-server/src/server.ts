@@ -118,8 +118,16 @@ export async function startAgentServer(
     );
 
   const sandboxProxyPort = opts.sandboxProxyPort ?? opts.port + 1000;
+  // Behind a remote host (Railway, Fly, …) the browser and the servers run on
+  // different machines, so the sandbox proxy must bind all interfaces and the
+  // manifest must advertise its PUBLIC origin — the default localhost URL is
+  // only reachable when the browser is on the same machine (local dev).
+  // `SANDBOX_PROXY_PUBLIC_URL` is that public origin (set by the deploy flow);
+  // when unset, behavior is unchanged (loopback bind, localhost URL).
+  const sandboxProxyPublicUrl = process.env.SANDBOX_PROXY_PUBLIC_URL;
   const sandboxProxy = await startSandboxProxyServer({
     port: sandboxProxyPort,
+    ...(sandboxProxyPublicUrl ? { host: '0.0.0.0' } : {}),
   });
 
   const app = createAgentApp({
@@ -128,7 +136,9 @@ export async function startAgentServer(
     chatStore,
     mcpServers: resolvedServers,
     systemPrompt: opts.systemPrompt,
-    sandboxProxyUrl: sandboxProxy.url,
+    sandboxProxyUrl: sandboxProxyPublicUrl
+      ? new URL('/sandbox.html', sandboxProxyPublicUrl).href
+      : sandboxProxy.url,
     log,
   });
 

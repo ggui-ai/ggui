@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6781} --public-base-url http://localhost:${PORT:-6781}",
+    "start": "ggui serve --mcp-only --dev-allow-all --port ${PORT:-6781} --public-base-url ${GGUI_PUBLIC_BASE_URL:-http://localhost:${PORT:-6781}}",
     "start:default-port": "ggui serve --mcp-only --dev-allow-all --public-base-url http://localhost:6781",
-    "start:secure": "ggui serve --mcp-only --port ${PORT:-6781} --public-base-url http://localhost:${PORT:-6781}"
+    "start:secure": "ggui serve --mcp-only --port ${PORT:-6781} --public-base-url ${GGUI_PUBLIC_BASE_URL:-http://localhost:${PORT:-6781}}"
   },
   "dependencies": {
     "@ggui-ai/cli": "workspace:*"
