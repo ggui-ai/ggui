@@ -80,12 +80,12 @@
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@react-native-async-storage/async-storage": ">=1.0.0",
-    "@react-native-community/netinfo": ">=9.0.0",
-    "@tanstack/react-query": ">=5.0.0",
+    "@react-native-async-storage/async-storage": "^1.0.0",
+    "@react-native-community/netinfo": "^9.0.0",
+    "@tanstack/react-query": "^5.0.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-native": ">=0.70.0",
-    "react-native-webview": ">=13.0.0"
+    "react-native": ">=0.70.0 <1.0.0",
+    "react-native-webview": "^13.0.0"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-query": {

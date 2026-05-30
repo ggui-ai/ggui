@@ -276,8 +276,8 @@
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
     "react": {
