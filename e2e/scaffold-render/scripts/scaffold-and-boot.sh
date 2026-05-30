@@ -26,6 +26,15 @@ REGISTRY="${REGISTRY:-http://localhost:4874}"
 REGISTRY_HOST_PORT="${REGISTRY#http://}"; REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT%/}"
 APP_PARENT="$(dirname "$APP_DIR")"
 
+# Each SDK's agent backend binds a different port (dev.mjs AGENT_PORT, per shell).
+# The web SPA reaches it via VITE_AGENT_ENDPOINT_URL, so that must match the SDK.
+case "$SDK" in
+  claude-agent-sdk) AGENT_PORT=6790 ;;
+  openai-agents-sdk) AGENT_PORT=6791 ;;
+  google-adk) AGENT_PORT=6792 ;;
+  *) echo "scaffold-and-boot: unknown SDK '$SDK'" >&2; exit 1 ;;
+esac
+
 # npx fetches create-agentic-app itself from Verdaccio (npx honors these);
 # pnpm's own isolation is the project .npmrc below (env-var cache-dir is
 # silently ignored by pnpm 11 — proven in sub-tier A).
@@ -56,12 +65,15 @@ EOF
 # dotenv-cli (a missing file errors), and it carries the LLM key that drives
 # BOTH the agent and ggui's UI generation, plus the todo-MCP wiring the render
 # scenario needs (the agent registers GGUI_TODO_MCP_URL's tools).
+# ANTHROPIC_API_KEY always (ggui generation + claude agent). The agent's own key
+# is whichever the chosen SDK reads: OPENAI (openai), GEMINI/GOOGLE (google-adk).
 {
   echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
   if [ -n "${OPENAI_API_KEY:-}" ]; then echo "OPENAI_API_KEY=$OPENAI_API_KEY"; fi
+  if [ -n "${GEMINI_API_KEY:-}" ]; then echo "GEMINI_API_KEY=$GEMINI_API_KEY"; fi
   if [ -n "${GOOGLE_API_KEY:-}" ]; then echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"; fi
   echo "GGUI_TODO_MCP_URL=http://localhost:6782/mcp"
-  echo "VITE_AGENT_ENDPOINT_URL=http://localhost:6790"
+  echo "VITE_AGENT_ENDPOINT_URL=http://localhost:$AGENT_PORT"
 } > "$APP_DIR/.env.local"
 
 echo "[boot] pnpm install ($SDK, Verdaccio-pinned)"

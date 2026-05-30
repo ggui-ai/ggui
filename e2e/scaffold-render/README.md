@@ -60,17 +60,20 @@ CI runs it on a schedule + `workflow_dispatch` only, never per-PR.
 
 ## Status & caveats (read before the first container run)
 
-- **cache-hit is `test.fixme`** — cross-session blueprint reuse is being
-  (re)implemented in a separate slice and is not yet on this test base. The
-  scenario is behaviour-based (turn-2 fast = reuse), so it activates by
-  un-`fixme`-ing the test once the cache lands on the test base. The render
-  scenario is fully live.
-- **SDK matrix** — the scenarios currently target **claude-agent-sdk** (the
-  key-available, proven path). The harness is SDK-parametric
-  (`spawnScaffoldedApp({sdk})`) and `scaffold-and-boot.sh` forwards
-  `OPENAI_API_KEY` / `GOOGLE_API_KEY` when present; extending to the other two
-  SDKs is a matter of supplying their agent keys + flipping the scenario's
-  `sdk`. ggui's own generation always needs `ANTHROPIC_API_KEY`.
+- **All three SDKs are live** — `render.spec.ts` runs claude / openai / google,
+  each its own describe, key-gated (ggui generation always needs
+  `ANTHROPIC_API_KEY`; the agent needs its own `OPENAI_API_KEY` /
+  `GEMINI_API_KEY`). The web SPA is pointed at the SDK's agent via a `?agent=`
+  query param (App.tsx priority-1) because `dev:web` runs plain vite, which
+  never reads the app-root `.env.local`. A missing key skips that SDK.
+- **cache-hit is live** — proven: turn-1 cold ≈ 11.6s vs turn-2 ≈ 6ms (~1900×),
+  so cross-session blueprint reuse is wired on this base. It's a real regression
+  gate: if a change breaks reuse, turn-2 falls back to a cold gen and fails the
+  `< 10s` budget. (The harness waits for ggui to be listening before the test
+  fires its first MCP call, or the direct `:6781` hit would race the boot.)
+- **LLM variance** — the render scenarios are non-deterministic; `retries:1`
+  absorbs the occasional miss (observed: openai needed one retry). Expected for
+  a real-LLM capstone.
 - **Container build mount** — the cell bind-mounts the monorepo **read-write**
   to build + publish the cohort in place. In CI that is a fresh checkout (clean
   install). Locally it reuses your worktree's `node_modules`/`dist` (both

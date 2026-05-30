@@ -8,10 +8,9 @@
  * Auth: the scaffolded ggui runs `ggui serve --mcp-only --dev-allow-all`, which
  * accepts ANY non-empty bearer as `builder` — no pairing/handshake-token needed.
  *
- * PENDING (test.fixme): cross-session blueprint reuse is being (re)implemented
- * in a separate slice and is NOT yet on this test base. The scenario is
- * behaviour-based (turn-2 fast = reuse), so it will pass with whatever cache
- * impl ships — un-`fixme` the test once that lands on the test base.
+ * LIVE regression gate: cross-session blueprint reuse is wired on this base —
+ * proven here at turn-1 cold ≈ 11.6s vs turn-2 ≈ 6ms (~1900×). If a change
+ * breaks reuse, turn-2 falls back to a cold gen and this fails the < 10s gate.
  */
 import { test, expect } from '@playwright/test';
 import { spawnScaffoldedApp, type ScaffoldAppHandle } from './scaffold-app-harness';
@@ -124,20 +123,22 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
     if (app) await app.close();
   });
 
-  test.fixme(
+  test(
     'session 1 cold-generates, session 2 reuses the blueprint (latency)',
     async () => {
       test.setTimeout(1_500_000);
       app = await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' });
 
       const cold = await renderOnce(app.gguiUrl, true);
+      // No forceCreate → the matcher runs and should reuse turn-1's blueprint.
+      const hit = await renderOnce(app.gguiUrl, false);
+      // eslint-disable-next-line no-console -- latency signal in the CI log.
+      console.log(`[cache-hit] turn-1 cold=${cold}ms  turn-2=${hit}ms`);
+
       expect(
         cold,
         `turn-1 ${cold}ms — too fast for a real LLM call (stub regression?)`,
       ).toBeGreaterThan(1_000);
-
-      // No forceCreate → the matcher runs and should reuse turn-1's blueprint.
-      const hit = await renderOnce(app.gguiUrl, false);
       expect(
         hit,
         `turn-2 ${hit}ms — cache hit should be < 10s; LLM fallthrough regression?`,

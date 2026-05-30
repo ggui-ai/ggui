@@ -26,6 +26,14 @@ export interface ScaffoldAppHandle {
   readonly webUrl: string;
   /** http://localhost:6781 — the ggui MCP server (cache-hit scenario). */
   readonly gguiUrl: string;
+  /**
+   * http://localhost:679x — the agent backend for this SDK (claude 6790,
+   * openai 6791, google 6792). The web SPA resolves its agent from a
+   * `?agent=` query param FIRST (App.tsx), so the render scenario navigates
+   * to `${webUrl}/?agent=${agentUrl}` — robust against the env not reaching
+   * vite (`dev:web` runs plain vite, which never reads the app-root .env.local).
+   */
+  readonly agentUrl: string;
   /** Absolute path of the scaffolded app dir. */
   readonly scaffoldDir: string;
   /** All script stdout/stderr captured so far — for failure dumps. */
@@ -45,6 +53,12 @@ const REGISTRY = process.env['REGISTRY'] ?? 'http://localhost:4874';
 // SDK its own localhost so the matrix can run without colliding.
 const WEB_PORT = 6890;
 const GGUI_PORT = 6781;
+// Per-SDK agent backend port (dev.mjs AGENT_PORT, fixed per shell).
+const AGENT_PORT: Record<SdkId, number> = {
+  'claude-agent-sdk': 6790,
+  'openai-agents-sdk': 6791,
+  'google-adk': 6792,
+};
 // All ports any SDK's dev tree may bind — checked on teardown so a leak from
 // any agent variant (6790/6791/6792) is caught, not just claude's.
 const APP_PORTS: readonly number[] = [GGUI_PORT, 6782, 6790, 6791, 6792, WEB_PORT];
@@ -115,7 +129,11 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
   });
 
   const webUrl = `http://localhost:${WEB_PORT}`;
-  const ready = await waitForReady(webUrl, child, () => buf);
+  const gguiUrl = `http://localhost:${GGUI_PORT}`;
+  // Wait for BOTH web (render scenario) AND ggui (cache-hit hits it directly).
+  // The 4 servers boot in parallel; ggui can lag web, so a web-only wait races
+  // the cache-hit's first MCP call → ECONNREFUSED on 6781.
+  const ready = await waitForReady([webUrl, gguiUrl], child, () => buf);
   if (!ready) {
     await killGroup(child);
     throw new Error(
@@ -125,7 +143,8 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
 
   return {
     webUrl,
-    gguiUrl: `http://localhost:${GGUI_PORT}`,
+    gguiUrl,
+    agentUrl: `http://localhost:${AGENT_PORT[opts.sdk]}`,
     scaffoldDir: appDir,
     stdout: () => buf,
     close: async () => {
@@ -136,7 +155,7 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
 }
 
 async function waitForReady(
-  webUrl: string,
+  urls: readonly string[],
   child: ChildProcess,
   dump: () => string,
 ): Promise<boolean> {
@@ -149,7 +168,8 @@ async function waitForReady(
         `scaffold-and-boot exited early (code ${child.exitCode}). Output:\n${dump().slice(-3000)}`,
       );
     }
-    if (await isAnswering(webUrl)) return true;
+    const up = await Promise.all(urls.map((u) => isAnswering(u)));
+    if (up.every(Boolean)) return true;
     await new Promise((r) => setTimeout(r, 1000));
   }
   return false;
