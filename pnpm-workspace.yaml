@@ -44,6 +44,9 @@ packages:
   - "e2e/journeys"
   - "e2e/wire-scenarios"
   - "e2e/mcp-host-simulator"
+  # Sub-tier B container e2e — render + cache-hit against the SCAFFOLDED
+  # published app (Verdaccio cohort → create-agentic-app → pnpm dev).
+  - "e2e/scaffold-render"
   # Marketplace test fixtures — workspace-private published gadget /
   # blueprint repos consumed by e2e to exercise publish→search→install.
   - "e2e/fixtures/*"

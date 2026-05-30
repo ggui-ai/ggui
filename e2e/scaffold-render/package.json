@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-ai/e2e-scaffold-render",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sub-tier B container e2e: render + cache-hit against the SCAFFOLDED published app (Verdaccio cohort → create-agentic-app → pnpm dev).",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^24.0.0",
+    "dotenv": "^16.4.0"
+  }
+}
