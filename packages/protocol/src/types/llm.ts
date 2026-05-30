@@ -66,7 +66,7 @@ export type ModelId =
   | "anthropic/claude-opus-4-6"
   // Google Gemini models (preview suffix required by API for *-preview ids)
   | "gemini/gemini-3.5-flash"
-  | "gemini/gemini-3.1-flash-lite-preview"
+  | "gemini/gemini-3.1-flash-lite"
   | "gemini/gemini-3-flash-preview"
   | "gemini/gemini-3.1-pro-preview"
   // OpenAI models
@@ -127,7 +127,6 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
   },
 
   // ── Google Gemini (API requires "-preview" suffix for previews) ──
-  // Default generation model.
   // Pricing values mirror LiteLLM upstream
   // (https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json);
   // host-side consumers may apply a more authoritative price table
@@ -142,8 +141,9 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     supportsTools: true,
     supportsCaching: true,
   },
-  "gemini/gemini-3.1-flash-lite-preview": {
-    id: "gemini/gemini-3.1-flash-lite-preview",
+  // Default generation model (platform-pool DEFAULT_POOL_MODEL).
+  "gemini/gemini-3.1-flash-lite": {
+    id: "gemini/gemini-3.1-flash-lite",
     provider: "google",
     displayName: "Gemini 3.1 Flash Lite",
     tier: "fast",

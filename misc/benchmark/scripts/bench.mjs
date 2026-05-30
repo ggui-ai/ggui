@@ -5,7 +5,7 @@
  *
  * Usage:
  *   pnpm bench                                          # defaults: google, weather-card
- *   pnpm bench --provider google --model gemini-3.1-flash-lite-preview --commit weather-card
+ *   pnpm bench --provider google --model gemini-3.1-flash-lite --commit weather-card
  *   pnpm bench --provider claude --commit survey-form
  *   pnpm bench --provider openai --commit kanban-board --max-turns 5
  *   pnpm bench --provider google,claude --commit weather-card,survey-form
@@ -15,7 +15,7 @@
  * Options:
  *   --provider, -p   Provider(s): claude, openai, google (comma-separated)
  *   --commit, -c     Commit ID(s): weather-card, survey-form, etc. (comma-separated)
- *   --model, -m      Model override for coding phase (e.g., gemini-3.1-flash-lite-preview)
+ *   --model, -m      Model override for coding phase (e.g., gemini-3.1-flash-lite)
  *   --think          Model override for planning phase
  *   --eval           Model override for evaluation phase
  *   --max-turns      Max coding attempts (default: 10)
@@ -110,7 +110,7 @@ const PRESETS = {
   quick: {
     providers: ['google'],
     commits: ['weather-card'],
-    model: 'gemini/gemini-3.1-flash-lite-preview',
+    model: 'gemini/gemini-3.1-flash-lite',
     maxAttempts: 5,
     maxEvalRounds: 0,
     timeout: 120000,
@@ -265,7 +265,7 @@ loadEnvFile(resolve(WORKSPACE_ROOT, '.env.local'));
 const DEFAULT_MODELS = {
   claude: 'anthropic/claude-haiku-4-5',
   openai: 'openai/gpt-5.4-mini',
-  google: 'gemini/gemini-3.1-flash-lite-preview',
+  google: 'gemini/gemini-3.1-flash-lite',
   openrouter: 'openrouter/anthropic/claude-haiku-4-5',
 };
 
@@ -411,7 +411,15 @@ const run = async () => {
 
   if (providers.includes('google')) {
     if (!hasGeminiKey) console.log('  WARNING: GEMINI_API_KEY not set');
-    const cfg = { apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY };
+    // Minimize Gemini 3.x Flash's default-on thinking — it dominates
+    // UI-gen latency without improving contract-bounded code emission.
+    // The Interactions API floor is 'minimal' (no true off). Override
+    // via GGUI_BENCH_THINKING_LEVEL=low|medium|high. See
+    // adapters/google/raw.ts.
+    const cfg = {
+      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+      thinkingLevel: process.env.GGUI_BENCH_THINKING_LEVEL || 'minimal',
+    };
     runner.registerAdapter(new GoogleRawAdapter(cfg), cfg);
   }
 

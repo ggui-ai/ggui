@@ -14,6 +14,16 @@ export interface AdapterConfig {
   apiKey?: string;
   /** Use Bedrock instead of direct API (Claude only) */
   useBedrock?: boolean;
+  /**
+   * Thinking level for models with extended thinking (Gemini 3.x Flash
+   * via the Interactions API). Mirrors the API's `thinking_level` enum —
+   * `'minimal'` is the floor (the API has NO true off), then `'low'` /
+   * `'medium'` / `'high'`. Omitted → provider default, and Gemini 3.5
+   * Flash defaults thinking ON with no cap — the dominant latency cost
+   * in contract-bounded UI generation. Only the Google adapter consumes
+   * this today.
+   */
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
 }
 
 /**

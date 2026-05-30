@@ -79,7 +79,7 @@ export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
 > = {
   anthropic: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   openai: { provider: 'openai', model: 'gpt-5.5-2026-04-23' },
-  google: { provider: 'google', model: 'gemini-3.5-flash' },
+  google: { provider: 'google', model: 'gemini-3.1-flash-lite' },
   openrouter: { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' },
 };
 

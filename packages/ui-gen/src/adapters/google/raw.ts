@@ -49,12 +49,25 @@ export class GoogleRawAdapter extends GeneratorAdapter {
     let totalOutputTokens = 0;
     let turnsUsed = 0;
 
+    // Thinking control. Gemini 3.x Flash defaults thinking ON — the
+    // dominant latency cost in UI generation, where the task is
+    // contract-bounded code emission, not open-ended reasoning. The
+    // Interactions API exposes this as `generation_config.thinking_level`
+    // ('minimal' is the floor — there is no true off — then 'low' /
+    // 'medium' / 'high'). When the caller pins a level we forward it on
+    // every turn. Omitted → provider default (unchanged behavior).
+    const thinkingLevel = this.config.thinkingLevel;
+    const generationConfig = thinkingLevel
+      ? { thinking_level: thinkingLevel }
+      : undefined;
+
     // Turn 1: send system instruction + tools + user prompt
     let interaction = await this.client.interactions.create({
       model: params.model as Interactions.Model,
       system_instruction: params.systemPrompt,
       tools,
       input: params.userPrompt,
+      ...(generationConfig ? { generation_config: generationConfig } : {}),
     });
 
     for (let turn = 0; turn < params.maxTurns; turn++) {
@@ -117,6 +130,7 @@ export class GoogleRawAdapter extends GeneratorAdapter {
         model: params.model as Interactions.Model,
         previous_interaction_id: interaction.id,
         input: results,
+        ...(generationConfig ? { generation_config: generationConfig } : {}),
       });
     }
 
