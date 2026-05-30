@@ -3,7 +3,8 @@
  *
  * Pins the cold-path contract synthesizer's behavior:
  *   - empty intent short-circuits without an LLM call
- *   - provider lacking callStructured collapses to null
+ *   - provider lacking callStructured falls back to text mode; unparseable
+ *     text collapses to null with a diagnostic reason
  *   - LLM throw / parse-fail collapses to null with a diagnostic reason
  *   - well-formed tool input → valid DataContract with the inferred specs
  *   - actionSpec entries are normalized to payload-less object schemas
@@ -66,13 +67,17 @@ describe('synthesizeContract — short-circuit cases', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('returns null when provider does not support callStructured', async () => {
+  it('falls back to text mode without callStructured, collapsing to null on unparseable output', async () => {
+    // Providers without callStructured (gemini / openai / openrouter) use
+    // the text-mode fallback (af7d938b7) so repair works on every provider
+    // instead of no-op'ing off-Anthropic. An empty / unparseable response
+    // collapses to null with a diagnostic reason rather than throwing.
     const result = await synthesizeContract(
       { llm: llmWithoutStructured() },
       'a counter widget',
     );
     expect(result.contract).toBeNull();
-    expect(result.reason).toMatch(/does not support callStructured/);
+    expect(result.reason).toMatch(/text-fallback|no parseable JSON/);
   });
 });
 

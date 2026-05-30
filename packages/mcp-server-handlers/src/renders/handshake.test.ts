@@ -148,25 +148,32 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.suggestion.blueprintMeta.generator).toBe('custom-generator-slug');
     });
 
-    it('rejects an unknown draft.generator with unknown_generator', async () => {
-      // Companion to the honor-the-hint test above: an unrecognized
-      // slug must fail loud rather than silently fall back to the
-      // server default. Error message names the registered slug so
-      // the agent's recovery is unambiguous (omit the field or pass
-      // the named generator).
+    it('forgivingly drops an unknown draft.generator — default used + GENERATOR_UNKNOWN finding', async () => {
+      // Forgiving handshake (af7d938b7): an unrecognized generator slug is
+      // DROPPED (the server default is used) and surfaced as a warn
+      // finding, rather than thrown — the handshake never hard-fails on a
+      // fixable detail. (The STRICT render-override path keeps the throwing
+      // assert.) The finding names the offending slug so the agent's
+      // recovery is unambiguous (omit the field or pass a known one).
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
-      await expect(
-        handler.handler(
-          minimalInput({
-            blueprintDraft: {
-              contract: {} as DataContract,
-              generator: 'unregistered-slug',
-            },
-          }),
-          { appId: 'app-1', requestId: 'r' },
-        ),
-      ).rejects.toThrow(/unknown_generator.*unregistered-slug/);
+      const out = await handler.handler(
+        minimalInput({
+          blueprintDraft: {
+            contract: {} as DataContract,
+            generator: 'unregistered-slug',
+          },
+        }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      // Did NOT throw: falls back to the server default generator…
+      expect(out.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
+      // …and surfaces a GENERATOR_UNKNOWN warn finding naming the slug.
+      const finding = out.suggestion.validationFindings?.find(
+        (f) => f.code === 'GENERATOR_UNKNOWN',
+      );
+      expect(finding?.severity).toBe('warn');
+      expect(finding?.message).toMatch(/unregistered-slug/);
     });
   });
 
