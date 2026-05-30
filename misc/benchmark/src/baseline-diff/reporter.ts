@@ -28,7 +28,6 @@ const BENCH_HEADLINE_FIELDS: Record<string, readonly string[]> = {
     'previewExpectedButMissingCount',
   ],
   a2ui: ['timeToFirstFrame', 'frameCount', 'totalParseFailures'],
-  'blueprint-negotiation': ['hitRate', 'wrongHitRate', 'decisionTimeMs'],
   'multi-sdk': [
     'avgTimeMs',
     'avgScore',

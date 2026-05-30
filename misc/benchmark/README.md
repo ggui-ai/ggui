@@ -4,7 +4,7 @@ Open-source benchmark suite for the [ggui generation protocol](https://github.co
 
 Multi-provider × multi-model quality, cost, and latency evals against the
 `@ggui-ai/ui-gen` surface — plus A2UI frame timings, SLO floors,
-blueprint-negotiation, and cross-bench baseline manifests.
+and cross-bench baseline manifests.
 
 ## Quick start
 

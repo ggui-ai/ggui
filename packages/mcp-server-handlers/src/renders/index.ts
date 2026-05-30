@@ -218,6 +218,14 @@ export {
   type HandshakeStoredInput,
   type HandshakeStoredTarget,
 } from "./handshake.js";
+export {
+  buildCacheReuseResult,
+  buildCreateFallback,
+  decideHandshake,
+  type BlueprintPool,
+  type HandshakeDecideInput,
+  type HandshakeDecisionAdapter,
+} from "./decide-handshake.js";
 export { installToCache, type InstallToCacheInput } from "./install-to-cache.js";
 export {
   createInstalledBlueprintsProvider,

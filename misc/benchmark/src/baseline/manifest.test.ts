@@ -8,7 +8,6 @@ import {
   buildBaselineManifest,
   extractA2uiSummary,
   extractMultiSdkSummary,
-  extractNegotiationSummary,
   extractSloSummary,
   type BenchManifestEntry,
 } from './manifest.js';
@@ -60,14 +59,12 @@ describe('buildBaselineManifest', () => {
           errorExcerpt: 'ANTHROPIC_API_KEY not set',
         }),
         mkEntry({ benchName: 'a2ui', status: 'success' }),
-        mkEntry({ benchName: 'blueprint-negotiation', status: 'success' }),
       ],
     });
     expect(m.results.map((r) => r.benchName)).toEqual([
       'slo',
       'multi-sdk',
       'a2ui',
-      'blueprint-negotiation',
     ]);
     expect(m.results[1]!.status).toBe('failed');
     expect(m.results[1]!.errorExcerpt).toContain('ANTHROPIC');
@@ -123,20 +120,6 @@ describe('extractA2uiSummary', () => {
     });
     expect(s.headline).toContain('form: 3r, parseFails=0');
     expect(s.headline).toContain('list: 3r, parseFails=1');
-  });
-});
-
-describe('extractNegotiationSummary', () => {
-  it('includes hit + wrong-hit rates per mode', () => {
-    const s = extractNegotiationSummary({
-      results: [{}, {}, {}],
-      summary: [
-        { registryMode: 'hosted', runs: 6, hitRate: 0.5, wrongHitRate: 0 },
-        { registryMode: 'empty', runs: 3, hitRate: 0, wrongHitRate: 0 },
-      ],
-    });
-    expect(s.headline).toContain('hosted: 6r hit=50% wrong=0%');
-    expect(s.headline).toContain('empty: 3r hit=0% wrong=0%');
   });
 });
 

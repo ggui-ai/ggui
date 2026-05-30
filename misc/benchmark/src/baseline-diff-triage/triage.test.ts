@@ -499,67 +499,7 @@ describe('decision / counts', () => {
   });
 });
 
-// ─── 8. bp-neg rules ──────────────────────────────────────────────
-
-describe('blueprint-negotiation', () => {
-  it('wrongHitRate rising triggers alert', () => {
-    const diff = mkDiff([
-      mkEntry('blueprint-negotiation', {
-        summaryDiff: {
-          kind: 'grouped',
-          keyField: 'registryMode',
-          rows: [
-            mkRow('hosted', {
-              wrongHitRate: scalar(0, 0.1),
-              hitRate: scalar(0.5, 0.4),
-              runs: scalar(4, 4),
-              errorRate: scalar(0, 0),
-              falsePositiveRate: scalar(0, 0),
-              falseNegativeRate: scalar(0, 0),
-              exactMatchRateOnHits: scalar(1, 1),
-              emptyRegistryCleanMissRate: scalar(null, null),
-              decisionTimeMs: stat({ median: 0.3 }, { median: 0.3 }),
-            }),
-          ],
-        },
-      }),
-    ]);
-    const report = triageDiff(diff);
-    const alerts = alertsOf(report);
-    expect(alerts.some((a) => a.rule === 'bp-neg-wrongHitRate-rise')).toBe(true);
-  });
-
-  it('empty-registry hallucination (cleanMiss drop) triggers alert', () => {
-    const diff = mkDiff([
-      mkEntry('blueprint-negotiation', {
-        summaryDiff: {
-          kind: 'grouped',
-          keyField: 'registryMode',
-          rows: [
-            mkRow('empty', {
-              emptyRegistryCleanMissRate: scalar(1.0, 0.8),
-              hitRate: scalar(0, 0.2),
-              runs: scalar(2, 2),
-              wrongHitRate: scalar(0, 0),
-              errorRate: scalar(0, 0),
-              falsePositiveRate: scalar(null, null),
-              falseNegativeRate: scalar(null, null),
-              exactMatchRateOnHits: scalar(null, null),
-              decisionTimeMs: stat({ median: 0 }, { median: 0 }),
-            }),
-          ],
-        },
-      }),
-    ]);
-    const report = triageDiff(diff);
-    const alerts = alertsOf(report);
-    expect(
-      alerts.some((a) => a.rule === 'bp-neg-emptycleanmiss-drop'),
-    ).toBe(true);
-  });
-});
-
-// ─── 9. provisional flag surfaces in notes ────────────────────────
+// ─── 8. provisional flag surfaces in notes ────────────────────────
 
 describe('provisional anchor surfacing', () => {
   it('adds top-level note when any item is anchored "provisional"', () => {

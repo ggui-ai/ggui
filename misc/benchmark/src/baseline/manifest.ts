@@ -2,7 +2,7 @@
  * Cross-bench baseline manifest — schema + pure helpers.
  *
  * The baseline is a **snapshot bundle**, not a new scoring layer.
- * One command runs all four v0 benches and writes a small manifest
+ * One command runs the v0 benches and writes a small manifest
  * tying them together with honest per-bench success/failure reporting.
  *
  * Discipline:
@@ -20,8 +20,7 @@
 export type BenchName =
   | 'slo'
   | 'multi-sdk'
-  | 'a2ui'
-  | 'blueprint-negotiation';
+  | 'a2ui';
 
 export type BenchStatus = 'success' | 'failed';
 
@@ -187,32 +186,6 @@ export function extractA2uiSummary(report: unknown): BenchTopLineSummary {
           const parseFails =
             typeof s.totalParseFailures === 'number' ? s.totalParseFailures : 0;
           return `${shape}: ${runs}r, parseFails=${parseFails}`;
-        })
-        .join(' | ')
-    : undefined;
-  return {
-    totalRuns: results?.length,
-    headline,
-  };
-}
-
-export function extractNegotiationSummary(report: unknown): BenchTopLineSummary {
-  const r = isRecord(report) ? report : null;
-  if (!r) return {};
-  const results = Array.isArray(r.results) ? r.results : undefined;
-  const summary = Array.isArray(r.summary) ? r.summary : undefined;
-  const headline = summary
-    ? summary
-        .filter(isRecord)
-        .map((s) => {
-          const mode = typeof s.registryMode === 'string' ? s.registryMode : '?';
-          const runs = typeof s.runs === 'number' ? s.runs : 0;
-          const hit = typeof s.hitRate === 'number' ? Math.round(s.hitRate * 100) : 0;
-          const wrong =
-            typeof s.wrongHitRate === 'number'
-              ? Math.round(s.wrongHitRate * 100)
-              : 0;
-          return `${mode}: ${runs}r hit=${hit}% wrong=${wrong}%`;
         })
         .join(' | ')
     : undefined;

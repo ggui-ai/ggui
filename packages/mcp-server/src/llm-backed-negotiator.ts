@@ -1,54 +1,39 @@
 /**
  * LLM-backed `HandshakeNegotiator` for the OSS server.
  *
- * Composes BYOK credentials + a `ProviderAdapter` from
- * `@ggui-ai/ui-gen/providers` into an `LLMCaller`, then runs
- * `@ggui-ai/negotiator`'s `negotiate()` pipeline. Mirrors the cloud
- * `createBedrockNegotiator` pattern (cloud/ggui-protocol-pod/src/
- * tools/handshake.ts), stripped of Bedrock-specific embedding +
- * vector-store wiring — those are absent on OSS by default and
- * `negotiate()` handles missing RAG deps gracefully.
+ * A thin adapter over the SHARED handshake-decision core
+ * (`decideHandshake` in `@ggui-ai/mcp-server-handlers`). This file owns
+ * only the OSS-specific seams; the decision spine is shared verbatim
+ * with the cloud pod's `createBedrockNegotiator` — same code, different
+ * adapter.
  *
- * ## What this binding does
+ * ## OSS adapter seams
  *
- * On every `ggui_handshake` call:
+ *   - **LLM** — `buildLlmCaller` composes BYOK credentials + a
+ *     `ProviderAdapter` from `@ggui-ai/ui-gen/providers` into an
+ *     `LLMCaller` (anthropic / openai / google / openrouter / bedrock).
+ *     The adapter's `resolveLlm(ctx)` returns it, or `undefined` when no
+ *     creds resolve (⇒ the core returns a no-LLM `create` fallback).
+ *   - **Pools** — a single per-app blueprint pool from `deps.cache`
+ *     (scope defaults to `ctx.appId`). Absent ⇒ no pools ⇒ synth-only.
+ *   - **warn** — `console.warn` for swallowed operational errors.
  *
- *   1. Resolves BYOK creds via the supplied `resolveLlm(ctx)`. No
- *      creds → returns a "create" result with a `no-creds` reason.
- *   2. Selects the matching `ProviderAdapter` for the resolved
- *      provider (anthropic / openai / google / openrouter / bedrock).
- *   3. Wraps the adapter into an `LLMCaller` (single-shot text
- *      completion).
- *   4. Calls `negotiate(deps, input)` with `embedding: undefined,
- *      vectors: undefined` — RAG search is skipped, decision LLM
- *      runs against an empty candidate list, returns a sensible
- *      create/update decision based on session state + agent
- *      prompt.
- *   5. Maps the `NegotiateResult` onto the OSS-shape
- *      `HandshakeNegotiatorResult`.
+ * ## Shared decision spine (in the core, not here)
  *
- * ## Failure modes
+ *   find-similar across pools (exact-key → coverage guard → judge →
+ *   atomic reuse) ⇒ else synth-repair create via
+ *   `ensureConformingContract`. Operational errors fail open; programmer
+ *   errors re-throw. See `decide-handshake.ts` for the full contract.
  *
- * Operational errors (network flap, provider 5xx, rate limit) fail
- * open: returns a "create" result with the error reason. Bugs
- * (TypeError / ReferenceError / RangeError / SyntaxError) re-throw
- * — those are programmer errors that should surface, not be
- * silently swallowed.
+ * ## selectVariant
  *
- * ## Cost posture
- *
- * One LLM call per handshake (when creds resolve). Operators
- * concerned about cost can either (a) skip handshake and call
- * `ggui_render` directly with `{story}`, or (b) bind a different
- * negotiator (e.g., the cache-backed one for read-only cache
- * lookups) via `createGguiServer({handshake: {negotiator: ...}})`.
+ * The optional LLM-driven variant-selection seam is OSS-specific and
+ * stays on this binding (it is not part of the shared decide spine).
  *
  * ## Default binding
  *
- * Bound by default in `createGguiServer` when handshake is enabled
- * AND a `resolveLlm` is wired into `generation`. OSS is cloud-aligned:
- * same `negotiate()` pipeline, just with degraded RAG when local
- * infrastructure isn't bound.
+ * Bound by default in `createGguiServer` when handshake is enabled AND a
+ * `resolveLlm` is wired into `generation`.
  */
 
 import type {
@@ -62,38 +47,14 @@ import type {
 } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
 import {
-  DEFAULT_GENERATOR_SLUG,
-  matchBlueprint,
+  decideHandshake,
+  type HandshakeDecisionAdapter,
   type HandshakeNegotiator,
-  type HandshakeNegotiatorResult,
   type InstalledBlueprintsProvider,
-  type MatchBlueprintDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import { ensureConformingContract, type LLMCaller } from "@ggui-ai/negotiator";
-import { dataContractSchema, lintContract } from "@ggui-ai/protocol";
-import type {
-  Blueprint,
-  DataContract,
-  HandshakeSuggestion,
-  SuggestionFinding,
-} from "@ggui-ai/protocol";
-import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import type { LLMCaller } from "@ggui-ai/negotiator";
+import type { Blueprint } from "@ggui-ai/protocol";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
-import { createHash, randomUUID } from "node:crypto";
-
-/**
- * Operational error classifier — mirrors the cloud helper. Bugs
- * surface; provider failures + network blips degrade to a "create"
- * stub so the agent isn't blocked by a transient infrastructure
- * issue.
- */
-function isOperationalError(err: unknown): boolean {
-  if (err instanceof TypeError) return false;
-  if (err instanceof ReferenceError) return false;
-  if (err instanceof RangeError) return false;
-  if (err instanceof SyntaxError) return false;
-  return true;
-}
 
 /**
  * Wrap a resolved BYOK credential pair into an `LLMCaller` the
@@ -264,25 +225,12 @@ export interface LlmBackedHandshakeNegotiatorDeps {
     | Promise<{ selection: LlmSelection; providerKey: ProviderKeyRef } | null>
     | null;
   /**
-   * Estimated cold-generation latency, embedded on the "create"
-   * fallback result's `plan.estimatedLatencyMs`. Default 30s.
-   */
-  estimatedGenerationLatencyMs?: number;
-  /**
-   * Blueprint-registry deps for the handshake-time exact-key match
-   * fast path. When bound, every `decide()` call first asks
-   * `matchBlueprint` whether the agent's draft canonical-key-equals
-   * an already-registered blueprint. A hit short-circuits the synth
-   * LLM round-trip and returns `origin: 'cache'` with the cached
-   * blueprint's contract + codeHash.
-   *
-   * The exact-key strategy is the only safe match when a contract is
-   * supplied (see the fuzzy-match gate in `blueprint-matcher.ts` —
-   * fuzzy matches across non-equal canonical contracts let cached
-   * call sites drift from the request's actionSpec/contextSpec wire
-   * surface).
-   * Semantic strategy fires only when contract is omitted, which the
-   * handshake input schema today disallows.
+   * Blueprint-registry deps for the handshake-time find-similar match
+   * (exact-key → coverage guard → judge). When bound, the shared
+   * `decideHandshake` core probes this registry (as a single per-app
+   * pool) before the synth path: an exact-key or semantic hit
+   * short-circuits the synth LLM round-trip and returns `origin:
+   * 'cache'` with the matched blueprint's contract + codeHash.
    *
    * Optional so deployments without RAG infrastructure (no embedding
    * / vector store) continue to use the synth-only path. Mirrors the
@@ -304,224 +252,54 @@ export interface LlmBackedHandshakeNegotiatorDeps {
   installedBlueprints?: InstalledBlueprintsProvider;
 }
 
-const DEFAULT_GEN_LATENCY_MS = 30_000;
-
-function buildCreateFallback(
-  draftContract: unknown,
-  reason: string,
-  _estimatedLatencyMs: number
-): HandshakeNegotiatorResult {
-  // No-LLM fallback (no BYOK creds, or an operational error during synth).
-  // The handshake backstop (validateContract) THROWS on a malformed draft,
-  // and there is no LLM here to repair it — so deterministically
-  // substitute the trivially-conforming empty contract (+ loud findings)
-  // when the draft fails the gate. NEVER return a raw malformed draft into
-  // the throwing backstop (that would revive the handshake-retry loop).
-  // A clean draft is kept verbatim (origin: agent).
-  const lint = lintContract(draftContract);
-  const contract: DataContract =
-    lint.errors.length === 0 ? dataContractSchema.parse(draftContract) : {};
-  const findings: SuggestionFinding[] = lint.errors.map((e) => ({
-    code: e.code,
-    severity: "error",
-    path: e.path,
-    message: e.message,
-  }));
-  const contractHash = blueprintKey(contract);
-  const suggestion: HandshakeSuggestion = {
-    origin: "agent",
-    rationale: reason,
-    blueprintMeta: {
-      blueprintId: `bp_${randomUUID()}`,
-      contractHash,
-      generator: "ui-gen-default-haiku-4-5",
-      variance: {},
-    },
-    ...(findings.length > 0 ? { validationFindings: findings } : {}),
-  };
-  return {
-    action: "create",
-    reason,
-    suggestion,
-    effectiveContract: contract,
-  };
-}
-
-/**
- * Build the `origin: 'cache'` reuse result from a matched blueprint —
- * ATOMIC: the cached blueprint's OWN contract + componentCode are reused
- * together (never the agent's draft under cached code), so the served UI
- * always matches the served contract. Shared by the exact-key and
- * semantic match branches. Pure / deterministic (sha256 only).
- */
-export function buildCacheReuseResult(
-  blueprint: {
-    readonly id: string;
-    readonly contractKey: string;
-    readonly componentCode: string;
-    readonly contract: DataContract;
-  },
-  reason: string
-): HandshakeNegotiatorResult {
-  const codeHash = createHash("sha256")
-    .update(blueprint.componentCode)
-    .digest("hex");
-  const suggestion: HandshakeSuggestion = {
-    origin: "cache",
-    rationale: reason,
-    blueprintMeta: {
-      blueprintId: blueprint.id,
-      contractHash: blueprint.contractKey,
-      codeHash,
-      generator: DEFAULT_GENERATOR_SLUG,
-      variance: {},
-      selectedReason: reason,
-    },
-  };
-  return {
-    action: "reuse",
-    reason,
-    suggestion,
-    effectiveContract: blueprint.contract,
-  };
-}
-
 /**
  * Build an LLM-backed `HandshakeNegotiator` for the OSS server.
- * Wires BYOK creds + an LLM provider adapter into
- * `@ggui-ai/negotiator`'s `negotiate()` pipeline. Operators get the
- * same negotiation shape cloud uses, with RAG gracefully degraded
- * (no embedding / vectors required).
+ *
+ * Thin wrapper over the shared `decideHandshake` core
+ * (`@ggui-ai/mcp-server-handlers`): injects the OSS adapter — a BYOK
+ * LLM resolver (`resolveLlm` → `buildLlmCaller`) and a single per-app
+ * blueprint pool (`deps.cache`, scope defaults to `ctx.appId`). The
+ * decision spine (find-similar → coverage guard → judge → atomic
+ * reuse, else synth-repair create) is shared verbatim with the cloud
+ * pod's `createBedrockNegotiator`; only the injected adapter differs.
+ * `selectVariant` is OSS-specific and stays on this binding.
  *
  * @public
  */
 export function createLlmBackedHandshakeNegotiator(
   deps: LlmBackedHandshakeNegotiatorDeps
 ): HandshakeNegotiator {
-  const estimatedLatencyMs = deps.estimatedGenerationLatencyMs ?? DEFAULT_GEN_LATENCY_MS;
-
-  return {
-    async decide({ intent, blueprintDraft, gadgets, ctx }): Promise<HandshakeNegotiatorResult> {
-      const draftContract = blueprintDraft.contract;
-
-      // Handshake-time exact-key fast path. Runs BEFORE the BYOK
-      // creds resolve + LLM synth — a cache hit needs neither the
-      // operator's API key nor a model round-trip. When the agent's
-      // draft canonical-key-equals a registered blueprint, return
-      // `origin: 'cache'` with the matched blueprint's contract +
-      // componentCode hash so the paired push.accept short-circuits
-      // straight into commitCachedRender.
-      //
-      // No-match (or any throw) falls through to today's synth path
-      // — the negotiator stays useful when the registry is cold,
-      // when matchBlueprint hiccups, or when the deployment skipped
-      // the cache deps entirely.
-      // Cache match needs a SHAPE-VALID contract — a malformed draft
-      // (wrapper-nesting, bad type spelling, …) can't canonical-key-match
-      // a registered blueprint, so skip the probe and fall straight to
-      // validate/repair via ensureConformingContract.
-      // Resolve BYOK creds + build the judge LLM ONCE, before the cache
-      // probe, so the semantic find+judge (find-similar → coverage guard
-      // → judge → atomic reuse) runs at handshake time — parity with the
-      // render path. Reused below for the synth/repair create path.
+  const adapter: HandshakeDecisionAdapter = {
+    // BYOK seam: resolve per-ctx creds + wrap into an LLMCaller. No
+    // creds ⇒ undefined ⇒ the core returns a no-LLM create fallback.
+    resolveLlm: async (ctx) => {
       const creds = await deps.resolveLlm(ctx);
-      const llm = creds
+      return creds
         ? buildLlmCaller(creds.selection, creds.providerKey)
         : undefined;
-
-      const parsedDraft = dataContractSchema.safeParse(draftContract);
-      if (deps.cache && parsedDraft.success) {
-        try {
-          const matchDeps: MatchBlueprintDeps = {
-            registry: deps.cache,
-            ...(llm ? { llm } : {}),
-            ...(deps.installedBlueprints ? { installedBlueprints: deps.installedBlueprints } : {}),
-          };
-          const matchResult = await matchBlueprint(matchDeps, ctx.appId, {
-            intent,
-            contract: parsedDraft.data,
-          });
-          // exact-key (free) OR semantic (find-similar + coverage guard +
-          // judge) → reuse the cached blueprint ATOMICALLY (its own
-          // contract + componentCode, never the agent's draft under it).
-          if (
-            matchResult.strategy === "exact-key" ||
-            matchResult.strategy === "semantic"
-          ) {
-            return buildCacheReuseResult(
-              matchResult.blueprint,
-              matchResult.reason
-            );
-          }
-        } catch (err) {
-          if (!isOperationalError(err)) throw err;
-          // Registry hiccup — log + fall through to synth so the
-          // handshake never crashes on a transient cache backend issue.
-          const message = err instanceof Error ? err.message : String(err);
-          // eslint-disable-next-line no-console -- operator-visible signal
-          console.warn(
-            `[llm-backed-negotiator] matchBlueprint probe failed; falling through to synth: ${message}`
-          );
-        }
-      }
-
-      if (!creds || !llm) {
-        return buildCreateFallback(
-          draftContract,
-          "no-creds: no BYOK credentials resolved for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.",
-          estimatedLatencyMs
-        );
-      }
-
-      try {
-        // Create path (no cache hit): the agent's DRAFT is the basis.
-        // ensureConformingContract validates it against the deterministic
-        // gate (lintContract / validateContract) and, on errors, repairs
-        // it in place via the bounded LLM loop — GUARANTEEING a contract
-        // that passes the handshake backstop, so the handshake never
-        // hard-fails on a malformed draft. origin: 'agent' = draft was
-        // already clean; 'synth' = repaired (or minimal-conforming
-        // fallback when unrepairable).
-        const conforming = await ensureConformingContract(
-          { llm },
-          {
-            intent,
-            draft: draftContract,
-            ...(gadgets !== undefined ? { appGadgets: gadgets } : {}),
-          }
-        );
-        const contractHash = blueprintKey(conforming.contract);
-        const suggestion: HandshakeSuggestion = {
-          origin: conforming.origin,
-          rationale: conforming.reasoning,
-          blueprintMeta: {
-            blueprintId: `bp_${randomUUID()}`,
-            contractHash,
-            generator: "ui-gen-default-haiku-4-5",
-            variance: {},
-          },
-          ...(conforming.findings.length > 0
-            ? { validationFindings: conforming.findings }
-            : {}),
-        };
-
-        return {
-          action: "create",
-          reason: conforming.reasoning,
-          suggestion,
-          effectiveContract: conforming.contract,
-        };
-      } catch (err) {
-        if (!isOperationalError(err)) throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        const errorClass = err instanceof Error ? err.name : "unknown";
-        return buildCreateFallback(
-          draftContract,
-          `negotiator-degraded: ${errorClass} during decision LLM call — ${message}. Falling back to bare-create; the paired ggui_render will still generate the UI.`,
-          estimatedLatencyMs
-        );
-      }
     },
+    // OSS searches a single per-app pool (scope defaults to ctx.appId).
+    // No cache wired ⇒ no pools ⇒ the core takes the synth-only path.
+    ...(deps.cache
+      ? {
+          pools: [
+            {
+              registry: deps.cache,
+              ...(deps.installedBlueprints
+                ? { installedBlueprints: deps.installedBlueprints }
+                : {}),
+            },
+          ],
+        }
+      : {}),
+    warn: (message) => {
+      // eslint-disable-next-line no-console -- operator-visible signal
+      console.warn(message);
+    },
+  };
+
+  return {
+    decide: (input) => decideHandshake(adapter, input),
 
     // LLM-driven variant selection. Reads each candidate's
     // `variance` + `validatorScore` + `isOperatorDefault` + the

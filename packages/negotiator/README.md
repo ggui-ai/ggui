@@ -1,11 +1,19 @@
 # @ggui-ai/negotiator
 
-UI decision engine for [ggui](https://github.com/ggui-ai/ggui).
+Contract-synthesis + match-judge engine for
+[ggui](https://github.com/ggui-ai/ggui)'s handshake.
 
-Given an agent's signal (data, prompt, context, agent tools) and the current
-render state, the negotiator decides **which UI to render** — create a new
-interface, update an existing one, or replace it — and, on the cold path,
-synthesizes the data contract that drives it.
+Given an agent's draft contract + intent, this package synthesizes (or
+repairs) a conforming `DataContract`, judges blueprint-match candidates for
+reuse, and validates contract structure + novelty — the primitives the
+handshake composes to always return a valid contract.
+
+> The handshake **decision** itself (find-similar → reuse vs synth-create)
+> lives in the shared `decideHandshake` core in
+> [`@ggui-ai/mcp-server-handlers`](../mcp-server-handlers), which composes
+> the primitives below. The former in-package `negotiate()` RAG+decision
+> pipeline was retired in favor of that unified, adapter-injected core
+> (one decision spine, an OSS BYOK adapter and a cloud Bedrock adapter).
 
 The package is deployment-agnostic. It composes the storage interfaces
 defined in `@ggui-ai/mcp-server-core` (`EmbeddingProvider`, `VectorStore`),
@@ -20,28 +28,26 @@ pnpm add @ggui-ai/negotiator
 
 ## What's in the box
 
-- **`negotiate(deps, input)`** — top-level orchestrator. Runs RAG search over
-  registered blueprints, reads render state, fast-paths exact blueprint
-  hits, and otherwise calls the decision LLM.
-- **`makeDecision(...)`** — the decision step in isolation: pick an action
-  (`create` / `update` / `replace`) and a blueprint from the
-  candidate set.
 - **`synthesizeContract(...)`** — cold-path contract synthesizer. Turns an
   agent intent into a `DataContract` (props / context / action / stream
   specs, plus gadget references), with a repair loop and a schema-validation
   gate.
-- **`ragSearch(...)`** — embedding + vector-store retrieval over the
-  blueprint corpus, composing the `@ggui-ai/mcp-server-core` interfaces.
-- **`rerankCandidates(...)`** — LLM re-rank of retrieval candidates.
+- **`ensureConformingContract(...)`** — the create-path guarantee: validates
+  an untrusted draft and, on errors, deterministically normalizes or
+  LLM-repairs it so the handshake always returns a contract that passes the
+  backstop. Never throws.
+- **`rerankCandidates(...)`** — LLM judge that re-ranks blueprint-match
+  retrieval candidates (the semantic-match decision used by
+  `decideHandshake`).
 - **`validateContractStructure` / `validateContractNovelty`** — advisory
   validators for the actions-vs-context placement rule.
 
 ```ts
-import { negotiate } from "@ggui-ai/negotiator";
+import { ensureConformingContract } from "@ggui-ai/negotiator";
 
-const result = await negotiate(deps, input);
-// result.action — "create" | "update" | "replace"
-// result.blueprint — the picked blueprint, if any
+const result = await ensureConformingContract({ llm }, { intent, draft });
+// result.origin — "agent" (clean) | "synth" (repaired)
+// result.contract — a DataContract guaranteed to pass the handshake backstop
 ```
 
 ## License

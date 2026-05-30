@@ -67,8 +67,8 @@ export type FieldDelta =
       readonly reason: string;
     };
 
-/** Pass-through of `NegotiationMinMedianMax` / `SloMinMedianMax` /
- *  `A2uiMinMedianMax` — same shape across all four benches. */
+/** Pass-through of `SloMinMedianMax` / `A2uiMinMedianMax` — same
+ *  shape across all benches. */
 export interface StatBand {
   readonly count: number;
   readonly nullCount: number;

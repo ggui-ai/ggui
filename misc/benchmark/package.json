@@ -30,7 +30,6 @@
     "bench:n": "node --import tsx scripts/bench-n.mjs",
     "bench:slo": "node --import tsx scripts/bench-slo.mjs",
     "bench:a2ui": "node --import tsx scripts/bench-a2ui.mjs",
-    "bench:blueprint-negotiation": "node --import tsx scripts/bench-blueprint-negotiation.mjs",
     "bench:baseline": "node --import tsx scripts/bench-baseline.mjs",
     "bench:baseline-diff": "node --import tsx scripts/bench-baseline-diff.mjs",
     "bench:baseline-diff-triage": "node --import tsx scripts/bench-baseline-diff-triage.mjs",

@@ -81,21 +81,6 @@ export const BENCH_DIFF_SPECS: Readonly<Record<BenchName, BenchDiffSpec>> = {
       { name: 'totalParseFailures', kind: 'scalar' },
     ],
   },
-  'blueprint-negotiation': {
-    summaryPath: 'summary',
-    keyField: 'registryMode',
-    fields: [
-      { name: 'runs', kind: 'scalar' },
-      { name: 'hitRate', kind: 'scalar' },
-      { name: 'falsePositiveRate', kind: 'scalar' },
-      { name: 'falseNegativeRate', kind: 'scalar' },
-      { name: 'exactMatchRateOnHits', kind: 'scalar' },
-      { name: 'emptyRegistryCleanMissRate', kind: 'scalar' },
-      { name: 'wrongHitRate', kind: 'scalar' },
-      { name: 'errorRate', kind: 'scalar' },
-      { name: 'decisionTimeMs', kind: 'stat' },
-    ],
-  },
   'multi-sdk': {
     // Shape differs — multi-sdk uses `floorSummaries` (optional on
     // historical reports). The diff falls back to "missing" when the

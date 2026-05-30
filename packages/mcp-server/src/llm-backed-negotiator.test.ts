@@ -14,12 +14,10 @@
  * mock pick fn; the BYOK + provider wiring is tested by the existing
  * llm-backed-negotiator e2e flow.
  */
-import { createHash } from 'node:crypto';
-import type { Blueprint, DataContract } from '@ggui-ai/protocol';
+import type { Blueprint } from '@ggui-ai/protocol';
 import type { VariantSelectionContext } from '@ggui-ai/mcp-server-core';
 import { describe, expect, it } from 'vitest';
 import {
-  buildCacheReuseResult,
   buildVariantSelectionUserMessage,
   parseVariantSelectionResponse,
   VARIANT_SELECTION_SYSTEM_PROMPT,
@@ -216,42 +214,6 @@ describe('parseVariantSelectionResponse', () => {
   });
 });
 
-describe('buildCacheReuseResult — atomic projection (exact-key + semantic share it)', () => {
-  it('projects a matched blueprint into an ATOMIC origin:cache reuse', () => {
-    const cachedContract: DataContract = {
-      contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
-    };
-    const code = 'export default () => null;';
-    const result = buildCacheReuseResult(
-      {
-        id: 'template:abc123',
-        contractKey: 'abc123',
-        componentCode: code,
-        contract: cachedContract,
-      },
-      'match-semantic: judge matched (confidence=0.90)',
-    );
-
-    expect(result.action).toBe('reuse');
-    // Atomic: the served contract is the CACHED blueprint's own contract,
-    // never the request's draft → contract + UI always agree.
-    expect(result.effectiveContract).toBe(cachedContract);
-    expect(result.suggestion.origin).toBe('cache');
-    expect(result.suggestion.blueprintMeta.blueprintId).toBe('template:abc123');
-    expect(result.suggestion.blueprintMeta.contractHash).toBe('abc123');
-    expect(result.suggestion.blueprintMeta.codeHash).toBe(
-      createHash('sha256').update(code).digest('hex'),
-    );
-    expect(result.reason).toMatch(/match-semantic/);
-  });
-
-  it('is deterministic — same blueprint + reason → identical result', () => {
-    const bp = {
-      id: 'template:x',
-      contractKey: 'x',
-      componentCode: 'a',
-      contract: {} as DataContract,
-    };
-    expect(buildCacheReuseResult(bp, 'r')).toEqual(buildCacheReuseResult(bp, 'r'));
-  });
-});
+// `buildCacheReuseResult` moved into the shared handshake-decision core
+// (`@ggui-ai/mcp-server-handlers` decide-handshake.ts); its atomic-
+// projection tests live in that package's `decide-handshake.test.ts`.

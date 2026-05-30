@@ -38,17 +38,16 @@ previous snapshot. `baseline-diff` is the narrow comparison tool:
 
 The four benches measure four different things:
 
-| bench                   | dimension                                        |
-| ----------------------- | ------------------------------------------------ |
-| `slo`                   | user-facing `ggui_render` latency checkpoints    |
-| `multi-sdk`             | ui-gen code quality (floor-split: OSS vs hosted) |
-| `a2ui`                  | provisional-preview emission latency + validity  |
-| `blueprint-negotiation` | pre-generation decision correctness              |
+| bench       | dimension                                        |
+| ----------- | ------------------------------------------------ |
+| `slo`       | user-facing `ggui_render` latency checkpoints    |
+| `multi-sdk` | ui-gen code quality (floor-split: OSS vs hosted) |
+| `a2ui`      | provisional-preview emission latency + validity  |
 
 A 10-point quality regression on `multi-sdk` and a 5ms latency
 regression on `slo` are not comparable. Averaging them into a
 single number means the first big mover dominates and smaller signals
-get lost. The diff surfaces all four layers independently — the human
+get lost. The diff surfaces all layers independently — the human
 reader weights them.
 
 ---
@@ -82,7 +81,7 @@ Baseline-Diff bench-baseline-diff.v0 — baseline-… vs baseline-…
 
   ── status transitions ──
   ✗ regressed      slo
-  = same-success   multi-sdk, a2ui, blueprint-negotiation
+  = same-success   multi-sdk, a2ui
 
   ── per-bench deltas ──
 
@@ -98,10 +97,6 @@ Baseline-Diff bench-baseline-diff.v0 — baseline-… vs baseline-…
     = intentShape=form        timeToFirstFrame=0→0 frameCount=4→4 totalParseFailures=0→0
     = intentShape=list        timeToFirstFrame=0→0 frameCount=4→4 totalParseFailures=0→0
     = intentShape=minimal     timeToFirstFrame=0→0 frameCount=4→4 totalParseFailures=0→0
-
-  [blueprint-negotiation] success → success
-    = registryMode=empty      hitRate=0%→0% wrongHitRate=0%→0% decisionTimeMs=0→0
-    = registryMode=hosted     hitRate=50%→50% wrongHitRate=0%→0% decisionTimeMs=1→1
 ```
 
 JSON (machine-readable, full):

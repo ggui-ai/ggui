@@ -69,13 +69,13 @@ are under-calibrated.
 
 ### Absolute vs relative thresholds
 
-| bench                              | metric type                           | threshold type                 | why                                                |
-| ---------------------------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------- |
-| slo / a2ui / blueprint-negotiation | latency stats (stat bands)            | **absolute ms**                | sub-ms baselines — relative thresholds meaningless |
-| any bench                          | counters (`totalParseFailures`, etc.) | **absolute (≠ 0)**             | zero observed noise floor                          |
-| any bench                          | rates                                 | **absolute percentage points** | normalized already                                 |
-| multi-sdk                          | `avgScore`                            | **absolute points (0..100)**   | scores are already on a normalized scale           |
-| multi-sdk                          | `avgTimeMs`                           | **relative (%)**               | 10-second runs jitter by hundreds of ms naturally  |
+| bench      | metric type                           | threshold type                 | why                                                |
+| ---------- | ------------------------------------- | ------------------------------ | -------------------------------------------------- |
+| slo / a2ui | latency stats (stat bands)            | **absolute ms**                | sub-ms baselines — relative thresholds meaningless |
+| any bench  | counters (`totalParseFailures`, etc.) | **absolute (≠ 0)**             | zero observed noise floor                          |
+| any bench  | rates                                 | **absolute percentage points** | normalized already                                 |
+| multi-sdk  | `avgScore`                            | **absolute points (0..100)**   | scores are already on a normalized scale           |
+| multi-sdk  | `avgTimeMs`                           | **relative (%)**               | 10-second runs jitter by hundreds of ms naturally  |
 
 ### Null / missing discrimination
 

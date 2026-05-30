@@ -39,10 +39,9 @@ regressions. Provisional alerts are visible but non-blocking.
   - **No automatic run on `pull_request`.** Benchmarks are not part
     of the default PR gate. Audit a PR by dispatching manually with
     its branch as the ref.
-- **Scope**: deterministic benches only (`slo`, `a2ui`,
-  `blueprint-negotiation`). `multi-sdk` stays covered by the
-  existing `smoke-benchmark` Tier 2 job — keeps the baseline
-  pipeline LLM-free and cheap.
+- **Scope**: deterministic benches only (`slo`, `a2ui`).
+  `multi-sdk` stays covered by the existing `smoke-benchmark`
+  Tier 2 job — keeps the baseline pipeline LLM-free and cheap.
 
 ### How to trigger a manual audit
 
@@ -135,7 +134,6 @@ baseline-pipeline-abc12345.zip
 │   ├── manifest.json
 │   ├── slo.json
 │   ├── a2ui.json
-│   ├── blueprint-negotiation.json
 │   └── stdout/
 ├── ci-diff.json           ← only when cache hit
 └── ci-triage.json         ← only when cache hit
@@ -203,7 +201,7 @@ soft rollout low-noise and fast.
 
 Additionally, the pipeline's `Build dependencies` step does NOT
 build `@ggui-ai/design`. None of the deterministic benches in scope
-(slo, a2ui, blueprint-negotiation) import from design, so building
+(slo, a2ui) import from design, so building
 it would be wasted work — and would couple this gate to the
 separate design-package build, which is an independent concern.
 

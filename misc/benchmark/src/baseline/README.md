@@ -11,16 +11,15 @@ a snapshot, not a new scoring layer.
 
 ## What it runs
 
-| bench                   | how                                                 |
-| ----------------------- | --------------------------------------------------- |
-| `slo`                   | `pnpm bench:slo --runs 3`                           |
-| `multi-sdk`             | `pnpm bench -p claude -c weather-card --floor both` |
-| `a2ui`                  | `pnpm bench:a2ui --runs 3`                          |
-| `blueprint-negotiation` | `pnpm bench:blueprint-negotiation --runs 3`         |
+| bench       | how                                                 |
+| ----------- | --------------------------------------------------- |
+| `slo`       | `pnpm bench:slo --runs 3`                           |
+| `multi-sdk` | `pnpm bench -p claude -c weather-card --floor both` |
+| `a2ui`      | `pnpm bench:a2ui --runs 3`                          |
 
 `multi-sdk` is the only bench requiring real LLM API keys
 (ANTHROPIC/OPENAI/GEMINI). When they're absent the bench fails; the
-manifest records the failure honestly and the other three benches
+manifest records the failure honestly and the other benches
 still complete. No silent skip.
 
 ---
@@ -35,12 +34,10 @@ tmp-bench-logs/baseline-<iso>/
   slo.json                         ← copy of slo's report
   multi-sdk.json                   ← copy of multi-sdk's report (on success)
   a2ui.json                        ← copy of a2ui's report
-  blueprint-negotiation.json       ← copy of negotiation's report
   stdout/
     slo.log                        ← full stdout+stderr capture
     multi-sdk.log
     a2ui.log
-    blueprint-negotiation.log
 ```
 
 `tmp-bench-logs/` is gitignored by convention. Bundles are portable:
@@ -132,16 +129,15 @@ in the manifest.
 ## Why this is the "new post-OSS-split reference epoch"
 
 Before the OSS split, the bench stack was a single LLM-scoring
-matrix (`multi-sdk`). Post-split, the stack is four orthogonal
-layers, each answering a different question:
+matrix (`multi-sdk`). Post-split, the stack is orthogonal layers,
+each answering a different question:
 
 - `slo` — does `ggui_render` hit its user-facing latency checkpoints?
 - `multi-sdk` — does ui-gen produce quality output? (floor-split: OSS vs hosted)
 - `a2ui` — does the provisional-preview path emit valid frames quickly?
-- `blueprint-negotiation` — does the pre-generation decision layer pick the right blueprint?
 
 The baseline bundle is the authoritative cross-layer snapshot — a
-single artifact proving all four layers ran together. Bundles are
+single artifact proving all layers ran together. Bundles are
 timestamped + git-sha'd so a regression in any layer can be traced
 back to the exact commit that introduced it.
 

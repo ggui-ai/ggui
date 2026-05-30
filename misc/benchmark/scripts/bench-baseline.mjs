@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Cross-bench baseline orchestrator — runs all four v0 benches and
+// Cross-bench baseline orchestrator — runs the v0 benches and
 // writes a single self-contained bundle with a manifest.
 //
 // Discipline:
@@ -22,7 +22,7 @@
 //
 //   tmp-bench-logs/baseline-<iso>/
 //     manifest.json
-//     slo.json / a2ui.json / blueprint-negotiation.json / multi-sdk.json
+//     slo.json / a2ui.json / multi-sdk.json
 //     stdout/
 //       <bench>.log    (full stdout + stderr capture per bench)
 
@@ -35,7 +35,6 @@ import {
   buildBaselineManifest,
   extractA2uiSummary,
   extractMultiSdkSummary,
-  extractNegotiationSummary,
   extractSloSummary,
 } from '../src/baseline/manifest.ts';
 
@@ -102,18 +101,6 @@ function buildSpecs(runs) {
       argv: ['pnpm', 'bench:a2ui', '--runs', String(runs)],
       stdoutPattern: /\[a2ui-v0\] wrote (.+)/,
       extractSummary: extractA2uiSummary,
-    },
-    {
-      benchName: 'blueprint-negotiation',
-      command: `pnpm bench:blueprint-negotiation --runs ${runs}`,
-      argv: [
-        'pnpm',
-        'bench:blueprint-negotiation',
-        '--runs',
-        String(runs),
-      ],
-      stdoutPattern: /\[neg-v0\] wrote (.+)/,
-      extractSummary: extractNegotiationSummary,
     },
   ];
 }

@@ -52,15 +52,7 @@ export const THRESHOLDS = {
   a2uiLatencyNoticeMs: 5,
   a2uiLatencyAlertMs: 20,
 
-  // ── Blueprint-negotiation decision time (stub LLM → sub-ms
-  //    baseline; notice threshold only, no alert until a bench that
-  //    actually spends latency here exists) ──
-  bpNegDecisionNoticeMs: 5,
-
   // ── Rate thresholds (percentage points, 0..1 scale) ──
-  bpNegHitRateDropAlert: 0.05, // 5pp drop
-  bpNegExactMatchOnHitsDropAlert: 0.05,
-  bpNegEmptyRegistryCleanMissDropAlert: 0.05,
   a2uiParsePassRateDropAlert: 0.01, // 1pp — deterministic emitter should never drop parse rate
   multiSdkSuccessRateDropAlert: 0.10, // 10pp — calibrated against F1 (100% → 0%)
 
@@ -210,8 +202,6 @@ export function classifyField(
       return classifySloField(rowKey, fieldName, delta);
     case 'a2ui':
       return classifyA2uiField(rowKey, fieldName, delta);
-    case 'blueprint-negotiation':
-      return classifyBpNegField(rowKey, fieldName, delta);
     case 'multi-sdk':
       return classifyMultiSdkField(rowKey, fieldName, delta, rowContext);
   }
@@ -399,114 +389,6 @@ function classifyA2uiField(
     delta,
     THRESHOLDS.a2uiLatencyNoticeMs,
     THRESHOLDS.a2uiLatencyAlertMs,
-    'provisional',
-  );
-}
-
-// ── blueprint-negotiation ─────────────────────────────────────────
-
-function classifyBpNegField(
-  rowKey: string,
-  fieldName: string,
-  delta: FieldDelta,
-): TriageItem | null {
-  const location = `blueprint-negotiation.${rowKey}.${fieldName}`;
-  if (delta.kind === 'missing') {
-    return mkInformational(
-      'blueprint-negotiation',
-      location,
-      'field-missing',
-      'provisional',
-      `${fieldName} missing on both sides`,
-      delta,
-    );
-  }
-  if (delta.kind === 'scalar') {
-    switch (fieldName) {
-      case 'hitRate':
-        return rateRule(
-          'blueprint-negotiation',
-          location,
-          'bp-neg-hitrate-drop',
-          'provisional',
-          `hitRate dropped`,
-          delta,
-          'down-only',
-          THRESHOLDS.bpNegHitRateDropAlert,
-        );
-      case 'wrongHitRate':
-      case 'falsePositiveRate':
-      case 'errorRate':
-        return rateRule(
-          'blueprint-negotiation',
-          location,
-          `bp-neg-${fieldName}-rise`,
-          'provisional',
-          `${fieldName} increased — dangerous class`,
-          delta,
-          'up-only',
-          0, // any non-zero increase
-        );
-      case 'exactMatchRateOnHits':
-        return rateRule(
-          'blueprint-negotiation',
-          location,
-          'bp-neg-exactmatch-drop',
-          'provisional',
-          'exactMatchRateOnHits dropped',
-          delta,
-          'down-only',
-          THRESHOLDS.bpNegExactMatchOnHitsDropAlert,
-        );
-      case 'emptyRegistryCleanMissRate':
-        return rateRule(
-          'blueprint-negotiation',
-          location,
-          'bp-neg-emptycleanmiss-drop',
-          'provisional',
-          'empty-registry clean-miss rate dropped — negotiator may be hallucinating',
-          delta,
-          'down-only',
-          THRESHOLDS.bpNegEmptyRegistryCleanMissDropAlert,
-        );
-      case 'falseNegativeRate':
-        return rateRule(
-          'blueprint-negotiation',
-          location,
-          'bp-neg-falseneg-rise',
-          'provisional',
-          'falseNegativeRate increased — missing hits it used to catch',
-          delta,
-          'up-only',
-          0,
-        );
-      default:
-        return suppressedTinyScalar(
-          'blueprint-negotiation',
-          location,
-          fieldName,
-          delta,
-        );
-    }
-  }
-  // stat band — decisionTimeMs
-  if (delta.before?.median == null || delta.after?.median == null) {
-    return mkInformational(
-      'blueprint-negotiation',
-      location,
-      'stat-null-side',
-      'provisional',
-      `${fieldName} median null on one side`,
-      delta,
-    );
-  }
-  return classifyLatencyStatBand(
-    'blueprint-negotiation',
-    location,
-    fieldName,
-    delta,
-    THRESHOLDS.bpNegDecisionNoticeMs,
-    Infinity, // no alert threshold — notice only
     'provisional',
   );
 }

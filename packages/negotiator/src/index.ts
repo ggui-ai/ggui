@@ -1,14 +1,25 @@
 /**
- * @ggui-ai/negotiator — open-source UI decision engine for ggui.
+ * @ggui-ai/negotiator — open-source contract-synthesis + match-judge
+ * engine for ggui's handshake.
  *
- * Decides which UI to render (create/update/replace) given agent
- * signal (data/prompt/context/agentTools) and current render state.
+ * Given an agent's draft contract + intent, this package:
+ *   - synthesizes / repairs a conforming `DataContract`
+ *     (`synthesizeContract`, `ensureConformingContract`) so the
+ *     handshake always returns a valid contract;
+ *   - judges blueprint-match candidates for reuse (`rerankCandidates`);
+ *   - validates contract structure + novelty (`contract-validators`);
+ *   - derives intent identity + suggestion hygiene (`intent`,
+ *     `suggestion`, `contract-hash`).
+ *
+ * The HANDSHAKE DECISION itself (find-similar → reuse vs synth-create)
+ * lives in the shared `decideHandshake` core in
+ * `@ggui-ai/mcp-server-handlers`, which composes these primitives; the
+ * former in-package `negotiate()` RAG+decision pipeline was retired in
+ * favor of that unified, adapter-injected core.
  *
  * Composes the storage seams defined in `@ggui-ai/mcp-server-core`
- * (`EmbeddingProvider`, `VectorStore`, `Negotiator`). The decision
- * semantics are open here; concrete cloud-vendor bindings (e.g. a
- * managed embedding service or vector store) live behind those seams
- * so this package stays deployment-agnostic.
+ * (`EmbeddingProvider`, `VectorStore`) so this package stays
+ * deployment-agnostic.
  *
  * This barrel stays narrow — it exports only the minimum surface
  * consumers need. Each additive export carries semver weight.
@@ -19,28 +30,7 @@ export { computeIntentId, shouldSuppressSuggestion } from './intent.js';
 export { detectDataPatterns, buildSuggestion } from './suggestion.js';
 export type { NegotiatorSuggestion } from './suggestion.js';
 export { inferInteractionMode, inferJsonSchemaType } from './pure.js';
-export { ragSearch } from './rag-search.js';
-export type {
-  RagSearchDeps,
-  RagSearchInput,
-  RagSearchResult,
-} from './rag-search.js';
-export type { NegotiatorOption } from './types.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
-export type { RenderState, RenderEntry } from './render.js';
-export type { NegotiatorDecisionInput } from './decision-input.js';
-export {
-  DECISION_SYSTEM_PROMPT,
-  buildDecisionUserMessage,
-  makeDecision,
-} from './decision.js';
-export { negotiate } from './negotiate.js';
-export type {
-  NegotiateDeps,
-  NegotiateInput,
-  NegotiateConfig,
-  NegotiateResult,
-} from './negotiate.js';
 export { rerankCandidates } from './llm-rerank.js';
 export type {
   RerankCandidate,

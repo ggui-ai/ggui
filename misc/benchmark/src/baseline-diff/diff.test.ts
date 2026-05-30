@@ -297,7 +297,7 @@ describe('diffGroupedSummary', () => {
 // ─── diffManifests ─────────────────────────────────────────────────
 
 describe('diffManifests', () => {
-  it('all four transition types in one diff', () => {
+  it('regressed / recovered / added / removed transitions in one diff', () => {
     const before = mkBundle(
       mkManifest({
         baselineId: 'b',
@@ -305,7 +305,8 @@ describe('diffManifests', () => {
           mkEntry({ benchName: 'slo', status: 'success' }),
           mkEntry({ benchName: 'multi-sdk', status: 'failed' }),
           mkEntry({ benchName: 'a2ui', status: 'success' }),
-          // 'blueprint-negotiation' not in before → will be 'added'
+          // no bench is absent in before → 'added' is covered by the
+          // unit test on classifyStatusChange(null, ...) above
         ],
       }),
     );
@@ -316,7 +317,6 @@ describe('diffManifests', () => {
           mkEntry({ benchName: 'slo', status: 'failed' }), // regressed
           mkEntry({ benchName: 'multi-sdk', status: 'success' }), // recovered
           // 'a2ui' not in after → removed
-          mkEntry({ benchName: 'blueprint-negotiation', status: 'success' }), // added
         ],
       }),
     );
@@ -326,7 +326,6 @@ describe('diffManifests', () => {
     expect(byName.get('slo')!.statusChange).toBe('regressed');
     expect(byName.get('multi-sdk')!.statusChange).toBe('recovered');
     expect(byName.get('a2ui')!.statusChange).toBe('removed');
-    expect(byName.get('blueprint-negotiation')!.statusChange).toBe('added');
   });
 
   it('same-success without loadable reports → note present', () => {
@@ -433,10 +432,9 @@ describe('diffManifests', () => {
 // ─── Per-bench spec sanity ─────────────────────────────────────────
 
 describe('BENCH_DIFF_SPECS', () => {
-  it('covers all 4 benches', () => {
+  it('covers all 3 benches', () => {
     expect(Object.keys(BENCH_DIFF_SPECS).sort()).toEqual([
       'a2ui',
-      'blueprint-negotiation',
       'multi-sdk',
       'slo',
     ]);
@@ -447,9 +445,8 @@ describe('BENCH_DIFF_SPECS', () => {
     expect(BENCH_DIFF_SPECS['multi-sdk'].keyField).toBe('floor');
   });
 
-  it('other three point at summary array', () => {
+  it('the others point at summary array', () => {
     expect(BENCH_DIFF_SPECS.slo.summaryPath).toBe('summary');
     expect(BENCH_DIFF_SPECS.a2ui.summaryPath).toBe('summary');
-    expect(BENCH_DIFF_SPECS['blueprint-negotiation'].summaryPath).toBe('summary');
   });
 });
