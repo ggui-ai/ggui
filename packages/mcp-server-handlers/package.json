@@ -76,7 +76,8 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cache-reuse-probe": "tsx src/renders/cache-reuse-probe.ts"
   },
   "dependencies": {
     "@ggui-ai/mcp-server-core": "workspace:*",
