@@ -133,12 +133,27 @@ export interface ClaudeAgentSdkAdapterOptions {
 }
 
 const DEFAULT_ALLOWED_TOOLS: Record<string, ReadonlyArray<string>> = {
+  // Every ggui MCP tool tagged audience:['agent'] (servers/ggui exposes
+  // these on /mcp). The Claude Agent SDK's `allowedTools` matches EXACT
+  // names — there is no `mcp__ggui` server-wildcard — so each agent-facing
+  // tool must be listed, or the SDK denies it ("permission not granted").
+  // Keep this in sync as the protocol adds agent-facing tools.
   ggui: [
+    // render loop
     'mcp__ggui__ggui_handshake',
     'mcp__ggui__ggui_render',
     'mcp__ggui__ggui_update',
     'mcp__ggui__ggui_emit',
     'mcp__ggui__ggui_consume',
+    'mcp__ggui__ggui_get_render',
+    'mcp__ggui__ggui_list_renders',
+    // blueprint reuse (blueprint-first)
+    'mcp__ggui__ggui_search_blueprints',
+    'mcp__ggui__ggui_render_blueprint',
+    'mcp__ggui__ggui_list_featured_blueprints',
+    // app discovery
+    'mcp__ggui__ggui_list_gadgets',
+    'mcp__ggui__ggui_list_themes',
   ],
   todo: [
     'mcp__todo__todo_list',
