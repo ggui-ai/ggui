@@ -26,6 +26,45 @@ const NOTEPAD_CONTRACT: DataContract = {
   },
 };
 
+// Two contracts for the SAME intent that differ exactly the way the LLM
+// authors a todo UI run-to-run (the cache-key-probe finding): different
+// action LABELS + a different toggle payload schema (`id` vs `id+done`).
+// They produce DIFFERENT blueprintKeys → an exact-key probe MISSES, even
+// though they answer the same need. This is the case the contract-bearing
+// semantic fall-through must bridge.
+const TODO_CONTRACT_CACHED: DataContract = {
+  propsSpec: {
+    properties: { todos: { required: true, schema: { type: 'array' } } },
+  },
+  actionSpec: {
+    addTodo: { label: 'Add todo item' },
+    toggleTodo: {
+      label: 'Toggle',
+      schema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+  },
+};
+const TODO_CONTRACT_AGENT: DataContract = {
+  propsSpec: {
+    properties: { todos: { required: true, schema: { type: 'array' } } },
+  },
+  actionSpec: {
+    addTodo: { label: 'Add a new todo item' },
+    toggleTodo: {
+      label: "Toggle a todo's done state",
+      schema: {
+        type: 'object',
+        properties: { id: { type: 'string' }, done: { type: 'boolean' } },
+        required: ['id', 'done'],
+      },
+    },
+  },
+};
+
 function makeRegistry() {
   return {
     embedding: new MockEmbeddingProvider(),
@@ -240,11 +279,11 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
 });
 
 describe('matchBlueprint — no-match cases', () => {
-  it('contract-bearing + canonical-key absent → no-match (Slice 18e gate)', async () => {
+  it('contract-bearing + canonical-key absent + empty scope → no-match (falls through to semantic, no candidate)', async () => {
     // Contract supplied + canonical-key lookup misses → exact-key
-    // strategy reports no-match. The judge can't safely match across
-    // non-equal canonical contracts, so cold gen is the only
-    // structurally-safe option.
+    // fast-path misses and falls through to the semantic strategy, which
+    // finds no candidates in the empty scope → no-match. (With a covering
+    // candidate present this would instead reuse via the judge.)
     const registry = makeRegistry();
     const result = await matchBlueprint(
       { registry, llm: stubLlm({ matchId: null, confidence: 0, reason: '' }) },
@@ -254,7 +293,7 @@ describe('matchBlueprint — no-match cases', () => {
     expect(result.strategy).toBe('no-match');
     if (result.strategy === 'no-match') {
       expect(result.candidates).toEqual([]);
-      expect(result.reason).toMatch(/no-match: contract supplied/);
+      expect(result.reason).toMatch(/no candidates in scope/);
     }
   });
 
@@ -384,12 +423,10 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
     expect(ev.judgeConfidence).toBeUndefined();
   });
 
-  it('emits no-match (exact-key strategy) when contract supplied + canonical-key absent (Slice 18e)', async () => {
-    // Contract supplied → semantic strategy is unsafe (the cached
-    // blueprint's wire surface ≠ the request's), so the matcher
-    // reports no-match without paying for RAG retrieval. The trace
-    // event records the strategy so operators can see why we didn't
-    // try fuzzy match.
+  it('emits no-match (semantic strategy) when contract supplied + canonical-key absent + empty scope', async () => {
+    // Contract supplied → exact-key fast-path misses and falls through
+    // to the semantic strategy, which finds no candidates in the empty
+    // scope → no-match emitted under the semantic strategy.
     setCacheTraceSink(captureSink());
     const registry = makeRegistry();
     await matchBlueprint({ registry }, SCOPE, {
@@ -399,7 +436,7 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
     expect(captured).toHaveLength(1);
     const ev = captured[0]!;
     expect(ev.decision).toBe('no-match');
-    expect(ev.strategy).toBe('exact-key');
+    expect(ev.strategy).toBe('semantic');
     expect(ev.winningBlueprintId).toBeUndefined();
   });
 
@@ -485,15 +522,15 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
 });
 
 describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)', () => {
-  // Pins the structural-safety contract: contract-bearing requests
-  // can ONLY hit match-exact (canonical-key equality) or fall to cold
-  // gen. The judge — even when it WOULD accept a candidate — must not
-  // serve across non-equal canonical contracts. The cached
-  // componentCode is keyed to the cached blueprint's wire surface;
-  // serving it under a different request's contract produces the
-  // user-visible bug from 2026-05-09 (request: {increment, decrement,
-  // reset} hit a 2-action {increment, reset} cached blueprint via
-  // judge similarity 0.876 — rendered widget had no minus button).
+  // Pins the structural-safety contract: a contract-bearing request may
+  // reuse a cached blueprint via the semantic judge ONLY when that
+  // blueprint COVERS the request's declared surface. A subset blueprint
+  // (missing an action / field the request declares) must be dropped by
+  // the coverage guard before the judge — even when the judge WOULD
+  // accept it. This is the 2026-05-09 bug: request {increment, decrement,
+  // reset} hit a 2-action {increment, reset} cached blueprint at judge
+  // similarity 0.876 — rendered widget had no minus button. The coverage
+  // guard (covers(), blueprint-coverage.ts) is the deterministic floor.
 
   // Two paraphrased counter contracts that canonicalize differently
   // (different action names → different keys) but a permissive judge
@@ -566,11 +603,14 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
 
     expect(result.strategy).toBe('no-match');
     if (result.strategy === 'no-match') {
-      expect(result.reason).toMatch(/no-match: contract supplied/);
+      // Rejected by the COVERAGE GUARD: the cached 2-action blueprint
+      // does not cover the 3-action request (missing decrement), so it
+      // is dropped before the judge rather than served as a subset.
+      expect(result.reason).toMatch(/none cover the request/);
     }
-    // Load-bearing: judge MUST NOT have been called. The gate
-    // short-circuits before RAG retrieval, before rerank, before
-    // any LLM cost.
+    // Load-bearing: judge MUST NOT have been called. The coverage guard
+    // drops the subset candidate BEFORE the rerank judge — no LLM cost,
+    // and a subset blueprint is never served (the 2026-05-09 regression).
     expect(judgeCalled).toBe(false);
   });
 
@@ -618,5 +658,80 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
       { minCosineForRerank: -1 },
     );
     expect(result.strategy).toBe('semantic');
+  });
+});
+
+// ─── Phase 1 TARGET: contract-bearing semantic fall-through ──────────────
+// These pin the behavior we are BUILDING: when the agent supplies a
+// contract (as the handshake always does) and it does NOT canonical-key
+// match, the matcher must fall through from exact-key into the existing
+// semantic find+judge and reuse a similar cached blueprint — returning the
+// CACHED contract+UI atomically, never the agent's draft under cached code.
+//
+// The first test is RED today (exact-key miss currently hard-returns
+// no-match; blueprint-matcher.ts:263-307) and turns GREEN once Phase 1
+// lifts the gate. The second pins that the free exact-key fast-path still
+// wins when the agent reproduces the cached contract (no judge call).
+describe('matchBlueprint — contract-bearing semantic fall-through (Phase 1)', () => {
+  const NO_COSINE_GATE = { minCosineForRerank: -1 };
+
+  it('reuses a similar cached blueprint when the agent submits a DIFFERENT contract for the same intent', async () => {
+    const registry = makeRegistry();
+    const stored = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: TODO_CONTRACT_CACHED,
+      intent: 'my todo items',
+      componentCode: 'export default () => null;',
+    });
+
+    // Agent re-authored an equivalent-but-not-identical contract (LLM
+    // noise) → exact-key MISSES. Find-similar + judge should still reuse.
+    const result = await matchBlueprint(
+      {
+        registry,
+        llm: stubLlm({
+          matchId: stored.id,
+          confidence: 0.9,
+          reason: 'same todo UI, paraphrased contract',
+        }),
+      },
+      SCOPE,
+      { intent: 'my todo items', contract: TODO_CONTRACT_AGENT },
+      NO_COSINE_GATE,
+    );
+
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      // Reuses the CACHED blueprint (its contract + UI), NOT the agent's draft.
+      expect(result.blueprint.contractKey).toBe(
+        blueprintKey(TODO_CONTRACT_CACHED),
+      );
+      expect(result.blueprint.intent).toBe('my todo items');
+    }
+  });
+
+  it('still takes the free exact-key fast-path (no judge call) when the agent reproduces the cached contract', async () => {
+    const registry = makeRegistry();
+    await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: TODO_CONTRACT_CACHED,
+      intent: 'my todo items',
+      componentCode: 'x',
+    });
+    let judgeCalled = false;
+    const result = await matchBlueprint(
+      {
+        registry,
+        llm: stubLlm(() => {
+          judgeCalled = true;
+          return { matchId: null, confidence: 0, reason: 'unused' };
+        }),
+      },
+      SCOPE,
+      { intent: 'my todo items', contract: TODO_CONTRACT_CACHED },
+      NO_COSINE_GATE,
+    );
+    expect(result.strategy).toBe('exact-key');
+    expect(judgeCalled).toBe(false); // exact-key short-circuits before the LLM
   });
 });

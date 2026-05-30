@@ -348,6 +348,45 @@ function buildCreateFallback(
 }
 
 /**
+ * Build the `origin: 'cache'` reuse result from a matched blueprint —
+ * ATOMIC: the cached blueprint's OWN contract + componentCode are reused
+ * together (never the agent's draft under cached code), so the served UI
+ * always matches the served contract. Shared by the exact-key and
+ * semantic match branches. Pure / deterministic (sha256 only).
+ */
+export function buildCacheReuseResult(
+  blueprint: {
+    readonly id: string;
+    readonly contractKey: string;
+    readonly componentCode: string;
+    readonly contract: DataContract;
+  },
+  reason: string
+): HandshakeNegotiatorResult {
+  const codeHash = createHash("sha256")
+    .update(blueprint.componentCode)
+    .digest("hex");
+  const suggestion: HandshakeSuggestion = {
+    origin: "cache",
+    rationale: reason,
+    blueprintMeta: {
+      blueprintId: blueprint.id,
+      contractHash: blueprint.contractKey,
+      codeHash,
+      generator: DEFAULT_GENERATOR_SLUG,
+      variance: {},
+      selectedReason: reason,
+    },
+  };
+  return {
+    action: "reuse",
+    reason,
+    suggestion,
+    effectiveContract: blueprint.contract,
+  };
+}
+
+/**
  * Build an LLM-backed `HandshakeNegotiator` for the OSS server.
  * Wires BYOK creds + an LLM provider adapter into
  * `@ggui-ai/negotiator`'s `negotiate()` pipeline. Operators get the
@@ -381,59 +420,52 @@ export function createLlmBackedHandshakeNegotiator(
       // (wrapper-nesting, bad type spelling, …) can't canonical-key-match
       // a registered blueprint, so skip the probe and fall straight to
       // validate/repair via ensureConformingContract.
+      // Resolve BYOK creds + build the judge LLM ONCE, before the cache
+      // probe, so the semantic find+judge (find-similar → coverage guard
+      // → judge → atomic reuse) runs at handshake time — parity with the
+      // render path. Reused below for the synth/repair create path.
+      const creds = await deps.resolveLlm(ctx);
+      const llm = creds
+        ? buildLlmCaller(creds.selection, creds.providerKey)
+        : undefined;
+
       const parsedDraft = dataContractSchema.safeParse(draftContract);
       if (deps.cache && parsedDraft.success) {
         try {
           const matchDeps: MatchBlueprintDeps = {
             registry: deps.cache,
+            ...(llm ? { llm } : {}),
             ...(deps.installedBlueprints ? { installedBlueprints: deps.installedBlueprints } : {}),
           };
           const matchResult = await matchBlueprint(matchDeps, ctx.appId, {
             intent,
             contract: parsedDraft.data,
           });
-          if (matchResult.strategy === "exact-key") {
-            const matched = matchResult.blueprint;
-            const codeHash = createHash("sha256").update(matched.componentCode).digest("hex");
-            const suggestion: HandshakeSuggestion = {
-              origin: "cache",
-              rationale: matchResult.reason,
-              blueprintMeta: {
-                blueprintId: matched.id,
-                contractHash: matched.contractKey,
-                codeHash,
-                generator: DEFAULT_GENERATOR_SLUG,
-                variance: {},
-                selectedReason: matchResult.reason,
-              },
-            };
-            return {
-              action: "reuse",
-              reason: matchResult.reason,
-              suggestion,
-              effectiveContract: matched.contract,
-            };
+          // exact-key (free) OR semantic (find-similar + coverage guard +
+          // judge) → reuse the cached blueprint ATOMICALLY (its own
+          // contract + componentCode, never the agent's draft under it).
+          if (
+            matchResult.strategy === "exact-key" ||
+            matchResult.strategy === "semantic"
+          ) {
+            return buildCacheReuseResult(
+              matchResult.blueprint,
+              matchResult.reason
+            );
           }
-          // Other strategies (no-match, semantic) fall through to
-          // the negotiate() path below. Semantic doesn't fire when
-          // a contract is supplied (the fuzzy-match gate blocks it);
-          // listing it here is structural completeness, not a
-          // reachable branch today.
         } catch (err) {
           if (!isOperationalError(err)) throw err;
           // Registry hiccup — log + fall through to synth so the
-          // handshake never crashes on a transient cache backend
-          // issue.
+          // handshake never crashes on a transient cache backend issue.
           const message = err instanceof Error ? err.message : String(err);
           // eslint-disable-next-line no-console -- operator-visible signal
           console.warn(
-            `[llm-backed-negotiator] matchBlueprint exact-key probe failed; falling through to synth: ${message}`
+            `[llm-backed-negotiator] matchBlueprint probe failed; falling through to synth: ${message}`
           );
         }
       }
 
-      const creds = await deps.resolveLlm(ctx);
-      if (!creds) {
+      if (!creds || !llm) {
         return buildCreateFallback(
           draftContract,
           "no-creds: no BYOK credentials resolved for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.",
@@ -442,7 +474,6 @@ export function createLlmBackedHandshakeNegotiator(
       }
 
       try {
-        const llm = buildLlmCaller(creds.selection, creds.providerKey);
         // Create path (no cache hit): the agent's DRAFT is the basis.
         // ensureConformingContract validates it against the deterministic
         // gate (lintContract / validateContract) and, on errors, repairs

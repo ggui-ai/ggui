@@ -54,6 +54,7 @@ import {
   type BlueprintRegistryDeps,
 } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
+import { covers } from './blueprint-coverage.js';
 
 /** Match-found shape — everything the caller needs to commit a reuse. */
 export interface BlueprintMatchHit {
@@ -240,26 +241,24 @@ export async function matchBlueprint(
     }
   }
 
-  // ─── Strategy: exact-key (agent supplied a contract) ──────────────
+  // ─── Strategy: exact-key fast-path (agent supplied a contract) ─────
   //
-  // Canonical-key equality lookup. Hit ⇒ guaranteed reuse. Miss ⇒
-  // cold gen against the requested contract.
+  // Canonical-key equality lookup — free, deterministic. Hit ⇒
+  // guaranteed reuse, return immediately (no LLM). Miss ⇒ FALL THROUGH
+  // to the semantic strategy below.
   //
-  // No fall-through to the semantic strategy. The
-  // judge can accept candidates whose canonical wire surface differs
-  // from the request's — different action keysets (subset OR superset)
-  // or different schemas within matching keys. Serving such a
-  // candidate's componentCode under the request's contract leaves:
-  //   - cached useAction('foo') call sites with no matching ActionSpec
-  //     entry registered (button renders, click does nothing)
-  //   - request-declared actionSpec entries with no useAction call
-  //     site in the cached code (declared button never appears in DOM)
-  //   - schema mismatches inside matching action names (cached
-  //     consumes payload.X, runtime dispatches payload.Y → silent
-  //     payload loss)
-  //
-  // For contract-bearing requests, canonical-key equality is the only
-  // structurally-safe match.
+  // The historical danger of serving a fuzzy match to a contract-bearing
+  // request — a cached UI whose wire surface differs from the request's
+  // (missing actions → dead/absent buttons; the 2026-05-09 missing-minus
+  // bug) — is now handled, not avoided by refusing to match at all:
+  //   1. ATOMIC reuse — the caller commits the cached blueprint's OWN
+  //      contract + componentCode together, never the request's contract
+  //      under cached code, so wiring is always internally coherent.
+  //   2. The COVERAGE GUARD (covers(), below) — a candidate is eligible
+  //      only if it declares EVERY surface the request declares, dropping
+  //      subset blueprints before the judge (completeness, not just
+  //      coherence). The judge cannot enforce this — 2026-05-09 accepted
+  //      a subset at 0.876; the guard is deterministic.
   if (query.contract !== undefined) {
     try {
       const exact = await findBlueprintExact(
@@ -292,24 +291,18 @@ export async function matchBlueprint(
       // eslint-disable-next-line no-console -- operator-visible signal; exact-key lookup should never fail
       console.warn(`[blueprint-matcher] exact-key lookup failed: ${msg}`);
     }
-    const reason =
-      'no-match: contract supplied + canonical-key absent. ' +
-      'Semantic-strategy fuzzy match across non-equal canonical contracts is ' +
-      'structurally unsafe. Cold gen against the requested ' +
-      'contract is the only structurally-safe option.';
-    emit({
-      decision: 'no-match',
-      strategy: 'exact-key',
-      reason,
-      candidates: [],
-    });
-    return { strategy: 'no-match', reason, candidates: [] };
+    // Exact-key MISS → fall through to the semantic strategy below. The
+    // coverage guard there drops any candidate that does not cover this
+    // request's declared surface before the judge runs, so a subset
+    // blueprint is never served.
   }
 
-  // ─── Strategy: semantic (agent omitted a contract) ────────────────
-  // RAG top-K + LLM rerank judge. Hit ⇒ matched blueprint's contract
-  // becomes the negotiated contract. Miss buckets distinguish
-  // cosine-gate, no-LLM, judge-declined, low-confidence, defense.
+  // ─── Strategy: semantic (find-similar + judge) ────────────────────
+  // Reached when the agent omitted a contract OR an exact-key probe
+  // missed. RAG top-K → coverage guard (contract-bearing only) → LLM
+  // rerank judge. Hit ⇒ the matched blueprint's contract+UI is reused
+  // atomically. Miss buckets distinguish coverage, cosine-gate, no-LLM,
+  // judge-declined, low-confidence, defense.
   let candidates: readonly BlueprintCandidate[] = [];
   try {
     const ragArg: { intent: string } = { intent: trimmedIntent };
@@ -329,6 +322,24 @@ export async function matchBlueprint(
       candidates: [],
     });
     return { strategy: 'no-match', reason, candidates: [] };
+  }
+
+  // Coverage guard (contract-bearing requests only). A cached blueprint
+  // is reusable ONLY if it covers every surface the request declares —
+  // drop non-covering candidates BEFORE the cosine gate + judge. The
+  // judge mis-accepts subsets (2026-05-09, 0.876); this deterministic
+  // floor does not. With no contract there is nothing to cover against.
+  if (query.contract !== undefined && candidates.length > 0) {
+    const requestContract = query.contract;
+    const covered = candidates.filter((c) =>
+      covers(c.blueprint.contract, requestContract),
+    );
+    if (covered.length === 0) {
+      const reason = `no-match: ${candidates.length} candidate(s) retrieved but none cover the request's declared surface — serving a subset would drop a capability the request declares. Cold gen is the structurally-safe option.`;
+      emit({ decision: 'no-match', strategy: 'semantic', reason, candidates });
+      return { strategy: 'no-match', reason, candidates };
+    }
+    candidates = covered;
   }
 
   if (candidates.length === 0) {
