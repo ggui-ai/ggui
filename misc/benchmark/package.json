@@ -33,6 +33,7 @@
     "bench:baseline": "node --import tsx scripts/bench-baseline.mjs",
     "bench:baseline-diff": "node --import tsx scripts/bench-baseline-diff.mjs",
     "bench:baseline-diff-triage": "node --import tsx scripts/bench-baseline-diff-triage.mjs",
+    "bench:contract": "node --import tsx scripts/bench-contract-synthesis.mjs",
     "probe": "node --import tsx scripts/probe-it.mjs"
   },
   "dependencies": {
