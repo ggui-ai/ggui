@@ -161,7 +161,12 @@ const SANDBOX_HTML = `<!doctype html>
     <meta name="color-scheme" content="light dark">
     <title>ggui sandbox proxy</title>
     <style>
-      html, body { margin: 0; height: 100vh; width: 100vw; background-color: transparent; }
+      /* True viewport fill — this proxy doc is the iframe's top-level page.
+         'vh' first as the universally-supported floor; 'dvh' (dynamic
+         viewport height) overrides on browsers that support it so mobile
+         URL-bar collapse doesn't clip the surface. 'width: 100%' avoids the
+         '100vw' horizontal-scrollbar overflow without needing 'dvw'. */
+      html, body { margin: 0; height: 100vh; height: 100dvh; width: 100%; background-color: transparent; }
       body { display: flex; flex-direction: column; }
       * { box-sizing: border-box; }
       iframe {

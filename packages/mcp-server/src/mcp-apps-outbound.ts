@@ -346,9 +346,41 @@ postRpc('ui/initialize',{
 })();
 `;
 
+// `--ggui-color-surface` is injected at `:root` on this document's
+// `<head>` by the iframe-runtime at boot (react-renderer.ts ->
+// `<style id="ggui-theme-vars">`), so the `var()` resolves to the
+// active theme's exact per-mode surface color at runtime. The static
+// `#1e293b` fallback (the dark-mode surface) covers the pre-resolve
+// first paint + browsers that drop unresolved custom properties.
+//
+// # Why paint the document background here (Safari white-canvas fix)
+//
+// This shell is ALWAYS the **top-level document of a standalone served
+// iframe** (`ui://ggui/render`, the `/r/<shortCode>` viewer, the
+// sandbox-proxy inner-iframe `srcdoc`). It is NEVER inlined into a host
+// page — the host wrapper (`<McpAppIframe>`) only ever loads it AS an
+// iframe document, never as part of its own DOM. So painting `html` /
+// `body` here is structurally unreachable by inline embedding and
+// cannot impose a background on a host page.
+//
+// The design scope root (`.ggui-rcr-*`) and the sandbox-proxy outer
+// document stay `background-color: transparent` by design (so a host
+// themeing the chat surface shows through AROUND the rendered content).
+// But nothing painted the rendered-content document's OWN backdrop:
+// Chrome composited the transparent iframe document over the dark host
+// app behind it (looked dark), while Safari renders a transparent
+// iframe document's backdrop as the opaque UA `Canvas` color (white) —
+// the per-browser divergence the bug reported. The component itself
+// themed correctly (its scoped vars resolve); only the page behind it
+// diverged. Painting the served document's own surface here removes the
+// dependency on a browser honoring iframe transparency.
+//
+// Value-resolution only — no `--ggui-*` token added or renamed.
+const GGUI_RENDER_SHELL_SURFACE = `var(--ggui-color-surface, #1e293b)`;
+
 export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
-<html lang="en" style="height:100%"><head><meta charset="utf-8"><title>ggui render</title></head>
-<body style="margin:0;height:100%;min-height:480px"><div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
+<html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
+<body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
 <script>${GGUI_RENDER_SHELL_SCRIPT_BODY}</script></body></html>`;
 
 /**
@@ -935,9 +967,19 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
+  // Standalone served-iframe document — paint its own surface backdrop
+  // so the canvas behind the rendered component never depends on a
+  // browser honoring iframe transparency (the Safari white-canvas bug).
+  // Same gating rationale as `GGUI_RENDER_SHELL_HTML`: this is ALWAYS a
+  // top-level iframe document (the `__GGUI_META__` self-contained shell
+  // for claude.ai / per-render resource shells), never inlined into a
+  // host page, so painting `html`/`body` here cannot regress inline
+  // embedding. `var(--ggui-color-surface, …)` resolves to the active
+  // theme's per-mode surface once the iframe-runtime injects the `:root`
+  // theme vars; the static dark fallback covers pre-resolve paint.
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>ggui render</title></head>
-<body>
+<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
+<body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
 <div id="ggui-root" data-ggui-shell="self-contained"></div>
 <script>window.__GGUI_META__ = ${json};</script>
 <script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
@@ -958,9 +1000,12 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
  * @public
  */
 export function buildSelfContainedLoadingShell(renderId: string): string {
+  // Standalone served-iframe loading document — same surface-backdrop
+  // paint + gating as the thin/self-contained shells so the canvas is
+  // dark while the render is still in flight (no Safari white flash).
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>ggui render</title></head>
-<body>
+<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
+<body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
 <div id="ggui-root" data-ggui-shell="loading" data-ggui-render-id="${renderId
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")

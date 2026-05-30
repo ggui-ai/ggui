@@ -283,8 +283,15 @@ export function AgentShell({
   const appName = gguiCtx.appMetadata?.appName ?? gguiCtx.appConfig?.name;
 
   return (
-    <div style={{
-      position: 'relative', width: '100vw', height: '100vh',
+    // True viewport fill — this shell IS the standalone page. `width: 100%`
+    // (not `100vw`) avoids the horizontal-scrollbar overflow `100vw`
+    // causes when a vertical scrollbar is present. `height` ships `100vh`
+    // inline as the universally-supported floor; the `100dvh` dynamic-
+    // viewport enhancement (so mobile URL-bar collapse doesn't clip the
+    // surface) is layered via the stylesheet at the bottom of this tree —
+    // inline React styles can't hold two values for one property.
+    <div data-ggui-agent-shell="" style={{
+      position: 'relative', width: '100%', height: '100vh',
       overflow: 'hidden',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     }}>
@@ -327,11 +334,13 @@ export function AgentShell({
         </span>
       </div>
 
-      {/* Container — centered, max-width */}
+      {/* Container — centered, max-width. Fills the shell box (which is
+          already pinned to the viewport), so `height: 100%` tracks the
+          dynamic-viewport floor set on the shell without re-deriving `vh`. */}
       <div style={{
         position: 'relative', zIndex: 1,
         maxWidth: 1200, width: 'calc(100% - 64px)',
-        margin: '0 auto', height: '100vh',
+        margin: '0 auto', height: '100%',
         display: 'flex', flexDirection: 'column',
         padding: '16px 0 40px',
         boxSizing: 'border-box' as const,
@@ -413,8 +422,13 @@ export function AgentShell({
         })}
       </div>
 
-      {/* Responsive overrides */}
+      {/* Responsive overrides + dynamic-viewport height enhancement.
+          `100dvh` overrides the inline `100vh` floor on browsers that
+          support it (Chrome 108+, Safari 15.4+, Firefox 101+); older
+          browsers ignore the unknown unit and keep the `100vh` inline
+          value, so the layout never breaks. */}
       <style>{`
+        [data-ggui-agent-shell] { height: 100dvh; }
         @media (max-width: 640px) {
           [data-ggui-frame] { border-radius: 12px !important; margin-top: 8px !important; }
           [data-ggui-head] { display: none !important; }
