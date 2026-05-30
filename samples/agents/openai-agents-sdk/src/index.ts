@@ -11,7 +11,7 @@
  *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
  *                       Omitted by default — the agent runs ggui-only.
  *   OPENAI_MODEL        Override the default OpenAI model
- *                       (default `gpt-5.5-2026-04-23` — see agent.ts)
+ *                       (default `gpt-5.5` — see agent.ts)
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely.
  *   OPENAI_API_KEY      Required. The agent fails-fast AT BOOT if absent

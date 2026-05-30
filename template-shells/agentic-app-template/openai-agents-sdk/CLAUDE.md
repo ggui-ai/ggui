@@ -136,7 +136,7 @@ both read it via `dotenv-cli`.
 | `RAILWAY_API_TOKEN`       | deploy   | Account token for `pnpm deploy:railway` (see Deploy).            |
 | `GGUI_TODO_MCP_URL`       | demo     | `http://localhost:6782/mcp` — wires the todo tools into the agent. |
 | `GGUI_MCP_URL`            | no       | Where the agent finds the ggui MCP (default `…:6781/mcp`).       |
-| `MODEL`                   | no       | OpenAI model the agent runs on (default `gpt-4o-mini`).          |
+| `MODEL`                   | no       | OpenAI model the agent runs on (default `gpt-5.5`).          |
 | `PORT`                    | no       | Agent backend port (default 6791).                               |
 | `VITE_AGENT_ENDPOINT_URL` | no       | Where the browser bundle reaches the agent backend.              |
 

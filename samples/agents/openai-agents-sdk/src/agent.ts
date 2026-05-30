@@ -25,7 +25,7 @@ import {
 } from './mcp-server-with-full-result.js';
 
 export interface OpenAiAgentAdapterOptions {
-  /** Default `gpt-5.5-2026-04-23`. Override per-process via env. */
+  /** Default `gpt-5.5`. Override per-process via env. */
   readonly model?: string;
   /** Default `process.env.OPENAI_API_KEY`. */
   readonly apiKey?: string;
@@ -51,7 +51,7 @@ export function createOpenAiAgentAdapter(
   }
   // The SDK reads OPENAI_API_KEY from the env at request time.
   if (!process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = apiKey;
-  const model = opts.model ?? 'gpt-5.5-2026-04-23';
+  const model = opts.model ?? 'gpt-5.5';
 
   return {
     name: 'openai-agents-sdk',

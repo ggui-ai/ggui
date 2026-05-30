@@ -11,7 +11,7 @@
  *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
  *                       Omitted by default — the agent runs ggui-only.
  *   MODEL               Override the default Claude model (default
- *                       `claude-haiku-4-5` — see agent.ts)
+ *                       `claude-sonnet-4-6` — see agent.ts)
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely (use the SDK's
  *                       built-in default).
