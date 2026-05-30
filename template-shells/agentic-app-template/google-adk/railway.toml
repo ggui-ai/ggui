@@ -15,9 +15,9 @@
 #   1. Create a new Railway project from this repo.
 #   2. Create FOUR services in the project, one per [services.<name>] block below.
 #      Railway's "deploy from repo" flow picks up these settings automatically.
-#   3. Set the secrets noted under [services.agent.env] / [services.ggui.env] —
-#      your GEMINI_API_KEY for the agent + ANTHROPIC_API_KEY for ggui in this
-#      default template (ggui generates UI via Claude; swap providers via ggui.json).
+#   3. Set the secret noted under [services.agent.env] / [services.ggui.env] —
+#      your GEMINI_API_KEY drives BOTH the agent and ggui's UI generation
+#      (servers/ggui/ggui.json is set to a Gemini model).
 #   4. Open the web service's public URL.
 #
 # Future: when guuey.com ships, drop a `guuey.json` next to this file. Railway
@@ -50,9 +50,9 @@ startCommand = "pnpm --filter ./servers/ggui start"
 
 [services.ggui.env]
 PORT = "6781"
-# ggui's own LLM-driven UI generator needs an LLM key. Default ggui.json
-# picks Claude — set ANTHROPIC_API_KEY (or change the model in ggui.json).
-# ANTHROPIC_API_KEY = "sk-ant-..."
+# ggui's own LLM-driven UI generator needs an LLM key. ggui.json is set to
+# a Gemini model, so set the same GEMINI_API_KEY here as the agent uses.
+# GEMINI_API_KEY = "..."
 
 # ── todo (sample domain MCP) ─────────────────────────────────────────────
 # Replace this block with your own MCP servers as your app grows. Private

@@ -132,8 +132,7 @@ both read it via `dotenv-cli`.
 
 | Var                       | Required | Purpose                                                          |
 | ------------------------- | -------- | ---------------------------------------------------------------- |
-| `GEMINI_API_KEY`          | yes      | LLM credential for the agent (`GOOGLE_API_KEY` also accepted).   |
-| `ANTHROPIC_API_KEY`       | yes      | Drives ggui's UI generation (default `ggui.json` picks Claude).  |
+| `GEMINI_API_KEY`          | yes      | LLM credential for BOTH the agent and ggui's UI generation (`GOOGLE_API_KEY` also accepted). |
 | `RAILWAY_API_TOKEN`       | deploy   | Account token for `pnpm deploy:railway` (see Deploy).            |
 | `GGUI_TODO_MCP_URL`       | demo     | `http://localhost:6782/mcp` — wires the todo tools into the agent. |
 | `GGUI_MCP_URL`            | no       | Where the agent finds the ggui MCP (default `…:6781/mcp`).       |

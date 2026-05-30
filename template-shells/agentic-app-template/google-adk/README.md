@@ -28,7 +28,7 @@ tools and renders a React UI → you click in that UI → the agent reacts.
 
 ```bash
 pnpm install
-cp .env.example .env.local   # add your GEMINI_API_KEY + ANTHROPIC_API_KEY
+cp .env.example .env.local   # add your GEMINI_API_KEY
 pnpm dev                     # starts all four servers, then opens the app
 ```
 
@@ -38,9 +38,10 @@ hidden by default — add `--verbose` to stream them). Prefer separate terminals
 `pnpm dev:ggui`, `pnpm dev:mcps` (every `servers/mcps/*`), `pnpm dev:agent`,
 and `pnpm dev:web` individually.
 
-Why two LLM keys? In the default config, the **agent** runs on Gemini and the
-**ggui server** generates UI via Claude. Set both, or change ggui.json's
-`generation.model` to a Gemini model and drop `ANTHROPIC_API_KEY`.
+One key, one vendor: both the **agent** and the **ggui server** (which
+generates the UI) run on Gemini, so a single `GEMINI_API_KEY` is all you need.
+To run ggui on a different provider, change `servers/ggui/ggui.json`'s
+`generation.model` and set that provider's key instead.
 
 ## Deploy to Railway
 

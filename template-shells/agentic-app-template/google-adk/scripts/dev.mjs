@@ -18,13 +18,113 @@
  */
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 
 const WEB_URL = `http://localhost:${process.env.WEB_PORT ?? 6890}`;
 const AGENT_PORT = 6792; // per shell — claude=6790, openai=6791, google=6792
+// Keys this template needs before anything can run. Each requirement is met if
+// ANY of its `keys` is set; ALL requirements must be met. Both the agent and
+// ggui's UI generation run on Gemini (servers/ggui/ggui.json; GOOGLE_API_KEY
+// accepted as a fallback), so the single Gemini key covers both.
+const REQUIRED_ENV = [
+  {
+    keys: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+    role: 'the agent loop AND ggui UI generation',
+    url: 'https://aistudio.google.com/apikey',
+    sample: 'AIza...',
+  },
+];
 const POSIX = process.platform !== 'win32';
 const VERBOSE =
   process.argv.slice(2).some((a) => a === '--verbose' || a === '-v') ||
   process.env.DEV_VERBOSE === '1';
+
+// Walk up from the cwd looking for the nearest .env.local — mirrors the
+// agent's own env discovery so the preflight never false-alarms when the
+// key lives in a parent dir (e.g. a workspace root).
+function findEnvLocalPath() {
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, '.env.local');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+function readEnvLocal() {
+  const path = findEnvLocalPath();
+  if (path === null) return null;
+  const env = {};
+  for (const raw of readFileSync(path, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    let key = line.slice(0, eq).trim();
+    if (key.startsWith('export ')) key = key.slice(7).trim();
+    let val = line.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    env[key] = val;
+  }
+  return env;
+}
+
+function keyIsSet(name, fileEnv) {
+  if ((process.env[name] ?? '').trim() !== '') return true;
+  if (fileEnv && (fileEnv[name] ?? '').trim() !== '') return true;
+  return false;
+}
+
+// Fail loud + early when a required key is missing. Without them the agent
+// loop and/or ggui's UI generation can't run — and the failure otherwise hides
+// as a single buried log line, which reads as "it just hung".
+function preflightEnv() {
+  const fileEnv = readEnvLocal();
+  const missing = REQUIRED_ENV.filter(
+    (req) => !req.keys.some((k) => keyIsSet(k, fileEnv)),
+  );
+  if (missing.length === 0) return;
+
+  const noFile = fileEnv === null;
+  const rule = '═'.repeat(64);
+  const out = ['', `\x1b[1;31m${rule}\x1b[0m`];
+  out.push(
+    `\x1b[1;31m  ✖  Missing required API key${missing.length > 1 ? 's' : ''}` +
+      `${noFile ? ' — no .env.local found' : ''}\x1b[0m`,
+  );
+  out.push(`\x1b[1;31m${rule}\x1b[0m`);
+  for (const req of missing) {
+    out.push(`  \x1b[1m${req.keys[0]}\x1b[0m — needed for ${req.role}`);
+  }
+  out.push('');
+  out.push(
+    `  ${noFile ? 'cp .env.example .env.local' : 'open .env.local'}, then set:`,
+  );
+  for (const req of missing) {
+    out.push(`      \x1b[36m${req.keys[0]}=${req.sample}\x1b[0m`);
+  }
+  out.push('  …and re-run \x1b[1mpnpm dev\x1b[0m.');
+  out.push('');
+  for (const req of missing) {
+    out.push(`  ${req.keys[0]} → \x1b[36m${req.url}\x1b[0m`);
+  }
+  out.push(`\x1b[1;31m${rule}\x1b[0m`);
+  out.push('');
+  process.stdout.write(out.join('\n') + '\n');
+  process.exit(1);
+}
+
+// Before anything spawns — a missing key is the #1 first-run mistake.
+preflightEnv();
 
 // name → color, the package.json script, where it listens, and a one-liner.
 const SERVICES = [

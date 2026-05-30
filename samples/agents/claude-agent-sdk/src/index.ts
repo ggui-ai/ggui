@@ -15,8 +15,8 @@
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely (use the SDK's
  *                       built-in default).
- *   ANTHROPIC_API_KEY   Required. The agent fails-fast on first `/chat`
- *                       if absent (see agent.ts).
+ *   ANTHROPIC_API_KEY   Required. The agent fails-fast AT BOOT if absent
+ *                       (checked below + in agent.ts).
  *
  * Adding another MCP server: one entry below + one env var. The agent
  * also needs an `ALLOWED_TOOLS_BY_SERVER` entry in `agent.ts` for its
@@ -59,6 +59,20 @@ const envPath = findEnvLocal(here);
 if (envPath) {
   loadDotenv({ path: envPath });
   console.log(`[sample-agent] loaded ${envPath}`);
+}
+
+// Fail loud + early when the provider key is missing. The agent loop AND
+// ggui's UI generation both need it; without it the agent would otherwise
+// crash mid-request with a buried error. (The `pnpm dev` orchestrator runs
+// the same check before booting — this also covers running the agent
+// standalone or in a deploy.)
+if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+  console.error(
+    '\n[sample-agent] ANTHROPIC_API_KEY is not set — the agent loop and ' +
+      "ggui's UI generation both require it.\n" +
+      '  Add it to .env.local (copy .env.example), then restart.\n',
+  );
+  process.exit(1);
 }
 
 const PORT = Number(process.env.PORT ?? 6790);

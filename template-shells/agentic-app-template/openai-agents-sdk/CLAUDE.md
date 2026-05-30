@@ -132,8 +132,7 @@ both read it via `dotenv-cli`.
 
 | Var                       | Required | Purpose                                                          |
 | ------------------------- | -------- | ---------------------------------------------------------------- |
-| `OPENAI_API_KEY`          | yes      | LLM credential for the agent (`@openai/agents`).                 |
-| `ANTHROPIC_API_KEY`       | yes      | Drives ggui's UI generation (default `ggui.json` picks Claude).  |
+| `OPENAI_API_KEY`          | yes      | LLM credential for BOTH the agent (`@openai/agents`) and ggui's UI generation. |
 | `RAILWAY_API_TOKEN`       | deploy   | Account token for `pnpm deploy:railway` (see Deploy).            |
 | `GGUI_TODO_MCP_URL`       | demo     | `http://localhost:6782/mcp` — wires the todo tools into the agent. |
 | `GGUI_MCP_URL`            | no       | Where the agent finds the ggui MCP (default `…:6781/mcp`).       |
