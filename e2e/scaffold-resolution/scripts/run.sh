@@ -80,6 +80,9 @@ export GGUI_TEMPLATES_REPO_URL="$WORK/templates-src"
 # scaffold WITHOUT --install and run install ourselves below, gated by a
 # project-level .npmrc (the strongest registry signal pnpm honors).
 export npm_config_registry="$REGISTRY/"
+# Isolates npx's (npm) package cache to $WORK so npx fetches create-agentic-app
+# FRESH from Verdaccio, not a stale npmjs-cached copy. This one IS honored (npx
+# is npm); pnpm ignores it — pnpm's isolation is the project .npmrc below.
 export npm_config_cache="$WORK/npm-cache"
 # NOTE: pnpm's store/cache isolation is done via the per-app project .npmrc
 # below (store-dir/cache-dir), NOT env vars — env-var cache-dir was found to be

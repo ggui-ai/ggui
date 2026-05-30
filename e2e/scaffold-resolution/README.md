@@ -178,15 +178,3 @@ SELFTEST=1 make test-scaffold-resolution  # falsification — MUST exit non-zero
 The gate is slow (full `pnpm build` + Verdaccio publish of ~35 packages + 3
 scaffold installs). Cold runs are typically 15–25 min. It is deterministic and
 keyless — safe to run in any environment with Docker and pnpm available.
-
-### During active refactoring
-
-The gate runs `pnpm build` which calls `pnpm install --frozen-lockfile`
-indirectly via Turborepo. While `packages/` is mid-refactor and the lockfile
-is intentionally stale, prefix with:
-
-```bash
-PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-scaffold-resolution
-```
-
-Switch back to the default before treating a gate run as release sign-off.

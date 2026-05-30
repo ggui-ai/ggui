@@ -12,6 +12,10 @@ uplinks:
     url: https://registry.npmjs.org/
 
 packages:
+  # @ggui-ai/* has NO `proxy:` ON PURPOSE — Verdaccio serves it from LOCAL
+  # storage only and 404s on any version not published this run. Load-bearing
+  # for gate validity: a fallthrough to an uplink would let the install silently
+  # resolve a real-npm prerelease and false-pass. Do NOT add a proxy/uplink here.
   "@ggui-ai/*":
     access: $all
     publish: $all
