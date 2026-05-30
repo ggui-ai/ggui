@@ -26,6 +26,7 @@
     "url": "https://github.com/ggui-ai/ggui.git",
     "directory": "packages/create-agentic-app"
   },
+  "homepage": "https://github.com/ggui-ai/agentic-app-templates#readme",
   "keywords": [
     "ggui",
     "agentic-app",
