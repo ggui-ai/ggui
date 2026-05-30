@@ -69,8 +69,14 @@ import {
   type InstalledBlueprintsProvider,
   type MatchBlueprintDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import { negotiate, type LLMCaller } from "@ggui-ai/negotiator";
-import type { Blueprint, DataContract, HandshakeSuggestion } from "@ggui-ai/protocol";
+import { ensureConformingContract, type LLMCaller } from "@ggui-ai/negotiator";
+import { dataContractSchema, lintContract } from "@ggui-ai/protocol";
+import type {
+  Blueprint,
+  DataContract,
+  HandshakeSuggestion,
+  SuggestionFinding,
+} from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
 import { createHash, randomUUID } from "node:crypto";
@@ -301,13 +307,27 @@ export interface LlmBackedHandshakeNegotiatorDeps {
 const DEFAULT_GEN_LATENCY_MS = 30_000;
 
 function buildCreateFallback(
-  draftContract: DataContract,
+  draftContract: unknown,
   reason: string,
   _estimatedLatencyMs: number
 ): HandshakeNegotiatorResult {
-  // Fallback path stamps an `origin: 'agent'` suggestion against the
-  // agent's draft. Gen-pending; no codeHash; provisional blueprintId.
-  const contractHash = blueprintKey(draftContract);
+  // No-LLM fallback (no BYOK creds, or an operational error during synth).
+  // The handshake backstop (validateContract) THROWS on a malformed draft,
+  // and there is no LLM here to repair it — so deterministically
+  // substitute the trivially-conforming empty contract (+ loud findings)
+  // when the draft fails the gate. NEVER return a raw malformed draft into
+  // the throwing backstop (that would revive the handshake-retry loop).
+  // A clean draft is kept verbatim (origin: agent).
+  const lint = lintContract(draftContract);
+  const contract: DataContract =
+    lint.errors.length === 0 ? dataContractSchema.parse(draftContract) : {};
+  const findings: SuggestionFinding[] = lint.errors.map((e) => ({
+    code: e.code,
+    severity: "error",
+    path: e.path,
+    message: e.message,
+  }));
+  const contractHash = blueprintKey(contract);
   const suggestion: HandshakeSuggestion = {
     origin: "agent",
     rationale: reason,
@@ -317,12 +337,13 @@ function buildCreateFallback(
       generator: "ui-gen-default-haiku-4-5",
       variance: {},
     },
+    ...(findings.length > 0 ? { validationFindings: findings } : {}),
   };
   return {
     action: "create",
     reason,
     suggestion,
-    effectiveContract: draftContract,
+    effectiveContract: contract,
   };
 }
 
@@ -356,7 +377,12 @@ export function createLlmBackedHandshakeNegotiator(
       // — the negotiator stays useful when the registry is cold,
       // when matchBlueprint hiccups, or when the deployment skipped
       // the cache deps entirely.
-      if (deps.cache) {
+      // Cache match needs a SHAPE-VALID contract — a malformed draft
+      // (wrapper-nesting, bad type spelling, …) can't canonical-key-match
+      // a registered blueprint, so skip the probe and fall straight to
+      // validate/repair via ensureConformingContract.
+      const parsedDraft = dataContractSchema.safeParse(draftContract);
+      if (deps.cache && parsedDraft.success) {
         try {
           const matchDeps: MatchBlueprintDeps = {
             registry: deps.cache,
@@ -364,7 +390,7 @@ export function createLlmBackedHandshakeNegotiator(
           };
           const matchResult = await matchBlueprint(matchDeps, ctx.appId, {
             intent,
-            contract: draftContract,
+            contract: parsedDraft.data,
           });
           if (matchResult.strategy === "exact-key") {
             const matched = matchResult.blueprint;
@@ -417,89 +443,42 @@ export function createLlmBackedHandshakeNegotiator(
 
       try {
         const llm = buildLlmCaller(creds.selection, creds.providerKey);
-        const declaredAgentTools = Object.keys(draftContract.agentCapabilities?.tools ?? {});
-        const synthPrompt = blueprintDraft.variance?.seedPrompt ?? intent;
-        const result = await negotiate(
+        // Create path (no cache hit): the agent's DRAFT is the basis.
+        // ensureConformingContract validates it against the deterministic
+        // gate (lintContract / validateContract) and, on errors, repairs
+        // it in place via the bounded LLM loop — GUARANTEEING a contract
+        // that passes the handshake backstop, so the handshake never
+        // hard-fails on a malformed draft. origin: 'agent' = draft was
+        // already clean; 'synth' = repaired (or minimal-conforming
+        // fallback when unrepairable).
+        const conforming = await ensureConformingContract(
           { llm },
           {
-            agent: {
-              prompt: synthPrompt,
-              ...(declaredAgentTools.length > 0 ? { agentTools: declaredAgentTools } : {}),
-              ...(gadgets !== undefined ? { gadgets } : {}),
-            },
-            config: {
-              appId: ctx.appId,
-              // Handshake runs ahead of any concrete render — no renderId
-              // is bound yet. The negotiator only uses `renderId` to key
-              // its optional `readRenderState` callback, which the OSS
-              // path doesn't wire here, so a stable placeholder works.
-              renderId: "handshake",
-              includeSharedPool: false,
-            },
+            intent,
+            draft: draftContract,
+            ...(gadgets !== undefined ? { appGadgets: gadgets } : {}),
           }
         );
-
-        const decision = result.decision;
-        const contract = decision.contract;
-        const contractHash = result.storedContractHash ?? blueprintKey(contract);
-        const draftHash = blueprintKey(draftContract);
-        const blueprintId = decision.blueprintId;
-
-        // Origin routing:
-        //   - blueprintId present (cache hit) → origin: 'cache'
-        //   - contract == draft               → origin: 'agent'
-        //   - contract != draft               → origin: 'synth'
-        let suggestion: HandshakeSuggestion;
-        if (blueprintId) {
-          suggestion = {
-            origin: "cache",
-            rationale: decision.reasoning ?? `cache match (${blueprintId})`,
-            blueprintMeta: {
-              blueprintId,
-              contractHash,
-              generator: "ui-gen-default-haiku-4-5",
-              variance: {},
-            },
-          };
-        } else if (contractHash === draftHash) {
-          suggestion = {
-            origin: "agent",
-            rationale: decision.reasoning ?? "novel-but-clean contract",
-            blueprintMeta: {
-              blueprintId: `bp_${randomUUID()}`,
-              contractHash,
-              generator: "ui-gen-default-haiku-4-5",
-              variance: {},
-            },
-          };
-        } else {
-          suggestion = {
-            origin: "synth",
-            rationale: decision.reasoning ?? "synth amended contract",
-            blueprintMeta: {
-              blueprintId: `bp_${randomUUID()}`,
-              contractHash,
-              generator: "ui-gen-default-haiku-4-5",
-              variance: {},
-            },
-            amendments: {
-              contractDiff: [
-                {
-                  op: "replace",
-                  path: "",
-                  value: contract as unknown as import("@ggui-ai/protocol").JsonValue,
-                },
-              ],
-              reasoning: decision.reasoning ?? "negotiator-amended contract",
-            },
-          };
-        }
+        const contractHash = blueprintKey(conforming.contract);
+        const suggestion: HandshakeSuggestion = {
+          origin: conforming.origin,
+          rationale: conforming.reasoning,
+          blueprintMeta: {
+            blueprintId: `bp_${randomUUID()}`,
+            contractHash,
+            generator: "ui-gen-default-haiku-4-5",
+            variance: {},
+          },
+          ...(conforming.findings.length > 0
+            ? { validationFindings: conforming.findings }
+            : {}),
+        };
 
         return {
-          action: blueprintId ? "reuse" : "create",
-          reason: decision.reasoning ?? "negotiated",
+          action: "create",
+          reason: conforming.reasoning,
           suggestion,
-          effectiveContract: contract,
+          effectiveContract: conforming.contract,
         };
       } catch (err) {
         if (!isOperationalError(err)) throw err;

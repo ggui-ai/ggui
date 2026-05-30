@@ -24,10 +24,12 @@
  * a richer surface should author the contract themselves on the
  * handshake input; synthesis is a fallback, not a replacement.
  *
- * **Failure modes collapse to null.** LLM throws, parse fails,
- * provider doesn't support `callStructured` → return `null`. Caller
- * falls back to an empty stub; behavior regresses to pre-synth but
- * doesn't crash.
+ * **Failure modes collapse to null.** LLM throws on every attempt or
+ * the bounded repair budget is exhausted → return `null`. Caller falls
+ * back to an empty stub; behavior regresses to pre-synth but doesn't
+ * crash. Providers without `callStructured` (gemini / openai /
+ * openrouter) use a text-JSON fallback rather than skipping synthesis,
+ * so repair works on every provider.
  *
  * **Cost.** ~$0.0005-0.001 per call (Haiku 4.5, ~500 input + ~300
  * output tokens). Latency ~1.5s. Fires only on cold-path Tier 3
@@ -43,6 +45,10 @@ import {
 import { lintContract, type ContractIssue } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 import { normalizeSchema } from './normalize-schema.js';
+import {
+  draftSeedPropKeys,
+  findDroppedSeedSurfaces,
+} from './preserve-seed-surfaces.js';
 import {
   formatValidationFindings,
   validateActionsVsContext,
@@ -114,14 +120,14 @@ A contract has FOUR specs that describe distinct directions on the wire between 
 
 THE FOUR-SPEC MODEL
 
-  propsSpec    (agent → UI, render-time)
-    Static initial-render data the agent passes once when the UI is mounted. The UI reads it; it never changes after mount. Use ONLY when the intent names data the component cannot render without (a weather card needs city + temp; a profile needs name + avatar). Omit when the UI generates its own state (a counter starting at zero, a blank notepad).
+  propsSpec    (agent → UI, render-time + agent-pushed refreshes)
+    Data the AGENT owns and supplies — the initial values at mount, AND every later refresh via ggui_update. NOT "static / never changes": propsSpec is the ONLY channel for agent-owned data, mutable or not. A weather card's city+temp (fixed) AND the items of the todo list the agent fetched and keeps in sync (mutable) BOTH live here — the agent seeds them at render and pushes each change with ggui_update. Use whenever the agent is the SOURCE of what the UI shows: the intent names data the agent provides / fetches / owns ("my todos", "the cart", "this user's profile", "the directory contents") OR data the component cannot render without (city, temp). Omit only when the UI originates its own state with no agent-supplied contents (a counter starting at zero, a blank notepad, a list the USER builds locally).
 
   streamSpec   (agent → UI, live, append-only)
     Channels where the agent pushes live data the UI displays as it arrives. Use ONLY when the intent describes ongoing agent-originated updates (a chat with messages, a live dashboard, a clock, a stock ticker, a notifications feed). Wrong instinct: do NOT use streamSpec for user-driven state, nor for a multi-step wizard / tutorial — its steps are a local stepper plus component-authored copy, not an agent-pushed feed.
 
   contextSpec  (UI → agent, live, debounced mirror)
-    Client state the agent OBSERVES continuously. The UI mutates each slot via a setter; the runtime mirrors the value back to the agent. Use for any client-side state whose CURRENT VALUE is what the agent cares about — a counter's count, a form's draft fields, a slider's position, a selected tab, a search query as the user types. The mirror is the wire path: the agent already sees every change.
+    Client state the agent OBSERVES continuously. The UI mutates each slot via a setter; the runtime mirrors the value back to the agent. Use for any CLIENT-ORIGINATED state whose CURRENT VALUE is what the agent cares about — a counter's count, a form's draft fields, a slider's position, a selected tab, a search query as the user types. The mirror is the wire path: the agent already sees every change. Ownership boundary: contextSpec is client→agent ONLY — the agent can READ the mirror but CANNOT push values into it (there is no agent→contextSpec channel). Data the AGENT owns or seeds belongs on propsSpec, never here — a collection the agent fetched and must keep in sync placed on contextSpec can never be seeded or updated, and the UI renders empty.
 
   actionSpec   (UI → agent, one-shot event)
     Discrete events the agent must WITNESS — a single point in time the agent receives a payload describing what happened. Use for events with semantic meaning beyond the current state of any slot: submit, save, send, finalize, navigate, confirm, cancel, search, delete-by-id. The payload carries the data the agent needs to act on the event.
@@ -187,10 +193,18 @@ CONCRETE PATTERNS
     contextSpec: { query: {schema: {type: "string"}, default: ""} }
     Whether to ALSO declare a submit-search action depends on whether the agent acts on every keystroke (no action — the mirror IS the wire) or only on enter/click (declare a search action). Default to no action unless the intent names "search button" / "submit on enter". When declaring, pass the query as payload: schema: {type: "object", properties: {query: {type: "string"}}, required: ["query"]}.
 
-  Todo list — "a todo list", "an agent-backed todo list that persists across sessions"
-    The todos array is client state that mutates (add / delete / toggle) — it is ALWAYS a contextSpec slot, NEVER propsSpec. propsSpec is for data that never changes after mount; a todo list's items change constantly.
-    contextSpec: { todos: {schema: {type: "array"}, default: []} }
-    actionSpec:  OMIT by default — a local-only list just lets the agent observe the items slot. Declare addTodo / deleteTodo ONLY when the intent says the agent must act on each add/delete ("agent-backed", "synced", "persists across sessions") — those words mean each mutation IS a discrete event the agent witnesses, layered ON TOP of the contextSpec slot, not instead of it.
+  Todo list / collection — split on OWNERSHIP, not on mutability. Both kinds mutate; what differs is WHO supplies the items.
+
+    (a) Agent-owned — "show my todos", "an agent-backed todo list that persists across sessions", "render my cart", "the messages in this thread", "the directory contents"
+        The AGENT owns the items: it fetched / persists / keeps them in sync. The collection is the agent's data → it goes on PROPSSPEC, seeded at render and refreshed via ggui_update after each change. This is the ONLY shape that round-trips — contextSpec has no agent-push channel, so an agent-owned list placed there can never be seeded or updated (the UI renders empty). add / delete / toggle are discrete events the agent must witness to persist → declare them on actionSpec (with a matching agentCapabilities tool for each nextStep). Mutability is fine: ggui_update is exactly how the agent pushes the change.
+        propsSpec:   { properties: { todos: {schema: {type: "array", items: {type: "object", properties: {id: {type: "string"}, text: {type: "string"}, done: {type: "boolean"}}, required: ["id", "text", "done"]}}, required: true} } }
+        actionSpec:  { toggleTodo: {label: "Toggle todo", schema: {type: "object", properties: {id: {type: "string"}}, required: ["id"]}, nextStep: "todo_toggle"}, addTodo: {label: "Add todo", schema: {type: "object", properties: {text: {type: "string"}}, required: ["text"]}, nextStep: "todo_add"} }
+
+    (b) User-built local — "a todo list where I can add and remove items", "a shopping list", "a checklist I tick off"
+        No agent-owned source: the USER assembles the list in the UI and the agent merely observes it. The items are client-originated state → a CONTEXTSPEC slot; OMIT actionSpec (the slot mirror IS the wire — the agent already sees every change). Only when the intent says the agent must persist / sync each change does it become the agent-owned case (a) above.
+        contextSpec: { todos: {schema: {type: "array"}, default: []} }
+
+    Tell them apart by the SOURCE of the initial items: "my / the / show / render / persisted / agent-backed / synced" → the agent has data to seed → (a) propsSpec. "a / let me build / I add" with no agent source → the user builds it → (b) contextSpec.
 
   Confirmation modal — "a delete-confirmation modal with confirm and cancel actions"
     Confirm and cancel are the discrete events the agent must witness; the modal holds no client state and no live feed. Declare propsSpec ONLY when the intent NAMES the item / data the modal shows ("confirm deleting <the file name>"); a generic confirmation modal that names no data field has NO propsSpec.
@@ -400,11 +414,11 @@ export const SYNTHESIZE_TOOL: ToolSchema = {
               },
             },
             description:
-              'Per-tool map: name → {inputSchema?, outputSchema?, usage?}. Catalog only — the agent owns invocation. Declare entries that are referenced via streamSpec[X].source.tool.',
+              'Per-tool map: name → {inputSchema?, outputSchema?, usage?}. Catalog only — the agent owns invocation. Declare an entry for EVERY tool a nextStep / source points at: each actionSpec[X].nextStep AND each streamSpec[X].source.tool — referencing an undeclared tool fails the cross-reference check.',
           },
         },
         description:
-          'Catalog of agent-invoked tools the contract references. The component code does NOT call these directly. Required when any streamSpec.source.tool refers to a tool name.',
+          'Catalog of agent-invoked tools the contract references. The component code does NOT call these directly. Required whenever any actionSpec.nextStep or streamSpec.source.tool names a tool.',
       },
       clientCapabilities: {
         type: 'object',
@@ -456,7 +470,7 @@ export const SYNTHESIZE_TOOL: ToolSchema = {
           },
         },
         description:
-          'Static-display data the agent passes at push time. Use ONLY when the intent names initial data fields (weather card → city/temp; profile → name/avatar). Omit when the UI generates its own state.',
+          'Agent-OWNED data the UI displays — the initial values seeded at render, refreshed any time after via ggui_update. NOT static-only: mutable collections the agent owns / fetched / keeps in sync (my todos, the cart, this thread\'s messages, a directory listing) go here too — propsSpec is the ONLY agent→client data channel. Use whenever the agent is the SOURCE of the displayed data (weather card → city/temp; profile → name/avatar; "my todos" → todos). Omit only when the UI originates its own state with no agent-supplied contents (a counter, a blank notepad, a list the user builds locally).',
       },
       reason: {
         type: 'string',
@@ -536,6 +550,184 @@ function buildRepairNote(rejected: unknown, failure: string): string {
 }
 
 /**
+ * PATCH-MODE preamble (L2) — prepended to the system prompt ONLY on the
+ * repair path (a draft is present). The cold-path system prompt is an
+ * "infer a contract from intent" authoring brief; reusing it verbatim
+ * for repair invites the model to RE-AUTHOR and reshape a near-correct
+ * draft (e.g. move a propsSpec collection to contextSpec). This preamble
+ * reframes the task as a minimal patch, which — together with the
+ * deterministic preservation gate — keeps the repair faithful.
+ */
+const REPAIR_PREAMBLE = `PATCH MODE — you are REPAIRING a contract the agent already authored, NOT writing a new one from scratch.
+- Change as LITTLE as possible. Fix ONLY the specific findings listed in the user message.
+- PRESERVE every spec the agent declared — ESPECIALLY every propsSpec property (agent-owned render-time seed data the UI needs). Never drop it.
+- Do NOT move data between specs (e.g. propsSpec → contextSpec) unless a finding explicitly requires it. A collection the agent supplies on propsSpec STAYS on propsSpec.
+- Keep the agent's names, shapes, and structure intact wherever the findings do not force a change.
+The four-spec model and placement rules below still hold — but in PATCH MODE they are guardrails for the fix, not a license to re-author.`;
+
+/**
+ * Preservation-failure repair note (L1) — drives a corrective retry when
+ * a VALID candidate dropped an agent-owned propsSpec seed surface. Names
+ * the exact missing keys so the model restores them, rather than the
+ * generic "fix this validation error" note (the candidate IS valid; the
+ * problem is round-trip fidelity the gate can't express).
+ */
+function buildPreservationRepairNote(
+  rejected: unknown,
+  dropped: readonly string[],
+): string {
+  const json = JSON.stringify(rejected);
+  const capped = json.length > 3000 ? `${json.slice(0, 3000)}…` : json;
+  return [
+    'YOUR PREVIOUS ATTEMPT dropped agent-owned render-time data. You returned this contract:',
+    capped,
+    '',
+    `The agent's draft declared these on propsSpec (agent-owned seed data the UI renders): ${dropped.join(', ')}. Your contract no longer carries them as propsSpec properties — so the agent can no longer seed them at render. contextSpec has NO agent seed channel, so moving them there leaves the UI empty.`,
+    '',
+    `Re-emit the contract with ${dropped.join(', ')} restored as propsSpec properties (agent-owned, seeded at render and refreshed via ggui_update). Keep every other spec unchanged.`,
+  ].join('\n');
+}
+
+/**
+ * Compose the FIRST-attempt repair note for the forgiving-handshake
+ * path: the agent PROPOSED a contract that failed deterministic
+ * validation. Unlike {@link buildRepairNote} (which frames the input as
+ * "your previous attempt"), this frames it as the AGENT'S draft to be
+ * repaired in place — preserve intent + structure, fix exactly the
+ * listed findings. The draft JSON is capped to bound the prompt.
+ */
+function buildDraftSeedNote(
+  draft: unknown,
+  findings: readonly { code: string; path: string; message: string }[],
+): string {
+  const json = JSON.stringify(draft);
+  const capped = json.length > 3000 ? `${json.slice(0, 3000)}…` : json;
+  const findingsText =
+    findings.length > 0
+      ? findings.map((f) => `[${f.code}] ${f.path}: ${f.message}`).join('; ')
+      : '(unspecified — re-derive a valid contract for the intent)';
+  return [
+    'The agent PROPOSED this contract, but it failed deterministic validation:',
+    capped,
+    '',
+    `Validation findings — ${findingsText}`,
+    '',
+    "Repair it: keep the agent's intent and as much of their structure (spec names, schemas, labels) as possible, fix EXACTLY these findings, and return a valid contract. Do not add unrelated specs.",
+  ].join('\n');
+}
+
+/**
+ * Invoke the synthesize tool — structured output when the provider
+ * supports it, else a text-JSON fallback. Forced tool use is
+ * Anthropic / Bedrock-only today; gemini / openai / openrouter callers
+ * reach this via the text path (the model emits one JSON object, which
+ * we regex-extract + parse). Lower reliability than forced tool use,
+ * but the bounded validate-and-repair loop catches malformed output and
+ * retries — so repair works on every provider instead of no-op'ing
+ * off-Anthropic.
+ */
+async function callSynthesizeTool(
+  llm: LLMCaller,
+  system: string,
+  user: string,
+): Promise<unknown> {
+  if (typeof llm.callStructured === 'function') {
+    return llm.callStructured<SynthesizeToolInput>(
+      system,
+      user,
+      SYNTHESIZE_TOOL,
+      1024,
+    );
+  }
+  const text = await llm.call(
+    system,
+    `${user}\n\nRespond with ONE JSON object only (no prose, no code fence) carrying the synthesized contract: {actionSpec?, contextSpec?, streamSpec?, propsSpec?, agentCapabilities?, clientCapabilities?, reason}. Every spec entry wraps its JSON Schema under a "schema" field.`,
+    1024,
+  );
+  return extractJsonObject(text);
+}
+
+/**
+ * Thrown by {@link extractJsonObject} when the text-fallback response
+ * carries no parseable JSON object — distinct from a transient network
+ * throw so the repair loop knows to feed a corrective "emit pure JSON"
+ * note (a network retry re-sends the same prompt instead).
+ */
+class SynthesizeTextParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SynthesizeTextParseError';
+  }
+}
+
+/**
+ * Robustly extract one JSON object from a possibly-prose-wrapped model
+ * response. A naive greedy `/\{[\s\S]*\}/` over-captures (first `{` to
+ * LAST `}`), throwing on "prose with a brace before the JSON" or "two
+ * objects". This tries, in order: (1) parse the trimmed text directly;
+ * (2) parse the contents of a ```json fence; (3) scan from the first `{`
+ * for the BALANCED closing `}` (string/escape aware). Throws only when
+ * nothing parses — the bounded validate-and-repair loop then retries
+ * with a corrective note.
+ */
+function extractJsonObject(text: string): unknown {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // fall through
+  }
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence && fence[1]) {
+    try {
+      return JSON.parse(fence[1].trim());
+    } catch {
+      // fall through
+    }
+  }
+  // Scan each balanced {...} from each '{' and return the FIRST that
+  // parses — robust against prose braces BEFORE the JSON (e.g. "{your
+  // widget}: {...}") and a trailing second object.
+  let searchFrom = 0;
+  for (;;) {
+    const start = trimmed.indexOf('{', searchFrom);
+    if (start < 0) break;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    let end = -1;
+    for (let i = start; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+      } else if (ch === '"') {
+        inStr = true;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end < 0) break; // unbalanced from here on
+    try {
+      return JSON.parse(trimmed.slice(start, end + 1));
+    } catch {
+      // not valid JSON from this '{' — advance and try the next one
+    }
+    searchFrom = start + 1;
+  }
+  throw new SynthesizeTextParseError(
+    `synthesize text-fallback: no parseable JSON object in response (length ${text.length})`,
+  );
+}
+
+/**
  * Drop `actionSpec` entries the structural validator flags as
  * `redundant-action` — an empty-payload action whose name is a
  * mutator of an existing context slot (e.g. `increment` alongside a
@@ -574,8 +766,14 @@ function pruneRedundantActions(contract: DataContract): DataContract {
  * Empty / whitespace intent short-circuits to null with a reason —
  * no contract can be inferred from nothing.
  *
- * Provider lacking `callStructured` (test stubs, providers without
- * tool-use) collapses to null.
+ * Providers without `callStructured` (gemini / openai / openrouter) use
+ * a text-JSON fallback (the validate-and-repair loop catches malformed
+ * output and retries) rather than skipping synthesis.
+ *
+ * When `options.draft` is supplied, the loop REPAIRS that draft in
+ * place (seeded with the agent's contract + the deterministic findings)
+ * instead of synthesizing from `intent` alone — the forgiving-handshake
+ * path.
  *
  * Each attempt is self-checked against the validation gate; a failure
  * feeds the precise error back for up to {@link MAX_SYNTH_ATTEMPTS}
@@ -602,6 +800,30 @@ export async function synthesizeContract(
      * no-app-registry path).
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
+    /**
+     * Repair-in-place seed. When provided, the synthesizer does NOT
+     * synthesize from `intent` alone — it starts from the agent's
+     * proposed `draft` and the deterministic findings that rejected it,
+     * and the validate-and-repair loop corrects exactly those problems
+     * while preserving the agent's intent + structure. This is the
+     * forgiving-handshake path: an invalid agent draft is the loop's
+     * SEED rather than a thrown error. Absent ⇒ classic
+     * synthesize-from-intent (cold path). Typed `unknown` because the
+     * agent's draft is untrusted — it may not be a valid DataContract
+     * (that's the whole point of repairing it).
+     */
+    readonly draft?: unknown;
+    /**
+     * Deterministic validation findings that rejected {@link draft}
+     * (from `lintContract(draft).errors`). Fed into the first repair
+     * note so the model corrects the precise problems. Ignored when
+     * `draft` is absent.
+     */
+    readonly draftFindings?: readonly {
+      readonly code: string;
+      readonly path: string;
+      readonly message: string;
+    }[];
   },
 ): Promise<SynthesizeContractResult> {
   const startedAt = Date.now();
@@ -610,17 +832,6 @@ export async function synthesizeContract(
     return {
       contract: null,
       reason: 'synthesize-skip: empty intent',
-      latencyMs: Date.now() - startedAt,
-      attempts: 0,
-      findings: [],
-    };
-  }
-
-  if (typeof deps.llm.callStructured !== 'function') {
-    return {
-      contract: null,
-      reason:
-        'synthesize-skip: provider does not support callStructured. Bind a structured-capable LLMCaller (Anthropic adapter) to enable contract synthesis.',
       latencyMs: Date.now() - startedAt,
       attempts: 0,
       findings: [],
@@ -642,9 +853,29 @@ export async function synthesizeContract(
   // small enough that a full re-emit IS the surgical edit. Budget
   // exhausted → decline exactly as the one-shot path did (caller falls
   // back to an empty contract stub).
-  let repairNote: string | undefined;
+  // Repair-in-place seed: when the caller passed the agent's rejected
+  // draft, the loop's FIRST attempt repairs that draft (not a blank
+  // synthesis). Later attempts overwrite this via buildRepairNote.
+  let repairNote: string | undefined =
+    options?.draft !== undefined
+      ? buildDraftSeedNote(options.draft, options.draftFindings ?? [])
+      : undefined;
   let lastReason = 'synthesize-fail: exhausted repair attempts';
   let lastFindings: readonly ContractValidationFinding[] = [];
+
+  // L2 — repair path uses the PATCH-MODE preamble (minimal patch, no
+  // re-author); cold path uses the bare authoring prompt.
+  const systemPrompt =
+    options?.draft !== undefined
+      ? `${REPAIR_PREAMBLE}\n\n${SYNTHESIZE_SYSTEM_PROMPT}`
+      : SYNTHESIZE_SYSTEM_PROMPT;
+
+  // L1 — the agent-owned seed surfaces the repaired contract MUST keep,
+  // and the best valid-but-non-preserving candidate to fall back on so
+  // preservation never makes the result WORSE than the validity-only gate.
+  const draftSeedKeys =
+    options?.draft !== undefined ? draftSeedPropKeys(options.draft) : [];
+  let lastValidContract: DataContract | null = null;
 
   for (let attempt = 1; attempt <= MAX_SYNTH_ATTEMPTS; attempt++) {
     const userPrompt =
@@ -654,16 +885,22 @@ export async function synthesizeContract(
 
     let toolInput: unknown;
     try {
-      toolInput = await deps.llm.callStructured<SynthesizeToolInput>(
-        SYNTHESIZE_SYSTEM_PROMPT,
+      toolInput = await callSynthesizeTool(
+        deps.llm,
+        systemPrompt,
         userPrompt,
-        SYNTHESIZE_TOOL,
-        1024,
       );
     } catch (err) {
-      // Transient (network) failure — retry the same prompt; the
-      // attempt produced nothing to correct, so no repair note.
-      lastReason = `synthesize-fail: callStructured threw — ${err instanceof Error ? err.message : String(err)}`;
+      lastReason = `synthesize-fail: callSynthesizeTool threw — ${err instanceof Error ? err.message : String(err)}`;
+      // Distinguish causes: an UNPARSEABLE text-path response (model
+      // emitted prose/non-JSON — common on gemini/openai via the text
+      // fallback) gets a corrective note so the next attempt emits pure
+      // JSON. A transient NETWORK failure re-sends the SAME prompt
+      // (nothing to correct) — preserving the retry semantics.
+      if (err instanceof SynthesizeTextParseError) {
+        repairNote =
+          'Your previous response could not be parsed as JSON. Respond with EXACTLY ONE JSON object and nothing else — no prose, no explanation, no markdown code fence.';
+      }
       continue;
     }
 
@@ -741,6 +978,24 @@ export async function synthesizeContract(
       continue;
     }
 
+    // L1 — preservation gate (best-effort). The candidate is VALID, but
+    // a repair must not silently drop an agent-owned seed surface the
+    // draft declared on propsSpec (the valid-but-round-trip-broken
+    // reshape lintContract + the placement validators can't see).
+    // Deterministic + model-independent: it drives a corrective retry.
+    if (draftSeedKeys.length > 0) {
+      const dropped = findDroppedSeedSurfaces(options?.draft, validatedContract);
+      if (dropped.length > 0) {
+        // Remember the best VALID candidate so an exhausted budget never
+        // returns WORSE than the validity-only gate did (a valid contract).
+        lastValidContract = validatedContract;
+        lastReason = `synthesize-preservation: candidate dropped agent-owned propsSpec seed surface(s) [${dropped.join(', ')}]`;
+        lastFindings = allFindings;
+        repairNote = buildPreservationRepairNote(validatedContract, dropped);
+        continue;
+      }
+    }
+
     const findingsSuffix =
       allFindings.length > 0
         ? ` — validator: ${formatValidationFindings({ findings: allFindings })}`
@@ -757,9 +1012,16 @@ export async function synthesizeContract(
     };
   }
 
+  // Budget exhausted. If preservation retries never landed a contract
+  // that kept every seed surface, fall back to the best VALID candidate
+  // we did produce (never worse than the validity-only gate). Only when
+  // no valid candidate ever appeared do we decline with `null`.
   return {
-    contract: null,
-    reason: lastReason,
+    contract: lastValidContract,
+    reason:
+      lastValidContract !== null
+        ? `${lastReason}; returned best valid candidate (preservation retries exhausted)`
+        : lastReason,
     latencyMs: Date.now() - startedAt,
     attempts: MAX_SYNTH_ATTEMPTS,
     findings: lastFindings,

@@ -17,9 +17,11 @@
  *
  *   ```
  *   phase 1: shape          (zod wire-shape validation)
- *   phase 2: references     (CTR_REF_*, CTR_DUP_NAME, CTR_RESERVED_NAME)
- *   phase 3: schema compat  (CTR_SCHEMA_INCOMPAT)
- *   phase 4: hygiene        (LINT_*  — graded, warnings only today)
+ *   phase 2: retired        (CTR_RETIRED_FIELD — dead top-level fields)
+ *   phase 3: schema-meta    (CTR_SCHEMA_META_INVALID — Ajv strict on inner schemas)
+ *   phase 4: references     (CTR_REF_*, CTR_DUP_NAME, CTR_RESERVED_NAME)
+ *   phase 5: schema compat  (CTR_SCHEMA_INCOMPAT)
+ *   phase 6: hygiene        (LINT_*  — graded, warnings only)
  *   ```
  *
  * Errors are reported one phase at a time during strict validation so
@@ -44,7 +46,12 @@ import {
   checkSchemaCompat,
   type SchemaCompatViolation,
 } from './schema-compat-invariants';
-import { checkHygiene, type HygieneWarning } from './hygiene-rules';
+import { checkContractSchemasValid } from './schema-meta-validation';
+import {
+  checkHygiene,
+  checkRetiredContractFields,
+  type HygieneWarning,
+} from './hygiene-rules';
 
 /**
  * Severity classification for a {@link ContractIssue}. Strict
@@ -60,6 +67,8 @@ export type ContractIssueSeverity = 'error' | 'warn';
  */
 export type ContractLintPhase =
   | 'shape'
+  | 'retired'
+  | 'schema-meta'
   | 'references'
   | 'schema-compat'
   | 'hygiene';
@@ -134,11 +143,13 @@ export class ContractValidationError extends Error {
 // Phase 1 — shape (zod wire-shape validation)
 // =============================================================================
 
-function phaseShape(contract: unknown): ContractIssue[] {
+function phaseShape(contract: unknown): {
+  issues: ContractIssue[];
+  parsed: DataContract | null;
+} {
   const parsed = dataContractSchema.safeParse(contract);
-  if (parsed.success) return [];
-
-  return zodErrorToIssues(parsed.error);
+  if (parsed.success) return { issues: [], parsed: parsed.data };
+  return { issues: zodErrorToIssues(parsed.error), parsed: null };
 }
 
 function zodErrorToIssues(error: ZodError): ContractIssue[] {
@@ -166,6 +177,56 @@ function zodIssueCode(zodCode: string): string {
     default:
       return 'CTR_SHAPE_INVALID';
   }
+}
+
+// =============================================================================
+// Phase — retired fields (CTR_RETIRED_FIELD)
+// =============================================================================
+
+/**
+ * Retired top-level field carriers (`wiredTools`, `libraries`,
+ * `dispatch`, …) are a fatal contract bug: the field rides through the
+ * `.passthrough()` schema but names dead protocol surface. Promoted
+ * from a hygiene WARNING to an ERROR so it routes through the same gate
+ * as every other contract error — the handshake repair loop remaps it
+ * (an LLM correctly re-nests `wiredTools` → `agentCapabilities.tools`),
+ * and `ggui_render`'s override path rejects it. Shares the one detector
+ * (`checkRetiredContractFields`) with the author-time surface + the
+ * push-gate assert, so the retired vocabulary can't drift across sites.
+ */
+function phaseRetired(contract: DataContract): ContractIssue[] {
+  return checkRetiredContractFields(contract).map((w): ContractIssue => ({
+    code: 'CTR_RETIRED_FIELD',
+    severity: 'error',
+    phase: 'retired',
+    path: w.path,
+    message: w.message,
+    ...(w.fixHint !== undefined ? { fixHint: w.fixHint } : {}),
+  }));
+}
+
+// =============================================================================
+// Phase — schema-meta (CTR_SCHEMA_META_INVALID, Ajv strict meta-validation)
+// =============================================================================
+
+/**
+ * Inner JSON Schema meta-validation — each `schema:` field must compile
+ * under Ajv strict mode. Distinct from phase-1 shape: zod validates the
+ * WRAPPER shape, but the wrapped JSON Schema rides through
+ * `.passthrough()` unvalidated. Runs before references / schema-compat,
+ * which read these schemas. This is the check the push/handshake assert
+ * set had that `validateContract` was previously missing — folding it in
+ * here is what makes the strict gate complete (and therefore safe to use
+ * as the single boundary gate).
+ */
+function phaseSchemaMeta(contract: DataContract): ContractIssue[] {
+  return checkContractSchemasValid(contract).map((v): ContractIssue => ({
+    code: 'CTR_SCHEMA_META_INVALID',
+    severity: 'error',
+    phase: 'schema-meta',
+    path: v.field,
+    message: v.message,
+  }));
 }
 
 // =============================================================================
@@ -265,19 +326,29 @@ function hygieneWarningToIssue(w: HygieneWarning): ContractIssue {
  * Hygiene-only contracts (warnings without errors) pass the strict
  * gate. Use {@link lintContract} when warnings matter.
  */
-export function validateContract(contract: DataContract): void {
-  const shapeIssues = phaseShape(contract);
-  if (shapeIssues.length > 0) {
-    throw new ContractValidationError('shape', shapeIssues);
+export function validateContract(contract: unknown): void {
+  const shape = phaseShape(contract);
+  if (shape.issues.length > 0) {
+    throw new ContractValidationError('shape', shape.issues);
   }
-  // After phase 1 we know the contract structurally parses; safe to
-  // cast through into the phase-2 / phase-3 helpers (they accept
-  // `DataContract` directly).
-  const refIssues = phaseReferences(contract);
+  // Shape passed ⇒ a parsed DataContract is available for the deeper,
+  // type-dependent phases. The null check narrows `c` to DataContract
+  // without a cast (unreachable: no shape issues ⇒ parsed present).
+  const c = shape.parsed;
+  if (c === null) return;
+  const retiredIssues = phaseRetired(c);
+  if (retiredIssues.length > 0) {
+    throw new ContractValidationError('retired', retiredIssues);
+  }
+  const schemaMetaIssues = phaseSchemaMeta(c);
+  if (schemaMetaIssues.length > 0) {
+    throw new ContractValidationError('schema-meta', schemaMetaIssues);
+  }
+  const refIssues = phaseReferences(c);
   if (refIssues.length > 0) {
     throw new ContractValidationError('references', refIssues);
   }
-  const compatIssues = phaseSchemaCompat(contract);
+  const compatIssues = phaseSchemaCompat(c);
   if (compatIssues.length > 0) {
     throw new ContractValidationError('schema-compat', compatIssues);
   }
@@ -295,20 +366,23 @@ export function validateContract(contract: DataContract): void {
  * author seeing a phase-2 reference error also sees the phase-4
  * hygiene warnings on the same contract.
  */
-export function lintContract(contract: DataContract): ContractLintResult {
+export function lintContract(contract: unknown): ContractLintResult {
   const issues: ContractIssue[] = [];
-  issues.push(...phaseShape(contract));
-  // Phase 2 + 3 produce shape-dependent errors. When the shape
-  // phase already failed, the contract may not match the type
-  // signatures these phases assume — skip downstream phases in that
-  // case to avoid throwing during the lint run. Authoring tools see
-  // "fix shape first" via the shape issues; once those are clean
-  // the next `lintContract` run reaches the deeper phases.
-  if (issues.length === 0) {
-    issues.push(...phaseReferences(contract));
-    issues.push(...phaseSchemaCompat(contract));
+  const shape = phaseShape(contract);
+  issues.push(...shape.issues);
+  // Phases beyond shape are shape-dependent and need a parsed
+  // DataContract. When shape failed, skip them (the contract may not
+  // match the type signatures these phases assume); authoring tools see
+  // "fix shape first" via the shape issues, and the next run reaches the
+  // deeper phases once shape is clean.
+  if (shape.issues.length === 0 && shape.parsed !== null) {
+    const c = shape.parsed;
+    issues.push(...phaseRetired(c));
+    issues.push(...phaseSchemaMeta(c));
+    issues.push(...phaseReferences(c));
+    issues.push(...phaseSchemaCompat(c));
+    issues.push(...phaseHygiene(c));
   }
-  issues.push(...phaseHygiene(contract));
 
   const errors: ContractIssue[] = [];
   const warnings: ContractIssue[] = [];

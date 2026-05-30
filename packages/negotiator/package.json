@@ -53,7 +53,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "probe-rerank": "tsx src/rerank-eval/run-probe-cli.ts",
-    "bench-synth": "tsx src/synth-bench/run-bench-cli.ts"
+    "bench-synth": "tsx src/synth-bench/run-bench-cli.ts",
+    "bench-repair": "tsx src/synth-bench/run-repair-bench-cli.ts"
   },
   "dependencies": {
     "@ggui-ai/mcp-server-core": "workspace:*",

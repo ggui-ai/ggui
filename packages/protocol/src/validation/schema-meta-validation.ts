@@ -99,13 +99,21 @@ function truncate(s: string, max: number): string {
 }
 
 /**
- * Walks the contract's six inner JSON Schema fields and asserts
- * each compiles cleanly under Ajv's strict mode. Throws
- * {@link ContractSchemaMetaError} on the first push attempt that
- * smuggles a malformed schema; collects every offender in one pass
- * before throwing so the agent sees the full list.
+ * Walks the contract's six inner JSON Schema fields and collects a
+ * {@link SchemaMetaViolation} for each that does not compile cleanly
+ * under Ajv's strict mode (unknown keyword, missing `items`, a
+ * non-schema `properties` value, or a missing `schema:` wrapper). Pure
+ * check — returns the full list so callers can either repair (the
+ * handshake repair loop) or throw (see {@link assertContractSchemasValid}).
+ *
+ * This is the inner-schema validity check folded into the unified
+ * `validateContract` gate (lint-contract.ts `phaseSchemaMeta`) — the
+ * one check the strict linter was previously missing relative to the
+ * push/handshake assert set.
  */
-export function assertContractSchemasValid(contract: DataContract): void {
+export function checkContractSchemasValid(
+  contract: DataContract,
+): SchemaMetaViolation[] {
   const violations: SchemaMetaViolation[] = [];
 
   if (contract.propsSpec?.properties) {
@@ -157,6 +165,17 @@ export function assertContractSchemasValid(contract: DataContract): void {
     }
   }
 
+  return violations;
+}
+
+/**
+ * Throwable wrapper around {@link checkContractSchemasValid}. Throws
+ * {@link ContractSchemaMetaError} (collecting every malformed schema in
+ * one pass) when any inner JSON Schema fails Ajv strict-mode
+ * compilation. No-op when all schemas are well-formed.
+ */
+export function assertContractSchemasValid(contract: DataContract): void {
+  const violations = checkContractSchemasValid(contract);
   if (violations.length > 0) {
     throw new ContractSchemaMetaError(violations);
   }

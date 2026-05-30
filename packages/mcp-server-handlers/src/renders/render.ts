@@ -92,7 +92,6 @@ import type {
   GenerationCacheDeps,
   GenerationCacheHit,
 } from './generation-cache.js';
-import { assertContractNoRetiredFields } from './assert-contract-no-retired-fields.js';
 import { assertGeneratorRegistered } from './assert-generator.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
 import { matchBlueprint } from './blueprint-matcher.js';
@@ -109,10 +108,7 @@ import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   validatePropsData,
   ContractViolationError,
-  assertCrossReferences,
-  assertNameInvariants,
-  assertSchemaCompat,
-  assertContractSchemasValid,
+  validateContract,
   dataContractSchema,
   STDLIB_GADGETS,
   renderOutputSchema,
@@ -1148,24 +1144,32 @@ export function createGguiRenderHandler(
         }
       }
 
-      // Retired-field gate. The contract schema is `.passthrough()`
-      // so unknown fields slip through silently; this hard-rejects
-      // the known-retired names BEFORE the structural validators run
-      // so the agent sees a precise migration message.
-      assertContractNoRetiredFields(story.contract);
+      // Single deterministic contract gate — the SAME `validateContract`
+      // the handshake backstop runs (retired fields, inner-schema
+      // validity, cross-references, name invariants, schema-compat). On
+      // the ACCEPT path this re-checks an already-validated contract
+      // (defense-in-depth; never fires). On the OVERRIDE path it is the
+      // STRICT commit gate: a forced contract MUST conform — the server
+      // does not repair it ("use mine verbatim"). A failure is rethrown
+      // with a pointer back to ggui_handshake (which DOES repair), so the
+      // agent recovers instead of looping on override.
+      try {
+        validateContract(story.contract);
+      } catch (err) {
+        if (acceptanceClassification === 'override') {
+          const detail = err instanceof Error ? err.message : String(err);
+          throw new Error(
+            `override_contract_invalid: the forced contract failed validation — ${detail} Override COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and send decision:{kind:'accept'} — do NOT retry override with the same draft.`,
+          );
+        }
+        throw err;
+      }
 
-      // Duplicate-gadget-hook gate. Two bindings with the same
-      // (package, hook) double-mount the wrapper; promoted from soft
-      // hygiene warning to hard reject so the violation is
+      // Duplicate-gadget-hook gate (gadget-specific; not part of the
+      // contract gate). Two bindings with the same (package, hook)
+      // double-mount the wrapper; hard reject so the violation is
       // observable rather than silently tolerated.
       assertNoDuplicateGadgetHooks(story.contract);
-
-      assertContractSchemasValid(story.contract);
-
-      // Cross-reference invariants — every `actionSpec[*].nextStep` and
-      // `streamSpec[*].source.tool` MUST resolve to a key in the
-      // contract's own `agentCapabilities.tools` catalog.
-      assertCrossReferences(story.contract);
 
       // Gadget registry gate + enrichment. First: every
       // `(package, export name)` the contract references on
@@ -1189,14 +1193,8 @@ export function createGguiRenderHandler(
         );
       }
 
-      // Name-invariant rules: no name collisions across actionSpec /
-      // streamSpec / contextSpec keys (boilerplate-identifier collision)
-      // and no `_ggui:` reserved-prefix keys on actionSpec / contextSpec.
-      assertNameInvariants(story.contract);
-
-      // Protocol-level schema-compat invariant against the contract's
-      // OWN catalog.
-      assertSchemaCompat(story.contract);
+      // (Name-invariant + schema-compat invariants are covered by the
+      // single `validateContract` gate above — no separate asserts here.)
 
       // Schema-compat validation against the AUTHORED contract via the
       // server's registered tool registry. Defensive backstops at gen
@@ -1218,7 +1216,7 @@ export function createGguiRenderHandler(
       }
 
       // Props validation against the agreed contract's propsSpec.
-      const runtimeProps = parsed.props;
+      let runtimeProps = parsed.props;
       if (effectiveContract.propsSpec) {
         const propsToValidate = (runtimeProps ?? {}) as Record<string, unknown>;
         const propsValidation = validatePropsData(
@@ -1236,19 +1234,38 @@ export function createGguiRenderHandler(
         runtimeProps !== undefined &&
         Object.keys(runtimeProps).length > 0
       ) {
-        throw new ContractViolationError({
-          tool: 'ggui_render',
-          violations: [
-            {
-              field: 'props',
-              message:
-                'props supplied but the agreed contract declares no propsSpec. Either refine the contract to declare a propsSpec covering these fields, or omit `props`.',
-              expected: 'no props (contract has no propsSpec)',
-              received: `props with keys: ${Object.keys(runtimeProps).join(', ')}`,
-            },
-          ],
-          hint: 'Send a refined `contract` whose `props` declares a propsSpec for these fields, or drop the `props` field. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
-        });
+        if (acceptanceClassification === 'accept') {
+          // Forgiving ACCEPT: the negotiator may have RESHAPED the
+          // contract (e.g. synth moves a mutable collection like `todos`
+          // from propsSpec → contextSpec), so the agent's accept-path
+          // props — authored against its ORIGINAL draft — no longer fit.
+          // The agreed contract declares no propsSpec, so the props are
+          // unusable; DROP them (the UI starts from contextSpec defaults)
+          // rather than hard-failing. The agent populates live state via
+          // ggui_update after render. Override stays STRICT (below).
+          const droppedKeys = Object.keys(runtimeProps).join(', ');
+          // eslint-disable-next-line no-console -- operator-visible signal
+          console.warn(
+            `[ggui_render] accept-path props dropped — the agreed contract declares no propsSpec ` +
+              `(synth likely reshaped propsSpec → contextSpec). Dropped keys: ${droppedKeys}. ` +
+              `Populate live state with ggui_update after render.`,
+          );
+          runtimeProps = undefined;
+        } else {
+          throw new ContractViolationError({
+            tool: 'ggui_render',
+            violations: [
+              {
+                field: 'props',
+                message:
+                  'props supplied but your override contract declares no propsSpec. Drop the `props` field, or add a propsSpec covering these fields.',
+                expected: 'no props (contract has no propsSpec)',
+                received: `props with keys: ${Object.keys(runtimeProps).join(', ')}`,
+              },
+            ],
+            hint: 'Your OVERRIDE draft has no propsSpec, so it takes no props. Drop `props`, add a propsSpec — or re-handshake and use decision:accept (the accept path tolerates mismatched props instead of failing). The handshake record is preserved; retry on the SAME handshakeId.',
+          });
+        }
       }
 
       // Atomically consume the handshake record now that input

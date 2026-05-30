@@ -616,8 +616,11 @@ export function checkRetiredContractFields(
 /**
  * Run every WIRE-side hygiene rule on a `DataContract`. Aggregates
  * warnings; order is stable (orphans → usage → example → gadget
- * hook-names → duplicate-hook → retired fields) so authoring tools
- * render a predictable checklist.
+ * hook-names → duplicate-hook) so authoring tools render a predictable
+ * checklist. Retired-field detection is NOT here — it is promoted to an
+ * ERROR phase (`phaseRetired` in lint-contract.ts); the detector
+ * `checkRetiredContractFields` stays exported for the author-time
+ * surface and the push-gate assert.
  *
  * Registry-side gadget lints (`lintGadgetCatalog`) are NOT run here:
  * they need an `App.gadgets` descriptor array, not a contract, and
@@ -634,6 +637,9 @@ export function checkHygiene(
     ...checkMissingExample(contract),
     ...checkGadgetHookNames(contract),
     ...checkDuplicateGadgetHooks(contract),
-    ...checkRetiredContractFields(contract),
+    // Retired-field detection is promoted to an ERROR phase
+    // (`phaseRetired` in lint-contract.ts) — not a hygiene warning.
+    // `checkRetiredContractFields` stays exported for the author-time
+    // surface + the push-gate assert.
   ];
 }

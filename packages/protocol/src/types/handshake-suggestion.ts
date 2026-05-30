@@ -203,11 +203,17 @@ export interface HandshakeSuggestion {
    */
   readonly amendments?: SuggestionAmendments;
   /**
-   * Populated iff validators ran AND produced findings. On `origin:
-   * 'cache'` these surface as a soft warning (the agent's draft
-   * WOULD have had issues, but the cached blueprint is being served);
-   * on `agent` / `synth` they're absent (agent path's validators
-   * passed; synth path's amendments already addressed them).
+   * Deterministic-gate findings surfaced to the agent so it learns what
+   * its draft got wrong (even though the server repaired it). Populated:
+   *   - `origin: 'agent'` — hygiene WARN findings on the (already-valid)
+   *     draft, if any.
+   *   - `origin: 'synth'` — the ERROR findings that rejected the draft
+   *     and triggered the repair loop.
+   *   - `origin: 'cache'` — absent (a registered blueprint is served;
+   *     the draft was not the basis).
+   * The repaired contract itself is delivered via `blueprintMeta` /
+   * the handshake's stored effectiveContract — these findings are
+   * advisory, not the contract.
    */
   readonly validationFindings?: readonly SuggestionFinding[];
 }

@@ -35,12 +35,30 @@ export function assertGeneratorRegistered(
   requested: string | undefined,
   defaultGenerator: string | undefined,
 ): void {
-  if (requested === undefined) return;
-  if (requested === defaultGenerator) return;
+  if (isGeneratorRegistered(requested, defaultGenerator)) return;
   const registered = defaultGenerator
     ? `['${defaultGenerator}']`
     : '[] (no generator registered)';
   throw new Error(
     `unknown_generator: '${requested}' is not registered on this server. Registered generators: ${registered}. Omit \`blueprintDraft.generator\` to use the server default.`,
   );
+}
+
+/**
+ * Non-throwing predicate form of {@link assertGeneratorRegistered}.
+ *
+ * Used by the FORGIVING `ggui_handshake` path: an unknown generator slug
+ * is DROPPED (the server default is used) + surfaced as a finding,
+ * rather than thrown — handshake never hard-fails on a fixable detail.
+ * The STRICT `ggui_render` override path keeps the throwing assert,
+ * because override commits the agent to its exact draft.
+ *
+ * `undefined` (use server default) is always registered.
+ */
+export function isGeneratorRegistered(
+  requested: string | undefined,
+  defaultGenerator: string | undefined,
+): boolean {
+  if (requested === undefined) return true;
+  return requested === defaultGenerator;
 }

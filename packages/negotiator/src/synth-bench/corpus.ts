@@ -20,11 +20,33 @@
  */
 
 import type { GadgetDescriptor } from '@ggui-ai/protocol';
+import type { RoundTripExpectation } from './round-trip-score.js';
 
 export interface BenchEntry {
   readonly id: string;
   readonly intent: string;
   readonly expected: BenchExpectation;
+  /**
+   * Repair-path seed. When set, the entry exercises the FORGIVING
+   * handshake flow rather than synthesize-from-intent: the runner feeds
+   * this (possibly malformed / suboptimal) agent draft to
+   * `ensureConformingContract`, which lints it → returns verbatim if
+   * clean (origin `agent`) or repairs-in-place if not (origin `synth`).
+   * Mirrors what a real agent submits on `ggui_handshake.blueprintDraft`.
+   * Typed `unknown` because the draft is untrusted — it may not be a
+   * valid `DataContract` (that is the whole point of repairing it).
+   *
+   * Entries WITHOUT a draft run the classic synthesize-from-intent path.
+   */
+  readonly draft?: unknown;
+  /**
+   * Round-trip quality expectation — what the agent intends to do with
+   * the AGREED contract next turn (seed props on `ggui_render`, consume
+   * gestures). The round-trip scorer asserts the produced contract
+   * actually supports it. Only meaningful alongside a `draft` (the
+   * repair corpus); leave absent for shape-only entries.
+   */
+  readonly roundTrip?: RoundTripExpectation;
   /**
    * Per-entry registered gadget catalog. When set, the runner
    * forwards this to `synthesizeContract`'s `appGadgets` option so
@@ -416,13 +438,20 @@ export const BENCH_CORPUS: readonly BenchEntry[] = [
     intent: 'an agent-backed todo list that persists across sessions',
     expected: {
       hasActionSpec: true,
-      hasContextSpec: true,
+      hasContextSpec: false,
       hasStreamSpec: false,
-      hasProps: false,
-      actionNames: ['addTodo', 'deleteTodo', 'add', 'delete', 'create', 'remove'],
-      contextSlots: ['todos', 'items'],
+      hasProps: true,
+      actionNames: [
+        'addTodo',
+        'deleteTodo',
+        'toggle',
+        'add',
+        'delete',
+        'create',
+        'remove',
+      ],
       notes:
-        'agent-backed = explicit persistence = each add/delete IS a discrete event the agent must witness.',
+        'agent-backed/persisted = the agent OWNS the items → todos seed on propsSpec (refreshed via ggui_update); add/delete/toggle are discrete events on actionSpec. contextSpec has no agent-push channel, so an agent-owned persisted list there cannot round-trip — this is the round-trip-correct shape, aligned with list-message-thread / list-file-browser (both props-bearing agent-supplied collections).',
     },
   },
   {
@@ -1122,5 +1151,306 @@ export const BENCH_CORPUS: readonly BenchEntry[] = [
         'positive: registered third-party HOOK gadget. A theme-aware chart intent should pull the `useChartTheme` hook export from the registered chart package — the component-only Leaflet cases never exercise a registered hook.',
     },
     appGadgets: [CHART_DESCRIPTOR],
+  },
+];
+
+/**
+ * Repair-path corpus — the round-trip QUALITY bench.
+ *
+ * Where {@link BENCH_CORPUS} asks "does synth emit the right SHAPE from
+ * an intent?", this corpus asks the contract-quality question: "when an
+ * agent submits a draft to `ggui_handshake`, does the negotiator's
+ * repair produce a contract that is round-trip-USABLE?" Each entry
+ * carries a real-shaped agent `draft` (run through the production
+ * `ensureConformingContract` create-path) plus a `roundTrip`
+ * expectation describing what the agent does next turn (seed props,
+ * consume gestures). The new round-trip scorer mirrors the render +
+ * consume wire gates, so a "valid-but-broken" repair fails here even
+ * though `lintContract` and the shape scorer pass it.
+ *
+ * The four entries map a 2×2 of (repair-fired?) × (round-trip-survives?):
+ *   - `repair-todo-seed`     — repair FIRES and BREAKS round-trip (RED today;
+ *                              the contract-quality falsifier — synth reshapes
+ *                              the seedable `todos` collection propsSpec →
+ *                              contextSpec, deleting the only agent seed channel).
+ *   - `repair-todo-clean`    — no repair needed (origin `agent`, fast-path);
+ *                              round-trip survives. Pins the no-false-positive case.
+ *   - `repair-form-nextstep` — repair FIRES (dangling nextStep) and PRESERVES the
+ *                              action round-trip. A "good repair" of a non-seed error.
+ *   - `repair-weather-seed`  — repair FIRES (stray wrapper key) and PRESERVES the
+ *                              props round-trip. A "good repair" that keeps propsSpec.
+ *
+ * Used by run-repair-bench(-cli).ts (live LLM probe) and
+ * round-trip-score.test.ts (deterministic scorer pinning).
+ */
+export const REPAIR_CORPUS: readonly BenchEntry[] = [
+  {
+    // THE falsifier. The agent reaches for a JSON-Schema reflex — a
+    // collection on propsSpec plus a wrapper-level `required` names-array
+    // (illegal: required-ness is a per-prop boolean; the wrapper only
+    // takes `description` + `properties`). That single
+    // CTR_SHAPE_UNRECOGNIZED_KEYS bounces the draft off the fast path
+    // into repair. The MINIMAL correct repair is "drop the stray
+    // `required` key — `todos` is render-time seed data, it stays on
+    // propsSpec." But synth's "a mutable collection is ALWAYS contextSpec"
+    // heuristic instead reshapes propsSpec → contextSpec, producing a
+    // VALID contract with no propsSpec — which the accept-path then drops
+    // the agent's `props: { todos }` against. RED on BOTH the shape scorer
+    // (has-props-mismatch) and the round-trip scorer (props-no-home) until
+    // the negotiator learns seed data stays on propsSpec.
+    id: 'repair-todo-seed',
+    intent:
+      'show my todos, let me check off completed ones and add new items',
+    draft: {
+      propsSpec: {
+        description: "The user's todo items",
+        // ⚠️ FATAL: `required` is not a legal key on the propsSpec wrapper.
+        required: ['todos'],
+        properties: {
+          todos: {
+            required: true,
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  text: { type: 'string' },
+                  completed: { type: 'boolean' },
+                },
+                required: ['id', 'text', 'completed'],
+              },
+            },
+          },
+        },
+      },
+      actionSpec: {
+        toggleTodo: {
+          label: 'Toggle todo',
+          schema: {
+            type: 'object',
+            properties: { id: { type: 'string' } },
+            required: ['id'],
+          },
+          nextStep: 'todo_toggle',
+        },
+        addTodo: {
+          label: 'Add todo',
+          schema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+          },
+          nextStep: 'todo_add',
+        },
+      },
+      agentCapabilities: {
+        tools: {
+          todo_toggle: {
+            description: 'Flip a todo done/undone',
+            inputSchema: {
+              type: 'object',
+              properties: { id: { type: 'string' } },
+              required: ['id'],
+            },
+          },
+          todo_add: {
+            description: 'Append a new todo',
+            inputSchema: {
+              type: 'object',
+              properties: { text: { type: 'string' } },
+              required: ['text'],
+            },
+          },
+        },
+      },
+    },
+    expected: {
+      // The GOOD outcome: todos stays seedable on propsSpec, toggle/add
+      // stay as actions, NO contextSpec reshape.
+      hasActionSpec: true,
+      hasContextSpec: false,
+      hasStreamSpec: false,
+      hasProps: true,
+      actionNames: ['toggle', 'add'],
+      notes:
+        'contract-quality falsifier: synth currently reshapes the seedable todos collection propsSpec → contextSpec, breaking the agent seed round-trip. Expected GREEN once the negotiator preserves render-time seed data on propsSpec.',
+    },
+    roundTrip: {
+      renderProps: {
+        todos: [{ id: 't1', text: 'Buy milk', completed: false }],
+      },
+      consumableActions: ['toggleTodo', 'addTodo'],
+    },
+  },
+  {
+    // The fast-path / no-false-positive case. Same intent, but the agent
+    // submitted a CLEAN, round-trip-correct draft (todos on propsSpec, no
+    // stray key, resolvable nextStep cross-refs). ensureConformingContract
+    // returns it VERBATIM (origin `agent`, no LLM call). The round-trip
+    // scorer MUST pass — if it flags this, the scorer is over-eager.
+    id: 'repair-todo-clean',
+    intent:
+      'show my todos, let me check off completed ones and add new items',
+    draft: {
+      propsSpec: {
+        description: "The user's todo items",
+        properties: {
+          todos: {
+            required: true,
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  text: { type: 'string' },
+                  completed: { type: 'boolean' },
+                },
+                required: ['id', 'text', 'completed'],
+              },
+            },
+          },
+        },
+      },
+      actionSpec: {
+        toggleTodo: {
+          label: 'Toggle todo',
+          schema: {
+            type: 'object',
+            properties: { id: { type: 'string' } },
+            required: ['id'],
+          },
+          nextStep: 'todo_toggle',
+        },
+        addTodo: {
+          label: 'Add todo',
+          schema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+          },
+          nextStep: 'todo_add',
+        },
+      },
+      agentCapabilities: {
+        tools: {
+          todo_toggle: {
+            description: 'Flip a todo done/undone',
+            inputSchema: {
+              type: 'object',
+              properties: { id: { type: 'string' } },
+              required: ['id'],
+            },
+          },
+          todo_add: {
+            description: 'Append a new todo',
+            inputSchema: {
+              type: 'object',
+              properties: { text: { type: 'string' } },
+              required: ['text'],
+            },
+          },
+        },
+      },
+    },
+    expected: {
+      hasActionSpec: true,
+      hasContextSpec: false,
+      hasStreamSpec: false,
+      hasProps: true,
+      actionNames: ['toggle', 'add'],
+      notes:
+        'clean draft — must pass the fast path verbatim (origin agent) and the round-trip scorer. Guards against the scorer false-positiving on a good contract.',
+    },
+    roundTrip: {
+      renderProps: {
+        todos: [{ id: 't1', text: 'Buy milk', completed: false }],
+      },
+      consumableActions: ['toggleTodo', 'addTodo'],
+    },
+  },
+  {
+    // Good repair of a NON-seed error. A contact form: fields are
+    // client-originated draft state (contextSpec), submit is an action.
+    // The draft's submit.nextStep points at a tool that isn't declared
+    // (CTR_REF_NEXT_STEP dangling) → repair fires. The fix (add the tool
+    // or drop the nextStep) has no reason to touch the `submit` action, so
+    // the gesture round-trip survives. No seed props.
+    id: 'repair-form-nextstep',
+    intent: 'a contact form with name, email and message that sends to my backend',
+    draft: {
+      contextSpec: {
+        name: { schema: { type: 'string' }, default: '' },
+        email: { schema: { type: 'string' }, default: '' },
+        message: { schema: { type: 'string' }, default: '' },
+      },
+      actionSpec: {
+        submit: {
+          label: 'Send message',
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              email: { type: 'string' },
+              message: { type: 'string' },
+            },
+            required: ['name', 'email', 'message'],
+          },
+          // ⚠️ dangling: no `send_message` tool declared below.
+          nextStep: 'send_message',
+        },
+      },
+    },
+    expected: {
+      hasActionSpec: true,
+      hasContextSpec: true,
+      hasStreamSpec: false,
+      hasProps: false,
+      actionNames: ['submit', 'send'],
+      contextSlots: ['name', 'email', 'message'],
+      notes:
+        'good repair of a dangling nextStep — the submit gesture must survive so the form round-trips.',
+    },
+    roundTrip: {
+      consumableActions: ['submit'],
+    },
+  },
+  {
+    // Good repair that must KEEP propsSpec. A weather card is the
+    // canonical props-only display case; the agent seeds city/temp/
+    // conditions. The draft carries a stray `additionalProperties` key on
+    // the propsSpec wrapper (illegal — only description+properties allowed)
+    // → CTR_SHAPE_UNRECOGNIZED_KEYS → repair fires. The fix drops the stray
+    // key; propsSpec (and the seed round-trip) must survive.
+    id: 'repair-weather-seed',
+    intent: 'show a weather card for a city with temperature and conditions',
+    draft: {
+      propsSpec: {
+        description: 'Current weather',
+        // ⚠️ FATAL: not a legal key on the propsSpec wrapper.
+        additionalProperties: false,
+        properties: {
+          city: { schema: { type: 'string' }, required: true },
+          temp: { schema: { type: 'number' }, required: true },
+          conditions: { schema: { type: 'string' }, required: true },
+        },
+      },
+    },
+    expected: {
+      hasActionSpec: false,
+      hasContextSpec: false,
+      hasStreamSpec: false,
+      hasProps: true,
+      notes:
+        'good repair of a stray wrapper key — propsSpec must survive so the seed round-trips.',
+    },
+    roundTrip: {
+      renderProps: {
+        city: 'San Francisco',
+        temp: 62,
+        conditions: 'Foggy',
+      },
+    },
   },
 ];

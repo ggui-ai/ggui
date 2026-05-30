@@ -49,6 +49,8 @@ export type {
 } from './llm-rerank.js';
 export { synthesizeContract } from './synthesize-contract.js';
 export type { SynthesizeContractResult } from './synthesize-contract.js';
+export { ensureConformingContract } from './ensure-conforming-contract.js';
+export type { EnsureConformingResult } from './ensure-conforming-contract.js';
 export {
   validateContractStructure,
   validateContractNovelty,

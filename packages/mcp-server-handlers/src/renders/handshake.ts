@@ -14,12 +14,15 @@
  *   3. Delegates suggestion production to the bound
  *      {@link HandshakeNegotiator} — which produces a
  *      {@link HandshakeSuggestion} routed by `origin: cache | agent | synth`.
- *      The negotiator implementation owns the search + validate
- *      orchestration (the reference LLM-backed negotiator runs
- *      `BlueprintSearch.search` and `validateContract` in parallel,
- *      falling through to a `synth.amend` seam when validation fails).
+ *      FORGIVING posture: the input draft is NOT validated/thrown here.
+ *      The negotiator owns validity — it cache-matches a registered
+ *      blueprint (origin: cache) OR runs `ensureConformingContract` on
+ *      the agent's draft (origin: agent when already clean, synth when
+ *      the bounded repair loop had to fix it), and ALWAYS returns a
+ *      contract that passes the deterministic `validateContract` gate.
  *      Absent negotiator → the seam stamps an `origin: 'agent'`
- *      suggestion using the agent's draft verbatim (no enrichment).
+ *      suggestion using the agent's draft verbatim (no repair; the
+ *      backstop below validates it and a malformed draft fails closed).
  *   4. Persists a {@link HandshakeRecord} under a TTL-bounded
  *      {@link KeyValueStore} key. Single-use: the paired `ggui_render`
  *      consumes it via `getAndDelete`.
@@ -34,15 +37,12 @@
  */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { assertContractNoRetiredFields } from './assert-contract-no-retired-fields.js';
-import { assertGeneratorRegistered } from './assert-generator.js';
+import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   STDLIB_GADGETS,
-  assertContractSchemasValid,
-  assertCrossReferences,
-  assertNameInvariants,
-  assertSchemaCompat,
+  validateContract,
+  lintContract,
   dataContractSchema,
   handshakeSuggestionSchema,
   type Blueprint,
@@ -72,11 +72,24 @@ import type { CanvasLifecycleEmitter } from './canvas-lifecycle.js';
  * variance + optional generator hint). `forceCreate` short-circuits
  * cache search so the paired render always cold-gens.
  */
+/**
+ * The agent's draft as it ENTERS the handshake. `contract` is `unknown`
+ * because a FORGIVING handshake accepts a possibly-malformed proposal and
+ * lets the negotiator validate / repair it — it is not yet a guaranteed
+ * `DataContract`. (The protocol {@link BlueprintDraft} keeps
+ * `contract: DataContract` for the STRICT `ggui_render` override path.)
+ */
+export interface DraftInput {
+  readonly contract: unknown;
+  readonly variance?: BlueprintDraft['variance'];
+  readonly generator?: string;
+}
+
 export interface HandshakeStoredInput {
   /** Concise semantic identity of the UI — drives intent-axis search keying. */
   readonly intent: string;
-  /** Agent's draft — contract (required) + optional variance + generator. */
-  readonly blueprintDraft: BlueprintDraft;
+  /** Agent's draft — contract (untrusted) + optional variance + generator. */
+  readonly blueprintDraft: DraftInput;
   /**
    * Skip blueprint search and route straight to validation (and on
    * pass, agent-mode suggestion). Used after an earlier handshake
@@ -168,8 +181,8 @@ export interface HandshakeNegotiator {
   decide(input: {
     /** Agent-authored intent — drives search intent-axis keying. */
     readonly intent: string;
-    /** Agent's draft — see {@link BlueprintDraft}. */
-    readonly blueprintDraft: BlueprintDraft;
+    /** Agent's draft — untrusted contract (see {@link DraftInput}). */
+    readonly blueprintDraft: DraftInput;
     /** Force-skip cache search; route to validation + agent/synth path. */
     readonly forceCreate?: boolean;
     /** Per-app gadget catalog — synth uses to populate gadgets. */
@@ -396,7 +409,13 @@ const inputSchema = {
    */
   blueprintDraft: z
     .object({
-      contract: dataContractSchema,
+      // Loose ON PURPOSE: a FORGIVING handshake accepts a possibly-
+      // malformed proposal (any JSON object) and lets the negotiator
+      // validate + repair it (ensureConformingContract). Strict
+      // `dataContractSchema` here would hard-fail the two most common
+      // malformations (wrapper-nesting, type-spelling) at the Zod layer
+      // BEFORE the negotiator runs — reviving the handshake-retry loop.
+      contract: z.record(z.string(), z.unknown()),
       variance: z
         .object({
           persona: z.string().optional(),
@@ -475,26 +494,43 @@ export function createGguiHandshakeHandler(
     audience: ['agent'],
     description:
       deps.description ??
-      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. Returns a `suggestion` with origin = cache | agent | synth — server matched an existing blueprint (cache), accepted your draft as-is (agent), or amended it (synth; diff in suggestion.amendments). On the paired ggui_render you send `decision: {kind: 'accept'}` (use the suggestion verbatim) or `decision: {kind: 'override', blueprintDraft}` (mint fresh against a NEW draft). Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
+      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. FORGIVING: handshake ALWAYS returns a conforming contract — if your draft is malformed the server repairs it (handshake never hard-fails on contract content). The `suggestion` carries origin = cache (matched an existing blueprint) | agent (your draft was already clean) | synth (server repaired your draft; what was wrong is listed in suggestion.validationFindings). A synth result is READY — accept it; do NOT re-call ggui_handshake in a loop hoping for a different origin. On the paired ggui_render you send `decision: {kind: 'accept'}` (use the suggestion verbatim — the normal path) or `decision: {kind: 'override', blueprintDraft}` (commit to a NEW draft of your own; STRICT — it must already conform, the server will not repair an override). Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<HandshakeOutput> {
       const parsed = z.object(inputSchema).parse(input);
-      const normalizedInput = normalizeInput(parsed);
+      let normalizedInput = normalizeInput(parsed);
 
-      // Semantic check on generator name — shared with render.ts's
-      // override path so the two seams cannot drift.
-      assertGeneratorRegistered(
-        normalizedInput.blueprintDraft.generator,
-        defaultGenerator,
-      );
+      // Forgiving generator: an UNKNOWN generator slug is DROPPED (the
+      // server default is used) + surfaced as a finding, rather than
+      // thrown. Handshake never hard-fails on a fixable detail; the
+      // STRICT render-override path keeps the throwing assert.
+      const generatorFindings: SuggestionFinding[] = [];
+      if (
+        !isGeneratorRegistered(
+          normalizedInput.blueprintDraft.generator,
+          defaultGenerator,
+        )
+      ) {
+        generatorFindings.push({
+          code: 'GENERATOR_UNKNOWN',
+          severity: 'warn',
+          path: 'blueprintDraft.generator',
+          message: `generator '${normalizedInput.blueprintDraft.generator}' is not registered on this server; using the default '${defaultGenerator}'. Omit blueprintDraft.generator to silence.`,
+        });
+        const { generator: _droppedGenerator, ...draftWithoutGenerator } =
+          normalizedInput.blueprintDraft;
+        normalizedInput = {
+          ...normalizedInput,
+          blueprintDraft: draftWithoutGenerator,
+        };
+      }
 
-      const draftContract = normalizedInput.blueprintDraft.contract;
-      assertContractNoRetiredFields(draftContract);
-      assertContractSchemasValid(draftContract);
-      assertCrossReferences(draftContract);
-      assertNameInvariants(draftContract);
-      assertSchemaCompat(draftContract);
+      // The agent's draft is NOT validated/thrown here. The negotiator
+      // owns validity — it cache-matches OR repairs the draft
+      // (ensureConformingContract) and returns a contract that passes the
+      // deterministic gate. This is the forgiving-handshake posture: a
+      // malformed draft is a TRIGGER into repair, not a thrown error.
 
       // Per-app gadget catalog.
       const gadgets: readonly GadgetDescriptor[] | undefined =
@@ -522,16 +558,29 @@ export function createGguiHandshakeHandler(
             defaultGenerator,
           );
 
-      // Re-run the same four contract invariants on the post-negotiation
-      // `effectiveContract`. The agent-draft path above already passed
-      // these on the input contract, but the negotiator may have
-      // returned an amended contract (`suggestion.origin === 'synth'`)
-      // OR a cached contract — both bypass the input gate.
-      assertContractNoRetiredFields(negotiated.effectiveContract);
-      assertContractSchemasValid(negotiated.effectiveContract);
-      assertCrossReferences(negotiated.effectiveContract);
-      assertNameInvariants(negotiated.effectiveContract);
-      assertSchemaCompat(negotiated.effectiveContract);
+      // Backstop: the negotiator's effectiveContract MUST pass the
+      // single deterministic gate. For a bound negotiator this is
+      // GUARANTEED (ensureConformingContract loops until validateContract
+      // is green), so a throw here means the negotiator returned a
+      // non-conforming contract — a negotiator bug surfaced loudly rather
+      // than shipped downstream. The no-negotiator default path also
+      // lands here: an invalid draft with nothing bound to repair it
+      // fails closed with the deterministic findings (bind a negotiator
+      // to get the forgiving repair path).
+      validateContract(negotiated.effectiveContract);
+
+      // Merge handshake-level findings (e.g. a dropped generator) into
+      // the negotiator's suggestion so the agent sees every adjustment.
+      const finalSuggestion: HandshakeSuggestion =
+        generatorFindings.length > 0
+          ? {
+              ...negotiated.suggestion,
+              validationFindings: [
+                ...(negotiated.suggestion.validationFindings ?? []),
+                ...generatorFindings,
+              ],
+            }
+          : negotiated.suggestion;
 
       const handshakeId = mintHandshakeId();
       // Emit handshake_started so the canvas animator transitions to
@@ -545,7 +594,12 @@ export function createGguiHandshakeHandler(
       const target: HandshakeStoredTarget = negotiated.target ?? {};
 
       // Canonical hash of the AGENT'S DRAFT contract (pre-amendment).
-      const draftHash = blueprintKey(normalizedInput.blueprintDraft.contract);
+      // Draft is untrusted (may be malformed) — hash only when it parses;
+      // blueprintKey tolerates `undefined`. Telemetry-only.
+      const draftHash = blueprintKey(
+        dataContractSchema.safeParse(normalizedInput.blueprintDraft.contract)
+          .data,
+      );
 
       const record: HandshakeRecord = {
         handshakeId,
@@ -553,7 +607,7 @@ export function createGguiHandshakeHandler(
         reason: negotiated.reason,
         input: normalizedInput,
         target,
-        suggestion: negotiated.suggestion,
+        suggestion: finalSuggestion,
         effectiveContract: negotiated.effectiveContract,
         appId: ctx.appId,
         createdAt: nowIso(),
@@ -615,17 +669,31 @@ export function createGguiHandshakeHandler(
 }
 
 /**
- * Default `origin: 'agent'` suggestion when no negotiator is bound.
- * The agent's draft is taken at face value; no cache search, no
- * validation, no amendments. Useful for the OSS zero-config path
- * (deps without an LLM caller / vector store).
+ * Default `origin: 'agent'` suggestion when no negotiator is bound (OSS
+ * zero-config). No negotiator ⇒ no LLM ⇒ nothing can REPAIR a malformed
+ * draft. The handshake backstop (validateContract) would throw on one,
+ * so this still honors "handshake never hard-fails": a clean draft is
+ * used verbatim; a malformed draft is deterministically replaced by the
+ * trivially-conforming empty contract + loud findings (bind a
+ * HandshakeNegotiator to get the forgiving repair path instead).
  */
 function buildDefaultAgentSuggestion(
-  blueprintDraft: BlueprintDraft,
+  blueprintDraft: DraftInput,
   mintBlueprintId: () => string,
   defaultGenerator: string,
 ): HandshakeNegotiatorResult {
-  const contract = blueprintDraft.contract;
+  const lint = lintContract(blueprintDraft.contract);
+  const clean = lint.errors.length === 0;
+  // `clean` ⇒ shape phase passed ⇒ strict parse cannot throw.
+  const contract: DataContract = clean
+    ? dataContractSchema.parse(blueprintDraft.contract)
+    : {};
+  const findings: SuggestionFinding[] = lint.errors.map((e) => ({
+    code: e.code,
+    severity: 'error',
+    path: e.path,
+    message: e.message,
+  }));
   const generator = blueprintDraft.generator ?? defaultGenerator;
   const blueprintMeta: BlueprintMeta = {
     blueprintId: mintBlueprintId(),
@@ -648,9 +716,11 @@ function buildDefaultAgentSuggestion(
   };
   const suggestion: HandshakeSuggestion = {
     origin: 'agent',
-    rationale:
-      'no-negotiator-bound: OSS default routes the draft as origin=agent (no search, no validation, no amendments). Bind a HandshakeNegotiator to enable cache/synth routing.',
+    rationale: clean
+      ? 'no-negotiator-bound: OSS default routes the draft as origin=agent (no search, no repair). Bind a HandshakeNegotiator to enable cache/synth routing.'
+      : 'no-negotiator-bound: draft failed validation and no negotiator (LLM) is bound to repair it — returning a minimal conforming contract. Bind a HandshakeNegotiator to enable repair.',
     blueprintMeta,
+    ...(findings.length > 0 ? { validationFindings: findings } : {}),
   };
   return {
     action: 'create',
@@ -667,7 +737,7 @@ function buildDefaultAgentSuggestion(
 function normalizeInput(parsed: {
   readonly intent: string;
   readonly blueprintDraft: {
-    readonly contract: DataContract;
+    readonly contract: unknown;
     readonly variance?: {
       readonly persona?: string;
       readonly aesthetic?: string;
@@ -686,7 +756,7 @@ function normalizeInput(parsed: {
 }
 
 function normalizeBlueprintDraft(draft: {
-  readonly contract: DataContract;
+  readonly contract: unknown;
   readonly variance?: {
     readonly persona?: string;
     readonly aesthetic?: string;
@@ -694,7 +764,7 @@ function normalizeBlueprintDraft(draft: {
     readonly seedPrompt?: string;
   };
   readonly generator?: string;
-}): BlueprintDraft {
+}): DraftInput {
   return {
     contract: draft.contract,
     ...(draft.variance !== undefined
