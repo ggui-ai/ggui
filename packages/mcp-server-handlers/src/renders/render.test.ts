@@ -600,14 +600,14 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     return handler.description as string;
   }
 
-  it("describes {kind:'accept'} as REUSING the proposed contract (fast path, no regeneration)", () => {
+  it('describes omitting override (ACCEPT) as REUSING the proposed contract (fast path, no regeneration)', () => {
     const d = description();
     expect(d).toMatch(/CALL SHAPE: ggui_render/);
     expect(d).toMatch(/REUSES the contract the handshake proposed/);
     expect(d).toMatch(/no regeneration/);
   });
 
-  it("describes {kind:'override'} as fresh generation from your own contract (STRICT)", () => {
+  it('describes override.contract as fresh generation from your own contract (STRICT)', () => {
     const d = description();
     expect(d).toMatch(/override/);
     expect(d).toMatch(/generates fresh/);

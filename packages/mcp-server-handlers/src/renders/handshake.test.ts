@@ -122,6 +122,9 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(d).toMatch(/VARIANCE_GAP/);
       // built-for-X-you-asked-Y framing + reuse-and-refine default.
       expect(d).toMatch(/built for X, you asked Y/);
+      // The default-accept framing must follow the VARIANCE_GAP flag —
+      // pin it so the clause can't drift to default-override.
+      expect(d).toMatch(/VARIANCE_GAP[\s\S]{0,200}DEFAULT TO ACCEPT/i);
     });
 
     it('teaches the variance/data boundary (design signals vs per-user data)', () => {
