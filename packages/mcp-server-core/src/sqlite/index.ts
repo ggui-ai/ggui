@@ -22,5 +22,9 @@ export { SqliteShortCodeIndex } from './short-code-index.js';
 export type { SqliteShortCodeIndexOptions } from './short-code-index.js';
 export { SqliteVectorStore } from './vector-store.js';
 export type { SqliteVectorStoreOptions } from './vector-store.js';
+// (scope, exactKey) → blueprint UUID. First-write-wins `putId` via
+// `ON CONFLICT DO NOTHING`. Interface lives in `../blueprint-index.ts`.
+export { SqliteBlueprintIndex } from './blueprint-index.js';
+export type { SqliteBlueprintIndexOptions } from './blueprint-index.js';
 export { SqliteThreadStore } from './thread-store.js';
 export type { SqliteThreadStoreOptions } from './thread-store.js';
