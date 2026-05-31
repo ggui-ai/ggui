@@ -284,7 +284,7 @@ export const renderCacheMarkerSchema = z.object({
   cachedBlueprintId: z
     .string()
     .optional()
-    .describe('The stored component id that was matched. Equals top-level blueprintId on a hit.'),
+    .describe('The stored component id that was matched.'),
   llmCallsAvoided: z
     .number()
     .describe('Generation calls skipped by serving the stored component (0 on a fresh generation).'),
@@ -295,7 +295,9 @@ export const renderCacheMarkerSchema = z.object({
 });
 
 /**
- * Wire-output shape — intentionally lean: `{renderId, nextStep?, action}`.
+ * Wire-output shape — `{renderId, resourceUri, action, contractHash,
+ * cache, nextStep?}`. `contractHash` (data-contract identity) and `cache`
+ * (reuse outcome) are required wire fields on this schema.
  * The handler carries `shortCode`, `codeReady`, `handshakeId`,
  * `decision`, `contract`, `codeUrl`, `codeHash`
  * on its internal `RenderOutput` TS shape for telemetry / post-classify
