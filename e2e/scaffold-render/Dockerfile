@@ -12,16 +12,16 @@
 # image's Node). The image carries only the toolchain; source arrives at run time.
 FROM mcr.microsoft.com/playwright:v1.49.0-jammy
 
-# pnpm pinned to the monorepo root's packageManager so the in-cell build matches.
-RUN corepack enable && corepack prepare pnpm@11.2.2 --activate
-
+# Install pnpm DIRECTLY via npm (not corepack): the corepack bundled in the
+# Playwright image has stale signing keys and fails pnpm's signature check
+# ("Cannot find matching keyid"). Pin to the monorepo root's packageManager.
 # curl: Verdaccio /-/ping wait. git: create-agentic-app clones the assembled
 # template repo + setup.sh git-inits it. rsync: copy the RO repo into /work.
 # verdaccio: the local registry — a PROCESS, not a sibling container / DinD.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl git rsync \
   && rm -rf /var/lib/apt/lists/* \
-  && npm install -g verdaccio@5
+  && npm install -g pnpm@11.2.2 verdaccio@5
 
 # verdaccio.yaml points storage + htpasswd at /verdaccio (its docker-image
 # convention); create it writable so the SAME config works in process mode.

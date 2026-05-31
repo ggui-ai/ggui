@@ -43,12 +43,11 @@ ANTHROPIC_API_KEY=… make test-scaffold-render-host
 key skips that SDK. `ANTHROPIC_API_KEY` is always required — it drives ggui's
 UI generation for every SDK.)
 
-The container run is slow cold (~30–40 min: copy the repo in, a fresh full
-`pnpm install` + cohort build with no warm cache, then publish + scaffold + boot
-
-- the LLM renders). The host-side path reuses your warm node_modules + turbo
-  cache (~10 min). Both are **nightly capstones**, not fast gates — CI runs the
-  container on a schedule + `workflow_dispatch` only, never per-PR.
+The container run is slow cold (~30–40 min): it copies the repo in, does a fresh
+full `pnpm install` + cohort build with no warm cache, then publishes, scaffolds,
+boots, and runs the LLM renders. The host-side path reuses your warm
+`node_modules` + turbo cache (~10 min). Both are **nightly capstones**, not fast
+gates — CI runs the container on a schedule + `workflow_dispatch` only, never per-PR.
 
 ## Landscape (where this sits)
 
