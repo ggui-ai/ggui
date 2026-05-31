@@ -869,9 +869,9 @@ describe('matchBlueprint — A4 deterministic propose path (stub judge, no LLM)'
         },
         SCOPE,
         { intent: WEATHER_INTENT, contract: WEATHER_REQUEST_SUPERSET },
-        // No minCosineForRerank override — the real RAG cosine for the
-        // same-intent contract-less query clears the default 0.2 gate
-        // (measured ≈0.44), so this proves the gate-respecting path.
+        // No minCosineForRerank override on purpose: this proves the DEFAULT-gate
+        // path. Relies on MockEmbeddingProvider cosine (~0.44) clearing DEFAULT_MIN_COSINE
+        // (0.2). If DEFAULT_MIN_COSINE is ever raised above ~0.4, add { minCosineForRerank: -1 }.
       );
     };
 
