@@ -13,13 +13,36 @@ import type {
 } from '../types/blueprint';
 import { dataContractSchema, jsonValueSchema } from './data-contract.js';
 
-/** Zod mirror of {@link BlueprintVariance}. */
+/**
+ * Zod mirror of {@link BlueprintVariance}. The single shared variance
+ * schema: every seam that accepts a variance block (handshake draft,
+ * render-decision override, operator blueprint tools) reuses this one
+ * rather than re-declaring the shape inline. `.strict()` so an unknown
+ * key surfaces as a typo at the wire layer rather than being silently
+ * dropped. The per-field `.describe()` strings ship as JSON-Schema
+ * metadata via `tools/list`, so they stay mechanism-only and
+ * vendor-neutral.
+ */
 export const blueprintVarianceSchema: z.ZodType<BlueprintVariance> = z
   .object({
-    persona: z.string().optional(),
-    aesthetic: z.string().optional(),
-    context: z.record(z.string(), jsonValueSchema).optional(),
-    seedPrompt: z.string().optional(),
+    persona: z
+      .string()
+      .optional()
+      .describe('Design persona, e.g. "minimalist" / "data-dense". Part of cache identity.'),
+    aesthetic: z
+      .string()
+      .optional()
+      .describe('Visual aesthetic, e.g. "calm" / "ornate". Part of cache identity.'),
+    context: z
+      .record(z.string(), jsonValueSchema)
+      .optional()
+      .describe(
+        'Deliberate design-shaping signals (e.g. {situation:"sad"}) — part of cache identity. NOT for per-user runtime data; put that in propsSpec/contextSpec.',
+      ),
+    seedPrompt: z
+      .string()
+      .optional()
+      .describe('Generation seed directive. Part of cache identity.'),
   })
   .strict() as z.ZodType<BlueprintVariance>;
 
