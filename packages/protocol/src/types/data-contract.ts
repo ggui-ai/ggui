@@ -760,7 +760,7 @@ export interface GadgetUse {
  * `version`) and a single bundle. Transport metadata (`bundleUrl`,
  * `bundleSri`, `bundleHost`, `styleUrl`, `connect`, `requires`,
  * `typesUrl`, `typesSri`) is per-PACKAGE; teaching text + `permission`
- * + the `required` flag are per-EXPORT (on each `exports[*]`).
+ * are per-EXPORT (on each `exports[*]`).
  *
  * One shape used by:
  *
@@ -788,7 +788,7 @@ export interface GadgetDescriptor {
    * least one (enforced by the schema). Each {@link GadgetExport}
    * carries its own identifier (`hook` or `component`) + teaching text
    * (`description` / `usage` / `example` / `gotchas`) + per-export
-   * `permission` / `required`.
+   * `permission`.
    */
   exports: GadgetExport[];
   /**

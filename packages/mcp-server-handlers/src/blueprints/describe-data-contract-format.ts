@@ -144,7 +144,6 @@ interface AgentToolEntry {
   outputSchema?: JsonSchema;
   usage?: string;
   example?: { input?: JsonValue; output?: JsonValue };
-  required?: boolean;
 }
 \`\`\`
 
@@ -184,8 +183,8 @@ interface GadgetExportUse {
 
 The wire carries IDENTITY ONLY — \`(package, export name)\`. It does
 NOT carry \`version\`: the operator's \`App.gadgets\` catalog owns the
-version pin. Per-export registry metadata (\`permission\`, \`example\`,
-the \`required\` flag) and transport fields (\`bundleUrl\`,
+version pin. Per-export registry metadata (\`permission\`, \`example\`)
+and transport fields (\`bundleUrl\`,
 \`bundleSri\`, …) likewise live on the operator-registered gadget
 package descriptor — NOT on the wire. The renderer resolves them
 server-side from the app's gadget catalog at push time (e.g. a hook's
