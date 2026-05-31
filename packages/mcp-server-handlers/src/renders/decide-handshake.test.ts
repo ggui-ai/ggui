@@ -354,6 +354,27 @@ describe('decideHandshake — find-similar across pools', () => {
     );
   });
 
+  it('omits variance from the match query when blueprintDraft carries none', async () => {
+    // DRAFT has no variance field, so the conditional spread must NOT set a
+    // `variance` key — this pins the exactOptionalPropertyTypes-safe spread
+    // against a future naive `variance: variance` that would leak an
+    // undefined key when variance is absent.
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {},
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(mockMatch.mock.calls[0]?.[2]).not.toHaveProperty('variance');
+  });
+
   it('threads the resolved llm + per-pool installedBlueprints into matchDeps', async () => {
     mockMatch.mockResolvedValue(hit('exact-key'));
     const bridge: InstalledBlueprintsProvider = {
