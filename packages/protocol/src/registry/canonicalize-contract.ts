@@ -72,6 +72,7 @@
  */
 import canonicalize from 'canonicalize';
 import type { DataContract } from '../types/data-contract.js';
+import type { BlueprintVariance } from '../types/blueprint.js';
 
 /**
  * Informational-prose field names removed from the canonical form —
@@ -103,8 +104,16 @@ type JsonValue =
  *
  * Exported for tests / debugging — production callers should use
  * `canonicalizeContracts()`.
+ *
+ * `stripProse` (default `true`) controls the `description`/`usage`
+ * STRIPPED_KEYS strip. The contract pipeline strips (prose is
+ * informational); the variance pipeline ({@link canonicalizeVariance})
+ * passes `false` because variance prose is load-bearing signal.
  */
-export function canonicalizeValue(value: unknown): JsonValue | undefined {
+export function canonicalizeValue(
+  value: unknown,
+  stripProse = true,
+): JsonValue | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   const t = typeof value;
@@ -115,7 +124,7 @@ export function canonicalizeValue(value: unknown): JsonValue | undefined {
   if (Array.isArray(value)) {
     const out: JsonValue[] = [];
     for (const item of value) {
-      const c = canonicalizeValue(item);
+      const c = canonicalizeValue(item, stripProse);
       if (c !== undefined) out.push(c);
     }
     return out;
@@ -135,13 +144,17 @@ export function canonicalizeValue(value: unknown): JsonValue | undefined {
       // literally `description`/`usage` as a MAP key (a gadget package,
       // an `agentCapabilities.tools` entry, a spec slot) maps to an
       // object/array and MUST survive: stripping it collapses distinct
-      // contracts onto one blueprint cache key.
-      .filter((k) => !(STRIPPED_KEYS.has(k) && typeof obj[k] === 'string'))
+      // contracts onto one blueprint cache key. Skipped entirely when
+      // `stripProse` is false (the variance pipeline).
+      .filter(
+        (k) =>
+          !(stripProse && STRIPPED_KEYS.has(k) && typeof obj[k] === 'string'),
+      )
       .map((k) => ({ source: k, normalized: k.normalize('NFC') }))
       .sort((a, b) => (a.normalized < b.normalized ? -1 : a.normalized > b.normalized ? 1 : 0));
     const out: { [key: string]: JsonValue } = {};
     for (const { source, normalized } of entries) {
-      const c = canonicalizeValue(obj[source]);
+      const c = canonicalizeValue(obj[source], stripProse);
       if (c !== undefined) out[normalized] = c;
     }
     return out;
@@ -169,5 +182,64 @@ export function canonicalizeContracts(contract: DataContract | undefined): strin
   // fall back to the empty-object canonical form so the hash function
   // always receives a stable string.
   const result = canonicalize(stripped);
+  return result ?? '{}';
+}
+
+/**
+ * Recursively elide "absent-equivalent" fields so semantically-empty
+ * variance collapses to the empty-object canonical form. Empty strings
+ * (`''`), empty objects (`{}`), empty arrays, `null`, and `undefined`
+ * are all dropped; a primitive that survives is kept verbatim. This is
+ * the D9 self-normalization step — callers never pre-normalize.
+ */
+function elideEmpty(value: JsonValue | undefined): JsonValue | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value === '' ? undefined : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) {
+    const out: JsonValue[] = [];
+    for (const item of value) {
+      const e = elideEmpty(item);
+      if (e !== undefined) out.push(e);
+    }
+    return out.length === 0 ? undefined : out;
+  }
+  const out: { [key: string]: JsonValue } = {};
+  for (const key of Object.keys(value)) {
+    const e = elideEmpty(value[key]);
+    if (e !== undefined) out[key] = e;
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+/**
+ * Canonical bytes for a {@link BlueprintVariance} block — the input to
+ * `variantKey()`. Same JCS + NFC pipeline as {@link canonicalizeContracts}
+ * with two DELIBERATE divergences from the contract pipeline:
+ *
+ *   1. **No `description`/`usage` strip.** For a contract, prose is
+ *      informational and stripped so a doc tweak doesn't invalidate a
+ *      cache key. For variance, the prose IS the signal: `seedPrompt`
+ *      and any `context` value steer the generated `componentCode`, so
+ *      stripping them would collapse genuinely distinct variants onto
+ *      one key (false reuse). This is the inverse of the contract rule.
+ *   2. **Self-normalizing (D9).** Empty-string fields, empty objects,
+ *      and empty arrays are elided internally so `undefined`, `{}`,
+ *      `{persona:''}`, and an all-empty block all collapse to the same
+ *      "default variant" canonical form. Callers never pre-normalize —
+ *      the accept path (verbatim `blueprintMeta.variance`) and the
+ *      override path produce identical keys for equivalent variance.
+ *
+ * Pure function — no I/O, no globals.
+ */
+export function canonicalizeVariance(
+  variance: BlueprintVariance | undefined,
+): string {
+  // NFC-normalize + sort keys (canonicalizeValue), but withOUT the
+  // STRIPPED_KEYS prose strip (`stripProse: false`) — variance prose
+  // is load-bearing signal, the inverse of the contract rule.
+  const normalized = canonicalizeValue(variance ?? {}, false);
+  const elided = elideEmpty(normalized) ?? {};
+  const result = canonicalize(elided);
   return result ?? '{}';
 }

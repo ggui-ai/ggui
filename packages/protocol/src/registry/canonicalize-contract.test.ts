@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   canonicalizeContracts,
   canonicalizeValue,
+  canonicalizeVariance,
 } from './canonicalize-contract.js';
 import type { DataContract } from '../types/data-contract.js';
+import type { BlueprintVariance } from '../types/blueprint.js';
 
 describe('canonicalizeContracts', () => {
   it('produces stable output for empty / undefined / {}', () => {
@@ -329,5 +331,61 @@ describe('canonicalizeContracts — RFC 8785 (JCS) conformance', () => {
       },
     };
     expect(canonicalizeContracts(a)).toBe(canonicalizeContracts(b));
+  });
+});
+
+describe('canonicalizeVariance', () => {
+  it('self-normalizes undefined / {} / all-empty to one canonical form (D9)', () => {
+    const sentinel = canonicalizeVariance(undefined);
+    expect(canonicalizeVariance({})).toBe(sentinel);
+    expect(canonicalizeVariance({ persona: '' })).toBe(sentinel);
+    expect(
+      canonicalizeVariance({
+        persona: '',
+        aesthetic: '',
+        seedPrompt: '',
+        context: {},
+      }),
+    ).toBe(sentinel);
+  });
+
+  it('is key-order insensitive', () => {
+    const a: BlueprintVariance = { persona: 'minimalist', aesthetic: 'editorial' };
+    const b: BlueprintVariance = { aesthetic: 'editorial', persona: 'minimalist' };
+    expect(canonicalizeVariance(a)).toBe(canonicalizeVariance(b));
+  });
+
+  it('NFC-normalizes string values (precomposed === decomposed)', () => {
+    const precomposed = 'café'; // é as one code point
+    const decomposed = 'café'; // e + combining acute
+    expect(precomposed).not.toBe(decomposed);
+    expect(canonicalizeVariance({ persona: precomposed })).toBe(
+      canonicalizeVariance({ persona: decomposed }),
+    );
+  });
+
+  it('does NOT strip seedPrompt / context prose — variance prose is load-bearing', () => {
+    // The inverse of the contract pipeline: a description-named field
+    // here is signal, not noise. Differing seedPrompt MUST diverge.
+    expect(canonicalizeVariance({ seedPrompt: 'calm pastel layout' })).not.toBe(
+      canonicalizeVariance({ seedPrompt: 'busy data-dense layout' }),
+    );
+  });
+
+  it('does NOT strip a string-valued field named "description"/"usage" inside context', () => {
+    // Unlike canonicalizeContracts, variance never strips prose: a
+    // context value keyed `description` is load-bearing variance signal.
+    const withDesc = canonicalizeVariance({ context: { description: 'cozy' } });
+    expect(withDesc).toContain('description');
+    expect(withDesc).toContain('cozy');
+    expect(canonicalizeVariance({ context: { description: 'cozy' } })).not.toBe(
+      canonicalizeVariance({ context: { description: 'stark' } }),
+    );
+  });
+
+  it('differing persona produces differing output', () => {
+    expect(canonicalizeVariance({ persona: 'data-dense' })).not.toBe(
+      canonicalizeVariance({ persona: 'minimalist' }),
+    );
   });
 });
