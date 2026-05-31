@@ -22,7 +22,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 const WEB_URL = `http://localhost:${process.env.WEB_PORT ?? 6890}`;
-const AGENT_PORT = 6792; // per shell — claude=6790, openai=6791, google=6792
+const AGENT_PORT = 6790; // per shell — claude=6790, openai=6791, google=6790
 // Keys this template needs before anything can run. Each requirement is met if
 // ANY of its `keys` is set; ALL requirements must be met. Both the agent and
 // ggui's UI generation run on Gemini (servers/ggui/ggui.json; GOOGLE_API_KEY

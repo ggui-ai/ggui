@@ -120,7 +120,7 @@ the most predictable (`dev:mcps` starts every `servers/mcps/*` at once):
 ```bash
 pnpm dev:ggui    # ggui MCP server   → http://localhost:6781/mcp
 pnpm dev:todo    # todo MCP server   → http://localhost:6782/mcp
-pnpm dev:agent   # agent backend     → http://localhost:6791
+pnpm dev:agent   # agent backend     → http://localhost:6790
 pnpm dev:web     # frontend SPA      → http://localhost:6890
 ```
 
@@ -137,7 +137,7 @@ both read it via `dotenv-cli`.
 | `GGUI_TODO_MCP_URL`       | demo     | `http://localhost:6782/mcp` — wires the todo tools into the agent. |
 | `GGUI_MCP_URL`            | no       | Where the agent finds the ggui MCP (default `…:6781/mcp`).       |
 | `MODEL`                   | no       | OpenAI model the agent runs on (default `gpt-5.5`).          |
-| `PORT`                    | no       | Agent backend port (default 6791).                               |
+| `PORT`                    | no       | Agent backend port (default 6790).                               |
 | `VITE_AGENT_ENDPOINT_URL` | no       | Where the browser bundle reaches the agent backend.              |
 
 The ggui server reads its model from `servers/ggui/ggui.json#generation.model`,

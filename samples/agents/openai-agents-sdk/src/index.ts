@@ -4,7 +4,7 @@
  *
  * Env vars consumed here:
  *
- *   PORT                Chat backend HTTP port (default 6791)
+ *   PORT                Chat backend HTTP port (default 6790)
  *   SANDBOX_PROXY_PORT  Spec-mandated second-origin sandbox port (default 7791)
  *   GGUI_MCP_URL        Primary ggui MCP endpoint
  *                       (default http://localhost:6781/mcp)
@@ -64,7 +64,7 @@ if (!process.env.OPENAI_API_KEY?.trim()) {
   process.exit(1);
 }
 
-const PORT = Number(process.env.PORT ?? 6791);
+const PORT = Number(process.env.PORT ?? 6790);
 const SANDBOX_PROXY_PORT = process.env.SANDBOX_PROXY_PORT
   ? Number(process.env.SANDBOX_PROXY_PORT)
   : 7791;

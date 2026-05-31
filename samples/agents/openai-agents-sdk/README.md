@@ -84,11 +84,11 @@ export OPENAI_API_KEY=sk-...
 
 # 3. Boot the sample agent backend
 pnpm --filter @ggui-samples/agent-openai-sdk start
-# → backend ready on http://localhost:6791
+# → backend ready on http://localhost:6790
 # → sandbox proxy on http://localhost:7791 (spec-mandated second origin)
 
 # 4. Boot the reference frontend in another terminal
-VITE_AGENT_ENDPOINT_URL=http://localhost:6791 \
+VITE_AGENT_ENDPOINT_URL=http://localhost:6790 \
   pnpm --filter @ggui-samples/app-ggui-basic-web dev
 # → frontend on http://localhost:6890
 ```
@@ -97,7 +97,7 @@ VITE_AGENT_ENDPOINT_URL=http://localhost:6791 \
 
 | Var                  | Default                     | Purpose                                                   |
 | -------------------- | --------------------------- | --------------------------------------------------------- |
-| `PORT`               | `6791`                      | Chat backend HTTP port                                    |
+| `PORT`               | `6790`                      | Chat backend HTTP port                                    |
 | `SANDBOX_PROXY_PORT` | `7791`                      | Spec-mandated second-origin sandbox port                  |
 | `GGUI_MCP_URL`       | `http://localhost:6781/mcp` | Primary ggui MCP endpoint                                 |
 | `GGUI_TODO_MCP_URL`  | —                           | Optional second MCP for domain tools (todo demo)          |
@@ -126,7 +126,7 @@ This sample is one of three SDK-specific backends with identical wire surface ar
 - `@ggui-samples/agent-openai-sdk` (this) — OpenAI Agents SDK (GPT-5.5)
 - `@ggui-samples/agent-google-adk` — Google ADK (Gemini)
 
-To swap drivers, point the frontend's `VITE_AGENT_ENDPOINT_URL` at a different sample's port (6790 / 6791 / 6792). The same `<AppRenderer>` works against any of them because the wire shape (POST /chat SSE of `SDKMessage`-shaped events, ggui MCP `_meta` envelope) is identical.
+To swap drivers, point the frontend's `VITE_AGENT_ENDPOINT_URL` at a different sample's port (6790 / 6790 / 6792). The same `<AppRenderer>` works against any of them because the wire shape (POST /chat SSE of `SDKMessage`-shaped events, ggui MCP `_meta` envelope) is identical.
 
 ## Plugging into a non-Vite frontend
 
@@ -134,7 +134,7 @@ The backend is pure node:http with wide-open CORS for dev — any frontend that 
 
 - **Next.js** — fetch `/chat` from a route handler or directly from a client component
 - **Remix / Astro / SvelteKit** — same; the wire is HTTP+SSE
-- **Plain HTML** — `EventSource('http://localhost:6791/chat')` works
+- **Plain HTML** — `EventSource('http://localhost:6790/chat')` works
 
 The frontend needs to:
 
