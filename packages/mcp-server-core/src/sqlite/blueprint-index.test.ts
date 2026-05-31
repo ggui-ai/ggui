@@ -93,9 +93,14 @@ describe('SqliteBlueprintIndex — persistence', () => {
     }
   });
 
-  it('close() is idempotent', () => {
+  it('close() is idempotent — repeated closes never throw', () => {
     const ix = new SqliteBlueprintIndex({ filename: ':memory:' });
-    ix.close();
-    expect(() => ix.close()).not.toThrow();
+    // Each call must be a no-op once the owned handle is released. The
+    // guard owns this guarantee, not better-sqlite3's tolerance.
+    expect(() => {
+      ix.close();
+      ix.close();
+      ix.close();
+    }).not.toThrow();
   });
 });

@@ -68,6 +68,7 @@ interface BlueprintIndexRow {
 export class SqliteBlueprintIndex implements BlueprintIndex {
   private readonly db: SqliteDatabase;
   private readonly ownsDatabase: boolean;
+  private closed = false;
 
   /** Prepared statements — built once at construction. */
   private readonly stmts: {
@@ -109,7 +110,10 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
 
   /** Release the underlying database handle, if owned. Idempotent. */
   close(): void {
-    if (this.ownsDatabase) this.db.close();
+    if (this.ownsDatabase && !this.closed) {
+      this.closed = true;
+      this.db.close();
+    }
   }
 
   async getId(scope: string, exactKey: string): Promise<string | null> {
