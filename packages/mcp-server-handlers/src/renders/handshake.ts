@@ -894,10 +894,15 @@ function emitHandshakeDecided(
     handshakeId: args.handshakeId,
     action: record.action,
     origin: record.suggestion.origin,
-    selectedBlueprintId: meta.blueprintId,
     selectionReason: reason,
     generator: meta.generator,
   };
+  // blueprintId is absent on agent/synth origins (D4) — the UUID is
+  // minted at render-time registration, not at handshake. Only emit the
+  // attribute when a stored cache UUID backs the suggestion.
+  if (meta.blueprintId !== undefined) {
+    attributes['selectedBlueprintId'] = meta.blueprintId;
+  }
   if (confidence !== undefined) {
     attributes['selectionConfidence'] = confidence;
   }

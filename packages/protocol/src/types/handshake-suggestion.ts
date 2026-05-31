@@ -109,10 +109,15 @@ export interface BlueprintDraft {
  */
 export interface BlueprintMeta {
   /**
-   * Provisional blueprint id. Server-minted at handshake-time.
-   * Becomes durable when push accepts; discarded on push override.
+   * Stored blueprint id (`bp_<uuid>`). Present only when a cached
+   * blueprint backs the suggestion (`origin === 'cache'`) — that is the
+   * durable UUID minted at its first render-time registration. ABSENT on
+   * `agent` / `synth` origins (D4): the UUID is minted at render-time
+   * registration, not at handshake, so there is no id to report yet.
+   * Consumers MUST tolerate absence (the telemetry reader omits the
+   * clause; the agent falls back to `contractHash`).
    */
-  readonly blueprintId: string;
+  readonly blueprintId?: string;
   /** Canonical RFC 8785 (JCS) hash of the suggestion's contract. */
   readonly contractHash: string;
   /**

@@ -1085,7 +1085,11 @@ export function createGguiRenderHandler(
           acceptanceClassification === 'accept' ? 'confirm' : 'override',
         reason:
           acceptanceClassification === 'accept'
-            ? `push-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}, blueprintId=${handshakeRecord.suggestion.blueprintMeta.blueprintId})`
+            ? `push-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}${
+                handshakeRecord.suggestion.blueprintMeta.blueprintId
+                  ? `, blueprintId=${handshakeRecord.suggestion.blueprintMeta.blueprintId}`
+                  : ''
+              })`
             : `push-classify: agent overrode handshake suggestion with a fresh draft`,
       });
 

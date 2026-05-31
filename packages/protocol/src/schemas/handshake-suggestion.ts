@@ -78,7 +78,7 @@ export const blueprintDraftSchema: z.ZodType<BlueprintDraft> = blueprintDraftObj
 /** `BlueprintMeta` — projected onto the handshake response. */
 export const blueprintMetaSchema: z.ZodType<BlueprintMeta> = z
   .object({
-    blueprintId: z.string().min(1),
+    blueprintId: z.string().min(1).optional(),
     contractHash: z.string().min(1),
     codeHash: z.string().optional(),
     generator: z.string().min(1),
