@@ -324,6 +324,14 @@ export const renderOutputSchema = z.object({
    */
   resourceUri: z.string(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
+  contractHash: z
+    .string()
+    .describe(
+      'Canonical hash of the rendered data contract (shape only — fields, types, specs). Same hash ⟺ same data flow.',
+    ),
+  cache: renderCacheMarkerSchema.describe(
+    'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
+  ),
   /**
    * Wire-shape recovery hint for the next call. Emitted ONLY when the
    * rendered contract has a non-empty `actionSpec` — i.e. the agent will

@@ -113,6 +113,7 @@ import {
   STDLIB_GADGETS,
   renderOutputSchema,
   type GguiRenderOutput,
+  type RenderCacheMarker,
 } from '@ggui-ai/protocol';
 import {
   emitCacheTraceEvent,
@@ -916,29 +917,9 @@ type RenderOutput = GguiRenderOutput & {
   shortCode: string;
   codeReady: boolean;
   handshakeId?: string;
-  contractHash?: string;
   codeUrl?: string;
   codeHash?: string;
 };
-
-/**
- * Cache-hit contract surfaced on `ggui_render` `structuredContent`. See
- * `outputSchema.cache` docstring and `./generation-cache.ts` for the
- * retrieval + record primitives.
- */
-export interface RenderCacheMarker {
-  readonly hit: boolean;
-  readonly similarity?: number;
-  readonly cachedBlueprintId?: string;
-  readonly llmCallsAvoided: number;
-  /**
-   * What kind of registry asset matched. `full-template`
-   * is the only emitted value today — the registry stores opaque
-   * component blobs. `composed` is reserved for the atomic-
-   * decomposition follow-up. `cold` accompanies `hit: false`.
-   */
-  readonly kind?: 'full-template' | 'composed' | 'cold';
-}
 
 /**
  * 16-char URL-safe short-code — `[a-z0-9]` minus `1lI0Oo` confusables (31-char
@@ -1471,8 +1452,8 @@ export function createGguiRenderHandler(
       //     componentCode into the scope so the next same-intent
       //     render hits.
       let generatedCodeReady = false;
-      // Telemetry seam for future cache-hit surfacing.
-      let _cacheMarker: RenderCacheMarker | undefined;
+      // Reuse outcome for this render — surfaced on the wire `cache` field.
+      let cacheMarker: RenderCacheMarker | undefined;
 
       // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
       // the MCP Apps protocol probe diagnostic system card.
@@ -1606,7 +1587,7 @@ export function createGguiRenderHandler(
                 : {}),
             },
           );
-          _cacheMarker = {
+          cacheMarker = {
             hit: true,
             similarity: blueprintHit.cosine,
             cachedBlueprintId: blueprintHit.id,
@@ -1657,7 +1638,7 @@ export function createGguiRenderHandler(
           );
           generatedCodeReady = outcome.ok;
           if (deps.generation.cache) {
-            _cacheMarker = {
+            cacheMarker = {
               hit: false,
               llmCallsAvoided: 0,
               kind: 'cold',
@@ -1810,6 +1791,7 @@ export function createGguiRenderHandler(
         codeReady: generatedCodeReady,
         handshakeId: handshakeRecord.handshakeId,
         contractHash: resolvedContractHash,
+        cache: cacheMarker ?? { hit: false, llmCallsAvoided: 0, kind: 'cold' },
         ...(codeUrl ? { codeUrl, codeHash } : {}),
         ...(nextStep ? { nextStep } : {}),
       };

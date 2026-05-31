@@ -302,13 +302,44 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
     ).toThrow();
   });
 
-  it('round-trips a render output', () => {
+  it('rejects an output missing the required cache-reuse fields', () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        renderId: 'render_1',
+        resourceUri: 'ui://ggui/render/render_1',
+        action: 'create',
+      }),
+    ).toThrow();
+  });
+
+  it('round-trips a render output with contractHash + cache', () => {
     const out = {
       renderId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
+      contractHash: '1c00b3ab282a45f6',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
     };
     expect(renderOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it('surfaces a cache.hit:true marker on output', () => {
+    const out = {
+      renderId: 'render_1',
+      resourceUri: 'ui://ggui/render/render_1',
+      action: 'reuse' as const,
+      contractHash: '1c00b3ab282a45f6',
+      cache: {
+        hit: true,
+        similarity: 1,
+        cachedBlueprintId: 'bp_abc',
+        llmCallsAvoided: 1,
+        kind: 'full-template' as const,
+      },
+    };
+    const parsed = renderOutputSchema.parse(out);
+    expect(parsed.cache.hit).toBe(true);
+    expect(parsed.cache.cachedBlueprintId).toBe('bp_abc');
   });
 
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
@@ -316,6 +347,8 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
       renderId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
+      contractHash: '1c00b3ab282a45f6',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
       // Dead field — post-R5 the `/r/<shortCode>` route was deleted.
       // Defensive: a sender that hasn't migrated yet must not poison
       // the wire output with a hallucination-bait URL.
@@ -325,6 +358,8 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
       renderId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
+      contractHash: '1c00b3ab282a45f6',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
     });
     expect(Object.keys(parsed)).not.toContain('url');
   });
