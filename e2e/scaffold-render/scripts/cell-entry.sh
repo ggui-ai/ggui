@@ -7,7 +7,14 @@
 # → Playwright — all on the container's own localhost (browser-in-cell). Logs
 # stream to the host; the container is removed on exit; the exit code is the
 # test result.
+#
+# Each phase prints a `⏱` lap line so the run log carries a per-step time
+# breakdown (the cohort build + scenarios are timed by turbo + Playwright; the
+# setup sub-phases are timed inside setup.sh).
 set -euo pipefail
+
+_lap=$SECONDS
+lap() { echo "[cell] ⏱ $1: $((SECONDS - _lap))s"; _lap=$SECONDS; }
 
 echo "[cell] copy /repo → /work (source only — node_modules/.git/dist/.turbo excluded)"
 rsync -a \
@@ -16,6 +23,7 @@ rsync -a \
   --exclude='e2e-results/' --exclude='*.log' \
   /repo/ /work/
 cd /work
+lap "copy /repo→/work"
 
 echo "[cell] start Verdaccio (process) on :4873"
 # Same verdaccio.yaml as the host path (@ggui-ai/* proxy-free, 50mb body); it
@@ -27,17 +35,19 @@ curl -sf http://localhost:4873/-/ping >/dev/null 2>&1 || {
   cat /tmp/verdaccio.log >&2
   exit 1
 }
-echo "[cell] Verdaccio is up"
+lap "verdaccio start"
 
 echo "[cell] pnpm install (workspace, fresh in /work)"
 # CI is hermetic (frozen); local allows lockfile updates.
 if [ -n "${CI:-}" ]; then FROZEN=--frozen-lockfile; else FROZEN=--frozen-lockfile=false; fi
 pnpm install "$FROZEN"
+lap "pnpm install (workspace)"
 
 echo "[cell] install the Playwright browser + OS deps (matches the resolved runner)"
 # --with-deps apt-installs Chromium's shared libs (the node:24 base has none);
 # needs root (the container's default user).
 pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright install --with-deps chromium
+lap "playwright install --with-deps"
 
 echo "[cell] run scaffold-render scenarios (Verdaccio process → SKIP_VERDACCIO_BOOT=1)"
 # The harness's setup.sh inherits these: REGISTRY points at our process, and

@@ -28,8 +28,11 @@ RUN npm install -g pnpm@11.2.2 verdaccio@5
 
 # curl: Verdaccio /-/ping wait. git: create-agentic-app clones the assembled
 # template repo + setup.sh git-inits it. rsync: copy the RO repo into /work.
+# xdg-utils: the scaffolded app's `pnpm dev` auto-opens the web URL; xdg-open
+# being present makes that a harmless no-op (belt-and-suspenders — dev.mjs also
+# now handles the missing-opener error).
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends curl git rsync \
+  && apt-get install -y --no-install-recommends curl git rsync xdg-utils \
   && rm -rf /var/lib/apt/lists/*
 
 # verdaccio.yaml points storage + htpasswd at /verdaccio (its docker-image

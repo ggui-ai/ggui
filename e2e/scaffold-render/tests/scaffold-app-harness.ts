@@ -68,11 +68,19 @@ let templatesSrc: string | undefined;
 
 async function ensureSetup(): Promise<string> {
   if (templatesSrc) return templatesSrc;
+  const t0 = Date.now();
   const work = mkdtempSync(join(tmpdir(), 'scaffold-render-'));
   const src = join(work, 'tpl');
   await run('bash', [SETUP], { ...process.env, TEMPLATES_SRC: src, REGISTRY });
   templatesSrc = src;
+  // eslint-disable-next-line no-console -- per-step timing in the run log.
+  console.log(`[harness] ⏱ one-time setup (build+publish+assemble): ${secs(t0)}s`);
   return src;
+}
+
+/** Whole-second elapsed since `t0` (ms), for the ⏱ timing log lines. */
+function secs(t0: number): string {
+  return ((Date.now() - t0) / 1000).toFixed(1);
 }
 
 function run(cmd: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<void> {
@@ -113,6 +121,7 @@ async function assertPortsFree(): Promise<void> {
 export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<ScaffoldAppHandle> {
   await assertPortsFree();
   const tpl = await ensureSetup();
+  const bootStart = Date.now();
   const appBase = mkdtempSync(join(tmpdir(), `app-${opts.sdk}-`));
   const appDir = join(appBase, 'app');
   let buf = '';
@@ -140,6 +149,8 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
       `scaffolded app (${opts.sdk}) did not become ready. Recent output:\n${buf.slice(-3000)}`,
     );
   }
+  // eslint-disable-next-line no-console -- per-step timing in the run log.
+  console.log(`[harness] ⏱ ${opts.sdk} scaffold+install+boot: ${secs(bootStart)}s`);
 
   return {
     webUrl,
