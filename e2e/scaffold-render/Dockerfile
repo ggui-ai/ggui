@@ -8,20 +8,29 @@
 # (browser-in-cell, so every iframe runtime-bundle / WS fetch is loopback).
 #
 # The RO mount + copy-to-/work means the container's fresh install/build never
-# mutates the host's node_modules (whose native-module ABI may differ from this
-# image's Node). The image carries only the toolchain; source arrives at run time.
-FROM mcr.microsoft.com/playwright:v1.49.0-jammy
+# mutates the host's node_modules. The image carries only the toolchain.
+#
+# Node 24 (the monorepo's root engines require `node >=24`; Playwright base
+# images bundle older Node (22.x) → pnpm install fails the engine check).
+# Sourced from mcr.microsoft.com (NOT docker.io `node:24`): docker.io pulls trip
+# this environment's credential helper, while mcr is anonymous + reliable.
+# Chromium + its OS deps are installed at run time by `playwright install
+# --with-deps chromium` (cell-entry), matching the resolved @playwright/test.
+FROM mcr.microsoft.com/devcontainers/javascript-node:24-bookworm
 
-# Install pnpm DIRECTLY via npm (not corepack): the corepack bundled in the
-# Playwright image has stale signing keys and fails pnpm's signature check
-# ("Cannot find matching keyid"). Pin to the monorepo root's packageManager.
+# Run as root so cell-entry's `playwright install --with-deps` (apt) works; the
+# Chromium-as-root sandbox is disabled via --no-sandbox in playwright.config.ts.
+USER root
+
+# pnpm pinned to the monorepo root's packageManager; verdaccio = the local
+# registry, run as a PROCESS (not a sibling container / DinD).
+RUN npm install -g pnpm@11.2.2 verdaccio@5
+
 # curl: Verdaccio /-/ping wait. git: create-agentic-app clones the assembled
 # template repo + setup.sh git-inits it. rsync: copy the RO repo into /work.
-# verdaccio: the local registry — a PROCESS, not a sibling container / DinD.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl git rsync \
-  && rm -rf /var/lib/apt/lists/* \
-  && npm install -g pnpm@11.2.2 verdaccio@5
+  && rm -rf /var/lib/apt/lists/*
 
 # verdaccio.yaml points storage + htpasswd at /verdaccio (its docker-image
 # convention); create it writable so the SAME config works in process mode.

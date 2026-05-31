@@ -34,8 +34,10 @@ echo "[cell] pnpm install (workspace, fresh in /work)"
 if [ -n "${CI:-}" ]; then FROZEN=--frozen-lockfile; else FROZEN=--frozen-lockfile=false; fi
 pnpm install "$FROZEN"
 
-echo "[cell] match the Playwright browser to the resolved test runner"
-pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright install chromium
+echo "[cell] install the Playwright browser + OS deps (matches the resolved runner)"
+# --with-deps apt-installs Chromium's shared libs (the node:24 base has none);
+# needs root (the container's default user).
+pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright install --with-deps chromium
 
 echo "[cell] run scaffold-render scenarios (Verdaccio process → SKIP_VERDACCIO_BOOT=1)"
 # The harness's setup.sh inherits these: REGISTRY points at our process, and
