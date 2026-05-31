@@ -15,7 +15,15 @@
  *       `blueprintId === storedUuid`);
  *   (d) a dangling `matchedBlueprint.id` self-heals to cold-gen (no
  *       throw, `cache.hit:false`);
- *   (e) cold-gen registers exactly once and mints a `bp_<uuid>` id.
+ *   (e) cold-gen registers exactly once and mints a `bp_<uuid>` id;
+ *   (f) the override decision is the AGENT SAFETY VALVE — even with a
+ *       reusable cached blueprint present AND referenced by an
+ *       `origin:'cache'` handshake, an `override` carrying a fresh
+ *       SUPERSET contract cold-gens against the agent's draft and does
+ *       NOT reuse the cached blueprint. This is the mechanism the whole
+ *       "the cache PROPOSES, the agent DISPOSES" design rests on — the
+ *       §6 point-read is gated on `decision.kind === 'accept'`, so an
+ *       override structurally bypasses it.
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -49,6 +57,23 @@ const CTX: HandlerContext = {
 
 /** Pure-display contract (no actionSpec → no nextStep). */
 const CONTRACT: DataContract = { propsSpec: { properties: {} } };
+
+/**
+ * Override draft for test (f): a conforming SUPERSET of `CONTRACT` that
+ * adds an interactive surface (`actionSpec.refresh`) the cached
+ * pure-display blueprint lacks — the "genuinely-needed surface missing"
+ * narrative. Must CONFORM (the override path is STRICT — `validateContract`
+ * runs as the commit gate and the server does NOT repair it):
+ *   - the action entry carries a required `label`;
+ *   - it declares NO `nextStep`, so it triggers no `CTR_REF_NEXT_STEP`
+ *     cross-reference check (no agentCapabilities.tools needed).
+ */
+const OVERRIDE_CONTRACT: DataContract = {
+  propsSpec: { properties: {} },
+  actionSpec: {
+    refresh: { label: 'Refresh', schema: { type: 'object', properties: {} } },
+  },
+};
 
 const STORED_CODE = 'export default function Cached(){ return null; }';
 const COLD_CODE = 'export default function Cold(){ return null; }';
@@ -360,6 +385,57 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const entries = await harness.vectorStore.listByScope(APP_ID);
     expect(entries).toHaveLength(1);
     expect(entries[0].key).toBe(out.blueprintId);
+  });
+
+  it('(f) override is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
+    // Reuse is RIGHT THERE: `buildAcceptCacheHarness` pre-seeds a stored
+    // Blueprint (componentCode = STORED_CODE) at `storedUuid` AND an
+    // `origin:'cache'` handshake record whose `matchedBlueprint`
+    // references it. Test (c) proves that an `accept` against this exact
+    // setup REUSES the stored blueprint. Here we drive the OTHER half:
+    // an `override` carrying a fresh, conforming SUPERSET contract (adds
+    // `actionSpec.refresh` the cached pure-display contract lacks — the
+    // "genuinely-needed surface missing" scenario). The handler's §6
+    // point-read is gated on `decision.kind === 'accept'` (render.ts), so
+    // an override structurally bypasses the cached blueprint and cold-gens
+    // against the agent's draft. This verifies the safety valve at the
+    // mechanism level — "the cache PROPOSES, the agent DISPOSES" — rather
+    // than assuming it: even with a reusable blueprint present and named,
+    // the agent's override wins.
+    const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
+    const out = await harness.handler.handler(
+      {
+        handshakeId,
+        decision: {
+          kind: 'override',
+          blueprintDraft: { contract: OVERRIDE_CONTRACT },
+        },
+      },
+      CTX,
+    );
+
+    // Cold-genned — did NOT reuse the available cached blueprint.
+    expect(out.cache.hit).toBe(false);
+    // A FRESH bp_<uuid> was minted, not the cached storedUuid.
+    expect(out.blueprintId).not.toBe(storedUuid);
+    expect(out.blueprintId).toMatch(/^bp_/);
+    // The cache marker reports cold/override, not a hit.
+    expect(out.cache.reason).toBeTruthy();
+    expect(out.cache.reason).toContain('cold');
+
+    // The served component code is the COLD-GEN output, NOT the stored
+    // blueprint's STORED_CODE (mirrors how test (c) reads the render).
+    const stored = await harness.renderStore.get(out.renderId);
+    const render = stored?.render as ComponentRender | undefined;
+    expect(render?.componentCode).toBe(COLD_CODE);
+    expect(render?.componentCode).not.toBe(STORED_CODE);
+
+    // The cached blueprint is still intact in the registry (override
+    // didn't mutate it); the cold-gen ADDED a second, fresh blueprint.
+    const entries = await harness.vectorStore.listByScope(APP_ID);
+    const keys = entries.map((e) => e.key);
+    expect(keys).toContain(storedUuid);
+    expect(keys).toContain(out.blueprintId);
   });
 });
 
