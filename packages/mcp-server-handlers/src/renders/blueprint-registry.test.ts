@@ -14,6 +14,7 @@ import {
   recordBlueprintHit,
   deleteBlueprint,
   composeBlueprintId,
+  composeExactKey,
   composeEmbeddingInput,
   BlueprintRejectedError,
   type ContractValidator,
@@ -55,6 +56,21 @@ describe('composeBlueprintId', () => {
   it('joins kind and contractKey with a colon', () => {
     expect(composeBlueprintId('template', 'abc123')).toBe('template:abc123');
     expect(composeBlueprintId('atom', 'xyz')).toBe('atom:xyz');
+  });
+});
+
+describe('composeExactKey', () => {
+  it('joins kind, contractKey, and variantKey with colons', () => {
+    expect(composeExactKey('template', 'abc123', 'v0')).toBe(
+      'template:abc123:v0',
+    );
+    expect(composeExactKey('atom', 'xyz', 'default')).toBe('atom:xyz:default');
+  });
+
+  it('distinct variantKeys produce distinct exact keys', () => {
+    const a = composeExactKey('template', 'abc123', 'variant-a');
+    const b = composeExactKey('template', 'abc123', 'variant-b');
+    expect(a).not.toBe(b);
   });
 });
 

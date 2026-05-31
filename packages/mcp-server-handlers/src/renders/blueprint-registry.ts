@@ -43,6 +43,11 @@ import type {
   VectorSearchResult,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
+
+// Re-export the core seam so handlers-side consumers (matcher, render,
+// ops-blueprint) name the index type from one barrel without reaching
+// into `@ggui-ai/mcp-server-core` directly.
+export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
 import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
 // `blueprintKey` is server-only — pulled in from a dedicated subpath
 // because it imports `node:crypto`, which browsers can't bundle.
@@ -187,6 +192,24 @@ export function composeBlueprintId(
   contractKey: string,
 ): string {
   return `${kind}:${contractKey}`;
+}
+
+/**
+ * Compose the deterministic exact-lookup key — the `(scope, exactKey)`
+ * half of the {@link BlueprintIndex} binding. Three-segment join
+ * `${kind}:${contractKey}:${variantKey}` so the variant axis is part of
+ * the reuse identity: two registrations of the same contract shape under
+ * distinct variance blocks resolve to distinct exact keys (and so distinct
+ * cached components). Sibling of {@link composeBlueprintId}; the registry's
+ * UUID flip (next wave) keys the index on this string rather than minting
+ * the id from `(kind, contractKey)`.
+ */
+export function composeExactKey(
+  kind: BlueprintKind,
+  contractKey: string,
+  variantKey: string,
+): string {
+  return `${kind}:${contractKey}:${variantKey}`;
 }
 
 /**
