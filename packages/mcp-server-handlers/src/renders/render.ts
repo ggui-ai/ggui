@@ -373,16 +373,6 @@ export interface GguiRenderHandlerDeps {
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
-   * Slug of the single generator bound on this server. Used to
-   * validate override-path `blueprintDraft.generator` — unknown
-   * names reject at the wire boundary instead of silently falling
-   * back to the default. Symmetric with the handshake handler's
-   * same-named dep. Defaults to `DEFAULT_GENERATOR_SLUG` when
-   * absent; multi-generator deployments would replace this single
-   * value with a `knownGenerators: Set<string>` membership check.
-   */
-  readonly defaultGenerator?: string;
-  /**
    * URL of the renderer bundle the thin shell should fetch. Padded
    * onto {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time
    * alongside `renderId` / `appId`. Separate dep (not a field on
@@ -1837,15 +1827,9 @@ export function createGguiRenderHandler(
       // resource URI minter) read from a single computed value
       // instead of recomputing against the same canonicalization.
       // This is the same hash the handshake returned as
-      // `contractHash`.
+      // `contractHash`. The variant axis pairs with this on the wire
+      // output via `effectiveVariantKey` (computed once up top).
       const resolvedContractHash = blueprintKey(effectiveContract);
-      // Variant axis of the reuse key — the same `effectiveVariantKey`
-      // computed once up top from the effective variance and used by the
-      // §6 re-resolution + the cold-gen registration. Paired with
-      // `resolvedContractHash`, this is the `(contractHash, variantKey)`
-      // reuse key the registry indexes on; surfaced on the wire output so
-      // a different variance is observably a distinct variant.
-      const resolvedVariantKey = effectiveVariantKey;
 
       // Conditional `nextStep` — emit a consume-recovery hint ONLY when
       // the resolved contract has a non-empty `actionSpec`. Pure-display
@@ -1894,7 +1878,10 @@ export function createGguiRenderHandler(
         // which never materialise a component — spec §9.1
         // present-on-materialisation.
         blueprintId: resolvedBlueprintId ?? '',
-        variantKey: resolvedVariantKey,
+        // Variant axis of the reuse key — the same `effectiveVariantKey`
+        // the §6 re-resolution + cold-gen registration keyed on, so a
+        // different variance is observably a distinct variant on the wire.
+        variantKey: effectiveVariantKey,
         cache: cacheMarker ?? {
           hit: false,
           llmCallsAvoided: 0,
