@@ -151,6 +151,18 @@ export interface HandshakeRecord {
    * Materialized at handshake-time so the render doesn't re-derive.
    */
   readonly effectiveContract: DataContract;
+  /**
+   * Reference to the cached blueprint this handshake reused — present ONLY
+   * when the decision was a cache reuse (`suggestion.origin === 'cache'`).
+   * The paired `ggui_render` point-reads the stored blueprint via this ref
+   * (design §6) instead of re-running the matcher. Absent on
+   * create / synth / agent handshakes.
+   */
+  readonly matchedBlueprint?: {
+    readonly id: string;
+    readonly contractKey: string;
+    readonly variantKey: string;
+  };
   readonly appId: string;
   readonly createdAt: string;
 }
@@ -615,6 +627,13 @@ export function createGguiHandshakeHandler(
           .data,
       );
 
+      // Thread the matched-blueprint ref onto the record ONLY on a cache
+      // reuse — the paired ggui_render point-reads the stored blueprint via
+      // it (design §6). Create / synth / agent decisions omit it.
+      const matchedBlueprint =
+        negotiated.suggestion.origin === 'cache'
+          ? negotiated.matchedBlueprint
+          : undefined;
       const record: HandshakeRecord = {
         handshakeId,
         action: negotiated.action,
@@ -623,6 +642,7 @@ export function createGguiHandshakeHandler(
         target,
         suggestion: finalSuggestion,
         effectiveContract: negotiated.effectiveContract,
+        ...(matchedBlueprint !== undefined ? { matchedBlueprint } : {}),
         appId: ctx.appId,
         createdAt: nowIso(),
       };

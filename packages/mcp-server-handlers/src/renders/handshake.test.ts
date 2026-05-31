@@ -364,6 +364,62 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
     });
   });
 
+  describe('matchedBlueprint persistence (P2-17)', () => {
+    const cacheReuseNegotiator = (): HandshakeNegotiator => ({
+      decide: () => ({
+        action: 'reuse',
+        reason: 'cache hit',
+        suggestion: {
+          origin: 'cache',
+          rationale: 'cache hit',
+          blueprintMeta: {
+            blueprintId: 'bp_11111111-1111-1111-1111-111111111111',
+            contractHash: 'hash_cached',
+            codeHash: 'code_hash_abc',
+            generator: 'ui-gen-default-haiku-4-5',
+            variance: {},
+          },
+        },
+        effectiveContract: {} as DataContract,
+        matchedBlueprint: {
+          id: 'bp_11111111-1111-1111-1111-111111111111',
+          contractKey: 'hash_cached',
+          variantKey: 'variant_default',
+        },
+      }),
+    });
+
+    it('persists matchedBlueprint on a cache-reuse handshake', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({
+        kvStore,
+        negotiator: cacheReuseNegotiator(),
+      });
+      const out = await handler.handler(
+        minimalInput(),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      const record = await consumeHandshakeRecord(kvStore, 'app-1', out.handshakeId);
+      expect(record?.matchedBlueprint).toEqual({
+        id: 'bp_11111111-1111-1111-1111-111111111111',
+        contractKey: 'hash_cached',
+        variantKey: 'variant_default',
+      });
+    });
+
+    it('omits matchedBlueprint on a create handshake (no-negotiator default)', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput(),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      const record = await consumeHandshakeRecord(kvStore, 'app-1', out.handshakeId);
+      expect(record?.suggestion.origin).toBe('agent');
+      expect(record?.matchedBlueprint).toBeUndefined();
+    });
+  });
+
   describe('input validation', () => {
     it('rejects an input missing blueprintDraft', async () => {
       const kvStore = new InMemoryKeyValueStore();
