@@ -1,16 +1,24 @@
 /**
  * Sub-tier B — cache-hit scenario. Talks DIRECTLY to the scaffolded app's ggui
  * MCP server (no browser) and proves cross-session blueprint reuse via the
- * LATENCY channel: turn-1 is a real cold generation (forceCreate, > 1s);
- * turn-2 (matcher allowed to run) reuses turn-1's blueprint (< 10s). `/r/<short>`
- * was dropped from the wire, so latency is the only observable — never url-nav.
+ * RENDER OUTPUT: turn-1 is a real cold generation (forceCreate); turn-2 (the
+ * render matcher allowed to run) reuses turn-1's blueprint. The primary
+ * observable is the structured `cache` marker on `ggui_render` —
+ * `cache.hit === true` with `cache.llmCallsAvoided >= 1` — plus blueprint
+ * identity equality: both turns carry the same `contractHash` (same data flow ⟺
+ * same hash). Latency stays as a SECONDARY soft signal (turn-2 still fast).
+ *
+ * Phase 1 keeps turn-2 on the existing `decision:{kind:'override'}` flow:
+ * render's own matcher (still present in Phase 1) makes turn-2 cache-hit on the
+ * identical contract. Phase 2 flips this to `accept` in the wave that deletes
+ * the render-side matcher.
  *
  * Auth: the scaffolded ggui runs `ggui serve --mcp-only --dev-allow-all`, which
  * accepts ANY non-empty bearer as `builder` — no pairing/handshake-token needed.
  *
- * LIVE regression gate: cross-session blueprint reuse is wired on this base —
- * proven here at turn-1 cold ≈ 11.6s vs turn-2 ≈ 6ms (~1900×). If a change
- * breaks reuse, turn-2 falls back to a cold gen and this fails the < 10s gate.
+ * LIVE regression gate: cross-session blueprint reuse is wired on this base. If
+ * a change breaks reuse, turn-2 falls back to a cold gen — `cache.hit` goes
+ * false (and latency climbs), failing this spec.
  */
 import { test, expect } from '@playwright/test';
 import { spawnScaffoldedApp, type ScaffoldAppHandle } from './scaffold-app-harness';
@@ -43,10 +51,30 @@ interface McpEnvelope {
 interface HandshakeResult {
   structuredContent?: { handshakeId?: string };
 }
-/** ggui_render CallToolResult (the bits we check). */
+/**
+ * Reuse-outcome marker on `ggui_render`'s `renderCacheMarkerSchema`. Mirrored
+ * locally (rather than imported from `@ggui-ai/protocol`) to keep this Verdaccio
+ * sub-tier-B harness dependency-free — same transport-boundary stance as the
+ * `Record<string, unknown>` envelope above. Only the read fields are modeled.
+ */
+interface RenderCacheMarker {
+  hit: boolean;
+  similarity?: number;
+  cachedBlueprintId?: string;
+  llmCallsAvoided: number;
+  kind?: 'full-template' | 'cold';
+}
+/**
+ * ggui_render CallToolResult (the bits we check). `contractHash` + `cache` are
+ * the Phase-1 reuse-visibility fields surfaced on `renderOutputSchema`; `action`
+ * rides along for completeness.
+ */
 interface RenderResult {
   isError?: boolean;
   renderId?: string;
+  action?: string;
+  contractHash?: string;
+  cache?: RenderCacheMarker;
 }
 
 /**
@@ -79,8 +107,19 @@ async function mcpCall(gguiUrl: string, method: string, params: unknown): Promis
   return (await res.json()) as McpEnvelope;
 }
 
-/** Handshake → render once; return the render's wall-clock ms. */
-async function renderOnce(gguiUrl: string, forceCreate: boolean): Promise<number> {
+/** ggui_render CallToolResult envelope — the structured fields ride on `structuredContent`. */
+interface RenderCallResult {
+  isError?: boolean;
+  structuredContent?: RenderResult;
+}
+
+/** The parsed render output plus the render's wall-clock ms (secondary signal). */
+interface RenderOnceResult extends RenderResult {
+  ms: number;
+}
+
+/** Handshake → render once; return the parsed render output + wall-clock ms. */
+async function renderOnce(gguiUrl: string, forceCreate: boolean): Promise<RenderOnceResult> {
   const hs = await mcpCall(gguiUrl, 'tools/call', {
     name: 'ggui_handshake',
     arguments: {
@@ -103,10 +142,15 @@ async function renderOnce(gguiUrl: string, forceCreate: boolean): Promise<number
       decision: { kind: 'override', blueprintDraft: { contract: CONTRACT } },
     },
   });
+  const ms = Date.now() - t0;
   if (env.error) throw new Error(`ggui_render RPC error: ${env.error.message}`);
-  const render = env.result as RenderResult | undefined;
-  if (!render || render.isError) throw new Error(`ggui_render failed: ${JSON.stringify(env.result)}`);
-  return Date.now() - t0;
+  const call = env.result as RenderCallResult | undefined;
+  if (!call || call.isError) throw new Error(`ggui_render failed: ${JSON.stringify(env.result)}`);
+  const render = call.structuredContent;
+  if (!render) {
+    throw new Error(`ggui_render returned no structuredContent: ${JSON.stringify(env.result)}`);
+  }
+  return { ...render, ms };
 }
 
 test.describe('scaffold-render: blueprint cache hit across sessions (published app)', () => {
@@ -124,25 +168,38 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
   });
 
   test(
-    'session 1 cold-generates, session 2 reuses the blueprint (latency)',
+    'session 1 cold-generates, session 2 reuses the blueprint (cache.hit + identity)',
     async () => {
       test.setTimeout(1_500_000);
       app = await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' });
 
-      const cold = await renderOnce(app.gguiUrl, true);
-      // No forceCreate → the matcher runs and should reuse turn-1's blueprint.
-      const hit = await renderOnce(app.gguiUrl, false);
-      // eslint-disable-next-line no-console -- latency signal in the CI log.
-      console.log(`[cache-hit] turn-1 cold=${cold}ms  turn-2=${hit}ms`);
+      const render1 = await renderOnce(app.gguiUrl, true);
+      // No forceCreate → the render matcher runs and should reuse turn-1's blueprint.
+      const render2 = await renderOnce(app.gguiUrl, false);
+      // eslint-disable-next-line no-console -- reuse + latency signal in the CI log.
+      console.log(
+        `[cache-hit] turn-1 cold=${render1.ms}ms hit=${render1.cache?.hit} | ` +
+          `turn-2=${render2.ms}ms hit=${render2.cache?.hit} avoided=${render2.cache?.llmCallsAvoided}`,
+      );
 
+      // PRIMARY observable: turn-2 served a stored component without generating.
+      expect(render2.cache?.hit, 'turn-2 should be a cache hit').toBe(true);
       expect(
-        cold,
-        `turn-1 ${cold}ms — too fast for a real LLM call (stub regression?)`,
-      ).toBeGreaterThan(1_000);
+        render2.cache?.llmCallsAvoided ?? 0,
+        'turn-2 cache hit should report at least one generation call avoided',
+      ).toBeGreaterThanOrEqual(1);
+      // Identity proof: same data flow ⟺ same contractHash across both turns.
+      expect(render1.contractHash, 'turn-1 should carry a contractHash').toBeTruthy();
       expect(
-        hit,
-        `turn-2 ${hit}ms — cache hit should be < 10s; LLM fallthrough regression?`,
-      ).toBeLessThan(10_000);
+        render2.contractHash,
+        'turn-2 contractHash should equal turn-1 (same contract → same hash)',
+      ).toBe(render1.contractHash);
+
+      // SECONDARY signal: turn-2 stays fast (no LLM fallthrough). Soft so a slow
+      // CI box doesn't mask the primary cache.hit failure mode above.
+      expect
+        .soft(render2.ms, `turn-2 ${render2.ms}ms — cache hit should be < 10s`)
+        .toBeLessThan(10_000);
     },
   );
 });
