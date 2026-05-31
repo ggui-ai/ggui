@@ -334,7 +334,31 @@ export function getCacheTraceSink(): CacheTraceSink | null {
  * is registered. Swallows sink-thrown errors (a broken devtools sink
  * must not break generation).
  */
+// Memoized env-gated stderr diagnostic sink. It lives HERE — the module the
+// matcher's emitCacheTraceEvent already calls — rather than being registered
+// by a caller via setCacheTraceSink, so it fires even across a published-
+// package boundary where a bundled CLI's setCacheTraceSink would target a
+// DIFFERENT module instance than the matcher reads. Off unless the
+// GGUI_CACHE_TRACE_STDERR env var is set (operator/CI opt-in diagnostic).
+let envStderrSinkSingleton: CacheTraceSink | null = null;
+function envStderrSink(): CacheTraceSink {
+  if (!envStderrSinkSingleton) {
+    envStderrSinkSingleton = createStderrCacheTraceSink();
+  }
+  return envStderrSinkSingleton;
+}
+
 export function emitCacheTraceEvent(event: CacheTraceEvent): void {
+  // Env-gated stderr diagnostic — independent of any registered sink, so the
+  // matcher's decision is visible in captured stderr regardless of whether a
+  // devtools sink is wired (and regardless of module-singleton boundaries).
+  if (process.env['GGUI_CACHE_TRACE_STDERR']) {
+    try {
+      envStderrSink().emit(event);
+    } catch {
+      // Diagnostic must never break generation.
+    }
+  }
   const sink = activeSink;
   if (!sink) return;
   try {

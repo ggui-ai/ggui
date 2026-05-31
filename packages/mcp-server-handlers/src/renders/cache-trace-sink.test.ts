@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   createStderrCacheTraceSink,
+  emitCacheTraceEvent,
+  setCacheTraceSink,
   newCacheTraceId,
   type CacheTraceEvent,
 } from './cache-trace-sink.js';
@@ -92,5 +94,32 @@ describe('createStderrCacheTraceSink', () => {
     expect('judgeConfidence' in parsed).toBe(false);
     expect('cosineNoveltyDistance' in parsed).toBe(false);
     expect('winningBlueprintId' in parsed).toBe(false);
+  });
+});
+
+describe('emitCacheTraceEvent env-gated stderr diagnostic', () => {
+  afterEach(() => {
+    delete process.env['GGUI_CACHE_TRACE_STDERR'];
+    setCacheTraceSink(null);
+    vi.restoreAllMocks();
+  });
+
+  it('self-emits to stderr when GGUI_CACHE_TRACE_STDERR is set, with NO registered sink', () => {
+    // The cross-package-singleton-proof path: no setCacheTraceSink call here.
+    process.env['GGUI_CACHE_TRACE_STDERR'] = '1';
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    emitCacheTraceEvent(makeEvent({ decision: 'no-match', reason: 'judge declined' }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]![0] as string).toContain('[ggui:cache-trace]');
+  });
+
+  it('does NOT emit to stderr when the env is unset and no sink is registered', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    emitCacheTraceEvent(makeEvent());
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });
