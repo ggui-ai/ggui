@@ -64,6 +64,11 @@ export * from './pairing.js';
 export * from './negotiator.js';
 export * from './embedding-provider.js';
 export * from './vector-store.js';
+// (scope, exactKey) → blueprint UUID. Sibling of `VectorStore`: the
+// vector store holds the embedding+metadata row keyed by UUID; this
+// index resolves the deterministic exact-lookup key to that UUID
+// without a scope scan. Rebuildable from `VectorStore` metadata.
+export * from './blueprint-index.js';
 export * from './kv-store.js';
 
 // Live-channel WS / session token primitives — transport-level
