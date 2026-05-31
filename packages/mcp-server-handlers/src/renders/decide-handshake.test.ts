@@ -339,6 +339,21 @@ describe('decideHandshake — find-similar across pools', () => {
     expect(mockMatch.mock.calls[1]?.[1]).toBe('shared');
   });
 
+  it('threads the request variance from blueprintDraft.variance into the match query', async () => {
+    mockMatch.mockResolvedValue(hit('exact-key', { id: 'bp-ek' }));
+    const variance = { persona: 'minimalist' } as const;
+    await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance },
+      ctx: CTX,
+    });
+    // The query (3rd matchBlueprint arg) carries the request variance so the
+    // now-variance-aware matcher keys the exact-key lookup on it.
+    expect(mockMatch.mock.calls[0]?.[2]).toEqual(
+      expect.objectContaining({ variance }),
+    );
+  });
+
   it('threads the resolved llm + per-pool installedBlueprints into matchDeps', async () => {
     mockMatch.mockResolvedValue(hit('exact-key'));
     const bridge: InstalledBlueprintsProvider = {

@@ -46,6 +46,7 @@ import {
   dataContractSchema,
   lintContract,
   summarizeContract,
+  type BlueprintVariance,
   type DataContract,
   type HandshakeSuggestion,
   type SuggestionFinding,
@@ -334,6 +335,11 @@ export async function decideHandshake(
   const { intent, blueprintDraft, gadgets, ctx } = input;
   const generatorSlug = adapter.generatorSlug ?? DEFAULT_GENERATOR_SLUG;
   const draftContract = blueprintDraft.contract;
+  // Request variance (persona / aesthetic / context / seedPrompt) is a
+  // sibling of the draft contract — it keys the matcher's exact-key lookup
+  // (`variantKey`) so a same-contract-different-persona request misses the
+  // cached UI rather than reusing it.
+  const variance: BlueprintVariance | undefined = blueprintDraft.variance;
   // Draft is UNTRUSTED (forgiving handshake — may be malformed). Parse
   // once up front: the find-similar tiers need a valid DataContract; a
   // malformed draft skips them and falls straight to validate/repair.
@@ -379,6 +385,7 @@ export async function decideHandshake(
         const matchResult = await matchBlueprint(matchDeps, scope, {
           intent,
           contract: parsedDraft.data,
+          ...(variance !== undefined ? { variance } : {}),
         });
         // exact-key is a perfect canonical match — it always wins,
         // immediately, over any semantic hit from any pool.
