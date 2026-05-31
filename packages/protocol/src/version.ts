@@ -1593,7 +1593,7 @@
  *      Cross-deployment uniformity: the same field type ships from
  *      polling HTTP endpoint, WS replay frame, and store-side `observe()`.
  */
-export const PROTOCOL_VERSION = "draft-2026-05-28";
+export const PROTOCOL_VERSION = "draft-2026-05-31";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the
