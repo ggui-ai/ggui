@@ -1,24 +1,38 @@
 /**
- * Sub-tier B — render scenario, across all three agent SDKs. Drives the
- * SCAFFOLDED published app's web SPA (the real product: `npx create-agentic-app`
- * → Verdaccio cohort → `pnpm dev`) and proves the agent renders a UI for a real
- * prompt. This is the fidelity target the workspace journeys can't reach: it
- * exercises the shipped packages, not workspace source.
+ * Sub-tier B — full agent-loop journey, across all three agent SDKs, against the
+ * SCAFFOLDED published app (`npx create-agentic-app` → Verdaccio cohort →
+ * `pnpm dev`). This is the highest-fidelity gate: it exercises the SHIPPED
+ * packages, not workspace source, through the complete interactive loop:
  *
- * One describe per SDK. ggui's own UI generation always needs ANTHROPIC_API_KEY;
- * each agent additionally needs its own key (OpenAI / Gemini). A missing key
- * skips that SDK's describe rather than failing it.
+ *   render   — agent generates a todo UI; the 3 items mount in the iframe.
+ *   interact — click "buy milk" → the agent drains the action (ggui_consume),
+ *              toggles via the todo MCP, and ggui_update-s the checked state.
+ *   rehydrate— reload the page → the on-mount snapshot restores the POST-CLICK
+ *              checked state (not just the initial render).
+ *
+ * Mirrors the workspace `agent-loop.spec.ts` journey, but driven against the
+ * scaffolded published app. One describe per SDK; ggui's UI generation always
+ * needs ANTHROPIC_API_KEY, each agent needs its own key (OpenAI / Gemini); a
+ * missing key skips that SDK.
  */
 import { test, expect } from '@playwright/test';
 import { spawnScaffoldedApp, type ScaffoldAppHandle, type SdkId } from './scaffold-app-harness';
+// Canonical toggleable/checked locators for agent-authored todo UIs — shared
+// with the workspace agent-loop journey (pure Playwright locator builders).
+import {
+  findTodoToggleable,
+  findTodoCheckedIndicator,
+} from '../../journeys/tests/agent-loop-harness';
 
-// The proven agent-loop journey prompt — known to drive a todo render. We
-// assert only that a requested item appears (a render happened); the full
-// toggle round-trip is the workspace agent-loop journey's job.
+// The proven agent-loop prompt — the trailing "keep in sync" sentence is what
+// drives the click-loop (toggle → todo MCP update → ggui_update).
 const JOURNEY_PROMPT =
   'Please use the todo MCP server to add these items to my todo list: ' +
   'buy milk, walk the dog, write code. Then show me my todo list as an ' +
-  'interactive UI where I can click an item to mark it done.';
+  'interactive UI where I can click an item to mark it done. When I toggle ' +
+  'an item, update it in the todo MCP so my list stays in sync.';
+
+const EXPECTED_TODOS = ['buy milk', 'walk', 'write code'];
 
 interface SdkCase {
   readonly sdk: SdkId;
@@ -40,7 +54,7 @@ function hasAgentKey(c: SdkCase): boolean {
 }
 
 for (const c of SDK_CASES) {
-  test.describe(`scaffold-render: ${c.sdk} renders against the published scaffolded app`, () => {
+  test.describe(`scaffold-render: ${c.sdk} full journey against the published scaffolded app`, () => {
     let app: ScaffoldAppHandle | undefined;
 
     test.beforeAll(() => {
@@ -55,28 +69,55 @@ for (const c of SDK_CASES) {
       if (app) await app.close();
     });
 
-    test(`${c.sdk}: chat → render → todo item visible`, async ({ page }) => {
+    test(`${c.sdk}: render → click → reload (rehydrate)`, async ({ page }) => {
       // First test bears the one-time build+publish+assemble (ensureSetup) plus
       // scaffold+install+boot+LLM — generous budget for a nightly capstone.
       test.setTimeout(1_500_000);
       app = await spawnScaffoldedApp({ sdk: c.sdk });
 
+      // ── STEP 1 — render ──────────────────────────────────────────────
       // The web SPA resolves its agent endpoint from `?agent=` FIRST (App.tsx),
-      // so pass the SDK's agent URL explicitly — `dev:web` runs plain vite,
-      // which never reads the app-root .env.local, so VITE_AGENT_ENDPOINT_URL
-      // alone would leave the web defaulting to 6790 (wrong for openai/google).
+      // so pass it explicitly (`dev:web` runs plain vite, which never reads the
+      // app-root .env.local).
       await page.goto(`${app.webUrl}/?agent=${encodeURIComponent(app.agentUrl)}`);
-      // Fast-fail on the static chat shell (90s) rather than the 25-min test
-      // timeout — an unreachable agent / blank page should fail quickly.
-      await page.getByRole('textbox').fill(JOURNEY_PROMPT, { timeout: 90_000 });
+      // Fast-fail on the static chat shell (90s) rather than the test timeout.
+      await expect(page.getByRole('textbox')).toBeVisible({ timeout: 90_000 });
+      await page.getByRole('textbox').fill(JOURNEY_PROMPT);
       await page.getByRole('button', { name: /send/i }).click();
 
-      // Double-iframe drill (outer sandbox-proxy → inner srcdoc) — the scaffolded
+      // Double-iframe drill (outer sandbox-proxy → inner srcdoc): the scaffolded
       // app's apps/web IS ggui-basic-web + <AppRenderer>, same as agent-loop.spec.
-      const frame = page.frameLocator('iframe').first().frameLocator('iframe').first();
+      const initialFrame = page.frameLocator('iframe').first().frameLocator('iframe').first();
+      for (const todo of EXPECTED_TODOS) {
+        await expect(initialFrame.getByText(new RegExp(todo, 'i')).first()).toBeVisible({
+          timeout: 240_000,
+        });
+      }
 
-      // Behavior assertion: the requested item renders. retries:1 absorbs LLM variance.
-      await expect(frame.getByText(/buy milk/i).first()).toBeVisible({ timeout: 240_000 });
+      // ── STEP 2 — interaction (toggle "buy milk" → checked) ───────────
+      // Clicking dispatches an action the agent drains (ggui_consume), toggles
+      // via the todo MCP, then ggui_update-s the render with the checked state.
+      await findTodoToggleable(initialFrame, /buy milk/i).click({ timeout: 30_000 });
+      // The agent may re-mount mid-update — read the LATEST iframe pair.
+      const afterClickFrame = page.frameLocator('iframe').last().frameLocator('iframe').first();
+      await expect(findTodoCheckedIndicator(afterClickFrame, /buy milk/i)).toBeVisible({
+        timeout: 180_000,
+      });
+      // The chat id must be in the URL — precondition for the reload-restore step.
+      expect(page.url()).toMatch(/[?&]chat=/);
+
+      // ── STEP 3 — rehydration (reload → checked state persists) ───────
+      // A hard reload re-mounts a fresh React tree; the on-mount snapshot must
+      // restore the POST-CLICK checked state, proving the snapshot captures
+      // post-interaction state — not just the initial render. This is the
+      // rehydration assertion; we deliberately stop here (a further undo-click
+      // would re-introduce LLM/UI non-determinism via a negative "checked-gone"
+      // assertion — the workspace agent-loop journey owned that extra step).
+      await page.reload();
+      const restoredFrame = page.frameLocator('iframe').first().frameLocator('iframe').first();
+      await expect(findTodoCheckedIndicator(restoredFrame, /buy milk/i)).toBeVisible({
+        timeout: 60_000,
+      });
     });
   });
 }
