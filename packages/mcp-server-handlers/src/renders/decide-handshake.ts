@@ -51,7 +51,7 @@ import {
   type HandshakeSuggestion,
   type SuggestionFinding,
 } from '@ggui-ai/protocol';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   ensureConformingContract,
   type LLMCaller,
@@ -225,6 +225,41 @@ function coverageGapFindings(
   push('streams', 'streamSpec');
   push('gadgets', 'gadgets');
   return findings;
+}
+
+/** Stable code for the VARIANCE_GAP warn finding on a variance-divergent reuse. */
+const VARIANCE_GAP_CODE = 'VARIANCE_GAP';
+
+/**
+ * Project a variance delta into a single `severity:'warn'` validation
+ * finding — emitted ONLY when the proposed (matched-blueprint) variance
+ * differs from the request variance. Mirrors {@link coverageGapFindings}:
+ * same `validationFindings` channel, no new wire field, default-ACCEPT
+ * steer (reuse-and-refine is the priority; override only when the variance
+ * difference must change what is generated).
+ *
+ * Equivalence is decided on {@link variantKey} (self-normalizing per D9),
+ * so `undefined` / `{}` / `{persona:''}` and any all-empty variance never
+ * false-flag against one another. Returns `[]` when the two variances are
+ * variantKey-equal.
+ */
+function varianceGapFindings(
+  requestVariance: BlueprintVariance | undefined,
+  proposedVariance: BlueprintVariance | undefined,
+): SuggestionFinding[] {
+  if (variantKey(requestVariance) === variantKey(proposedVariance)) return [];
+  return [
+    {
+      code: VARIANCE_GAP_CODE,
+      severity: 'warn',
+      path: 'variance',
+      message: `the proposed cached UI was built for variance ${JSON.stringify(
+        proposedVariance ?? {},
+      )}; you requested ${JSON.stringify(
+        requestVariance ?? {},
+      )}. Default to ACCEPT (reuse-and-refine) — override the variance only if the difference must change what is generated.`,
+    },
+  ];
 }
 
 /**
@@ -434,17 +469,23 @@ export async function decideHandshake(
         generatorSlug,
       );
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
-      // what the cached UI lacks before accepting (reuse the existing
-      // validationFindings channel — no new wire field).
-      const gapFindings = coverageGapFindings(best.coverage, parsedDraft.data);
-      if (gapFindings.length === 0) return reuse;
+      // what the cached UI lacks before accepting; a variance-divergent
+      // reuse additionally carries a VARIANCE_GAP warn finding so the agent
+      // sees the proposed variance differs from the request (both reuse the
+      // existing validationFindings channel — no new wire field). A single
+      // reuse can carry BOTH.
+      const extraFindings = [
+        ...coverageGapFindings(best.coverage, parsedDraft.data),
+        ...varianceGapFindings(variance, best.blueprint.variance),
+      ];
+      if (extraFindings.length === 0) return reuse;
       return {
         ...reuse,
         suggestion: {
           ...reuse.suggestion,
           validationFindings: [
             ...(reuse.suggestion.validationFindings ?? []),
-            ...gapFindings,
+            ...extraFindings,
           ],
         },
       };

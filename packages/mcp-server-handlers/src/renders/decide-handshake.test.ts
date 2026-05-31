@@ -601,6 +601,107 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
   });
 });
 
+describe('decideHandshake — VARIANCE_GAP finding (D5)', () => {
+  // A semantic hit whose matched blueprint carries `bpVariance`, so the
+  // proposed (cached) variance can differ from the request's. The `hit()`
+  // helper builds a default-variance blueprint, so build the result here.
+  function semanticHitWithVariance(
+    bpVariance: Record<string, unknown>,
+  ): BlueprintMatchResult {
+    return {
+      strategy: 'semantic',
+      blueprint: mkBlueprint({ id: 'bp-sem', variance: bpVariance }),
+      cosine: 0.8,
+      reason: 'semantic match',
+      coverage: EMPTY_GAP,
+      judgeConfidence: 0.9,
+    };
+  }
+
+  it('a reuse whose proposed variance ≠ the request variance carries a VARIANCE_GAP warn finding naming the proposed variance', async () => {
+    const proposed = { persona: 'minimalist', aesthetic: 'monochrome' };
+    mockMatch.mockResolvedValueOnce(semanticHitWithVariance(proposed));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: { persona: 'power-user' } },
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    const findings =
+      r.suggestion.validationFindings?.filter(
+        (f) => f.code === 'VARIANCE_GAP',
+      ) ?? [];
+    expect(findings).toHaveLength(1);
+    const finding = findings[0];
+    expect(finding?.severity).toBe('warn');
+    expect(finding?.path).toBe('variance');
+    // Default-accept steer.
+    expect(finding?.message).toMatch(/default.*accept/i);
+    expect(finding?.message).toMatch(/override.*if/i);
+    // Names the proposed variance.
+    expect(finding?.message).toMatch(/minimalist/);
+    expect(finding?.message).toMatch(/monochrome/);
+  });
+
+  it('emits NO VARIANCE_GAP when the proposed variance equals the request variance', async () => {
+    const same = { persona: 'minimalist' };
+    mockMatch.mockResolvedValueOnce(semanticHitWithVariance(same));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: { ...same } },
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(
+      r.suggestion.validationFindings?.some((f) => f.code === 'VARIANCE_GAP'),
+    ).toBeFalsy();
+  });
+
+  it('emits NO VARIANCE_GAP when both variances are empty/absent (variantKey-equivalent)', async () => {
+    // Matched blueprint has {} variance; the request carries none — these
+    // are variantKey-equivalent, so no false-flag.
+    mockMatch.mockResolvedValueOnce(semanticHitWithVariance({}));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(
+      r.suggestion.validationFindings?.some((f) => f.code === 'VARIANCE_GAP'),
+    ).toBeFalsy();
+  });
+
+  it('a gapped reuse with a variance delta carries BOTH COVERAGE_GAP and VARIANCE_GAP findings', async () => {
+    mockMatch.mockResolvedValueOnce({
+      strategy: 'semantic',
+      blueprint: mkBlueprint({
+        id: 'bp-sem',
+        variance: { persona: 'minimalist' },
+      }),
+      cosine: 0.8,
+      reason: 'semantic match',
+      coverage: {
+        actions: ['decrement'],
+        props: [],
+        context: [],
+        streams: [],
+        gadgets: [],
+      },
+      judgeConfidence: 0.9,
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: { persona: 'power-user' } },
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    const codes = (r.suggestion.validationFindings ?? []).map((f) => f.code);
+    expect(codes).toContain('COVERAGE_GAP');
+    expect(codes).toContain('VARIANCE_GAP');
+  });
+});
+
 describe('decideHandshake — create / fallback', () => {
   it('runs ensureConformingContract create path when no pool matches', async () => {
     mockMatch.mockResolvedValue(miss);
