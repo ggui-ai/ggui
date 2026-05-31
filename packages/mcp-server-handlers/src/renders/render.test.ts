@@ -292,6 +292,12 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(out.blueprintId).toBe(storedUuid);
     expect(out.cache.cachedBlueprintId).toBe(storedUuid);
 
+    // B1: the cache marker is self-describing by default — a HIT names
+    // the reused blueprint without GGUI_CACHE_TRACE_STDERR.
+    expect(out.cache.reason).toBeTruthy();
+    expect(out.cache.reason).toContain('full-template');
+    expect(out.cache.reason).toContain(storedUuid);
+
     const stored = await harness.renderStore.get(out.renderId);
     const render = stored?.render as ComponentRender | undefined;
     expect(render?.componentCode).toBe(STORED_CODE);
@@ -344,6 +350,10 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       CTX,
     );
     expect(out.cache.hit).toBe(false);
+    // B1: a cold render carries a default-available reason indicating it
+    // generated fresh rather than reusing a stored component.
+    expect(out.cache.reason).toBeTruthy();
+    expect(out.cache.reason).toContain('cold');
     expect(out.blueprintId).toMatch(/^bp_[0-9a-f-]{36}$/);
 
     // Exactly one blueprint landed in the registry under this scope.

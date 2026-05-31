@@ -1605,6 +1605,7 @@ export function createGguiRenderHandler(
             cachedBlueprintId: blueprintHit.id,
             llmCallsAvoided: 1,
             kind: 'full-template',
+            reason: `full-template: reused stored blueprint ${blueprintHit.id} (cache point-read on the accepted origin:cache proposal); 1 generation call avoided`,
           };
           // Reuse → the stored UUID is the materialised component id.
           // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
@@ -1657,6 +1658,8 @@ export function createGguiRenderHandler(
               hit: false,
               llmCallsAvoided: 0,
               kind: 'cold',
+              reason:
+                'cold: generated fresh — no stored component was reused for this render (agent overrode, or no accepted cache proposal, or first-of-kind)',
             };
             // Register the produced blueprint into the registry so
             // future calls can hit Tier 1 (exact contract match) or
@@ -1828,7 +1831,12 @@ export function createGguiRenderHandler(
         // present-on-materialisation.
         blueprintId: resolvedBlueprintId ?? '',
         variantKey: resolvedVariantKey,
-        cache: cacheMarker ?? { hit: false, llmCallsAvoided: 0, kind: 'cold' },
+        cache: cacheMarker ?? {
+          hit: false,
+          llmCallsAvoided: 0,
+          kind: 'cold',
+          reason: 'cold: no cache marker was set for this render',
+        },
         ...(codeUrl ? { codeUrl, codeHash } : {}),
         ...(nextStep ? { nextStep } : {}),
       };

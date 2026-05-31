@@ -43,6 +43,25 @@ describe('renderCacheMarkerSchema', () => {
     expect(renderCacheMarkerSchema.parse(marker)).toEqual(marker);
   });
 
+  it('round-trips the optional `reason` diagnostic when present', () => {
+    const marker = {
+      hit: true,
+      similarity: 0.92,
+      cachedBlueprintId: 'bp_abc',
+      llmCallsAvoided: 1,
+      kind: 'full-template' as const,
+      reason: 'full-template: reused stored blueprint bp_abc; 1 generation call avoided',
+    };
+    expect(renderCacheMarkerSchema.parse(marker)).toEqual(marker);
+  });
+
+  it('parses with `reason` absent (the field is optional)', () => {
+    const marker = { hit: false, llmCallsAvoided: 0, kind: 'cold' as const };
+    const parsed = renderCacheMarkerSchema.parse(marker);
+    expect(parsed.reason).toBeUndefined();
+    expect(parsed).toEqual(marker);
+  });
+
   it('requires `hit`', () => {
     expect(() => renderCacheMarkerSchema.parse({ llmCallsAvoided: 0 })).toThrow();
   });

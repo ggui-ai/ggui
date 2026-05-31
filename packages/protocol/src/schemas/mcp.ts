@@ -292,6 +292,12 @@ export const renderCacheMarkerSchema = z.object({
     .enum(['full-template', 'cold'])
     .optional()
     .describe('full-template = a whole stored component was served; cold = freshly generated.'),
+  reason: z
+    .string()
+    .optional()
+    .describe(
+      'Compact human-readable explanation of the cache outcome — why this render reused a stored component or generated cold. Diagnostic; default-available without the verbose env-gated trace.',
+    ),
 });
 
 /**

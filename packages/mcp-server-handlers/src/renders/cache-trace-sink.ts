@@ -33,6 +33,16 @@
  * **Default = no sink.** When unset, the matcher emits nothing and
  * spends no CPU on the top-k probe. Passing `null` removes a
  * previously registered sink.
+ *
+ * **This sink is the VERBOSE diagnostic, not the default-available one.**
+ * The compact, always-on answer to "why did this render reuse a stored
+ * component vs generate cold?" is the `cache.reason` string on every
+ * `ggui_render` output (`renderCacheMarkerSchema.reason`) — surfaced
+ * without any env var. This sink's per-lookup `CacheTraceEvent.reason`
+ * (and the env-gated `GGUI_CACHE_TRACE_STDERR` stderr projection of it)
+ * is the high-volume operator/CI diagnostic: it covers EVERY matcher
+ * lookup including the ones that never become a render. The two share a
+ * reason vocabulary; the render marker is the public, low-volume summary.
  */
 
 /**
