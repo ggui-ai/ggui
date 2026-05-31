@@ -121,6 +121,7 @@ describe('buildCacheReuseResult', () => {
         variantKey: 'v-abc',
         componentCode: code,
         contract: cachedContract,
+        variance: {},
       },
       'match-semantic: judge matched (confidence=0.90)',
     );
@@ -151,11 +152,27 @@ describe('buildCacheReuseResult', () => {
 
   it('honors a custom generator slug', () => {
     const r = buildCacheReuseResult(
-      { id: 'x', contractKey: 'x', variantKey: 'vx', componentCode: 'a', contract: {} },
+      { id: 'x', contractKey: 'x', variantKey: 'vx', componentCode: 'a', contract: {}, variance: {} },
       'r',
       'ui-gen-advanced-opus',
     );
     expect(r.suggestion.blueprintMeta.generator).toBe('ui-gen-advanced-opus');
+  });
+
+  it("projects the matched blueprint's variance onto blueprintMeta.variance (NOT {})", () => {
+    const variance = { persona: 'minimalist', aesthetic: 'monochrome' } as const;
+    const r = buildCacheReuseResult(
+      {
+        id: BP_UUID,
+        contractKey: 'abc',
+        variantKey: 'v-abc',
+        componentCode: 'x',
+        contract: {},
+        variance,
+      },
+      'match-semantic',
+    );
+    expect(r.suggestion.blueprintMeta.variance).toEqual(variance);
   });
 
   it('is deterministic — same blueprint + reason → identical result', () => {
@@ -165,6 +182,7 @@ describe('buildCacheReuseResult', () => {
       variantKey: 'vx',
       componentCode: 'a',
       contract: {} as DataContract,
+      variance: {},
     };
     expect(buildCacheReuseResult(bp, 'r')).toEqual(buildCacheReuseResult(bp, 'r'));
   });
@@ -204,6 +222,22 @@ describe('buildCreateFallback', () => {
     const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r', 'slug-z');
     expect(r.suggestion.blueprintMeta.generator).toBe('slug-z');
   });
+
+  it('defaults blueprintMeta.variance to {} when no requestVariance is threaded', () => {
+    const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r');
+    expect(r.suggestion.blueprintMeta.variance).toEqual({});
+  });
+
+  it('projects the threaded request variance onto blueprintMeta.variance (NOT {})', () => {
+    const requestVariance = { persona: 'power-user' } as const;
+    const r = buildCreateFallback(
+      { propsSpec: { properties: {} } },
+      'r',
+      DEFAULT_GENERATOR_SLUG,
+      requestVariance,
+    );
+    expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -241,7 +275,7 @@ const miss: BlueprintMatchResult = { strategy: 'no-match', reason: 'no candidate
 describe('decideHandshake — pre-match', () => {
   it('short-circuits on a pre-match hit (find-similar never runs)', async () => {
     const preResult = buildCacheReuseResult(
-      { id: 'curated-1', contractKey: 'c1', variantKey: 'cv1', componentCode: 'x', contract: {} },
+      { id: 'curated-1', contractKey: 'c1', variantKey: 'cv1', componentCode: 'x', contract: {}, variance: {} },
       'curated',
     );
     const preMatch = vi.fn(async () => preResult);
@@ -416,6 +450,27 @@ describe('decideHandshake — find-similar across pools', () => {
         intent: 'i', blueprintDraft: DRAFT, ctx: CTX,
       }),
     ).rejects.toThrow(/bug/);
+  });
+
+  it("a cache reuse result carries the MATCHED blueprint's variance (round-trip), not the request variance", async () => {
+    // The matched blueprint carries its OWN variance; the reuse result must
+    // project THAT (the cached UI's variance), not the request's.
+    const matchedVariance = { persona: 'minimalist', aesthetic: 'monochrome' };
+    mockMatch.mockResolvedValueOnce({
+      strategy: 'exact-key',
+      blueprint: mkBlueprint({ id: 'bp-ek', variance: matchedVariance }),
+      cosine: 1,
+      reason: 'exact-key match',
+      coverage: EMPTY_GAP,
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      // Request carries a DIFFERENT variance — the reuse must ignore it.
+      blueprintDraft: { ...DRAFT, variance: { persona: 'power-user' } },
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.variance).toEqual(matchedVariance);
   });
 });
 
@@ -617,5 +672,39 @@ describe('decideHandshake — create / fallback', () => {
       { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
     );
     expect(r.suggestion.blueprintMeta.generator).toBe('ui-gen-advanced-opus');
+  });
+
+  it('the synth/create result carries the REQUEST variance on blueprintMeta.variance', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'synth',
+      method: 'llm-repair',
+      findings: [],
+      reasoning: 'repaired',
+    });
+    const requestVariance = { persona: 'power-user' };
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: requestVariance },
+      ctx: CTX,
+    });
+    expect(r.action).toBe('create');
+    expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
+  });
+
+  it('the no-creds create fallback carries the REQUEST variance on blueprintMeta.variance', async () => {
+    mockMatch.mockResolvedValue(miss);
+    const requestVariance = { persona: 'power-user' };
+    const r = await decideHandshake(
+      adapter({ resolveLlm: () => undefined, pools: [pool()] }),
+      {
+        intent: 'i',
+        blueprintDraft: { ...DRAFT, variance: requestVariance },
+        ctx: CTX,
+      },
+    );
+    expect(r.action).toBe('create');
+    expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
   });
 });

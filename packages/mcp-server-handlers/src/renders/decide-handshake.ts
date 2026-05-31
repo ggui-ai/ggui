@@ -241,6 +241,7 @@ export function buildCacheReuseResult(
     readonly variantKey: string;
     readonly componentCode: string;
     readonly contract: DataContract;
+    readonly variance: BlueprintVariance;
   },
   reason: string,
   generatorSlug: string = DEFAULT_GENERATOR_SLUG,
@@ -259,7 +260,10 @@ export function buildCacheReuseResult(
       contractHash: blueprint.contractKey,
       codeHash,
       generator: generatorSlug,
-      variance: {},
+      // The MATCHED blueprint's own variance — what the cached UI carries,
+      // surfaced so the agent sees the proposed variance before accepting
+      // (D5). `?? {}` keeps the no-variance default for legacy rows.
+      variance: blueprint.variance ?? {},
       selectedReason: reason,
     },
     proposedContractSummary: summarizeContract(blueprint.contract),
@@ -291,6 +295,7 @@ export function buildCreateFallback(
   draftContract: unknown,
   reason: string,
   generatorSlug: string = DEFAULT_GENERATOR_SLUG,
+  requestVariance?: BlueprintVariance,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(draftContract);
   const contract: DataContract =
@@ -310,7 +315,10 @@ export function buildCreateFallback(
     blueprintMeta: {
       contractHash,
       generator: generatorSlug,
-      variance: {},
+      // The REQUEST variance — this contract was built for the request, so
+      // the proposed variance is the request's. `?? {}` keeps the
+      // no-variance default (D5).
+      variance: requestVariance ?? {},
     },
     proposedContractSummary: summarizeContract(contract),
     ...(findings.length > 0 ? { validationFindings: findings } : {}),
@@ -448,6 +456,7 @@ export async function decideHandshake(
       draftContract,
       'no-creds: no LLM available for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.',
       generatorSlug,
+      variance,
     );
   }
 
@@ -475,7 +484,9 @@ export async function decideHandshake(
       blueprintMeta: {
         contractHash: blueprintKey(conforming.contract),
         generator: generatorSlug,
-        variance: {},
+        // The synthesized contract was made for the request, so its
+        // proposed variance is the REQUEST variance (D5).
+        variance: variance ?? {},
       },
       proposedContractSummary: summarizeContract(conforming.contract),
       ...(conforming.findings.length > 0
@@ -495,6 +506,7 @@ export async function decideHandshake(
       draftContract,
       `negotiator-degraded: ${errorClass} during decision LLM call — ${errMessage(err)}. Falling back to bare-create; the paired ggui_render will still generate the UI.`,
       generatorSlug,
+      variance,
     );
   }
 }
