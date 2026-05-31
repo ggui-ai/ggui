@@ -98,13 +98,38 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(d).toMatch(/do NOT re-call ggui_handshake in a loop/);
     });
 
-    it('reduces the agent to ONE accept/override decision on ggui_render', () => {
+    it('teaches the variance-aware render dispositions (omit=accept / override.variance / override.contract)', () => {
       const d = description();
-      expect(d).toMatch(/accept/i);
-      expect(d).toMatch(/override/i);
-      // accept REUSES; override is STRICT and fails if it does not conform.
-      expect(d).toMatch(/REUSES the proposed contract/);
+      // The DELETED `decision: {kind}` shape must be GONE — an LLM
+      // following it hard-fails the new renderInputSchema.
+      expect(d).not.toMatch(/decision: ?\{kind/);
+      expect(d).not.toMatch(/blueprintDraft\}/);
+      // omit `override` = ACCEPT the proposed contract (normal path).
+      expect(d).toMatch(/OMIT `override` to ACCEPT the proposed contract/);
+      // `override: {variance}` re-aims the variant, keeps the contract.
+      expect(d).toMatch(/`override: \{variance\}`/);
+      expect(d).toMatch(/keeps the agreed contract/);
+      // `override: {contract}` is STRICT — must conform, no repair.
+      expect(d).toMatch(/`override: \{contract\}`/);
       expect(d).toMatch(/STRICT/);
+      expect(d).toMatch(/will not repair an override/);
+      // props is REQUIRED on the render.
+      expect(d).toMatch(/`props` is REQUIRED/);
+    });
+
+    it('flags VARIANCE_GAP alongside COVERAGE_GAP and defaults to accept', () => {
+      const d = description();
+      expect(d).toMatch(/VARIANCE_GAP/);
+      // built-for-X-you-asked-Y framing + reuse-and-refine default.
+      expect(d).toMatch(/built for X, you asked Y/);
+    });
+
+    it('teaches the variance/data boundary (design signals vs per-user data)', () => {
+      const d = description();
+      // variance = design-shaping signals; per-user data → props/contextSpec.
+      expect(d).toMatch(/VARIANCE is design-shaping signals only/);
+      expect(d).toMatch(/persona \/ aesthetic \/ mood/);
+      expect(d).toMatch(/per-user runtime data belongs in `props` \/ contextSpec/);
     });
 
     it('keeps the CONTRACT SHAPE + PLACEMENT RULE blocks verbatim', () => {

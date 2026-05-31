@@ -615,6 +615,22 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     expect(d).toMatch(/this call fails/);
   });
 
+  it('teaches override.variance re-aims the variant while keeping the agreed contract', () => {
+    const d = description();
+    expect(d).toMatch(/override\.variance re-aims the variant/);
+    expect(d).toMatch(/keeping the agreed contract/);
+    expect(d).toMatch(/distinct cached component/);
+  });
+
+  it('teaches the variance/data boundary (design signals vs per-user data)', () => {
+    const d = description();
+    // variance carries design-shaping signals; per-user runtime data
+    // belongs in props/contextSpec, never variance.
+    expect(d).toMatch(/VARIANCE is design-shaping signals only/);
+    expect(d).toMatch(/persona\/aesthetic\/mood/);
+    expect(d).toMatch(/per-user runtime data goes in props\/contextSpec, NOT variance/);
+  });
+
   it('states the response reports action, a stable blueprintId, and a cache marker', () => {
     const d = description();
     expect(d).toMatch(/final `action`/);
