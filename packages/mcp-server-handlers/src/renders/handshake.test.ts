@@ -65,6 +65,74 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
     });
   });
 
+  // P2-24: the negotiation-framing portion of the description was
+  // rewritten to match Phase 2 behavior (server prioritizes proposing a
+  // similar cached contract; ONE accept/override decision on ggui_render).
+  // These ship via tools/list to every self-hoster's LLM, so they are
+  // code-property asserted (key phrases) + OSS-purity grepped (no
+  // platform/tier/credit/cost wording).
+  describe('description (P2-24 negotiation framing)', () => {
+    const description = () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      expect(typeof handler.description).toBe('string');
+      return handler.description as string;
+    };
+
+    it('frames the server as prioritizing reuse of a similar contract', () => {
+      const d = description();
+      expect(d).toMatch(/priorit/i);
+      expect(d).toMatch(/reus/i);
+    });
+
+    it('describes a PROPOSED contract with a short summary and origin set', () => {
+      const d = description();
+      expect(d).toMatch(/proposed/i);
+      expect(d).toMatch(/proposedContractSummary/);
+      expect(d).toMatch(/origin = cache .*\| agent .*\| synth/);
+    });
+
+    it('is FORGIVING — always conforming, accept rather than loop', () => {
+      const d = description();
+      expect(d).toMatch(/forgiving/i);
+      expect(d).toMatch(/do NOT re-call ggui_handshake in a loop/);
+    });
+
+    it('reduces the agent to ONE accept/override decision on ggui_render', () => {
+      const d = description();
+      expect(d).toMatch(/accept/i);
+      expect(d).toMatch(/override/i);
+      // accept REUSES; override is STRICT and fails if it does not conform.
+      expect(d).toMatch(/REUSES the proposed contract/);
+      expect(d).toMatch(/STRICT/);
+    });
+
+    it('keeps the CONTRACT SHAPE + PLACEMENT RULE blocks verbatim', () => {
+      const d = description();
+      expect(d).toContain(
+        'CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field',
+      );
+      expect(d).toContain(
+        'PLACEMENT RULE: actionSpec = events that drive the agent\'s next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.',
+      );
+    });
+
+    it('is OSS-pure — no platform/tier/cloud/credit/cost semantics', () => {
+      const d = description();
+      for (const banned of [
+        '@ggui-cloud',
+        '@guuey',
+        'platform',
+        'tier',
+        'credit',
+        'billing',
+        'savings',
+      ]) {
+        expect(d.toLowerCase()).not.toContain(banned.toLowerCase());
+      }
+    });
+  });
+
   describe('no-negotiator default — origin: agent', () => {
     it("stamps an agent-origin suggestion with the agent's draft verbatim", async () => {
       const kvStore = new InMemoryKeyValueStore();
