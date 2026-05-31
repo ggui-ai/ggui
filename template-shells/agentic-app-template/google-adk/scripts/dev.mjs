@@ -241,7 +241,13 @@ const DEADLINE = Date.now() + 90_000;
           ? ['cmd', ['/c', 'start', '', WEB_URL]]
           : ['xdg-open', [WEB_URL]];
     try {
-      spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
+      // A missing/failed opener (e.g. a headless container with no xdg-open)
+      // emits an ASYNC 'error' event — without this handler Node treats it as
+      // unhandled and crashes the whole dev tree. Opening is best-effort; the
+      // URL is printed above, so a no-op is fine.
+      const opener = spawn(cmd, args, { stdio: 'ignore', detached: true });
+      opener.on('error', () => {});
+      opener.unref();
     } catch {
       /* headless — the URL is printed above, which is enough */
     }
