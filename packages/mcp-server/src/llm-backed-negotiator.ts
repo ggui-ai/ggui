@@ -37,6 +37,7 @@
  */
 
 import type {
+  BlueprintIndex,
   EmbeddingProvider,
   LlmRoute,
   LlmSelection,
@@ -240,6 +241,7 @@ export interface LlmBackedHandshakeNegotiatorDeps {
   cache?: {
     readonly embedding: EmbeddingProvider;
     readonly vectorStore: VectorStore;
+    readonly index: BlueprintIndex;
   };
   /**
    * Marketplace-install bridge. When wired alongside

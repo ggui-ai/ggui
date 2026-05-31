@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -69,6 +70,7 @@ function makeRegistry() {
   return {
     embedding: new MockEmbeddingProvider(),
     vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
   };
 }
 

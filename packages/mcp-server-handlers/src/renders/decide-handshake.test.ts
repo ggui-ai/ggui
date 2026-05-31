@@ -13,9 +13,11 @@
 import { createHash } from 'node:crypto';
 import type { DataContract } from '@ggui-ai/protocol';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import { variantKey } from '@ggui-ai/protocol/blueprint-key';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { HandlerContext } from '../types.js';
 import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
@@ -52,6 +54,8 @@ function mkBlueprint(over: Partial<RegistryBlueprint> & { id: string }): Registr
     id: over.id,
     kind: over.kind ?? 'template',
     contractKey: over.contractKey ?? 'key-1',
+    variantKey: over.variantKey ?? variantKey(over.variance),
+    variance: over.variance ?? {},
     contract: over.contract ?? { propsSpec: { properties: {} } },
     intent: over.intent ?? 'an intent',
     componentCode: over.componentCode ?? 'export default () => null;',
@@ -71,6 +75,7 @@ function pool(over: Partial<BlueprintPool> = {}): BlueprintPool {
     registry: over.registry ?? {
       embedding: new MockEmbeddingProvider(),
       vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
     },
     ...(over.scope !== undefined ? { scope: over.scope } : {}),
     ...(over.label !== undefined ? { label: over.label } : {}),
@@ -296,6 +301,7 @@ describe('decideHandshake — find-similar across pools', () => {
       deps: {
         embedding: new MockEmbeddingProvider(),
         vectorStore: new InMemoryVectorStore(),
+        index: new InMemoryBlueprintIndex(),
       },
     };
     const llm = { async call() { return ''; } };

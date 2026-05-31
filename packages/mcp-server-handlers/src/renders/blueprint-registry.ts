@@ -37,6 +37,7 @@
  * retrieves, and enumerates.
  */
 import type {
+  BlueprintIndex,
   EmbeddingProvider,
   EnumerableVectorStore,
   VectorEntry,
@@ -48,10 +49,15 @@ import type {
 // ops-blueprint) name the index type from one barrel without reaching
 // into `@ggui-ai/mcp-server-core` directly.
 export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
-import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
-// `blueprintKey` is server-only — pulled in from a dedicated subpath
-// because it imports `node:crypto`, which browsers can't bundle.
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import {
+  summarizeContract,
+  type BlueprintVariance,
+  type DataContract,
+} from '@ggui-ai/protocol';
+// `blueprintKey` + `variantKey` are server-only — pulled in from a
+// dedicated subpath because they import `node:crypto`, which browsers
+// can't bundle.
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   validateContractStructure,
   type ContractValidationFinding,
@@ -91,6 +97,20 @@ export interface Blueprint {
   readonly kind: BlueprintKind;
   /** Identity hash of `contract` — equal contract produce equal keys. */
   readonly contractKey: string;
+  /**
+   * Identity hash of the design-time {@link variance} block — the variant
+   * axis of the reuse key. `(contractKey, variantKey)` identifies one
+   * reusable component; runtime props are never an input. Self-normalizing:
+   * `undefined` / `{}` / all-empty variance hash to one stable "default
+   * variant" sentinel. See `variantKey()` in `@ggui-ai/protocol`.
+   */
+  readonly variantKey: string;
+  /**
+   * Design-time variance tags carried alongside the contract. The variant
+   * selector reads these to pick the best fit; `variantKey` is their
+   * identity hash. Defaults to `{}` (the default variant).
+   */
+  readonly variance: BlueprintVariance;
   readonly contract: DataContract;
   /** Original intent prose that produced the blueprint. Diagnostic + RAG. */
   readonly intent: string;
@@ -158,10 +178,18 @@ export class BlueprintRejectedError extends Error {
   }
 }
 
-/** Compose deps for the registry — embedder + vector store. */
+/** Compose deps for the registry — embedder + vector store + identity index. */
 export interface BlueprintRegistryDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectorStore: VectorStore;
+  /**
+   * `(scope, exactKey) → blueprintId` resolver. Sibling of
+   * {@link vectorStore}: the vector store holds the embedding+metadata row;
+   * this index resolves the deterministic exact-lookup key to the row's id
+   * without a scope scan. Threaded now (plumbing wave); the dedup +
+   * indexed exact lookup that consume it land next wave.
+   */
+  readonly index: BlueprintIndex;
 }
 
 /** Input for {@link registerBlueprint}. */
@@ -180,6 +208,13 @@ export interface RegisterBlueprintInput {
    * matcher ignores provenance; tagging is purely for observability.
    */
   readonly provenance?: BlueprintProvenance;
+  /**
+   * Design-time variance tags for this registration. Drives the variant
+   * axis of the reuse key via `variantKey(variance)`. Omitted → the
+   * default variant (`{}`); the self-normalizing hash treats absent /
+   * empty variance as one stable sentinel.
+   */
+  readonly variance?: BlueprintVariance;
 }
 
 /**
@@ -233,6 +268,8 @@ const METADATA_KEYS = {
   componentCode: 'componentCode',
   contract: 'contract',
   contractKey: 'contractKey',
+  variantKey: 'variantKey',
+  variance: 'variance',
   kind: 'kind',
   createdAt: 'createdAt',
   hitCount: 'hitCount',
@@ -248,6 +285,8 @@ function blueprintToMetadata(
     [METADATA_KEYS.componentCode]: bp.componentCode,
     [METADATA_KEYS.contract]: JSON.stringify(bp.contract),
     [METADATA_KEYS.contractKey]: bp.contractKey,
+    [METADATA_KEYS.variantKey]: bp.variantKey,
+    [METADATA_KEYS.variance]: JSON.stringify(bp.variance),
     [METADATA_KEYS.kind]: bp.kind,
     [METADATA_KEYS.createdAt]: bp.createdAt,
     [METADATA_KEYS.hitCount]: bp.hitCount,
@@ -327,10 +366,18 @@ function rowToBlueprint(
   const hitCount = readScalarNumber(metadata[METADATA_KEYS.hitCount]) ?? 0;
   const lastHitAt = readScalarString(metadata[METADATA_KEYS.lastHitAt]);
   const provenance = readProvenance(metadata[METADATA_KEYS.provenance]);
+  const variance = readVariance(metadata[METADATA_KEYS.variance]);
+  // Legacy rows (written before the variant axis existed) lack a
+  // `variantKey`; default to the "default variant" sentinel so the row
+  // still reconstructs and slots under the empty-variance identity.
+  const variantKeyValue =
+    readScalarString(metadata[METADATA_KEYS.variantKey]) ?? variantKey(undefined);
   return {
     id: key,
     kind: kindStr,
     contractKey,
+    variantKey: variantKeyValue,
+    variance,
     contract,
     intent,
     componentCode,
@@ -339,6 +386,25 @@ function rowToBlueprint(
     provenance,
     ...(lastHitAt !== undefined ? { lastHitAt } : {}),
   };
+}
+
+/**
+ * Reconstruct a {@link BlueprintVariance} from the stored JSON blob.
+ * Legacy rows (no `variance` key) and malformed JSON both resolve to the
+ * default variant `{}` — the self-normalizing `variantKey()` hash treats
+ * absent / empty variance as one stable sentinel, so this default never
+ * shifts a legacy row's identity.
+ */
+function readVariance(
+  value: string | number | boolean | null | undefined,
+): BlueprintVariance {
+  const str = readScalarString(value);
+  if (str === undefined) return {};
+  try {
+    return JSON.parse(str) as BlueprintVariance;
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -421,12 +487,19 @@ export async function registerBlueprint(
   );
 
   const contractKey = blueprintKey(input.contract);
+  // Plumbing wave: the id stays the legacy `${kind}:${contractKey}` shape;
+  // the UUID flip + index dedup land next wave. variantKey/variance are
+  // persisted now so the identity flip has the metadata it needs.
   const id = composeBlueprintId(input.kind, contractKey);
+  const variance = input.variance ?? {};
+  const vKey = variantKey(input.variance);
   const createdAt = new Date().toISOString();
   const blueprint: Blueprint = {
     id,
     kind: input.kind,
     contractKey,
+    variantKey: vKey,
+    variance,
     contract: input.contract,
     intent: input.intent.trim(),
     componentCode: input.componentCode,
@@ -565,6 +638,56 @@ export async function findBlueprintExact(
     }
   }
   return null;
+}
+
+/**
+ * Point-read a blueprint by its vector-store key (id) within `scope`,
+ * or `null` when absent. Two branches mirror {@link findBlueprintExact}:
+ * `listByScope`+find on an {@link EnumerableVectorStore} (no embed
+ * round-trip), else a zero-vector `query`+scan on a non-enumerable
+ * backend.
+ *
+ * Distinct from `findBlueprintExact`, which resolves a `(kind,
+ * contractKey)` lookup to the synthetic key first. This reads straight
+ * by id — the shape the render-time point-read (next wave) needs once
+ * the index resolves `(scope, exactKey) → id`.
+ */
+async function findBlueprintByUuid(
+  store: VectorStore,
+  scope: string,
+  id: string,
+): Promise<Blueprint | null> {
+  if ('listByScope' in store && typeof store.listByScope === 'function') {
+    const entries = await (store as EnumerableVectorStore).listByScope(scope);
+    for (const entry of entries) {
+      if (entry.key === id) {
+        return rowToBlueprint(entry.key, entry.metadata);
+      }
+    }
+    return null;
+  }
+  const dummy = new Array<number>(1).fill(0);
+  const results = await store.query(scope, dummy, 1000);
+  for (const result of results) {
+    if (result.key === id) {
+      return rowToBlueprint(result.key, result.metadata);
+    }
+  }
+  return null;
+}
+
+/**
+ * Public point-read wrapper — resolve a blueprint by its id within
+ * `scope`, or `null` when absent. The render-time point-read path (the
+ * next wave, once the index resolves `(scope, exactKey) → id`) uses this
+ * to fetch the matched row without a contract re-hash.
+ */
+export async function readBlueprintById(
+  deps: { vectorStore: VectorStore },
+  scope: string,
+  id: string,
+): Promise<Blueprint | null> {
+  return findBlueprintByUuid(deps.vectorStore, scope, id);
 }
 
 /**

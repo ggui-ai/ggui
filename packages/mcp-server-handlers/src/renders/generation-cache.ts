@@ -26,6 +26,7 @@
  */
 import { createHash } from 'node:crypto';
 import type {
+  BlueprintIndex,
   EmbeddingProvider,
   EnumerableVectorStore,
   VectorStore,
@@ -42,6 +43,13 @@ export const DEFAULT_CACHE_SIMILARITY_THRESHOLD = 0.45;
 export interface GenerationCacheDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectorStore: VectorStore;
+  /**
+   * `(scope, exactKey) → blueprintId` identity index. Threaded into the
+   * `BlueprintRegistryDeps` the render handler composes from this bundle
+   * so the matcher + registry share one index instance. See
+   * {@link BlueprintIndex}.
+   */
+  readonly index: BlueprintIndex;
   /**
    * Score above which a top-1 hit is treated as a cache hit. Defaults
    * to {@link DEFAULT_CACHE_SIMILARITY_THRESHOLD}. Callers override

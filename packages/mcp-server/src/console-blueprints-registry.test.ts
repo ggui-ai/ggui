@@ -28,10 +28,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import type {
+  BlueprintIndex,
   EmbeddingProvider,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -58,19 +60,26 @@ interface Fixture {
   url: string;
   vectors: VectorStore;
   embedding: EmbeddingProvider;
+  index: BlueprintIndex;
 }
 
 async function boot(
   opts: CreateGguiServerOptions = {},
-  bound: { vectors?: VectorStore; embedding?: EmbeddingProvider } = {},
+  bound: {
+    vectors?: VectorStore;
+    embedding?: EmbeddingProvider;
+    index?: BlueprintIndex;
+  } = {},
 ): Promise<Fixture> {
   const vectors = bound.vectors ?? new InMemoryVectorStore();
   const embedding = bound.embedding ?? new MockEmbeddingProvider();
+  const index = bound.index ?? new InMemoryBlueprintIndex();
   const consoleOpt: CreateGguiServerOptions['console'] = opts.console ?? {};
   const server = createGguiServer({
     logger: silentLogger,
     vectors,
     embedding,
+    index,
     ...opts,
     console: consoleOpt,
   });
@@ -85,6 +94,7 @@ async function boot(
     url: `http://127.0.0.1:${addr.port}`,
     vectors,
     embedding,
+    index,
   };
 }
 
@@ -141,7 +151,7 @@ describe('GET /ggui/console/blueprints/registry', () => {
     const f = await boot();
     fixtures.push(f);
     const stored = await registerBlueprint(
-      { embedding: f.embedding, vectorStore: f.vectors },
+      { embedding: f.embedding, vectorStore: f.vectors, index: f.index },
       DEFAULT_BUILDER_APP_ID,
       {
         kind: 'template',
@@ -184,7 +194,7 @@ describe('GET /ggui/console/blueprints/registry', () => {
     const provenances = ['synth', 'register', 'install'] as const;
     for (const provenance of provenances) {
       await registerBlueprint(
-        { embedding: f.embedding, vectorStore: f.vectors },
+        { embedding: f.embedding, vectorStore: f.vectors, index: f.index },
         DEFAULT_BUILDER_APP_ID,
         {
           kind: 'template',
@@ -219,7 +229,7 @@ describe('GET /ggui/console/blueprints/registry', () => {
   it('filters by ?kind=', async () => {
     const f = await boot();
     fixtures.push(f);
-    const deps = { embedding: f.embedding, vectorStore: f.vectors };
+    const deps = { embedding: f.embedding, vectorStore: f.vectors, index: f.index };
     await registerBlueprint(deps, DEFAULT_BUILDER_APP_ID, {
       kind: 'template',
       contract: NOTEPAD_CONTRACT,

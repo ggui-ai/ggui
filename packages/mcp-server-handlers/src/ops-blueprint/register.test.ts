@@ -5,6 +5,7 @@ import type {
   UiGenerator,
 } from "@ggui-ai/mcp-server-core";
 import {
+  InMemoryBlueprintIndex,
   InMemoryBlueprintStore,
   InMemoryVectorStore,
   MockEmbeddingProvider,
@@ -97,13 +98,14 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
     const blueprintStore = new InMemoryBlueprintStore();
     const vectorStore = new InMemoryVectorStore();
     const embedding = new MockEmbeddingProvider();
+    const index = new InMemoryBlueprintIndex();
     const handler = createGguiOpsRegisterBlueprintHandler({
       registry: makeRegistry(),
       blueprintStore,
       putCode: (codeHash, body) => {
         blueprintStore.putCode(codeHash, body);
       },
-      cacheRegistry: { embedding, vectorStore },
+      cacheRegistry: { embedding, vectorStore, index },
     });
 
     await handler.handler(
@@ -239,6 +241,7 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
       cacheRegistry: {
         embedding: new MockEmbeddingProvider(),
         vectorStore: failingVectorStore,
+        index: new InMemoryBlueprintIndex(),
       },
       telemetry: {
         emit(event) {

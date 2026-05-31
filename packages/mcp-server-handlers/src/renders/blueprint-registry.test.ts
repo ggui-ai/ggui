@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -25,10 +26,12 @@ const SCOPE = 'app-test';
 function makeDeps(): {
   embedding: MockEmbeddingProvider;
   vectorStore: InMemoryVectorStore;
+  index: InMemoryBlueprintIndex;
 } {
   return {
     embedding: new MockEmbeddingProvider(),
     vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
   };
 }
 

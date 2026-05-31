@@ -45,6 +45,7 @@ import type {
   AuditSink,
   AuthAdapter,
   AuthResult,
+  BlueprintIndex,
   BlueprintProvider,
   BlueprintSearch,
   BlueprintSelector,
@@ -83,6 +84,7 @@ import {
   InMemoryActiveConsumerRegistry,
   InMemoryAppMetadataStore,
   InMemoryAuthAdapter,
+  InMemoryBlueprintIndex,
   InMemoryBlueprintStore,
   InMemoryKeyValueStore,
   InMemoryPairingService,
@@ -402,6 +404,7 @@ function buildOpsBlueprintDeps(input: {
   readonly cacheRegistry?: {
     readonly embedding: EmbeddingProvider;
     readonly vectorStore: VectorStore;
+    readonly index: BlueprintIndex;
   };
 }): {
   readonly opsBlueprint: {
@@ -417,6 +420,7 @@ function buildOpsBlueprintDeps(input: {
     readonly cacheRegistry?: {
       readonly embedding: EmbeddingProvider;
       readonly vectorStore: VectorStore;
+      readonly index: BlueprintIndex;
     };
   };
 } {
@@ -906,6 +910,7 @@ export function defaultHandlers(deps: {
     readonly cacheRegistry?: {
       readonly embedding: EmbeddingProvider;
       readonly vectorStore: VectorStore;
+      readonly index: BlueprintIndex;
     };
   };
   /**
@@ -1547,6 +1552,17 @@ export interface CreateGguiServerOptions {
    * Vector store for blueprint search. Defaults to `InMemoryVectorStore`.
    */
   readonly vectors?: VectorStore;
+
+  /**
+   * Blueprint identity index — resolves `(scope, exactKey) → blueprintId`
+   * without a scope scan. Defaults to `InMemoryBlueprintIndex`. Operators
+   * who wire a persistent `vectors` store SHOULD pass a matching
+   * persistent index (e.g. `SqliteBlueprintIndex`) so the binding survives
+   * a restart. Threaded into the generation cache + every
+   * `BlueprintRegistryDeps` the server builds so the matcher + registry
+   * share one instance.
+   */
+  readonly index?: BlueprintIndex;
 
   /**
    * Embedding provider for blueprint search. Defaults to `MockEmbeddingProvider`
@@ -3097,6 +3113,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   }
 
   const vectors = opts.vectors ?? new InMemoryVectorStore();
+  // Blueprint identity index — sibling of `vectors`. Defaults to
+  // in-memory; operators wiring a persistent vector store pass a matching
+  // persistent index. Threaded into the generation cache + every
+  // `BlueprintRegistryDeps` below so the matcher + registry share one
+  // instance.
+  const index = opts.index ?? new InMemoryBlueprintIndex();
   const embedding = opts.embedding ?? new MockEmbeddingProvider();
 
   // Cross-cutting sinks. Telemetry defaults to a
@@ -3361,7 +3383,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const generationWithCache = opts.generation
     ? {
         ...opts.generation,
-        cache: opts.generation.cache ?? ({ embedding, vectorStore: vectors } as const),
+        cache:
+          opts.generation.cache ??
+          ({ embedding, vectorStore: vectors, index } as const),
       }
     : undefined;
 
@@ -3386,6 +3410,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     if (bridgeDeps.embedding !== embedding) {
       throw new Error(
         "createGguiServer: `generation.installedBlueprints` provider was constructed with a different `embedding` than the server resolved. The bridge must share the same embedding provider the matcher reads — pass the same instance to both `embedding:` and the provider's `deps.embedding`."
+      );
+    }
+    if (bridgeDeps.index !== index) {
+      throw new Error(
+        "createGguiServer: `generation.installedBlueprints` provider was constructed with a different `index` than the server resolved. The bridge must share the same blueprint index the matcher reads — pass the same instance to both `index:` and the provider's `deps.index`."
       );
     }
   }

@@ -63,7 +63,11 @@ import {
   type ShortCodeIndex,
   type ThemeWriter,
 } from "@ggui-ai/mcp-server";
-import { InMemoryAppMetadataStore, InMemoryVectorStore } from "@ggui-ai/mcp-server-core/in-memory";
+import {
+  InMemoryAppMetadataStore,
+  InMemoryBlueprintIndex,
+  InMemoryVectorStore,
+} from "@ggui-ai/mcp-server-core/in-memory";
 import { PlaintextFileProviderKeyStore } from "@ggui-ai/mcp-server-core/plaintext";
 import {
   createInstalledBlueprintsProvider,
@@ -665,6 +669,15 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // `createGguiServer` so server + provider share state.
   const vectorStore = storage.vectors ?? new InMemoryVectorStore();
 
+  // Blueprint identity index — minted here so the install bridge's
+  // provider deps and the server share ONE instance (the server's
+  // ref-equality guard enforces this, same as `vectorStore`). The index
+  // is rebuildable from vector-store metadata and self-heals at the read
+  // site, so an in-memory index is safe even alongside a persistent
+  // `storage.vectors`; a persistent index can be threaded later via the
+  // same seam.
+  const blueprintIndex = new InMemoryBlueprintIndex();
+
   // Construct the marketplace-install bridge BEFORE `createGguiServer`
   // so we can fold it into `opts.generation.installedBlueprints` below.
   // Per design lock (project_slices_5_6_7_plan.md), the provider
@@ -710,7 +723,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
           errors: result.errors.map((m) => m.text),
         };
       },
-      deps: { embedding, vectorStore },
+      deps: { embedding, vectorStore, index: blueprintIndex },
       onIssue: (issue: InstalledBlueprintCacheIssue) => {
         process.stderr.write(
           `[ggui serve] installed-blueprint ${issue.id}: ${issue.kind}: ${issue.message}\n`
@@ -776,6 +789,10 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // declaration, leave the server to mint its own internal
     // InMemoryVectorStore that the bridge couldn't see.
     vectors: vectorStore,
+    // Share the one minted index instance with the server so the install
+    // bridge + matcher resolve identity through the SAME index (the
+    // server's ref-equality guard enforces this).
+    index: blueprintIndex,
     // `threads:` is an opt-in on createGguiServer (no zero-config
     // fallback — threads without an explicit store wouldn't mount
     // routes at all). We only pass it when the manifest declares a

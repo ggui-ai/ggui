@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve as pathResolve } from 'node:path';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -147,7 +148,7 @@ async function main(): Promise<void> {
   const llm = anthropicJudge(resolveKey());
 
   // Scenario 1 — REUSE.
-  const r1 = { embedding: new MockEmbeddingProvider(), vectorStore: new InMemoryVectorStore() };
+  const r1 = { embedding: new MockEmbeddingProvider(), vectorStore: new InMemoryVectorStore(), index: new InMemoryBlueprintIndex() };
   await registerBlueprint(r1, SCOPE, {
     kind: 'template',
     contract: TODO_CACHED,
@@ -181,7 +182,7 @@ async function main(): Promise<void> {
   const reuse = labelReuse;
 
   // Scenario 2 — REJECT subset.
-  const r2 = { embedding: new MockEmbeddingProvider(), vectorStore: new InMemoryVectorStore() };
+  const r2 = { embedding: new MockEmbeddingProvider(), vectorStore: new InMemoryVectorStore(), index: new InMemoryBlueprintIndex() };
   await registerBlueprint(r2, SCOPE, {
     kind: 'template',
     contract: COUNTER_2,

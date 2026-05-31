@@ -1514,6 +1514,7 @@ export function createGguiRenderHandler(
             registry: {
               embedding: deps.generation.cache.embedding,
               vectorStore: deps.generation.cache.vectorStore,
+              index: deps.generation.cache.index,
             },
             ...(llm ? { llm } : {}),
             ...(deps.generation.installedBlueprints
@@ -1655,6 +1656,7 @@ export function createGguiRenderHandler(
                 {
                   embedding: deps.generation.cache.embedding,
                   vectorStore: deps.generation.cache.vectorStore,
+                  index: deps.generation.cache.index,
                 },
                 ctx.appId,
                 {

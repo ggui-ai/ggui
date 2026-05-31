@@ -10,6 +10,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
+  InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
@@ -41,10 +42,12 @@ const TIMER_CONTRACT: DataContract = {
 function makeDeps(): {
   embedding: MockEmbeddingProvider;
   vectorStore: InMemoryVectorStore;
+  index: InMemoryBlueprintIndex;
 } {
   return {
     embedding: new MockEmbeddingProvider(),
     vectorStore: new InMemoryVectorStore(),
+    index: new InMemoryBlueprintIndex(),
   };
 }
 
