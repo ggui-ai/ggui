@@ -316,6 +316,16 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
           `bp=${render2.blueprintId} coverageGaps=${gaps.length}`,
       );
 
+      // Dump the scaffolded app's captured stdout/stderr so the booted
+      // `ggui serve`'s diagnostic lines reach the run log — the embedding
+      // boot line (`[ggui:embedding] …`, real-bge vs mock fallback) and
+      // the per-lookup cache trace (`[ggui:cache-trace] …`, decision +
+      // reason: no-match / low-cosine / no-llm / judge-declined). These
+      // are what reveal WHY this relaxed-semantic match did or didn't
+      // propose from cache (origin assertion below).
+      // eslint-disable-next-line no-console -- diagnostic dump scoped to this scenario.
+      console.log(`[cache-hit:similar] scaffolded app output:\n${app.stdout()}`);
+
       // The handshake proposed the prior blueprint despite the surface diff.
       expect(
         render2.suggestion?.origin,

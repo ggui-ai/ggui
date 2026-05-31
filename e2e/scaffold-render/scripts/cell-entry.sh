@@ -49,6 +49,27 @@ echo "[cell] install the Playwright browser + OS deps (matches the resolved runn
 pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright install --with-deps chromium
 lap "playwright install --with-deps"
 
+# Best-effort embedding warmup: pre-download/load the bge-small model into a
+# shared cache so it's ready by the time the scaffolded `ggui serve` runs its
+# first blueprint lookup (real embeddings, not the mock-quality fallback). We
+# pin GGUI_EMBEDDING_CACHE_DIR + export it so BOTH this warmup AND the scaffolded
+# serve (which inherits this env through the playwright harness) read the SAME
+# cache. The warmup uses the @ggui-ai/embedding-local API via tsx against source
+# (dist isn't built yet at this point). NON-FATAL: a failure only loses the
+# diagnostic head-start; `|| true` keeps the run alive.
+export GGUI_EMBEDDING_CACHE_DIR=/work/.ggui-embedding-cache
+node_modules/.bin/tsx -e "
+import { createLocalEmbeddingProvider } from './oss/packages/embedding-local/src/provider.ts';
+try {
+  const p = createLocalEmbeddingProvider({ cacheDir: process.env.GGUI_EMBEDDING_CACHE_DIR });
+  const v = await p.embed('warmup');
+  console.log('[cell] embedding warmup ok (' + p.id + ', ' + v.length + 'd)');
+} catch (err) {
+  console.log('[cell] embedding warmup FAILED: ' + (err instanceof Error ? err.message : String(err)));
+}
+" || echo "[cell] embedding warmup FAILED: tsx warmup process exited non-zero (non-fatal — continuing)"
+lap "embedding warmup"
+
 echo "[cell] run scaffold-render scenarios (Verdaccio process → SKIP_VERDACCIO_BOOT=1)"
 # The harness's setup.sh inherits these: REGISTRY points at our process, and
 # SKIP_VERDACCIO_BOOT=1 stops it from trying to `docker run` its own Verdaccio.

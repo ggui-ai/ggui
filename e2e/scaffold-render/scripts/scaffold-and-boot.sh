@@ -70,6 +70,11 @@ EOF
   if [ -n "${GOOGLE_API_KEY:-}" ]; then echo "GOOGLE_API_KEY=$GOOGLE_API_KEY"; fi
   echo "GGUI_TODO_MCP_URL=http://localhost:6782/mcp"
   echo "VITE_AGENT_ENDPOINT_URL=http://localhost:$AGENT_PORT"
+  # Register the stderr blueprint-cache trace sink in the booted `ggui serve`
+  # so every matchBlueprint decision (and the reason it landed there) prints
+  # as a `[ggui:cache-trace]` JSON line — the diagnostic the cache-hit spec
+  # dumps via app.stdout() to see WHY a semantic match did/didn't propose.
+  echo "GGUI_CACHE_TRACE_STDERR=1"
 } > "$APP_DIR/.env.local"
 
 echo "[boot] pnpm install ($SDK, Verdaccio-pinned)"
