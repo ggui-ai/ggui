@@ -208,7 +208,6 @@ export function buildContractsContext(
         const bits = [`  - **\`${name}\`**`];
         if (entry.description) bits.push(`— ${entry.description}`);
         if (entry.usage) bits.push(`(usage: ${entry.usage})`);
-        if (entry.required === false) bits.push('(optional)');
         return bits.join(' ');
       })
       .join('\n');

@@ -72,7 +72,7 @@ describe('defineGadgetPackage', () => {
     expect(descriptor.connect).toEqual(['https://api.example.com']);
   });
 
-  it('carries optional per-export fields (gotchas, permission, required)', () => {
+  it('carries optional per-export fields (gotchas, permission)', () => {
     const descriptor = defineGadgetPackage({
       package: '@scope/gadget-foo',
       version: '0.0.1',
@@ -83,14 +83,12 @@ describe('defineGadgetPackage', () => {
           ...TEACHING,
           gotchas: 'Mind the footgun.',
           permission: 'geolocation',
-          required: true,
         },
       ],
     });
     expect(descriptor.exports[0]).toMatchObject({
       gotchas: 'Mind the footgun.',
       permission: 'geolocation',
-      required: true,
     });
   });
 

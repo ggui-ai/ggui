@@ -69,8 +69,6 @@ interface GadgetExportTeaching {
   readonly gotchas?: string;
   /** Optional Web-Permissions identifier the export gates on. */
   readonly permission?: string;
-  /** Whether the UI MUST mount this export. Default `false`. */
-  readonly required?: boolean;
 }
 
 /** A hook export declaration — `use`-prefixed name + its impl. */
@@ -170,7 +168,6 @@ export function defineGadgetPackage(
       ...(entry.permission !== undefined
         ? { permission: entry.permission }
         : {}),
-      ...(entry.required !== undefined ? { required: entry.required } : {}),
     };
     return 'hook' in entry
       ? { hook: entry.hook, ...teaching }

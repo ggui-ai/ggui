@@ -564,17 +564,6 @@ export interface AgentToolEntry {
    */
   outputSchema?: JsonSchema;
   /**
-   * Whether the contract is unsatisfiable if the agent's MCP toolbox
-   * lacks this tool. Advisory in v1: enforcement happens at dispatch
-   * time (the agent gets `TOOL_UNAVAILABLE` if the named tool isn't
-   * registered), not at push time. Future: agent reports its toolbox
-   * on handshake; server can validate `required: true` proactively.
-   *
-   * Default: `false`. UI/agent code MUST guard against absence (e.g.,
-   * conditional render, fallback reasoning).
-   */
-  required?: boolean;
-  /**
    * Example input/output pair for documentation and boilerplate
    * generation. Keys `input` / `output` are MCP-aligned.
    */
@@ -645,12 +634,6 @@ export interface GadgetExportBase {
    * carries it.
    */
   permission?: string;
-  /**
-   * Whether the UI MUST mount this export for the contract to be
-   * satisfiable. Default `false`. Advisory in v1 — enforced at
-   * boilerplate-generation time, not at runtime.
-   */
-  required?: boolean;
 }
 
 /**

@@ -62,8 +62,8 @@ import {
  * Author input to {@link createGguiGadget}. A `createGguiGadget` call
  * builds a gadget PACKAGE that exposes exactly one HOOK export — so
  * the spec keeps the per-export teaching fields flat (`hook`,
- * `description`, `usage`, `example`, `gotchas`, `permission`,
- * `required`) alongside the package identity + transport fields
+ * `description`, `usage`, `example`, `gotchas`, `permission`)
+ * alongside the package identity + transport fields
  * (`package`, `version`, `bundleUrl`, …) and a `hookImpl` runtime
  * function. The factory assembles these into a
  * {@link GadgetDescriptor} of the package+exports shape.
@@ -165,7 +165,6 @@ export function createGguiGadget<TOutput, TOptions = void>(
     example,
     gotchas,
     permission,
-    required,
     ...packageFields
   } = spec;
 
@@ -192,7 +191,6 @@ export function createGguiGadget<TOutput, TOptions = void>(
     example,
     ...(gotchas !== undefined ? { gotchas } : {}),
     ...(permission !== undefined ? { permission } : {}),
-    ...(required !== undefined ? { required } : {}),
   };
   const descriptorDraft = {
     ...packageFields,

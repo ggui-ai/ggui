@@ -213,7 +213,6 @@ export const agentToolEntrySchema = z
     usage: z.string().optional(),
     inputSchema: jsonSchemaSchema.optional(),
     outputSchema: jsonSchemaSchema.optional(),
-    required: z.boolean().optional(),
     example: z
       .object({
         input: jsonValueSchema,
@@ -403,13 +402,12 @@ export { HOOK_NAME_RE, COMPONENT_NAME_RE } from './gadget-name-grammar';
 
 /**
  * Per-export field shape shared by both export-schema postures —
- * `gotchas` + `required`. Teaching text (`description` / `usage` /
- * `example`) and `permission` differ between wire-permissive and
- * registry-strict, so they are spread per-posture below.
+ * `gotchas`. Teaching text (`description` / `usage` / `example`) and
+ * `permission` differ between wire-permissive and registry-strict, so
+ * they are spread per-posture below.
  */
 const baseExportFieldsShape = {
   gotchas: z.string().optional(),
-  required: z.boolean().optional(),
 } as const;
 
 /**

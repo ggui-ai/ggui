@@ -15,8 +15,12 @@
  * together) keeps the UI internally coherent, but coherence is not
  * COMPLETENESS — the agent asked for a capability the cache lacks. This
  * guard is the deterministic check the LLM judge cannot be trusted to
- * make: it drops any candidate that fails to cover the request BEFORE
- * the judge runs, so an incomplete blueprint is never reused.
+ * make. It is INFORMATIONAL, not a gate: a candidate that fails to
+ * cover the request is NOT dropped — the resulting `coverageGap` is
+ * reported on the match hit so the agent can SEE the uncovered surface.
+ * The matcher proposes the reuse; the agent disposes — overriding the
+ * proposed contract is the safety valve when a flagged surface is one
+ * the user must directly see or act on.
  *
  * Pure — no store, no LLM. Compares only declared key-SETS; differences
  * WITHIN a shared surface (a relabeled action, an `id` vs `id+done`
