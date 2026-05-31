@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/iframe-runtime",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The iframe-local ggui runtime: a self-contained ESM bundle that boots inside an MCP Apps host iframe, runs the protocol-version handshake, opens the live-channel WebSocket, and mounts the rendered UI. Bundles React, ReactDOM, and the ggui design system so generated component code has a single seam to read from.",
   "keywords": [
     "ggui",

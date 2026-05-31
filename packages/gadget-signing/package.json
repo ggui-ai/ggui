@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/gadget-signing",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Gadget bundle signing + verification for the ggui gadget marketplace. Ed25519 author-key path + sigstore/cosign keyless path. Pure-TS @noble crypto for Ed25519 — browser-safe.",
   "license": "Apache-2.0",
   "keywords": [

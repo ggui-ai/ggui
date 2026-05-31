@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/protocol-conformance",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Conformance test kit for the ggui protocol. Drives a behavioral fixture catalog against a live implementation over WebSocket, plus three pure-function catalogs (schema, registration, resolution) for the gadget obligations, and reports a scorecard-style pass / fail / skip. MCP builders adopt this kit to prove their implementation is protocol-conformant.",
   "license": "Apache-2.0",
   "keywords": [

@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/design",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ggui design system — themeable React primitives, components, compositions, blueprints, and design tokens. One bare-barrel import; runtime theming via DTCG token injection.",
   "type": "module",
   "main": "./dist/index.js",

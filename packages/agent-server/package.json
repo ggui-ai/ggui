@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/agent-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, and directive synthesis for `_meta[\"ai.ggui/userAction\"]` so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
   "keywords": [
     "ggui",

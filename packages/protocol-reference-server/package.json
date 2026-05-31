@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/protocol-reference-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Minimal reference implementation of the ggui protocol. Implements exactly enough of the live-channel WebSocket wire to pass the @ggui-ai/protocol-conformance kit. Not a production server — it exists to prove the protocol is vendor-neutral: an independent, from-scratch implementation passing the kit grounds that claim empirically.",
   "keywords": [
     "ggui",
