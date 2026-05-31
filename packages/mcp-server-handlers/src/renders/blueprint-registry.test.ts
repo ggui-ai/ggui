@@ -14,7 +14,6 @@ import {
   listBlueprints,
   recordBlueprintHit,
   deleteBlueprint,
-  composeBlueprintId,
   composeExactKey,
   composeEmbeddingInput,
   BlueprintRejectedError,
@@ -54,13 +53,6 @@ const FEEDBACK_CONTRACT: DataContract = {
     },
   },
 };
-
-describe('composeBlueprintId', () => {
-  it('joins kind and contractKey with a colon', () => {
-    expect(composeBlueprintId('template', 'abc123')).toBe('template:abc123');
-    expect(composeBlueprintId('atom', 'xyz')).toBe('atom:xyz');
-  });
-});
 
 describe('composeExactKey', () => {
   it('joins kind, contractKey, and variantKey with colons', () => {

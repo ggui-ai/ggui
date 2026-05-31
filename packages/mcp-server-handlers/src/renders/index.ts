@@ -186,8 +186,8 @@ export {
 } from "./blueprint-matcher.js";
 export {
   BlueprintRejectedError,
-  composeBlueprintId,
   composeEmbeddingInput,
+  composeExactKey,
   deleteBlueprint,
   findBlueprintExact,
   findBlueprintsByEmbedding,
@@ -196,6 +196,7 @@ export {
   registerBlueprint,
   type Blueprint,
   type BlueprintCandidate,
+  type BlueprintIndex,
   type BlueprintKind,
   type BlueprintProvenance,
   type BlueprintRegistryDeps,

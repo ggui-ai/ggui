@@ -9,18 +9,20 @@
  *   - Tier 2: RAG retrieval → top-K candidates handed to the LLM judge.
  *   - Tier 3: cold gen → register the produced blueprint.
  *
- * ## Storage layout (asset-keyed)
+ * ## Storage layout (uuid-keyed)
  *
- * Keys are synthetic: `${kind}:${contractKey}` where `kind` is the
+ * Vector-store rows are keyed by an opaque `bp_<uuid>` id minted once at
+ * first registration. The deterministic reuse identity lives in the
+ * sibling {@link BlueprintIndex}, which maps the exact key
+ * `${kind}:${contractKey}:${variantKey}` to that uuid. `kind` is the
  * atomic-design level (`'template'` for full components today;
  * `'organism'` / `'molecule'` / `'atom'` reserved for future
- * compositional decomposition). The `VectorStore` contract stays
- * unchanged — composition lives at the cache layer.
+ * compositional decomposition).
  *
- * One blueprint per `(scope, kind, contractKey)` tuple. Future
- * variant support (multiple visual treatments for the same contract
- * shape) would go through `${kind}:${contractKey}#${variantId}`
- * keys — deferred until cache eviction proves it necessary.
+ * One blueprint per `(scope, kind, contractKey, variantKey)` tuple:
+ * the same contract under distinct design-time variance blocks resolves
+ * to distinct sibling rows (distinct exact keys → distinct uuids). The
+ * default variant (absent / empty variance) hashes to one stable sentinel.
  *
  * ## What's stored
  *
@@ -224,26 +226,13 @@ export interface RegisterBlueprintInput {
 }
 
 /**
- * Compose the synthetic registry id from kind + contractKey. Exposed
- * so consumers can build the same shape when they need to look up
- * by hand (devtools, tests, hand-curated seeds).
- */
-export function composeBlueprintId(
-  kind: BlueprintKind,
-  contractKey: string,
-): string {
-  return `${kind}:${contractKey}`;
-}
-
-/**
  * Compose the deterministic exact-lookup key — the `(scope, exactKey)`
  * half of the {@link BlueprintIndex} binding. Three-segment join
  * `${kind}:${contractKey}:${variantKey}` so the variant axis is part of
  * the reuse identity: two registrations of the same contract shape under
  * distinct variance blocks resolve to distinct exact keys (and so distinct
- * cached components). Sibling of {@link composeBlueprintId}; the registry's
- * UUID flip (next wave) keys the index on this string rather than minting
- * the id from `(kind, contractKey)`.
+ * cached components). The index maps this key to the row's opaque
+ * `bp_<uuid>` id; identity is never derived from `(kind, contractKey)`.
  */
 export function composeExactKey(
   kind: BlueprintKind,
