@@ -19,11 +19,48 @@ import { describe, it, expect } from 'vitest';
 import {
   handshakeInputSchema,
   handshakeOutputSchema,
+  renderCacheMarkerSchema,
   renderInputSchema,
   renderOutputSchema,
   updateInputSchema,
   updateOutputSchema,
 } from './mcp';
+
+describe('renderCacheMarkerSchema', () => {
+  it('round-trips a hit marker (full-template)', () => {
+    const marker = {
+      hit: true,
+      similarity: 0.92,
+      cachedBlueprintId: 'bp_abc',
+      llmCallsAvoided: 1,
+      kind: 'full-template' as const,
+    };
+    expect(renderCacheMarkerSchema.parse(marker)).toEqual(marker);
+  });
+
+  it('round-trips a cold marker (required fields only)', () => {
+    const marker = { hit: false, llmCallsAvoided: 0 };
+    expect(renderCacheMarkerSchema.parse(marker)).toEqual(marker);
+  });
+
+  it('requires `hit`', () => {
+    expect(() => renderCacheMarkerSchema.parse({ llmCallsAvoided: 0 })).toThrow();
+  });
+
+  it('requires `llmCallsAvoided`', () => {
+    expect(() => renderCacheMarkerSchema.parse({ hit: false })).toThrow();
+  });
+
+  it("rejects the dropped `composed` kind (D8)", () => {
+    expect(() =>
+      renderCacheMarkerSchema.parse({
+        hit: true,
+        llmCallsAvoided: 1,
+        kind: 'composed',
+      }),
+    ).toThrow();
+  });
+});
 
 describe('ggui_handshake — MVB-5 three-step handshake', () => {
   it('accepts a minimal input — intent + blueprintDraft (contract only)', () => {

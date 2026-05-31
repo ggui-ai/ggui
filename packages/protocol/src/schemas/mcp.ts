@@ -268,9 +268,36 @@ export const renderInputSchema = z.object({
 }).strict();
 
 /**
+ * Reuse outcome for a single `ggui_render` — surfaced on the wire so an
+ * agent or operator can tell whether a stored component was served or a
+ * new one was generated. Counts generation calls only; it carries no
+ * cost or tier semantics.
+ */
+export const renderCacheMarkerSchema = z.object({
+  hit: z
+    .boolean()
+    .describe('True when a stored component was served without generating new code.'),
+  similarity: z
+    .number()
+    .optional()
+    .describe('Cosine similarity of the matched component to the request (semantic match only).'),
+  cachedBlueprintId: z
+    .string()
+    .optional()
+    .describe('The stored component id that was matched. Equals top-level blueprintId on a hit.'),
+  llmCallsAvoided: z
+    .number()
+    .describe('Generation calls skipped by serving the stored component (0 on a fresh generation).'),
+  kind: z
+    .enum(['full-template', 'cold'])
+    .optional()
+    .describe('full-template = a whole stored component was served; cold = freshly generated.'),
+});
+
+/**
  * Wire-output shape — intentionally lean: `{renderId, nextStep?, action}`.
  * The handler carries `shortCode`, `codeReady`, `handshakeId`,
- * `decision`, `contract`, `contractHash`, `cache`, `codeUrl`, `codeHash`
+ * `decision`, `contract`, `codeUrl`, `codeHash`
  * on its internal `RenderOutput` TS shape for telemetry / post-classify
  * tracing — zod strips them before structuredContent serialization.
  *

@@ -4,6 +4,7 @@ import type { Render, RenderStatus } from './session';
 import type {
   handshakeInputSchema,
   handshakeOutputSchema,
+  renderCacheMarkerSchema,
   renderInputSchema,
   renderOutputSchema,
   updateInputSchema,
@@ -581,6 +582,12 @@ export interface ServerCapabilities {
 
 export type GguiRenderInput = z.infer<typeof renderInputSchema>;
 export type GguiRenderOutput = z.infer<typeof renderOutputSchema>;
+
+/**
+ * Reuse outcome surfaced on a single `ggui_render`. Derived from
+ * {@link renderCacheMarkerSchema} — the schema is the source of truth.
+ */
+export type RenderCacheMarker = z.infer<typeof renderCacheMarkerSchema>;
 
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
