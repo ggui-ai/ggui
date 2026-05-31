@@ -31,7 +31,11 @@
  * same exact-key flow for synth-provenance rows. Slice 5 only
  * widens the cache-write origin; it doesn't change the consume side.
  */
-import { InMemoryVectorStore, MockEmbeddingProvider } from "@ggui-ai/mcp-server-core/in-memory";
+import {
+  InMemoryBlueprintIndex,
+  InMemoryVectorStore,
+  MockEmbeddingProvider,
+} from "@ggui-ai/mcp-server-core/in-memory";
 import {
   createInstalledBlueprintsProvider,
   type InstalledBlueprintCompileResult,
@@ -69,12 +73,15 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
   });
 
   async function boot(installed: ReadonlyArray<InstalledBlueprintEntry>): Promise<void> {
-    // SAME embedder + vectorStore instances must pass through both the
-    // matcher (via `vectors`/`embedding` on createGguiServer) AND the
-    // bridge's `deps`. Otherwise the bridge writes to a vector store
-    // the matcher never reads — silent drift, no Tier-1 hit.
+    // SAME embedder + vectorStore + index instances must pass through
+    // both the matcher (via `vectors`/`embedding`/`index` on
+    // createGguiServer) AND the bridge's `deps`. Otherwise the bridge
+    // writes to a store/index the matcher never reads — silent drift,
+    // no Tier-1 hit. createGguiServer fail-loud-asserts reference
+    // equality on all three at construction.
     const embedding = new MockEmbeddingProvider();
     const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
 
     const installedBlueprintsProvider = createInstalledBlueprintsProvider({
       installedBlueprints: () => installed,
@@ -87,12 +94,13 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
           code: "export default function I() { return null; }",
         };
       },
-      deps: { embedding, vectorStore },
+      deps: { embedding, vectorStore, index },
     });
 
     fixture = await bootOssServer({
       embedding,
       vectors: vectorStore,
+      index,
       generation: {
         uiGenerator: {
           slug: "ui-gen-default-haiku-4-5",
