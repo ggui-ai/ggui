@@ -51,10 +51,13 @@ export interface RerankDecision {
    */
   readonly matchId: string | null;
   /**
-   * Confidence on `[0, 1]`. Caller compares against a threshold (e.g.
-   * 0.6) before treating the decision as a hit. Returned even when
-   * matchId is null so callers can log "judge declined with
-   * confidence X."
+   * Confidence on `[0, 1]` — how strongly the matched candidate is in
+   * the same task-and-shape family as the request, NOT how completely
+   * its fields cover the request. Field/slot/action deltas are
+   * reconciled and reported to the agent separately; they never lower
+   * this score. Caller compares against a threshold (e.g. 0.6) before
+   * treating the decision as a hit. Returned even when matchId is null
+   * so callers can log "judge declined with confidence X."
    */
   readonly confidence: number;
   /**
@@ -80,15 +83,15 @@ export interface RerankQuery {
   readonly contractSummary: string;
 }
 
-const RERANK_SYSTEM_PROMPT = `You match user UI requests against previously-generated UI blueprints. Each blueprint was produced for a past request and stored. Decide whether any candidate produces the SAME USEFUL UI for the current request.
+const RERANK_SYSTEM_PROMPT = `You match user UI requests against previously-generated UI blueprints. Each blueprint was produced for a past request and stored. Decide whether any candidate belongs to the SAME FAMILY as the current request — i.e. it would serve as a reasonable starting point that the requester can refine, not a pixel-exact replica.
 
-MATCH means the candidate would correctly satisfy the user's current request — same UI shape (component types, layout pattern), same wire surface (slot names, action names), same intended user task, and same load-bearing parameters (dates, months, ranges, enum values).
+MATCH means the candidate is the same intended user task AND the same broad UI shape (component types, layout pattern). A candidate still MATCHES when the current request adds or omits fields, slots, or actions relative to the cached blueprint — a superset, a subset, or an overlapping wire surface all still match. Added or omitted fields/slots/actions DO NOT block a match and are NOT yours to judge: those wire-surface deltas are reconciled and reported to the agent separately, after you decide. Judge similarity of task and shape, never coverage of fields.
 
-NO-MATCH means the candidate would NOT satisfy the user's current request — different task (haiku composer vs tweet draft, login vs signup), different UI shape (form vs list vs dashboard), or load-bearing parameters differ (calendar-Jan vs calendar-Mar — same contract, different value).
+NO-MATCH means the candidate is a fundamentally different thing — a different intended task (haiku composer vs tweet draft, login vs signup), a different UI shape (form vs list vs dashboard), OR a conflicting load-bearing fixed VALUE baked into the blueprint (calendar pinned to Jan vs a request for Mar — same contract shape, but the fixed value conflicts). Reserve NO-MATCH for these; do not decline a candidate merely because its fields, slots, or actions differ from the request.
 
 Visual style differences alone (minimal vs ornate, dense vs spacious) DO NOT block a match — the user can refine those after they get a working UI.
 
-Output exactly ONE tool call with your decision. confidence is a number in [0, 1]. matchId is a string from the candidate ids, or null when no candidate matches. reason is a short sentence the operator can use to debug.`;
+Output exactly ONE tool call with your decision. confidence is a number in [0, 1] measuring how strongly the candidate is in the same task-and-shape family as the request (not how completely its fields cover the request). matchId is a string from the candidate ids, or null when no candidate matches. reason is a short sentence the operator can use to debug.`;
 
 const RERANK_TOOL: ToolSchema = {
   name: 'submit_rerank_decision',

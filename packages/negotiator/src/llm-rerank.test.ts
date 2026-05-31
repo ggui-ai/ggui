@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   rerankCandidates,
   summarizeContract,
+  RERANK_SYSTEM_PROMPT,
   type RerankCandidate,
   type RerankQuery,
 } from './llm-rerank.js';
@@ -154,6 +155,99 @@ describe('rerankCandidates', () => {
     });
     const decision = await rerankCandidates({ llm }, QUERY, CANDIDATES);
     expect(decision.latencyMs).toBeGreaterThanOrEqual(10);
+  });
+});
+
+describe('RERANK_SYSTEM_PROMPT — similarity-only judge (no field-coverage gate)', () => {
+  const prompt = RERANK_SYSTEM_PROMPT;
+  const lower = prompt.toLowerCase();
+
+  it('(a) does NOT require the candidate to have the same wire surface (slot/action names)', () => {
+    // The load-bearing flaw: the old MATCH clause demanded "same wire
+    // surface (slot names, action names)", silently re-imposing a
+    // field-coverage gate the architecture deliberately removed.
+    expect(lower).not.toContain('same wire surface');
+    expect(lower).not.toMatch(/same\s+(?:slot|action)\s+names/);
+  });
+
+  it('(b) states added/omitted fields are REPORTED to the agent, not declined', () => {
+    // Adding or omitting fields/slots/actions must not block a match;
+    // those deltas are reported to the agent separately.
+    expect(lower).toMatch(/add(?:s|ed|ing)?\b[\s\S]*\bomit/);
+    expect(lower).toMatch(/do not block|does not block|not? a blocker|do not gate/);
+    expect(lower).toMatch(/report(?:ed)?\s+to\s+the\s+agent/);
+  });
+
+  it('(c) keys MATCH on same intended task + same broad UI shape', () => {
+    expect(lower).toMatch(/same (?:intended )?(?:user )?task/);
+    expect(lower).toMatch(/same (?:broad )?ui shape|component types|layout pattern/);
+  });
+
+  it('(c) reserves NO-MATCH for different task / different UI shape / conflicting fixed VALUES', () => {
+    expect(lower).toContain('no-match');
+    expect(lower).toMatch(/different (?:intended )?task/);
+    expect(lower).toMatch(/different ui shape/);
+    // Conflicting fixed values: the calendar-Jan vs calendar-Mar case.
+    expect(lower).toMatch(/conflict/);
+    expect(lower).toMatch(/value/);
+    expect(prompt).toMatch(/calendar-Jan|Jan.*Mar|fixed value/i);
+  });
+
+  it('does NOT list added/omitted fields or a differing wire surface as a NO-MATCH trigger', () => {
+    // Slice the NO-MATCH region (from "NO-MATCH" up to the visual-style
+    // clause) and ensure field/wire deltas are not named there.
+    const noMatchStart = prompt.search(/NO-MATCH/);
+    expect(noMatchStart).toBeGreaterThanOrEqual(0);
+    const visualClauseStart = prompt.search(/[Vv]isual style/);
+    expect(visualClauseStart).toBeGreaterThan(noMatchStart);
+    const noMatchRegion = prompt.slice(noMatchStart, visualClauseStart).toLowerCase();
+    expect(noMatchRegion).not.toContain('wire surface');
+    expect(noMatchRegion).not.toMatch(/added|omitted|missing field|extra field/);
+  });
+
+  it('keeps the visual-style clause and the final tool-call output sentence', () => {
+    expect(lower).toContain('visual style');
+    expect(lower).toMatch(/do not block a match/);
+    expect(lower).toMatch(/output exactly one tool call/);
+    expect(lower).toMatch(/confidence is a number in \[0, 1\]/);
+  });
+
+  it('frames a superset-but-same-task candidate as MATCH-eligible (judges on similarity, not coverage)', () => {
+    // A candidate that omits a field the current request adds (an
+    // optional superset of the cached contract) must be eligible to
+    // MATCH. We assert the judge, stubbed to pick it, is passed through
+    // — i.e. the harness imposes no coverage gate of its own — and that
+    // the prompt's own wording permits this framing.
+    const supersetQuery: RerankQuery = {
+      intent: 'Weather card showing city name and temperature',
+      contractSummary: 'slots=cityName,tempC; actions=∅; streams=∅',
+    };
+    const supersetCandidates: readonly RerankCandidate[] = [
+      {
+        id: 'bp-weather-cityonly',
+        cachedIntent: 'Weather card showing the city name',
+        // Cached contract OMITS tempC — the current request is a superset.
+        cachedContractSummary: 'slots=cityName; actions=∅; streams=∅',
+        cosine: 0.94,
+      },
+    ];
+    // Prompt wording must permit a superset to match.
+    expect(lower).toMatch(/superset|adds? (?:or omits?|fields|slots)|omits? (?:fields|slots|actions)/);
+    // And the harness must pass the judge's MATCH through unmodified.
+    return rerankCandidates(
+      {
+        llm: stubLlm({
+          matchId: 'bp-weather-cityonly',
+          confidence: 0.8,
+          reason: 'same weather-card task; current request just adds tempC',
+        }),
+      },
+      supersetQuery,
+      supersetCandidates,
+    ).then((decision) => {
+      expect(decision.matchId).toBe('bp-weather-cityonly');
+      expect(decision.confidence).toBeCloseTo(0.8);
+    });
   });
 });
 
