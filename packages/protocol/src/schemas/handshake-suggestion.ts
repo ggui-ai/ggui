@@ -14,7 +14,6 @@ import type {
   HandshakeSuggestion,
   JsonPatch,
   JsonPatchOp,
-  PushDecision,
   SuggestionAmendments,
   SuggestionFinding,
   SuggestionOrigin,
@@ -72,7 +71,7 @@ export const blueprintDraftObjectSchema = z
   })
   .strict();
 
-/** `BlueprintDraft` — input shape on handshake + override push. */
+/** `BlueprintDraft` — input shape on the handshake. */
 export const blueprintDraftSchema: z.ZodType<BlueprintDraft> = blueprintDraftObjectSchema as z.ZodType<BlueprintDraft>;
 
 /** `BlueprintMeta` — projected onto the handshake response. */
@@ -117,13 +116,3 @@ export const handshakeSuggestionSchema: z.ZodType<HandshakeSuggestion> = z
   })
   .strict() as z.ZodType<HandshakeSuggestion>;
 
-/** Push decision discriminator — accept vs override. */
-export const pushDecisionSchema: z.ZodType<PushDecision> = z.union([
-  z.object({ kind: z.literal('accept') }).strict(),
-  z
-    .object({
-      kind: z.literal('override'),
-      blueprintDraft: blueprintDraftSchema,
-    })
-    .strict(),
-]) as z.ZodType<PushDecision>;

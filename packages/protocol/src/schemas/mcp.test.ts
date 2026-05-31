@@ -269,54 +269,60 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
   });
 });
 
-describe('ggui_render — MVB-5 decision discriminator', () => {
-  it('accepts decision: accept', () => {
+describe('ggui_render — variance-aware override reshape', () => {
+  it('accepts ACCEPT — {handshakeId, props} (no override)', () => {
     const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
-      decision: { kind: 'accept' },
+      props: {},
     });
     expect(parsed.handshakeId).toBe('hs_abc');
-    expect(parsed.decision.kind).toBe('accept');
+    expect(parsed.override).toBeUndefined();
   });
 
-  it('accepts decision: override with a fresh blueprintDraft', () => {
+  it('accepts override.variance re-aiming the variant axis', () => {
     const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
-      decision: {
-        kind: 'override',
-        blueprintDraft: { contract: {}, variance: { persona: 'mobile-first' } },
-      },
+      props: {},
+      override: { variance: { persona: 'mobile-first' } },
     });
-    expect(parsed.decision.kind).toBe('override');
-    if (parsed.decision.kind === 'override') {
-      expect(parsed.decision.blueprintDraft.variance?.persona).toBe('mobile-first');
-    }
+    expect(parsed.override?.variance?.persona).toBe('mobile-first');
+    expect(parsed.override?.contract).toBeUndefined();
   });
 
-  it('accepts props alongside the decision', () => {
+  it('accepts override.contract re-drafting the contract', () => {
     const parsed = renderInputSchema.parse({
       handshakeId: 'hs_abc',
-      decision: { kind: 'accept' },
+      props: {},
+      override: { contract: {} },
+    });
+    expect(parsed.override?.contract).toBeDefined();
+  });
+
+  it('accepts props alongside an override', () => {
+    const parsed = renderInputSchema.parse({
+      handshakeId: 'hs_abc',
       props: { city: 'Berlin' },
+      override: { variance: { persona: 'mobile-first' } },
     });
     expect(parsed.props).toEqual({ city: 'Berlin' });
   });
 
   it('rejects a shape missing handshakeId', () => {
+    expect(() => renderInputSchema.parse({ props: {} })).toThrow();
+  });
+
+  it('rejects a shape missing props', () => {
     expect(() =>
-      renderInputSchema.parse({ decision: { kind: 'accept' } }),
+      renderInputSchema.parse({ handshakeId: 'hs_abc' }),
     ).toThrow();
   });
 
-  it('rejects a shape missing decision', () => {
-    expect(() => renderInputSchema.parse({ handshakeId: 'hs_abc' })).toThrow();
-  });
-
-  it('rejects an override decision missing blueprintDraft', () => {
+  it('rejects an empty override:{} — omit override to accept instead', () => {
     expect(() =>
       renderInputSchema.parse({
         handshakeId: 'hs_abc',
-        decision: { kind: 'override' },
+        props: {},
+        override: {},
       }),
     ).toThrow();
   });

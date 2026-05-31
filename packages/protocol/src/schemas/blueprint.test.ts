@@ -1,6 +1,6 @@
 // Protocol-side schema tests for `blueprintVarianceSchema` — the single
 // shared variance schema reused by every seam that accepts a variance
-// block (handshake draft, render-decision override, operator blueprint
+// block (handshake draft, render override, operator blueprint
 // tools). Pinning its parse + strict behavior here means every
 // downstream consumer inherits the same rule.
 

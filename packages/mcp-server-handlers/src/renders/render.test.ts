@@ -10,22 +10,32 @@
  *       `variantKey` / `cache` and they survive `renderOutputSchema.parse`;
  *   (b) render NEVER invokes the semantic `matchBlueprint` — the §6
  *       point-read replaced it (spy on the matcher module);
- *   (c) an `accept` + `origin:'cache'` handshake point-reads the stored
- *       UUID and serves its componentCode verbatim (`cache.hit:true`,
- *       `blueprintId === storedUuid`);
+ *   (c) an ACCEPT (no `override`) + `origin:'cache'` handshake point-reads
+ *       the stored UUID and serves its componentCode verbatim
+ *       (`cache.hit:true`, `blueprintId === storedUuid`);
  *   (d) a dangling `matchedBlueprint.id` self-heals to cold-gen (no
  *       throw, `cache.hit:false`);
  *   (e) cold-gen registers exactly once and mints a `bp_<uuid>` id;
- *   (f) the override decision is the AGENT SAFETY VALVE — even with a
+ *   (f) `override.contract` is the AGENT SAFETY VALVE — even with a
  *       reusable cached blueprint present AND referenced by an
  *       `origin:'cache'` handshake, an `override` carrying a fresh
  *       SUPERSET contract cold-gens against the agent's draft and does
  *       NOT reuse the cached blueprint. This is the mechanism the whole
  *       "the cache PROPOSES, the agent DISPOSES" design rests on — the
- *       §6 point-read is gated on `decision.kind === 'accept'`, so an
+ *       §6 point-read is gated on `override === undefined`, so an
  *       override structurally bypasses it.
+ *
+ * Plus the variance-aware reshape (Tasks 6+7):
+ *   (g) the reshaped input schema accepts ACCEPT (`{handshakeId, props}`),
+ *       `override.variance`, `override.contract`; rejects empty
+ *       `override:{}` and missing `props`;
+ *   (h) `override.variance` RE-RESOLVES at the new
+ *       `(contractKey, variantKey(newVariance))` — reuse if a row exists
+ *       there, else cold-gen registered under the new variantKey, with
+ *       `out.variantKey === variantKey(newVariance)`.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryKeyValueStore,
@@ -274,7 +284,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
   it('(a) surfaces blueprintId / contractHash / variantKey / cache and survives renderOutputSchema.parse', async () => {
     const { harness, handshakeId } = await buildColdGenHarness();
     const out = await harness.handler.handler(
-      { handshakeId, decision: { kind: 'accept' } },
+      { handshakeId, props: {} },
       CTX,
     );
     expect(typeof out.blueprintId).toBe('string');
@@ -293,12 +303,12 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     try {
       const cache = await buildAcceptCacheHarness();
       await cache.harness.handler.handler(
-        { handshakeId: cache.handshakeId, decision: { kind: 'accept' } },
+        { handshakeId: cache.handshakeId, props: {} },
         CTX,
       );
       const cold = await buildColdGenHarness();
       await cold.harness.handler.handler(
-        { handshakeId: cold.handshakeId, decision: { kind: 'accept' } },
+        { handshakeId: cold.handshakeId, props: {} },
         CTX,
       );
       expect(spy).not.toHaveBeenCalled();
@@ -307,15 +317,19 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     }
   });
 
-  it('(c) accept + origin:cache point-reads the stored UUID and serves its componentCode', async () => {
+  it('(c) accept (no override) + origin:cache point-reads the stored UUID and serves its componentCode', async () => {
     const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
     const out = await harness.handler.handler(
-      { handshakeId, decision: { kind: 'accept' } },
+      { handshakeId, props: {} },
       CTX,
     );
     expect(out.cache.hit).toBe(true);
     expect(out.blueprintId).toBe(storedUuid);
     expect(out.cache.cachedBlueprintId).toBe(storedUuid);
+    // Accept reuses the PROPOSED `(contractKey, variantKey)` — the
+    // proposed variance is `{}` (default), so the wire variantKey is the
+    // default-variant sentinel.
+    expect(out.variantKey).toBe(variantKey({}));
 
     // B1: the cache marker is self-describing by default — a HIT names
     // the reused blueprint without GGUI_CACHE_TRACE_STDERR.
@@ -358,7 +372,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       coldCode: COLD_CODE,
     });
     const out = await handler.handler(
-      { handshakeId, decision: { kind: 'accept' } },
+      { handshakeId, props: {} },
       CTX,
     );
     // Self-heal: falls through to cold-gen rather than throwing.
@@ -371,7 +385,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
   it('(e) cold-gen registers exactly once and mints a bp_<uuid> id', async () => {
     const { harness, handshakeId } = await buildColdGenHarness();
     const out = await harness.handler.handler(
-      { handshakeId, decision: { kind: 'accept' } },
+      { handshakeId, props: {} },
       CTX,
     );
     expect(out.cache.hit).toBe(false);
@@ -387,29 +401,27 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(entries[0].key).toBe(out.blueprintId);
   });
 
-  it('(f) override is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
+  it('(f) override.contract is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
     // Reuse is RIGHT THERE: `buildAcceptCacheHarness` pre-seeds a stored
     // Blueprint (componentCode = STORED_CODE) at `storedUuid` AND an
     // `origin:'cache'` handshake record whose `matchedBlueprint`
-    // references it. Test (c) proves that an `accept` against this exact
+    // references it. Test (c) proves that an ACCEPT against this exact
     // setup REUSES the stored blueprint. Here we drive the OTHER half:
-    // an `override` carrying a fresh, conforming SUPERSET contract (adds
-    // `actionSpec.refresh` the cached pure-display contract lacks — the
-    // "genuinely-needed surface missing" scenario). The handler's §6
-    // point-read is gated on `decision.kind === 'accept'` (render.ts), so
-    // an override structurally bypasses the cached blueprint and cold-gens
-    // against the agent's draft. This verifies the safety valve at the
-    // mechanism level — "the cache PROPOSES, the agent DISPOSES" — rather
-    // than assuming it: even with a reusable blueprint present and named,
-    // the agent's override wins.
+    // an `override.contract` carrying a fresh, conforming SUPERSET
+    // contract (adds `actionSpec.refresh` the cached pure-display contract
+    // lacks — the "genuinely-needed surface missing" scenario). The
+    // handler's §6 point-read is gated on `override === undefined`
+    // (render.ts), so an override structurally bypasses the cached
+    // blueprint and cold-gens against the agent's draft. This verifies the
+    // safety valve at the mechanism level — "the cache PROPOSES, the agent
+    // DISPOSES" — rather than assuming it: even with a reusable blueprint
+    // present and named, the agent's override wins.
     const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
     const out = await harness.handler.handler(
       {
         handshakeId,
-        decision: {
-          kind: 'override',
-          blueprintDraft: { contract: OVERRIDE_CONTRACT },
-        },
+        props: {},
+        override: { contract: OVERRIDE_CONTRACT },
       },
       CTX,
     );
@@ -436,6 +448,135 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const keys = entries.map((e) => e.key);
     expect(keys).toContain(storedUuid);
     expect(keys).toContain(out.blueprintId);
+  });
+});
+
+describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)', () => {
+  /** The reshaped input raw-shape as a parseable zod object. */
+  function inputObject() {
+    const handler = buildHandler({
+      handshakeStore: new InMemoryKeyValueStore(),
+      renderStore: new InMemoryRenderStore(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+      coldCode: COLD_CODE,
+    });
+    return z.object(handler.inputSchema);
+  }
+
+  // (g) Schema acceptance / rejection.
+  it('(g) accepts ACCEPT — {handshakeId, props:{}} (no override)', () => {
+    const parsed = inputObject().parse({ handshakeId: 'hs_1', props: {} });
+    expect(parsed.handshakeId).toBe('hs_1');
+    expect(parsed.override).toBeUndefined();
+  });
+
+  it('(g) accepts override.variance — {handshakeId, override:{variance:{persona:"x"}}, props:{}}', () => {
+    const parsed = inputObject().parse({
+      handshakeId: 'hs_1',
+      override: { variance: { persona: 'x' } },
+      props: {},
+    });
+    expect(parsed.override?.variance?.persona).toBe('x');
+    expect(parsed.override?.contract).toBeUndefined();
+  });
+
+  it('(g) accepts override.contract — {handshakeId, override:{contract}, props:{}}', () => {
+    const parsed = inputObject().parse({
+      handshakeId: 'hs_1',
+      override: { contract: OVERRIDE_CONTRACT },
+      props: {},
+    });
+    expect(parsed.override?.contract).toBeDefined();
+  });
+
+  it('(g) REJECTS an empty override:{} — omit override to accept instead', () => {
+    expect(() =>
+      inputObject().parse({ handshakeId: 'hs_1', override: {}, props: {} }),
+    ).toThrow();
+  });
+
+  it('(g) REJECTS a shape missing props', () => {
+    expect(() => inputObject().parse({ handshakeId: 'hs_1' })).toThrow();
+  });
+
+  // (h) override.variance RE-RESOLUTION.
+  //
+  // Seed a cache harness whose stored blueprint sits at the DEFAULT
+  // variant (variance `{}`). An `override.variance:{persona:'x'}` moves
+  // the variant axis, so the effective `(contractKey, variantKey)` no
+  // longer matches the proposed default-variant row.
+  const PERSONA_VARIANCE = { persona: 'x' } as const;
+
+  it('(h) override.variance REUSES a blueprint registered at the new (contractKey, variantKey)', async () => {
+    const { harness, handshakeId } = await buildAcceptCacheHarness();
+    // Register a SECOND blueprint at the SAME contract but the persona
+    // variant — the row the re-resolution must find.
+    const personaUuid = 'bp_22222222-2222-4222-8222-222222222222';
+    await registerBlueprint(
+      {
+        embedding: fakeEmbedding,
+        vectorStore: harness.vectorStore,
+        index: harness.index,
+      },
+      APP_ID,
+      {
+        kind: 'template',
+        contract: CONTRACT,
+        intent: 'a test card',
+        componentCode: STORED_CODE,
+        provenance: 'synth',
+        variance: PERSONA_VARIANCE,
+      },
+      { mintId: () => personaUuid },
+    );
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { variance: PERSONA_VARIANCE }, props: {} },
+      CTX,
+    );
+
+    // Re-resolved to the persona-variant row, NOT the proposed default
+    // one — reuse hit, and the wire variantKey is the new variant.
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(personaUuid);
+    expect(out.variantKey).toBe(variantKey(PERSONA_VARIANCE));
+    expect(out.variantKey).not.toBe(variantKey({}));
+  });
+
+  it('(h) override.variance with NO row at the new variantKey cold-gens, registered under the new variantKey', async () => {
+    // No persona-variant row is pre-seeded — only the proposed default
+    // row exists. The re-resolution misses → cold-gen.
+    const { harness, storedUuid, handshakeId } = await buildAcceptCacheHarness();
+
+    const out = await harness.handler.handler(
+      { handshakeId, override: { variance: PERSONA_VARIANCE }, props: {} },
+      CTX,
+    );
+
+    expect(out.cache.hit).toBe(false);
+    // A FRESH bp_<uuid> was minted — not the proposed default row.
+    expect(out.blueprintId).not.toBe(storedUuid);
+    expect(out.blueprintId).toMatch(/^bp_/);
+    // (c)-style: the wire variantKey is the EFFECTIVE (new) variant, not
+    // the default sentinel.
+    expect(out.variantKey).toBe(variantKey(PERSONA_VARIANCE));
+    expect(out.variantKey).not.toBe(variantKey({}));
+
+    // The cold-gen row is registered under the new variantKey — a
+    // SUBSEQUENT accept-style re-resolution at that exact variant finds
+    // it. We assert registration directly via the index.
+    const reread = await harness.index.getId(
+      APP_ID,
+      `template:${blueprintKey(CONTRACT)}:${variantKey(PERSONA_VARIANCE)}`,
+    );
+    expect(reread).toBe(out.blueprintId);
+
+    // The served code is the COLD-GEN output (the persona variant had no
+    // stored component), not the default row's STORED_CODE.
+    const stored = await harness.renderStore.get(out.renderId);
+    const render = stored?.render as ComponentRender | undefined;
+    expect(render?.componentCode).toBe(COLD_CODE);
   });
 });
 

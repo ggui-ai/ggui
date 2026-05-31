@@ -16,7 +16,7 @@ import { dataContractSchema, jsonValueSchema } from './data-contract.js';
 /**
  * Zod mirror of {@link BlueprintVariance}. The single shared variance
  * schema: every seam that accepts a variance block (handshake draft,
- * render-decision override, operator blueprint tools) reuses this one
+ * render override, operator blueprint tools) reuses this one
  * rather than re-declaring the shape inline. `.strict()` so an unknown
  * key surfaces as a typo at the wire layer rather than being silently
  * dropped. The per-field `.describe()` strings ship as JSON-Schema

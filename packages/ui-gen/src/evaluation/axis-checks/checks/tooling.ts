@@ -247,14 +247,14 @@ const RETIRED_IDENTIFIERS: readonly RetiredIdentifier[] = [
     id: "PushStory",
     label: "`PushStory` type / `pushStorySchema` schema",
     replacement:
-      "`PushStory` was retired when the handshake input was flattened. The post-Phase-B wire is `ggui_handshake({intent, blueprintDraft: {contract, variance?, generator?}})` + `ggui_render({handshakeId, decision: {kind: 'accept' | 'override', blueprintDraft?}, props?})`.",
+      "`PushStory` was retired when the handshake input was flattened. The current wire is `ggui_handshake({intent, blueprintDraft: {contract, variance?, generator?}})` + `ggui_render({handshakeId, props, override?: {contract?, variance?}})` (omit `override` to accept the proposal as-is).",
   },
   {
     pattern: /\bpushStorySchema\b/,
     id: "pushStorySchema",
     label: "`pushStorySchema` zod schema",
     replacement:
-      "`pushStorySchema` was retired alongside `PushStory`. Current schemas: `handshakeInputSchema` + `renderInputSchema` (with the `decision` discriminator) in `@ggui-ai/protocol`.",
+      "`pushStorySchema` was retired alongside `PushStory`. Current schemas: `handshakeInputSchema` + `renderInputSchema` (with the optional `override` re-aim) in `@ggui-ai/protocol`.",
   },
   {
     pattern: /\bstory\s*\.\s*adapters\b/,

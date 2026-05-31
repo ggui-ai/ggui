@@ -1,8 +1,8 @@
 /**
  * `ggui_render` — OSS handler for outbound UI delivery.
  *
- * Handshake-first only. The wire input is `{handshakeId, decision,
- * props?, themeId?, infra?}`; the generator input (intent, context,
+ * Handshake-first only. The wire input is `{handshakeId, props,
+ * override?, themeId?, infra?}`; the generator input (intent, context,
  * schema, adapters, forceCreate) is read from the handshake record the
  * agent already wrote in the prior `ggui_handshake` round-trip.
  *
@@ -17,8 +17,9 @@
  *   1. Validates input (handshakeId required at schema; zod surfaces an
  *      actionable rejection if absent).
  *   2. Consumes the handshake record (`getAndDelete`) — single-use.
- *   3. Resolves the effective contract (cheap-confirm via
- *      `contractHash` OR override via `contract`).
+ *   3. Resolves the effective contract (accept the agreed contract OR
+ *      re-draft via `override.contract`) and the effective variance
+ *      (accept the proposed variance OR re-aim via `override.variance`).
  *   4. Validates routing targets on the contract's `actionSpec`.
  *   5. Resolves or mints the render row from
  *      `handshakeRecord.target.renderId`.
@@ -92,10 +93,13 @@ import type {
   GenerationCacheDeps,
   GenerationCacheHit,
 } from './generation-cache.js';
-import { assertGeneratorRegistered } from './assert-generator.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
-import { readBlueprintById, registerBlueprint } from './blueprint-registry.js';
+import {
+  findBlueprintExact,
+  readBlueprintById,
+  registerBlueprint,
+} from './blueprint-registry.js';
 import {
   assertGadgetsRegistered,
   filterDescriptorsToContract,
@@ -109,6 +113,7 @@ import {
   ContractViolationError,
   validateContract,
   dataContractSchema,
+  blueprintVarianceSchema,
   STDLIB_GADGETS,
   renderOutputSchema,
   type GguiRenderOutput,
@@ -770,22 +775,25 @@ export interface ChannelNotifier {
 /**
  * Input raw-shape.
  *
- * Single shape: `{ handshakeId, decision, props? }`.
+ * Single shape: `{ handshakeId, props, override? }`.
  * `handshakeId` is REQUIRED — every render consumes a prior
  * `ggui_handshake` record. The handshake captures the intent +
  * blueprintDraft and produces the suggestion the render acts on.
  *
- * Decision branching:
- *   - `{kind: 'accept'}` — use the handshake's
- *     `suggestion.blueprintMeta` verbatim (reuses provisional id).
- *   - `{kind: 'override', blueprintDraft: {...}}` — mint a fresh
- *     blueprintId; gen against the agent's NEW draft.
+ * Decision is now expressed by PRESENCE of `override`, not a
+ * discriminated union:
+ *   - omit `override` — ACCEPT the handshake suggestion as-is. The
+ *     effective contract + variance come straight from the suggestion.
+ *   - `override: {contract?, variance?}` — PATCH the agreed proposal.
+ *     A `contract` re-drafts the agreed shape (STRICT — must already
+ *     conform); a `variance` re-aims the variant axis while keeping the
+ *     agreed contract. At least one of the two MUST be set.
  */
 const inputSchema = {
   handshakeId: z
     .string({
       message:
-        "ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate, then render with {handshakeId, decision: {kind: 'accept'}} (accept the suggestion) or {handshakeId, decision: {kind: 'override', blueprintDraft: {...}}} (mint fresh against a new draft). Direct-render without a handshakeId is not supported.",
+        'ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate, then render with {handshakeId, props} (accept the suggestion as-is) or {handshakeId, props, override: {contract?, variance?}} (re-aim the contract and/or variance). Direct-render without a handshakeId is not supported.',
     })
     .min(1, 'ggui_render: handshakeId must be a non-empty string.'),
   /**
@@ -793,8 +801,11 @@ const inputSchema = {
    * effective contract's `propsSpec`. Validation failures throw
    * `ContractViolationError` (recoverable); the handshake remains
    * alive so the agent can fix-and-retry on the same handshakeId.
+   *
+   * REQUIRED — pass `{}` when the effective contract declares no
+   * propsSpec (the field is required, the value may be empty).
    */
-  props: z.record(z.string(), z.unknown()).optional(),
+  props: z.record(z.string(), z.unknown()),
   /**
    * Per-render theme override. When set, lands on the committed
    * render and takes priority over `App.defaultThemeId` at
@@ -835,47 +846,43 @@ const inputSchema = {
     .strict()
     .optional(),
   /**
-   * Render decision discriminator.
+   * Re-aim the handshake proposal. PATCH semantics over the agreed
+   * suggestion:
    *
-   *   - `{kind: 'accept'}` — use the handshake's
-   *     `suggestion.blueprintMeta` verbatim. Reuses the provisional
-   *     `blueprintId`. Code: cache delivery (origin === 'cache') or
-   *     gen against the suggestion's stored effective contract
-   *     (origin === 'agent' / 'synth').
-   *   - `{kind: 'override', blueprintDraft: {...}}` — mint a fresh
-   *     `blueprintId` and gen against the agent's NEW draft. The
-   *     provisional id from the handshake is discarded.
+   *   - omit `override` — ACCEPT the proposal as-is (effective contract
+   *     + variance come from `suggestion.blueprintMeta`).
+   *   - `override.contract` — STRICT full re-draft of the contract. The
+   *     server does NOT repair it; it must already conform.
+   *   - `override.variance` — re-aim the variant axis (persona /
+   *     aesthetic / context / seedPrompt) while keeping the agreed
+   *     contract. A different variance resolves a distinct cached
+   *     component.
+   *
+   * `.refine` requires at least one of the two — an empty `override:{}`
+   * is rejected (omit `override` entirely to accept).
    */
-  decision: z.union([
-    z.object({ kind: z.literal('accept') }).strict(),
-    z
-      .object({
-        kind: z.literal('override'),
-        blueprintDraft: z
-          .object({
-            contract: dataContractSchema,
-            variance: z
-              .object({
-                persona: z.string().optional(),
-                aesthetic: z.string().optional(),
-                context: z.record(z.string(), z.unknown()).optional(),
-                seedPrompt: z.string().optional(),
-              })
-              .strict()
-              .optional(),
-            generator: z
-              .string()
-              .max(120)
-              .regex(/^[a-z0-9_:.-]+$/i, {
-                message:
-                  "generator must be a registered generator identifier (e.g. 'anthropic-claude-haiku-4-5'), not source code or free-form text",
-              })
-              .optional(),
-          })
-          .strict(),
-      })
-      .strict(),
-  ]),
+  override: z
+    .object({
+      contract: dataContractSchema
+        .optional()
+        .describe(
+          'STRICT full re-draft of the contract — must already conform; the server will not repair it.',
+        ),
+      variance: blueprintVarianceSchema
+        .optional()
+        .describe(
+          'Re-aim the variant (persona/aesthetic/context/seedPrompt); keeps the agreed contract.',
+        ),
+    })
+    .strict()
+    .refine((o) => o.contract !== undefined || o.variance !== undefined, {
+      message:
+        'override must set contract and/or variance — omit override entirely to ACCEPT the handshake proposal as-is.',
+    })
+    .optional()
+    .describe(
+      'Omit to ACCEPT the proposal as-is. Provide to re-aim contract and/or variance (PATCH semantics).',
+    ),
 } as const;
 
 /**
@@ -955,7 +962,7 @@ export function createGguiRenderHandler(
       // prerequisite is what produces correct first calls.
       [
         // 1. Call shape — the literal JSON the agent must emit.
-        "CALL SHAPE: ggui_render({handshakeId, decision, props?}). handshakeId comes from a prior ggui_handshake (REQUIRED). decision is one of {kind:'accept'} (REUSES the contract the handshake proposed — fast path, no regeneration) OR {kind:'override', blueprintDraft:{contract, variance?, generator?}} (generates fresh from your OWN new contract; STRICT — it must already conform or this call fails). props is REQUIRED when the effective contract declares propsSpec; values are validated against propsSpec at render time. The response reports the final `action`, the `blueprintId` (stable — equal across renders that reused the same component), and a `cache` marker.",
+        "CALL SHAPE: ggui_render({handshakeId, props, override?}). handshakeId comes from a prior ggui_handshake (REQUIRED). OMIT override to ACCEPT — this REUSES the contract the handshake proposed (fast path, no regeneration). Provide override:{contract?, variance?} to re-aim the proposal (PATCH semantics): override.contract generates fresh from your OWN new contract (STRICT — it must already conform or this call fails); override.variance re-aims the variant (persona/aesthetic/context/seedPrompt) while keeping the agreed contract — a different variance resolves a distinct cached component. props is REQUIRED — pass values for every propsSpec field the effective contract declares, or {} when it declares none; values are validated against propsSpec at render time. The response reports the final `action`, the `blueprintId` (stable — equal across renders that reused the same component), and a `cache` marker.",
         // 2. Prerequisite — handshake first, always.
         'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — render consumes it. Direct render without a handshakeId fails with handshake_not_found.',
         // 2b. Next step — driven by the response, not blanket-applied.
@@ -984,7 +991,7 @@ export function createGguiRenderHandler(
     },
     async handler(input, ctx: HandlerContext): Promise<RenderOutput> {
       // Render is handshake-first. The wire input is just
-      // {handshakeId, decision, props?}; the generator input (intent,
+      // {handshakeId, props, override?}; the generator input (intent,
       // context, schema, adapters, forceCreate) flows from the
       // handshake record the agent already wrote in the prior
       // `ggui_handshake` round-trip. Schema-required handshakeId
@@ -1025,48 +1032,40 @@ export function createGguiRenderHandler(
       }
 
       const storedInput = handshakeRecord.input;
-      const decision = parsed.decision;
+      const override = parsed.override;
 
-      // Decision branching:
+      // Decision is expressed by PRESENCE of `override`, not a
+      // discriminated union. PATCH semantics over the agreed proposal:
       //
-      //   - `kind: 'accept'`   — use the handshake's stored
-      //     effectiveContract verbatim. Reuses the provisional
-      //     blueprintId from `suggestion.blueprintMeta` (durable
-      //     post-render).
-      //   - `kind: 'override'` — agent supplies a fresh
-      //     blueprintDraft; mint a new blueprintId and gen against
-      //     that draft. The provisional id from the handshake is
-      //     discarded (telemetry still threads via handshakeId).
+      //   - `override === undefined` (ACCEPT) — use the handshake's
+      //     stored effectiveContract + the negotiator's projected
+      //     variance verbatim. Reuses the proposed blueprint identity.
+      //   - `override.contract` — re-draft the contract (STRICT —
+      //     `validateContract` runs below as the commit gate; the server
+      //     does NOT repair it). Cold-gens against the new contract.
+      //   - `override.variance` — re-aim the variant axis while keeping
+      //     the agreed contract. Re-resolves the EFFECTIVE
+      //     `(contractKey, variantKey)` — reuse if a blueprint exists
+      //     there, else cold-gen registered under the new variantKey.
       //
-      // Effective contract feeds the rest of the handler exactly as
-      // before — the decision branch only changes WHICH contract gets
-      // installed and WHICH blueprintId we surface.
-      let effectiveContract: DataContract;
-      let effectiveVariance: BlueprintVariance | undefined;
-      let acceptanceClassification: 'accept' | 'override';
-      if (decision.kind === 'accept') {
-        effectiveContract = handshakeRecord.effectiveContract;
-        // Accept path — the negotiator's projected variance on the
-        // suggestion is canonical (carries agent draft for origin=agent,
-        // cached blueprint's tags for origin=cache, synth-amended tags
-        // for origin=synth).
-        effectiveVariance = handshakeRecord.suggestion.blueprintMeta.variance;
-        acceptanceClassification = 'accept';
-      } else {
-        // Override path — gen against the agent's NEW draft contract +
-        // its declared variance.
-        effectiveContract = decision.blueprintDraft.contract as DataContract;
-        effectiveVariance = normalizeOverrideVariance(
-          decision.blueprintDraft.variance,
-        );
-        acceptanceClassification = 'override';
-        // Semantic check on override-path generator name — shared with
-        // handshake.ts's input gate so the two seams cannot drift.
-        assertGeneratorRegistered(
-          decision.blueprintDraft.generator,
-          deps.defaultGenerator,
-        );
-      }
+      // The effective contract + variance feed the rest of the handler.
+      // The override only changes WHICH contract / variance get
+      // installed and WHICH blueprint identity we resolve / surface.
+      //
+      // `acceptanceClassification` is telemetry-only — it distinguishes
+      // accept-vs-override on the cache trace; the STRICT override-
+      // contract gate keys on it too (an unchanged agreed contract never
+      // fails that gate).
+      const effectiveContract: DataContract =
+        override?.contract ?? handshakeRecord.effectiveContract;
+      // Accept path — the negotiator's projected variance on the
+      // suggestion is canonical (carries agent draft for origin=agent,
+      // cached blueprint's tags for origin=cache, synth-amended tags for
+      // origin=synth). Override re-aims it.
+      const effectiveVariance: BlueprintVariance | undefined =
+        override?.variance ?? handshakeRecord.suggestion.blueprintMeta.variance;
+      const acceptanceClassification: 'accept' | 'override' =
+        override === undefined ? 'accept' : 'override';
 
       // Telemetry: classification observable on every render so the
       // cache trace shows accept-vs-override patterns.
@@ -1105,6 +1104,16 @@ export function createGguiRenderHandler(
           : {}),
       };
 
+      // Effective variant axis of the reuse key — computed once from the
+      // EFFECTIVE variance (proposed on accept, re-aimed on
+      // `override.variance`). `variantKey()` self-normalizes absent /
+      // empty variance to the stable default-variant sentinel. Paired
+      // with `blueprintKey(effectiveContract)`, this is the
+      // `(contractKey, variantKey)` reuse key the registry indexes on —
+      // the §6 re-resolution and the cold-gen registration below both
+      // key on it, so reuse / registration stay on the same identity.
+      const effectiveVariantKey = variantKey(effectiveVariance);
+
       // Resolved gadget catalog, lifted to handler scope. When
       // `appMetadataStore` is bound, the registry-membership block
       // below captures the catalog (App record's `gadgets`, or
@@ -1131,19 +1140,21 @@ export function createGguiRenderHandler(
       // Single deterministic contract gate — the SAME `validateContract`
       // the handshake backstop runs (retired fields, inner-schema
       // validity, cross-references, name invariants, schema-compat). On
-      // the ACCEPT path this re-checks an already-validated contract
-      // (defense-in-depth; never fires). On the OVERRIDE path it is the
-      // STRICT commit gate: a forced contract MUST conform — the server
-      // does not repair it ("use mine verbatim"). A failure is rethrown
-      // with a pointer back to ggui_handshake (which DOES repair), so the
-      // agent recovers instead of looping on override.
+      // the ACCEPT path (and on a `override.variance`-only re-aim, which
+      // keeps the agreed contract) this re-checks an already-validated
+      // contract (defense-in-depth; never fires). On an `override.contract`
+      // re-draft it is the STRICT commit gate: a forced contract MUST
+      // conform — the server does not repair it ("use mine verbatim"). A
+      // failure is rethrown with a pointer back to ggui_handshake (which
+      // DOES repair), so the agent recovers instead of looping on
+      // override.
       try {
         validateContract(story.contract);
       } catch (err) {
         if (acceptanceClassification === 'override') {
           const detail = err instanceof Error ? err.message : String(err);
           throw new Error(
-            `override_contract_invalid: the forced contract failed validation — ${detail} Override COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and send decision:{kind:'accept'} — do NOT retry override with the same draft.`,
+            `override_contract_invalid: your override.contract failed validation — ${detail} override.contract COMMITS you to your exact contract; the server does not repair it. To get an auto-repaired or cache-matched contract, call ggui_handshake({intent, blueprintDraft}) and render WITHOUT override (accept the proposal) — do NOT retry override with the same contract.`,
           );
         }
         throw err;
@@ -1199,8 +1210,11 @@ export function createGguiRenderHandler(
         });
       }
 
-      // Props validation against the agreed contract's propsSpec.
-      let runtimeProps = parsed.props;
+      // Props validation against the agreed contract's propsSpec. The
+      // wire `props` is required (value may be `{}`), but the
+      // accept-path drop below resets it to `undefined` (= "no runtime
+      // props"), so the local stays `Record<string, unknown> | undefined`.
+      let runtimeProps: Record<string, unknown> | undefined = parsed.props;
       if (effectiveContract.propsSpec) {
         const propsToValidate = (runtimeProps ?? {}) as Record<string, unknown>;
         const propsValidation = validatePropsData(
@@ -1211,7 +1225,7 @@ export function createGguiRenderHandler(
           throw new ContractViolationError({
             tool: 'ggui_render',
             violations: propsValidation.violations,
-            hint: 'Fix the props to satisfy the agreed propsSpec, or send a refined `contract` to override the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
+            hint: 'Fix the props to satisfy the agreed propsSpec, or send `override: {contract}` to re-draft the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
           });
         }
       } else if (
@@ -1242,12 +1256,12 @@ export function createGguiRenderHandler(
               {
                 field: 'props',
                 message:
-                  'props supplied but your override contract declares no propsSpec. Drop the `props` field, or add a propsSpec covering these fields.',
-                expected: 'no props (contract has no propsSpec)',
+                  'props supplied but your override.contract declares no propsSpec. Pass `props: {}`, or add a propsSpec covering these fields.',
+                expected: 'props: {} (contract has no propsSpec)',
                 received: `props with keys: ${Object.keys(runtimeProps).join(', ')}`,
               },
             ],
-            hint: 'Your OVERRIDE draft has no propsSpec, so it takes no props. Drop `props`, add a propsSpec — or re-handshake and use decision:accept (the accept path tolerates mismatched props instead of failing). The handshake record is preserved; retry on the SAME handshakeId.',
+            hint: 'Your override.contract has no propsSpec, so it takes no props. Pass `props: {}`, add a propsSpec — or omit `override` and accept the proposal (the accept path tolerates mismatched props instead of failing). The handshake record is preserved; retry on the SAME handshakeId.',
           });
         }
       }
@@ -1499,21 +1513,36 @@ export function createGguiRenderHandler(
         const intent = story.intent;
         const forceCreate = storedInput.forceCreate === true;
 
-        // §6 deterministic point-read. Render NO LONGER runs its own
-        // semantic match (`matchBlueprint` is gone from this handler).
-        // The handshake already decided; on an `origin:'cache'` accept
-        // it stored the matched blueprint's identity
-        // (`handshakeRecord.matchedBlueprint`). Here we O(1) point-read
-        // the stored row by UUID and serve its componentCode — the same,
-        // single match the handshake chose. `blueprintId` equality across
-        // two renders therefore genuinely means the same component was
-        // reused (no second, divergent matcher to disagree).
+        // §6 deterministic reuse resolution. Render NO LONGER runs its
+        // own semantic match (`matchBlueprint` is gone from this
+        // handler). Three paths, all keyed on the EFFECTIVE
+        // `(contractKey, variantKey)` identity:
         //
-        // Self-heal: a dangling `matchedBlueprint.id` (row evicted /
-        // gone between handshake and render) point-reads to `null` →
-        // `blueprintHit` stays null → we fall through to cold-gen. Never
-        // throws. `forceCreate` (agent opted out after a declined
-        // handshake) skips the point-read entirely.
+        //   - ACCEPT (`override === undefined`) + `origin:'cache'` — the
+        //     handshake already decided and stored the matched
+        //     blueprint's identity (`handshakeRecord.matchedBlueprint`).
+        //     Effective == proposed, so we O(1) point-read the stored
+        //     row by UUID and serve its componentCode — the same, single
+        //     match the handshake chose.
+        //   - `override.variance` (contract unchanged) — the variant
+        //     axis changed, so the proposed `matchedBlueprint` no longer
+        //     names the right component. RE-RESOLVE at the effective
+        //     `(blueprintKey(effectiveContract), effectiveVariantKey)`
+        //     via the index — reuse if a row exists there, else cold-gen
+        //     registered under the new variantKey.
+        //   - `override.contract` — a fresh contract; skip the
+        //     point-read entirely and cold-gen against it (the STRICT
+        //     `validateContract` commit gate already ran above).
+        //
+        // `blueprintId` equality across two renders therefore genuinely
+        // means the same component was reused (no second, divergent
+        // matcher to disagree).
+        //
+        // Self-heal: a dangling `matchedBlueprint.id` or a stale index
+        // binding (row evicted / gone between handshake and render)
+        // resolves to `null` → `blueprintHit` stays null → we fall
+        // through to cold-gen. Never throws. `forceCreate` (agent opted
+        // out after a declined handshake) skips reuse entirely.
         let blueprintHit: {
           readonly id: string;
           readonly contractKey: string;
@@ -1524,16 +1553,46 @@ export function createGguiRenderHandler(
 
         const matched = handshakeRecord.matchedBlueprint;
         if (
-          decision.kind === 'accept' &&
+          override === undefined &&
           handshakeRecord.suggestion.origin === 'cache' &&
           matched &&
           deps.generation.cache?.index &&
           !forceCreate
         ) {
+          // ACCEPT — effective == proposed; point-read the stored row.
           const bp = await readBlueprintById(
             { vectorStore: deps.generation.cache.vectorStore },
             ctx.appId,
             matched.id,
+          );
+          if (bp) {
+            blueprintHit = {
+              id: bp.id,
+              contractKey: bp.contractKey,
+              componentCode: bp.componentCode,
+              cosine: 1,
+              contract: bp.contract,
+            };
+          }
+        } else if (
+          override?.variance !== undefined &&
+          override.contract === undefined &&
+          deps.generation.cache?.index &&
+          !forceCreate
+        ) {
+          // OVERRIDE.variance — the contract is unchanged but the variant
+          // axis moved. Re-resolve at the EFFECTIVE
+          // `(contractKey, effectiveVariantKey)` and reuse a stored
+          // component for that exact variant if one exists.
+          const bp = await findBlueprintExact(
+            {
+              vectorStore: deps.generation.cache.vectorStore,
+              index: deps.generation.cache.index,
+            },
+            ctx.appId,
+            'template',
+            blueprintKey(effectiveContract),
+            effectiveVariantKey,
           );
           if (bp) {
             blueprintHit = {
@@ -1666,9 +1725,12 @@ export function createGguiRenderHandler(
             // future calls can hit Tier 1 (exact contract match) or
             // Tier 2 (semantic neighbour). The minted UUID becomes this
             // render's `blueprintId` (a fresh generation mints a new id).
-            // `variance: story.variance` so the registered blueprint's
-            // `variantKey` equals what the handshake / point-read computed
-            // — same `(contractKey, variantKey)` identity on both sides.
+            // Register under the EFFECTIVE variance (proposed on accept,
+            // re-aimed on `override.variance`) so the row's `variantKey`
+            // equals `effectiveVariantKey` — the same
+            // `(contractKey, variantKey)` identity the §6 re-resolution
+            // and the wire output key on. Never the default sentinel when
+            // an override re-aimed the variant.
             if (outcome.ok && outcome.componentCode) {
               const registered = await safelyRegisterBlueprint(
                 {
@@ -1683,8 +1745,8 @@ export function createGguiRenderHandler(
                   intent,
                   componentCode: outcome.componentCode,
                   provenance: 'synth',
-                  ...(story.variance !== undefined
-                    ? { variance: story.variance }
+                  ...(effectiveVariance !== undefined
+                    ? { variance: effectiveVariance }
                     : {}),
                 },
               );
@@ -1777,12 +1839,13 @@ export function createGguiRenderHandler(
       // This is the same hash the handshake returned as
       // `contractHash`.
       const resolvedContractHash = blueprintKey(effectiveContract);
-      // Variant axis of the reuse key. `variantKey()` self-normalizes
-      // absent / empty variance to the stable default-variant sentinel,
-      // so a pure-display render with no variance block still surfaces a
-      // canonical value. Paired with `resolvedContractHash`, this is the
-      // `(contractHash, variantKey)` reuse key the registry indexes on.
-      const resolvedVariantKey = variantKey(effectiveVariance);
+      // Variant axis of the reuse key — the same `effectiveVariantKey`
+      // computed once up top from the effective variance and used by the
+      // §6 re-resolution + the cold-gen registration. Paired with
+      // `resolvedContractHash`, this is the `(contractHash, variantKey)`
+      // reuse key the registry indexes on; surfaced on the wire output so
+      // a different variance is observably a distinct variant.
+      const resolvedVariantKey = effectiveVariantKey;
 
       // Conditional `nextStep` — emit a consume-recovery hint ONLY when
       // the resolved contract has a non-empty `actionSpec`. Pure-display
@@ -2708,43 +2771,4 @@ async function safelyRegisterBlueprint(
       }),
     );
   }
-}
-
-/**
- * Coerce the override-path's parsed `variance` (zod-typed as
- * `Record<string, unknown>` due to `z.unknown()` on `context`) into
- * the canonical {@link BlueprintVariance} shape. Same pattern as
- * `normalizeBlueprintDraft` in handshake.ts — every key is preserved
- * verbatim; the result is a structural projection, not a transformation.
- * Returns `undefined` for absent or empty inputs so the spread in the
- * `story` builder stays clean.
- */
-function normalizeOverrideVariance(
-  variance:
-    | {
-        persona?: string | undefined;
-        aesthetic?: string | undefined;
-        context?: Record<string, unknown> | undefined;
-        seedPrompt?: string | undefined;
-      }
-    | undefined,
-): BlueprintVariance | undefined {
-  if (variance === undefined) return undefined;
-  const out: { -readonly [K in keyof BlueprintVariance]: BlueprintVariance[K] } = {};
-  if (typeof variance.persona === 'string') out.persona = variance.persona;
-  if (typeof variance.aesthetic === 'string') out.aesthetic = variance.aesthetic;
-  if (typeof variance.seedPrompt === 'string') out.seedPrompt = variance.seedPrompt;
-  if (
-    variance.context !== undefined &&
-    variance.context !== null &&
-    typeof variance.context === 'object' &&
-    !Array.isArray(variance.context)
-  ) {
-    const ctx: { [k: string]: import('@ggui-ai/protocol').JsonValue } = {};
-    for (const [k, v] of Object.entries(variance.context)) {
-      ctx[k] = v as import('@ggui-ai/protocol').JsonValue;
-    }
-    out.context = ctx;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }

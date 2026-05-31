@@ -10,8 +10,9 @@ import { z } from 'zod';
 import {
   blueprintDraftSchema,
   handshakeSuggestionSchema,
-  pushDecisionSchema,
 } from './handshake-suggestion';
+import { dataContractSchema } from './data-contract';
+import { blueprintVarianceSchema } from './blueprint';
 
 // ── Shared Sub-Schemas ──
 
@@ -161,13 +162,13 @@ export const handshakeInputSchema = z.object({
  *
  * The agent reads `suggestion.origin` to branch the paired render call:
  *
- *   - `cache`  → render `{decision: {kind: 'accept'}}` for cache delivery.
- *   - `agent`  → render `{decision: {kind: 'accept'}}` to gen against the draft.
- *   - `synth`  → render `{decision: {kind: 'accept'}}` to gen against the amended contract.
+ *   - `cache`  → render `{handshakeId, props}` (omit `override`) for cache delivery.
+ *   - `agent`  → render `{handshakeId, props}` (omit `override`) to gen against the draft.
+ *   - `synth`  → render `{handshakeId, props}` (omit `override`) to gen against the amended contract.
  *
- * Any origin → render `{decision: {kind: 'override', blueprintDraft: {...}}}` to
- * discard the suggestion and gen against a fresh draft (mints a new
- * `blueprintId` server-side).
+ * Any origin → render `{handshakeId, props, override: {contract?, variance?}}`
+ * to re-aim the suggestion — `override.contract` gens against a fresh
+ * contract; `override.variance` re-aims the variant axis.
  *
  * Wire-output is intentionally lean. The handler carries `reason`,
  * `target`, `alternatives`, `contractHash`, `serverCapabilities` on
@@ -191,7 +192,7 @@ export const handshakeOutputSchema = z.object({
    * conditional on the routing outcome.
    */
   suggestion: handshakeSuggestionSchema
-    .describe('Server\'s suggestion — origin-routed (cache | agent | synth). Always carries a provisional `blueprintMeta` the agent reuses by sending `decision: \'accept\'` on render.'),
+    .describe('Server\'s suggestion — origin-routed (cache | agent | synth). Always carries a provisional `blueprintMeta` the agent reuses by rendering WITHOUT `override` (accept the proposal as-is).'),
   /**
    * Truncated human-readable rationale for the `action` value. Helps
    * the agent and the operator narrate why the server chose to reuse a cached
@@ -219,17 +220,22 @@ export const handshakeOutputSchema = z.object({
  * `ggui_render` — materialises a UI emission. Step 3 of the three-step
  * handshake protocol.
  *
- * The agent commits its decision relative to the prior handshake's
- * suggestion: ACCEPT (use the provisional `blueprintMeta` from
- * step-2 verbatim) or OVERRIDE (mint a fresh blueprintId with a NEW
- * `blueprintDraft`).
+ * The agent commits relative to the prior handshake's suggestion by
+ * PRESENCE of `override` (no discriminated union): omit `override` to
+ * ACCEPT the proposal as-is, or provide `override: {contract?, variance?}`
+ * to re-aim the contract and/or the variant axis (PATCH semantics).
  *
  * Locked decisions:
  *
- *   - `decision` discriminator: `{kind: 'accept'} |
- *     {kind: 'override', blueprintDraft: {...}}`.
- *   - `accept` reuses `handshake.suggestion.blueprintMeta.blueprintId`
- *     exactly; `override` discards the provisional id and mints fresh.
+ *   - ACCEPT (omit `override`) reuses the agreed contract + the proposed
+ *     variance, resolving the proposed `(contractKey, variantKey)`.
+ *   - `override.contract` re-drafts the contract (STRICT — must already
+ *     conform; the server does not repair it) and cold-gens against it.
+ *   - `override.variance` re-aims the variant axis while keeping the
+ *     agreed contract, re-resolving the effective
+ *     `(contractKey, variantKey(newVariance))`.
+ *   - `props` is REQUIRED (pass `{}` when the effective contract declares
+ *     no propsSpec).
  *
  * There is no separate `ggui_commit` — render absorbs that responsibility.
  *
@@ -241,7 +247,7 @@ export const renderInputSchema = z.object({
   handshakeId: z
     .string({
       message:
-        'ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate — handshake returns a handshakeId + suggestion. Then render with {handshakeId, decision: {kind: \'accept\'}} (accept the suggestion) or {handshakeId, decision: {kind: \'override\', blueprintDraft: {...}}} (override with a fresh draft). Direct-render without a handshakeId is not supported.',
+        'ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate — handshake returns a handshakeId + suggestion. Then render with {handshakeId, props} (accept the suggestion as-is) or {handshakeId, props, override: {contract?, variance?}} (re-aim the contract and/or variance). Direct-render without a handshakeId is not supported.',
     })
     .min(1, 'ggui_render: handshakeId must be a non-empty string from a prior ggui_handshake call.'),
   /**
@@ -249,22 +255,45 @@ export const renderInputSchema = z.object({
    * effective contract's `propsSpec` — required-field checks + type
    * checks per spec entry. Validation failures fail the render with a
    * recoverable `ContractViolationError`.
-   */
-  props: z.record(z.string(), z.unknown()).optional(),
-  /**
-   * Decision discriminator (REQUIRED).
    *
-   *   - `{kind: 'accept'}` — use the handshake's
-   *     `suggestion.blueprintMeta` verbatim. Cache delivery (origin
-   *     === 'cache') or gen-against-suggestion (origin === 'agent' /
-   *     'synth'). Reuses the provisional `blueprintId`.
-   *   - `{kind: 'override', blueprintDraft: {...}}` — mint a fresh
-   *     `blueprintId` and gen against the agent's NEW draft. The
-   *     provisional id from the handshake is discarded. Telemetry
-   *     threads via `handshakeId`.
+   * REQUIRED — pass `{}` when the effective contract declares no
+   * propsSpec (the field is required, the value may be empty).
    */
-  decision: pushDecisionSchema
-    .describe('Accept the handshake suggestion (use provisional blueprintId verbatim) or override with a fresh draft (mint new blueprintId).'),
+  props: z.record(z.string(), z.unknown()),
+  /**
+   * Re-aim the handshake proposal (PATCH semantics). Omit to ACCEPT the
+   * proposal as-is; provide to re-draft the contract and/or re-aim the
+   * variant axis. At least one of `contract` / `variance` MUST be set —
+   * an empty `override: {}` is rejected.
+   *
+   *   - `contract` — STRICT full re-draft of the contract. The server
+   *     does NOT repair it; it must already conform.
+   *   - `variance` — re-aim the variant axis (persona / aesthetic /
+   *     context / seedPrompt) while keeping the agreed contract. A
+   *     different variance resolves a distinct cached component.
+   */
+  override: z
+    .object({
+      contract: dataContractSchema
+        .optional()
+        .describe(
+          'STRICT full re-draft of the contract — must already conform; the server will not repair it.',
+        ),
+      variance: blueprintVarianceSchema
+        .optional()
+        .describe(
+          'Re-aim the variant (persona/aesthetic/context/seedPrompt); keeps the agreed contract.',
+        ),
+    })
+    .strict()
+    .refine((o) => o.contract !== undefined || o.variance !== undefined, {
+      message:
+        'override must set contract and/or variance — omit override entirely to ACCEPT the handshake proposal as-is.',
+    })
+    .optional()
+    .describe(
+      'Omit to ACCEPT the proposal as-is. Provide to re-aim contract and/or variance (PATCH semantics).',
+    ),
 }).strict();
 
 /**

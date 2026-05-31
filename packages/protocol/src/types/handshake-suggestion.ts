@@ -19,9 +19,10 @@
  *                the contract. Provisional blueprintId; `amendments`
  *                carries the diff vs the agent's draft.
  *
- * Step 3 — the agent posts a `PushDecision` (accept the suggestion or
- * override with a fresh draft). Accept reuses the provisional
- * `blueprintId`; override mints a fresh one.
+ * Step 3 — the agent renders, optionally posting an `override`
+ * (re-aim the contract and/or variance). Omitting `override` accepts the
+ * suggestion as-is and resolves the proposed `(contractKey, variantKey)`;
+ * an `override` re-resolves the effective identity.
  *
  * Locked decisions:
  *
@@ -45,7 +46,7 @@ import type { DataContract, JsonValue } from './data-contract.js';
  *
  *   - `cache`  — an existing blueprint matched at or above the per-app
  *                threshold. `blueprintMeta.codeHash` is present; the
- *                paired `ggui_render({decision: {kind: 'accept'}})`
+ *                paired `ggui_render({handshakeId, props})` (no `override`)
  *                short-circuits to cache delivery.
  *   - `agent`  — no cache hit, but the agent's draft validated cleanly.
  *                `codeHash` absent; gen runs on push against the
@@ -239,23 +240,6 @@ export interface HandshakeSuggestion {
    */
   readonly validationFindings?: readonly SuggestionFinding[];
 }
-
-/**
- * Decision discriminator on the push input. Replaces the old
- * `{contract? | contractHash?}` triad with a clearer accept-vs-
- * override branch.
- *
- *   - `accept`   — use the handshake's `blueprintMeta` verbatim.
- *                  If `codeHash` is present (origin === 'cache'),
- *                  delivery is a fast cache fetch. Otherwise gen
- *                  runs against the suggestion's stored contract.
- *   - `override` — mint a fresh blueprintId and run gen against the
- *                  agent's NEW draft. The provisional id from the
- *                  handshake is discarded.
- */
-export type PushDecision =
-  | { readonly kind: 'accept' }
-  | { readonly kind: 'override'; readonly blueprintDraft: BlueprintDraft };
 
 /**
  * Build a minimal JSON-Patch RFC 6902 diff between two contracts.
