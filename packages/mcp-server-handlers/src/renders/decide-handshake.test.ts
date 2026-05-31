@@ -431,6 +431,60 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
     expect(gapFindings[0]?.message).toMatch(/decrement/);
   });
 
+  it('the COVERAGE_GAP message steers default-accept / override-if and names the surface', async () => {
+    mockMatch.mockResolvedValueOnce(
+      hit('semantic', { id: 'bp-gap', judgeConfidence: 0.9, coverage: GAP }),
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    const msg =
+      r.suggestion.validationFindings?.find((f) => f.code === 'COVERAGE_GAP')
+        ?.message ?? '';
+    // Default-accept steer: reuse is the priority, override is conditional.
+    expect(msg).toMatch(/default.*accept/i);
+    expect(msg).toMatch(/override.*if/i);
+    // Names the missing surface.
+    expect(msg).toMatch(/decrement/);
+  });
+
+  it('a PROP gap annotates required-vs-optional from the draft', async () => {
+    const PROP_GAP = {
+      actions: [],
+      props: ['city', 'units'],
+      context: [],
+      streams: [],
+      gadgets: [],
+    } as const;
+    // Draft declares `city` required, `units` optional — the missing-prop
+    // findings must reflect each prop's required status from the draft.
+    const draftWithProps = {
+      contract: {
+        propsSpec: {
+          properties: {
+            city: { schema: { type: 'string' }, required: true },
+            units: { schema: { type: 'string' } },
+          },
+        },
+      } as DataContract,
+    };
+    mockMatch.mockResolvedValueOnce(
+      hit('semantic', { id: 'bp-gap', judgeConfidence: 0.9, coverage: PROP_GAP }),
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool()] }),
+      { intent: 'i', blueprintDraft: draftWithProps, ctx: CTX },
+    );
+    const findings =
+      r.suggestion.validationFindings?.filter((f) => f.code === 'COVERAGE_GAP') ??
+      [];
+    const city = findings.find((f) => f.path === 'propsSpec.properties.city');
+    const units = findings.find((f) => f.path === 'propsSpec.properties.units');
+    expect(city?.message).toMatch(/required/i);
+    expect(units?.message).toMatch(/optional/i);
+  });
+
   it('breaks a coverage tie on judgeConfidence (both gapped → higher wins)', async () => {
     mockMatch
       .mockResolvedValueOnce(

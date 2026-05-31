@@ -187,16 +187,34 @@ function coverageHasGap(gap: CoverageGap): boolean {
  * per missing surface — so the agent sees exactly what the proposed cached
  * UI lacks before accepting. Empty gap ⇒ no findings. Reuses the
  * `validationFindings` channel; introduces no new wire field.
+ *
+ * The message steers DEFAULT-ACCEPT: reuse-and-refine is the priority, and
+ * override is the conditional exception (only when the user must directly
+ * see or act on the missing surface). For a PROP gap ONLY, the finding also
+ * notes whether the missing prop was required or optional in the agent's
+ * `request` draft — that required/optional signal is exactly what tells the
+ * agent whether overriding is warranted. `PropEntry.required` is the only
+ * per-entry boolean of its kind; actions / context / streams / gadgets have
+ * no such concept, so their messages carry no annotation.
  */
-function coverageGapFindings(gap: CoverageGap): SuggestionFinding[] {
+function coverageGapFindings(
+  gap: CoverageGap,
+  request: DataContract,
+): SuggestionFinding[] {
   const findings: SuggestionFinding[] = [];
   const push = (kind: keyof CoverageGap, path: string): void => {
     for (const name of gap[kind]) {
+      const annotation =
+        kind === 'props'
+          ? request.propsSpec?.properties?.[name]?.required === true
+            ? ' (required in your draft)'
+            : ' (optional in your draft)'
+          : '';
       findings.push({
         code: COVERAGE_GAP_CODE,
         severity: 'warn',
         path: `${path}.${name}`,
-        message: `the proposed cached UI does not declare ${kind} '${name}' that your draft requests; accept to reuse it anyway, or override to generate a UI covering this surface`,
+        message: `the proposed cached UI does not declare ${kind} '${name}'${annotation} that your draft requests. Default to ACCEPT (reuse-and-refine) — override only if the user must directly see or act on this surface, since the cached UI cannot show it.`,
       });
     }
   };
@@ -402,7 +420,7 @@ export async function decideHandshake(
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
       // what the cached UI lacks before accepting (reuse the existing
       // validationFindings channel — no new wire field).
-      const gapFindings = coverageGapFindings(best.coverage);
+      const gapFindings = coverageGapFindings(best.coverage, parsedDraft.data);
       if (gapFindings.length === 0) return reuse;
       return {
         ...reuse,
