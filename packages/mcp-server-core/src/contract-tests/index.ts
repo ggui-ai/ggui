@@ -22,6 +22,11 @@ export {
   enumerableVectorStoreContract,
   vectorStoreContract,
 } from './vector-store.js';
+// (scope, exactKey) → blueprint UUID seam. The first-write-wins dedup
+// case is the load-bearing assertion. Interface lives in
+// `../blueprint-index.ts`.
+export { runBlueprintIndexConformance } from './blueprint-index.js';
+export type { BlueprintIndexConformanceFactory } from './blueprint-index.js';
 export { kvStoreContract } from './kv-store.js';
 export type { KvContractClock, KvContractOptions } from './kv-store.js';
 export { embeddingProviderContract } from './embedding-provider.js';

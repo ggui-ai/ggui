@@ -7,6 +7,9 @@
  */
 
 export { InMemoryVectorStore } from './vector-store.js';
+// (scope, exactKey) → blueprint UUID. First-write-wins `putId` is the
+// dedup primitive. Interface lives in `../blueprint-index.ts`.
+export { InMemoryBlueprintIndex } from './blueprint-index.js';
 export { InMemoryKeyValueStore } from './kv-store.js';
 export { MockEmbeddingProvider } from './embedding-provider.js';
 export type { MockEmbeddingProviderOptions } from './embedding-provider.js';
