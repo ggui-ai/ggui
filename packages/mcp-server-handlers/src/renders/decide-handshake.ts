@@ -37,10 +37,11 @@
  * RangeError / SyntaxError) re-throw so real bugs surface.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   dataContractSchema,
   lintContract,
+  summarizeContract,
   type DataContract,
   type HandshakeSuggestion,
   type SuggestionFinding,
@@ -173,6 +174,7 @@ export function buildCacheReuseResult(
   blueprint: {
     readonly id: string;
     readonly contractKey: string;
+    readonly variantKey: string;
     readonly componentCode: string;
     readonly contract: DataContract;
   },
@@ -185,6 +187,9 @@ export function buildCacheReuseResult(
   const suggestion: HandshakeSuggestion = {
     origin: 'cache',
     rationale: reason,
+    // blueprintId is set ONLY on cache reuse — it is the durable UUID
+    // minted at the blueprint's first render-time registration. Create /
+    // synth / agent decisions omit it (the UUID does not exist yet).
     blueprintMeta: {
       blueprintId: blueprint.id,
       contractHash: blueprint.contractKey,
@@ -193,12 +198,19 @@ export function buildCacheReuseResult(
       variance: {},
       selectedReason: reason,
     },
+    proposedContractSummary: summarizeContract(blueprint.contract),
   };
   return {
     action: 'reuse',
     reason,
     suggestion,
     effectiveContract: blueprint.contract,
+    // Matched-ref for the paired render's §6 point-read.
+    matchedBlueprint: {
+      id: blueprint.id,
+      contractKey: blueprint.contractKey,
+      variantKey: blueprint.variantKey,
+    },
   };
 }
 
@@ -229,12 +241,14 @@ export function buildCreateFallback(
   const suggestion: HandshakeSuggestion = {
     origin: 'agent',
     rationale: reason,
+    // No blueprintId — the durable UUID is minted at render-time
+    // registration, never at handshake. Absent on agent/synth (D4).
     blueprintMeta: {
-      blueprintId: `bp_${randomUUID()}`,
       contractHash,
       generator: generatorSlug,
       variance: {},
     },
+    proposedContractSummary: summarizeContract(contract),
     ...(findings.length > 0 ? { validationFindings: findings } : {}),
   };
   return {
@@ -360,12 +374,14 @@ export async function decideHandshake(
     const suggestion: HandshakeSuggestion = {
       origin: conforming.origin,
       rationale: conforming.reasoning,
+      // No blueprintId — minted at render-time registration, not here.
+      // Absent on agent/synth origins (D4).
       blueprintMeta: {
-        blueprintId: `bp_${randomUUID()}`,
         contractHash: blueprintKey(conforming.contract),
         generator: generatorSlug,
         variance: {},
       },
+      proposedContractSummary: summarizeContract(conforming.contract),
       ...(conforming.findings.length > 0
         ? { validationFindings: conforming.findings }
         : {}),

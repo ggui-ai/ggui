@@ -11,7 +11,7 @@
  * covered by `blueprint-matcher.test.ts` + the live `cache-reuse-probe`.
  */
 import { createHash } from 'node:crypto';
-import type { DataContract } from '@ggui-ai/protocol';
+import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
 import {
   InMemoryBlueprintIndex,
   InMemoryVectorStore,
@@ -106,6 +106,8 @@ beforeEach(() => {
 // Pure projection helpers
 // ---------------------------------------------------------------------------
 
+const BP_UUID = 'bp_11111111-1111-1111-1111-111111111111';
+
 describe('buildCacheReuseResult', () => {
   it('projects a matched blueprint into an ATOMIC origin:cache reuse', () => {
     const cachedContract: DataContract = {
@@ -113,25 +115,43 @@ describe('buildCacheReuseResult', () => {
     };
     const code = 'export default () => null;';
     const result = buildCacheReuseResult(
-      { id: 'template:abc', contractKey: 'abc', componentCode: code, contract: cachedContract },
+      {
+        id: BP_UUID,
+        contractKey: 'abc',
+        variantKey: 'v-abc',
+        componentCode: code,
+        contract: cachedContract,
+      },
       'match-semantic: judge matched (confidence=0.90)',
     );
     expect(result.action).toBe('reuse');
     // Atomic: served contract is the CACHED blueprint's own contract.
     expect(result.effectiveContract).toBe(cachedContract);
     expect(result.suggestion.origin).toBe('cache');
-    expect(result.suggestion.blueprintMeta.blueprintId).toBe('template:abc');
+    // blueprintId is set ONLY on cache reuse — the stored durable UUID.
+    expect(result.suggestion.blueprintMeta.blueprintId).toBe(BP_UUID);
     expect(result.suggestion.blueprintMeta.contractHash).toBe('abc');
     expect(result.suggestion.blueprintMeta.codeHash).toBe(
       createHash('sha256').update(code).digest('hex'),
     );
     expect(result.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
     expect(result.reason).toMatch(/match-semantic/);
+    // proposedContractSummary equals summarizeContract(cachedContract) —
+    // the same lossy summary the matcher's judge feeds (one source of truth).
+    expect(result.suggestion.proposedContractSummary).toBe(
+      summarizeContract(cachedContract),
+    );
+    // Matched-ref threaded for the paired render's §6 point-read.
+    expect(result.matchedBlueprint).toEqual({
+      id: BP_UUID,
+      contractKey: 'abc',
+      variantKey: 'v-abc',
+    });
   });
 
   it('honors a custom generator slug', () => {
     const r = buildCacheReuseResult(
-      { id: 'x', contractKey: 'x', componentCode: 'a', contract: {} },
+      { id: 'x', contractKey: 'x', variantKey: 'vx', componentCode: 'a', contract: {} },
       'r',
       'ui-gen-advanced-opus',
     );
@@ -139,7 +159,13 @@ describe('buildCacheReuseResult', () => {
   });
 
   it('is deterministic — same blueprint + reason → identical result', () => {
-    const bp = { id: 'x', contractKey: 'x', componentCode: 'a', contract: {} as DataContract };
+    const bp = {
+      id: 'x',
+      contractKey: 'x',
+      variantKey: 'vx',
+      componentCode: 'a',
+      contract: {} as DataContract,
+    };
     expect(buildCacheReuseResult(bp, 'r')).toEqual(buildCacheReuseResult(bp, 'r'));
   });
 });
@@ -153,6 +179,13 @@ describe('buildCreateFallback', () => {
     expect(r.effectiveContract).toEqual(clean);
     expect(r.suggestion.validationFindings).toBeUndefined();
     expect(r.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
+    // No throwaway provisional id — blueprintId is minted ONLY at
+    // render-time registration (absent on origin:agent).
+    expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+    // proposedContractSummary projects the clean draft.
+    expect(r.suggestion.proposedContractSummary).toBe(summarizeContract(clean));
+    // No matched-ref on a create decision.
+    expect(r.matchedBlueprint).toBeUndefined();
   });
 
   it('substitutes the empty contract + loud findings for a MALFORMED draft', () => {
@@ -162,6 +195,9 @@ describe('buildCreateFallback', () => {
     expect(r.effectiveContract).toEqual({});
     expect(r.suggestion.validationFindings?.length ?? 0).toBeGreaterThan(0);
     expect(r.suggestion.validationFindings?.[0]?.severity).toBe('error');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+    // Summary of the substituted empty contract.
+    expect(r.suggestion.proposedContractSummary).toBe(summarizeContract({}));
   });
 
   it('honors a custom generator slug', () => {
@@ -205,7 +241,7 @@ const miss: BlueprintMatchResult = { strategy: 'no-match', reason: 'no candidate
 describe('decideHandshake — pre-match', () => {
   it('short-circuits on a pre-match hit (find-similar never runs)', async () => {
     const preResult = buildCacheReuseResult(
-      { id: 'curated-1', contractKey: 'c1', componentCode: 'x', contract: {} },
+      { id: 'curated-1', contractKey: 'c1', variantKey: 'cv1', componentCode: 'x', contract: {} },
       'curated',
     );
     const preMatch = vi.fn(async () => preResult);
@@ -365,6 +401,13 @@ describe('decideHandshake — create / fallback', () => {
     expect(r.suggestion.origin).toBe('synth');
     expect(r.suggestion.validationFindings?.length).toBe(1);
     expect(mockEnsure).toHaveBeenCalledOnce();
+    // No throwaway provisional id on the synth-create path (D4) and no
+    // matched-ref; proposedContractSummary projects the conforming contract.
+    expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+    expect(r.matchedBlueprint).toBeUndefined();
+    expect(r.suggestion.proposedContractSummary).toBe(
+      summarizeContract({ propsSpec: { properties: {} } }),
+    );
   });
 
   it('returns a no-creds create fallback when no LLM resolves', async () => {

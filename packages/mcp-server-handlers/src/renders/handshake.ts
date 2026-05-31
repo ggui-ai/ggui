@@ -238,6 +238,20 @@ export interface HandshakeNegotiatorResult {
   readonly target?: HandshakeStoredTarget;
   /** Top-N alternative blueprints surfaced on the response. */
   readonly alternatives?: readonly Blueprint[];
+  /**
+   * Reference to the cached blueprint this decision reused — present ONLY
+   * on `origin: 'cache'` reuse. Threaded onto the persisted
+   * {@link HandshakeRecord} so the paired `ggui_render` can point-read the
+   * stored blueprint (§6) instead of re-running the matcher. HANDLERS-side
+   * only — deliberately kept out of `@ggui-ai/protocol` (P2-4): it is an
+   * internal server-to-render routing detail, not an agent-facing wire
+   * field. Absent on create / synth / agent decisions.
+   */
+  readonly matchedBlueprint?: {
+    readonly id: string;
+    readonly contractKey: string;
+    readonly variantKey: string;
+  };
 }
 
 export interface GguiHandshakeHandlerDeps {
