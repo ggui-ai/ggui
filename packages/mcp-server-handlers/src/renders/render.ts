@@ -955,7 +955,7 @@ export function createGguiRenderHandler(
       // prerequisite is what produces correct first calls.
       [
         // 1. Call shape — the literal JSON the agent must emit.
-        "CALL SHAPE: ggui_render({handshakeId, decision, props?}). handshakeId comes from a prior ggui_handshake (REQUIRED). decision is one of {kind:'accept'} (use the handshake suggestion verbatim, reuses provisional blueprintId) OR {kind:'override', blueprintDraft:{contract, variance?, generator?}} (mint a fresh blueprintId against your NEW draft). props is REQUIRED when the effective contract declares propsSpec; values are validated against propsSpec at render time.",
+        "CALL SHAPE: ggui_render({handshakeId, decision, props?}). handshakeId comes from a prior ggui_handshake (REQUIRED). decision is one of {kind:'accept'} (REUSES the contract the handshake proposed — fast path, no regeneration) OR {kind:'override', blueprintDraft:{contract, variance?, generator?}} (generates fresh from your OWN new contract; STRICT — it must already conform or this call fails). props is REQUIRED when the effective contract declares propsSpec; values are validated against propsSpec at render time. The response reports the final `action`, the `blueprintId` (stable — equal across renders that reused the same component), and a `cache` marker.",
         // 2. Prerequisite — handshake first, always.
         'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — render consumes it. Direct render without a handshakeId fails with handshake_not_found.',
         // 2b. Next step — driven by the response, not blanket-applied.

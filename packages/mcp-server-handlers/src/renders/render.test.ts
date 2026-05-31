@@ -352,3 +352,81 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(entries[0].key).toBe(out.blueprintId);
   });
 });
+
+// P2-25: the CALL SHAPE block of the ggui_render description was
+// rewritten for Phase 2 — accept REUSES the proposed contract (fast
+// path), override generates fresh (STRICT), and the response reports
+// final action + a stable blueprintId + a cache marker. The provisional
+// blueprintId framing is gone (the UUID is minted at registration).
+// These strings ship via tools/list to every self-hoster's LLM, so they
+// are code-property asserted + OSS-purity grepped.
+describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
+  function description(): string {
+    const handler = buildHandler({
+      handshakeStore: new InMemoryKeyValueStore(),
+      renderStore: new InMemoryRenderStore(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+      coldCode: COLD_CODE,
+    });
+    expect(typeof handler.description).toBe('string');
+    return handler.description as string;
+  }
+
+  it("describes {kind:'accept'} as REUSING the proposed contract (fast path, no regeneration)", () => {
+    const d = description();
+    expect(d).toMatch(/CALL SHAPE: ggui_render/);
+    expect(d).toMatch(/REUSES the contract the handshake proposed/);
+    expect(d).toMatch(/no regeneration/);
+  });
+
+  it("describes {kind:'override'} as fresh generation from your own contract (STRICT)", () => {
+    const d = description();
+    expect(d).toMatch(/override/);
+    expect(d).toMatch(/generates fresh/);
+    expect(d).toMatch(/STRICT/);
+    expect(d).toMatch(/this call fails/);
+  });
+
+  it('states the response reports action, a stable blueprintId, and a cache marker', () => {
+    const d = description();
+    expect(d).toMatch(/final `action`/);
+    expect(d).toMatch(/`blueprintId` \(stable/);
+    expect(d).toMatch(/`cache` marker/);
+  });
+
+  it('no longer frames blueprintId as provisional/minted-at-handshake', () => {
+    const d = description();
+    expect(d).not.toMatch(/provisional blueprintId/);
+    expect(d).not.toMatch(/mint a fresh blueprintId/);
+  });
+
+  it('keeps blocks 2-6 (PREREQUISITE / NEXT STEP / RECOVERABLE / MUTATION / WIRE SURFACE / HOSTING) verbatim', () => {
+    const d = description();
+    expect(d).toContain(
+      'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST.',
+    );
+    expect(d).toContain(
+      'MUTATION: ggui_update mutates props on a delivered UI. NEVER re-render to mutate',
+    );
+    expect(d).toContain('WIRE SURFACE (DataContract). PLACEMENT RULE for the two inbound specs:');
+    expect(d).toContain(
+      'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/render',
+    );
+  });
+
+  it('is OSS-pure — no platform/tier/cloud/credit/cost semantics', () => {
+    const d = description();
+    for (const banned of [
+      '@ggui-cloud',
+      '@guuey',
+      'platform',
+      'tier',
+      'credit',
+      'billing',
+      'savings',
+    ]) {
+      expect(d.toLowerCase()).not.toContain(banned.toLowerCase());
+    }
+  });
+});
