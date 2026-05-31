@@ -138,6 +138,53 @@ describe('matchBlueprint — exact-key strategy', () => {
   });
 });
 
+describe('matchBlueprint — variance-aware exact-key strategy', () => {
+  // Two blueprints, SAME contract, DIFFERENT variance → distinct
+  // variantKeys → distinct exact-keys. A variance-blind exact-key probe
+  // would collapse both to the contractKey-only (default-variant) lookup
+  // and return whichever was written first. The matcher must pass
+  // `variantKey(query.variance)` so each request resolves its OWN variant.
+  it('resolves the variant matching the request variance (not a contractKey-only collision)', async () => {
+    const registry = makeRegistry();
+    const personaA = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'export default () => "a";',
+      variance: { persona: 'a' },
+    });
+    const personaB = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'export default () => "b";',
+      variance: { persona: 'b' },
+    });
+    // Two distinct rows under the SAME contract — distinct variantKeys.
+    expect(personaA.id).not.toBe(personaB.id);
+
+    const aResult = await matchBlueprint({ registry }, SCOPE, {
+      intent: 'paraphrased notepad',
+      contract: NOTEPAD_CONTRACT,
+      variance: { persona: 'a' },
+    });
+    expect(aResult.strategy).toBe('exact-key');
+    if (aResult.strategy === 'exact-key') {
+      expect(aResult.blueprint.id).toBe(personaA.id);
+    }
+
+    const bResult = await matchBlueprint({ registry }, SCOPE, {
+      intent: 'paraphrased notepad',
+      contract: NOTEPAD_CONTRACT,
+      variance: { persona: 'b' },
+    });
+    expect(bResult.strategy).toBe('exact-key');
+    if (bResult.strategy === 'exact-key') {
+      expect(bResult.blueprint.id).toBe(personaB.id);
+    }
+  });
+});
+
 describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
   // The mock embedder produces sine/cosine basis vectors that often
   // land below 0.3 cosine across distinct text — fine for production

@@ -34,8 +34,12 @@
  */
 import type { LLMCaller } from '@ggui-ai/negotiator';
 import { rerankCandidates } from '@ggui-ai/negotiator';
-import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import {
+  summarizeContract,
+  type DataContract,
+  type BlueprintVariance,
+} from '@ggui-ai/protocol';
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   emitCacheTraceEvent,
   newCacheTraceId,
@@ -177,7 +181,11 @@ const DEFAULT_JUDGE_THRESHOLD = 0.5;
 export async function matchBlueprint(
   deps: MatchBlueprintDeps,
   scope: string,
-  query: { readonly intent: string; readonly contract?: DataContract },
+  query: {
+    readonly intent: string;
+    readonly contract?: DataContract;
+    readonly variance?: BlueprintVariance;
+  },
   options: MatchBlueprintOptions = {},
 ): Promise<BlueprintMatchResult> {
   const kind: BlueprintKind = options.kind ?? 'template';
@@ -299,6 +307,7 @@ export async function matchBlueprint(
         scope,
         kind,
         expectedKey,
+        variantKey(query.variance),
       );
       if (exact) {
         bumpHitBestEffort(deps.registry, scope, exact.id);
