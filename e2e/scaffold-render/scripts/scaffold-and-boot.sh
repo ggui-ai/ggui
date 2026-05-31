@@ -26,14 +26,10 @@ REGISTRY="${REGISTRY:-http://localhost:4874}"
 REGISTRY_HOST_PORT="${REGISTRY#http://}"; REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT%/}"
 APP_PARENT="$(dirname "$APP_DIR")"
 
-# Each SDK's agent backend binds a different port (dev.mjs AGENT_PORT, per shell).
-# The web SPA reaches it via VITE_AGENT_ENDPOINT_URL, so that must match the SDK.
-case "$SDK" in
-  claude-agent-sdk) AGENT_PORT=6790 ;;
-  openai-agents-sdk) AGENT_PORT=6791 ;;
-  google-adk) AGENT_PORT=6792 ;;
-  *) echo "scaffold-and-boot: unknown SDK '$SDK'" >&2; exit 1 ;;
-esac
+# The agent backend is unified to port 6790 across all SDK shells (dev.mjs).
+# The web SPA reaches it via VITE_AGENT_ENDPOINT_URL / the render scenario's
+# ?agent= param.
+AGENT_PORT=6790
 
 # npx fetches create-agentic-app itself from Verdaccio (npx honors these);
 # pnpm's own isolation is the project .npmrc below (env-var cache-dir is

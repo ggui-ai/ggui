@@ -27,11 +27,11 @@ export interface ScaffoldAppHandle {
   /** http://localhost:6781 — the ggui MCP server (cache-hit scenario). */
   readonly gguiUrl: string;
   /**
-   * http://localhost:679x — the agent backend for this SDK (claude 6790,
-   * openai 6791, google 6792). The web SPA resolves its agent from a
-   * `?agent=` query param FIRST (App.tsx), so the render scenario navigates
-   * to `${webUrl}/?agent=${agentUrl}` — robust against the env not reaching
-   * vite (`dev:web` runs plain vite, which never reads the app-root .env.local).
+   * http://localhost:6790 — the agent backend, unified across all SDK shells
+   * (dev.mjs). The web SPA resolves its agent from a `?agent=` query param
+   * FIRST (App.tsx), so the render scenario navigates to
+   * `${webUrl}/?agent=${agentUrl}` — robust against the env not reaching vite
+   * (`dev:web` runs plain vite, which never reads the app-root .env.local).
    */
   readonly agentUrl: string;
   /** Absolute path of the scaffolded app dir. */
@@ -48,20 +48,16 @@ const BOOT = resolve(ROOT, 'oss/e2e/scaffold-render/scripts/scaffold-and-boot.sh
 const REGISTRY = process.env['REGISTRY'] ?? 'http://localhost:4874';
 
 // Fixed host ports the scaffolded `pnpm dev` binds: ggui 6781, mcps 6782,
-// agent 6790/6791/6792 (per SDK: claude/openai/google), web 6890. One booted
-// app at a time host-side (Playwright workers:1); the container cells give each
-// SDK its own localhost so the matrix can run without colliding.
+// agent 6790 (unified across SDKs), web 6890. One booted app at a time
+// host-side (Playwright workers:1); the container cell gives the app its own
+// localhost.
 const WEB_PORT = 6890;
 const GGUI_PORT = 6781;
-// Per-SDK agent backend port (dev.mjs AGENT_PORT, fixed per shell).
-const AGENT_PORT: Record<SdkId, number> = {
-  'claude-agent-sdk': 6790,
-  'openai-agents-sdk': 6791,
-  'google-adk': 6792,
-};
-// All ports any SDK's dev tree may bind — checked on teardown so a leak from
-// any agent variant (6790/6791/6792) is caught, not just claude's.
-const APP_PORTS: readonly number[] = [GGUI_PORT, 6782, 6790, 6791, 6792, WEB_PORT];
+// Agent backend port — unified to 6790 across all SDK shells (dev.mjs AGENT_PORT).
+const AGENT_PORT = 6790;
+// All ports the scaffolded dev tree binds — checked on teardown so a leak is
+// caught before the next boot.
+const APP_PORTS: readonly number[] = [GGUI_PORT, 6782, AGENT_PORT, WEB_PORT];
 
 // build + publish + assemble runs ONCE per worker process; cache the result.
 let templatesSrc: string | undefined;
@@ -155,7 +151,7 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
   return {
     webUrl,
     gguiUrl,
-    agentUrl: `http://localhost:${AGENT_PORT[opts.sdk]}`,
+    agentUrl: `http://localhost:${AGENT_PORT}`,
     scaffoldDir: appDir,
     stdout: () => buf,
     close: async () => {
