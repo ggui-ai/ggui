@@ -638,9 +638,41 @@ describe('decideHandshake — VARIANCE_GAP finding (D5)', () => {
     // Default-accept steer.
     expect(finding?.message).toMatch(/default.*accept/i);
     expect(finding?.message).toMatch(/override.*if/i);
-    // Names the proposed variance.
-    expect(finding?.message).toMatch(/minimalist/);
-    expect(finding?.message).toMatch(/monochrome/);
+    // Names the proposed variance via the bounded persona/aesthetic
+    // projection (NOT the raw JSON of the whole block).
+    expect(finding?.message).toContain('persona:"minimalist"');
+    expect(finding?.message).toContain('aesthetic:"monochrome"');
+    // And the requested side projects too.
+    expect(finding?.message).toContain('persona:"power-user"');
+  });
+
+  it('projects the variance BOUNDED — unbounded context/seedPrompt collapse to a <set> marker, never inlined', async () => {
+    // A big context object + a long seedPrompt must NOT be stringified into
+    // the wire-carried message; they collapse to a presence marker so the
+    // finding stays bounded.
+    const longSeed = 'x'.repeat(5000);
+    const bigContext = { huge: 'y'.repeat(5000) };
+    mockMatch.mockResolvedValueOnce(
+      semanticHitWithVariance({
+        persona: 'minimalist',
+        context: bigContext,
+        seedPrompt: longSeed,
+      }),
+    );
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: { ...DRAFT, variance: { persona: 'power-user' } },
+      ctx: CTX,
+    });
+    const msg =
+      r.suggestion.validationFindings?.find((f) => f.code === 'VARIANCE_GAP')
+        ?.message ?? '';
+    expect(msg).toContain('context:<set>');
+    expect(msg).toContain('seedPrompt:<set>');
+    // The unbounded payloads never leak into the message.
+    expect(msg).not.toContain(longSeed);
+    expect(msg).not.toContain('y'.repeat(5000));
+    expect(msg.length).toBeLessThan(500);
   });
 
   it('emits NO VARIANCE_GAP when the proposed variance equals the request variance', async () => {

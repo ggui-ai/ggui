@@ -231,6 +231,24 @@ function coverageGapFindings(
 const VARIANCE_GAP_CODE = 'VARIANCE_GAP';
 
 /**
+ * Bounded, readable projection of a variance block for the VARIANCE_GAP
+ * message. NEVER `JSON.stringify` the whole block: `context` (a free-form
+ * `JsonObject`) and `seedPrompt` (an arbitrary-length string) are unbounded
+ * and would bloat every variance-gap handshake response (`SuggestionFinding`
+ * carries no maxLength). Only the short tags (`persona`, `aesthetic`) are
+ * inlined; the unbounded fields collapse to a `<set>` presence marker.
+ */
+function summarizeVariance(v: BlueprintVariance | undefined): string {
+  if (!v || Object.keys(v).length === 0) return '(default)';
+  const parts: string[] = [];
+  if (v.persona) parts.push(`persona:${JSON.stringify(v.persona)}`);
+  if (v.aesthetic) parts.push(`aesthetic:${JSON.stringify(v.aesthetic)}`);
+  if (v.context !== undefined) parts.push('context:<set>');
+  if (v.seedPrompt !== undefined) parts.push('seedPrompt:<set>');
+  return parts.join(', ') || '(default)';
+}
+
+/**
  * Project a variance delta into a single `severity:'warn'` validation
  * finding — emitted ONLY when the proposed (matched-blueprint) variance
  * differs from the request variance. Mirrors {@link coverageGapFindings}:
@@ -253,10 +271,10 @@ function varianceGapFindings(
       code: VARIANCE_GAP_CODE,
       severity: 'warn',
       path: 'variance',
-      message: `the proposed cached UI was built for variance ${JSON.stringify(
-        proposedVariance ?? {},
-      )}; you requested ${JSON.stringify(
-        requestVariance ?? {},
+      message: `the proposed cached UI was built for variance ${summarizeVariance(
+        proposedVariance,
+      )}; you requested ${summarizeVariance(
+        requestVariance,
       )}. Default to ACCEPT (reuse-and-refine) — override the variance only if the difference must change what is generated.`,
     },
   ];
