@@ -4,11 +4,13 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { DataContract } from '@ggui-ai/protocol';
+import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import type { LLMCaller, ToolSchema } from '@ggui-ai/negotiator';
 import { matchBlueprint } from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
+import { decideHandshake } from './decide-handshake.js';
+import type { HandlerContext } from '../types.js';
 import {
   setCacheTraceSink,
   type CacheTraceEvent,
@@ -775,5 +777,193 @@ describe('matchBlueprint — contract-bearing semantic fall-through (Phase 1)', 
     );
     expect(result.strategy).toBe('exact-key');
     expect(judgeCalled).toBe(false); // exact-key short-circuits before the LLM
+  });
+});
+
+// ─── Task A4: deterministic propose path (stub judge, NO real LLM) ────────
+//
+// The FAST regression gate for "the pipeline proposes + signals correctly."
+// With the rerank judge STUBBED to ACCEPT a non-covering-but-similar
+// candidate, the WHOLE propose path runs offline + deterministically —
+// RAG recall → judge → coverage gap → decision projection. No real LLM, no
+// network, no API key: `callStructured` is replaced by `stubLlm`, which
+// returns a forced `{matchId, confidence, reason}` shaped exactly like the
+// rerank tool input. (Calibration against a REAL LLM is Task A5; this is the
+// LLM-free sibling.)
+//
+// Two layers, BOTH asserted:
+//   (1) matcher level — `matchBlueprint` returns strategy:'semantic' (NOT
+//       'no-match') with `coverage` reporting the missing key-delta.
+//   (2) decision level — `decideHandshake` drives the SAME stubbed-judge path
+//       through the REAL `matchBlueprint` (no mock) and projects an
+//       origin:'cache' reuse carrying the A2 required-marker summary +
+//       COVERAGE_GAP findings naming the missing surface.
+//
+// A cached blueprint with a REQUIRED prop is registered so its
+// `summarizeContract` projection carries the A2 `name:type!` marker; the
+// request declares an EXTRA prop the cached blueprint lacks so the coverage
+// gap is non-empty and meaningful.
+
+// Cached weather card: `city` is REQUIRED (so the summary carries `city:string!`,
+// the A2 marker) + an optional `temperature`. One refresh action.
+const WEATHER_CACHED: DataContract = {
+  propsSpec: {
+    properties: {
+      city: { required: true, schema: { type: 'string' } },
+      temperature: { schema: { type: 'number' } },
+    },
+  },
+  actionSpec: {
+    refresh: {
+      label: 'Refresh',
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+    },
+  },
+};
+
+// Agent's request: SAME intent + the same two props PLUS an extra `humidity`
+// prop the cached blueprint lacks. Canonicalizes to a DIFFERENT key (extra
+// prop) → exact-key MISSES → falls through to the stubbed semantic judge.
+// The coverage gap is exactly `{props: ['humidity']}`.
+const WEATHER_REQUEST_SUPERSET: DataContract = {
+  propsSpec: {
+    properties: {
+      city: { required: true, schema: { type: 'string' } },
+      temperature: { schema: { type: 'number' } },
+      humidity: { schema: { type: 'number' } },
+    },
+  },
+  actionSpec: {
+    refresh: {
+      label: 'Refresh',
+      schema: { type: 'object', properties: {}, additionalProperties: false },
+    },
+  },
+};
+
+const WEATHER_INTENT = 'a weather card for a city';
+
+describe('matchBlueprint — A4 deterministic propose path (stub judge, no LLM)', () => {
+  it('proposes a non-covering similar candidate (strategy:semantic) and reports the exact key-delta in coverage — deterministically', async () => {
+    // Build the inputs ONCE; run the matcher TWICE to pin determinism
+    // (deterministic embedder + forced judge ⇒ identical result, no network).
+    const run = async () => {
+      const registry = makeRegistry();
+      const stored = await registerBlueprint(registry, SCOPE, {
+        kind: 'template',
+        contract: WEATHER_CACHED,
+        intent: WEATHER_INTENT,
+        componentCode: 'export default () => <div/>;',
+      });
+      // Stub the judge to ACCEPT the cached blueprint by its registry id at a
+      // confidence above the default 0.5 threshold. This is the ONLY LLM
+      // surface — `callStructured` returns the rerank-tool-shaped object.
+      return matchBlueprint(
+        {
+          registry,
+          llm: stubLlm({
+            matchId: stored.id,
+            confidence: 0.9,
+            reason: 'stub: same weather-card family',
+          }),
+        },
+        SCOPE,
+        { intent: WEATHER_INTENT, contract: WEATHER_REQUEST_SUPERSET },
+        // No minCosineForRerank override — the real RAG cosine for the
+        // same-intent contract-less query clears the default 0.2 gate
+        // (measured ≈0.44), so this proves the gate-respecting path.
+      );
+    };
+
+    const first = await run();
+    const second = await run();
+
+    // Proposes (semantic) — NOT no-match. The contract-bearing request
+    // exact-key-misses (extra prop), falls through, and the stubbed judge
+    // accepts the similar candidate.
+    expect(first.strategy).toBe('semantic');
+    if (first.strategy === 'semantic') {
+      // Reuses the CACHED blueprint atomically (its contract+UI).
+      expect(first.blueprint.contractKey).toBe(blueprintKey(WEATHER_CACHED));
+      // Coverage reports EXACTLY the missing prop — the request's `humidity`
+      // that the cached blueprint lacks. Not no-match; the gap is informational.
+      expect(first.coverage.props).toEqual(['humidity']);
+      expect(first.coverage.actions).toEqual([]);
+      expect(first.judgeConfidence).toBeCloseTo(0.9);
+      // The reason string carries the coverage-gap note for trace logs.
+      expect(first.reason).toMatch(/coverage gap/);
+      expect(first.reason).toMatch(/humidity/);
+    }
+
+    // Deterministic: same inputs (modulo opaque per-run blueprint ids) →
+    // identical strategy + coverage. Compare the load-bearing fields.
+    expect(second.strategy).toBe(first.strategy);
+    if (first.strategy === 'semantic' && second.strategy === 'semantic') {
+      expect(second.coverage).toEqual(first.coverage);
+      expect(second.judgeConfidence).toBe(first.judgeConfidence);
+    }
+  });
+});
+
+describe('decideHandshake — A4 deterministic propose path (real matcher, stub judge, no LLM)', () => {
+  // Drive the FULL decision spine through the REAL `matchBlueprint` (this file
+  // does NOT mock it, unlike decide-handshake.test.ts which mocks the matcher
+  // wholesale). The adapter wires a single pool backed by the in-memory
+  // registry + a `resolveLlm` returning the stubbed judge — so RAG, judge,
+  // coverage, and the origin:'cache' projection all run offline.
+  const CTX: HandlerContext = { appId: SCOPE, requestId: 'r-a4' };
+
+  it("returns origin:'cache' with the A2 required-marker summary + COVERAGE_GAP findings naming the missing surface", async () => {
+    const registry = makeRegistry();
+    const stored = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: WEATHER_CACHED,
+      intent: WEATHER_INTENT,
+      componentCode: 'export default () => <div/>;',
+    });
+
+    // The forced judge accepts the cached blueprint (id is opaque per run, so
+    // resolve it from the just-registered blueprint). This is the only LLM.
+    const judge = stubLlm({
+      matchId: stored.id,
+      confidence: 0.9,
+      reason: 'stub: same weather-card family',
+    });
+
+    const result = await decideHandshake(
+      {
+        resolveLlm: () => judge,
+        pools: [{ registry, scope: SCOPE }],
+      },
+      {
+        intent: WEATHER_INTENT,
+        blueprintDraft: { contract: WEATHER_REQUEST_SUPERSET },
+        ctx: CTX,
+      },
+    );
+
+    // Proposes a cache reuse — origin:'cache', action:'reuse'.
+    expect(result.action).toBe('reuse');
+    expect(result.suggestion.origin).toBe('cache');
+    expect(result.suggestion.blueprintMeta.blueprintId).toBe(stored.id);
+
+    // proposedContractSummary = summarizeContract(<cached contract>) — and the
+    // cached `city` prop is required:true, so the A2 `name:type!` marker MUST
+    // appear (`city:string!`). One source of truth: equals the summary helper.
+    expect(result.suggestion.proposedContractSummary).toBe(
+      summarizeContract(WEATHER_CACHED),
+    );
+    expect(result.suggestion.proposedContractSummary).toMatch(/city:string!/);
+
+    // COVERAGE_GAP findings name the missing surface — the request's `humidity`
+    // prop the cached UI lacks. One warn finding per missing surface.
+    const gapFindings =
+      result.suggestion.validationFindings?.filter(
+        (f) => f.code === 'COVERAGE_GAP',
+      ) ?? [];
+    expect(gapFindings).toHaveLength(1);
+    expect(gapFindings[0]?.severity).toBe('warn');
+    expect(gapFindings[0]?.path).toBe('propsSpec.properties.humidity');
+    expect(gapFindings[0]?.message).toMatch(/humidity/);
   });
 });
