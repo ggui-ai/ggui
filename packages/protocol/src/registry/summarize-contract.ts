@@ -21,7 +21,7 @@
  *
  *     slots=<name:type,...>;
  *     actions=<name(payloadFields)?,...>; streams=<name,...>;
- *     props=<name:type!?,...>
+ *     props=<name:type[!],...>
  *
  * Format details:
  *   - slots: `name:type` (e.g. `count:number,draft:string`). Bare
