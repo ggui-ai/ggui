@@ -19,22 +19,11 @@
  * are the empirical complement to `blueprint-matcher.test.ts` (which
  * runs the matcher in isolation against a mock embedder + stub LLM).
  *
- * SKIPPED (2026-05-21) — pending migration. This over-the-wire test
- * was authored against an older blueprint-first / handshake / render
- * contract: its hand-rolled `generation` deps (notably the stub
- * `resolveLlm` with a placeholder `key: 'test-key'`) and the
- * `openRender`→render flow no longer yield the `{codeReady, cache}`
- * structuredContent the assertions expect — the handshake negotiator
- * now makes a real authenticated `[decision]` call. The same
- * render→cold-gen→cache behavior is covered green by `e2e/wire-scenarios`
- * `08-cached-push` + `17-cold-path-then-cache`, so coverage is not
- * lost. Re-enable after rebuilding the fake-generator + render harness
- * against the current contract (real `ANTHROPIC_API_KEY` via a
- * `.env.local` loader; LLM-gate the suite). TODO(host-simulator):
- * migrate slice-16e.
+ * The render output's reuse marker is the shared `RenderCacheMarker`
+ * from `@ggui-ai/protocol` (Phase-1 reuse visibility) — no local mirror.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import type { DataContract } from '@ggui-ai/protocol';
+import type { DataContract, RenderCacheMarker } from '@ggui-ai/protocol';
 import {
   HostSimulator,
   bootOssServer,
@@ -60,20 +49,12 @@ const WEATHER_CONTRACT: DataContract = {
   },
 };
 
-interface RenderCacheMarker {
-  hit: boolean;
-  llmCallsAvoided: number;
-  similarity?: number;
-  cachedBlueprintId?: string;
-  kind?: 'full-template' | 'composed' | 'cold';
-}
-
 interface RenderStructured {
   codeReady: boolean;
   cache?: RenderCacheMarker;
 }
 
-describe.skip('host-simulator: Slice 16e blueprint-first registry', () => {
+describe('host-simulator: Slice 16e blueprint-first registry', () => {
   let fixture: OssFixture | null = null;
   let host: HostSimulator | null = null;
   const calls = { count: 0 };
