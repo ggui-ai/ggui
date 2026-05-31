@@ -38,7 +38,7 @@ describe('summarizeContract', () => {
     expect(summary).toContain('actions=cancel,submit');
   });
 
-  it('surfaces props names + types when populated', () => {
+  it('surfaces props names + types, marking required props with a trailing `!`', () => {
     const summary = summarizeContract({
       propsSpec: {
         properties: {
@@ -47,7 +47,25 @@ describe('summarizeContract', () => {
         },
       },
     });
-    expect(summary).toContain('props=comment:string,rating:number');
+    // `rating` is required → `rating:number!`; `comment` is optional →
+    // `comment:string` (no marker).
+    expect(summary).toContain('props=comment:string,rating:number!');
+  });
+
+  it('marks a required untyped prop as `name!` and leaves optional/absent unmarked', () => {
+    const summary = summarizeContract({
+      propsSpec: {
+        properties: {
+          // required + untyped (no schema.type) → `bare!`
+          bare: { schema: {}, required: true },
+          // required:false is explicitly NOT required → no marker
+          optional: { schema: { type: 'string' }, required: false },
+          // absent `required` (undefined) → no marker
+          implicit: { schema: { type: 'boolean' } },
+        },
+      },
+    });
+    expect(summary).toContain('props=bare!,implicit:boolean,optional:string');
   });
 
   it('omits props segment entirely when no props declared', () => {
@@ -66,6 +84,20 @@ describe('summarizeContract', () => {
     });
     expect(summary).toBe(
       'slots=y:string; actions=z; streams=w; props=x:string',
+    );
+  });
+
+  it('docstring example — a required prop renders `name:type!`', () => {
+    const summary = summarizeContract({
+      propsSpec: {
+        properties: { x: { schema: { type: 'string' }, required: true } },
+      },
+      contextSpec: { y: { schema: { type: 'string' } } },
+      actionSpec: { z: { label: 'Z' } },
+      streamSpec: { w: { schema: { type: 'string' } } },
+    });
+    expect(summary).toBe(
+      'slots=y:string; actions=z; streams=w; props=x:string!',
     );
   });
 

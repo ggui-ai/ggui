@@ -21,7 +21,7 @@
  *
  *     slots=<name:type,...>;
  *     actions=<name(payloadFields)?,...>; streams=<name,...>;
- *     props=<name:type,...>
+ *     props=<name:type!?,...>
  *
  * Format details:
  *   - slots: `name:type` (e.g. `count:number,draft:string`). Bare
@@ -36,7 +36,12 @@
  *     in the summary lets the judge see this distinction.
  *   - streams: bare `name` (channel schemas vary a lot and are usually
  *     emitted by the agent later; including them adds noise).
- *   - props: `name:type` (initial render shape).
+ *   - props: `name:type` (initial render shape). A trailing `!` marks a
+ *     required prop (e.g. `name:type!` = required; `name:type` =
+ *     optional). Bare `name!` when a required prop's schema has no
+ *     `type` field. Only props the component MUST accept are marked;
+ *     surfacing required-vs-optional lets the rerank judge tell a
+ *     mandatory prop apart from an optional one instead of guessing.
  *
  * Empty slots/actions/streams/props collapse to `∅`.
  */
@@ -78,8 +83,16 @@ export function summarizeContract(
     ? Object.entries(contract.propsSpec.properties)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, entry]) => {
-          const t = readType((entry as { schema?: unknown }).schema);
-          return t ? `${name}:${t}` : name;
+          // `entry` is a `PropEntry` (PropsSpec.properties is
+          // `Record<string, PropEntry>`), so `schema` and `required`
+          // read directly — no cast.
+          const t = readType(entry.schema);
+          const base = t ? `${name}:${t}` : name;
+          // A trailing `!` marks a mandatory prop so the rerank judge
+          // (and the agent) can tell required from optional. Only the
+          // literal `true` earns the marker; `undefined`/`false` = not
+          // required.
+          return entry.required === true ? `${base}!` : base;
         })
         .join(',')
     : '';
