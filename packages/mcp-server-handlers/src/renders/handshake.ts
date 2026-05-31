@@ -43,6 +43,7 @@ import {
   STDLIB_GADGETS,
   validateContract,
   lintContract,
+  summarizeContract,
   dataContractSchema,
   handshakeSuggestionSchema,
   type Blueprint,
@@ -298,12 +299,6 @@ export interface GguiHandshakeHandlerDeps {
    */
   readonly generateHandshakeId?: () => string;
   /**
-   * Provisional blueprint-id minter override. Same posture as
-   * {@link generateHandshakeId} — tests freeze for deterministic
-   * assertions. Defaults to `randomUUID` prefixed with `bp_`.
-   */
-  readonly mintBlueprintId?: () => string;
-  /**
    * Clock override — tests freeze time for deterministic
    * `createdAt`. Defaults to `() => new Date().toISOString()`.
    */
@@ -510,7 +505,6 @@ export function createGguiHandshakeHandler(
 ): SharedHandler<typeof inputSchema, typeof outputSchema, HandshakeOutput> {
   const ttlSec = deps.ttlSec ?? HANDSHAKE_RECORD_TTL_SEC;
   const mintHandshakeId = deps.generateHandshakeId ?? (() => randomUUID());
-  const mintBlueprintId = deps.mintBlueprintId ?? (() => `bp_${randomUUID()}`);
   const nowIso = deps.now ?? (() => new Date().toISOString());
   const defaultGenerator = deps.defaultGenerator ?? DEFAULT_GENERATOR_SLUG;
 
@@ -580,7 +574,6 @@ export function createGguiHandshakeHandler(
           })
         : buildDefaultAgentSuggestion(
             normalizedInput.blueprintDraft,
-            mintBlueprintId,
             defaultGenerator,
           );
 
@@ -713,7 +706,6 @@ export function createGguiHandshakeHandler(
  */
 function buildDefaultAgentSuggestion(
   blueprintDraft: DraftInput,
-  mintBlueprintId: () => string,
   defaultGenerator: string,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(blueprintDraft.contract);
@@ -729,8 +721,9 @@ function buildDefaultAgentSuggestion(
     message: e.message,
   }));
   const generator = blueprintDraft.generator ?? defaultGenerator;
+  // No blueprintId — origin:'agent' (D4): the durable UUID is minted at
+  // render-time registration, never at handshake.
   const blueprintMeta: BlueprintMeta = {
-    blueprintId: mintBlueprintId(),
     contractHash: blueprintKey(contract),
     generator,
     variance: {
@@ -754,6 +747,7 @@ function buildDefaultAgentSuggestion(
       ? 'no-negotiator-bound: OSS default routes the draft as origin=agent (no search, no repair). Bind a HandshakeNegotiator to enable cache/synth routing.'
       : 'no-negotiator-bound: draft failed validation and no negotiator (LLM) is bound to repair it — returning a minimal conforming contract. Bind a HandshakeNegotiator to enable repair.',
     blueprintMeta,
+    proposedContractSummary: summarizeContract(contract),
     ...(findings.length > 0 ? { validationFindings: findings } : {}),
   };
   return {

@@ -81,6 +81,20 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
     });
 
+    it('carries proposedContractSummary and NO blueprintId (P2-18)', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput(),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      // proposedContractSummary projects the (empty) draft contract.
+      expect(out.suggestion.proposedContractSummary).toBeTruthy();
+      // No throwaway provisional id on the origin:'agent' default path —
+      // the durable UUID is minted at render-time registration (D4).
+      expect(out.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+    });
+
     it('returns a non-empty handshakeId', async () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
@@ -529,9 +543,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(attrs['handshakeId']).toBe(out.handshakeId);
       expect(attrs['action']).toBe('create');
       expect(attrs['origin']).toBe('agent');
-      expect(attrs['selectedBlueprintId']).toBe(
-        out.suggestion.blueprintMeta.blueprintId,
-      );
+      // D4 / P2-18: no blueprintId is minted on the origin:'agent' default
+      // path (minted at render-time registration) — so neither the
+      // suggestion nor the telemetry attribute carries one.
+      expect(out.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+      expect(attrs['selectedBlueprintId']).toBeUndefined();
       expect(attrs['selectionReason']).toBeTruthy();
       expect(attrs['generator']).toBe(DEFAULT_GENERATOR_SLUG);
       // No selectVariant ran ⇒ no confidence axis.
