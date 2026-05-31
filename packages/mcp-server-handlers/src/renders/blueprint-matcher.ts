@@ -54,7 +54,18 @@ import {
   type BlueprintRegistryDeps,
 } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
-import { covers } from './blueprint-coverage.js';
+import { coverageGap, type CoverageGap } from './blueprint-coverage.js';
+
+/** An all-empty coverage gap — used for exact-key hits (canonical-key
+ *  equality already implies full coverage) and for contract-less requests
+ *  (nothing to cover against). */
+const EMPTY_GAP: CoverageGap = {
+  actions: [],
+  props: [],
+  context: [],
+  streams: [],
+  gadgets: [],
+};
 
 /** Match-found shape — everything the caller needs to commit a reuse. */
 export interface BlueprintMatchHit {
@@ -70,6 +81,15 @@ export interface BlueprintMatchHit {
   readonly reason: string;
   /** When strategy='semantic', the LLM judge's confidence; undefined for exact-key. */
   readonly judgeConfidence?: number;
+  /**
+   * The surfaces the request declares that the matched blueprint does NOT
+   * cover. Empty everywhere ⇒ the cached UI covers the request fully;
+   * non-empty ⇒ the agent asked for a capability the cached UI lacks (the
+   * decision layer surfaces these as `COVERAGE_GAP` warn findings so the
+   * agent can override). `exact-key` hits + contract-less requests always
+   * carry the all-empty {@link EMPTY_GAP}.
+   */
+  readonly coverage: CoverageGap;
 }
 
 /** No-match result — caller cold-gens. */
@@ -247,18 +267,19 @@ export async function matchBlueprint(
   // guaranteed reuse, return immediately (no LLM). Miss ⇒ FALL THROUGH
   // to the semantic strategy below.
   //
-  // The historical danger of serving a fuzzy match to a contract-bearing
-  // request — a cached UI whose wire surface differs from the request's
-  // (missing actions → dead/absent buttons; the 2026-05-09 missing-minus
-  // bug) — is now handled, not avoided by refusing to match at all:
+  // A fuzzy match to a contract-bearing request is served PROACTIVELY —
+  // proposing a similar cached UI is the whole point of the cache. Two
+  // safety properties keep that safe + honest:
   //   1. ATOMIC reuse — the caller commits the cached blueprint's OWN
   //      contract + componentCode together, never the request's contract
   //      under cached code, so wiring is always internally coherent.
-  //   2. The COVERAGE GUARD (covers(), below) — a candidate is eligible
-  //      only if it declares EVERY surface the request declares, dropping
-  //      subset blueprints before the judge (completeness, not just
-  //      coherence). The judge cannot enforce this — 2026-05-09 accepted
-  //      a subset at 0.876; the guard is deterministic.
+  //   2. INFORMATIONAL coverage — `coverageGap(candidate, request)` is
+  //      attached to every semantic hit (below). A non-empty gap (the
+  //      cached UI lacks a surface the request declares — e.g. the
+  //      2026-05-09 missing-minus case) is NOT dropped; it is reported on
+  //      `hit.coverage` so the decision layer surfaces `COVERAGE_GAP` warn
+  //      findings and the agent can OVERRIDE. Agent override is the safety
+  //      valve, not a hard drop: the cache proposes; the agent disposes.
   if (query.contract !== undefined) {
     try {
       const exact = await findBlueprintExact(
@@ -285,6 +306,7 @@ export async function matchBlueprint(
           blueprint: exact,
           cosine: 1,
           reason,
+          coverage: EMPTY_GAP,
         };
       }
     } catch (err) {
@@ -294,18 +316,18 @@ export async function matchBlueprint(
       // eslint-disable-next-line no-console -- operator-visible signal; exact-key lookup should never fail
       console.warn(`[blueprint-matcher] exact-key lookup failed: ${msg}`);
     }
-    // Exact-key MISS → fall through to the semantic strategy below. The
-    // coverage guard there drops any candidate that does not cover this
-    // request's declared surface before the judge runs, so a subset
-    // blueprint is never served.
+    // Exact-key MISS → fall through to the semantic strategy below. A
+    // non-covering candidate is no longer dropped — the matcher proposes
+    // it and reports the coverage gap on the hit for the decision layer.
   }
 
   // ─── Strategy: semantic (find-similar + judge) ────────────────────
   // Reached when the agent omitted a contract OR an exact-key probe
-  // missed. RAG top-K → coverage guard (contract-bearing only) → LLM
-  // rerank judge. Hit ⇒ the matched blueprint's contract+UI is reused
-  // atomically. Miss buckets distinguish coverage, cosine-gate, no-LLM,
-  // judge-declined, low-confidence, defense.
+  // missed. RAG top-K → cosine gate → LLM rerank judge. Hit ⇒ the matched
+  // blueprint's contract+UI is reused atomically, with any coverage gap
+  // (request surfaces the cached UI lacks) reported on `hit.coverage`.
+  // Miss buckets distinguish cosine-gate, no-LLM, judge-declined,
+  // low-confidence, defense.
   let candidates: readonly BlueprintCandidate[] = [];
   try {
     const ragArg: { intent: string } = { intent: trimmedIntent };
@@ -325,24 +347,6 @@ export async function matchBlueprint(
       candidates: [],
     });
     return { strategy: 'no-match', reason, candidates: [] };
-  }
-
-  // Coverage guard (contract-bearing requests only). A cached blueprint
-  // is reusable ONLY if it covers every surface the request declares —
-  // drop non-covering candidates BEFORE the cosine gate + judge. The
-  // judge mis-accepts subsets (2026-05-09, 0.876); this deterministic
-  // floor does not. With no contract there is nothing to cover against.
-  if (query.contract !== undefined && candidates.length > 0) {
-    const requestContract = query.contract;
-    const covered = candidates.filter((c) =>
-      covers(c.blueprint.contract, requestContract),
-    );
-    if (covered.length === 0) {
-      const reason = `no-match: ${candidates.length} candidate(s) retrieved but none cover the request's declared surface — serving a subset would drop a capability the request declares. Cold gen is the structurally-safe option.`;
-      emit({ decision: 'no-match', strategy: 'semantic', reason, candidates });
-      return { strategy: 'no-match', reason, candidates };
-    }
-    candidates = covered;
   }
 
   if (candidates.length === 0) {
@@ -440,7 +444,16 @@ export async function matchBlueprint(
   }
 
   bumpHitBestEffort(deps.registry, scope, matched.blueprint.id);
-  const reason = `match-semantic: judge matched ${matched.blueprint.id} (cosine=${matched.cosine.toFixed(2)}, confidence=${decision.confidence.toFixed(2)}) — ${decision.reason}`;
+  // Compute the coverage gap vs the request's declared surface. Empty when
+  // contract-less (nothing to cover) or fully covering. A non-empty gap is
+  // reported (not dropped): the cache proposes the similar blueprint and
+  // the agent override is the safety valve.
+  const coverage =
+    query.contract !== undefined
+      ? coverageGap(matched.blueprint.contract, query.contract)
+      : EMPTY_GAP;
+  const gapNote = coverageGapNote(coverage);
+  const reason = `match-semantic: judge matched ${matched.blueprint.id} (cosine=${matched.cosine.toFixed(2)}, confidence=${decision.confidence.toFixed(2)}) — ${decision.reason}${gapNote}`;
   emit({
     decision: 'match-semantic',
     strategy: 'semantic',
@@ -456,7 +469,25 @@ export async function matchBlueprint(
     cosine: matched.cosine,
     judgeConfidence: decision.confidence,
     reason,
+    coverage,
   };
+}
+
+/**
+ * When the chosen blueprint does not cover every surface the request
+ * declares, build a human-readable note appended to the match reason — the
+ * request declares surfaces the cached UI lacks; the agent override is the
+ * safety valve. Empty gap ⇒ empty string.
+ */
+function coverageGapNote(gap: CoverageGap): string {
+  const parts: string[] = [];
+  if (gap.actions.length > 0) parts.push(`actions: ${gap.actions.join(', ')}`);
+  if (gap.props.length > 0) parts.push(`props: ${gap.props.join(', ')}`);
+  if (gap.context.length > 0) parts.push(`context: ${gap.context.join(', ')}`);
+  if (gap.streams.length > 0) parts.push(`streams: ${gap.streams.join(', ')}`);
+  if (gap.gadgets.length > 0) parts.push(`gadgets: ${gap.gadgets.join(', ')}`);
+  if (parts.length === 0) return '';
+  return ` [coverage gap — the request declares surfaces this cached UI lacks (${parts.join('; ')}); agent override is the safety valve]`;
 }
 
 function bumpHitBestEffort(

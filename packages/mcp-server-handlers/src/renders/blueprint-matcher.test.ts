@@ -524,16 +524,17 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
   });
 });
 
-describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)', () => {
-  // Pins the structural-safety contract: a contract-bearing request may
-  // reuse a cached blueprint via the semantic judge ONLY when that
-  // blueprint COVERS the request's declared surface. A subset blueprint
-  // (missing an action / field the request declares) must be dropped by
-  // the coverage guard before the judge — even when the judge WOULD
-  // accept it. This is the 2026-05-09 bug: request {increment, decrement,
-  // reset} hit a 2-action {increment, reset} cached blueprint at judge
-  // similarity 0.876 — rendered widget had no minus button. The coverage
-  // guard (covers(), blueprint-coverage.ts) is the deterministic floor.
+describe('matchBlueprint — coverage is informational (Path A)', () => {
+  // Path A (Phase 2 Wave 2C): the matcher PROPOSES a similar cached
+  // blueprint to a contract-bearing request even when it does NOT cover
+  // every declared surface. There is NO coverage hard-drop and NO coverage
+  // floor — only the cosine (0.3) + judge (0.6) gates remain. A subset
+  // blueprint (missing an action / field the request declares) is reused
+  // and the gap is REPORTED on `hit.coverage` so the decision layer can
+  // surface COVERAGE_GAP warn findings; the agent override is the safety
+  // valve. This is the 2026-05-09 case (request {increment, decrement,
+  // reset} matched a 2-action {increment, reset} cached blueprint) — now
+  // handled by proposing + reporting the gap, not by refusing to match.
 
   // Two paraphrased counter contracts that canonicalize differently
   // (different action names → different keys) but a permissive judge
@@ -569,13 +570,14 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
     contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
   };
 
-  it('does NOT serve a subset cached blueprint to a contract-bearing request', async () => {
+  it('PROPOSES a subset cached blueprint to a contract-bearing request, reporting the coverage gap on the hit', async () => {
     // Setup: register the 2-action counter, then request a 3-action
-    // counter. Pre-fix: judge would accept (similar shape, just
-    // missing decrement). Post-fix: semantic strategy skipped,
-    // returns no-match.
+    // counter. The judge runs (NO coverage hard-drop) and accepts the
+    // similar shape; the matcher returns a semantic hit whose
+    // `coverage.actions` names the missing `decrement` so the decision
+    // layer can warn. Agent override is the safety valve.
     const registry = makeRegistry();
-    await registerBlueprint(registry, SCOPE, {
+    const stored = await registerBlueprint(registry, SCOPE, {
       kind: 'template',
       contract: COUNTER_TWO_ACTIONS,
       intent: 'a counter widget',
@@ -587,11 +589,9 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
       {
         registry,
         llm: stubLlm(() => {
-          // If the judge IS called, it would happily accept — pinning
-          // the gate by its absence (judgeCalled stays false).
           judgeCalled = true;
           return {
-            matchId: `template:${blueprintKey(COUNTER_TWO_ACTIONS)}`,
+            matchId: stored.id,
             confidence: 0.95,
             reason: 'similar counter shape',
           };
@@ -599,22 +599,22 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
       },
       SCOPE,
       { intent: 'a counter widget', contract: COUNTER_THREE_ACTIONS },
-      // Cosine gate dropped to -1 so the rerank path WOULD be active
-      // if the gate didn't skip it pre-RAG.
+      // Cosine gate dropped to -1 so the rerank path is active.
       { minCosineForRerank: -1 },
     );
 
-    expect(result.strategy).toBe('no-match');
-    if (result.strategy === 'no-match') {
-      // Rejected by the COVERAGE GUARD: the cached 2-action blueprint
-      // does not cover the 3-action request (missing decrement), so it
-      // is dropped before the judge rather than served as a subset.
-      expect(result.reason).toMatch(/none cover the request/);
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      // Reuses the CACHED 2-action blueprint (its contract + UI).
+      expect(result.blueprint.id).toBe(stored.id);
+      // The coverage gap names the missing `decrement` action — surfaced
+      // on the hit for the decision layer's COVERAGE_GAP warn findings.
+      expect(result.coverage.actions).toEqual(['decrement']);
+      // The reason string carries the coverage-gap note for trace logs.
+      expect(result.reason).toMatch(/coverage gap/);
     }
-    // Load-bearing: judge MUST NOT have been called. The coverage guard
-    // drops the subset candidate BEFORE the rerank judge — no LLM cost,
-    // and a subset blueprint is never served (the 2026-05-09 regression).
-    expect(judgeCalled).toBe(false);
+    // The judge DID run — there is no coverage hard-drop before it.
+    expect(judgeCalled).toBe(true);
   });
 
   it('still hits match-exact on canonical-key equality (gate does not block exact match)', async () => {
@@ -661,6 +661,45 @@ describe('matchBlueprint — Slice 18e (judge gated to contract-less requests)',
       { minCosineForRerank: -1 },
     );
     expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      // Contract-less → nothing to cover against → empty gap.
+      expect(result.coverage.actions).toEqual([]);
+      expect(result.coverage.props).toEqual([]);
+      expect(result.coverage.context).toEqual([]);
+      expect(result.coverage.streams).toEqual([]);
+      expect(result.coverage.gadgets).toEqual([]);
+    }
+  });
+
+  it('reports an EMPTY coverage gap (no note) when the cached blueprint fully covers the request', async () => {
+    // The cached 3-action counter covers a 2-action subset request, so the
+    // semantic hit's coverage gap is empty and the reason carries no note.
+    const registry = makeRegistry();
+    const stored = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: COUNTER_THREE_ACTIONS,
+      intent: 'a counter widget',
+      componentCode: 'export default () => <div/>;',
+    });
+    const result = await matchBlueprint(
+      {
+        registry,
+        llm: stubLlm({
+          matchId: stored.id,
+          confidence: 0.95,
+          reason: 'superset counter covers the request',
+        }),
+      },
+      SCOPE,
+      { intent: 'a counter widget', contract: COUNTER_TWO_ACTIONS },
+      { minCosineForRerank: -1 },
+    );
+    expect(result.strategy).toBe('semantic');
+    if (result.strategy === 'semantic') {
+      expect(result.blueprint.id).toBe(stored.id);
+      expect(result.coverage.actions).toEqual([]);
+      expect(result.reason).not.toMatch(/coverage gap/);
+    }
   });
 });
 

@@ -22,7 +22,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { HandlerContext } from '../types.js';
 import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
-import type { BlueprintMatchResult } from './blueprint-matcher.js';
+import type { BlueprintMatchHit, BlueprintMatchResult } from './blueprint-matcher.js';
 import { matchBlueprint } from './blueprint-matcher.js';
 import { ensureConformingContract } from '@ggui-ai/negotiator';
 import type { EnsureConformingResult } from '@ggui-ai/negotiator';
@@ -174,16 +174,26 @@ describe('buildCreateFallback', () => {
 // decideHandshake orchestration
 // ---------------------------------------------------------------------------
 
+const EMPTY_GAP = {
+  actions: [],
+  props: [],
+  context: [],
+  streams: [],
+  gadgets: [],
+} as const;
+
 function hit(strategy: 'exact-key' | 'semantic', over: {
   id?: string;
   reason?: string;
   judgeConfidence?: number;
+  coverage?: BlueprintMatchHit['coverage'];
 } = {}): BlueprintMatchResult {
   return {
     strategy,
     blueprint: mkBlueprint({ id: over.id ?? `bp-${strategy}`, contractKey: over.id ?? strategy }),
     cosine: strategy === 'exact-key' ? 1 : 0.8,
     reason: over.reason ?? `${strategy} match`,
+    coverage: over.coverage ?? EMPTY_GAP,
     ...(strategy === 'semantic' && over.judgeConfidence !== undefined
       ? { judgeConfidence: over.judgeConfidence }
       : {}),
