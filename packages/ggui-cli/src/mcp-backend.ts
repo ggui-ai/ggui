@@ -71,6 +71,8 @@ import {
 import { PlaintextFileProviderKeyStore } from "@ggui-ai/mcp-server-core/plaintext";
 import {
   createInstalledBlueprintsProvider,
+  createStderrCacheTraceSink,
+  setCacheTraceSink,
   type CreateInstalledBlueprintsProviderOptions,
   type InstalledBlueprintCacheIssue,
   type InstalledBlueprintCompileResult,
@@ -544,8 +546,25 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // get `MockEmbeddingProvider` if they don't bind an embedder — that
   // keeps the 60MB `@huggingface/transformers` install surface off
   // the unit-test path.
+  const embeddingCacheDir = getEmbeddingCacheDir();
   const embedding = createLocalEmbeddingProvider({
-    cacheDir: getEmbeddingCacheDir(),
+    cacheDir: embeddingCacheDir,
+  });
+  // One-line boot log of which embedding provider is live, so a captured
+  // serve log makes real-model-vs-mock unambiguous. The local provider
+  // loads `bge-small-en-v1.5` lazily; we then fire a best-effort warmup
+  // probe (one `embed`) so the model is downloaded/loaded before the
+  // first real lookup AND a load failure (e.g. missing
+  // `@huggingface/transformers` peer dep) is surfaced as a clear
+  // fallback warning rather than a silent first-lookup degradation.
+  // eslint-disable-next-line no-console -- one-shot boot signal, mirrors banner output
+  console.warn(`[ggui:embedding] local ${embedding.id} (cache: ${embeddingCacheDir})`);
+  embedding.embed("warmup").catch((err: unknown) => {
+    const reason = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console -- one-shot boot signal; local model unavailable
+    console.warn(
+      `[ggui:embedding] MockEmbeddingProvider fallback — local model unavailable: ${reason}`
+    );
   });
   // BYOK provider-key store — same `~/.ggui/credentials.json` that
   // `byok-resolver.ts` reads on every `resolve()`. Threading the store
@@ -745,6 +764,18 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
         }
       : opts.generation
     : undefined;
+
+  // Env-gated blueprint-cache trace sink. When `GGUI_CACHE_TRACE_STDERR`
+  // is truthy, every `matchBlueprint` decision (and the reason it landed
+  // there) is written as a single JSON line to stderr prefixed
+  // `[ggui:cache-trace] ` — a diagnostic for seeing WHY a semantic match
+  // missed (RAG retrieved nothing / cosine below floor / judge declined)
+  // in a captured server log. Registered BEFORE `createGguiServer` so the
+  // first lookup already routes through it. Absent env = no sink (the
+  // matcher emits nothing and spends no CPU on the top-K probe).
+  if (process.env["GGUI_CACHE_TRACE_STDERR"]) {
+    setCacheTraceSink(createStderrCacheTraceSink());
+  }
 
   const server = createGguiServer({
     auth,

@@ -345,6 +345,55 @@ export function emitCacheTraceEvent(event: CacheTraceEvent): void {
 }
 
 /**
+ * A sink that writes each event as a single-line JSON record to
+ * `console.error`, prefixed `[ggui:cache-trace] `. Intended as an
+ * env-gated diagnostic so the matcher's decision (and the reason it
+ * landed there) is visible in a server's captured stderr — e.g. a
+ * container run that needs to see WHY a semantic match missed.
+ *
+ * Only the decision-relevant fields are projected (decision, strategy,
+ * reason, cosine novelty distance, judge confidence + reason, winning
+ * blueprint id, scope, intent). Fields absent on the event are omitted
+ * from the JSON rather than emitted as `undefined`, so each line stays
+ * compact + greppable.
+ *
+ * Sync + non-throwing, per the {@link CacheTraceSink} contract — a
+ * stringify or write failure must never sink generation, so it is
+ * swallowed.
+ */
+export function createStderrCacheTraceSink(): CacheTraceSink {
+  return {
+    emit(event: CacheTraceEvent): void {
+      try {
+        const record: Record<string, unknown> = {
+          decision: event.decision,
+          reason: event.reason,
+          scope: event.scope,
+          intent: event.intent,
+        };
+        if (event.strategy !== undefined) record['strategy'] = event.strategy;
+        if (event.cosineNoveltyDistance !== undefined) {
+          record['cosineNoveltyDistance'] = event.cosineNoveltyDistance;
+        }
+        if (event.judgeConfidence !== undefined) {
+          record['judgeConfidence'] = event.judgeConfidence;
+        }
+        if (event.judgeReason !== undefined) {
+          record['judgeReason'] = event.judgeReason;
+        }
+        if (event.winningBlueprintId !== undefined) {
+          record['winningBlueprintId'] = event.winningBlueprintId;
+        }
+        // eslint-disable-next-line no-console -- env-gated diagnostic stderr sink.
+        console.error(`[ggui:cache-trace] ${JSON.stringify(record)}`);
+      } catch {
+        // A diagnostic sink must never break generation — swallow.
+      }
+    },
+  };
+}
+
+/**
  * Crockford-style random ID. Mirrors `newLlmTraceId` so both devtools
  * surfaces share the same dedupe-by-id contract on the client.
  */

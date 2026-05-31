@@ -62,6 +62,7 @@ export { assertStreamContract } from "./assert-stream-contract.js";
 export {
   CACHE_TRACE_INTENT_MAX_BYTES,
   CACHE_TRACE_PROBE_SIZE,
+  createStderrCacheTraceSink,
   emitCacheTraceEvent,
   getCacheTraceSink,
   newCacheTraceId,
