@@ -28,3 +28,9 @@ export function blueprintKey(contract: DataContract | undefined): string {
   const canonical = canonicalizeContracts(contract);
   return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
 }
+
+// The `@ggui-ai/protocol/blueprint-key` subpath maps to this single
+// file (NOT a barrel), so the variant axis of the reuse key must be
+// re-exported here to be importable at that subpath alongside
+// `blueprintKey`. See `variant-key.ts` for the implementation.
+export { variantKey } from './variant-key.js';

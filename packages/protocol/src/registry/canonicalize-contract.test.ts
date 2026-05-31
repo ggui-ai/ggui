@@ -356,8 +356,8 @@ describe('canonicalizeVariance', () => {
   });
 
   it('NFC-normalizes string values (precomposed === decomposed)', () => {
-    const precomposed = 'café'; // é as one code point
-    const decomposed = 'café'; // e + combining acute
+    const precomposed = 'caf\u00e9'; // \u00e9 as one code point
+    const decomposed = 'cafe\u0301'; // e + combining acute (two code points)
     expect(precomposed).not.toBe(decomposed);
     expect(canonicalizeVariance({ persona: precomposed })).toBe(
       canonicalizeVariance({ persona: decomposed }),
