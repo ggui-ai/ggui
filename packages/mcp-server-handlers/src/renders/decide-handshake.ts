@@ -18,11 +18,15 @@
  *      for the curated-blueprint tier-0 (dataTools ⊆ sourceTools). OSS
  *      omits it. A returned result short-circuits.
  *   2. **Find-similar across pools** — for each declared pool, in order,
- *      run {@link matchBlueprint} (exact-key → coverage guard → judge).
- *      An `exact-key` hit (free, canonical-key equality) in ANY pool wins
- *      immediately. Otherwise the highest-confidence `semantic` hit across
- *      all pools is reused ATOMICALLY (the cached blueprint's own contract
- *      + componentCode, never the agent's draft under cached code).
+ *      run {@link matchBlueprint} (exact-key → cosine gate → judge). An
+ *      `exact-key` hit (free, canonical-key equality) in ANY pool wins
+ *      immediately. Otherwise the best `semantic` hit across all pools is
+ *      reused ATOMICALLY (the cached blueprint's own contract +
+ *      componentCode, never the agent's draft under cached code) — the
+ *      tiebreak prefers a fully-covering hit over a gapped one, then
+ *      higher judgeConfidence. A coverage gap is informational: the reuse
+ *      carries `COVERAGE_GAP` warn findings naming the surfaces the cached
+ *      UI lacks, and the agent override is the safety valve.
  *   3. **Create** — no reusable match: the agent's DRAFT is the basis.
  *      `ensureConformingContract` validates + repairs it via the bounded
  *      LLM loop, guaranteeing a contract the handshake backstop accepts.
@@ -57,6 +61,7 @@ import {
   type BlueprintMatchHit,
   type MatchBlueprintDeps,
 } from './blueprint-matcher.js';
+import type { CoverageGap } from './blueprint-coverage.js';
 import type { BlueprintRegistryDeps } from './blueprint-registry.js';
 import {
   DEFAULT_GENERATOR_SLUG,
@@ -161,6 +166,46 @@ function isOperationalError(err: unknown): boolean {
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Stable code for the COVERAGE_GAP warn findings appended on a gapped reuse. */
+const COVERAGE_GAP_CODE = 'COVERAGE_GAP';
+
+/** True iff the coverage gap names any surface the cached UI lacks. */
+function coverageHasGap(gap: CoverageGap): boolean {
+  return (
+    gap.actions.length > 0 ||
+    gap.props.length > 0 ||
+    gap.context.length > 0 ||
+    gap.streams.length > 0 ||
+    gap.gadgets.length > 0
+  );
+}
+
+/**
+ * Project a coverage gap into `severity:'warn'` validation findings — one
+ * per missing surface — so the agent sees exactly what the proposed cached
+ * UI lacks before accepting. Empty gap ⇒ no findings. Reuses the
+ * `validationFindings` channel; introduces no new wire field.
+ */
+function coverageGapFindings(gap: CoverageGap): SuggestionFinding[] {
+  const findings: SuggestionFinding[] = [];
+  const push = (kind: keyof CoverageGap, path: string): void => {
+    for (const name of gap[kind]) {
+      findings.push({
+        code: COVERAGE_GAP_CODE,
+        severity: 'warn',
+        path: `${path}.${name}`,
+        message: `the proposed cached UI does not declare ${kind} '${name}' that your draft requests; accept to reuse it anyway, or override to generate a UI covering this surface`,
+      });
+    }
+  };
+  push('actions', 'actionSpec');
+  push('props', 'propsSpec.properties');
+  push('context', 'contextSpec');
+  push('streams', 'streamSpec');
+  push('gadgets', 'gadgets');
+  return findings;
 }
 
 /**
@@ -299,7 +344,8 @@ export async function decideHandshake(
   const llm = await adapter.resolveLlm(ctx);
 
   // Tier 1 — find-similar across pools (exact-key free + semantic
-  // find+judge+coverage). Reuse the cached blueprint ATOMICALLY.
+  // find+judge). Reuse the cached blueprint ATOMICALLY; a coverage gap is
+  // informational (surfaced as COVERAGE_GAP warn findings, not a drop).
   if (adapter.pools && adapter.pools.length > 0 && parsedDraft.success) {
     const semanticHits: BlueprintMatchHit[] = [];
     for (const pool of adapter.pools) {
@@ -337,12 +383,37 @@ export async function decideHandshake(
       }
     }
     if (semanticHits.length > 0) {
-      // No exact-key anywhere → reuse the highest-confidence semantic hit
-      // across pools (each pool's judge ran in its own candidate context).
-      const best = semanticHits.reduce((a, b) =>
-        (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a,
+      // No exact-key anywhere → reuse the best semantic hit across pools
+      // (each pool's judge ran in its own candidate context). Tiebreak:
+      // prefer a FULLY-COVERING hit over a gapped one (an exact surface
+      // match is worth more than a higher-confidence partial), then break
+      // ties on judgeConfidence.
+      const best = semanticHits.reduce((a, b) => {
+        const aGap = coverageHasGap(a.coverage);
+        const bGap = coverageHasGap(b.coverage);
+        if (aGap !== bGap) return aGap ? b : a; // empty-gap wins
+        return (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a;
+      });
+      const reuse = buildCacheReuseResult(
+        best.blueprint,
+        best.reason,
+        generatorSlug,
       );
-      return buildCacheReuseResult(best.blueprint, best.reason, generatorSlug);
+      // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
+      // what the cached UI lacks before accepting (reuse the existing
+      // validationFindings channel — no new wire field).
+      const gapFindings = coverageGapFindings(best.coverage);
+      if (gapFindings.length === 0) return reuse;
+      return {
+        ...reuse,
+        suggestion: {
+          ...reuse.suggestion,
+          validationFindings: [
+            ...(reuse.suggestion.validationFindings ?? []),
+            ...gapFindings,
+          ],
+        },
+      };
     }
   }
 

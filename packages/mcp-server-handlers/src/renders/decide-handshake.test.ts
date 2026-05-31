@@ -383,6 +383,70 @@ describe('decideHandshake — find-similar across pools', () => {
   });
 });
 
+describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)', () => {
+  const GAP = {
+    actions: ['decrement'],
+    props: [],
+    context: [],
+    streams: [],
+    gadgets: [],
+  } as const;
+
+  it('prefers a FULLY-COVERING hit over a gapped one even at lower confidence', async () => {
+    // bp-gap has higher confidence but a coverage gap; bp-full covers
+    // fully. Coverage wins the tiebreak before confidence.
+    mockMatch
+      .mockResolvedValueOnce(
+        hit('semantic', { id: 'bp-gap', judgeConfidence: 0.95, coverage: GAP }),
+      )
+      .mockResolvedValueOnce(hit('semantic', { id: 'bp-full', judgeConfidence: 0.7 }));
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: 'app' }), pool({ scope: 'shared' })] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-full');
+    // The winning fully-covering reuse carries NO coverage-gap findings.
+    expect(
+      r.suggestion.validationFindings?.some((f) => f.code === 'COVERAGE_GAP'),
+    ).toBeFalsy();
+  });
+
+  it('a gapped reuse carries COVERAGE_GAP warn findings, one per missing surface', async () => {
+    mockMatch.mockResolvedValueOnce(
+      hit('semantic', { id: 'bp-gap', judgeConfidence: 0.9, coverage: GAP }),
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool()] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-gap');
+    const gapFindings =
+      r.suggestion.validationFindings?.filter((f) => f.code === 'COVERAGE_GAP') ??
+      [];
+    expect(gapFindings).toHaveLength(1);
+    expect(gapFindings[0]?.severity).toBe('warn');
+    expect(gapFindings[0]?.path).toBe('actionSpec.decrement');
+    expect(gapFindings[0]?.message).toMatch(/decrement/);
+  });
+
+  it('breaks a coverage tie on judgeConfidence (both gapped → higher wins)', async () => {
+    mockMatch
+      .mockResolvedValueOnce(
+        hit('semantic', { id: 'bp-lo', judgeConfidence: 0.7, coverage: GAP }),
+      )
+      .mockResolvedValueOnce(
+        hit('semantic', { id: 'bp-hi', judgeConfidence: 0.9, coverage: GAP }),
+      );
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: 'app' }), pool({ scope: 'shared' })] }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-hi');
+  });
+});
+
 describe('decideHandshake — create / fallback', () => {
   it('runs ensureConformingContract create path when no pool matches', async () => {
     mockMatch.mockResolvedValue(miss);
