@@ -135,19 +135,6 @@ function weatherContract(opts: {
   return { propsSpec: { properties } };
 }
 
-/** Weather card with city + temp + humidity (the richer cached shape). */
-function weatherWithHumidityContract(): DataContract {
-  return {
-    propsSpec: {
-      properties: {
-        city: { schema: { type: 'string' }, required: true },
-        temp: { schema: { type: 'number' } },
-        humidity: { schema: { type: 'number' } },
-      },
-    },
-  };
-}
-
 /** Weather card with city only (the subset request). */
 function weatherCityOnlyContract(): DataContract {
   return {
@@ -308,7 +295,7 @@ const MATCH_PAIRS: readonly CalibrationPair[] = [
       {
         id: 'bp-weather-rich',
         cachedIntent: 'Weather card showing city, temperature, and humidity',
-        cachedContractSummary: summarizeContract(weatherWithHumidityContract()),
+        cachedContractSummary: summarizeContract(weatherContract({ humidity: true })),
         cosine: 0.9,
       },
     ],
@@ -355,6 +342,8 @@ const NO_MATCH_PAIRS: readonly CalibrationPair[] = [
   },
   // different-ui-shape: a flat list vs a calendar grid (different layout
   // pattern) even though both carry a date/label item array.
+  // Borderline-by-design: the contract summaries are identical, so the
+  // list-vs-grid signal lives ONLY in the intent prose — hence retry:2.
   {
     name: 'different-ui-shape (flat list vs calendar grid)',
     category: 'different-ui-shape',
@@ -429,11 +418,11 @@ describe.skipIf(!apiKey)('llm-rerank calibration (real Haiku judge)', () => {
         { retry: 2, timeout: CALL_TIMEOUT_MS },
         async () => {
           const decision = await rerankCandidates({ llm }, pair.query, pair.candidates);
-          // NO-MATCH = the judge returns null, OR it names a candidate
-          // but below the hit threshold (caller treats that as no-match).
-          const isNoMatch =
-            decision.matchId === null || decision.confidence < JUDGE_THRESHOLD;
-          expect(isNoMatch).toBe(true);
+          // no-match to the caller = matchId null, OR a candidate named but below threshold.
+          // Split so a flake reveals which: wrong id vs right id with surprisingly high confidence.
+          if (decision.matchId !== null) {
+            expect(decision.confidence).toBeLessThan(JUDGE_THRESHOLD);
+          }
         },
       );
     }
