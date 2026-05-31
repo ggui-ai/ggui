@@ -40,7 +40,13 @@ export default defineConfig({
     {
       name: 'scaffold-render',
       testDir: './tests',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // The container cell runs as root (Chromium refuses its sandbox as
+        // root) → --no-sandbox; harmless host-side. --disable-dev-shm-usage
+        // avoids /dev/shm exhaustion in containers.
+        launchOptions: { args: ['--no-sandbox', '--disable-dev-shm-usage'] },
+      },
     },
   ],
 });

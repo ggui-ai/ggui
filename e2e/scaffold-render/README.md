@@ -28,17 +28,27 @@ Both paths need `ANTHROPIC_API_KEY` (drives the agent **and** ggui's UI
 generation) and Docker.
 
 ```bash
-# Container (the "on container" deliverable; browser-in-cell, all localhost):
-ANTHROPIC_API_KEY=… make test-scaffold-render
+# Container — ONE ephemeral container (docker run --rm; logs stream to your
+# terminal; removed on exit). Everything runs in-cell on the container's own
+# localhost: Verdaccio (a process), the cohort build/publish, the scaffolded
+# app, and the browser. Builds the image once (cached after).
+ANTHROPIC_API_KEY=… OPENAI_API_KEY=… GEMINI_API_KEY=… make test-scaffold-render
 
 # Host-side (faster iteration; Verdaccio in Docker, Playwright on the host).
 # One app at a time — ensure ports 6781/6782/6790/6890 are free first.
 ANTHROPIC_API_KEY=… make test-scaffold-render-host
 ```
 
-First run is slow (~15–25 min): a full cohort build + publish + scaffold +
-install + boot + the LLM render. It is a **nightly capstone**, not a fast gate —
-CI runs it on a schedule + `workflow_dispatch` only, never per-PR.
+(Set `OPENAI_API_KEY` / `GEMINI_API_KEY` too to exercise those SDKs; a missing
+key skips that SDK. `ANTHROPIC_API_KEY` is always required — it drives ggui's
+UI generation for every SDK.)
+
+The container run is slow cold (~30–40 min: copy the repo in, a fresh full
+`pnpm install` + cohort build with no warm cache, then publish + scaffold + boot
+
+- the LLM renders). The host-side path reuses your warm node_modules + turbo
+  cache (~10 min). Both are **nightly capstones**, not fast gates — CI runs the
+  container on a schedule + `workflow_dispatch` only, never per-PR.
 
 ## Landscape (where this sits)
 
@@ -51,12 +61,12 @@ CI runs it on a schedule + `workflow_dispatch` only, never per-PR.
 
 ## Files
 
-- `scripts/setup.sh` — build cohort → Verdaccio → publish → assemble templates → git-init. Shared by host + cell (`SKIP_VERDACCIO_BOOT=1` for the cell's sibling Verdaccio).
+- `scripts/setup.sh` — build cohort → Verdaccio → publish → assemble templates → git-init. Shared by host + cell (`SKIP_VERDACCIO_BOOT=1` when the cell already started Verdaccio as a process).
 - `scripts/scaffold-and-boot.sh` — per-SDK: `create-agentic-app` (Verdaccio-pinned) → write `.env.local` → `pnpm install` → `pnpm dev` (foreground).
 - `tests/scaffold-app-harness.ts` — `spawnScaffoldedApp({sdk})` → `ScaffoldAppHandle`; boots the script as a process group, waits for web-ready, tears the whole `pnpm dev` tree down cleanly (SIGTERM → dev.mjs drains its detached servers → SIGKILL backstop → ports freed).
 - `tests/render.spec.ts` · `tests/cache-hit.spec.ts` — the two scenarios.
-- `playwright.config.ts` — `workers:1`, `retries:1`, generous timeout; loads the root `.env.local`.
-- `Dockerfile` · `docker-compose.yml` · `scripts/cell-entry.sh` — the cell (Playwright+Chromium baked, monorepo bind-mounted) + sibling Verdaccio.
+- `playwright.config.ts` — `workers:1`, `retries:1`, generous timeout; loads the root `.env.local`; `--no-sandbox` for in-container root Chromium.
+- `Dockerfile` · `scripts/cell-entry.sh` — the single self-contained cell image (Playwright+Chromium + pnpm + Verdaccio-as-a-process). `cell-entry.sh` copies the RO-mounted repo into `/work`, starts Verdaccio, installs + builds, then runs Playwright — all in one `docker run --rm` container.
 
 ## Status & caveats (read before the first container run)
 
@@ -74,10 +84,12 @@ CI runs it on a schedule + `workflow_dispatch` only, never per-PR.
 - **LLM variance** — the render scenarios are non-deterministic; `retries:1`
   absorbs the occasional miss (observed: openai needed one retry). Expected for
   a real-LLM capstone.
-- **Container build mount** — the cell bind-mounts the monorepo **read-write**
-  to build + publish the cohort in place. In CI that is a fresh checkout (clean
-  install). Locally it reuses your worktree's `node_modules`/`dist` (both
-  gitignored, regenerable); files the cell writes may be root-owned.
+- **Container isolation** — the monorepo is bind-mounted **read-only** at
+  `/repo`; `cell-entry.sh` copies it into the container's own `/work` (excluding
+  `node_modules`/`.git`/`dist`/`.turbo`) and installs + builds there. So the
+  cell's fresh install never mutates the host's `node_modules` (whose native-
+  module ABI may differ from the image's Node). The container is fully ephemeral
+  (`--rm`); nothing leaks back to the host.
 - **Playwright browser version** — `cell-entry.sh` runs `playwright install
 chromium` after `pnpm install` so the browser matches the resolved
   `@playwright/test` runner even if it differs from the baked image version.

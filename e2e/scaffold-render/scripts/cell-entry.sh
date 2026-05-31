@@ -1,29 +1,44 @@
 #!/usr/bin/env bash
 #
-# In-cell orchestrator for the scaffold-render e2e. Verdaccio is a SIBLING
-# compose service (no docker-in-docker): REGISTRY points at it and
-# SKIP_VERDACCIO_BOOT=1 tells setup.sh not to boot its own. The browser AND the
-# scaffolded app both run INSIDE this container, so every iframe runtime-bundle
-# / WS fetch is localhost — no --public-base-url gymnastics.
-#
-# The monorepo is bind-mounted at /repo (read-write). In CI that is a fresh
-# checkout (clean install); locally it reuses your worktree's node_modules/dist
-# (both gitignored, regenerable). See README "Container caveats".
+# In-cell orchestrator for the scaffold-render e2e. ONE ephemeral container
+# (`docker run --rm`, attached): copy the READ-ONLY-mounted monorepo into a
+# writable /work (so the host's node_modules are never touched), start Verdaccio
+# as a LOCAL PROCESS (no DinD / sibling), then build → publish → scaffold → boot
+# → Playwright — all on the container's own localhost (browser-in-cell). Logs
+# stream to the host; the container is removed on exit; the exit code is the
+# test result.
 set -euo pipefail
-cd /repo
 
-echo "[cell] pnpm install (repo workspace — needed to build + publish the cohort)"
-# CI is a fresh checkout → enforce a frozen lockfile (hermetic, catches drift).
-# Local runs reuse a possibly-dirty worktree → allow lockfile updates.
+echo "[cell] copy /repo → /work (source only — node_modules/.git/dist/.turbo excluded)"
+rsync -a \
+  --exclude='node_modules/' --exclude='.git/' --exclude='dist/' \
+  --exclude='dist-server/' --exclude='.next/' --exclude='.turbo/' \
+  --exclude='e2e-results/' --exclude='*.log' \
+  /repo/ /work/
+cd /work
+
+echo "[cell] start Verdaccio (process) on :4873"
+# Same verdaccio.yaml as the host path (@ggui-ai/* proxy-free, 50mb body); it
+# listens on 0.0.0.0:4873 and stores under /verdaccio (created in the image).
+verdaccio --config /work/oss/e2e/scaffold-resolution/verdaccio.yaml >/tmp/verdaccio.log 2>&1 &
+for _ in $(seq 1 60); do curl -sf http://localhost:4873/-/ping >/dev/null 2>&1 && break; sleep 1; done
+curl -sf http://localhost:4873/-/ping >/dev/null 2>&1 || {
+  echo "[cell] Verdaccio failed to start:" >&2
+  cat /tmp/verdaccio.log >&2
+  exit 1
+}
+echo "[cell] Verdaccio is up"
+
+echo "[cell] pnpm install (workspace, fresh in /work)"
+# CI is hermetic (frozen); local allows lockfile updates.
 if [ -n "${CI:-}" ]; then FROZEN=--frozen-lockfile; else FROZEN=--frozen-lockfile=false; fi
 pnpm install "$FROZEN"
 
-echo "[cell] match the Playwright browser to the installed test runner"
-# Fail loudly if the browser install breaks — a missing/mismatched Chromium is a
-# cryptic test failure otherwise. (The baked image browser is just a warm cache.)
+echo "[cell] match the Playwright browser to the resolved test runner"
 pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright install chromium
 
-echo "[cell] run scaffold-render scenarios (REGISTRY=${REGISTRY:-unset}, SDK=${SDK:-claude-agent-sdk})"
-# The harness's ensureSetup runs setup.sh (build → publish → assemble) on first
-# spawn, inheriting REGISTRY + SKIP_VERDACCIO_BOOT from this cell's environment.
+echo "[cell] run scaffold-render scenarios (Verdaccio process → SKIP_VERDACCIO_BOOT=1)"
+# The harness's setup.sh inherits these: REGISTRY points at our process, and
+# SKIP_VERDACCIO_BOOT=1 stops it from trying to `docker run` its own Verdaccio.
+export REGISTRY=http://localhost:4873 SKIP_VERDACCIO_BOOT=1
 exec pnpm --filter @ggui-ai/e2e-scaffold-render exec playwright test --project=scaffold-render
