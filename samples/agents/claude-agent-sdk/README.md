@@ -133,7 +133,7 @@ This sample is one of three SDK-specific backends with identical wire surface ar
 - `@ggui-samples/agent-openai-sdk` — OpenAI Agents SDK (GPT-5.5)
 - `@ggui-samples/agent-google-adk` — Google ADK (Gemini)
 
-To swap drivers, point the frontend's `VITE_AGENT_ENDPOINT_URL` at a different sample's port (6790 / 6791 / 6792). The same `<AppRenderer>` works against any of them because the wire shape (POST /chat SSE of `SDKMessage`-shaped events, ggui MCP `_meta` envelope) is identical.
+To swap drivers, point the frontend's `VITE_AGENT_ENDPOINT_URL` at the sample backend you're running — all three samples now default to 6790, so override `PORT` to run more than one at once. The same `<AppRenderer>` works against any of them because the wire shape (POST /chat SSE of `SDKMessage`-shaped events, ggui MCP `_meta` envelope) is identical.
 
 ## Plugging into a non-Vite frontend
 
