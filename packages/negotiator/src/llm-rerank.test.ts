@@ -27,7 +27,7 @@ function stubLlm(
       _tool: ToolSchema,
     ): Promise<T> {
       const value = typeof ret === 'function' ? await ret() : ret;
-      return value as unknown as T;
+      return value as T;
     },
   };
 }
@@ -174,7 +174,7 @@ describe('RERANK_SYSTEM_PROMPT — similarity-only judge (no field-coverage gate
     // Adding or omitting fields/slots/actions must not block a match;
     // those deltas are reported to the agent separately.
     expect(lower).toMatch(/add(?:s|ed|ing)?\b[\s\S]*\bomit/);
-    expect(lower).toMatch(/do not block|does not block|not? a blocker|do not gate/);
+    expect(lower).toMatch(/do not block|does not block|not\s+a\s+blocker|do not gate/);
     expect(lower).toMatch(/report(?:ed)?\s+to\s+the\s+agent/);
   });
 
@@ -194,9 +194,12 @@ describe('RERANK_SYSTEM_PROMPT — similarity-only judge (no field-coverage gate
   });
 
   it('does NOT list added/omitted fields or a differing wire surface as a NO-MATCH trigger', () => {
-    // Slice the NO-MATCH region (from "NO-MATCH" up to the visual-style
-    // clause) and ensure field/wire deltas are not named there.
-    const noMatchStart = prompt.search(/NO-MATCH/);
+    // Slice the NO-MATCH region (from the NO-MATCH *definition* up to
+    // the visual-style clause) and ensure field/wire deltas are not
+    // named there. Anchor on "NO-MATCH means" rather than a bare
+    // "NO-MATCH" so the slice never silently swallows MATCH-paragraph
+    // text if the word "NO-MATCH" later appears earlier in the prompt.
+    const noMatchStart = prompt.search(/^NO-MATCH means/m);
     expect(noMatchStart).toBeGreaterThanOrEqual(0);
     const visualClauseStart = prompt.search(/[Vv]isual style/);
     expect(visualClauseStart).toBeGreaterThan(noMatchStart);
