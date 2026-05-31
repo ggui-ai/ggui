@@ -215,7 +215,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
         registry,
         llm: stubLlm({
           matchId: registered.id,
-          confidence: 0.5, // below default 0.6 threshold
+          confidence: 0.4, // below default 0.5 threshold (Path-A loosened)
           reason: 'low confidence match',
         }),
       },
@@ -528,7 +528,7 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
   // Path A (Phase 2 Wave 2C): the matcher PROPOSES a similar cached
   // blueprint to a contract-bearing request even when it does NOT cover
   // every declared surface. There is NO coverage hard-drop and NO coverage
-  // floor — only the cosine (0.3) + judge (0.6) gates remain. A subset
+  // floor — only the cosine (0.2) + judge (0.5) gates remain. A subset
   // blueprint (missing an action / field the request declares) is reused
   // and the gap is REPORTED on `hit.coverage` so the decision layer can
   // surface COVERAGE_GAP warn findings; the agent override is the safety

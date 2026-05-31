@@ -145,17 +145,26 @@ export interface MatchBlueprintOptions {
   readonly kind?: BlueprintKind;
   /** RAG top-K. Default 20 — balance between recall and prompt cost. */
   readonly topK?: number;
-  /** Minimum cosine on top-1 to even invoke the LLM judge. Default 0.3 — */
+  /** Minimum cosine on top-1 to even invoke the LLM judge. Default 0.2 — */
   /** below this the candidates are clearly unrelated; rerank cost is wasted. */
+  /** (Loosened for Path-A; see the DEFAULT_MIN_COSINE note.) */
   readonly minCosineForRerank?: number;
   /** LLM judge confidence threshold for treating a semantic-strategy decision as a hit. */
-  /** Default 0.6 — empirically calibrated. */
+  /** Default 0.5 — loosened for Path-A; see the DEFAULT_JUDGE_THRESHOLD note. */
   readonly judgeThreshold?: number;
 }
 
 const DEFAULT_TOP_K = 20;
-const DEFAULT_MIN_COSINE = 0.3;
-const DEFAULT_JUDGE_THRESHOLD = 0.6;
+// Loosened for Path-A: propose a cached blueprint more readily. The cosine
+// gate (skip the LLM judge below this) and the judge-confidence threshold
+// are both relaxed so a paraphrased / similar contract reaches — and is
+// accepted by — the semantic judge instead of cold-generating. Over-proposal
+// is safe here: the agent decision step plus the COVERAGE_GAP findings on a
+// non-covering hit are the safety valve (the cache proposes; the agent
+// disposes), so a slightly weaker match surfaces as a reviewable suggestion
+// rather than a silent wrong reuse.
+const DEFAULT_MIN_COSINE = 0.2;
+const DEFAULT_JUDGE_THRESHOLD = 0.5;
 
 /**
  * Walk the matcher and return the decision.
