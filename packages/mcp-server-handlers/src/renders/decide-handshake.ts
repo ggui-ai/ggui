@@ -262,8 +262,9 @@ export function buildCacheReuseResult(
       generator: generatorSlug,
       // The MATCHED blueprint's own variance — what the cached UI carries,
       // surfaced so the agent sees the proposed variance before accepting
-      // (D5). `?? {}` keeps the no-variance default for legacy rows.
-      variance: blueprint.variance ?? {},
+      // (D5). Required on Blueprint (rowToBlueprint defaults legacy rows to
+      // {}), so no coalesce here.
+      variance: blueprint.variance,
       selectedReason: reason,
     },
     proposedContractSummary: summarizeContract(blueprint.contract),
