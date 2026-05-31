@@ -452,19 +452,22 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
   it('a PROP gap annotates required-vs-optional from the draft', async () => {
     const PROP_GAP = {
       actions: [],
-      props: ['city', 'units'],
+      props: ['city', 'units', 'detail'],
       context: [],
       streams: [],
       gadgets: [],
     } as const;
-    // Draft declares `city` required, `units` optional — the missing-prop
-    // findings must reflect each prop's required status from the draft.
+    // Draft declares `city` required, `units` optional-via-absence, and
+    // `detail` EXPLICITLY required:false — the missing-prop findings must
+    // reflect each prop's required status from the draft. The explicit
+    // `false` case locks the `=== true` (not truthy) comparison.
     const draftWithProps = {
       contract: {
         propsSpec: {
           properties: {
             city: { schema: { type: 'string' }, required: true },
             units: { schema: { type: 'string' } },
+            detail: { schema: { type: 'string' }, required: false },
           },
         },
       } as DataContract,
@@ -481,8 +484,14 @@ describe('decideHandshake — coverage tiebreak + COVERAGE_GAP findings (P2-16)'
       [];
     const city = findings.find((f) => f.path === 'propsSpec.properties.city');
     const units = findings.find((f) => f.path === 'propsSpec.properties.units');
+    const detail = findings.find((f) => f.path === 'propsSpec.properties.detail');
     expect(city?.message).toMatch(/required/i);
     expect(units?.message).toMatch(/optional/i);
+    // Explicit required:false must read as optional (NOT required) — pins
+    // the `=== true` comparison; a future `if (required)` truthy check
+    // would not regress here, but it WOULD on `units` (undefined) above.
+    expect(detail?.message).toMatch(/optional/i);
+    expect(detail?.message).not.toMatch(/required/i);
   });
 
   it('breaks a coverage tie on judgeConfidence (both gapped → higher wins)', async () => {
