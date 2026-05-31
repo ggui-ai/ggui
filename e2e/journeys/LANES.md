@@ -32,13 +32,12 @@ Strategy doc §4.2 locks the blocking LLM subset to **four** scenarios. Memory h
 
 ### Additional Lane 2 specs beyond the strategy's blocking four
 
-Three Lane 2 specs ship today that aren't in the blocking-four lock. They cover orthogonal user-stories (Q2, Q3, Q5 per strategy §5) and run advisory today:
+Two Lane 2 specs ship today that aren't in the blocking-four lock. They cover orthogonal user-stories (Q2, Q3 per strategy §5) and run advisory today:
 
-| Spec                      | User-story                                                                       | Lane 2 sub-shape                                            |
-| ------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `chat-generation.spec.ts` | Q2 — chat on dev page (ChatShell-with-UI, Slice 8b)                              | Blocking on presence of `ANTHROPIC_API_KEY`; skip otherwise |
-| `live-generation.spec.ts` | Q3 — weather / generic push (Slice 4 follow-on)                                  | Blocking on presence of key; skip otherwise                 |
-| `cache-reuse.spec.ts`     | Q5 — same-intent cache hit (two blocks: repeated-turn + cold→hit→cold lifecycle) | Blocking on presence of key; skip otherwise                 |
+| Spec                      | User-story                                          | Lane 2 sub-shape                                            |
+| ------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
+| `chat-generation.spec.ts` | Q2 — chat on dev page (ChatShell-with-UI, Slice 8b) | Blocking on presence of `ANTHROPIC_API_KEY`; skip otherwise |
+| `live-generation.spec.ts` | Q3 — weather / generic push (Slice 4 follow-on)     | Blocking on presence of key; skip otherwise                 |
 
 ### Advisory / nightly scope (not blocking, not shipped as standalone)
 
@@ -50,7 +49,7 @@ Per strategy §4.2, the following expand Lane 2 in the advisory / nightly lane b
 
 ## Gating discipline (all Lane 2 specs)
 
-Every Lane 2 spec follows the **advisory-skip envelope** pattern via the canonical `shouldSkipLane2Advisory({specLabel?})` helper in `ggui-serve-harness.ts`. All seven Lane 2 specs call the helper (the former duplicated inline pattern was factored out 2026-04-24).
+Every Lane 2 spec follows the **advisory-skip envelope** pattern via the canonical `shouldSkipLane2Advisory({specLabel?})` helper in `ggui-serve-harness.ts`. All six Lane 2 specs call the helper (the former duplicated inline pattern was factored out 2026-04-24).
 
 1. `@ggui-ai/cli` dist missing → **skip** with build hint.
 2. `@ggui-ai/console` dist missing → **skip** with build hint.
@@ -58,7 +57,7 @@ Every Lane 2 spec follows the **advisory-skip envelope** pattern via the canonic
 4. `ANTHROPIC_API_KEY` unset or empty → **skip** (clean CI without secrets).
 5. Otherwise → run with `test.setTimeout(TEST_TIMEOUT_MS)`, attach perf recorder + network gate, assert `structuredContent.cache` / browser DOM per spec contract.
 
-CI policy today: Lane 2 runs when `ANTHROPIC_API_KEY` is present in the environment. No key → all seven specs skip cleanly. This is the correct posture — the lane's purpose is validating LLM-backed generation paths, not arguing with operators about secret availability.
+CI policy today: Lane 2 runs when `ANTHROPIC_API_KEY` is present in the environment. No key → all six specs skip cleanly. This is the correct posture — the lane's purpose is validating LLM-backed generation paths, not arguing with operators about secret availability.
 
 ## Assertion shape — all Lane 2 specs
 
@@ -94,7 +93,6 @@ Also Lane 3: `packages/mcp-server-handlers/src/renders/*.test.ts` — all handle
 
 Latency / benchmark specs. Thresholds defined inline per spec via `perf-recorder.ts::recordBlocking()` calls:
 
-- `cache-reuse.spec.ts` — blocking: cache-hit turn-2 must be <2s (no LLM fallthrough guard)
 - `tasks-backed-generation.spec.ts` + `live-generation.spec.ts` — real-LLM turn floor (>1s catches stub regressions)
 
 No dedicated nightly perf suite exists today. When one lands it belongs under a separate Playwright project (e.g., `perf-ggui-oss`) so threshold / trend gates don't pollute the blocking run.

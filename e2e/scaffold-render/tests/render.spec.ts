@@ -17,12 +17,9 @@
  */
 import { test, expect } from '@playwright/test';
 import { spawnScaffoldedApp, type ScaffoldAppHandle, type SdkId } from './scaffold-app-harness';
-// Canonical toggleable/checked locators for agent-authored todo UIs — shared
-// with the workspace agent-loop journey (pure Playwright locator builders).
-import {
-  findTodoToggleable,
-  findTodoCheckedIndicator,
-} from '../../journeys/tests/agent-loop-harness';
+// Toggleable/checked locators for agent-authored todo UIs (pure Playwright
+// locator builders). Self-contained in scaffold-render — see ./todo-locators.
+import { findTodoToggleable, findTodoCheckedIndicator } from './todo-locators';
 
 // The proven agent-loop prompt — the trailing "keep in sync" sentence is what
 // drives the click-loop (toggle → todo MCP update → ggui_update).

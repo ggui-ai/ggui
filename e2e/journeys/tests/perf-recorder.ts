@@ -63,7 +63,7 @@ export interface PerfRecord {
   /**
    * Stable identifier for the path. Use kebab-case + the critical
    * vocabulary (e.g., `cold-boot`, `pair-mint`, `tools-list`,
-   * `cache-reuse-turn2`, `push-cold-llm`, `chat-message-llm`).
+   * `push-cold-llm`, `chat-message-llm`).
    * Consistency matters more than cleverness — future aggregators
    * group on this.
    */
@@ -109,12 +109,6 @@ export interface PerfRecord {
  *     the in-memory MCP backend, no cache, no LLM. Observed: 10-40ms.
  *     Same 100× headroom rationale as `pair-mint`.
  *
- *   - `cache-reuse-turn2` — 2_000ms. Matches the EXISTING implicit
- *     assertion in `cache-reuse.spec.ts`:
- *       > cache hit should be sub-second; LLM fallthrough regression?
- *     Re-captured here so the threshold is visible in the timings
- *     artifact instead of buried in a spec-local `expect().toBeLessThan`.
- *
  * These are intentionally generous. A timing below the budget says
  * nothing about whether the code is fast; a violation says "this
  * path is broken or silently fell through to a slow path."
@@ -123,7 +117,6 @@ export const BLOCKING_BUDGETS_MS = {
   'cold-boot': 15_000,
   'pair-mint': 2_000,
   'tools-list': 2_000,
-  'cache-reuse-turn2': 2_000,
 } as const satisfies Record<string, number>;
 
 /**
