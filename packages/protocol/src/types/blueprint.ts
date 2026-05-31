@@ -121,7 +121,7 @@ export interface BlueprintVariance {
  * this shape encodes.
  */
 export interface Blueprint {
-  /** Stable, unique blueprint id (e.g. `bp-<uuid>`). Primary key. */
+  /** Stable, unique blueprint id (e.g. `bp_<uuid>`). Primary key. */
   readonly blueprintId: string;
   /**
    * Canonical RFC 8785 (JCS) hash of the contract shape — same
