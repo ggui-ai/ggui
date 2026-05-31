@@ -203,6 +203,23 @@ export interface HandshakeSuggestion {
   /** Provisional blueprint metadata — see {@link BlueprintMeta}. */
   readonly blueprintMeta: BlueprintMeta;
   /**
+   * Agent-readable projection of the contract the server proposes the
+   * agent build against. Parties: the SERVER produces it from the
+   * effective contract; the AGENT consumes it to make ONE accept-vs-
+   * override decision knowingly.
+   *
+   * Obligation: when set, it equals `summarizeContract(effectiveContract)`
+   * (the same lossy summary the matcher's judge feeds — one source of
+   * truth). OPTIONAL (D5): a malformed/absent contract → omitted (never
+   * throws); the agent then falls back to `blueprintMeta.contractHash`.
+   * Builders set it whenever a contract is available.
+   *
+   * This is the agent-readable projection only — the full contract still
+   * rides on the handshake record's stored `effectiveContract` for
+   * render-time generation.
+   */
+  readonly proposedContractSummary?: string;
+  /**
    * Populated iff `origin === 'synth'`. Carries the JSON-Patch diff
    * vs the agent's draft and the synth model's reasoning.
    */

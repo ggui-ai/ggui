@@ -35,3 +35,29 @@ describe('handshakeSuggestionSchema — blueprintMeta.blueprintId optional', () 
     expect(parsed.blueprintMeta.blueprintId).toBeUndefined();
   });
 });
+
+describe('handshakeSuggestionSchema — proposedContractSummary (optional, D5)', () => {
+  it('parses a suggestion WITH proposedContractSummary', () => {
+    const parsed = handshakeSuggestionSchema.parse({
+      origin: 'cache',
+      rationale: 'reusing a similar cached contract',
+      blueprintMeta: {
+        ...baseMeta,
+        blueprintId: 'bp_22222222-2222-2222-2222-222222222222',
+      },
+      proposedContractSummary: 'actions: submit; context: noteText',
+    });
+    expect(parsed.proposedContractSummary).toBe(
+      'actions: submit; context: noteText',
+    );
+  });
+
+  it('parses a suggestion WITHOUT proposedContractSummary (agent falls back to contractHash)', () => {
+    const parsed = handshakeSuggestionSchema.parse({
+      origin: 'agent',
+      rationale: 'fresh draft validated cleanly',
+      blueprintMeta: baseMeta,
+    });
+    expect(parsed.proposedContractSummary).toBeUndefined();
+  });
+});

@@ -111,6 +111,7 @@ export const handshakeSuggestionSchema: z.ZodType<HandshakeSuggestion> = z
     origin: suggestionOriginSchema,
     rationale: z.string(),
     blueprintMeta: blueprintMetaSchema,
+    proposedContractSummary: z.string().optional(),
     amendments: suggestionAmendmentsSchema.optional(),
     validationFindings: z.array(suggestionFindingSchema).optional(),
   })
