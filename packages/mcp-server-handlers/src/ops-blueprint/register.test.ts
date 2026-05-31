@@ -118,7 +118,7 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
     );
 
     const expectedKey = blueprintKey(SAMPLE_CONTRACT);
-    const found = await findBlueprintExact({ vectorStore }, "app-1", "template", expectedKey);
+    const found = await findBlueprintExact({ vectorStore, index }, "app-1", "template", expectedKey);
     expect(found).not.toBeNull();
     expect(found!.contractKey).toBe(expectedKey);
     expect(found!.componentCode).toBe(SAMPLE_CODE);

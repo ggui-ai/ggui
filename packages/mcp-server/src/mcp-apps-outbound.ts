@@ -32,7 +32,11 @@
  *   same `@ggui-ai/mcp-server` instance that mints the bootstrap.
  */
 
-import type { RenderStore, VectorStore } from "@ggui-ai/mcp-server-core";
+import type {
+  BlueprintIndex,
+  RenderStore,
+  VectorStore,
+} from "@ggui-ai/mcp-server-core";
 import {
   deriveBundleOrigins,
   deriveContractBundle,
@@ -1071,6 +1075,15 @@ export interface GguiRenderResourceTemplateOptions {
    */
   readonly vectorStore?: VectorStore;
   /**
+   * Blueprint identity index backing the registry. Required alongside
+   * `vectorStore` for the registry-only rehydrate fallback: the resume
+   * URI carries only a contract hash, so the handler resolves the
+   * default-variant exact key `(template, contractKey, defaultVariantKey)`
+   * to the row's UUID via this index. Threaded from the same shared
+   * index instance the matcher reads.
+   */
+  readonly index?: BlueprintIndex;
+  /**
    * App-id used for blueprint-registry scoping when the session has
    * been evicted. The registry is per-`appId`, but a missing session
    * has no way to derive its tenant — multi-tenant deployments leave
@@ -1320,11 +1333,13 @@ export function registerGguiRenderResourceTemplate(
     // process restart).
     const [stored, blueprint] = await Promise.all([
       opts.renderStore.get(renderId),
-      hasResumeKey && opts.vectorStore && opts.defaultAppIdFallback
+      hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
         ? findBlueprintExact(
-            { vectorStore: opts.vectorStore },
+            { vectorStore: opts.vectorStore, index: opts.index },
             opts.defaultAppIdFallback,
             "template",
+            // Resume URI carries only a contract hash — omit variantKey
+            // so the lookup resolves the default variant.
             blueprintKey
           )
         : Promise.resolve(null),

@@ -66,7 +66,6 @@ import {
   type InstallToCacheInput,
 } from './install-to-cache.js';
 import {
-  composeBlueprintId,
   deleteBlueprint,
   findBlueprintExact,
   listBlueprints,
@@ -420,7 +419,7 @@ export function createInstalledBlueprintsProvider(
       // not in the live set — either way it shouldn't be served.
       try {
         await deleteBlueprint(
-          { vectorStore: store },
+          { vectorStore: store, index: options.deps.index },
           scope,
           row.id,
         );
@@ -544,7 +543,7 @@ async function evictStaleInstallRow(
   let existing;
   try {
     existing = await findBlueprintExact(
-      { vectorStore: deps.vectorStore },
+      { vectorStore: deps.vectorStore, index: deps.index },
       scope,
       'template',
       contractKey,
@@ -555,9 +554,9 @@ async function evictStaleInstallRow(
   if (!existing || existing.provenance !== 'install') return;
   try {
     await deleteBlueprint(
-      { vectorStore: deps.vectorStore },
+      { vectorStore: deps.vectorStore, index: deps.index },
       scope,
-      composeBlueprintId('template', contractKey),
+      existing.id,
     );
     onIssue?.({
       id: entry.id,

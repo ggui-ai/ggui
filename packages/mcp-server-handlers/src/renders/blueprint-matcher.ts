@@ -262,7 +262,10 @@ export async function matchBlueprint(
   if (query.contract !== undefined) {
     try {
       const exact = await findBlueprintExact(
-        { vectorStore: deps.registry.vectorStore },
+        {
+          vectorStore: deps.registry.vectorStore,
+          index: deps.registry.index,
+        },
         scope,
         kind,
         expectedKey,

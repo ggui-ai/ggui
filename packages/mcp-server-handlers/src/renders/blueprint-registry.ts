@@ -36,6 +36,7 @@
  * downstream in the handshake handler. Registry just persists,
  * retrieves, and enumerates.
  */
+import { randomUUID } from 'node:crypto';
 import type {
   BlueprintIndex,
   EmbeddingProvider,
@@ -92,7 +93,12 @@ export type BlueprintProvenance = 'synth' | 'register' | 'install';
 
 /** A blueprint as carried through the registry. */
 export interface Blueprint {
-  /** Synthetic registry id: `${kind}:${contractKey}`. */
+  /**
+   * Opaque registry id — `bp_<uuid>`, minted once at first registration.
+   * Identity is no longer derived from `(kind, contractKey)`; the
+   * deterministic exact-lookup key composes `(kind, contractKey,
+   * variantKey)` and resolves to this id via the {@link BlueprintIndex}.
+   */
   readonly id: string;
   readonly kind: BlueprintKind;
   /** Identity hash of `contract` — equal contract produce equal keys. */
@@ -317,6 +323,25 @@ function readScalarString(
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Narrow a stored `kind` scalar to {@link BlueprintKind}, or `undefined`
+ * when the row is foreign / malformed. Avoids an unchecked cast at the
+ * index-key reconstruction site.
+ */
+function readBlueprintKind(
+  value: string | number | boolean | null | undefined,
+): BlueprintKind | undefined {
+  if (
+    value === 'template' ||
+    value === 'organism' ||
+    value === 'molecule' ||
+    value === 'atom'
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 function readScalarNumber(
   value: string | number | boolean | null | undefined,
 ): number | undefined {
@@ -438,14 +463,26 @@ export interface RegisterBlueprintOptions {
    * so the fail-closed branch never fires under the default validator).
    */
   readonly validator?: ContractValidator;
+  /**
+   * Override the UUID minter. Defaults to `() => \`bp_${randomUUID()}\``.
+   * Tests inject a deterministic minter to assert id shape without
+   * depending on `node:crypto` randomness. Only consulted on a fresh
+   * registration — a dedup hit returns the existing row's id verbatim.
+   */
+  readonly mintId?: () => string;
 }
 
 /**
- * Register a blueprint into the scope. Idempotent on key — re-
- * registering the same `(kind, contractKey)` overwrites the existing
- * entry's metadata and re-embeds (hit counters reset; that's
- * accepted because re-registration only happens on a fresh cold-gen
- * which means the underlying componentCode also changed).
+ * Register a blueprint into the scope.
+ *
+ * Identity: a fresh `(contractKey, variantKey)` mints an opaque
+ * `bp_<uuid>` once and binds it in the {@link BlueprintIndex} under the
+ * deterministic exact key. Dedup-on-first-registration: re-registering an
+ * already-bound `(contractKey, variantKey)` returns the existing UUID+row
+ * verbatim (first write wins — no re-mint, no metadata overwrite, no
+ * hitCount reset). A dangling index binding (id present, row gone)
+ * self-heals: the stale binding is dropped and registration proceeds as
+ * a fresh mint.
  *
  * Validation: the contract is run through the structural validator
  * BEFORE any write. `severity: 'error'` findings short-circuit the
@@ -487,12 +524,22 @@ export async function registerBlueprint(
   );
 
   const contractKey = blueprintKey(input.contract);
-  // Plumbing wave: the id stays the legacy `${kind}:${contractKey}` shape;
-  // the UUID flip + index dedup land next wave. variantKey/variance are
-  // persisted now so the identity flip has the metadata it needs.
-  const id = composeBlueprintId(input.kind, contractKey);
-  const variance = input.variance ?? {};
   const vKey = variantKey(input.variance);
+  const exactKey = composeExactKey(input.kind, contractKey, vKey);
+
+  // Dedup-on-first-registration: a bound (contractKey, variantKey) returns its
+  // existing UUID+row verbatim (first write wins, no re-mint, no hitCount reset).
+  const existingId = await deps.index.getId(scope, exactKey);
+  if (existingId) {
+    const existing = await findBlueprintByUuid(deps.vectorStore, scope, existingId);
+    if (existing) return existing;
+    // Dangling binding (id present, row gone) — self-heal: drop the stale
+    // binding and fall through to mint a fresh row.
+    await deps.index.deleteId(scope, exactKey);
+  }
+
+  const id = options.mintId?.() ?? `bp_${randomUUID()}`;
+  const variance = input.variance ?? {};
   const createdAt = new Date().toISOString();
   const blueprint: Blueprint = {
     id,
@@ -512,7 +559,7 @@ export async function registerBlueprint(
   };
 
   const cap = options.maxPerKind ?? DEFAULT_MAX_BLUEPRINTS_PER_KIND;
-  await maybeEvictLowestHitBlueprint(deps.vectorStore, scope, input.kind, id, cap);
+  await maybeEvictLowestHitBlueprint(deps, scope, input.kind, cap);
 
   const embeddingInput = composeEmbeddingInput(input.contract, input.intent);
   const vector = await deps.embedding.embed(embeddingInput);
@@ -521,30 +568,37 @@ export async function registerBlueprint(
     vector,
     metadata: blueprintToMetadata(blueprint),
   });
+  await deps.index.putId(scope, exactKey, id);
   return blueprint;
 }
 
 /**
- * If inserting `id` into (scope, kind) would push the bucket past
- * `cap`, delete the lowest-hitCount entry (oldest on ties). No-op
- * when:
+ * If a fresh registration into (scope, kind) would push the bucket past
+ * `cap`, delete the lowest-hitCount entry (oldest on ties). No-op when:
  *   - cap is Infinity (eviction disabled),
  *   - the bucket is below cap,
- *   - the incoming key is already in the bucket (re-write doesn't grow),
  *   - the vector store isn't enumerable (hosted-only path).
  *
- * Eviction is best-effort — a failed delete won't block the put.
- * The cap is a soft ceiling; one over-cap state is preferable to
- * dropping a fresh registration.
+ * Always called for a fresh mint — dedup is upstream now, so a
+ * re-registration of an already-bound `(contractKey, variantKey)` never
+ * reaches here (it returns the existing row before eviction). There is
+ * therefore no re-write short-circuit: every call grows the bucket by one.
+ *
+ * After deleting the victim's vector, the victim's exact key is
+ * reconstructed from its stored metadata (`kind` / `contractKey` /
+ * `variantKey`) and dropped from the {@link BlueprintIndex} so the
+ * binding doesn't dangle. Both deletes are best-effort — a failure
+ * won't block the put. The cap is a soft ceiling; one over-cap state is
+ * preferable to dropping a fresh registration.
  */
 async function maybeEvictLowestHitBlueprint(
-  store: VectorStore,
+  deps: { vectorStore: VectorStore; index: BlueprintIndex },
   scope: string,
   kind: BlueprintKind,
-  incomingId: string,
   cap: number,
 ): Promise<void> {
   if (!Number.isFinite(cap)) return;
+  const store = deps.vectorStore;
   if (!('listByScope' in store) || typeof store.listByScope !== 'function') {
     return;
   }
@@ -560,9 +614,6 @@ async function maybeEvictLowestHitBlueprint(
     return;
   }
 
-  // Re-write of an existing key — the bucket size doesn't grow, so
-  // no eviction needed.
-  if (bucket.some((e) => e.key === incomingId)) return;
   if (bucket.length < cap) return;
 
   // Pick the entry with the lowest hitCount; on ties pick the oldest
@@ -590,54 +641,53 @@ async function maybeEvictLowestHitBlueprint(
     // Eviction is best-effort — let the put proceed even if delete
     // raced with another writer.
   }
+  // Drop the victim's index binding so it doesn't dangle. Reconstruct
+  // the exact key from the victim's own metadata.
+  const victimKind = readBlueprintKind(victim.metadata[METADATA_KEYS.kind]);
+  const victimContractKey = readScalarString(
+    victim.metadata[METADATA_KEYS.contractKey],
+  );
+  const victimVariantKey =
+    readScalarString(victim.metadata[METADATA_KEYS.variantKey]) ??
+    variantKey(undefined);
+  if (victimKind !== undefined && victimContractKey !== undefined) {
+    try {
+      await deps.index.deleteId(
+        scope,
+        composeExactKey(victimKind, victimContractKey, victimVariantKey),
+      );
+    } catch {
+      // Best-effort — a failed index delete leaves a self-healing
+      // dangling binding, which `findBlueprintExact` resolves to null.
+    }
+  }
 }
 
 /**
- * Tier 1 exact-key lookup — return the blueprint whose contract
- * canonicalizes to `contractKey`, or `null` if none exists.
+ * Tier 1 exact lookup — resolve the blueprint bound to `(kind,
+ * contractKey, variantKey)` via the {@link BlueprintIndex}, or `null` if
+ * none exists.
  *
- * Implementation note: `VectorStore` lacks a `getByKey` primitive, so
- * we either listByScope+filter (works on every backend) or query+
- * filter-by-key (requires an embedding round-trip). We use
- * `listByScope` when an `EnumerableVectorStore` is available since
- * Tier 1 doesn't need the embedder; otherwise fall back to a
- * query-with-zero-vector + key filter, which works but burns one
- * cosine round-trip on every Tier 1 check. Production deployments
- * should always wire an enumerable store (every OSS default
- * satisfies this).
+ * `variantKey_` is optional (named with a trailing underscore so it does
+ * not shadow the imported `variantKey` helper). Omitted → the
+ * default-variant sentinel, so a contract-only lookup resolves the
+ * default variant. The index resolves the deterministic exact key to the
+ * row's UUID in one point-read; an index hit that points at a missing
+ * row (a dangling binding) resolves to `null` rather than throwing — the
+ * read site is one of the two self-heal points for stale bindings.
  */
 export async function findBlueprintExact(
-  deps: { vectorStore: VectorStore },
+  deps: { vectorStore: VectorStore; index: BlueprintIndex },
   scope: string,
   kind: BlueprintKind,
   contractKey: string,
+  variantKey_?: string,
 ): Promise<Blueprint | null> {
-  const expectedId = composeBlueprintId(kind, contractKey);
-  const store = deps.vectorStore;
-  if ('listByScope' in store && typeof store.listByScope === 'function') {
-    const entries = await (store as EnumerableVectorStore).listByScope(scope);
-    for (const entry of entries) {
-      if (entry.key === expectedId) {
-        return rowToBlueprint(entry.key, entry.metadata);
-      }
-    }
-    return null;
-  }
-  // Non-enumerable backend (S3 Vectors). Hash-search via the cosine
-  // primitive. We construct an unrelated query vector — a zero vector
-  // — which means cosine to all entries is 0; the result list ends up
-  // ordered arbitrarily by the backend. Then we scan for the exact
-  // key. Cost: one round-trip + a linear scan over the topK.
-  // Inefficient for large scopes; OSS deployments use enumerable
-  // stores so this branch is hosted-only.
-  const dummy = new Array<number>(1).fill(0);
-  const results = await store.query(scope, dummy, 1000);
-  for (const result of results) {
-    if (result.key === expectedId) {
-      return rowToBlueprint(result.key, result.metadata);
-    }
-  }
-  return null;
+  const vKey = variantKey_ ?? variantKey(undefined); // optional → default-variant
+  const exactKey = composeExactKey(kind, contractKey, vKey);
+  const id = await deps.index.getId(scope, exactKey);
+  if (!id) return null;
+  return findBlueprintByUuid(deps.vectorStore, scope, id); // UUID-miss after index-hit → null, never throw
 }
 
 /**
@@ -817,11 +867,27 @@ async function reembed(
 /**
  * Delete a blueprint by id. Idempotent — deleting a missing key is a
  * no-op (matches `VectorStore.deleteVector` contract).
+ *
+ * Reads the row first so the `(kind, contractKey, variantKey)` exact key
+ * can be reconstructed and dropped from the {@link BlueprintIndex}; the
+ * index drop is best-effort (a missing row / failed delete leaves a
+ * self-healing dangling binding, never an error).
  */
 export async function deleteBlueprint(
-  deps: { vectorStore: VectorStore },
+  deps: { vectorStore: VectorStore; index: BlueprintIndex },
   scope: string,
   id: string,
 ): Promise<void> {
+  const existing = await findBlueprintByUuid(deps.vectorStore, scope, id);
   await deps.vectorStore.deleteVector(scope, id);
+  if (existing) {
+    try {
+      await deps.index.deleteId(
+        scope,
+        composeExactKey(existing.kind, existing.contractKey, existing.variantKey),
+      );
+    } catch {
+      // Best-effort — a dangling binding self-heals at the read site.
+    }
+  }
 }

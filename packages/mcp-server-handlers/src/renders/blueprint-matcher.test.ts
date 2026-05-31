@@ -147,7 +147,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
 
   it('returns match-semantic when judge accepts a candidate', async () => {
     const registry = makeRegistry();
-    await registerBlueprint(registry, SCOPE, {
+    const registered = await registerBlueprint(registry, SCOPE, {
       kind: 'template',
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
@@ -157,7 +157,8 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       {
         registry,
         llm: stubLlm({
-          matchId: `template:${blueprintKey(NOTEPAD_CONTRACT)}`,
+          // Judge picks the candidate by its opaque registry id.
+          matchId: registered.id,
           confidence: 0.85,
           reason: 'paraphrase match',
         }),
@@ -203,7 +204,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
 
   it('no-match-low-confidence when judge confidence below threshold', async () => {
     const registry = makeRegistry();
-    await registerBlueprint(registry, SCOPE, {
+    const registered = await registerBlueprint(registry, SCOPE, {
       kind: 'template',
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
@@ -213,7 +214,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       {
         registry,
         llm: stubLlm({
-          matchId: `template:${blueprintKey(NOTEPAD_CONTRACT)}`,
+          matchId: registered.id,
           confidence: 0.5, // below default 0.6 threshold
           reason: 'low confidence match',
         }),

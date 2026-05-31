@@ -53,7 +53,7 @@ describe('installToCache', () => {
     expect(bp.provenance).toBe('install');
     expect(bp.kind).toBe('template');
     expect(bp.contractKey).toBe(blueprintKey(COUNTER_CONTRACT));
-    expect(bp.id).toBe(`template:${blueprintKey(COUNTER_CONTRACT)}`);
+    expect(bp.id).toMatch(/^bp_[0-9a-f-]{36}$/);
   });
 
   it('produces a matcher-visible row at the canonical contract key', async () => {
@@ -67,7 +67,7 @@ describe('installToCache', () => {
       intent: 'A counter from @vendor/counter@1.0.0',
     });
     const hit = await findBlueprintExact(
-      { vectorStore: deps.vectorStore },
+      { vectorStore: deps.vectorStore, index: deps.index },
       SCOPE,
       'template',
       blueprintKey(COUNTER_CONTRACT),

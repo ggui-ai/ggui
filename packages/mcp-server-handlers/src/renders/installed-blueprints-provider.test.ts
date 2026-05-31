@@ -599,7 +599,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
     );
 
     const direct = await findBlueprintExact(
-      { vectorStore: deps.vectorStore },
+      { vectorStore: deps.vectorStore, index: deps.index },
       SCOPE,
       'template',
       blueprintKey(COUNTER_CONTRACT),

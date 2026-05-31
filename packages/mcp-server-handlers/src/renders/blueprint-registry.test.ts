@@ -5,7 +5,7 @@ import {
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { DataContract } from '@ggui-ai/protocol';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import type { ContractValidationResult } from '@ggui-ai/negotiator';
 import {
   registerBlueprint,
@@ -95,7 +95,7 @@ describe('composeEmbeddingInput', () => {
 });
 
 describe('registerBlueprint', () => {
-  it('writes a template entry with deterministic id', async () => {
+  it('mints an opaque bp_<uuid> id keyed off the contract', async () => {
     const deps = makeDeps();
     const bp = await registerBlueprint(deps, SCOPE, {
       kind: 'template',
@@ -103,7 +103,8 @@ describe('registerBlueprint', () => {
       intent: 'Build a notepad',
       componentCode: 'export default () => null;',
     });
-    expect(bp.id).toBe(`template:${blueprintKey(NOTEPAD_CONTRACT)}`);
+    // Identity is opaque — no longer derived from (kind, contractKey).
+    expect(bp.id).toMatch(/^bp_[0-9a-f-]{36}$/);
     expect(bp.contractKey).toBe(blueprintKey(NOTEPAD_CONTRACT));
     expect(bp.kind).toBe('template');
     expect(bp.intent).toBe('Build a notepad');
@@ -111,26 +112,53 @@ describe('registerBlueprint', () => {
     expect(bp.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it('two paraphrased registrations of the same contract overwrite the same id', async () => {
+  it('dedups: same (contract, variance) twice returns the same uuid, first write wins', async () => {
     const deps = makeDeps();
     const a = await registerBlueprint(deps, SCOPE, {
       kind: 'template',
       contract: NOTEPAD_CONTRACT,
       intent: 'Build a notepad',
-      componentCode: 'export default () => null;',
+      componentCode: 'export default () => "first";',
     });
     const b = await registerBlueprint(deps, SCOPE, {
       kind: 'template',
-      contract: NOTEPAD_CONTRACT, // same canonical shape
+      contract: NOTEPAD_CONTRACT, // same canonical shape, same (default) variance
       intent: 'A live notepad panel — different prose',
       componentCode: 'export default () => "newer";',
     });
-    expect(a.id).toBe(b.id);
+    // Same UUID — the second registration is a dedup hit, not a new row.
+    expect(b.id).toBe(a.id);
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(1);
-    // Latest write wins.
-    expect(all[0]?.intent).toBe('A live notepad panel — different prose');
-    expect(all[0]?.componentCode).toBe('export default () => "newer";');
+    // First write wins — no overwrite, no re-mint, no metadata churn.
+    expect(b.intent).toBe('Build a notepad');
+    expect(b.componentCode).toBe('export default () => "first";');
+    expect(all[0]?.intent).toBe('Build a notepad');
+    expect(all[0]?.componentCode).toBe('export default () => "first";');
+  });
+
+  it('same contract + different variance mints distinct sibling uuids', async () => {
+    const deps = makeDeps();
+    const a = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad — minimalist',
+      componentCode: 'a',
+      variance: { persona: 'minimalist' },
+    });
+    const b = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT, // same contract shape
+      intent: 'notepad — data-dense',
+      componentCode: 'b',
+      variance: { persona: 'data-dense' },
+    });
+    // Distinct variance → distinct exact keys → distinct sibling rows.
+    expect(a.id).not.toBe(b.id);
+    expect(a.contractKey).toBe(b.contractKey);
+    expect(a.variantKey).not.toBe(b.variantKey);
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all).toHaveLength(2);
   });
 
   it('different contract produce different ids', async () => {
@@ -150,6 +178,22 @@ describe('registerBlueprint', () => {
     expect(a.id).not.toBe(b.id);
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(2);
+  });
+
+  it('uses an injected mintId for the registry id', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: NOTEPAD_CONTRACT,
+        intent: 'notepad',
+        componentCode: 'a',
+      },
+      { mintId: () => 'bp_injected-fixed-id' },
+    );
+    expect(bp.id).toBe('bp_injected-fixed-id');
   });
 
   it('rejects an empty intent', async () => {
@@ -195,7 +239,7 @@ describe('registerBlueprint', () => {
       });
       expect(bp.provenance).toBe(provenance);
       const fetched = await findBlueprintExact(
-        { vectorStore: deps.vectorStore },
+        { vectorStore: deps.vectorStore, index: deps.index },
         SCOPE,
         'template',
         bp.contractKey,
@@ -268,6 +312,72 @@ describe('findBlueprintExact', () => {
       'template',
       blueprintKey(NOTEPAD_CONTRACT),
     );
+    expect(bp).toBeNull();
+  });
+
+  it('distinguishes two variants of the same contract by variantKey', async () => {
+    const deps = makeDeps();
+    const minimalist = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad — minimalist',
+      componentCode: 'minimalist',
+      variance: { persona: 'minimalist' },
+    });
+    const dense = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad — data-dense',
+      componentCode: 'dense',
+      variance: { persona: 'data-dense' },
+    });
+    const contractKey = blueprintKey(NOTEPAD_CONTRACT);
+    const hitMinimalist = await findBlueprintExact(
+      deps,
+      SCOPE,
+      'template',
+      contractKey,
+      variantKey({ persona: 'minimalist' }),
+    );
+    const hitDense = await findBlueprintExact(
+      deps,
+      SCOPE,
+      'template',
+      contractKey,
+      variantKey({ persona: 'data-dense' }),
+    );
+    expect(hitMinimalist?.id).toBe(minimalist.id);
+    expect(hitMinimalist?.componentCode).toBe('minimalist');
+    expect(hitDense?.id).toBe(dense.id);
+    expect(hitDense?.componentCode).toBe('dense');
+    // Omitting variantKey resolves the default variant — neither of
+    // these non-default siblings — so it misses.
+    const hitDefault = await findBlueprintExact(
+      deps,
+      SCOPE,
+      'template',
+      contractKey,
+    );
+    expect(hitDefault).toBeNull();
+  });
+
+  it('self-heals an index hit that points at a missing row (returns null)', async () => {
+    const deps = makeDeps();
+    const contractKey = blueprintKey(NOTEPAD_CONTRACT);
+    // Manually bind a dangling exact key → no vector row exists for it.
+    const exactKey = composeExactKey(
+      'template',
+      contractKey,
+      variantKey(undefined),
+    );
+    await deps.index.putId(SCOPE, exactKey, 'bp_dangling-no-row');
+    const bp = await findBlueprintExact(
+      deps,
+      SCOPE,
+      'template',
+      contractKey,
+    );
+    // Index hit, UUID miss → null, never a throw.
     expect(bp).toBeNull();
   });
 });
@@ -574,7 +684,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
     expect(ids.has(third.id)).toBe(true);
   });
 
-  it('does not evict on re-registration of an existing key (overwrite, no growth)', async () => {
+  it('does not evict on re-registration of an existing key (dedup, no growth)', async () => {
     const deps = makeDeps();
     const cap = 2;
     await registerBlueprint(
@@ -600,8 +710,9 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
       { maxPerKind: cap },
     );
 
-    // Re-register first contract — same key, overwrite, must NOT
-    // evict the second entry (bucket size unchanged).
+    // Re-register first contract — same (contractKey, variantKey) is a
+    // dedup hit (first write wins). The bucket does not grow, so the
+    // second entry must NOT be evicted.
     await registerBlueprint(
       deps,
       SCOPE,
@@ -616,12 +727,68 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
 
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(cap);
-    // The re-registered first contract carries the new componentCode.
+    // Dedup is first-write-wins — the re-registration returned the
+    // original row verbatim, so the first write's code/intent survive.
     const first = all.find(
       (bp) => bp.contractKey === blueprintKey(uniqueContract(1)),
     );
-    expect(first?.componentCode).toBe('v2');
-    expect(first?.intent).toBe('one revised');
+    expect(first?.componentCode).toBe('v1');
+    expect(first?.intent).toBe('one');
+  });
+
+  it('eviction drops the evicted exact key from the index — re-register mints a fresh uuid', async () => {
+    const deps = makeDeps();
+    const cap = 1;
+    // Register one entry at cap=1.
+    const first = await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: uniqueContract(1),
+        intent: 'one',
+        componentCode: 'a',
+      },
+      { maxPerKind: cap },
+    );
+    const firstExactKey = composeExactKey(
+      'template',
+      blueprintKey(uniqueContract(1)),
+      variantKey(undefined),
+    );
+    expect(await deps.index.getId(SCOPE, firstExactKey)).toBe(first.id);
+
+    // A second distinct contract at cap+1 evicts `first` (cold, oldest).
+    await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: uniqueContract(2),
+        intent: 'two',
+        componentCode: 'b',
+      },
+      { maxPerKind: cap },
+    );
+    // The evicted entry's index binding is gone.
+    expect(await deps.index.getId(SCOPE, firstExactKey)).toBeNull();
+
+    // Re-registering the evicted contract mints a NEW uuid (no dedup
+    // hit — the prior binding was dropped by eviction).
+    const reborn = await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: uniqueContract(1),
+        intent: 'one again',
+        componentCode: 'a2',
+      },
+      { maxPerKind: Number.POSITIVE_INFINITY },
+    );
+    expect(reborn.id).not.toBe(first.id);
+    expect(reborn.id).toMatch(/^bp_[0-9a-f-]{36}$/);
+    expect(await deps.index.getId(SCOPE, firstExactKey)).toBe(reborn.id);
   });
 
   it('does not evict cross-kind — atom and template buckets are independent', async () => {

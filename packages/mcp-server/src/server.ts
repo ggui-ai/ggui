@@ -4484,6 +4484,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ...(vectors
                   ? {
                       vectorStore: vectors,
+                      // Shared blueprint index — same instance the
+                      // matcher reads — so the registry-only rehydrate
+                      // fallback resolves the resume URI's default-variant
+                      // exact key to the cached row's UUID.
+                      index,
                       defaultAppIdFallback: DEFAULT_BUILDER_APP_ID,
                     }
                   : {}),
