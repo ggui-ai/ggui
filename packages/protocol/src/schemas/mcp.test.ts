@@ -312,23 +312,39 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
     ).toThrow();
   });
 
-  it('round-trips a render output with contractHash + cache', () => {
+  it('round-trips a render output with contractHash + blueprintId + variantKey + cache', () => {
     const out = {
       renderId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
       contractHash: '1c00b3ab282a45f6',
+      blueprintId: 'bp_550e8400-e29b-41d4-a716-446655440000',
+      variantKey: 'v_default',
       cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
     };
     expect(renderOutputSchema.parse(out)).toEqual(out);
   });
 
-  it('surfaces a cache.hit:true marker on output', () => {
+  it('rejects an output missing the required blueprintId / variantKey fields', () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        renderId: 'render_1',
+        resourceUri: 'ui://ggui/render/render_1',
+        action: 'create',
+        contractHash: '1c00b3ab282a45f6',
+        cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
+      }),
+    ).toThrow();
+  });
+
+  it('surfaces a cache.hit:true marker on output, with cachedBlueprintId === blueprintId', () => {
     const out = {
       renderId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'reuse' as const,
       contractHash: '1c00b3ab282a45f6',
+      blueprintId: 'bp_abc',
+      variantKey: 'v_default',
       cache: {
         hit: true,
         similarity: 1,
@@ -340,6 +356,7 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
     const parsed = renderOutputSchema.parse(out);
     expect(parsed.cache.hit).toBe(true);
     expect(parsed.cache.cachedBlueprintId).toBe('bp_abc');
+    expect(parsed.cache.cachedBlueprintId).toBe(parsed.blueprintId);
   });
 
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
@@ -348,6 +365,8 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
       contractHash: '1c00b3ab282a45f6',
+      blueprintId: 'bp_xyz',
+      variantKey: 'v_default',
       cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
       // Dead field — post-R5 the `/r/<shortCode>` route was deleted.
       // Defensive: a sender that hasn't migrated yet must not poison
@@ -359,6 +378,8 @@ describe('ggui_render — MVB-5 decision discriminator', () => {
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
       contractHash: '1c00b3ab282a45f6',
+      blueprintId: 'bp_xyz',
+      variantKey: 'v_default',
       cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
     });
     expect(Object.keys(parsed)).not.toContain('url');

@@ -284,7 +284,7 @@ export const renderCacheMarkerSchema = z.object({
   cachedBlueprintId: z
     .string()
     .optional()
-    .describe('The stored component id that was matched.'),
+    .describe('The stored component id that was matched. Equals top-level blueprintId on a hit.'),
   llmCallsAvoided: z
     .number()
     .describe('Generation calls skipped by serving the stored component (0 on a fresh generation).'),
@@ -330,6 +330,16 @@ export const renderOutputSchema = z.object({
     .string()
     .describe(
       'Canonical hash of the rendered data contract (shape only — fields, types, specs). Same hash ⟺ same data flow.',
+    ),
+  blueprintId: z
+    .string()
+    .describe(
+      'Opaque id of the materialised component for this render. Equal across two renders means the same cached component was served (a fresh generation mints a new id; a reuse returns the stored one).',
+    ),
+  variantKey: z
+    .string()
+    .describe(
+      'Canonical hash of the design-time variance (persona, aesthetic, seed prompt, context). With contractHash it forms the reuse key: the same pair reuses one component; a different variant of the same contract gets its own.',
     ),
   cache: renderCacheMarkerSchema.describe(
     'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
