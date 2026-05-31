@@ -94,9 +94,8 @@ import type {
 } from './generation-cache.js';
 import { assertGeneratorRegistered } from './assert-generator.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
-import { matchBlueprint } from './blueprint-matcher.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
-import { registerBlueprint } from './blueprint-registry.js';
+import { readBlueprintById, registerBlueprint } from './blueprint-registry.js';
 import {
   assertGadgetsRegistered,
   filterDescriptorsToContract,
@@ -104,7 +103,7 @@ import {
 import { fetchGadgetTypes } from './fetch-gadget-types.js';
 import { assertPublicEnvSatisfied } from './assert-public-env.js';
 import type { LLMCaller } from '@ggui-ai/negotiator';
-import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   validatePropsData,
   ContractViolationError,
@@ -1458,6 +1457,14 @@ export function createGguiRenderHandler(
       let generatedCodeReady = false;
       // Reuse outcome for this render — surfaced on the wire `cache` field.
       let cacheMarker: RenderCacheMarker | undefined;
+      // Opaque component id surfaced on the wire `blueprintId` field. A
+      // reuse decision resolves it to the stored UUID via the §6
+      // point-read; a cold gen sets it to the freshly-minted UUID
+      // `safelyRegisterBlueprint` returns. Stays `undefined` on the
+      // genuinely-no-component branches (probe-card / generation-off),
+      // which surface `blueprintId: ''` per spec §9.1 present-on-
+      // materialisation.
+      let resolvedBlueprintId: string | undefined;
 
       // Probe-card short-circuit. Intent prefix `[ggui:probe]` triggers
       // the MCP Apps protocol probe diagnostic system card.
@@ -1492,12 +1499,21 @@ export function createGguiRenderHandler(
         const intent = story.intent;
         const forceCreate = storedInput.forceCreate === true;
 
-        // Blueprint matcher when cache is wired. Exact-key and
-        // semantic strategies short-circuit generation entirely; a
-        // `no-match*` outcome falls through to cold-gen and registers
-        // the produced blueprint. Bypass the matcher entirely when
-        // `forceCreate` is set — agent has explicitly opted out after
-        // a declined handshake.
+        // §6 deterministic point-read. Render NO LONGER runs its own
+        // semantic match (`matchBlueprint` is gone from this handler).
+        // The handshake already decided; on an `origin:'cache'` accept
+        // it stored the matched blueprint's identity
+        // (`handshakeRecord.matchedBlueprint`). Here we O(1) point-read
+        // the stored row by UUID and serve its componentCode — the same,
+        // single match the handshake chose. `blueprintId` equality across
+        // two renders therefore genuinely means the same component was
+        // reused (no second, divergent matcher to disagree).
+        //
+        // Self-heal: a dangling `matchedBlueprint.id` (row evicted /
+        // gone between handshake and render) point-reads to `null` →
+        // `blueprintHit` stays null → we fall through to cold-gen. Never
+        // throws. `forceCreate` (agent opted out after a declined
+        // handshake) skips the point-read entirely.
         let blueprintHit: {
           readonly id: string;
           readonly contractKey: string;
@@ -1506,35 +1522,26 @@ export function createGguiRenderHandler(
           readonly contract: DataContract;
         } | null = null;
 
-        if (deps.generation.cache && !forceCreate) {
-          const llm = deps.generation.resolveLlmCaller
-            ? await deps.generation.resolveLlmCaller(ctx)
-            : null;
-          const matchDeps: Parameters<typeof matchBlueprint>[0] = {
-            registry: {
-              embedding: deps.generation.cache.embedding,
-              vectorStore: deps.generation.cache.vectorStore,
-              index: deps.generation.cache.index,
-            },
-            ...(llm ? { llm } : {}),
-            ...(deps.generation.installedBlueprints
-              ? { installedBlueprints: deps.generation.installedBlueprints }
-              : {}),
-          };
-          const matchResult = await matchBlueprint(matchDeps, ctx.appId, {
-            intent,
-            contract: story.contract,
-          });
-          if (
-            matchResult.strategy === 'exact-key' ||
-            matchResult.strategy === 'semantic'
-          ) {
+        const matched = handshakeRecord.matchedBlueprint;
+        if (
+          decision.kind === 'accept' &&
+          handshakeRecord.suggestion.origin === 'cache' &&
+          matched &&
+          deps.generation.cache?.index &&
+          !forceCreate
+        ) {
+          const bp = await readBlueprintById(
+            { vectorStore: deps.generation.cache.vectorStore },
+            ctx.appId,
+            matched.id,
+          );
+          if (bp) {
             blueprintHit = {
-              id: matchResult.blueprint.id,
-              contractKey: matchResult.blueprint.contractKey,
-              componentCode: matchResult.blueprint.componentCode,
-              cosine: matchResult.cosine,
-              contract: matchResult.blueprint.contract,
+              id: bp.id,
+              contractKey: bp.contractKey,
+              componentCode: bp.componentCode,
+              cosine: 1,
+              contract: bp.contract,
             };
           }
         }
@@ -1599,6 +1606,9 @@ export function createGguiRenderHandler(
             llmCallsAvoided: 1,
             kind: 'full-template',
           };
+          // Reuse → the stored UUID is the materialised component id.
+          // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
+          resolvedBlueprintId = blueprintHit.id;
         } else {
           // The `.d.ts` fetch is deferred to HERE — the cold-gen
           // branch — not done eagerly after the registry gate. On a
@@ -1650,9 +1660,13 @@ export function createGguiRenderHandler(
             };
             // Register the produced blueprint into the registry so
             // future calls can hit Tier 1 (exact contract match) or
-            // Tier 2 (semantic neighbour).
+            // Tier 2 (semantic neighbour). The minted UUID becomes this
+            // render's `blueprintId` (a fresh generation mints a new id).
+            // `variance: story.variance` so the registered blueprint's
+            // `variantKey` equals what the handshake / point-read computed
+            // — same `(contractKey, variantKey)` identity on both sides.
             if (outcome.ok && outcome.componentCode) {
-              await safelyRegisterBlueprint(
+              const registered = await safelyRegisterBlueprint(
                 {
                   embedding: deps.generation.cache.embedding,
                   vectorStore: deps.generation.cache.vectorStore,
@@ -1665,8 +1679,12 @@ export function createGguiRenderHandler(
                   intent,
                   componentCode: outcome.componentCode,
                   provenance: 'synth',
+                  ...(story.variance !== undefined
+                    ? { variance: story.variance }
+                    : {}),
                 },
               );
+              resolvedBlueprintId = registered;
             }
           }
         }
@@ -1755,6 +1773,12 @@ export function createGguiRenderHandler(
       // This is the same hash the handshake returned as
       // `contractHash`.
       const resolvedContractHash = blueprintKey(effectiveContract);
+      // Variant axis of the reuse key. `variantKey()` self-normalizes
+      // absent / empty variance to the stable default-variant sentinel,
+      // so a pure-display render with no variance block still surfaces a
+      // canonical value. Paired with `resolvedContractHash`, this is the
+      // `(contractHash, variantKey)` reuse key the registry indexes on.
+      const resolvedVariantKey = variantKey(effectiveVariance);
 
       // Conditional `nextStep` — emit a consume-recovery hint ONLY when
       // the resolved contract has a non-empty `actionSpec`. Pure-display
@@ -1797,6 +1821,13 @@ export function createGguiRenderHandler(
         codeReady: generatedCodeReady,
         handshakeId: handshakeRecord.handshakeId,
         contractHash: resolvedContractHash,
+        // Reuse → stored UUID (§6 point-read); cold-gen → minted UUID
+        // (`safelyRegisterBlueprint`). Empty only on the
+        // genuinely-no-component branches (probe-card / generation-off),
+        // which never materialise a component — spec §9.1
+        // present-on-materialisation.
+        blueprintId: resolvedBlueprintId ?? '',
+        variantKey: resolvedVariantKey,
         cache: cacheMarker ?? { hit: false, llmCallsAvoided: 0, kind: 'cold' },
         ...(codeUrl ? { codeUrl, codeHash } : {}),
         ...(nextStep ? { nextStep } : {}),
@@ -2635,6 +2666,12 @@ async function commitCachedRender(
  * already produced valid componentCode and the render has been
  * committed; the registry write is a performance optimization, not a
  * correctness dependency.
+ *
+ * Returns the registered blueprint's opaque `bp_<uuid>` id so the
+ * cold-gen path can surface it as the render's `blueprintId`. Returns
+ * `undefined` when the best-effort write threw (the render still
+ * succeeds; only the future cache-hit optimization + the surfaced id
+ * are lost — the wire then carries the empty-id default).
  */
 async function safelyRegisterBlueprint(
   deps: import('@ggui-ai/mcp-server-core').EmbeddingProvider extends never
@@ -2642,9 +2679,10 @@ async function safelyRegisterBlueprint(
     : Parameters<typeof registerBlueprint>[0],
   scope: string,
   input: Parameters<typeof registerBlueprint>[2],
-): Promise<void> {
+): Promise<string | undefined> {
   try {
-    await registerBlueprint(deps, scope, input);
+    const registered = await registerBlueprint(deps, scope, input);
+    return registered.id;
   } catch (err) {
     // Best-effort registration — the live render already produced
     // valid code + the row was committed; only the future cache-hit
