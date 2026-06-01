@@ -10,11 +10,18 @@
  *     --name my-app --scope acme --agent claude-agent-sdk --install
  *   npx @ggui-ai/create-agentic-app --list-agents
  *
- * Mechanics: shallow-clones github.com/ggui-ai/agentic-app-templates,
- * extracts the chosen SDK subdir into the target dir, renames
+ * Mechanics: copies the chosen SDK template tree — BUNDLED inside this
+ * package at `dist/templates/<agent>/` and exact-pinned to this CLI's own
+ * @ggui-ai/* cohort version at build time — into the target dir, renames
  * `agentic-app-template` → <name> and `@agentic-app-template/*` →
  * `@<scope>/*` in every package.json + a few docstring sites, seeds
- * `.env.local` from `.env.example`, optionally runs `pnpm install`.
+ * `.env.local` from `.env.example`, optionally runs `pnpm install`. No
+ * network access — the published CLI version is the single source of truth
+ * for both the template tree and its @ggui-ai/* dep versions.
+ *
+ * Override (clone the live mirror instead of the bundle): set
+ * `GGUI_TEMPLATES_REPO_URL` / `GGUI_TEMPLATES_REF` or pass `--ref`. That path
+ * shallow-clones github.com/ggui-ai/agentic-app-templates and requires `git`.
  *
  * The user can still run `/bootstrap` inside Claude Code afterwards —
  * that command tailors README/CLAUDE.md prose and deletes itself.
@@ -32,12 +39,34 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 
 const REPO_URL =
   process.env.GGUI_TEMPLATES_REPO_URL ?? 'https://github.com/ggui-ai/agentic-app-templates';
 const REPO_REF = process.env.GGUI_TEMPLATES_REF ?? 'main';
+
+/**
+ * Templates bundled inside this package at build time. The compiled CLI lives
+ * at `dist/cli.js`; the assembler writes the per-SDK trees to `dist/templates/`
+ * (see this package's `build` script). Each SDK is at `<BUNDLED_TEMPLATES_DIR>/
+ * <agent>/`, already exact-pinned to this CLI's co-published @ggui-ai/* cohort.
+ */
+const BUNDLED_TEMPLATES_DIR = fileURLToPath(new URL('./templates', import.meta.url));
+
+/**
+ * True when the user asked to clone the live mirror instead of using the
+ * bundled templates: any of GGUI_TEMPLATES_REPO_URL / GGUI_TEMPLATES_REF env
+ * vars, or an explicit `--ref`. Otherwise the default is the offline bundle.
+ */
+function wantsCloneOverride(args: Args): boolean {
+  return (
+    process.env.GGUI_TEMPLATES_REPO_URL !== undefined ||
+    process.env.GGUI_TEMPLATES_REF !== undefined ||
+    args.ref !== undefined
+  );
+}
 
 const AGENTS = ['claude-agent-sdk', 'openai-agents-sdk', 'google-adk'] as const;
 type Agent = (typeof AGENTS)[number];
@@ -48,10 +77,12 @@ const API_KEY_BY_AGENT: Record<Agent, string> = {
   'google-adk': 'GEMINI_API_KEY',
 };
 
+// All three agents default to the same port (6790) after the prior
+// port-unification — the agent backend listens on 6790 regardless of SDK.
 const DEFAULT_PORT_BY_AGENT: Record<Agent, string> = {
   'claude-agent-sdk': '6790',
-  'openai-agents-sdk': '6791',
-  'google-adk': '6792',
+  'openai-agents-sdk': '6790',
+  'google-adk': '6790',
 };
 
 interface Args {
@@ -122,7 +153,10 @@ Options:
   --install          Run \`pnpm install\` after scaffolding.
   --no-git           Skip \`git init\` + initial commit (done by default).
   --force            Overwrite target if it exists (non-empty).
-  --ref <ref>        git ref of ${REPO_URL} to clone from (default: ${REPO_REF}).
+  --ref <ref>        Clone the live mirror at this git ref instead of using the
+                     bundled templates (default: bundled). Equivalent to
+                     setting GGUI_TEMPLATES_REF; both override the offline
+                     bundle and require \`git\`. Mirror: ${REPO_URL}.
   --list-agents      Print the supported agent SDKs and exit.
   --help, -h         Show this help.
 `);
@@ -159,6 +193,13 @@ function shallowClone(ref: string, dest: string): void {
   if (r.status !== 0) {
     console.error(`\n✗ git clone failed — is ${REPO_URL} reachable?`);
     process.exit(1);
+  }
+}
+
+/** Remove build artifacts that may have slipped into the copied tree. */
+function stripArtifacts(targetDir: string): void {
+  for (const junk of ['node_modules', 'dist', 'dist-ui', '.turbo']) {
+    rmSync(join(targetDir, junk), { recursive: true, force: true });
   }
 }
 
@@ -276,8 +317,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  ensureGitAvailable();
-
   // Resolve target dir + name. Positional target doubles as name unless
   // --name overrides.
   let target = args.target;
@@ -332,30 +371,41 @@ async function main(): Promise<void> {
     }
   }
 
-  // 1. Shallow-clone the templates repo into a tmpdir.
-  const tmp = mkdtempSync(join(tmpdir(), 'create-agentic-app-'));
-  try {
-    shallowClone(args.ref ?? REPO_REF, tmp);
+  // 1+2. Source the chosen template tree into the target. Default: copy from
+  // the bundled, exact-pinned templates (offline). Override: clone the live
+  // mirror when GGUI_TEMPLATES_REPO_URL / GGUI_TEMPLATES_REF / --ref is set.
+  if (wantsCloneOverride(args)) {
+    ensureGitAvailable();
+    const tmp = mkdtempSync(join(tmpdir(), 'create-agentic-app-'));
+    try {
+      shallowClone(args.ref ?? REPO_REF, tmp);
 
-    const sourceSubdir = join(tmp, agent);
-    if (!existsSync(sourceSubdir)) {
-      console.error(`\n✗ "${agent}" is not in ${REPO_URL} yet.`);
-      console.error('  Available subdirs:');
-      for (const d of readdirSync(tmp).filter((d) => !d.startsWith('.'))) {
-        console.error(`    - ${d}`);
+      const sourceSubdir = join(tmp, agent);
+      if (!existsSync(sourceSubdir)) {
+        console.error(`\n✗ "${agent}" is not in ${REPO_URL} yet.`);
+        console.error('  Available subdirs:');
+        for (const d of readdirSync(tmp).filter((d) => !d.startsWith('.'))) {
+          console.error(`    - ${d}`);
+        }
+        process.exit(1);
       }
+
+      cpSync(sourceSubdir, targetAbs, { recursive: true });
+      stripArtifacts(targetAbs);
+      console.log(`✓ scaffolded ${agent} into ${targetAbs} (from cloned mirror)`);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  } else {
+    const sourceSubdir = join(BUNDLED_TEMPLATES_DIR, agent);
+    if (!existsSync(sourceSubdir)) {
+      console.error(`\n✗ bundled template for "${agent}" not found at ${sourceSubdir}.`);
+      console.error('  This is a packaging bug — the CLI ships its templates in dist/templates/.');
       process.exit(1);
     }
-
-    // 2. Copy the chosen template subdir into the target.
     cpSync(sourceSubdir, targetAbs, { recursive: true });
-    // Strip any artifacts that slipped in.
-    for (const junk of ['node_modules', 'dist', 'dist-ui', '.turbo']) {
-      rmSync(join(targetAbs, junk), { recursive: true, force: true });
-    }
-    console.log(`✓ scaffolded ${agent} into ${targetAbs}`);
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    stripArtifacts(targetAbs);
+    console.log(`✓ scaffolded ${agent} into ${targetAbs} (from bundled templates)`);
   }
 
   // 3. Rename root + per-server packages.
