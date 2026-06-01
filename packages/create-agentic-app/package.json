@@ -14,7 +14,6 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../../scripts/build-templates.mjs --all --out-base=dist/templates --pin=$(node -p \"require('./package.json').version\") && chmod +x dist/cli.js",
-    "prepack": "pnpm build",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
