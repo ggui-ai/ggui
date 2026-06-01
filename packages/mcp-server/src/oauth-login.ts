@@ -48,6 +48,7 @@ import {
   type OAuthLoginProvider,
 } from './oauth-login-types.js';
 import type { Logger } from './logger.js';
+import { singleParam } from './route-param.js';
 
 export const DEFAULT_OAUTH_START_PATH = '/ggui/oauth-login/:providerId/start';
 export const DEFAULT_OAUTH_CALLBACK_PATH =
@@ -172,7 +173,7 @@ export function mountOAuthLoginRoutes(
 
   // --- GET /ggui/oauth-login/:providerId/start ---
   app.get(startPath, async (req: Request, res: Response) => {
-    const providerId = req.params['providerId'];
+    const providerId = singleParam(req.params['providerId']);
     const reqLogger = opts.logger.child({
       route: 'GET ' + startPath,
       providerId: providerId ?? '<missing>',
@@ -232,7 +233,7 @@ export function mountOAuthLoginRoutes(
 
   // --- GET /ggui/oauth-login/:providerId/callback ---
   app.get(callbackPath, async (req: Request, res: Response) => {
-    const providerId = req.params['providerId'];
+    const providerId = singleParam(req.params['providerId']);
     const reqLogger = opts.logger.child({
       route: 'GET ' + callbackPath,
       providerId: providerId ?? '<missing>',

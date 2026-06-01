@@ -22,6 +22,7 @@ import type {
   SessionStreamBuffer,
 } from '@ggui-ai/mcp-server-core';
 import { applyDevtoolSecurityHeaders } from './console-headers.js';
+import { singleParam } from './route-param.js';
 
 /** One row in `GET /ggui/console/timeline/renders`. */
 interface TimelineRenderSummary {
@@ -184,7 +185,7 @@ export function mountConsoleTimelineRoutes(
     async (req: Request, res: Response) => {
       applyDevtoolSecurityHeaders(res);
 
-      const renderId = req.params['renderId'];
+      const renderId = singleParam(req.params['renderId']);
       if (!renderId || renderId.length === 0) {
         res.status(400).json({
           error: 'invalid_render_id',

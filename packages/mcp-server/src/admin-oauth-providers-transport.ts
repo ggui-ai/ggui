@@ -33,6 +33,7 @@ import { resolveIdentity, UnauthenticatedError } from './auth.js';
 import type { Logger } from './logger.js';
 import type { OAuthProviderConfigRecord } from './oauth-login-types.js';
 import type { OAuthProvidersStore } from './oauth-providers-store.js';
+import { singleParam } from './route-param.js';
 
 export const DEFAULT_ADMIN_OAUTH_PROVIDERS_PATH = '/ggui/admin/oauth-providers';
 
@@ -167,7 +168,7 @@ export function mountAdminOAuthProvidersTransport(
   app.put(`${basePath}/:providerId`, async (req: Request, res: Response) => {
     const reqLogger = opts.logger.child({ route: 'PUT ' + basePath + '/:providerId' });
     if (!(await requireBuilder(req, res, reqLogger))) return;
-    const providerId = req.params['providerId'] ?? '';
+    const providerId = singleParam(req.params['providerId']) ?? '';
     const body = (req.body ?? {}) as Record<string, unknown>;
     const clientId = typeof body['clientId'] === 'string' ? body['clientId'] : undefined;
     const clientSecret =
@@ -243,7 +244,7 @@ export function mountAdminOAuthProvidersTransport(
         route: 'POST ' + basePath + '/:providerId/toggle',
       });
       if (!(await requireBuilder(req, res, reqLogger))) return;
-      const providerId = req.params['providerId'] ?? '';
+      const providerId = singleParam(req.params['providerId']) ?? '';
       const body = (req.body ?? {}) as Record<string, unknown>;
       const enabled = typeof body['enabled'] === 'boolean' ? body['enabled'] : undefined;
       if (enabled === undefined) {
@@ -310,7 +311,7 @@ export function mountAdminOAuthProvidersTransport(
         route: 'DELETE ' + basePath + '/:providerId',
       });
       if (!(await requireBuilder(req, res, reqLogger))) return;
-      const providerId = req.params['providerId'] ?? '';
+      const providerId = singleParam(req.params['providerId']) ?? '';
       try {
         await opts.store.remove(providerId);
         reqLogger.info('admin_oauth_providers_remove', { providerId });

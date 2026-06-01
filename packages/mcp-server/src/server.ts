@@ -140,6 +140,7 @@ import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-s
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { type Express, type Request, type Response } from "express";
+import type { ParamsDictionary } from "express-serve-static-core";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -154,6 +155,7 @@ import {
 } from "./console-auth.js";
 import { BoundedCacheTraceSink, mountConsoleCacheRoutes } from "./console-cache.js";
 import { applyDevtoolSecurityHeaders } from "./console-headers.js";
+import { singleParam } from "./route-param.js";
 import { BoundedLlmTraceSink, mountConsoleLlmTraceRoutes } from "./console-llm-trace.js";
 import { BoundedPayloadTraceSink, mountConsolePayloadsRoutes } from "./console-payloads.js";
 import {
@@ -1795,7 +1797,7 @@ export interface CreateGguiServerOptions {
 
   /**
    * Per-tenant URL routing. When set, the factory
-   * additionally mounts `${pathPrefix}/:${paramName}(${paramPattern})`
+   * additionally mounts `${pathPrefix}/:${paramName}`
    * alongside the universal path. The shared handler reads
    * `req.params[paramName]` and uses it as `ctx.appId`, overriding
    * `appIdFromIdentity` for that request.
@@ -1808,13 +1810,15 @@ export interface CreateGguiServerOptions {
    * bare-root system route like `/health` or `/settings`.
    *
    * Without `pathPrefix`, the route mounts at the bare
-   * `/:${paramName}(${paramPattern})` — useful only when the
-   * deployment owns the entire URL space and the pattern guarantees
-   * no collision (e.g. UUIDs).
+   * `/:${paramName}` — useful only when the deployment owns the
+   * entire URL space and the pattern guarantees no collision
+   * (e.g. UUIDs).
    *
-   * Pattern is an Express-compatible regex (no slashes, no flags).
-   * Express only matches the URL when it satisfies the pattern; a
-   * malformed appId 404s instead of reaching the handler.
+   * Pattern is a JS regex source (no slashes, no flags). `path-to-
+   * regexp` v8 (express@5) dropped inline `:param(pattern)` route
+   * syntax, so the factory enforces `paramPattern` with an `app.param`
+   * validator (anchored full-match) rather than baking it into the
+   * route string; a malformed appId 404s before reaching the handler.
    *
    * `authorize` is the deployment-specific access check. After auth
    * resolves but before session work begins, the handler invokes it
@@ -4134,9 +4138,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // (also us) issue tokens bound to either resource via RFC 8707
     // resource indicators.
     if (opts.perAppRouting !== undefined) {
-      const { paramName, paramPattern, pathPrefix = "" } = opts.perAppRouting;
-      app.get(
-        `${pathPrefix}/:${paramName}(${paramPattern})/.well-known/oauth-protected-resource`,
+      const { paramName, pathPrefix = "" } = opts.perAppRouting;
+      // `path-to-regexp` v8 (express@5) removed the `:param(pattern)`
+      // inline-regex route syntax — registering one throws at startup.
+      // Per-app routes now mount with a PLAIN named param; `paramPattern`
+      // is enforced by a single `app.param` validator (registered with
+      // the per-app MCP route below) that 404s any value failing a
+      // full-anchored match. Express resolves `app.param` callbacks at
+      // dispatch time for any route declaring the param, regardless of
+      // registration order, so this well-known route inherits the check
+      // even though the validator is wired further down.
+      //
+      // `req.params` can't be indexed by the runtime `paramName` under
+      // the v8 param-key inference, so pin the params type to the plain
+      // string dictionary (`ParamsDictionary`) — the legitimate
+      // single-value param shape — so the `paramName` lookup resolves
+      // to `string`.
+      app.get<ParamsDictionary>(
+        `${pathPrefix}/:${paramName}/.well-known/oauth-protected-resource`,
         (req, res) => {
           const appId = req.params[paramName];
           if (typeof appId !== "string" || appId.length === 0) {
@@ -4626,21 +4645,34 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // and uses it as `ctx.appId` for the request.
   //
   // When `pathPrefix` is set, the route mounts at
-  // `${pathPrefix}/:${paramName}(${paramPattern})` — cloud uses
-  // `/apps` so URLs are `mcp.ggui.ai/apps/<appId>`. The prefix
-  // segments per-tenant traffic from system routes
-  // (`/health`, `/oauth/*`, `/.well-known/*`, `/r/*`) so an opaque
-  // appId can never shadow a future static path.
+  // `${pathPrefix}/:${paramName}` — cloud uses `/apps` so URLs are
+  // `mcp.ggui.ai/apps/<appId>`. The prefix segments per-tenant traffic
+  // from system routes (`/health`, `/oauth/*`, `/.well-known/*`,
+  // `/r/*`) so an opaque appId can never shadow a future static path.
   //
-  // Without `pathPrefix`, the route mounts bare. Pattern's regex
-  // constraint is the only collision defense — fine when the
-  // pattern guarantees non-collision (e.g. UUIDs).
+  // Without `pathPrefix`, the route mounts bare. The `paramPattern`
+  // constraint is the only collision defense — fine when the pattern
+  // guarantees non-collision (e.g. UUIDs).
+  //
+  // `path-to-regexp` v8 (express@5) dropped the `:param(pattern)`
+  // inline-regex syntax, so the pattern is enforced via a single
+  // `app.param` validator (anchored full-match) rather than baked into
+  // the route string. Registered once here; Express resolves it at
+  // dispatch for EVERY route declaring `paramName` — the per-app
+  // well-known route above AND this MCP route — regardless of
+  // registration order. A value failing the pattern 404s before any
+  // handler runs.
   if (opts.perAppRouting !== undefined) {
     const { paramName, paramPattern, pathPrefix } = opts.perAppRouting;
-    const route =
-      pathPrefix !== undefined
-        ? `${pathPrefix}/:${paramName}(${paramPattern})`
-        : `/:${paramName}(${paramPattern})`;
+    const appIdPattern = new RegExp(`^(?:${paramPattern})$`);
+    app.param(paramName, (_req, res, next, val) => {
+      if (typeof val !== "string" || !appIdPattern.test(val)) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      next();
+    });
+    const route = pathPrefix !== undefined ? `${pathPrefix}/:${paramName}` : `/:${paramName}`;
     app.post(route, agentMcpHandler);
   }
 
@@ -4754,7 +4786,17 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // `/ui://ggui/render` shell HTML setting `s.type='module'`
         // (`mcp-apps-outbound.ts::GGUI_SESSION_SHELL_SCRIPT_BODY`).
         res.setHeader("Access-Control-Allow-Origin", "*");
-        res.sendFile(runtimeBundleFile);
+        // `dotfiles: 'allow'` — express@5's `res.sendFile` (send@1.x)
+        // splits the FULL absolute path into segments and applies its
+        // default `dotfiles: 'ignore'` policy, which 404s any file whose
+        // path crosses a dot-prefixed directory segment (e.g. a checkout
+        // under `~/.local/...` or a git worktree under `.../.git/...`).
+        // `runtimeBundleFile` is a fixed, server-controlled absolute path
+        // — never derived from the request — so there is no traversal
+        // surface to protect; allow the bundle to serve regardless of
+        // where the package install tree happens to live. express@4's
+        // `sendFile` did not subject the parent directories to this check.
+        res.sendFile(runtimeBundleFile, { dotfiles: "allow" });
       });
     } else {
       logger.warn("renderer_bundle_missing", {
@@ -7128,7 +7170,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       app.get("/ggui/console/renders/:renderId/meta", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const renderIdFromPath = req.params["renderId"];
+        const renderIdFromPath = singleParam(req.params["renderId"]);
         const verified = await gateDevtoolRenderRequest(req, res, renderIdFromPath);
         if (!verified) return;
         if (!mintBootstrap) {
