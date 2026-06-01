@@ -169,7 +169,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     expect(token.length).toBeGreaterThan(0);
 
     // Post-Phase-B render is handshake-first: handshake → render
-    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // ({handshakeId, props, override?}). The prior `ggui_new_session` mint is
     // gone — every render IS the addressable scope.
     const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
       name: 'ggui_handshake',
@@ -186,7 +186,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
 
     const renderEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
       name: 'ggui_render',
-      arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+      arguments: { handshakeId, props: {}, override: { contract: {} } },
     });
     expect(renderEnv.error).toBeUndefined();
     // Post-Phase-B structuredContent surface: {renderId, url, action,

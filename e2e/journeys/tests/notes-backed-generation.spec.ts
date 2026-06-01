@@ -186,7 +186,7 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     ].join(' ');
 
     // Post-Phase-B render is handshake-first: handshake → render
-    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // ({handshakeId, props, override?}). The prior `ggui_new_session` mint is
     // gone — every render IS the addressable scope. Direct story-
     // shaped render is retired; the legacy `story.context` carrier
     // for backing state is no longer on the wire (the generator picks
@@ -210,7 +210,7 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     const renderEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
       mcpCallAs(baseUrl, token, 'tools/call', {
         name: 'ggui_render',
-        arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+        arguments: { handshakeId, props: {}, override: { contract: {} } },
       }),
       new Promise((_resolve, reject) =>
         setTimeout(

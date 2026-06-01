@@ -331,7 +331,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
 
     const renderEnvelope = await mcpCall(baseUrl, pairToken, "tools/call", {
       name: "ggui_render",
-      arguments: { handshakeId, decision: { kind: "override", blueprintDraft: { contract: {} } } },
+      arguments: { handshakeId, props: {}, override: { contract: {} } },
     });
     const renderResult = renderEnvelope.result as {
       content?: ReadonlyArray<{ type: string; text: string }>;

@@ -202,7 +202,7 @@ test.describe.serial(
       const renderEnv = await Promise.race<ReturnType<typeof mcpCallAs>>([
         mcpCallAs(handle.baseUrl, token, 'tools/call', {
           name: 'ggui_render',
-          arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+          arguments: { handshakeId, props: {}, override: { contract: {} } },
         }),
         new Promise((_resolve, reject) =>
           setTimeout(

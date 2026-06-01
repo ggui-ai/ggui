@@ -94,7 +94,7 @@ test.describe.serial(
       const { token } = await mintPairToken(handle, 'session-inspector-spec');
 
       // Post-Phase-B render is handshake-first: handshake → render
-      // ({handshakeId, decision}). Direct story-shaped render is
+      // ({handshakeId, props, override?}). Direct story-shaped render is
       // retired; the prior `ggui_new_session` step is gone (every
       // render IS the addressable scope).
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
@@ -117,7 +117,7 @@ test.describe.serial(
       const env = await Promise.race<ReturnType<typeof mcpCallAs>>([
         mcpCallAs(handle.baseUrl, token, 'tools/call', {
           name: 'ggui_render',
-          arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+          arguments: { handshakeId, props: {}, override: { contract: {} } },
         }),
         new Promise((_resolve, reject) =>
           setTimeout(

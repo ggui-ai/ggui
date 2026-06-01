@@ -175,8 +175,9 @@ describe('Tasks MCP mounted on createGguiServer — real /mcp wire', () => {
     const client = await connectClient(fx.url);
     try {
       // Post-Phase-B render is handshake-first: handshake(intent,
-      // blueprintDraft) → render(handshakeId, decision). The prior
-      // `ggui_new_session` mint is gone — every render IS the
+      // blueprintDraft) → render(handshakeId, props, override?). Accept
+      // (reuse the handshake proposal as-is) omits `override` entirely.
+      // The prior `ggui_new_session` mint is gone — every render IS the
       // addressable scope.
       const hs = (await client.callTool({
         name: 'ggui_handshake',
@@ -189,7 +190,7 @@ describe('Tasks MCP mounted on createGguiServer — real /mcp wire', () => {
         name: 'ggui_render',
         arguments: {
           handshakeId: hs.handshakeId,
-          decision: { kind: 'accept' },
+          props: {},
         },
       });
       const structured = result.structuredContent as {

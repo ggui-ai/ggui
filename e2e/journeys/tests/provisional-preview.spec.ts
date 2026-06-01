@@ -127,7 +127,7 @@ test.describe.serial(
 
       const renderEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_render',
-        arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+        arguments: { handshakeId, props: {}, override: { contract: {} } },
       });
       expect(renderEnv.error).toBeUndefined();
       // Post-Phase-B structuredContent: {renderId, url, action,

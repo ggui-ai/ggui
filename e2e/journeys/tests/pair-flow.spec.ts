@@ -358,7 +358,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     expect(toolNames).not.toContain('ggui_render_blueprint');
 
     // Post-Phase-B render is handshake-first: handshake → render
-    // ({handshakeId, decision}). The prior `ggui_new_session` mint is
+    // ({handshakeId, props, override?}). The prior `ggui_new_session` mint is
     // gone — every render IS the addressable scope.
     const hsEnv = await mcpCallAs(handle.baseUrl, completion.token, 'tools/call', {
       name: 'ggui_handshake',
@@ -378,7 +378,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
       'tools/call',
       {
         name: 'ggui_render',
-        arguments: { handshakeId, decision: { kind: 'override', blueprintDraft: { contract: {} } } },
+        arguments: { handshakeId, props: {}, override: { contract: {} } },
       },
     );
     expect(renderEnv.error).toBeUndefined();
