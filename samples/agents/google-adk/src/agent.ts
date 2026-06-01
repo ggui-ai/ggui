@@ -19,6 +19,7 @@ import {
   InMemorySessionService,
   InMemoryArtifactService,
 } from '@google/adk';
+import { ThinkingLevel } from '@google/genai';
 import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
 import type {
   AgentAdapter,
@@ -113,6 +114,17 @@ export function createGoogleAdkAdapter(
       description:
         'A ggui-aware agent that renders interactive UI via MCP tools.',
       instruction,
+      // Gemini-3 models (incl. gemini-3.5-flash) default to thinkingLevel
+      // HIGH, which makes the multi-step render → consume → update loop too
+      // slow to land within host/test budgets (it blows the scaffold-render
+      // 240s render budget where claude/openai finish in ~44s). ADK 1.1.0 (JS)
+      // ships no `planner`, so the documented thinking-config path is
+      // unreachable — but `generateContentConfig` is spread verbatim onto the
+      // request (basic_llm_request_processor), so thinkingConfig rides through
+      // here. MINIMAL is the floor (the enum has no "off").
+      generateContentConfig: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      },
       tools,
     });
 

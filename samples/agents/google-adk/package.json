@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/adk": "^1.1.0",
+    "@google/genai": "^1.37.0",
     "@ggui-ai/agent-server": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "dotenv": "^16.4.5",
