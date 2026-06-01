@@ -220,12 +220,12 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
   });
 
   // §2.H "contract-less push isolation" was authored before the
-  // three-step (D10) handshake locked. Today push REQUIRES a handshake-
-  // sourced decision (accept the server's suggestion or override with
-  // a fresh blueprintDraft), so genuinely contract-less pushes cannot
-  // reach the registry — the relevant isolation now lives at the
-  // handshake input layer and is covered by the negotiator-side tests
-  // in @ggui-ai/negotiator.
+  // three-step (D10) handshake locked. Today render REQUIRES a
+  // handshake-sourced proposal (accept it as-is by omitting `override`,
+  // or supply `override: {contract}` to STRICT-regen), so genuinely
+  // contract-less pushes cannot reach the registry — the relevant
+  // isolation now lives at the handshake input layer and is covered by
+  // the negotiator-side tests in @ggui-ai/negotiator.
   it.skip('§2.H: pushes WITHOUT contract are not registered (no Tier 1 hits possible)', async () => {
     await boot();
 

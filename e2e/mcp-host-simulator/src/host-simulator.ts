@@ -204,26 +204,20 @@ export interface HandshakeOutput {
 }
 
 /**
- * Render input decision discriminator. Mirrors the protocol's
- * `RenderDecision`. `accept` reuses the handshake suggestion's
- * provisional `blueprintMeta` verbatim; `override` mints a fresh
- * `blueprintId` against a new draft.
+ * `ggui_render` override input — mirrors the protocol render `override?` shape.
+ * PATCH the handshake proposal by re-drafting the contract (STRICT) and/or
+ * re-aiming the variant. OMIT `override` on a render call to ACCEPT the
+ * proposal as-is.
  */
-export type RenderDecisionInput =
-  | { readonly kind: "accept" }
-  | {
-      readonly kind: "override";
-      readonly blueprintDraft: {
-        readonly contract: Record<string, unknown>;
-        readonly variance?: {
-          readonly persona?: string;
-          readonly aesthetic?: string;
-          readonly context?: Record<string, unknown>;
-          readonly seedPrompt?: string;
-        };
-        readonly generator?: string;
-      };
-    };
+export interface RenderOverrideInput {
+  readonly contract?: Record<string, unknown>;
+  readonly variance?: {
+    readonly persona?: string;
+    readonly aesthetic?: string;
+    readonly context?: Record<string, unknown>;
+    readonly seedPrompt?: string;
+  };
+}
 
 /**
  * Args for {@link HostSimulator.simulateWiredAction}. Mirrors the
@@ -484,25 +478,26 @@ export class HostSimulator {
   }
 
   /**
-   * Convenience wrapper for `ggui_render` — post-Phase-B input shape:
-   * `{handshakeId, decision, props?}`. The `decision` discriminator
-   * routes the render:
+   * Convenience wrapper for `ggui_render` — input shape:
+   * `{handshakeId, props, override?}`. `props` is REQUIRED (pass `{}`
+   * when the contract declares no propsSpec). Disposition is expressed
+   * by the PRESENCE of `override`:
    *
-   *   - `{kind: 'accept'}` — reuse the handshake suggestion's
-   *     provisional blueprintId verbatim. Cache delivery (origin ===
-   *     'cache') or gen-against-suggestion (origin === 'agent' /
-   *     'synth').
-   *   - `{kind: 'override', blueprintDraft: {...}}` — mint a fresh
-   *     blueprintId and gen against a new draft. Discards the
-   *     handshake's provisional id.
+   *   - OMIT `override` — ACCEPT the handshake proposal as-is. Cache
+   *     delivery (origin === 'cache') or gen-against-suggestion
+   *     (origin === 'agent' / 'synth').
+   *   - `override: {contract}` — STRICT cold-gen from the new contract
+   *     (no repair). Discards the handshake's provisional draft.
+   *   - `override: {variance}` — re-aim persona/aesthetic/context/
+   *     seedPrompt while keeping the agreed contract.
    *
    * The return mirrors {@link callTool}'s `CallToolResult`, with
    * `meta` populated when the render minted bootstrap data.
    */
   async render(args: {
     readonly handshakeId: string;
-    readonly decision: RenderDecisionInput;
-    readonly props?: unknown;
+    readonly props: Record<string, unknown>;
+    readonly override?: RenderOverrideInput;
     /** Forwarded to {@link callTool} — see its `options.timeoutMs`. */
     readonly timeoutMs?: number;
   }): Promise<CallToolResult> {
@@ -510,8 +505,8 @@ export class HostSimulator {
       "ggui_render",
       {
         handshakeId: args.handshakeId,
-        decision: args.decision,
-        ...(args.props !== undefined ? { props: args.props } : {}),
+        props: args.props,
+        ...(args.override !== undefined ? { override: args.override } : {}),
       },
       args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : undefined
     );
@@ -525,11 +520,11 @@ export class HostSimulator {
    *
    * Default behavior: the simulator handshakes with the agent's
    * `blueprintDraft` (or `{contract: {}}` when none is provided), then
-   * accepts the server's suggestion verbatim (`decision: 'accept'`).
-   * Pass `decision: {kind: 'override', blueprintDraft: {...}}` to
-   * mint a fresh blueprintId on render instead. To skip blueprint-
-   * search on handshake and force the agent-mode suggestion path,
-   * set `forceCreate: true`.
+   * ACCEPTS the server's proposal as-is (no `override` on render).
+   * Pass `override: {contract}` to STRICT-regen against a fresh
+   * contract, or `override: {variance}` to re-aim the variant while
+   * keeping the agreed contract. To skip blueprint-search on handshake
+   * and force the agent-mode suggestion path, set `forceCreate: true`.
    */
   async openRender(args: {
     readonly intent: string;
@@ -544,8 +539,8 @@ export class HostSimulator {
       readonly generator?: string;
     };
     readonly forceCreate?: boolean;
-    readonly decision?: RenderDecisionInput;
-    readonly props?: unknown;
+    readonly override?: RenderOverrideInput;
+    readonly props?: Record<string, unknown>;
   }): Promise<{
     readonly handshakeId: string;
     readonly contractHash: string;
@@ -565,11 +560,9 @@ export class HostSimulator {
 
     const renderArgs: Parameters<typeof this.render>[0] = {
       handshakeId: handshake.handshakeId,
-      decision: args.decision ?? { kind: "accept" },
+      props: args.props ?? {},
+      ...(args.override !== undefined ? { override: args.override } : {}),
     };
-    if (args.props !== undefined) {
-      (renderArgs as { props?: unknown }).props = args.props;
-    }
     const renderResult = await this.render(renderArgs);
     return {
       handshakeId: handshake.handshakeId,
