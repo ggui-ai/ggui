@@ -111,7 +111,7 @@
     "react-native-webview": "^13.16.0",
     "react-test-renderer": "19.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.0"
   },
   "bugs": {
     "url": "https://github.com/ggui-ai/ggui/issues"
