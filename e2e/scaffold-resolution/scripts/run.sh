@@ -19,7 +19,7 @@ REGISTRY="${REGISTRY:-http://localhost:4874}"
 # @ggui-ai/ui-gen packs to ~18 MB (the golden-path default is 10 MB).
 VERDACCIO_CONFIG="$REPO_ROOT/oss/e2e/scaffold-resolution/verdaccio.yaml"
 PUBLISH_ALL="$REPO_ROOT/oss/e2e/clean-room-consumer/scripts/publish-all.sh"
-ASSEMBLER="$REPO_ROOT/scripts/build-templates.mjs"
+ASSEMBLER="$REPO_ROOT/oss/scripts/build-templates.mjs"
 CONTAINER=ggui-scaffold-verdaccio
 WORK="$(mktemp -d)"
 SDKS=(claude-agent-sdk openai-agents-sdk google-adk)

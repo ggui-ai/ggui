@@ -48,7 +48,7 @@ workspace symlinks.
 ## How it works
 
 Five stages, orchestrated by `scripts/run.sh`, run **on the host** (not inside
-a clean-room container — the template assembler `scripts/build-templates.mjs`
+a clean-room container — the template assembler `oss/scripts/build-templates.mjs`
 is monorepo-rooted and must run in the monorepo tree):
 
 ### [1/5] Build
@@ -81,7 +81,7 @@ from the live dep graph by `compute-order.mjs` — no hand-kept list).
 ### [4/5] Assemble templates
 
 ```
-node scripts/build-templates.mjs --all --out-base=<tmpdir>/templates-src
+node oss/scripts/build-templates.mjs --all --out-base=<tmpdir>/templates-src
 ```
 
 Runs the monorepo's template assembler in **published-version-range** mode
