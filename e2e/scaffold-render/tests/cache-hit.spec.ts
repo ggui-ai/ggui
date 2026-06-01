@@ -452,23 +452,32 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
       test.setTimeout(1_500_000);
       app = app ?? (await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' }));
 
-      // Turn-1: ACCEPT a forceCreate handshake under V_MIN. forceCreate makes the
-      // render point-read miss → cold-gen → registers under variantKey(V_MIN).
+      // Turn-1: ESTABLISH the V_MIN blueprint via `override.contract` — a STRICT
+      // cold-gen that bypasses the matcher, so it deterministically registers under
+      // (blueprintKey(CONTRACT_V1), variantKey(V_MIN)). A bare accept would NOT do
+      // this: the relaxed semantic matcher reuses a prior gauge blueprint under its
+      // DEFAULT variance (all these gauge contracts are embedding-similar, cosine
+      // ≈0.75-0.94), DROPPING V_MIN — proven by an earlier run where every turn-1
+      // collapsed onto the soil-moisture blueprint at variantKey({}). Pinning via
+      // override.contract+variance is what actually exercises the variant axis.
       const render1 = await renderOnce(app.gguiUrl, {
         intent: INTENT_V1,
         contract: CONTRACT_V1,
         variance: V_MIN,
         forceCreate: true,
+        override: { contract: CONTRACT_V1, variance: V_MIN },
       });
-      // Turn-2: same contract, but `override.variance = V_DENSE` re-aims the
-      // effective variance → point-read (contractKey, variantKey(V_DENSE)) misses
-      // → cold-gen → registers under variantKey(V_DENSE).
+      // Turn-2: same contract under V_DENSE. Pin BOTH via override so the
+      // (contractHash, variantKey) identity is fully controlled (no reliance on the
+      // cross-gauge semantic matcher): STRICT cold-gen → registers under
+      // (blueprintKey(CONTRACT_V1), variantKey(V_DENSE)) — same contractHash as
+      // turn-1, different variantKey ⇒ a distinct blueprint.
       const render2 = await renderOnce(app.gguiUrl, {
         intent: INTENT_V1,
         contract: CONTRACT_V1,
         variance: V_DENSE,
         forceCreate: false,
-        override: { variance: V_DENSE },
+        override: { contract: CONTRACT_V1, variance: V_DENSE },
       });
       // eslint-disable-next-line no-console -- variance differentiation signal.
       console.log(
@@ -511,13 +520,17 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
       test.setTimeout(1_500_000);
       app = app ?? (await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' }));
 
-      // Turn-1: ACCEPT a forceCreate handshake under V_MIN → cold-gen → register
-      // under variantKey(V_MIN).
+      // Turn-1: ESTABLISH the V_MIN blueprint via `override.contract` (STRICT
+      // cold-gen, bypasses the cross-gauge matcher) → deterministically registers
+      // under (blueprintKey(CONTRACT_V2), variantKey(V_MIN)). This is what makes
+      // turn-2's exact-key hit below a REAL variance-aware reuse (not a collapse
+      // onto a prior default-variant gauge blueprint).
       const render1 = await renderOnce(app.gguiUrl, {
         intent: INTENT_V2,
         contract: CONTRACT_V2,
         variance: V_MIN,
         forceCreate: true,
+        override: { contract: CONTRACT_V2, variance: V_MIN },
       });
       // Turn-2: same contract + same variance, no forceCreate → handshake
       // exact-key (contractKey, variantKey(V_MIN)) HITS → origin:cache → ACCEPT
@@ -555,13 +568,17 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
       test.setTimeout(1_500_000);
       app = app ?? (await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' }));
 
-      // Turn-1: ACCEPT a forceCreate handshake under V_MIN → cold-gen → register
-      // under variantKey(V_MIN).
+      // Turn-1: ESTABLISH the V_MIN blueprint via `override.contract` (STRICT
+      // cold-gen, bypasses the cross-gauge matcher) → deterministically registers
+      // under (blueprintKey(CONTRACT_V3), variantKey(V_MIN)). Turn-2's V_DENSE
+      // exact-key then genuinely MISSES (a different variantKey), forcing the
+      // relaxed semantic path + VARIANCE_GAP — the disposes path this scenario tests.
       const render1 = await renderOnce(app.gguiUrl, {
         intent: INTENT_V3,
         contract: CONTRACT_V3,
         variance: V_MIN,
         forceCreate: true,
+        override: { contract: CONTRACT_V3, variance: V_MIN },
       });
       // RELIABILITY (the origin:cache + VARIANCE_GAP assertions ride on the live
       // rerank judge): playwright.config.ts sets `retries: 1`, absorbing transient
