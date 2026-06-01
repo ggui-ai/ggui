@@ -140,7 +140,7 @@ export async function runSloCase(
       { appId, requestId },
     );
     await handler.handler(
-      { handshakeId: hs.handshakeId, decision: { kind: 'accept' } },
+      { handshakeId: hs.handshakeId, props: {} },
       { appId, requestId },
     );
     // Open-source build: handler returns synchronously;
