@@ -49,8 +49,11 @@ import type { ServeBackend } from './serve-command.js';
 /**
  * Drive the canonical handshake-first render flow over MCP and return
  * the raw render result body. Performs `ggui_handshake({intent,
- * blueprintDraft})` → `ggui_render({handshakeId, decision})`, all
- * under one bearer token. Tests that want the structured render
+ * blueprintDraft})` → `ggui_render({handshakeId, props})`, all
+ * under one bearer token. `props` is required; omitting `override`
+ * accepts the handshake proposal as-is (an `override.contract`
+ * forces a strict cold-gen, `override.variance` re-aims the agreed
+ * contract). Tests that want the structured render
  * response or the bootstrap meta call this instead of fabricating
  * tools/call bodies inline (the direct-render shape was retired
  * post-synth-authority; `ggui_render` REQUIRES a handshakeId).
@@ -113,7 +116,7 @@ async function renderOverMcp(args: {
     'tools/call',
     {
       name: 'ggui_render',
-      arguments: { handshakeId, decision: { kind: 'accept' } },
+      arguments: { handshakeId, props: {} },
     },
     `${idBase}-render`,
   );
