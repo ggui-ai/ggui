@@ -1681,9 +1681,10 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       expect(hsContent.handshakeId).toBeTruthy();
       expect(hsContent.action).toBe('create');
 
-      // 2. Paired render consumes the record via decision:accept — the
+      // 2. Paired render reuses the record by OMITTING override — the
       //    handshake's stored suggestion contract is the effective
-      //    contract. Post-Phase-B: structuredContent is
+      //    contract. props is REQUIRED ({} for this no-propsSpec
+      //    contract). Post-Phase-B: structuredContent is
       //    {renderId, nextStep?, action} — `sessionId` + `stackItemId`
       //    collapse to `renderId`, no `url` (the `/r/<shortCode>` route
       //    was deleted; hosts mount via `_meta.ui.resourceUri` or
@@ -1692,7 +1693,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
-          decision: { kind: 'accept' },
+          props: {},
         },
       });
       expect(renderResult.isError).toBeFalsy();
@@ -1724,7 +1725,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
-          decision: { kind: 'accept' },
+          props: {},
         },
       });
       expect(first.isError).toBeFalsy();
@@ -1735,7 +1736,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         name: 'ggui_render',
         arguments: {
           handshakeId: hsContent.handshakeId,
-          decision: { kind: 'accept' },
+          props: {},
         },
       });
       expect(second.isError).toBe(true);
@@ -1761,7 +1762,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         name: 'ggui_render',
         arguments: {
           handshakeId: 'never-minted',
-          decision: { kind: 'accept' },
+          props: {},
         },
       });
       expect(result.isError).toBe(true);

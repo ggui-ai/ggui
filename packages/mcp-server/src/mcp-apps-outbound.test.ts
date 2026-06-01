@@ -81,8 +81,9 @@ async function handshakeAndRender(
   // Post-Phase-B (flatten-render-identity): the prior `ggui_new_session`
   // + `ggui_handshake({renderId})` + `ggui_push` triple collapses to
   // `ggui_handshake({intent, blueprintDraft})` + `ggui_render({handshakeId,
-  // decision})`. The renderId is minted by `ggui_render` itself (returned
-  // on the result's structuredContent).
+  // props})`. Accept = OMIT `override`; props is REQUIRED (pass {} for a
+  // no-propsSpec contract). The renderId is minted by `ggui_render` itself
+  // (returned on the result's structuredContent).
   const handshake = await client.callTool({
     name: 'ggui_handshake',
     arguments: {
@@ -95,7 +96,7 @@ async function handshakeAndRender(
   }).handshakeId;
   return client.callTool({
     name: 'ggui_render',
-    arguments: { handshakeId, decision: { kind: 'accept' } },
+    arguments: { handshakeId, props: {} },
   });
 }
 
