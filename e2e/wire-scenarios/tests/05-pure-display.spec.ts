@@ -46,7 +46,6 @@ describe.skipIf(!HAS_KEY)('Scenario 5 — pure-display render (no actionSpec)', 
     }>(
       await callTool(MCP_URL, 'ggui_render', {
         handshakeId: handshake.handshakeId,
-        decision: { kind: 'accept' },
         props: { title: 'Welcome to ggui' },
       }),
     );

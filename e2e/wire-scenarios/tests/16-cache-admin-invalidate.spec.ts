@@ -147,11 +147,8 @@ async function renderWithContract(): Promise<{
   const out = unwrapStructured<RenderOut>(
     await callTool(MCP_URL, 'ggui_render', {
       handshakeId: handshake.handshakeId,
-      decision: {
-        kind: 'override',
-        blueprintDraft: { contract: CACHE_ADMIN_CONTRACT },
-      },
       props: { message: 'hello' },
+      override: { contract: CACHE_ADMIN_CONTRACT },
     }),
   );
   const latencyMs = Date.now() - start;

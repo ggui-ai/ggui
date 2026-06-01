@@ -82,7 +82,7 @@ async function handshakeOnly(args: {
       blueprintDraft: { contract: args.contract },
       // Hint synth to skip the rewrite path so the gate validates the
       // agent's draft directly (cache + cohort fast-paths can still
-      // fire but `kind: 'override'` on render pins effective contract).
+      // fire but `override.contract` on render pins effective contract).
       forceCreate: true,
     }),
   );
@@ -150,7 +150,8 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     // Gate accepts.
     expect(readToolErrorMessage(renderResp)).toBeNull();
@@ -208,7 +209,8 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     });
     const renderResp = await callTool(MCP_URL_MISSING_ENV, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
@@ -248,7 +250,8 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();

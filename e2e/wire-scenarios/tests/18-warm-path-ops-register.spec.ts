@@ -24,7 +24,7 @@
  *      blueprintDraft: {contract: <same>}})`.
  *      Assert: `suggestion.origin === 'cache'`,
  *      `blueprintMeta.codeHash === sha256(componentCode)`.
- *   3. `ggui_render({handshakeId, decision: {kind: 'accept'}})`.
+ *   3. `ggui_render({handshakeId, props: {}})`  // accept: override omitted.
  *      Assert: `bootstrap.codeHash === <same sha256>`, render latency
  *      < 5s.
  *
@@ -172,7 +172,7 @@ describe(
         const renderStart = Date.now();
         const renderResp = await callTool(MCP_URL, 'ggui_render', {
           handshakeId: handshake.handshakeId,
-          decision: { kind: 'accept' },
+          props: {},
         });
         const render = unwrapStructured<RenderOut>(renderResp);
         const renderLatencyMs = Date.now() - renderStart;

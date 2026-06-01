@@ -24,12 +24,12 @@
  * `ggui_render` so a regression at the seam (render.ts wiring,
  * appMetadataStore plumbing in server.ts) lights up here too.
  *
- * # Why every render uses `decision.kind: 'override'`
+ * # Why every render uses `override.contract`
  *
  * The default ggui server has the LLM-backed negotiator wired (real
- * `ANTHROPIC_API_KEY` from `.env.local`). Sending `kind: 'accept'`
+ * `ANTHROPIC_API_KEY` from `.env.local`). Omitting `override` (accept)
  * would let synth amend the contract and the gate would validate the
- * AMENDED shape, not the test's intent. `kind: 'override'` pins the
+ * AMENDED shape, not the test's intent. `override.contract` pins the
  * effective contract to the agent's draft so the gate runs against
  * the actual hook references the test declares. This is the same
  * shape an agent uses in production when it's authored a complete
@@ -93,7 +93,7 @@ async function handshakeOnly(args: {
       intent: SCENARIO_INTENT,
       blueprintDraft: { contract: args.contract },
       // Hint synth to skip the rewrite path. Even with `forceCreate`
-      // the cache fast-path can still fire, but `kind: 'override'` on
+      // the cache fast-path can still fire, but `override.contract` on
       // render pins the effective contract regardless of suggestion
       // origin so the gate validates the agent's draft directly.
       forceCreate: true,
@@ -160,7 +160,8 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     // Gate accepts → render completes. No tool-level error envelope,
     // structuredContent carries the RenderBootstrap shape.
@@ -196,7 +197,8 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();
@@ -232,7 +234,8 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();

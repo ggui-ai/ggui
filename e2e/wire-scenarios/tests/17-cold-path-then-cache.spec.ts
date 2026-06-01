@@ -21,27 +21,28 @@
  *      blueprintDraft: {contract: COLD_PATH_CONTRACT}})`.
  *      Assert: `suggestion.origin !== 'cache'` (cold — should be
  *      `'agent'` or `'synth'`), `blueprintMeta.codeHash === undefined`.
- *   2. `ggui_render({handshakeId, decision: {kind: 'override',
- *      blueprintDraft: {contract: COLD_PATH_CONTRACT}}})`. Override
- *      forces render to use the LITERAL draft (not the negotiator's
- *      potentially-amended effectiveContract); cold-gen runs and
- *      registers `template:${blueprintKey(COLD_PATH_CONTRACT)}`.
+ *   2. `ggui_render({handshakeId, props: {}, override: {contract:
+ *      COLD_PATH_CONTRACT}})`. `override.contract` forces render to
+ *      STRICT cold-gen against the LITERAL draft (not the negotiator's
+ *      potentially-amended effectiveContract) and registers
+ *      `template:${blueprintKey(COLD_PATH_CONTRACT)}`.
  *      Capture `cold.bootstrap.codeHash`.
  *   3. `ggui_handshake({intent: COLD_PATH_INTENT_PARAPHRASED,
  *      blueprintDraft: {contract: COLD_PATH_CONTRACT}})`.
  *      Assert: `suggestion.origin === 'cache'`,
  *      `blueprintMeta.codeHash` present.
- *   4. `ggui_render({handshakeId, decision: {kind: 'accept'}})`.
+ *   4. `ggui_render({handshakeId, props: {}})`  // accept: override omitted.
  *      Assert: `warm.bootstrap.codeHash === cold.bootstrap.codeHash`
  *      AND warm render latency < 5s.
  *
  * **Why override on step 2, not accept**: the OSS negotiator's synth
  * runs on every cold handshake and may amend the draft (e.g. add a
- * required field). If step 2 went accept-path, `effectiveContract`
- * would be the amended contract, render would register under
- * `blueprintKey(amended)`, and step 3's handshake against the literal
- * draft would key-miss. Override pins the registered contract to the
- * literal draft so step 3's handshake exact-key matches.
+ * required field). If step 2 omitted `override` (accept path),
+ * `effectiveContract` would be the amended contract, render would
+ * register under `blueprintKey(amended)`, and step 3's handshake against
+ * the literal draft would key-miss. `override.contract` pins the
+ * registered contract to the literal draft so step 3's handshake
+ * exact-key matches.
  *
  * Gated on `ANTHROPIC_API_KEY` — step 2 cold-gens once.
  */
@@ -146,10 +147,8 @@ describe.skipIf(!HAS_KEY)(
         const coldRender = unwrapStructured<RenderOut>(
           await callTool(MCP_URL, 'ggui_render', {
             handshakeId: coldHandshake.handshakeId,
-            decision: {
-              kind: 'override',
-              blueprintDraft: { contract: COLD_PATH_CONTRACT },
-            },
+            props: {},
+            override: { contract: COLD_PATH_CONTRACT },
           }),
         );
         const coldBootstrap = await fetchBootstrap(coldRender.url);
@@ -185,7 +184,7 @@ describe.skipIf(!HAS_KEY)(
         const warmRender = unwrapStructured<RenderOut>(
           await callTool(MCP_URL, 'ggui_render', {
             handshakeId: warmHandshake.handshakeId,
-            decision: { kind: 'accept' },
+            props: {},
           }),
         );
         const warmRenderLatencyMs = Date.now() - warmRenderStart;

@@ -1,19 +1,19 @@
 /**
- * Scenario 11 — handshake → render plumbing: `override` uses its
- * literal `blueprintDraft.contract`, NOT the stored effectiveContract.
+ * Scenario 11 — handshake → render plumbing: `override.contract` uses
+ * its literal contract, NOT the stored effectiveContract.
  *
  * What this tests (plumbing, not content):
  *
  *   handshake({intent, blueprintDraft: A})
  *     -> negotiator runs against draft A, stores effectiveContract_A
  *
- *   render({handshakeId, decision: {kind: 'accept'}})
+ *   render({handshakeId, props})  // accept: override omitted
  *     -> render.ts reads handshakeRecord.effectiveContract (== A or
  *        augmented(A)) and cold-gens against it
  *
- *   render({handshakeId, decision: {kind: 'override', blueprintDraft: B}})
- *     -> render.ts reads decision.blueprintDraft.contract (== literal B,
- *        ignoring the stored effectiveContract_A)
+ *   render({handshakeId, props, override: {contract: B}})
+ *     -> render.ts reads override.contract (== literal B, ignoring the
+ *        stored effectiveContract_A) and STRICT cold-gens against it
  *
  * The pass criterion: when A and B are DIFFERENT contract shapes,
  * accept's codeHash MUST NOT equal override's codeHash — they're
@@ -147,14 +147,12 @@ async function handshakeAndRender(
   const out = unwrapStructured<RenderOut>(
     await callTool(mcpUrl, 'ggui_render', {
       handshakeId: handshake.handshakeId,
-      decision:
-        opts.decision === 'accept'
-          ? { kind: 'accept' }
-          : {
-              kind: 'override',
-              blueprintDraft: { contract: OVERRIDE_DRAFT_CONTRACT },
-            },
       props,
+      // accept = omit `override` (reuse the stored effectiveContract);
+      // override = pin our literal draft via `override.contract`.
+      ...(opts.decision === 'override'
+        ? { override: { contract: OVERRIDE_DRAFT_CONTRACT } }
+        : {}),
     }),
   );
   return fetchBootstrap(out.url);
@@ -177,7 +175,7 @@ for (const provider of PROVIDERS) {
       const MCP_URL = provider.mcpUrl;
 
       test(
-        'override uses its literal blueprintDraft.contract, not the stored effectiveContract',
+        'override uses its literal override.contract, not the stored effectiveContract',
         async () => {
           const accepted = await handshakeAndRender(MCP_URL, {
             seed: `scenario-11-accept-${provider.name}`,

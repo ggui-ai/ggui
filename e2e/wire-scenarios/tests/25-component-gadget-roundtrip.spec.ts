@@ -31,10 +31,10 @@
  * the gate against the STDLIB hook catalog, this pins it against an
  * operator-registered COMPONENT package.
  *
- * Every render uses `decision.kind: 'override'` for the same reason
- * scenario 19 does — it pins the effective contract to the agent's
- * draft so the gate validates the exact `(package, export)` references
- * the test declares, regardless of any synth/cache fast-path.
+ * Every render uses `override.contract` for the same reason scenario 19
+ * does — it pins the effective contract to the agent's draft so the
+ * gate validates the exact `(package, export)` references the test
+ * declares, regardless of any synth/cache fast-path.
  *
  * No LLM, no internet, no extra infrastructure for the gate path.
  */
@@ -138,7 +138,8 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     // Gate accepts a component-gadget reference → render completes.
     expect(readToolErrorMessage(renderResp)).toBeNull();
@@ -170,7 +171,8 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
     });
     const renderResp = await callTool(MCP_URL, 'ggui_render', {
       handshakeId,
-      decision: { kind: 'override', blueprintDraft: { contract } },
+      props: {},
+      override: { contract },
     });
     const message = readToolErrorMessage(renderResp);
     expect(message).not.toBeNull();

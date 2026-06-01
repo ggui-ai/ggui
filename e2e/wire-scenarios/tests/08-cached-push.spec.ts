@@ -17,21 +17,20 @@
  * opens a new chat → same UI request → expect instant cache hit
  * instead of re-paying cold-gen.
  *
- * **Why `decision: 'override'` instead of `'accept'`.** The cache is
- * keyed on `blueprintKey(effectiveContract)`. On the `accept` path
- * `effectiveContract` comes from the LLM-backed negotiator's
- * `decision.contract`, which is NOT byte-deterministic across separate
- * API round-trips even at temperature 0 (server-side sampling jitter
- * can shift a description string, reorder fields, etc.). When that
- * drifts, `blueprintKey` diverges, exact-key misses (Slice 18e gate
- * disables semantic fall-through when a contract is supplied),
- * cold-gen fires fresh, codeHash differs, test fails.
+ * **Why `override.contract` instead of accept (omitting override).** The
+ * cache is keyed on `blueprintKey(effectiveContract)`. On the accept path
+ * `effectiveContract` comes from the LLM-backed negotiator's proposed
+ * contract, which is NOT byte-deterministic across separate API
+ * round-trips even at temperature 0 (server-side sampling jitter can
+ * shift a description string, reorder fields, etc.). When that drifts,
+ * `blueprintKey` diverges, exact-key misses (Slice 18e gate disables
+ * semantic fall-through when a contract is supplied), cold-gen fires
+ * fresh, codeHash differs, test fails.
  *
- * `override` passes the LITERAL `blueprintDraft.contract` on render.
- * `story.contract` becomes the exact draft we sent — byte-identical
- * between renders — so `blueprintKey` collides and the cache exact-
- * key hits. This test now tests the CACHE LAYER honestly, decoupled
- * from negotiator determinism.
+ * `override.contract` passes the LITERAL draft on render. `story.contract`
+ * becomes the exact draft we sent — byte-identical between renders — so
+ * `blueprintKey` collides and the cache exact-key hits. This test now
+ * tests the CACHE LAYER honestly, decoupled from negotiator determinism.
  *
  * The signal is `/api/bootstrap/<shortCode>.codeHash` — that's the
  * hash the iframe-runtime fetches, so identical bytes across renders
@@ -117,18 +116,15 @@ async function renderOnce(opts: {
     }),
   );
   const start = Date.now();
-  // `override` so `story.contract` = the LITERAL draft on both
-  // renders. The negotiator's potentially-non-deterministic
-  // `decision.contract` is bypassed; only the cache layer is under
-  // test here. See file-level docstring for the determinism gap.
+  // `override.contract` so `story.contract` = the LITERAL draft on both
+  // renders. The negotiator's potentially-non-deterministic proposed
+  // contract is bypassed; only the cache layer is under test here. See
+  // file-level docstring for the determinism gap.
   const out = unwrapStructured<RenderOut>(
     await callTool(MCP_URL, 'ggui_render', {
       handshakeId: handshake.handshakeId,
-      decision: {
-        kind: 'override',
-        blueprintDraft: { contract: BANNER_CONTRACT },
-      },
       props: { title: 'Hello' },
+      override: { contract: BANNER_CONTRACT },
     }),
   );
   const latencyMs = Date.now() - start;

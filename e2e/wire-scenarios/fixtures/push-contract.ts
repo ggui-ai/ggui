@@ -1,10 +1,11 @@
 /**
  * Helpers that drive the `ggui_handshake` → `ggui_render` chain against
  * a live ggui MCP endpoint. The handshake's `blueprintDraft.contract`
- * carries a verbatim DataContract; the render accepts it via
- * `decision: {kind:'override'}` (or `{kind:'accept'}`). Render WILL
- * invoke the configured generator (LLM) to produce componentCode — see
- * `ANTHROPIC_API_KEY` gating in each scenario.
+ * carries a verbatim DataContract; the render pins it via
+ * `override: {contract}`. (Omitting `override` would ACCEPT the synth's
+ * suggestion instead.) Render WILL invoke the configured generator (LLM)
+ * to produce componentCode — see `ANTHROPIC_API_KEY` gating in each
+ * scenario.
  *
  * Returns the rendered URL (`<server>/r/<shortCode>`) and the renderId
  * so tests can open the iframe AND drive ggui_consume for the same
@@ -24,7 +25,7 @@ export interface PushContractOptions {
   readonly mcpUrl: string;
   /** Free text intent passed to handshake. */
   readonly intent: string;
-  /** Verbatim DataContract draft. Pushed as-is via `decision: {kind:'override'}`. */
+  /** Verbatim DataContract draft. Pinned as-is via `override: {contract}`. */
   readonly contract: Record<string, unknown>;
   /** Optional props (required when the contract declares propsSpec). */
   readonly props?: Record<string, unknown>;
@@ -47,11 +48,12 @@ export async function pushKnownContract(
     }),
   );
 
-  // `override` decision forces our verbatim contract instead of the
-  // synth's suggestion. `accept` would replace our minimal contract
-  // with whatever the synth thought the intent implied (e.g. adding
-  // required propsSpec entries our test doesn't supply), making
-  // scenarios non-deterministic.
+  // `override.contract` pins our verbatim contract (STRICT cold-gen)
+  // instead of the synth's suggestion. Omitting `override` would ACCEPT
+  // whatever the synth thought the intent implied (e.g. adding required
+  // propsSpec entries our test doesn't supply), making scenarios
+  // non-deterministic. `props` is required on every render; default to
+  // `{}` since these contracts declare no propsSpec.
   const render = unwrapStructured<{
     renderId: string;
     renderUrl?: string;
@@ -59,11 +61,8 @@ export async function pushKnownContract(
   }>(
     await callTool(opts.mcpUrl, 'ggui_render', {
       handshakeId: handshake.handshakeId,
-      decision: {
-        kind: 'override',
-        blueprintDraft: { contract: opts.contract },
-      },
-      ...(opts.props !== undefined ? { props: opts.props } : {}),
+      props: opts.props ?? {},
+      override: { contract: opts.contract },
     }),
   );
 
