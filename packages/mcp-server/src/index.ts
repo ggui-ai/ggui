@@ -89,6 +89,7 @@ export {
 export {
   checkRenderSchemaCompat,
   DEFAULT_SCHEMA_COMPAT_MODE,
+  hasErrorFinding,
   SchemaCompatError,
 } from './schema-compat.js';
 export type {

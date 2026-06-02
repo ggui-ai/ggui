@@ -430,10 +430,12 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
   // real-world ingress). Three modes — reject / warn / off — cover
   // every operator posture.
 
-  it('schemaCompatCheck=reject: rejects with 422 when action tool is not registered', async () => {
+  it('schemaCompatCheck=reject: action tool-not-found is advisory → renders (200)', async () => {
     // CONTRACT_ACTIONS references `tasks_complete` which no mount
-    // registers; `reject` mode surfaces `tool-not-found` BEFORE the
-    // stack item commits.
+    // registers. `nextStep` is a documented HINT the agent owns and
+    // ggui never dispatches, so an unresolved action `nextStep` is
+    // tagged warn-severity — even under `reject` mode it does NOT
+    // block the render; the stack item commits.
     fx = await bootFull(
       [
         {
@@ -452,22 +454,12 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       `${fx.url}/ggui/console/blueprint/todo-list/try`,
       { method: 'POST' },
     );
-    expect(res.status).toBe(422);
-    const body = (await res.json()) as {
-      error: string;
-      findings: Array<{
-        kind: string;
-        specName: string;
-        toolName: string;
-        reason: string;
-      }>;
-    };
-    expect(body.error).toBe('SCHEMA_MISMATCH_ERROR');
-    expect(body.findings).toHaveLength(1);
-    expect(body.findings[0]?.kind).toBe('action');
-    expect(body.findings[0]?.specName).toBe('toggleTask');
-    expect(body.findings[0]?.toolName).toBe('tasks_complete');
-    expect(body.findings[0]?.reason).toBe('tool-not-found');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { renderId: string };
+    const stored = await fx.renderStore.get(body.renderId);
+    expect(stored).not.toBeNull();
+    // Phase B identity collapse: render.id === renderId.
+    expect(stored!.render.id).toBe(body.renderId);
   });
 
   it('schemaCompatCheck=warn: lets the push through; no 422, stack commits', async () => {

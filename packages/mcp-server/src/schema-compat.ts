@@ -105,6 +105,15 @@ export interface SchemaCompatFinding {
    *     one violation. See {@link SchemaCompatFinding.violations}.
    */
   readonly reason: 'tool-not-found' | 'schema-mismatch';
+  /**
+   * Whether this finding blocks the render (`'error'`) or is purely
+   * advisory (`'warn'`). Defaults to error severity when omitted — the
+   * throw gate treats any finding lacking `severity: 'warn'` as a
+   * hard error. An action `nextStep` tool-not-found is tagged `'warn'`
+   * because `nextStep` is a documented HINT the agent owns and ggui
+   * never dispatches; an unresolved one must not block the render.
+   */
+  readonly severity?: 'error' | 'warn';
   /** Subset violations carried through for rich error rendering.
    *  Empty array when `reason: 'tool-not-found'`. */
   readonly violations: readonly SubsetViolation[];
@@ -234,6 +243,10 @@ export function checkRenderSchemaCompat(
         specName: actionName,
         toolName,
         reason: 'tool-not-found',
+        // Advisory: `nextStep` is a documented HINT the agent owns and
+        // ggui never dispatches, so an unresolved one must not block
+        // the render. Warn-only — the throw gate skips it.
+        severity: 'warn',
         violations: [],
       });
       continue;
@@ -274,6 +287,7 @@ export function checkRenderSchemaCompat(
     if (!tool) {
       // Cross-MCP escape hatch — symmetric with the actionSpec arm.
       if (contractDeclaredTools.has(toolName)) continue;
+      // stream tool-not-found stays error — spec defers the stream downgrade (Phase 2 scope = action nextStep only).
       findings.push({
         kind: 'stream',
         specName: channelName,
@@ -304,10 +318,25 @@ export function checkRenderSchemaCompat(
     findings,
   };
 
-  if (mode === 'reject' && !report.compatible) {
+  if (mode === 'reject' && hasErrorFinding(report)) {
     throw new SchemaCompatError(report, context);
   }
   return report;
+}
+
+/**
+ * Does this report carry at least one finding that should BLOCK the
+ * render? A finding blocks unless it is explicitly advisory
+ * (`severity: 'warn'`) — i.e. anything lacking `severity: 'warn'`
+ * counts as a hard error (default-error semantics). The single
+ * source of truth for the throw gate, shared by the internal
+ * `'reject'`-mode gate above AND any external host that runs the
+ * check in `'warn'` mode and owns its own enforcement (e.g. the
+ * cloud pod's `ggui_push`). Keeping ONE predicate guarantees the
+ * OSS and pod gates can never silently diverge.
+ */
+export function hasErrorFinding(report: SchemaCompatReport): boolean {
+  return report.findings.some((f) => f.severity !== 'warn');
 }
 
 /**

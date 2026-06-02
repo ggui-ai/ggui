@@ -176,6 +176,75 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     expect(report.findings[0]?.violations).toEqual([]);
   });
 
+  it('reject mode does NOT throw for an action nextStep tool-not-found (advisory)', () => {
+    const report = checkRenderSchemaCompat(
+      {
+        actionSpec: {
+          createTask: {
+            label: 'Create',
+            nextStep: 'nonexistent',
+            schema: { type: 'object', properties: {} },
+          },
+        },
+      },
+      registry,
+      'reject',
+      'test',
+    );
+    expect(report.compatible).toBe(false);
+    expect(report.findings[0]?.reason).toBe('tool-not-found');
+    expect(report.findings[0]?.severity).toBe('warn');
+  });
+
+  it('reject mode STILL throws for an action schema-mismatch', () => {
+    // Reuse the wrong-type fixture shape: action declares `title` as a
+    // number but `submit_task.inputSchema` requires a string → a
+    // schema-mismatch finding (error severity) under reject mode.
+    const render = {
+      actionSpec: {
+        createTask: {
+          label: 'Create task',
+          nextStep: 'submit_task',
+          schema: {
+            type: 'object',
+            properties: { title: { type: 'number' } }, // wrong type
+            required: ['title'],
+          } satisfies JsonSchema,
+        },
+      },
+    };
+    expect(() =>
+      checkRenderSchemaCompat(
+        render,
+        registry,
+        'reject',
+        'test:action-mismatch-throws',
+      ),
+    ).toThrow(SchemaCompatError);
+  });
+
+  it('reject mode STILL throws for a stream tool-not-found', () => {
+    // Reuse the ghost_tool stream fixture: a stream channel references
+    // an unregistered tool → tool-not-found stays error severity, so
+    // reject mode throws (stream downgrade deferred — Phase 2 scope is
+    // action nextStep only).
+    expect(() =>
+      checkRenderSchemaCompat(
+        {
+          streamSpec: {
+            feed: {
+              schema: { type: 'object' } satisfies JsonSchema,
+              tool: 'ghost_tool',
+            },
+          },
+        },
+        registry,
+        'reject',
+        'test:stream-missing-throws',
+      ),
+    ).toThrow(SchemaCompatError);
+  });
+
   it('void action (no schema) + tool with required fields → flagged as mismatch (wire sends empty object)', () => {
     // submit_task.inputSchema requires `title`; void action sends
     // nothing ⇒ the wire would deliver {} to a tool that rejects
