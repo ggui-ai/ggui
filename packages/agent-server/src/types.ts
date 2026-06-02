@@ -12,6 +12,7 @@
  * One normalized envelope shape across every SDK keeps the frontend
  * hook (`useMcpAppsChat`) parsing one wire.
  */
+import type { AgentToolEntry } from '@ggui-ai/protocol';
 
 /**
  * One MCP endpoint the agent's LLM is allowed to call into.
@@ -145,6 +146,20 @@ export interface AgentInput {
    * the library aborts the SSE write loop on the same trigger.
    */
   readonly abortSignal: AbortSignal;
+  /**
+   * Canonical agent-tool catalog the library built from the LIVE MCP
+   * connection (`initialize` → serverInfo, `tools/list` → tools),
+   * keyed by bare tool name. This is the tools MAP only — to stamp it
+   * into `blueprintDraft.contract.agentCapabilities` the adapter MUST
+   * wrap it as `{ tools: agentCapabilities }`, because
+   * `DataContract.agentCapabilities` is the `AgentCapabilitiesSpec`
+   * shape (`{ tools: Record<string, AgentToolEntry> }`), not the bare
+   * map. Stamping it lets blueprint reuse match on the canonical
+   * `(serverInfo.name, toolName)` identity + schema. ABSENT when the
+   * catalog couldn't be built (e.g. an MCP server was down at boot) —
+   * the agent's host then degrades to bare / within-host reuse.
+   */
+  readonly agentCapabilities?: Record<string, AgentToolEntry>;
 }
 
 /**

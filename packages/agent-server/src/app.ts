@@ -55,13 +55,14 @@
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import type { AgentToolEntry } from '@ggui-ai/protocol';
 import {
   defaultAuthorizeChat,
   principalId,
   type AuthAdapter,
   type Principal,
 } from './auth.js';
-import { callMcpToolsCall } from './mcp-client.js';
+import { buildAgentCatalog, callMcpToolsCall } from './mcp-client.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import { mintChatId, type ChatStore } from './chat-store.js';
 import type { AgentAdapter, McpServerConfig } from './types.js';
@@ -125,6 +126,34 @@ export function createAgentApp(
 ): Hono<{ Variables: AgentAppVariables }> {
   const { adapter, chatStore, mcpServers, sandboxProxyUrl, auth } = deps;
   const log = deps.log ?? ((): void => {});
+
+  // Canonical agent-tool catalog, built ONCE from the live MCP
+  // connection (`initialize` + `tools/list`) and memoized for the
+  // process lifetime — boot-cost matters and the catalog is stable.
+  // Built lazily on the first `kind:'chat'` request rather than at
+  // construction so the app object stays synchronous to create and a
+  // not-yet-reachable MCP at boot doesn't block app construction.
+  //
+  // Failure mode: if the build rejects (a server is down), we RESET the
+  // memo so the next request retries rather than permanently disabling
+  // the catalog on a transient boot failure. The caller catches the
+  // rejection and degrades to `agentCapabilities: undefined`.
+  let catalogPromise:
+    | Promise<Record<string, AgentToolEntry>>
+    | undefined;
+  const getAgentCatalog = (): Promise<Record<string, AgentToolEntry>> => {
+    if (catalogPromise === undefined) {
+      const built = buildAgentCatalog(mcpServers);
+      catalogPromise = built;
+      // Don't cache a rejected promise — reset so the next request
+      // retries. Swallow here only to avoid an unhandled-rejection
+      // warning; the awaiting caller still observes the rejection.
+      built.catch(() => {
+        if (catalogPromise === built) catalogPromise = undefined;
+      });
+    }
+    return catalogPromise;
+  };
 
   const app = new Hono<{ Variables: AgentAppVariables }>();
 
@@ -344,6 +373,21 @@ export function createAgentApp(
       `[agent-server] POST /agent chat=${chatId} owner=${ownerId} prompt=${JSON.stringify(body.prompt.slice(0, 80))}`,
     );
 
+    // Resolve the canonical agent-tool catalog (memoized). On failure
+    // (an MCP server down at boot) degrade to undefined rather than
+    // 500ing the run — the reuse gate is designed to degrade when caps
+    // are absent. `getAgentCatalog` already resets its memo on reject
+    // so the next request retries.
+    let agentCapabilities: Record<string, AgentToolEntry> | undefined;
+    try {
+      agentCapabilities = await getAgentCatalog();
+    } catch (err) {
+      agentCapabilities = undefined;
+      log(
+        `[agent-server] agent-capabilities catalog build failed; degrading to none: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     return streamSSE(c, async (stream) => {
       // First SSE event is always the chatId allocation echo so the
       // client can stamp it into URL / localStorage on the first POST
@@ -369,6 +413,7 @@ export function createAgentApp(
           mcpServers,
           systemPrompt: deps.systemPrompt,
           abortSignal: abortController.signal,
+          ...(agentCapabilities ? { agentCapabilities } : {}),
         })) {
           msgCount += 1;
           // Tool-result interceptor — when `_meta.ui.resourceUri` is

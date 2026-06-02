@@ -11,15 +11,25 @@
  * e2e harness. Here we assert that the route returns 200 (or the
  * appropriate auth code) and the right Content-Type.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentToolEntry } from '@ggui-ai/protocol';
 import { createAgentApp } from './app.js';
 import { createGuestTokenAuth } from './auth.js';
 import { createInMemoryChatStore } from './chat-store.js';
+import { buildAgentCatalog } from './mcp-client.js';
 import type {
   AgentAdapter,
   AgentInput,
   NormalizedMessage,
 } from './types.js';
+
+// Mock only `buildAgentCatalog` from the MCP client — keep the real
+// `callMcpToolsCall` / `parseMcpResponse` so the relay + interceptor
+// tests above continue to exercise the live code paths.
+vi.mock('./mcp-client.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./mcp-client.js')>();
+  return { ...actual, buildAgentCatalog: vi.fn() };
+});
 
 const SECRET = 'app-integration-test-secret-32b-ok';
 
@@ -432,6 +442,139 @@ describe("POST /agent { kind:'tool-call' }", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe('POST /agent — agentCapabilities catalog threading', () => {
+  const CATALOG: Record<string, AgentToolEntry> = {
+    todo_add: {
+      serverInfo: { name: '@x/todo', version: '0.0.1' },
+      toolInfo: { inputSchema: { type: 'object', properties: {} }, description: 'add' },
+    },
+  };
+
+  const buildAgentCatalogMock = vi.mocked(buildAgentCatalog);
+
+  beforeEach(() => {
+    buildAgentCatalogMock.mockReset();
+  });
+
+  // A capturing adapter that records the `agentCapabilities` from EVERY
+  // run (one app instance is reused across requests, so the same adapter
+  // sees each call). `nthCapture(n)` resolves with the value the n-th
+  // run (1-based) received, regardless of SSE fan-out timing — letting a
+  // test assert the SECOND request's value, not just the first.
+  function capturingAdapter(): {
+    adapter: AgentAdapter;
+    captured: Promise<AgentInput['agentCapabilities']>;
+    nthCapture: (n: number) => Promise<AgentInput['agentCapabilities']>;
+  } {
+    const values: Array<AgentInput['agentCapabilities']> = [];
+    const waiters = new Map<
+      number,
+      (v: AgentInput['agentCapabilities']) => void
+    >();
+    const nthCapture = (
+      n: number,
+    ): Promise<AgentInput['agentCapabilities']> => {
+      if (values.length >= n) return Promise.resolve(values[n - 1]);
+      return new Promise((resolve) => waiters.set(n, resolve));
+    };
+    const adapter: AgentAdapter = {
+      name: 'capture',
+      async *run(input: AgentInput): AsyncIterable<NormalizedMessage> {
+        values.push(input.agentCapabilities);
+        const waiter = waiters.get(values.length);
+        if (waiter) {
+          waiter(input.agentCapabilities);
+          waiters.delete(values.length);
+        }
+        yield { type: 'result', subtype: 'ok' };
+      },
+    };
+    return { adapter, captured: nthCapture(1), nthCapture };
+  }
+
+  function buildCapturingApp(adapter: AgentAdapter): {
+    app: ReturnType<typeof createAgentApp>;
+  } {
+    const auth = createGuestTokenAuth({ signingSecret: SECRET });
+    const store = createInMemoryChatStore();
+    const app = createAgentApp({
+      adapter,
+      auth,
+      chatStore: store,
+      mcpServers: MCP_SERVERS,
+      systemPrompt: null,
+      sandboxProxyUrl: 'http://localhost:7790',
+    });
+    return { app };
+  }
+
+  async function postChat(
+    app: ReturnType<typeof createAgentApp>,
+    guestToken: string,
+  ): Promise<void> {
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi' }),
+    });
+    // Drain the SSE body to drive the adapter generator to completion.
+    await res.text();
+  }
+
+  it('passes the built catalog to the adapter as input.agentCapabilities', async () => {
+    buildAgentCatalogMock.mockResolvedValue(CATALOG);
+    const { adapter, captured } = capturingAdapter();
+    const { app } = buildCapturingApp(adapter);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+    expect(await captured).toEqual(CATALOG);
+  });
+
+  it('memoizes the build — two requests trigger buildAgentCatalog once', async () => {
+    buildAgentCatalogMock.mockResolvedValue(CATALOG);
+    const { adapter } = capturingAdapter();
+    const { app } = buildCapturingApp(adapter);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+    await postChat(app, guestToken);
+    expect(buildAgentCatalogMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('degrades to undefined when the build throws, and the request still succeeds', async () => {
+    buildAgentCatalogMock.mockRejectedValueOnce(new Error('mcp down'));
+    const { adapter, captured } = capturingAdapter();
+    const { app } = buildCapturingApp(adapter);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+    expect(await captured).toBeUndefined();
+  });
+
+  it('retries the build on the next request after a transient boot failure', async () => {
+    buildAgentCatalogMock
+      .mockRejectedValueOnce(new Error('mcp down'))
+      .mockResolvedValueOnce(CATALOG);
+    const cap = capturingAdapter();
+    const { app } = buildCapturingApp(cap.adapter);
+    const { guestToken } = await mintGuestBearer(app);
+
+    // First request: build rejects → adapter run #1 degrades to undefined.
+    await postChat(app, guestToken);
+    expect(await cap.nthCapture(1)).toBeUndefined();
+
+    // Second request: memo was reset on reject, so the build RE-attempts
+    // and now succeeds — adapter run #2 must see the recovered CATALOG.
+    await postChat(app, guestToken);
+    expect(await cap.nthCapture(2)).toEqual(CATALOG);
+    expect(buildAgentCatalogMock).toHaveBeenCalledTimes(2);
   });
 });
 

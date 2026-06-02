@@ -15,12 +15,17 @@
  *   2. `POST /agent { kind:'tool-call' }` — `tools/call` relay
  *      (iframe → host → MCP). The iframe holds no MCP credential; this
  *      host forwards the call and returns the JSON-RPC envelope.
- *   3. (Future) MCP discovery — `tools/list` to learn what each
- *      configured server exposes.
+ *   3. Boot-time MCP discovery — `initialize` (→ `serverInfo`) +
+ *      `tools/list` (→ tool descriptors), folded by
+ *      {@link buildAgentCatalog} into the canonical
+ *      `AgentToolEntry` catalog the agent stamps into its handshake
+ *      draft so reuse can match on `(serverInfo.name, toolName)`.
  *
- * Both `callMcpToolsCall` and `callMcpResourcesRead` use
+ * Every RPC (`callMcpToolsCall`, `callMcpResourcesRead`,
+ * `callMcpInitialize`, `callMcpToolsList`) uses
  * {@link parseMcpResponse} on the upstream body.
  */
+import type { AgentToolEntry, JsonSchema } from '@ggui-ai/protocol';
 
 /**
  * Parse a streamable-HTTP MCP response body. Returns the inner
@@ -201,4 +206,213 @@ export async function callMcpToolsCall(args: {
   });
   const text = await response.text();
   return parseMcpResponse(text);
+}
+
+/**
+ * MCP wire-protocol version this client advertises in the `initialize`
+ * handshake. Streamable-HTTP servers echo / negotiate it; `2025-06-18`
+ * is the version the rest of this repo's clients speak (matches the
+ * ggui MCP server + the sample smoke tests).
+ */
+const MCP_PROTOCOL_VERSION = '2025-06-18';
+
+/** This client's identity, sent as `clientInfo` on `initialize`. */
+const CLIENT_INFO = {
+  name: '@ggui-ai/agent-server',
+  // keep in sync with package.json version
+  version: '0.2.1',
+} as const;
+
+/**
+ * Issue an `initialize` JSON-RPC against an MCP endpoint and return the
+ * server's identity (`serverInfo`). On stateless Streamable-HTTP the
+ * `initialize` response carries `serverInfo` directly, so the
+ * `notifications/initialized` follow-up isn't needed just to read it.
+ * `(serverInfo.name, toolName)` is the canonical cross-framework tool
+ * identity used by the reuse gate; `version` is metadata, not identity.
+ */
+export async function callMcpInitialize(args: {
+  readonly url: string;
+  readonly bearer: string;
+  readonly signal?: AbortSignal;
+}): Promise<{ name: string; version: string }> {
+  const rpcId = nextRpcId++;
+  const response = await fetch(args.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${args.bearer}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcId,
+      method: 'initialize',
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: CLIENT_INFO,
+      },
+    }),
+    ...(args.signal ? { signal: args.signal } : {}),
+  });
+  const text = await response.text();
+  const rpc = parseMcpResponse(text);
+  if (rpc.error !== undefined) {
+    throw new Error(
+      `MCP initialize for ${args.url} failed: ${rpc.error.message ?? 'no message'}`,
+    );
+  }
+  const result = rpc.result as
+    | { readonly serverInfo?: { name?: unknown; version?: unknown } }
+    | undefined;
+  const serverInfo = result?.serverInfo;
+  if (
+    !serverInfo ||
+    typeof serverInfo.name !== 'string' ||
+    typeof serverInfo.version !== 'string'
+  ) {
+    throw new Error(
+      `MCP initialize for ${args.url} returned no serverInfo {name, version}`,
+    );
+  }
+  return { name: serverInfo.name, version: serverInfo.version };
+}
+
+/**
+ * Issue a `tools/list` JSON-RPC against an MCP endpoint and return the
+ * tool descriptors. Each descriptor mirrors the MCP `tools/list` entry:
+ * `name` (the bare tool name), `inputSchema` (always present), plus
+ * optional `description` / `outputSchema`.
+ */
+export async function callMcpToolsList(args: {
+  readonly url: string;
+  readonly bearer: string;
+  readonly signal?: AbortSignal;
+}): Promise<
+  Array<{
+    name: string;
+    description?: string;
+    inputSchema: JsonSchema;
+    outputSchema?: JsonSchema;
+  }>
+> {
+  const rpcId = nextRpcId++;
+  const response = await fetch(args.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${args.bearer}`,
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcId,
+      method: 'tools/list',
+      params: {},
+    }),
+    ...(args.signal ? { signal: args.signal } : {}),
+  });
+  const text = await response.text();
+  const rpc = parseMcpResponse(text);
+  if (rpc.error !== undefined) {
+    throw new Error(
+      `MCP tools/list for ${args.url} failed: ${rpc.error.message ?? 'no message'}`,
+    );
+  }
+  const result = rpc.result as
+    | {
+        readonly tools?: ReadonlyArray<{
+          readonly name?: unknown;
+          readonly description?: unknown;
+          readonly inputSchema?: unknown;
+          readonly outputSchema?: unknown;
+        }>;
+      }
+    | undefined;
+  if (!result || !Array.isArray(result.tools)) {
+    throw new Error(`MCP tools/list for ${args.url} returned no tools array`);
+  }
+  // Narrow the wire shape to our typed return. A tool without a string
+  // `name` or an object `inputSchema` is malformed for our purposes; the
+  // MCP spec requires both, so skip anything that doesn't satisfy them.
+  const tools: Array<{
+    name: string;
+    description?: string;
+    inputSchema: JsonSchema;
+    outputSchema?: JsonSchema;
+  }> = [];
+  for (const t of result.tools) {
+    if (typeof t.name !== 'string') continue;
+    if (t.inputSchema === null || typeof t.inputSchema !== 'object') continue;
+    const tool: {
+      name: string;
+      description?: string;
+      inputSchema: JsonSchema;
+      outputSchema?: JsonSchema;
+    } = {
+      name: t.name,
+      inputSchema: t.inputSchema as JsonSchema,
+    };
+    if (typeof t.description === 'string') tool.description = t.description;
+    if (t.outputSchema !== null && typeof t.outputSchema === 'object') {
+      tool.outputSchema = t.outputSchema as JsonSchema;
+    }
+    tools.push(tool);
+  }
+  return tools;
+}
+
+/**
+ * Build the canonical agent-tool catalog by querying every configured
+ * MCP server live: `initialize` (→ `serverInfo`) + `tools/list` (→ tool
+ * descriptors). The result is keyed by BARE tool name and maps to the
+ * nested {@link AgentToolEntry} shape (`serverInfo` + `toolInfo`), which
+ * the agent stamps into `blueprintDraft.contract.agentCapabilities` so
+ * the reuse gate can match on `(serverInfo.name, toolName)` + schema.
+ *
+ * Constraint: bare tool names MUST be unique across the configured
+ * server SET. Two servers exposing the same bare name collide on the
+ * catalog key; we keep the FIRST (iteration-order) and drop later ones
+ * with a warning rather than silently overwriting. Operators who need
+ * to expose two servers with overlapping tool names must namespace them
+ * at the MCP layer.
+ *
+ * Failure mode is all-or-nothing: if ANY server's `initialize` /
+ * `tools/list` fails, the entire build rejects (fail-fast via
+ * `Promise.all`) — there is no partial catalog. The caller's degrade
+ * path treats this rejection as `agentCapabilities: undefined`, so a
+ * single down server degrades ALL tools, not just that server's.
+ */
+export async function buildAgentCatalog(
+  servers: Record<string, { url: string; bearer: string }>,
+): Promise<Record<string, AgentToolEntry>> {
+  const perServer = await Promise.all(
+    Object.entries(servers).map(async ([key, cfg]) => {
+      const [serverInfo, tools] = await Promise.all([
+        callMcpInitialize({ url: cfg.url, bearer: cfg.bearer }),
+        callMcpToolsList({ url: cfg.url, bearer: cfg.bearer }),
+      ]);
+      return { key, serverInfo, tools };
+    }),
+  );
+
+  const catalog: Record<string, AgentToolEntry> = {};
+  for (const { key, serverInfo, tools } of perServer) {
+    for (const tool of tools) {
+      if (Object.prototype.hasOwnProperty.call(catalog, tool.name)) {
+        console.warn(
+          `[agent-server] duplicate bare tool name "${tool.name}" — server "${key}" (${serverInfo.name}) collides with an earlier server; keeping the first.`,
+        );
+        continue;
+      }
+      const toolInfo: AgentToolEntry['toolInfo'] = {
+        inputSchema: tool.inputSchema,
+      };
+      if (tool.description !== undefined) toolInfo.description = tool.description;
+      if (tool.outputSchema !== undefined) toolInfo.outputSchema = tool.outputSchema;
+      catalog[tool.name] = { serverInfo, toolInfo };
+    }
+  }
+  return catalog;
 }
