@@ -63,6 +63,7 @@ import {
   type MatchBlueprintDeps,
 } from './blueprint-matcher.js';
 import type { CoverageGap } from './blueprint-coverage.js';
+import { isFulfillable } from './blueprint-fulfillability.js';
 import type { BlueprintRegistryDeps } from './blueprint-registry.js';
 import {
   DEFAULT_GENERATOR_SLUG,
@@ -433,6 +434,12 @@ export async function decideHandshake(
   // find+judge). Reuse the cached blueprint ATOMICALLY; a coverage gap is
   // informational (surfaced as COVERAGE_GAP warn findings, not a drop).
   if (adapter.pools && adapter.pools.length > 0 && parsedDraft.success) {
+    // The requesting agent's declared MCP tools (a set keyed by bare
+    // toolName) — the basis for the reuse fulfillability gate. A cached
+    // blueprint is only proposed for reuse when these SUPERSET the
+    // blueprint's required tools AND keep its recorded input schemas
+    // satisfiable (see {@link isFulfillable}).
+    const agentCaps = parsedDraft.data.agentCapabilities?.tools;
     const semanticHits: BlueprintMatchHit[] = [];
     for (const pool of adapter.pools) {
       const scope = pool.scope ?? ctx.appId;
@@ -449,16 +456,27 @@ export async function decideHandshake(
           contract: parsedDraft.data,
           ...(variance !== undefined ? { variance } : {}),
         });
-        // exact-key is a perfect canonical match — it always wins,
-        // immediately, over any semantic hit from any pool.
-        if (matchResult.strategy === 'exact-key') {
+        // exact-key is a perfect canonical match — it wins immediately over
+        // any semantic hit from any pool, but ONLY when the requesting agent
+        // can fulfill it: its declared tools must superset the blueprint's
+        // required tools and keep the recorded input schemas satisfiable.
+        // An unfulfillable candidate is declined (the cached UI's actions /
+        // channels would dead-end against tools the agent cannot call) — fall
+        // through to the next pool / semantic accumulation / create.
+        if (
+          matchResult.strategy === 'exact-key' &&
+          isFulfillable(matchResult.blueprint.contract, agentCaps).ok
+        ) {
           return buildCacheReuseResult(
             matchResult.blueprint,
             matchResult.reason,
             generatorSlug,
           );
         }
-        if (matchResult.strategy === 'semantic') {
+        if (
+          matchResult.strategy === 'semantic' &&
+          isFulfillable(matchResult.blueprint.contract, agentCaps).ok
+        ) {
           semanticHits.push(matchResult);
         }
       } catch (err) {

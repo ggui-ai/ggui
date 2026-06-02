@@ -734,6 +734,218 @@ describe('decideHandshake — VARIANCE_GAP finding (D5)', () => {
   });
 });
 
+describe('decideHandshake — fulfillability reuse gate (P3c)', () => {
+  // A cached blueprint whose contract REQUIRES the agent to be able to call
+  // `todo_add` (an action nextStep) — and records that tool's inputSchema
+  // (required ['text']). The gate only proposes reuse when the requesting
+  // agent's declared caps superset the required tools AND keep the recorded
+  // schema satisfiable.
+  function blueprintRequiring(
+    required: string[],
+    recordedRequiredFields: string[] = ['text'],
+    id = 'bp-req',
+  ): RegistryBlueprint {
+    const actionSpec: DataContract['actionSpec'] = {};
+    const tools: NonNullable<DataContract['agentCapabilities']>['tools'] = {};
+    for (const t of required) {
+      actionSpec[t] = { label: t, nextStep: t };
+      tools[t] = {
+        toolInfo: {
+          inputSchema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: recordedRequiredFields,
+          },
+        },
+      };
+    }
+    return mkBlueprint({
+      id,
+      contract: { actionSpec, agentCapabilities: { tools } },
+    });
+  }
+
+  const exactKeyHit = (bp: RegistryBlueprint): BlueprintMatchResult => ({
+    strategy: 'exact-key',
+    blueprint: bp,
+    cosine: 1,
+    reason: 'exact-key match',
+    coverage: EMPTY_GAP,
+  });
+
+  const semanticHit = (
+    bp: RegistryBlueprint,
+    judgeConfidence: number,
+  ): BlueprintMatchResult => ({
+    strategy: 'semantic',
+    blueprint: bp,
+    cosine: 0.8,
+    reason: 'semantic match',
+    coverage: EMPTY_GAP,
+    judgeConfidence,
+  });
+
+  /** A draft declaring the given tools (bare-name → required-field list). */
+  function draftDeclaring(
+    spec: Record<string, { required?: string[]; version?: string }>,
+  ): { contract: DataContract } {
+    const tools: NonNullable<DataContract['agentCapabilities']>['tools'] = {};
+    for (const [name, { required, version }] of Object.entries(spec)) {
+      tools[name] = {
+        ...(version !== undefined
+          ? { serverInfo: { name: 'todo-server', version } }
+          : {}),
+        toolInfo: {
+          inputSchema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            ...(required ? { required } : {}),
+          },
+        },
+      };
+    }
+    return { contract: { propsSpec: { properties: {} }, agentCapabilities: { tools } } };
+  }
+
+  it('GATE PASS — reuses when the draft declares the blueprint-required tool', async () => {
+    mockMatch.mockResolvedValueOnce(exactKeyHit(blueprintRequiring(['todo_add'])));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({ todo_add: { required: ['text'] } }),
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-req');
+  });
+
+  it('GATE DECLINE — falls through to create when the draft lacks a required tool', async () => {
+    mockMatch.mockResolvedValueOnce(
+      exactKeyHit(blueprintRequiring(['todo_add', 'todo_delete'])),
+    );
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({ todo_add: { required: ['text'] } }),
+      ctx: CTX,
+    });
+    expect(r.action).not.toBe('reuse');
+    expect(r.action).toBe('create');
+    expect(mockEnsure).toHaveBeenCalledOnce();
+  });
+
+  it('SCHEMA-COMPAT DECLINE — falls through when the draft dropped a recorded-required field', async () => {
+    // Blueprint recorded inputSchema.required = ['text']; the draft's CURRENT
+    // todo_add no longer requires 'text' → required-subset violated → decline.
+    mockMatch.mockResolvedValueOnce(exactKeyHit(blueprintRequiring(['todo_add'], ['text'])));
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({ todo_add: { required: [] } }),
+      ctx: CTX,
+    });
+    expect(r.action).not.toBe('reuse');
+    expect(r.action).toBe('create');
+  });
+
+  it('SCHEMA-COMPAT PASS — reuses when the draft added an OPTIONAL field', async () => {
+    // Draft now requires ['text','tags'] — still a superset of the
+    // blueprint's ['text'], so optional-add is compatible.
+    mockMatch.mockResolvedValueOnce(exactKeyHit(blueprintRequiring(['todo_add'], ['text'])));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({ todo_add: { required: ['text', 'tags'] } }),
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-req');
+  });
+
+  it('VERSION-INDEPENDENCE — reuses when serverInfo.version bumped but the schema is unchanged', async () => {
+    mockMatch.mockResolvedValueOnce(exactKeyHit(blueprintRequiring(['todo_add'], ['text'])));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({
+        todo_add: { required: ['text'], version: '9.9.9' },
+      }),
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-req');
+  });
+
+  it('SEMANTIC-BEST GATE — an unfulfillable semantic hit is filtered, falls to create', async () => {
+    mockMatch.mockResolvedValueOnce(
+      semanticHit(blueprintRequiring(['todo_delete']), 0.95),
+    );
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: draftDeclaring({ todo_add: { required: ['text'] } }),
+      ctx: CTX,
+    });
+    expect(r.action).not.toBe('reuse');
+    expect(r.action).toBe('create');
+  });
+
+  it('SEMANTIC ACCUMULATION-GATE — reuses a lower-confidence FULFILLABLE hit over a higher-confidence UNfulfillable one', async () => {
+    // Pool 1: the HIGHER-confidence semantic hit (0.95) requires `todo_delete`
+    // — the draft can't fulfill it. Pool 2: a LOWER-confidence hit (0.7)
+    // requires only `todo_add`, which the draft DOES declare.
+    //
+    // This pins ACCUMULATION-time gating (filter as hits arrive) vs
+    // SELECTION-time gating (reduce-by-confidence, then check the winner):
+    //   - accumulation: the unfulfillable 0.95 hit never enters semanticHits,
+    //     so the fulfillable 0.7 hit is the only candidate → REUSE bp-lo-good.
+    //   - selection: the 0.95 hit would win the reduce, then fail the gate →
+    //     fall to CREATE, never reaching the fulfillable 0.7 hit.
+    // The current code accumulation-gates, so we assert REUSE of bp-lo-good.
+    mockMatch
+      .mockResolvedValueOnce(
+        semanticHit(blueprintRequiring(['todo_delete'], ['text'], 'bp-hi-bad'), 0.95),
+      )
+      .mockResolvedValueOnce(
+        semanticHit(blueprintRequiring(['todo_add'], ['text'], 'bp-lo-good'), 0.7),
+      );
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: 'app' }), pool({ scope: 'shared' })] }),
+      {
+        intent: 'i',
+        blueprintDraft: draftDeclaring({ todo_add: { required: ['text'] } }),
+        ctx: CTX,
+      },
+    );
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-lo-good');
+    // The create path must NOT have run — the fulfillable hit was reused.
+    expect(mockEnsure).not.toHaveBeenCalled();
+  });
+});
+
 describe('decideHandshake — create / fallback', () => {
   it('runs ensureConformingContract create path when no pool matches', async () => {
     mockMatch.mockResolvedValue(miss);

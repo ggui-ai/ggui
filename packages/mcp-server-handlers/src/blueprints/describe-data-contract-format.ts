@@ -162,6 +162,22 @@ Pure catalog — declares tools the AGENT may invoke. Referenced from
 NEVER calls these. Cross-ref linter rejects dangling \`nextStep\` /
 \`source.tool\` values that don't resolve to a key here.
 
+Canonical-identity hints (improve reuse of UIs built by earlier
+conversations or other agents):
+
+- The map KEYS are the **bare** MCP tool name — the part AFTER any
+  \`mcp__<server>__\` prefix a host prepends on its connection. Key by
+  the bare name (e.g. \`todo_add\`), NOT the host's connection label or
+  prefix.
+- \`serverInfo\` is the server's self-declared \`name\` + \`version\` from
+  the MCP \`initialize\` handshake. Provide it WHEN your host exposes it —
+  it lets a UI built against the same \`(server, toolName)\` be reused
+  across conversations and agents. OMIT it (do NOT guess) if you don't
+  have it. \`version\` is metadata, not identity, so a version bump alone
+  never blocks reuse.
+- \`toolInfo.inputSchema\` is echoed verbatim from the tool's \`tools/list\`
+  descriptor.
+
 ## ClientCapabilitiesSpec entry
 
 \`\`\`ts
