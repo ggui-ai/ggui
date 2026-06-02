@@ -581,6 +581,7 @@ export interface GguiRenderHandlerDeps {
     shape: {
       readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
       readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
+      readonly agentCapabilities?: { readonly tools?: Readonly<Record<string, unknown>> };
     },
   ) => void;
 
@@ -2193,6 +2194,7 @@ async function runGenerationIntoRender(
     | ((shape: {
         readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
         readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
+        readonly agentCapabilities?: { readonly tools?: Readonly<Record<string, unknown>> };
       }) => void)
     | undefined,
   generatorOverride: GguiRenderHandlerDeps['generator'] | undefined,
@@ -2625,6 +2627,7 @@ async function commitCachedRender(
     | ((shape: {
         readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
         readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
+        readonly agentCapabilities?: { readonly tools?: Readonly<Record<string, unknown>> };
       }) => void)
     | undefined,
   args: {
