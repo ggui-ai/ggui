@@ -443,8 +443,8 @@ export function inspect(contract: ClassifierInput): ContractSignals {
       ?.tools) ?? {};
   const agentTools: AgentToolInfo[] = [];
   for (const [name, tool] of Object.entries(agentToolsMap)) {
-    const t = tool as { inputSchema?: SchemaShape };
-    const req = t?.inputSchema?.properties ?? {};
+    const t = tool as { toolInfo?: { inputSchema?: SchemaShape } };
+    const req = t?.toolInfo?.inputSchema?.properties ?? {};
     agentTools.push({ name, requestKeys: Object.keys(req) });
   }
 

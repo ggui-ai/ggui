@@ -471,7 +471,7 @@ export function buildContractsContext(
     const tools = Object.entries(agentTools)
       .map(([name, entry]) => {
         const bits = [`  - **\`${name}\`**`];
-        if (entry.description) bits.push(`— ${entry.description}`);
+        if (entry.toolInfo?.description) bits.push(`— ${entry.toolInfo.description}`);
         return bits.join(' ');
       })
       .join('\n');

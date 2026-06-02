@@ -34,7 +34,7 @@ const objectSchema = {
 
 function fullTool(extra: Record<string, unknown> = {}) {
   return {
-    inputSchema: objectSchema,
+    toolInfo: { inputSchema: objectSchema },
     usage: 'when to use this',
     example: { input: {}, output: 'ok' },
     ...extra,
@@ -120,7 +120,7 @@ describe('checkMissingUsage', () => {
     const contract: DataContract = {
       agentCapabilities: {
         tools: {
-          bare_tool: { inputSchema: objectSchema },
+          bare_tool: { toolInfo: { inputSchema: objectSchema } },
         },
       },
     };
@@ -149,7 +149,7 @@ describe('checkMissingUsage', () => {
   it('flags empty-string usage the same as missing usage', () => {
     const contract: DataContract = {
       agentCapabilities: {
-        tools: { tool: { inputSchema: objectSchema, usage: '' } },
+        tools: { tool: { toolInfo: { inputSchema: objectSchema }, usage: '' } },
       },
     };
     const warnings = checkMissingUsage(contract);
@@ -178,7 +178,7 @@ describe('checkMissingExample', () => {
       agentCapabilities: {
         tools: {
           tool: {
-            inputSchema: objectSchema,
+            toolInfo: { inputSchema: objectSchema },
             usage: 'when to use this',
           },
         },
@@ -284,7 +284,7 @@ describe('checkHygiene (aggregate)', () => {
 
   it('aggregates orphan + missing-usage + missing-example warnings in stable order', () => {
     const contract: DataContract = {
-      agentCapabilities: { tools: { bare: { inputSchema: objectSchema } } },
+      agentCapabilities: { tools: { bare: { toolInfo: { inputSchema: objectSchema } } } },
     };
     const warnings = checkHygiene(contract);
     expect(warnings.map((w) => w.code)).toEqual([

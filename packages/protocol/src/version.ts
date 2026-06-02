@@ -6,6 +6,38 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `AgentToolEntry` restructured — `{serverInfo?, toolInfo, usage, example}`
+ * (2026-06-02, BREAKING, pre-launch):
+ *
+ *   z1. **`AgentToolEntry` fields regrouped.** The flat per-tool entry
+ *      (`{description?, usage?, inputSchema?, outputSchema?, example?}`)
+ *      is restructured to separate MCP-native descriptor from ggui
+ *      authoring metadata:
+ *        - NEW `serverInfo?: {name, version}` — owning MCP server
+ *          identity from the `initialize` handshake. OPTIONAL: populated
+ *          by the agent-server catalog-builder / a host that exposes it;
+ *          absent for hand-authored contracts. `(server, toolName)` is
+ *          the canonical cross-framework identity; `serverInfo.version`
+ *          is metadata, NOT identity.
+ *        - NEW `toolInfo: {inputSchema, description?, outputSchema?}` —
+ *          the MCP `tools/list` descriptor echoed verbatim (minus
+ *          `name`, which is the catalog key). `inputSchema` is now
+ *          REQUIRED (every MCP tool has one); the former top-level
+ *          `description` / `inputSchema` / `outputSchema` MOVED here.
+ *        - `usage` + `example` stay on the entry (the ggui authoring
+ *          layer, not MCP).
+ *      Entries remain keyed by bare `toolName` in
+ *      `agentCapabilities.tools` (unchanged). The canonical contract
+ *      hash strips `serverInfo` entirely (version = metadata, not
+ *      identity) while preserving `toolInfo.inputSchema` /
+ *      `toolInfo.outputSchema` as identity.
+ *      Pre-launch no-backcompat: every contract author / catalog-builder
+ *      that emitted the flat shape MUST migrate to the nested
+ *      `toolInfo`. `agentToolEntrySchema` is `.strict()` on both the
+ *      outer entry and the inner `toolInfo` / `serverInfo` / `example`
+ *      objects.
+ *
+ * --------------------------------------------------------------------
  * R4 — auth-credential `bootstrap` renamed to `wsToken`; aggregate
  * polling endpoint deleted; console session-meta route renamed
  * (BREAKING, pre-launch):
@@ -392,8 +424,9 @@
  *      `assertContractSchemasValid(contract)` walks the six inner
  *      JSON Schema fields (`propsSpec.properties[*].schema`,
  *      `actionSpec[*].schema`, `streamSpec[*].schema`,
- *      `contextSpec[*].schema`, `agentCapabilities.tools[*].inputSchema`,
- *      `agentCapabilities.tools[*].outputSchema`) and runs
+ *      `contextSpec[*].schema`,
+ *      `agentCapabilities.tools[*].toolInfo.inputSchema`,
+ *      `agentCapabilities.tools[*].toolInfo.outputSchema`) and runs
  *      `compileForValidation()` on each. Ajv strict mode throws at
  *      compile-time on malformed schemas (unknown keywords, properties
  *      values that aren't schemas, array schemas with non-schema
@@ -1019,9 +1052,10 @@
  *   00000000. Protocol-level schema-compat invariant in
  *      `@ggui-ai/protocol/validation/schema-compat-invariants`:
  *      `CTR_SCHEMA_INCOMPAT` validates `actionSpec[*].schema` is a
- *      subset of the referenced `agentCapabilities.tools[*].inputSchema`,
+ *      subset of the referenced
+ *      `agentCapabilities.tools[*].toolInfo.inputSchema`,
  *      and `streamSpec[*].schema` is a superset of the referenced
- *      `agentCapabilities.tools[*].outputSchema`. Compares against the
+ *      `agentCapabilities.tools[*].toolInfo.outputSchema`. Compares against the
  *      contract's OWN agentCapabilities catalog (no runtime tool registry,
  *      no zod conversion) — author-visible bug class. Distinct from
  *      and complementary to the server-level F4 check
@@ -1593,7 +1627,7 @@
  *      Cross-deployment uniformity: the same field type ships from
  *      polling HTTP endpoint, WS replay frame, and store-side `observe()`.
  */
-export const PROTOCOL_VERSION = "draft-2026-05-31";
+export const PROTOCOL_VERSION = "draft-2026-06-02";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

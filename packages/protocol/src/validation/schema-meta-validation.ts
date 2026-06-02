@@ -6,8 +6,8 @@
  *   2. `actionSpec[*].schema` (optional per entry)
  *   3. `streamSpec[*].schema`
  *   4. `contextSpec[*].schema`
- *   5. `agentCapabilities.tools[*].inputSchema` (optional per entry)
- *   6. `agentCapabilities.tools[*].outputSchema` (optional per entry)
+ *   5. `agentCapabilities.tools[*].toolInfo.inputSchema` (required per entry)
+ *   6. `agentCapabilities.tools[*].toolInfo.outputSchema` (optional per entry)
  *
  * For each present schema, runs `compileForValidation()` from
  * `ajv-runtime`. Ajv's `strict: true` mode throws on malformed JSON
@@ -148,17 +148,17 @@ export function checkContractSchemasValid(
 
   if (contract.agentCapabilities?.tools) {
     for (const [name, entry] of Object.entries(contract.agentCapabilities.tools)) {
-      if (entry.inputSchema) {
+      if (entry.toolInfo.inputSchema) {
         tryCompile(
           `agentCapabilities.tools.${name}.inputSchema`,
-          entry.inputSchema,
+          entry.toolInfo.inputSchema,
           violations,
         );
       }
-      if (entry.outputSchema) {
+      if (entry.toolInfo.outputSchema) {
         tryCompile(
           `agentCapabilities.tools.${name}.outputSchema`,
-          entry.outputSchema,
+          entry.toolInfo.outputSchema,
           violations,
         );
       }

@@ -271,8 +271,10 @@ describe('scoreSynthesizedContract — preferred shapes pass', () => {
       agentCapabilities: {
         tools: {
           fetch_quote: {
-            inputSchema: { type: 'object' },
-            outputSchema: { type: 'object' },
+            toolInfo: {
+              inputSchema: { type: 'object' },
+              outputSchema: { type: 'object' },
+            },
           },
         },
       },

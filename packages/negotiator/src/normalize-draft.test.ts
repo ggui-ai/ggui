@@ -66,7 +66,12 @@ describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', (
         submit: { label: 'Go', schema: { type: 'object' }, bogusActionKey: 2 },
       },
       agentCapabilities: {
-        tools: { t: { inputSchema: { type: 'object' }, bogusToolKey: 3 } },
+        tools: {
+          t: {
+            toolInfo: { inputSchema: { type: 'object' }, bogusInnerKey: 4 },
+            bogusToolKey: 3,
+          },
+        },
       },
     };
     const out = normalizeDraft(draft) as Record<string, unknown>;
@@ -80,14 +85,22 @@ describe('normalizeDraft — strips illegal wrapper keys, preserves the rest', (
         'bogusActionKey'
       ],
     ).toBeUndefined();
+    const cleanedTool = (
+      (out['agentCapabilities'] as Record<string, unknown>)['tools'] as Record<
+        string,
+        Record<string, unknown>
+      >
+    )['t'];
+    // Stray key on the OUTER entry is stripped.
+    expect(cleanedTool['bogusToolKey']).toBeUndefined();
+    // Stray key INSIDE toolInfo is stripped too (nested clean).
     expect(
-      (
-        (out['agentCapabilities'] as Record<string, unknown>)['tools'] as Record<
-          string,
-          Record<string, unknown>
-        >
-      )['t']['bogusToolKey'],
+      (cleanedTool['toolInfo'] as Record<string, unknown>)['bogusInnerKey'],
     ).toBeUndefined();
+    // The legitimate nested inputSchema survives.
+    expect(
+      (cleanedTool['toolInfo'] as Record<string, unknown>)['inputSchema'],
+    ).toBeDefined();
   });
 
   it('leaves an already-valid draft semantically intact (no spurious churn)', () => {

@@ -54,13 +54,12 @@ const ACTION_ENTRY_KEYS = new Set([
   'nextStep',
 ]);
 const STREAM_ENTRY_KEYS = new Set(['description', 'schema', 'source']);
-const AGENT_TOOL_KEYS = new Set([
-  'description',
-  'usage',
+const AGENT_TOOL_KEYS = new Set(['serverInfo', 'toolInfo', 'usage', 'example']);
+/** Inner keys of an {@link AgentToolEntry.toolInfo} (the MCP descriptor). */
+const AGENT_TOOL_INFO_KEYS = new Set([
   'inputSchema',
+  'description',
   'outputSchema',
-  'required',
-  'example',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -95,6 +94,36 @@ function cleanEntryMap(
   const out: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(map)) {
     out[name] = cleanEntry(entry, allowed, schemaFields);
+  }
+  return out;
+}
+
+/** Clean a single `AgentToolEntry`: keep only the allowed outer keys
+ *  ({@link AGENT_TOOL_KEYS}), then clean the nested `toolInfo` to its
+ *  inner keys ({@link AGENT_TOOL_INFO_KEYS}) and normalize
+ *  `toolInfo.inputSchema` / `toolInfo.outputSchema` so the `.strict()`
+ *  schema doesn't reject a stray nested key. Non-record entries pass
+ *  through untouched. */
+function cleanAgentToolEntry(entry: unknown): unknown {
+  if (!isRecord(entry)) return entry;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (!AGENT_TOOL_KEYS.has(key)) continue; // strip the illegal outer key
+    out[key] =
+      key === 'toolInfo'
+        ? cleanEntry(value, AGENT_TOOL_INFO_KEYS, ['inputSchema', 'outputSchema'])
+        : value;
+  }
+  return out;
+}
+
+/** Apply {@link cleanAgentToolEntry} across the agent-tool catalog. */
+function cleanAgentToolMap(
+  map: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(map)) {
+    out[name] = cleanAgentToolEntry(entry);
   }
   return out;
 }
@@ -144,10 +173,7 @@ export function normalizeDraft(draft: unknown): unknown {
     if (isRecord(ac['tools'])) {
       out['agentCapabilities'] = {
         ...ac,
-        tools: cleanEntryMap(ac['tools'], AGENT_TOOL_KEYS, [
-          'inputSchema',
-          'outputSchema',
-        ]),
+        tools: cleanAgentToolMap(ac['tools']),
       };
     }
   }

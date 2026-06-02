@@ -4,6 +4,7 @@ import {
   canonicalizeValue,
   canonicalizeVariance,
 } from './canonicalize-contract.js';
+import { blueprintKey } from './blueprint-key.js';
 import type { DataContract } from '../types/data-contract.js';
 import type { BlueprintVariance } from '../types/blueprint.js';
 
@@ -220,6 +221,46 @@ describe('canonicalizeContracts', () => {
       sym: Symbol('s'),
     });
     expect(result).toEqual({ keep: 1 });
+  });
+
+  it('serverInfo does not affect the canonical hash (metadata, not identity)', () => {
+    const base: DataContract = {
+      agentCapabilities: {
+        tools: { todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} } } } },
+      },
+      actionSpec: {
+        addTodo: { label: 'Add', nextStep: 'todo_add', schema: { type: 'object', properties: {} } },
+      },
+    };
+    const withServer: DataContract = {
+      ...base,
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { name: '@x/todo', version: '9.9.9' },
+            toolInfo: { inputSchema: { type: 'object', properties: {} } },
+          },
+        },
+      },
+    };
+    expect(blueprintKey(base)).toBe(blueprintKey(withServer));
+  });
+
+  it('tool-name set change DOES change the canonical hash', () => {
+    const oneTool: DataContract = {
+      agentCapabilities: {
+        tools: { todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} } } } },
+      },
+    };
+    const twoTools: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} } } },
+          todo_remove: { toolInfo: { inputSchema: { type: 'object', properties: {} } } },
+        },
+      },
+    };
+    expect(blueprintKey(oneTool)).not.toBe(blueprintKey(twoTools));
   });
 });
 

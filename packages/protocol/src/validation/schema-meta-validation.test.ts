@@ -45,8 +45,10 @@ describe('assertContractSchemasValid', () => {
       agentCapabilities: {
         tools: {
           fetch: {
-            inputSchema: { type: 'object', properties: { id: { type: 'string' } } },
-            outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+            toolInfo: {
+              inputSchema: { type: 'object', properties: { id: { type: 'string' } } },
+              outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+            },
           },
         },
       },
@@ -146,11 +148,13 @@ describe('assertContractSchemasValid', () => {
       agentCapabilities: {
         tools: {
           fetch: {
-            inputSchema: { type: 'string' },
-            outputSchema: {
-              type: 'array',
-              items: 'not-a-schema',
-            } as unknown as JsonSchema,
+            toolInfo: {
+              inputSchema: { type: 'string' },
+              outputSchema: {
+                type: 'array',
+                items: 'not-a-schema',
+              } as unknown as JsonSchema,
+            },
           },
         },
       },

@@ -209,17 +209,16 @@ export const contextSpecSchema = z.record(z.string(), contextEntrySchema);
 /** {@link AgentToolEntry} — per-tool metadata in an {@link AgentCapabilitiesSpec}. */
 export const agentToolEntrySchema = z
   .object({
-    description: z.string().optional(),
-    usage: z.string().optional(),
-    inputSchema: jsonSchemaSchema.optional(),
-    outputSchema: jsonSchemaSchema.optional(),
-    example: z
+    serverInfo: z.object({ name: z.string(), version: z.string() }).strict().optional(),
+    toolInfo: z
       .object({
-        input: jsonValueSchema,
-        output: jsonValueSchema,
+        inputSchema: jsonSchemaSchema,
+        description: z.string().optional(),
+        outputSchema: jsonSchemaSchema.optional(),
       })
-      .strict()
-      .optional(),
+      .strict(),
+    usage: z.string().optional(),
+    example: z.object({ input: jsonValueSchema, output: jsonValueSchema }).strict().optional(),
   })
   .strict();
 

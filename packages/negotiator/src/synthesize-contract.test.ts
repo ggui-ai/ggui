@@ -722,6 +722,7 @@ describe('synthesizeContract — tool-schema ↔ DataContract field coverage', (
           agentCapabilities: {
             tools: {
               fetch_quote: {
+                inputSchema: { type: 'object' },
                 outputSchema: { type: 'object' },
                 usage: 'Fetches a quote.',
               },

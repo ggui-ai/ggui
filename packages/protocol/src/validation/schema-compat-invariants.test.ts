@@ -24,16 +24,18 @@ describe('checkActionSchemaCompat', () => {
     expect(violations).toEqual([]);
   });
 
-  it('skips entries when the referenced tool has no inputSchema', () => {
-    const violations = checkActionSchemaCompat(
+  it('skips stream channels when the referenced tool has no outputSchema', () => {
+    // inputSchema is REQUIRED on every AgentToolEntry, so the action side
+    // always has an anchor; the "missing schema → skip" path now lives on
+    // the stream side, where outputSchema stays optional.
+    const violations = checkStreamSchemaCompat(
       {
-        save: {
-          label: 'Save',
+        feed: {
           schema: { type: 'object', properties: {}, additionalProperties: false },
-          nextStep: 'save_tool',
+          source: { tool: 'save_tool' },
         },
       },
-      { tools: { save_tool: {} } },
+      { tools: { save_tool: { toolInfo: { inputSchema: { type: 'object' } } } } },
     );
     expect(violations).toEqual([]);
   });
@@ -65,10 +67,12 @@ describe('checkActionSchemaCompat', () => {
       {
         tools: {
           save_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' }, force: { type: 'boolean' } },
-              required: ['id'],
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' }, force: { type: 'boolean' } },
+                required: ['id'],
+              },
             },
           },
         },
@@ -94,11 +98,13 @@ describe('checkActionSchemaCompat', () => {
       {
         tools: {
           save_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+                additionalProperties: false,
+              },
             },
           },
         },
@@ -121,10 +127,12 @@ describe('checkActionSchemaCompat', () => {
       {
         tools: {
           ping_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+              },
             },
           },
         },
@@ -156,7 +164,7 @@ describe('checkStreamSchemaCompat', () => {
           source: { tool: 'feed_tool' },
         },
       },
-      { tools: { feed_tool: {} } },
+      { tools: { feed_tool: { toolInfo: { inputSchema: { type: 'object' } } } } },
     );
     expect(violations).toEqual([]);
   });
@@ -180,13 +188,16 @@ describe('checkStreamSchemaCompat', () => {
       {
         tools: {
           feed_tool: {
-            outputSchema: {
-              type: 'object',
-              properties: {
-                kind: { type: 'string' },
-                body: { type: 'string' },
+            toolInfo: {
+              inputSchema: { type: 'object' },
+              outputSchema: {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string' },
+                  body: { type: 'string' },
+                },
+                required: ['kind', 'body'],
               },
-              required: ['kind', 'body'],
             },
           },
         },
@@ -211,13 +222,16 @@ describe('checkStreamSchemaCompat', () => {
       {
         tools: {
           feed_tool: {
-            outputSchema: {
-              type: 'object',
-              properties: {
-                kind: { type: 'string' },
-                extra: { type: 'string' },
+            toolInfo: {
+              inputSchema: { type: 'object' },
+              outputSchema: {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string' },
+                  extra: { type: 'string' },
+                },
+                required: ['kind', 'extra'],
               },
-              required: ['kind', 'extra'],
             },
           },
         },
@@ -264,18 +278,23 @@ describe('checkSchemaCompat (aggregate)', () => {
       agentCapabilities: {
         tools: {
           save_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+                additionalProperties: false,
+              },
             },
           },
           feed_tool: {
-            outputSchema: {
-              type: 'object',
-              properties: { kind: { type: 'string' }, extra: { type: 'string' } },
-              required: ['kind', 'extra'],
+            toolInfo: {
+              inputSchema: { type: 'object' },
+              outputSchema: {
+                type: 'object',
+                properties: { kind: { type: 'string' }, extra: { type: 'string' } },
+                required: ['kind', 'extra'],
+              },
             },
           },
         },
@@ -293,7 +312,7 @@ describe('assertSchemaCompat', () => {
         actionSpec: {
           ping: { label: 'Ping', nextStep: 'ping_tool' },
         },
-        agentCapabilities: { tools: { ping_tool: {} } },
+        agentCapabilities: { tools: { ping_tool: { toolInfo: { inputSchema: { type: 'object' } } } } },
       }),
     ).not.toThrow();
   });
@@ -314,10 +333,12 @@ describe('assertSchemaCompat', () => {
       agentCapabilities: {
         tools: {
           save_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+              },
             },
           },
         },

@@ -1247,19 +1247,23 @@ export const REPAIR_CORPUS: readonly BenchEntry[] = [
       agentCapabilities: {
         tools: {
           todo_toggle: {
-            description: 'Flip a todo done/undone',
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
+            toolInfo: {
+              description: 'Flip a todo done/undone',
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+              },
             },
           },
           todo_add: {
-            description: 'Append a new todo',
-            inputSchema: {
-              type: 'object',
-              properties: { text: { type: 'string' } },
-              required: ['text'],
+            toolInfo: {
+              description: 'Append a new todo',
+              inputSchema: {
+                type: 'object',
+                properties: { text: { type: 'string' } },
+                required: ['text'],
+              },
             },
           },
         },
@@ -1336,19 +1340,23 @@ export const REPAIR_CORPUS: readonly BenchEntry[] = [
       agentCapabilities: {
         tools: {
           todo_toggle: {
-            description: 'Flip a todo done/undone',
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
+            toolInfo: {
+              description: 'Flip a todo done/undone',
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+              },
             },
           },
           todo_add: {
-            description: 'Append a new todo',
-            inputSchema: {
-              type: 'object',
-              properties: { text: { type: 'string' } },
-              required: ['text'],
+            toolInfo: {
+              description: 'Append a new todo',
+              inputSchema: {
+                type: 'object',
+                properties: { text: { type: 'string' } },
+                required: ['text'],
+              },
             },
           },
         },

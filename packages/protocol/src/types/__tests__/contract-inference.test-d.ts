@@ -146,15 +146,17 @@ const _weatherContract = defineContract({
   },
   agentCapabilities: { tools: {
     getForecast: {
-      inputSchema: {
-        type: 'object',
-        properties: { days: { type: 'number' } },
-        required: ['days'],
-      },
-      outputSchema: {
-        type: 'object',
-        properties: { forecast: { type: 'array', items: { type: 'string' } } },
-        required: ['forecast'],
+      toolInfo: {
+        inputSchema: {
+          type: 'object',
+          properties: { days: { type: 'number' } },
+          required: ['days'],
+        },
+        outputSchema: {
+          type: 'object',
+          properties: { forecast: { type: 'array', items: { type: 'string' } } },
+          required: ['forecast'],
+        },
       },
     },
   }},
@@ -332,15 +334,17 @@ const _singleWired = defineContract({
   agentCapabilities: {
     tools: {
       ping: {
-        inputSchema: {
-          type: 'object',
-          properties: { ms: { type: 'number' } },
-          required: ['ms'],
-        },
-        outputSchema: {
-          type: 'object',
-          properties: { pong: { type: 'boolean' } },
-          required: ['pong'],
+        toolInfo: {
+          inputSchema: {
+            type: 'object',
+            properties: { ms: { type: 'number' } },
+            required: ['ms'],
+          },
+          outputSchema: {
+            type: 'object',
+            properties: { pong: { type: 'boolean' } },
+            required: ['pong'],
+          },
         },
       },
     },
@@ -353,9 +357,9 @@ type _SW_Name = Expect<Equal<InferAgentToolNames<SW>, 'ping'>>;
 // agentTools is a catalog the AGENT invokes; component-side payload
 // types are no longer modeled (the component never invokes).
 
-// Agent tool with no schemas — the catalog still enumerates the name.
+// Agent tool with a minimal toolInfo — the catalog still enumerates the name.
 const _wiredNoSchemas = defineContract({
-  agentCapabilities: { tools: { fireAndForget: {} } },
+  agentCapabilities: { tools: { fireAndForget: { toolInfo: { inputSchema: { type: 'object' } } } } },
 } as const);
 type WNS = typeof _wiredNoSchemas;
 type _WNS_Name = Expect<Equal<InferAgentToolNames<WNS>, 'fireAndForget'>>;

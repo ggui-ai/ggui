@@ -597,30 +597,34 @@ Requirements:
       agentCapabilities: {
         tools: {
           loadHistory: {
-            description: 'Fetch older messages for infinite scroll',
-            inputSchema: { type: 'object', properties: {
-              before: { type: 'string', description: 'ISO timestamp cursor' },
-              limit: { type: 'number', description: 'Max messages to return' },
-            }},
-            outputSchema: { type: 'object', properties: {
-              messages: { type: 'array', items: { type: 'object', properties: {
-                sender: { type: 'string' }, text: { type: 'string' }, timestamp: { type: 'string' },
-              }}},
-              hasMore: { type: 'boolean' },
-            }},
+            toolInfo: {
+              description: 'Fetch older messages for infinite scroll',
+              inputSchema: { type: 'object', properties: {
+                before: { type: 'string', description: 'ISO timestamp cursor' },
+                limit: { type: 'number', description: 'Max messages to return' },
+              }},
+              outputSchema: { type: 'object', properties: {
+                messages: { type: 'array', items: { type: 'object', properties: {
+                  sender: { type: 'string' }, text: { type: 'string' }, timestamp: { type: 'string' },
+                }}},
+                hasMore: { type: 'boolean' },
+              }},
+            },
             example: {
               input: { before: '2026-03-15T14:00:00Z', limit: 20 },
               output: { messages: [{ sender: 'Alice', text: 'Earlier message', timestamp: '2026-03-15T13:55:00Z' }], hasMore: true },
             },
           },
           searchMessages: {
-            description: 'Full-text search across conversation',
-            inputSchema: { type: 'object', properties: { query: { type: 'string' } }},
-            outputSchema: { type: 'object', properties: {
-              results: { type: 'array', items: { type: 'object', properties: {
-                sender: { type: 'string' }, text: { type: 'string' }, timestamp: { type: 'string' },
-              }}},
-            }},
+            toolInfo: {
+              description: 'Full-text search across conversation',
+              inputSchema: { type: 'object', properties: { query: { type: 'string' } }},
+              outputSchema: { type: 'object', properties: {
+                results: { type: 'array', items: { type: 'object', properties: {
+                  sender: { type: 'string' }, text: { type: 'string' }, timestamp: { type: 'string' },
+                }}},
+              }},
+            },
           },
         },
       },
@@ -687,13 +691,15 @@ Initial stock data comes from props. Live price updates arrive via stream events
       agentCapabilities: {
         tools: {
           getStockDetail: {
-            description: 'Get detailed info for a specific stock (52-week range, volume, etc.)',
-            inputSchema: { type: 'object', properties: { symbol: { type: 'string' } }},
-            outputSchema: { type: 'object', properties: {
-              symbol: { type: 'string' }, name: { type: 'string' },
-              high52w: { type: 'number' }, low52w: { type: 'number' },
-              volume: { type: 'number' }, marketCap: { type: 'string' },
-            }},
+            toolInfo: {
+              description: 'Get detailed info for a specific stock (52-week range, volume, etc.)',
+              inputSchema: { type: 'object', properties: { symbol: { type: 'string' } }},
+              outputSchema: { type: 'object', properties: {
+                symbol: { type: 'string' }, name: { type: 'string' },
+                high52w: { type: 'number' }, low52w: { type: 'number' },
+                volume: { type: 'number' }, marketCap: { type: 'string' },
+              }},
+            },
             example: {
               input: { symbol: 'AAPL' },
               output: { symbol: 'AAPL', name: 'Apple Inc.', high52w: 199.62, low52w: 140.81, volume: 54123000, marketCap: '2.89T' },

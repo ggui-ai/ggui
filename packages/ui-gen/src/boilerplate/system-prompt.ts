@@ -435,7 +435,7 @@ The following identifiers / shapes are RETIRED from the contract surface as of 2
 
 When you declare a reference, also declare the catalog entry it points at:
 
-- \`actionSpec[X].nextStep = 'fetch_inbox'\` → \`agentCapabilities.tools.fetch_inbox = { inputSchema, outputSchema?, usage?, example? }\` MUST exist. Cross-ref code: \`CTR_REF_NEXT_STEP\`.
+- \`actionSpec[X].nextStep = 'fetch_inbox'\` → \`agentCapabilities.tools.fetch_inbox = { toolInfo: { inputSchema, description?, outputSchema? }, usage?, example? }\` MUST exist. Cross-ref code: \`CTR_REF_NEXT_STEP\`.
 - \`streamSpec[X].source.tool = 'list_messages'\` → \`agentCapabilities.tools.list_messages\` MUST exist. Cross-ref code: \`CTR_REF_STREAM_SOURCE\`.
 - The catalog entry's schemas MUST be a superset of the referencing spec's schema. Cross-ref code: \`CTR_SCHEMA_INCOMPAT\`.
 

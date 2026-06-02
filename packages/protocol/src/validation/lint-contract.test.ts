@@ -27,7 +27,7 @@ describe('validateContract — strict, throws on first failing phase', () => {
         },
       },
       agentCapabilities: {
-        tools: { archive_email: { inputSchema: objectSchema } },
+        tools: { archive_email: { toolInfo: { inputSchema: objectSchema } } },
       },
     };
     expect(() => validateContract(contract)).not.toThrow();
@@ -85,11 +85,13 @@ describe('validateContract — strict, throws on first failing phase', () => {
       agentCapabilities: {
         tools: {
           save_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+                additionalProperties: false,
+              },
             },
           },
         },
@@ -138,7 +140,7 @@ describe('lintContract — graded, returns errors + warnings', () => {
       agentCapabilities: {
         tools: {
           tool: {
-            inputSchema: objectSchema,
+            toolInfo: { inputSchema: objectSchema },
             usage: 'archives the email',
             example: { input: {}, output: 'ok' },
           },
@@ -168,11 +170,13 @@ describe('lintContract — graded, returns errors + warnings', () => {
       agentCapabilities: {
         tools: {
           b_tool: {
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
+            toolInfo: {
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+                required: ['id'],
+                additionalProperties: false,
+              },
             },
           },
         },
@@ -199,7 +203,7 @@ describe('lintContract — graded, returns errors + warnings', () => {
 
   it('surfaces phase-4 hygiene warnings (orphan agent tool, missing usage, missing example)', () => {
     const result = lintContract({
-      agentCapabilities: { tools: { unused_tool: { inputSchema: objectSchema } } },
+      agentCapabilities: { tools: { unused_tool: { toolInfo: { inputSchema: objectSchema } } } },
     });
     expect(result.errors).toEqual([]);
     const codes = result.warnings.map((w) => w.code).sort();

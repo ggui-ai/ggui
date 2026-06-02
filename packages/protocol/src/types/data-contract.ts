@@ -536,37 +536,37 @@ export const EMPTY_REFRESH_INPUT: RefreshInput = Object.freeze(
 // =============================================================================
 
 /**
- * Per-tool metadata in an {@link AgentCapabilitiesSpec}.
+ * Per-tool metadata in an {@link AgentCapabilitiesSpec}, keyed by the
+ * bare MCP tool name (the catalog key) in {@link AgentCapabilitiesSpec.tools}.
  *
  * Documents an MCP tool the contract references — by `actionSpec[*].nextStep`,
  * by `streamSpec[*].source.tool`, or simply for the LLM-authoring catalog.
- * The `example` field's `input`/`output` keys align with MCP's tool envelope
- * naming so the contract reads identically to what the agent's MCP client sees.
+ *
+ * Shape: `serverInfo` (OPTIONAL) carries the owning MCP server identity
+ * from the `initialize` handshake; `(server, toolName)` is the canonical
+ * cross-framework identity — `serverInfo.version` is metadata, NOT
+ * identity (so it never enters the canonical contract hash). `toolInfo`
+ * echoes the MCP `tools/list` descriptor (minus `name`, which is the
+ * catalog key). The ggui authoring layer adds `usage` + `example` on top
+ * of the MCP-native descriptor. The `example` field's `input`/`output`
+ * keys align with MCP's tool envelope naming so the contract reads
+ * identically to what the agent's MCP client sees.
  */
 export interface AgentToolEntry {
-  /** Human-readable description of this tool. */
-  description?: string;
-  /**
-   * When / why / by-whom this tool is called. Free-form LLM-targeted
-   * prose — the "context-of-use" hint that bare `description` lacks.
-   * Read by the UI generator and the agent's reasoning loop alike.
-   */
+  /** Owning MCP server identity (from the `initialize` handshake). OPTIONAL:
+   *  populated by the agent-server catalog-builder or a host that exposes it;
+   *  absent for hand-authored/library-less contracts. (server,toolName) is the
+   *  canonical cross-framework identity; version is metadata, not identity. */
+  serverInfo?: { name: string; version: string };
+  /** MCP tool descriptor, echoed from `tools/list` (minus name = the catalog key). */
+  toolInfo: {
+    /** JSON Schema for the tool input. REQUIRED — every MCP tool has one. */
+    inputSchema: JsonSchema;
+    description?: string;
+    outputSchema?: JsonSchema;
+  };
+  /** ggui authoring layer (not MCP): when/why/by-whom the tool is called. */
   usage?: string;
-  /**
-   * JSON Schema for the tool's input. MCP-aligned name. Optional —
-   * may be hydrated from MCP registry at generation time for tools the
-   * server can introspect; opaque for tools on other MCP servers.
-   */
-  inputSchema?: JsonSchema;
-  /**
-   * JSON Schema for the tool's output. MCP-aligned name. Optional —
-   * same hydration story as `inputSchema`.
-   */
-  outputSchema?: JsonSchema;
-  /**
-   * Example input/output pair for documentation and boilerplate
-   * generation. Keys `input` / `output` are MCP-aligned.
-   */
   example?: { input: JsonValue; output: JsonValue };
 }
 
@@ -1187,9 +1187,9 @@ export function deriveContextDefault(entry: ContextEntry): JsonValue | undefined
  *       },
  *       agentCapabilities: {
  *         tools: {
- *           todo_toggle: { description: 'Flip a todo done/undone',
+ *           todo_toggle: { toolInfo: { description: 'Flip a todo done/undone',
  *             inputSchema: { type: 'object', properties: { id: {type:'string'} },
- *               required: ['id'] } },
+ *               required: ['id'] } } },
  *         },
  *       },
  *     }

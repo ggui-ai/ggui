@@ -724,7 +724,7 @@ export default function Component(props: Props) {
       actionSpec: { foo: { label: 'Foo' } },
       streamSpec: { bar: { description: 'bar channel', schema: { type: 'object' } } },
       contextSpec: { view: { schema: { type: 'string' }, default: 'list' } },
-      agentCapabilities: { tools: { baz: { description: 'baz tool' } } },
+      agentCapabilities: { tools: { baz: { toolInfo: { inputSchema: { type: 'object' }, description: 'baz tool' } } } },
     };
     const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
     const wireIssues = issues.filter(

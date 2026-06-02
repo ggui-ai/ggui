@@ -99,7 +99,11 @@ const OVERRIDE_CONTRACT: DataContract = {
  */
 const AGENT_TOOL_CONTRACT: DataContract = {
   propsSpec: { properties: {} },
-  agentCapabilities: { tools: { todo_add: { description: 'add a todo' } } },
+  agentCapabilities: {
+    tools: {
+      todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} }, description: 'add a todo' } },
+    },
+  },
   actionSpec: {
     addTodo: { label: 'Add', nextStep: 'todo_add', schema: { type: 'object', properties: {} } },
   },

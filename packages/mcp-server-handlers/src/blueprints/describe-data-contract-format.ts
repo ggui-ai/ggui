@@ -135,15 +135,24 @@ and read latest as \`stream.latest\` or iterate \`stream.history\`.
 
 \`\`\`ts
 interface AgentCapabilitiesSpec {
+  // Keyed by the bare MCP tool name (the catalog key).
   tools: Record<string, AgentToolEntry>;
 }
 
 interface AgentToolEntry {
-  description?: string;
-  inputSchema?: JsonSchema;
-  outputSchema?: JsonSchema;
+  // Owning MCP server identity (optional — from the 'initialize'
+  // handshake). (server, toolName) is the canonical identity;
+  // version is metadata, not identity.
+  serverInfo?: { name: string; version: string };
+  // MCP tool descriptor, echoed from 'tools/list' (minus name = the key).
+  toolInfo: {
+    inputSchema: JsonSchema; // REQUIRED — every MCP tool has one.
+    description?: string;
+    outputSchema?: JsonSchema;
+  };
+  // ggui authoring layer (not MCP): when/why/by-whom the tool is called.
   usage?: string;
-  example?: { input?: JsonValue; output?: JsonValue };
+  example?: { input: JsonValue; output: JsonValue };
 }
 \`\`\`
 

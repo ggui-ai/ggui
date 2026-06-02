@@ -39,8 +39,10 @@
 import {
   dataContractSchema,
   gadgetExportName,
+  type AgentToolEntry,
   type DataContract,
   type GadgetDescriptor,
+  type JsonSchema,
 } from '@ggui-ai/protocol';
 import { lintContract, type ContractIssue } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
@@ -1253,26 +1255,29 @@ function buildContract(input: SynthesizeToolInput): DataContract {
     input.agentCapabilities?.tools &&
     Object.keys(input.agentCapabilities.tools).length > 0
   ) {
-    const built: Record<
-      string,
-      { inputSchema?: unknown; outputSchema?: unknown; usage?: string }
-    > = {};
+    const built: Record<string, AgentToolEntry> = {};
     for (const [name, entry] of Object.entries(input.agentCapabilities.tools)) {
       if (!entry || typeof entry !== 'object') continue;
+      // The LLM authors the ergonomic flat shape ({inputSchema?,
+      // outputSchema?, usage?}); the wire shape nests the MCP descriptor
+      // under `toolInfo` with a REQUIRED `inputSchema` (default the
+      // void-object schema when the LLM omitted it). `usage` stays on the
+      // ggui authoring layer alongside the descriptor.
+      const inputSchema = (entry.inputSchema !== undefined
+        ? normalizeSchema(entry.inputSchema)
+        : { type: 'object' }) as JsonSchema;
       built[name] = {
-        ...(entry.inputSchema !== undefined
-          ? { inputSchema: normalizeSchema(entry.inputSchema) }
-          : {}),
-        ...(entry.outputSchema !== undefined
-          ? { outputSchema: normalizeSchema(entry.outputSchema) }
-          : {}),
+        toolInfo: {
+          inputSchema,
+          ...(entry.outputSchema !== undefined
+            ? { outputSchema: normalizeSchema(entry.outputSchema) as JsonSchema }
+            : {}),
+        },
         ...(typeof entry.usage === 'string' ? { usage: entry.usage } : {}),
       };
     }
     if (Object.keys(built).length > 0) {
-      contract.agentCapabilities = {
-        tools: built,
-      } as DataContract['agentCapabilities'];
+      contract.agentCapabilities = { tools: built };
     }
   }
   // clientCapabilities.gadgets — browser-capability gadgets the

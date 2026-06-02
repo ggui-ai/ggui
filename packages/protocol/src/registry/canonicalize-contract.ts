@@ -52,10 +52,21 @@
  *   - The four typed specs: `propsSpec`, `actionSpec`, `contextSpec`,
  *     `streamSpec` (including `streamSpec[*].source.tool` cross-refs).
  *   - The two catalogs: `agentCapabilities.tools[*]` (key names + their
- *     `inputSchema`/`outputSchema`) and `clientCapabilities.gadgets`
- *     (package-keyed — npm package names as outer keys, export names as
- *     the inner `exports` map keys; no `version`, no transport metadata
- *     on the wire).
+ *     `toolInfo.inputSchema`/`toolInfo.outputSchema`) and
+ *     `clientCapabilities.gadgets` (package-keyed — npm package names as
+ *     outer keys, export names as the inner `exports` map keys; no
+ *     `version`, no transport metadata on the wire).
+ *
+ * # Domain rule: `agentCapabilities.tools[*].serverInfo` is stripped
+ *
+ * `serverInfo` ({name, version}) records the owning MCP server identity.
+ * `(server, toolName)` is the canonical cross-framework identity, but
+ * `serverInfo.version` is METADATA, not identity — a server version bump
+ * MUST NOT invalidate a registered blueprint, and the same tool reached
+ * via two framework registrations MUST reuse the same UI. The entire
+ * `serverInfo` sub-object is removed (structurally, context-scoped to the
+ * tool-catalog recursion) BEFORE the JCS pass. `toolInfo.inputSchema` /
+ * `toolInfo.outputSchema` stay — they ARE identity (they shape the data).
  *   - Inner JSON Schema fields under every `schema:` wrapper (`type`,
  *     `enum`, `properties`, `required`, `items`, `additionalProperties`,
  *     `nullable`, `format`, …).
@@ -71,7 +82,7 @@
  * Pure function — no I/O, no globals.
  */
 import canonicalize from 'canonicalize';
-import type { DataContract } from '../types/data-contract.js';
+import type { AgentToolEntry, DataContract } from '../types/data-contract.js';
 import type { BlueprintVariance } from '../types/blueprint.js';
 
 /**
@@ -164,9 +175,36 @@ export function canonicalizeValue(
 }
 
 /**
+ * Structurally remove `agentCapabilities.tools[*].serverInfo` before the
+ * generic JCS walk. Context-scoped to the tool catalog (NOT a global
+ * value-guard) so a spec slot / gadget package / tool literally named
+ * `serverInfo` elsewhere can never be collateral-stripped. Pure — returns
+ * a shallow-cloned contract; the input is never mutated. Returns the
+ * input unchanged when there is no `agentCapabilities.tools` to walk.
+ */
+function stripToolServerInfo(
+  contract: DataContract,
+): DataContract {
+  const tools = contract.agentCapabilities?.tools;
+  if (!tools) return contract;
+  const cleanedTools: Record<string, AgentToolEntry> = {};
+  for (const [name, entry] of Object.entries(tools)) {
+    // `serverInfo` is optional on AgentToolEntry, so the rest object is
+    // still a well-typed AgentToolEntry with that field omitted.
+    const { serverInfo: _serverInfo, ...rest } = entry;
+    cleanedTools[name] = rest;
+  }
+  return {
+    ...contract,
+    agentCapabilities: { ...contract.agentCapabilities, tools: cleanedTools },
+  };
+}
+
+/**
  * Produce the canonical bytes for a `DataContract` value, suitable
  * for hashing or external content-address lookups. Stable across
- * paraphrase, key order, whitespace, and description-only edits.
+ * paraphrase, key order, whitespace, description-only edits, and
+ * `serverInfo` (server-version metadata, not identity).
  *
  * Empty / undefined / `{}` all collapse to the same canonical bytes,
  * which produces a stable `blueprintKey` for the "no-contract" case.
@@ -177,7 +215,7 @@ export function canonicalizeValue(
  * implementations using any JCS library produce the same bytes.
  */
 export function canonicalizeContracts(contract: DataContract | undefined): string {
-  const stripped = canonicalizeValue(contract ?? {});
+  const stripped = canonicalizeValue(stripToolServerInfo(contract ?? {}));
   // `canonicalize` may return undefined if every field was stripped;
   // fall back to the empty-object canonical form so the hash function
   // always receives a stable string.

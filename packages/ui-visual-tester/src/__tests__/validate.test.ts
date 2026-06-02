@@ -109,7 +109,7 @@ const AGENT_BOUND_CONTRACT: DataContract = {
   },
   agentCapabilities: {
     tools: {
-      incrementCounter: { description: 'Increment the counter' },
+      incrementCounter: { toolInfo: { inputSchema: { type: 'object' }, description: 'Increment the counter' } },
     },
   },
 };

@@ -18,7 +18,7 @@ function withAgentTools(tools: Record<string, unknown> = {}): DataContract {
       tools: Object.fromEntries(
         Object.entries(tools).map(([k]) => [
           k,
-          { inputSchema: { type: 'object' as const } },
+          { toolInfo: { inputSchema: { type: 'object' as const } } },
         ]),
       ),
     },
@@ -49,8 +49,8 @@ describe('checkActionNextStepRefs', () => {
       },
       {
         tools: {
-          archive_email: { inputSchema: { type: 'object' as const } },
-          send_email: { inputSchema: { type: 'object' as const } },
+          archive_email: { toolInfo: { inputSchema: { type: 'object' as const } } },
+          send_email: { toolInfo: { inputSchema: { type: 'object' as const } } },
         },
       },
     );
@@ -60,7 +60,7 @@ describe('checkActionNextStepRefs', () => {
   it('returns a CTR_REF_NEXT_STEP violation when nextStep names an undeclared tool', () => {
     const violations = checkActionNextStepRefs(
       { archive: { label: 'Archive', nextStep: 'archive_email' } },
-      { tools: { send_email: { inputSchema: { type: 'object' as const } } } },
+      { tools: { send_email: { toolInfo: { inputSchema: { type: 'object' as const } } } } },
     );
     expect(violations).toHaveLength(1);
     expect(violations[0].code).toBe(CTR_REF_NEXT_STEP);
@@ -87,7 +87,7 @@ describe('checkActionNextStepRefs', () => {
         send: { label: 'Send', nextStep: 'send_email' },
         ok: { label: 'OK', nextStep: 'noop' },
       },
-      { tools: { noop: { inputSchema: { type: 'object' as const } } } },
+      { tools: { noop: { toolInfo: { inputSchema: { type: 'object' as const } } } } },
     );
     expect(violations.map((v) => v.received)).toEqual([
       'archive_email',
@@ -126,8 +126,8 @@ describe('checkStreamSourceRefs', () => {
       },
       {
         tools: {
-          fetch_ticker: { inputSchema: { type: 'object' as const } },
-          list_alerts: { inputSchema: { type: 'object' as const } },
+          fetch_ticker: { toolInfo: { inputSchema: { type: 'object' as const } } },
+          list_alerts: { toolInfo: { inputSchema: { type: 'object' as const } } },
         },
       },
     );
@@ -203,7 +203,7 @@ describe('checkCrossReferences (aggregate)', () => {
         ticker: { schema: stringSchema, source: { tool: 'fetch_ticker' } },
       },
       agentCapabilities: {
-        tools: { fetch_ticker: { inputSchema: { type: 'object' as const } } },
+        tools: { fetch_ticker: { toolInfo: { inputSchema: { type: 'object' as const } } } },
       },
     };
     expect(checkCrossReferences(contract)).toEqual([]);

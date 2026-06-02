@@ -134,7 +134,7 @@ export function checkActionSchemaCompat(
 
     const tool = tools.get(toolName);
     if (!tool) continue; // CTR_REF_NEXT_STEP covers this
-    const toolInput = tool.inputSchema;
+    const toolInput = tool.toolInfo.inputSchema;
     if (!toolInput) continue; // catalog entry incomplete — no anchor
 
     const actionSchema: JsonSchema = entry.schema ?? {
@@ -192,7 +192,7 @@ export function checkStreamSchemaCompat(
 
     const tool = tools.get(toolName);
     if (!tool) continue; // CTR_REF_STREAM_SOURCE covers this
-    const toolOutput = tool.outputSchema;
+    const toolOutput = tool.toolInfo?.outputSchema;
     if (!toolOutput) continue;
 
     const channelSchema = (entry as StreamChannelEntry).schema;
