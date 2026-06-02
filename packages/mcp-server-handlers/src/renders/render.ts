@@ -1613,11 +1613,11 @@ export function createGguiRenderHandler(
                 cachedIntent: intent,
                 cachedAt: new Date().toISOString(),
                 // Project the matched blueprint's contract onto the
-                // cache hit so commitCachedRender lands the four wire-
-                // surface specs on the new render. Symmetric with
-                // runGenerationIntoRender's render build: both paths
-                // emit the same shape, and bootstrap-meta derivation
-                // reads from one place.
+                // cache hit so commitCachedRender lands the wire-surface
+                // specs and capability catalog on the new render.
+                // Symmetric with runGenerationIntoRender's render build:
+                // both paths emit the same shape, and bootstrap-meta
+                // derivation reads from one place.
                 ...(blueprintHit.contract.actionSpec
                   ? { actionSpec: blueprintHit.contract.actionSpec }
                   : {}),
@@ -1629,6 +1629,17 @@ export function createGguiRenderHandler(
                   : {}),
                 ...(blueprintHit.contract.contextSpec
                   ? { contextSpec: blueprintHit.contract.contextSpec }
+                  : {}),
+                // Project agentCapabilities through the blueprint-hit path
+                // so commitCachedRender's schema-compat escape hatch
+                // recognizes cross-MCP tools the reused contract's
+                // actionSpec.nextStep / streamSpec.source.tool reference.
+                // Without it the exempt set is empty and any reused
+                // blueprint whose nextStep is a domain (non-ggui_*) tool
+                // fails "tool not registered". Symmetric with the cold-gen
+                // path (runGenerationIntoRender's render build).
+                ...(blueprintHit.contract.agentCapabilities
+                  ? { agentCapabilities: blueprintHit.contract.agentCapabilities }
                   : {}),
                 // Project clientCapabilities through the blueprint-hit
                 // path so the cached commit emits Permissions-Policy

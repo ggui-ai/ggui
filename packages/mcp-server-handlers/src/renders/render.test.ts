@@ -55,7 +55,7 @@ import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
-import { createGguiRenderHandler } from './render.js';
+import { createGguiRenderHandler, type GguiRenderHandlerDeps } from './render.js';
 import type { HandlerContext } from '../types.js';
 
 const APP_ID = 'app-test';
@@ -82,6 +82,26 @@ const OVERRIDE_CONTRACT: DataContract = {
   propsSpec: { properties: {} },
   actionSpec: {
     refresh: { label: 'Refresh', schema: { type: 'object', properties: {} } },
+  },
+};
+
+/**
+ * Action-bearing contract for the reuse × schema-compat seam test. The
+ * `addTodo` action carries `nextStep: 'todo_add'` — a domain (non-`ggui_*`)
+ * tool — so the cross-MCP escape hatch (a nextStep declared in
+ * `agentCapabilities.tools` is exempt from the ggui-registry check) is the
+ * ONLY thing keeping schema-compat from throwing "tool not registered".
+ *
+ * `todo_add` MUST appear in `agentCapabilities.tools` or register-time
+ * `CTR_REF_NEXT_STEP` throws first; `ActionEntry` requires `label`. The
+ * tool value uses the CURRENT `AgentToolEntry` schema (all fields
+ * optional, `.strict()`), so a lone `description` is valid.
+ */
+const AGENT_TOOL_CONTRACT: DataContract = {
+  propsSpec: { properties: {} },
+  agentCapabilities: { tools: { todo_add: { description: 'add a todo' } } },
+  actionSpec: {
+    addTodo: { label: 'Add', nextStep: 'todo_add', schema: { type: 'object', properties: {} } },
   },
 };
 
@@ -117,6 +137,30 @@ function fakeGenerator(componentCode: string) {
   });
 }
 
+/**
+ * Schema-compat seam stub replicating the real cross-MCP escape hatch
+ * (`@ggui-ai/mcp-server/schema-compat.ts`): a `nextStep` declared in
+ * `agentCapabilities.tools` is exempt from the ggui-registry check; an
+ * undeclared one throws the live `SCHEMA_MISMATCH_ERROR`. Used to prove
+ * the cache path lands `agentCapabilities` so the `declared` set is
+ * populated (vs. empty → false-positive throw).
+ */
+function makeSchemaCompatStub(): NonNullable<
+  GguiRenderHandlerDeps['checkRenderContracts']
+> {
+  return (shape) => {
+    const declared = new Set(Object.keys(shape.agentCapabilities?.tools ?? {}));
+    for (const [name, entry] of Object.entries(shape.actionSpec ?? {})) {
+      const tool = entry?.nextStep;
+      if (typeof tool === 'string' && tool.length > 0 && !declared.has(tool)) {
+        throw new Error(
+          `SCHEMA_MISMATCH_ERROR — action "${name}" references tool "${tool}" which is not registered`,
+        );
+      }
+    }
+  };
+}
+
 interface Harness {
   readonly handshakeStore: InMemoryKeyValueStore;
   readonly renderStore: InMemoryRenderStore;
@@ -131,10 +175,22 @@ function buildHandler(opts: {
   readonly vectorStore: InMemoryVectorStore;
   readonly index: InMemoryBlueprintIndex;
   readonly coldCode: string;
+  /**
+   * Optional schema-compat seam. When present it's threaded onto the
+   * handler deps' `checkRenderContracts`, so cache-hit AND cold-gen
+   * commits run it against the projected `ComponentRender`. Default
+   * tests omit it (the no-registry / zero-config case); the reuse ×
+   * action-bearing-contract test passes a stub that replicates the real
+   * cross-MCP escape hatch to exercise the seam the cache path drops.
+   */
+  readonly checkRenderContracts?: GguiRenderHandlerDeps['checkRenderContracts'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
     renderStore: opts.renderStore,
+    ...(opts.checkRenderContracts
+      ? { checkRenderContracts: opts.checkRenderContracts }
+      : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -241,6 +297,91 @@ async function buildAcceptCacheHarness(): Promise<{
     vectorStore,
     index,
     coldCode: COLD_CODE,
+  });
+  return {
+    harness: { handshakeStore, renderStore, vectorStore, index, handler },
+    storedUuid,
+    handshakeId,
+  };
+}
+
+/**
+ * Parameterized variant of {@link buildAcceptCacheHarness}. Registers a
+ * stored blueprint carrying `contract` at a known UUID, seeds an
+ * `origin:'cache'` handshake whose `matchedBlueprint`/`effectiveContract`
+ * reference that SAME contract, and threads `extraOpts` (e.g. a
+ * `checkRenderContracts` stub) onto the handler. The ACCEPT point-read
+ * serves the stored blueprint's own contract, so the cache-hit projection
+ * reads `contract.{actionSpec,agentCapabilities,…}` from `contract`.
+ */
+async function buildAcceptCacheHarnessFor(
+  contract: DataContract,
+  extraOpts: {
+    readonly checkRenderContracts?: GguiRenderHandlerDeps['checkRenderContracts'];
+  } = {},
+): Promise<{
+  readonly harness: Harness;
+  readonly storedUuid: string;
+  readonly handshakeId: string;
+}> {
+  const handshakeStore = new InMemoryKeyValueStore();
+  const renderStore = new InMemoryRenderStore();
+  const vectorStore = new InMemoryVectorStore();
+  const index = new InMemoryBlueprintIndex();
+
+  const storedUuid = 'bp_33333333-3333-4333-8333-333333333333';
+  await registerBlueprint(
+    { embedding: fakeEmbedding, vectorStore, index },
+    APP_ID,
+    {
+      kind: 'template',
+      contract,
+      intent: 'a test card',
+      componentCode: STORED_CODE,
+      provenance: 'synth',
+    },
+    { mintId: () => storedUuid },
+  );
+
+  const handshakeId = 'hs-cache-param-1';
+  const record: HandshakeRecord = {
+    handshakeId,
+    action: 'reuse',
+    reason: 'test',
+    input: {
+      intent: 'a test card',
+      blueprintDraft: { contract },
+    },
+    target: {},
+    suggestion: {
+      origin: 'cache',
+      rationale: 'test',
+      blueprintMeta: {
+        contractHash: blueprintKey(contract),
+        generator: 'fake',
+        variance: {},
+      },
+    },
+    effectiveContract: contract,
+    matchedBlueprint: {
+      id: storedUuid,
+      contractKey: blueprintKey(contract),
+      variantKey: variantKey(undefined),
+    },
+    appId: APP_ID,
+    createdAt: new Date().toISOString(),
+  };
+  await seedHandshake(handshakeStore, handshakeId, record);
+
+  const handler = buildHandler({
+    handshakeStore,
+    renderStore,
+    vectorStore,
+    index,
+    coldCode: COLD_CODE,
+    ...(extraOpts.checkRenderContracts
+      ? { checkRenderContracts: extraOpts.checkRenderContracts }
+      : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -448,6 +589,44 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const keys = entries.map((e) => e.key);
     expect(keys).toContain(storedUuid);
     expect(keys).toContain(out.blueprintId);
+  });
+
+  // ── reuse × action-bearing contract (the SCHEMA_MISMATCH seam) ──────
+  //
+  // The live bug: the cache-hit projection copies the matched
+  // blueprint's actionSpec/streamSpec/propsSpec/contextSpec/
+  // clientCapabilities but DROPS agentCapabilities. commitCachedRender's
+  // schema-compat escape hatch reads cacheHit.agentCapabilities to exempt
+  // a cross-MCP `nextStep` from the ggui-registry check — with the field
+  // dropped, the exempt set is empty and any reused blueprint whose
+  // actionSpec.nextStep is a domain tool fails "tool not registered".
+  // The V1/V2/S1/S2 cache tests never reused an action-bearing contract,
+  // so this seam stayed untested. `makeSchemaCompatStub` replicates the
+  // real escape-hatch logic; the harness threads it through the deps.
+  it('cache-reuse of a blueprint with agentCapabilities + actionSpec.nextStep does NOT throw SCHEMA_MISMATCH', async () => {
+    const { harness, handshakeId } = await buildAcceptCacheHarnessFor(
+      AGENT_TOOL_CONTRACT,
+      { checkRenderContracts: makeSchemaCompatStub() },
+    );
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    expect(out).toBeDefined();
+    expect(out.cache.hit).toBe(true);
+  });
+
+  it('schema-compat stub: nextStep without agentCapabilities throws; with it, passes', () => {
+    const stub = makeSchemaCompatStub();
+    expect(() => stub({ actionSpec: AGENT_TOOL_CONTRACT.actionSpec })).toThrow(
+      /not registered/,
+    );
+    expect(() =>
+      stub({
+        actionSpec: AGENT_TOOL_CONTRACT.actionSpec,
+        agentCapabilities: AGENT_TOOL_CONTRACT.agentCapabilities,
+      }),
+    ).not.toThrow();
   });
 });
 
