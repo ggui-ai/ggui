@@ -54,6 +54,7 @@ import {
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   ensureConformingContract,
+  normalizeDraft,
   type LLMCaller,
 } from '@ggui-ai/negotiator';
 import type { HandlerContext } from '../types.js';
@@ -406,7 +407,28 @@ export async function decideHandshake(
   // Draft is UNTRUSTED (forgiving handshake — may be malformed). Parse
   // once up front: the find-similar tiers need a valid DataContract; a
   // malformed draft skips them and falls straight to validate/repair.
-  const parsedDraft = dataContractSchema.safeParse(draftContract);
+  //
+  // FALLBACK-NORMALIZE (only-on-failure, load-bearing): when the RAW
+  // parse fails, retry on the DETERMINISTICALLY-normalized draft. Most
+  // LLM drafts carry mechanical-only quirks (Gemini uppercase 'OBJECT'
+  // types, 'TYPE|null' pipe-unions, a stray propsSpec.required array) that
+  // `normalizeDraft` fixes without an LLM. Without this, a quirky-but-
+  // matchable draft skips the find-similar block entirely and cold-gens
+  // every turn. The retry is gated ON FAILURE so a CLEAN draft keeps
+  // parsing verbatim: its match key (`blueprintKey(draft)`) must stay
+  // identical to the key Tier-2 create registers it under (the verbatim
+  // fast-path in ensureConformingContract). A quirky-but-normalizable
+  // draft instead matches on `blueprintKey(normalizeDraft(draft))`, which
+  // equals the key its OWN first-time create registers under (the
+  // deterministic `method:'normalized'` tier) — so create-then-reuse line
+  // up. Always-normalizing would break that key consistency.
+  let parsedDraft = dataContractSchema.safeParse(draftContract);
+  if (!parsedDraft.success) {
+    const normalizedParse = dataContractSchema.safeParse(
+      normalizeDraft(draftContract),
+    );
+    if (normalizedParse.success) parsedDraft = normalizedParse;
+  }
 
   // Tier 0 — deployment-specific pre-match (cloud curated blueprint).
   // Runs first so a curated / byte-exact hit wins over find-similar.

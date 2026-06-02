@@ -110,6 +110,17 @@ function normalizeTypeValue(
     if (DROP_TYPES.has(lower)) return undefined;
     const alias = TYPE_ALIASES[lower];
     if (alias !== undefined) return alias;
+    if (lower.includes('|')) {
+      // Pipe-union string (`"STRING|null"`). Some models emit the union
+      // as one pipe-delimited string rather than the JSON Schema array
+      // form; recover the first valid non-null member, mirroring the
+      // array branch below (drops the nullable arm).
+      for (const member of lower.split('|')) {
+        const norm = normalizeTypeValue(member, enumSibling);
+        if (norm !== undefined && norm !== 'null') return norm;
+      }
+      return undefined;
+    }
     // Unrecognized garbage — drop the constraint rather than guess.
     return undefined;
   }

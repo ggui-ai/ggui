@@ -11,7 +11,11 @@
  * covered by `blueprint-matcher.test.ts` + the live `cache-reuse-probe`.
  */
 import { createHash } from 'node:crypto';
-import { summarizeContract, type DataContract } from '@ggui-ai/protocol';
+import {
+  dataContractSchema,
+  summarizeContract,
+  type DataContract,
+} from '@ggui-ai/protocol';
 import {
   InMemoryBlueprintIndex,
   InMemoryVectorStore,
@@ -471,6 +475,88 @@ describe('decideHandshake — find-similar across pools', () => {
     });
     expect(r.action).toBe('reuse');
     expect(r.suggestion.blueprintMeta.variance).toEqual(matchedVariance);
+  });
+});
+
+describe('decideHandshake — quirky draft reaches the reuse-match gate (fallback-normalize)', () => {
+  // A draft carrying mechanical LLM quirks that FAIL a raw
+  // dataContractSchema.safeParse but normalizeDraft fixes deterministically:
+  //   - a stray `propsSpec.required` array on the wrapper (Gemini's
+  //     JSON-Schema reflex — illegal on the `.strict()` wrapper),
+  //   - a capitalized `type: "OBJECT"` (canonical is lowercase),
+  //   - a pipe-union `type: "STRING|null"` (canonical is a single type).
+  // Pre-fix, the raw parse fails → the find-similar block is skipped
+  // entirely → matchBlueprint is never reached → fall to create.
+  // The draft is UNTRUSTED at this boundary (forgiving handshake) — the
+  // contract field is nominally a DataContract but may carry malformed
+  // values at runtime. Build it as an opaque JSON value so the literal's
+  // illegal `type` strings don't need a type assertion, then thread it in.
+  const quirkyContract: DataContract = JSON.parse(
+    JSON.stringify({
+      propsSpec: {
+        properties: { title: { schema: { type: 'string' } } },
+        required: ['title'],
+      },
+      actionSpec: {
+        submit: {
+          label: 'Submit',
+          schema: {
+            type: 'OBJECT',
+            properties: { text: { type: 'STRING|null' } },
+          },
+        },
+      },
+    }),
+  );
+  const QUIRKY_DRAFT = { contract: quirkyContract };
+
+  it('the quirky draft genuinely fails a RAW dataContractSchema parse (test premise)', () => {
+    // Imported lazily to avoid colliding with the matcher/negotiator mocks
+    // — this asserts the parse contract directly, the premise of the fix.
+    expect(dataContractSchema.safeParse(QUIRKY_DRAFT.contract).success).toBe(
+      false,
+    );
+  });
+
+  it('reuses on an exact-key hit even though the RAW draft fails to parse', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    // Pre-fix the raw parse fails, the matcher is skipped, and the flow
+    // falls to the create path — stub ensureConformingContract so that
+    // pre-fix branch yields a clean `create` (not a crash), making the
+    // matchBlueprint-was-reached assertion the unambiguous RED signal.
+    mockEnsure.mockResolvedValue({
+      contract: { propsSpec: { properties: {} } },
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: QUIRKY_DRAFT,
+      ctx: CTX,
+    });
+    // Pre-fix this is `create` (matchBlueprint never called); post-fix the
+    // normalized parse reaches the matcher and the exact-key hit is reused.
+    expect(mockMatch).toHaveBeenCalledOnce();
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-ek');
+    // The create path must NOT have run.
+    expect(mockEnsure).not.toHaveBeenCalled();
+  });
+
+  it('a CLEAN draft still parses verbatim and reuses (no regression to the verbatim path)', async () => {
+    // The fallback-normalize is ONLY-ON-FAILURE: a clean draft must reach
+    // the matcher via the RAW parse, unchanged.
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-clean' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(mockMatch).toHaveBeenCalledOnce();
+    expect(r.action).toBe('reuse');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-clean');
   });
 });
 

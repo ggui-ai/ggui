@@ -74,6 +74,34 @@ describe('normalizeSchema — invalid type spellings', () => {
     });
   });
 
+  it('collapses a pipe-union type STRING to its first valid non-null member', () => {
+    // Gemini emits the union as a single pipe-string, e.g. "STRING|null",
+    // rather than the JSON Schema array form. Recover the first valid
+    // non-null member (case-insensitive), dropping the nullable arm.
+    expect(normalizeSchema({ type: 'STRING|null' })).toEqual({
+      type: 'string',
+    });
+    expect(normalizeSchema({ type: 'null|number' })).toEqual({
+      type: 'number',
+    });
+    // Aliases inside the pipe-union normalize too.
+    expect(normalizeSchema({ type: 'int|null' })).toEqual({
+      type: 'integer',
+    });
+  });
+
+  it('canonicalizes a nested pipe-union under a capitalized object type', () => {
+    expect(
+      normalizeSchema({
+        type: 'OBJECT',
+        properties: { text: { type: 'STRING|null' } },
+      }),
+    ).toEqual({
+      type: 'object',
+      properties: { text: { type: 'string' } },
+    });
+  });
+
   it('drops the type key for no-constraint words (any/unknown/mixed)', () => {
     expect(normalizeSchema({ type: 'any', description: 'x' })).toEqual({
       description: 'x',
