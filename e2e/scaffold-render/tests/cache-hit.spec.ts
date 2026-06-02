@@ -77,6 +77,28 @@ const SIMILAR_CONTRACT = {
   },
 } as const;
 
+// ── Regression-gate fixture: mechanically-quirky Gemini-style contract ───────
+// Quirks that FAIL a raw `dataContractSchema.safeParse` but are fixed by
+// `normalizeDraft` before the match gate:
+//   1. Stray `propsSpec`-level `required` array (strict schema rejects it as
+//      CTR_SHAPE_UNRECOGNIZED_KEYS).
+//   2. Uppercase JSON-Schema type `"STRING"` (protocol only accepts lowercase).
+//   3. Pipe-union nullable `"NUMBER|null"` (protocol expects a single string).
+// After normalization the contract is a clean, matchable oil-pressure gauge —
+// niche enough that turn-1 is a genuine cold gen, so turn-2's hit is
+// attributable to turn-1's blueprint (not a shipped default).
+const QUIRKY_INTENT = 'Render an oil-pressure gauge for pump station "PS-4"';
+const QUIRKY_CONTRACT = {
+  propsSpec: {
+    description: 'oil pressure gauge',
+    required: ['stationLabel'], // stray propsSpec-level `required` — CTR_SHAPE_UNRECOGNIZED_KEYS
+    properties: {
+      stationLabel: { schema: { type: 'STRING' }, required: false }, // uppercase type
+      pressurePsi: { schema: { type: 'NUMBER|null' }, required: false }, // pipe-union nullable
+    },
+  },
+} as const;
+
 // ── Variance-axis fixtures (scenarios V1–V3) ─────────────────────────────────
 // Two request-time variances along the persona axis. The reuse identity is
 // (contractHash, variantKey) — a different variance derives a different
@@ -632,6 +654,80 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
         render2.blueprintId,
         'V3: accept across the variance gap must reuse the V_MIN blueprintId',
       ).toBe(render1.blueprintId);
+    },
+  );
+
+  test(
+    'mechanically-quirky contract (uppercase types / pipe-union / stray required) → normalized, then reused (regression: 4c20c984a)',
+    async () => {
+      // Regression gate for commit 4c20c984a: `decide-handshake` now falls back
+      // to a normalized parse before the blueprint-match gate. Before the fix,
+      // any draft that failed a RAW `dataContractSchema.safeParse` was routed
+      // straight to cold-gen, so a Gemini-style quirky draft (which has all three
+      // malformations above) cold-genned EVERY turn and NEVER reused. After the
+      // fix, `normalizeDraft` cleans the draft first; the result is a valid,
+      // matchable contract → turn-2 hits the exact-key index and reuses.
+      //
+      // QUIRKY_CONTRACT fails raw parse (3 issues: uppercase `STRING`, pipe-union
+      // `NUMBER|null`, stray `propsSpec.required`). After `normalizeDraft` it is
+      // schema-valid and lint-clean with a stable `contractHash`. Turn-2 therefore
+      // MUST reuse turn-1's blueprint — otherwise the pre-fix cold-gen regression
+      // is back.
+      test.setTimeout(1_500_000);
+      app = app ?? (await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' }));
+
+      // Turn-1: cold generation (forceCreate), ACCEPT the handshake proposal
+      // (OMIT override). The quirky draft can't go through `override.contract` —
+      // that path is STRICT (validateContract gate) and would THROW
+      // `override_contract_invalid` on the uppercase types / pipe-union / stray
+      // `propsSpec.required`. Instead the handshake's forgiving tier runs
+      // `ensureConformingContract(quirky)`, whose deterministic normalize tier
+      // yields the conforming contract = `normalizeDraft(quirky)`; accepting
+      // renders + registers it under `blueprintKey(normalizeDraft(quirky))` —
+      // exactly the key turn-2's accept looks up via the normalize-before-match
+      // fix. Mints the durable blueprintId we assert on in turn-2.
+      const render1 = await renderOnce(app.gguiUrl, {
+        intent: QUIRKY_INTENT,
+        contract: QUIRKY_CONTRACT,
+        forceCreate: true,
+      });
+      // Turn-2: same quirky contract, no forceCreate → normalizeDraft produces
+      // the same clean form → exact-key index HITS → origin:cache → ACCEPT (omit
+      // override) → point-read HITS → reuse.
+      const render2 = await renderOnce(app.gguiUrl, {
+        intent: QUIRKY_INTENT,
+        contract: QUIRKY_CONTRACT,
+        forceCreate: false,
+      });
+      // eslint-disable-next-line no-console -- quirky-contract reuse signal in the CI log.
+      console.log(
+        `[cache-hit:quirky] turn-1 bp=${render1.blueprintId} ms=${render1.ms} | ` +
+          `turn-2 bp=${render2.blueprintId} hit=${render2.cache?.hit} ` +
+          `cachedBp=${render2.cache?.cachedBlueprintId} avoided=${render2.cache?.llmCallsAvoided} ms=${render2.ms}`,
+      );
+
+      // PRIMARY proof (D1): turn-2 reused turn-1's blueprint. If the pre-fix
+      // cold-gen regression is back, turn-2 mints a new blueprintId and fails
+      // here.
+      expect(render2.cache?.hit, 'turn-2 should be a cache hit (quirky contract normalized then reused)').toBe(true);
+      expect(render1.blueprintId, 'turn-1 should carry a durable blueprintId').toBeTruthy();
+      expect(
+        render2.blueprintId,
+        'turn-2 blueprintId should EQUAL turn-1 — equality proves normalization ran before the match gate',
+      ).toBe(render1.blueprintId);
+      expect(
+        render2.cache?.cachedBlueprintId,
+        'the cache marker should name turn-1 as the reused blueprint',
+      ).toBe(render1.blueprintId);
+      expect(
+        render2.cache?.llmCallsAvoided ?? 0,
+        'turn-2 cache hit should report at least one generation call avoided',
+      ).toBeGreaterThanOrEqual(1);
+
+      // SECONDARY signal: turn-2 stays fast (no LLM fallthrough).
+      expect
+        .soft(render2.ms, `turn-2 ${render2.ms}ms — cache hit should be < 10s`)
+        .toBeLessThan(10_000);
     },
   );
 });
