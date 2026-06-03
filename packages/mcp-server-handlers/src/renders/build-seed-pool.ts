@@ -64,14 +64,29 @@ export async function buildSeedPool(
     }
     // A blueprint is a completed template; 'template' is the constant the
     // match path keys on, so the loaded exactKey matches what the handshake computes.
-    await registerBlueprint(registry, scope, {
-      kind: 'template',
-      contract: input.contract,
-      intent: input.variance.seedPrompt ?? input.variance.persona ?? 'shared blueprint',
-      componentCode: input.componentCode,
-      provenance: 'register',
-      variance: input.variance,
-    });
+    // Duplicate (contract, variance) records dedup to the first (registerBlueprint
+    // is first-write-wins on the exact key).
+    await registerBlueprint(
+      registry,
+      scope,
+      {
+        kind: 'template',
+        contract: input.contract,
+        // Coalesce on the first NON-EMPTY hint — `??` is nullish-only, so an
+        // empty `seedPrompt`/`persona` would yield an empty intent and trip
+        // registerBlueprint's "intent cannot be empty" guard, aborting the
+        // whole build on one bad record.
+        intent:
+          [input.variance.seedPrompt, input.variance.persona]
+            .map((s) => s?.trim())
+            .find((s): s is string => Boolean(s)) ?? 'shared blueprint',
+        componentCode: input.componentCode,
+        provenance: 'register',
+        variance: input.variance,
+      },
+      // Seed pool is a fixed curated set — never evict.
+      { maxPerKind: Infinity },
+    );
   }
 
   return {
