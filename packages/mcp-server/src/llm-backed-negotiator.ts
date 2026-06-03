@@ -52,6 +52,7 @@ import {
   type HandshakeDecisionAdapter,
   type HandshakeNegotiator,
   type InstalledBlueprintsProvider,
+  type ToolIdentityCatalogStore,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { LLMCaller } from "@ggui-ai/negotiator";
 import type { Blueprint } from "@ggui-ai/protocol";
@@ -252,6 +253,16 @@ export interface LlmBackedHandshakeNegotiatorDeps {
    * without a separate synth round-trip.
    */
   installedBlueprints?: InstalledBlueprintsProvider;
+  /**
+   * Per-app tool-identity catalog store (READ side). When wired, the
+   * shared `decideHandshake` core runs `canonicalizeToolIdentity`
+   * against `catalogStore.get(ctx.appId)` BEFORE keying — rewriting each
+   * tool's `serverInfo` to the canonical identity the host runtime
+   * declared via `ggui_runtime_declare_tool_catalog`, so blueprint reuse
+   * is framework-invariant. Absent ⇒ the canonicalization step is a
+   * no-op (Tier 2). The SAME instance the declaration handler writes.
+   */
+  catalogStore?: ToolIdentityCatalogStore;
 }
 
 /**
@@ -271,6 +282,10 @@ export interface LlmBackedHandshakeNegotiatorDeps {
 export function createLlmBackedHandshakeNegotiator(
   deps: LlmBackedHandshakeNegotiatorDeps
 ): HandshakeNegotiator {
+  // Capture the store so the adapter resolver closes over a concrete
+  // value (no `?.` chain inside the hot path; the spread below already
+  // gates on presence).
+  const catalogStore = deps.catalogStore;
   const adapter: HandshakeDecisionAdapter = {
     // BYOK seam: resolve per-ctx creds + wrap into an LLMCaller. No
     // creds ⇒ undefined ⇒ the core returns a no-LLM create fallback.
@@ -298,6 +313,13 @@ export function createLlmBackedHandshakeNegotiator(
       // eslint-disable-next-line no-console -- operator-visible signal
       console.warn(message);
     },
+    // READ side of tool-identity canonicalization. When a catalog store
+    // is wired, the core resolves the per-app catalog by ctx.appId and
+    // runs canonicalizeToolIdentity before keying. Absent ⇒ the seam is
+    // a no-op (Tier 2).
+    ...(catalogStore
+      ? { toolIdentityCatalog: (ctx) => catalogStore.get(ctx.appId) }
+      : {}),
   };
 
   return {

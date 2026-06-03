@@ -75,18 +75,20 @@ describe('createGguiServer — HTTP surface', () => {
     // wired — absent registry ⇒ absent tool (no throwing shim).
     // Default boot: ggui_search_blueprints + ggui_list_featured_blueprints
     // + 6 spec/discovery handlers + ggui_runtime_submit_action +
-    // ggui_list_gadgets = 10.
+    // ggui_list_gadgets + ggui_runtime_declare_tool_catalog = 11.
+    // (The declare tool registers on every boot — the shared
+    // tool-identity catalog store defaults to an in-memory instance.)
     expect(body).toEqual({
       status: 'ok',
       server: 'ggui-mcp-server',
       version: '0.0.1',
-      tools: 10,
+      tools: 11,
     });
   });
 
   it('exposes toolCount statically on the GguiServer object', async () => {
     fx = await boot();
-    expect(fx.server.toolCount).toBe(10);
+    expect(fx.server.toolCount).toBe(11);
   });
 
   it('toolCount reflects a custom handlers list', async () => {
@@ -778,6 +780,7 @@ describe('createGguiServer — MCP wire roundtrip', () => {
       expect(names).toEqual([
         'ggui_list_featured_blueprints',
         'ggui_list_gadgets',
+        'ggui_runtime_declare_tool_catalog',
         'ggui_runtime_submit_action',
         'ggui_search_blueprints',
       ]);
@@ -1232,6 +1235,7 @@ describe('createGguiServer — mcpMounts (Slice 6 runtime aggregation)', () => {
       expect(names).toEqual([
         'ggui_list_featured_blueprints',
         'ggui_list_gadgets',
+        'ggui_runtime_declare_tool_catalog',
         'ggui_runtime_submit_action',
         'ggui_search_blueprints',
         'greeter_hello',
@@ -1262,10 +1266,10 @@ describe('createGguiServer — mcpMounts (Slice 6 runtime aggregation)', () => {
       logger: silentLogger,
       mcpMounts: [{ name: 'greeter', handlers: [greeter] }],
     });
-    // 10 default handlers (2 blueprint-read + 6 spec/discovery + 1 submit-action
-    // + 1 list-gadgets) + 1 mount handler.
+    // 11 default handlers (2 blueprint-read + 6 spec/discovery + 1 submit-action
+    // + 1 list-gadgets + 1 declare-tool-catalog) + 1 mount handler.
     // `ggui_render_blueprint` is gated on `uiRegistry`.
-    expect(server.toolCount).toBe(11);
+    expect(server.toolCount).toBe(12);
   });
 
   it('throws at composition time when a mount tool name collides with a ggui-native tool', () => {

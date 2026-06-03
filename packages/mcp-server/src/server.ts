@@ -203,6 +203,7 @@ import {
 import {
   clearGenerationCache,
   createGguiConsumeHandler,
+  createGguiDeclareToolCatalogHandler,
   createGguiEmitHandler,
   createGguiGetRenderHandler,
   createGguiHandshakeHandler,
@@ -212,6 +213,7 @@ import {
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
   createGguiUpdateHandler,
+  InMemoryToolIdentityCatalogStore,
   createInMemoryProvisionalPreviewRegistry,
   deriveContractBundle,
   derivePublicEnvProjection,
@@ -229,6 +231,7 @@ import {
   type ProvisionalPreviewDeps,
   type ProvisionalPreviewEmitter,
   type ProvisionalPreviewOutcome,
+  type ToolIdentityCatalogStore,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { UiRegistry } from "@ggui-ai/ui-registry";
 import {
@@ -452,6 +455,17 @@ function buildOpsBlueprintDeps(input: {
 export function defaultHandlers(deps: {
   readonly embedding: EmbeddingProvider;
   readonly vectors: VectorStore;
+  /**
+   * Per-app tool-identity catalog store (write side). When bound,
+   * registers `ggui_runtime_declare_tool_catalog` — the host runtime's
+   * `{ bareToolName -> canonical serverInfo }` declaration is persisted
+   * here under `ctx.appId`. The SAME instance the handshake negotiator's
+   * `toolIdentityCatalog` resolver reads, so a reused blueprint's tool
+   * `serverInfo` is canonicalized before keying. Absent ⇒ the declaration
+   * tool is NOT registered (zero-config OSS without the round-trip wired
+   * stays clean).
+   */
+  readonly toolIdentityCatalogStore?: ToolIdentityCatalogStore;
   /**
    * Optional blueprint catalog source. When bound,
    * `ggui_list_featured_blueprints` enumerates the provider's
@@ -1016,6 +1030,22 @@ export function defaultHandlers(deps: {
       createGguiListThemesHandler({
         appMetadataStore: deps.appMetadataStore,
         themes: deps.themes,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+  }
+  // `ggui_runtime_declare_tool_catalog` — WRITE side of cross-runtime
+  // tool-identity canonicalization. The host runtime declares its
+  // `{ bareToolName -> canonical serverInfo }` catalog on connect; it is
+  // persisted under `ctx.appId` in the SAME store the handshake
+  // negotiator's `toolIdentityCatalog` resolver reads, so a reused
+  // blueprint's tool `serverInfo` is canonicalized before keying.
+  // Registered only when the store is wired (zero-config OSS without the
+  // round-trip stays clean — tools/list doesn't advertise a write tool
+  // with nowhere to persist).
+  if (deps.toolIdentityCatalogStore) {
+    handlers.push(
+      createGguiDeclareToolCatalogHandler({
+        catalogStore: deps.toolIdentityCatalogStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -1589,6 +1619,25 @@ export interface CreateGguiServerOptions {
    * cross-handler sharing) and `ggui_list_themes` is NOT registered.
    */
   readonly appMetadataStore?: AppMetadataStore;
+
+  /**
+   * Per-app tool-identity catalog store — the shared persistence seam
+   * for cross-runtime tool-identity canonicalization. The SAME instance
+   * is wired into BOTH sides of the round-trip:
+   *   - WRITE: the `ggui_runtime_declare_tool_catalog` handler (the host
+   *     runtime declares `{ bareToolName -> canonical serverInfo }` on
+   *     connect).
+   *   - READ: the handshake decision adapter's `toolIdentityCatalog`
+   *     resolver, so a reused blueprint's tool `serverInfo` is rewritten
+   *     to the canonical identity before keying (framework-invariant
+   *     reuse).
+   *
+   * Absent ⇒ `createGguiServer` constructs a single shared
+   * `InMemoryToolIdentityCatalogStore` and threads it into both sides
+   * (mirrors the `appMetadataStore` default). Hosted deployments bind a
+   * multi-tenant adapter.
+   */
+  readonly toolIdentityCatalogStore?: ToolIdentityCatalogStore;
 
   /**
    * Global theme-catalog resolver. When bound alongside
@@ -3498,6 +3547,16 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ? (handshakeExplicit?.kvStore ?? new InMemoryKeyValueStore())
     : undefined;
 
+  // ONE shared tool-identity catalog store wired into BOTH sides of the
+  // cross-runtime canonicalization round-trip — the
+  // `ggui_runtime_declare_tool_catalog` WRITE handler (registered in
+  // `defaultHandlers` below) AND the handshake negotiator's READ-side
+  // `toolIdentityCatalog` resolver. Default to a single in-memory store
+  // (mirrors the `appMetadataStore` default); hosted deployments inject a
+  // multi-tenant adapter via `opts.toolIdentityCatalogStore`.
+  const toolIdentityCatalogStore: ToolIdentityCatalogStore =
+    opts.toolIdentityCatalogStore ?? new InMemoryToolIdentityCatalogStore();
+
   // Auto-compose a `HandshakeNegotiator` so `ggui_handshake` returns
   // a real reuse-vs-create decision instead of the honest-but-shallow
   // "no-negotiator-bound" default. Cloud-aligned tier order:
@@ -3565,6 +3624,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ...(generationWithCache.installedBlueprints
               ? { installedBlueprints: generationWithCache.installedBlueprints }
               : {}),
+            // READ side of tool-identity canonicalization — the SAME
+            // store the `ggui_runtime_declare_tool_catalog` handler
+            // writes. The shared core runs `canonicalizeToolIdentity`
+            // against `catalogStore.get(ctx.appId)` before keying.
+            catalogStore: toolIdentityCatalogStore,
           })
         : undefined))
     : undefined;
@@ -3626,6 +3690,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     defaultHandlers({
       embedding,
       vectors,
+      // WRITE side of tool-identity canonicalization — the SAME store
+      // the handshake negotiator's `toolIdentityCatalog` resolver reads.
+      // Registers `ggui_runtime_declare_tool_catalog`.
+      toolIdentityCatalogStore,
       ...(opts.blueprintProvider ? { blueprints: opts.blueprintProvider } : {}),
       // UI registry for `ggui_render_blueprint`. Absent = render tool
       // is NOT registered on this server (defaultHandlers' own opt-in

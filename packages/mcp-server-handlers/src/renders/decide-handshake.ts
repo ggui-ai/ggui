@@ -73,6 +73,10 @@ import {
 } from './handshake.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import { emitAgentCaps } from './agentcaps-measurement.js';
+import {
+  canonicalizeToolIdentity,
+  type ToolIdentityCatalog,
+} from './canonicalize-tool-identity.js';
 
 /**
  * One blueprint pool to search for a reusable match. A pool is a
@@ -154,6 +158,12 @@ export interface HandshakeDecisionAdapter {
    * passes its structured logger. Absent ⇒ silent.
    */
   warn?(message: string): void;
+  /** Optional per-app tool-identity catalog (bare tool → canonical serverInfo).
+   *  Present ⇒ run the canonicalization step before keying (Tier 1); absent ⇒
+   *  no-op (Tier 2). Resolved by ctx.appId. */
+  readonly toolIdentityCatalog?: (
+    ctx: HandlerContext,
+  ) => Promise<ToolIdentityCatalog | undefined> | ToolIdentityCatalog | undefined;
 }
 
 /** Decide-input shape — derived from the negotiator contract (single source of truth). */
@@ -399,7 +409,11 @@ export async function decideHandshake(
 ): Promise<HandshakeNegotiatorResult> {
   const { intent, blueprintDraft, gadgets, ctx } = input;
   const generatorSlug = adapter.generatorSlug ?? DEFAULT_GENERATOR_SLUG;
-  const draftContract = blueprintDraft.contract;
+  // The agent's draft contract (untrusted). Reassigned in place to the
+  // canonicalized contract by the Slice-2 step below so the create / repair
+  // path (ensureConformingContract + buildCreateFallback) hashes the same
+  // canonical identity the match probe reads.
+  let draftContract = blueprintDraft.contract;
   // Request variance (persona / aesthetic / context / seedPrompt) is a
   // sibling of the draft contract — it keys the matcher's exact-key lookup
   // (`variantKey`) so a same-contract-different-persona request misses the
@@ -438,6 +452,24 @@ export async function decideHandshake(
     emitAgentCaps(parsedDraft.data, {
       enabled: process.env['GGUI_AGENTCAPS_STDERR'] === '1',
     });
+  }
+
+  // Slice 2 — tool identity canonicalization. Resolve each tool's serverInfo.name
+  // to its canonical (initialize) value BEFORE keying, so reuse is framework-
+  // invariant. No-op when no catalog is declared (Tier 2). The canonical name
+  // lands in the contract that gets hashed → portable hash preserved.
+  if (parsedDraft.success && adapter.toolIdentityCatalog) {
+    const catalog = await adapter.toolIdentityCatalog(ctx);
+    if (catalog) {
+      const canonical = canonicalizeToolIdentity(parsedDraft.data, catalog);
+      // Re-parse keeps `parsedDraft` a real SafeParseSuccess (the
+      // canonicalized contract is still schema-valid) — no hand-built
+      // discriminated union, no cast. Thread the canonical contract onto
+      // the create / repair basis too so it hashes the same identity the
+      // match probe reads.
+      parsedDraft = dataContractSchema.safeParse(canonical);
+      draftContract = canonical;
+    }
   }
 
   // Tier 0 — deployment-specific pre-match (cloud curated blueprint).

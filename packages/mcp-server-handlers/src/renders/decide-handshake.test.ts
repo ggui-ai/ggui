@@ -98,6 +98,9 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
     ...(over.preMatch !== undefined ? { preMatch: over.preMatch } : {}),
     ...(over.generatorSlug !== undefined ? { generatorSlug: over.generatorSlug } : {}),
     ...(over.warn !== undefined ? { warn: over.warn } : {}),
+    ...(over.toolIdentityCatalog !== undefined
+      ? { toolIdentityCatalog: over.toolIdentityCatalog }
+      : {}),
   };
 }
 
@@ -1029,6 +1032,131 @@ describe('decideHandshake — fulfillability reuse gate (P3c)', () => {
     expect(r.suggestion.blueprintMeta.blueprintId).toBe('bp-lo-good');
     // The create path must NOT have run — the fulfillable hit was reused.
     expect(mockEnsure).not.toHaveBeenCalled();
+  });
+});
+
+describe('decideHandshake — tool identity canonicalization (Slice 2)', () => {
+  // A draft whose `todo_add` tool carries a NON-canonical serverInfo.name
+  // ('todo' — a config-key / fabricated name). The per-app catalog maps the
+  // bare tool name to the canonical identity its MCP server announced at
+  // `initialize` ('@ggui-samples/mcp-todo'). When the adapter exposes a
+  // `toolIdentityCatalog`, the handshake step must rewrite the draft's
+  // serverInfo BEFORE keying, so the contract that reaches both the match
+  // probe AND the create fallback carries the canonical name.
+  function draftWithServerName(name: string): { contract: DataContract } {
+    return {
+      contract: {
+        propsSpec: { properties: {} },
+        agentCapabilities: {
+          tools: {
+            todo_add: {
+              serverInfo: { name },
+              toolInfo: {
+                inputSchema: {
+                  type: 'object',
+                  properties: { text: { type: 'string' } },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  const CANONICAL = { todo_add: { name: '@ggui-samples/mcp-todo', version: '0.0.1' } };
+
+  it('canonicalizes serverInfo before the MATCH probe reads the contract (Tier 1)', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    await decideHandshake(
+      adapter({
+        pools: [pool()],
+        toolIdentityCatalog: () => CANONICAL,
+      }),
+      {
+        intent: 'i',
+        blueprintDraft: draftWithServerName('todo'),
+        ctx: CTX,
+      },
+    );
+    // The query (3rd matchBlueprint arg) carries the CANONICALIZED contract.
+    const query = mockMatch.mock.calls[0]?.[2];
+    expect(
+      query?.contract?.agentCapabilities?.tools?.todo_add?.serverInfo?.name,
+    ).toBe('@ggui-samples/mcp-todo');
+    expect(
+      query?.contract?.agentCapabilities?.tools?.todo_add?.serverInfo?.version,
+    ).toBe('0.0.1');
+  });
+
+  it('canonicalizes serverInfo before the CREATE fallback reads the draft (Tier 1)', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'synth', method: 'llm-repair', findings: [], reasoning: 'r',
+    });
+    await decideHandshake(
+      adapter({
+        pools: [pool()],
+        toolIdentityCatalog: () => CANONICAL,
+      }),
+      {
+        intent: 'i',
+        blueprintDraft: draftWithServerName('todo'),
+        ctx: CTX,
+      },
+    );
+    // ensureConformingContract's draft (2nd arg `.draft`) is the
+    // canonicalized contract, not the raw 'todo'-named one.
+    const ensureArgs = mockEnsure.mock.calls[0]?.[1];
+    const draft = ensureArgs?.draft as DataContract | undefined;
+    expect(
+      draft?.agentCapabilities?.tools?.todo_add?.serverInfo?.name,
+    ).toBe('@ggui-samples/mcp-todo');
+  });
+
+  it('is a Tier-2 NO-OP when the adapter exposes no toolIdentityCatalog', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    await decideHandshake(
+      adapter({ pools: [pool()] }), // no toolIdentityCatalog
+      {
+        intent: 'i',
+        blueprintDraft: draftWithServerName('todo'),
+        ctx: CTX,
+      },
+    );
+    const query = mockMatch.mock.calls[0]?.[2];
+    // Unchanged — the raw config-key name flows downstream untouched.
+    expect(
+      query?.contract?.agentCapabilities?.tools?.todo_add?.serverInfo?.name,
+    ).toBe('todo');
+  });
+
+  it('is a NO-OP when toolIdentityCatalog resolves to undefined (no catalog declared)', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    await decideHandshake(
+      adapter({
+        pools: [pool()],
+        toolIdentityCatalog: () => undefined,
+      }),
+      {
+        intent: 'i',
+        blueprintDraft: draftWithServerName('todo'),
+        ctx: CTX,
+      },
+    );
+    const query = mockMatch.mock.calls[0]?.[2];
+    expect(
+      query?.contract?.agentCapabilities?.tools?.todo_add?.serverInfo?.name,
+    ).toBe('todo');
   });
 });
 
