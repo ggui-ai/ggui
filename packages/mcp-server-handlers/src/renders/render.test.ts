@@ -56,6 +56,7 @@ import * as matcherModule from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { createGguiRenderHandler, type GguiRenderHandlerDeps } from './render.js';
+import type { BlueprintPool } from './decide-handshake.js';
 import type { HandlerContext } from '../types.js';
 
 const APP_ID = 'app-test';
@@ -631,6 +632,205 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
         agentCapabilities: AGENT_TOOL_CONTRACT.agentCapabilities,
       }),
     ).not.toThrow();
+  });
+});
+
+// ── §6 reuse point-read is seed-pool-aware (cross-deployment) ─────────
+//
+// A seed-pool blueprint lives in a SEPARATE registry under a different
+// scope (`'shared'`) than the per-app cache. The handshake matcher fans
+// out across pools (decide-handshake.ts), so it can PROPOSE an
+// `origin:'cache'` reuse of a seed-pool blueprint. But the render-time
+// §6 point-read used to read ONLY the per-app store under `ctx.appId` —
+// so the proposed seed blueprint resolved to `null` and render fell
+// through to cold-gen, silently defeating cross-deployment reuse.
+//
+// The fix mirrors the matcher's pool fan-out: the point-read tries the
+// per-app store FIRST, then each seed pool under `pool.scope`, stopping
+// at the first hit. Per-app-first is load-bearing — a deployment's own
+// blueprint wins over a seed-pool one with the same id.
+describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
+  const SHARED_SCOPE = 'shared';
+  const SEED_CODE = 'export default function Seed(){ return null; }';
+
+  /**
+   * Build a `BlueprintPool` (registry + scope) and register a blueprint
+   * carrying `componentCode` under `scope` at `uuid`. Returns the pool
+   * plus its (separate) stores so callers can also register a per-app
+   * row at the same uuid for the ordering test.
+   */
+  async function buildSeedPool(opts: {
+    readonly uuid: string;
+    readonly contract: DataContract;
+    readonly componentCode: string;
+    readonly scope: string;
+  }): Promise<BlueprintPool> {
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    await registerBlueprint(
+      { embedding: fakeEmbedding, vectorStore, index },
+      opts.scope,
+      {
+        kind: 'template',
+        contract: opts.contract,
+        intent: 'a test card',
+        componentCode: opts.componentCode,
+        provenance: 'register',
+      },
+      { mintId: () => opts.uuid },
+    );
+    return {
+      registry: { embedding: fakeEmbedding, vectorStore, index },
+      scope: opts.scope,
+    };
+  }
+
+  /**
+   * Build the render handler with an EMPTY per-app cache PLUS
+   * `seedPools`, and seed an `origin:'cache'` handshake whose
+   * `matchedBlueprint.id` references a blueprint that lives ONLY in a
+   * seed pool. When `perAppRow` is set, ALSO register a row at the SAME
+   * uuid in the per-app store (the ordering test) so we can prove
+   * per-app-first.
+   */
+  async function buildSeedPoolHarness(opts: {
+    readonly uuid: string;
+    readonly contract: DataContract;
+    readonly seedPools: readonly BlueprintPool[];
+    readonly perAppRow?: { readonly componentCode: string };
+  }): Promise<{
+    readonly handler: ReturnType<typeof createGguiRenderHandler>;
+    readonly renderStore: InMemoryRenderStore;
+    readonly handshakeId: string;
+  }> {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryRenderStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+
+    if (opts.perAppRow) {
+      await registerBlueprint(
+        { embedding: fakeEmbedding, vectorStore, index },
+        APP_ID,
+        {
+          kind: 'template',
+          contract: opts.contract,
+          intent: 'a test card',
+          componentCode: opts.perAppRow.componentCode,
+          provenance: 'synth',
+        },
+        { mintId: () => opts.uuid },
+      );
+    }
+
+    const handshakeId = 'hs-seed-1';
+    const record: HandshakeRecord = {
+      handshakeId,
+      action: 'reuse',
+      reason: 'test',
+      input: {
+        intent: 'a test card',
+        blueprintDraft: { contract: opts.contract },
+      },
+      target: {},
+      suggestion: {
+        origin: 'cache',
+        rationale: 'test',
+        blueprintMeta: {
+          contractHash: blueprintKey(opts.contract),
+          generator: 'fake',
+          variance: {},
+        },
+      },
+      effectiveContract: opts.contract,
+      matchedBlueprint: {
+        id: opts.uuid,
+        contractKey: blueprintKey(opts.contract),
+        variantKey: variantKey(undefined),
+      },
+      appId: APP_ID,
+      createdAt: new Date().toISOString(),
+    };
+    await seedHandshake(handshakeStore, handshakeId, record);
+
+    const handler = createGguiRenderHandler({
+      handshakeStore,
+      renderStore,
+      generation: {
+        uiGenerator: {
+          slug: 'ui-gen-default-fake',
+          tier: 'default',
+          model: 'fake',
+          generate: fakeGenerator(COLD_CODE),
+        },
+        resolveLlm: () => null,
+        blueprints: { get: async () => null, list: async () => [] },
+        // EMPTY per-app cache — the seed blueprint is NOT here.
+        cache: { embedding: fakeEmbedding, vectorStore, index },
+        seedPools: opts.seedPools,
+      },
+      generator: fakeGenerator(COLD_CODE),
+    });
+    return { handler, renderStore, handshakeId };
+  }
+
+  it('ACCEPT reuses a blueprint that lives ONLY in a seed pool (per-app miss → pool hit)', async () => {
+    const uuid = 'bp_55555555-5555-4555-8555-555555555555';
+    const pool = await buildSeedPool({
+      uuid,
+      contract: CONTRACT,
+      componentCode: SEED_CODE,
+      scope: SHARED_SCOPE,
+    });
+    const { handler, renderStore, handshakeId } = await buildSeedPoolHarness({
+      uuid,
+      contract: CONTRACT,
+      seedPools: [pool],
+    });
+
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+
+    // The inverse of the dangling-id fall-through test: the per-app store
+    // is empty, but the seed pool resolves the matched UUID, so render
+    // REUSES it instead of cold-genning.
+    expect(out.cache.hit).toBe(true);
+    expect(out.cache.cachedBlueprintId).toBe(uuid);
+    expect(out.blueprintId).toBe(uuid);
+
+    const stored = await renderStore.get(out.renderId);
+    const render = stored?.render as ComponentRender | undefined;
+    expect(render?.componentCode).toBe(SEED_CODE);
+    expect(render?.componentCode).not.toBe(COLD_CODE);
+  });
+
+  it('per-app store WINS over a seed pool with the same id (per-app-first ordering)', async () => {
+    const uuid = 'bp_66666666-6666-4666-8666-666666666666';
+    // Seed pool carries SEED_CODE under the same uuid…
+    const pool = await buildSeedPool({
+      uuid,
+      contract: CONTRACT,
+      componentCode: SEED_CODE,
+      scope: SHARED_SCOPE,
+    });
+    // …but the per-app store carries STORED_CODE under that SAME uuid.
+    const { handler, renderStore, handshakeId } = await buildSeedPoolHarness({
+      uuid,
+      contract: CONTRACT,
+      seedPools: [pool],
+      perAppRow: { componentCode: STORED_CODE },
+    });
+
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(uuid);
+
+    // Per-app-first: the per-app STORED_CODE is served, NOT the seed
+    // pool's SEED_CODE.
+    const stored = await renderStore.get(out.renderId);
+    const render = stored?.render as ComponentRender | undefined;
+    expect(render?.componentCode).toBe(STORED_CODE);
+    expect(render?.componentCode).not.toBe(SEED_CODE);
   });
 });
 

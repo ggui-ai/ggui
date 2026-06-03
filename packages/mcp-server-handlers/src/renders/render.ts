@@ -95,6 +95,7 @@ import type {
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
+import type { BlueprintPool } from './decide-handshake.js';
 import {
   findBlueprintExact,
   readBlueprintById,
@@ -214,6 +215,21 @@ export interface GenerationDeps {
    * `generation` can't get surprising cache behavior.
    */
   readonly cache?: GenerationCacheDeps;
+
+  /**
+   * Read-only shared/seed pools (cross-deployment reuse). The §6 reuse
+   * point-read falls back to each pool's registry under `pool.scope` on a
+   * per-app miss, so a blueprint the handshake matched in a seed pool is
+   * reused (not regenerated). Mirrors `decideHandshake`'s pool fan-out:
+   * per-app first, then seed pools, stopping at the first hit.
+   *
+   * The seed-pool point-read relies on the enumerable `listByScope`
+   * branch of `readBlueprintById`/`findBlueprintExact` — seed pools are
+   * always backed by enumerable in-memory stores (`semanticInert` only
+   * nulls `query()`, never `listByScope`), so the point-read resolves
+   * without a vector query.
+   */
+  readonly seedPools?: readonly BlueprintPool[];
 
   /**
    * Per-call LLM resolver for Tier 2 rerank in the blueprint matcher.
@@ -1542,6 +1558,69 @@ export function createGguiRenderHandler(
           readonly contract: DataContract;
         } | null = null;
 
+        // Cross-deployment reuse fan-out. The handshake matcher fans out
+        // across pools (decide-handshake.ts), so it can propose reusing a
+        // blueprint that lives in a seed pool — a SEPARATE registry under
+        // `pool.scope` (e.g. `'shared'`), not the per-app store. Both §6
+        // point-reads below must mirror that fan-out: try the per-app
+        // store FIRST (a deployment's own blueprint wins), then each seed
+        // pool under `pool.scope ?? ctx.appId`, stopping at the first hit.
+        // A miss everywhere leaves `blueprintHit` null → existing cold-gen
+        // fallthrough (self-heal, unchanged). With `seedPools` undefined
+        // both helpers collapse to exactly the old single per-app read.
+        const seedPools = deps.generation.seedPools ?? [];
+        const readByIdAcrossPools = async (id: string) => {
+          const perApp = deps.generation?.cache
+            ? await readBlueprintById(
+                { vectorStore: deps.generation.cache.vectorStore },
+                ctx.appId,
+                id,
+              )
+            : null;
+          if (perApp) return perApp;
+          for (const pool of seedPools) {
+            const hit = await readBlueprintById(
+              { vectorStore: pool.registry.vectorStore },
+              pool.scope ?? ctx.appId,
+              id,
+            );
+            if (hit) return hit;
+          }
+          return null;
+        };
+        const findExactAcrossPools = async (
+          contractKey: string,
+          variantKey_: string,
+        ) => {
+          const perApp = deps.generation?.cache?.index
+            ? await findBlueprintExact(
+                {
+                  vectorStore: deps.generation.cache.vectorStore,
+                  index: deps.generation.cache.index,
+                },
+                ctx.appId,
+                'template',
+                contractKey,
+                variantKey_,
+              )
+            : null;
+          if (perApp) return perApp;
+          for (const pool of seedPools) {
+            const hit = await findBlueprintExact(
+              {
+                vectorStore: pool.registry.vectorStore,
+                index: pool.registry.index,
+              },
+              pool.scope ?? ctx.appId,
+              'template',
+              contractKey,
+              variantKey_,
+            );
+            if (hit) return hit;
+          }
+          return null;
+        };
+
         const matched = handshakeRecord.matchedBlueprint;
         if (
           override === undefined &&
@@ -1550,12 +1629,9 @@ export function createGguiRenderHandler(
           deps.generation.cache?.index &&
           !forceCreate
         ) {
-          // ACCEPT — effective == proposed; point-read the stored row.
-          const bp = await readBlueprintById(
-            { vectorStore: deps.generation.cache.vectorStore },
-            ctx.appId,
-            matched.id,
-          );
+          // ACCEPT — effective == proposed; point-read the stored row
+          // (per-app first, then seed pools — see fan-out comment above).
+          const bp = await readByIdAcrossPools(matched.id);
           if (bp) {
             blueprintHit = {
               id: bp.id,
@@ -1574,14 +1650,9 @@ export function createGguiRenderHandler(
           // OVERRIDE.variance — the contract is unchanged but the variant
           // axis moved. Re-resolve at the EFFECTIVE
           // `(contractKey, effectiveVariantKey)` and reuse a stored
-          // component for that exact variant if one exists.
-          const bp = await findBlueprintExact(
-            {
-              vectorStore: deps.generation.cache.vectorStore,
-              index: deps.generation.cache.index,
-            },
-            ctx.appId,
-            'template',
+          // component for that exact variant if one exists (per-app first,
+          // then seed pools — see fan-out comment above).
+          const bp = await findExactAcrossPools(
             blueprintKey(effectiveContract),
             effectiveVariantKey,
           );

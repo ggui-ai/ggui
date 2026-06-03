@@ -3447,6 +3447,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         cache:
           opts.generation.cache ??
           ({ embedding, vectorStore: vectors, index } as const),
+        // Thread the shared/seed pools into the generation deps so the
+        // render handler's §6 reuse point-read can fall back to them on a
+        // per-app miss. Same `opts.seedPools` fed to the negotiator below;
+        // without this, the handshake PROPOSES a seed-pool blueprint
+        // (origin:'cache') but render reads only the per-app store, misses,
+        // and cold-regenerates — defeating cross-deployment reuse.
+        ...(opts.seedPools && opts.seedPools.length > 0
+          ? { seedPools: opts.seedPools }
+          : {}),
       }
     : undefined;
 
