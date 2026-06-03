@@ -209,7 +209,11 @@ export const contextSpecSchema = z.record(z.string(), contextEntrySchema);
 /** {@link AgentToolEntry} — per-tool metadata in an {@link AgentCapabilitiesSpec}. */
 export const agentToolEntrySchema = z
   .object({
-    serverInfo: z.object({ name: z.string(), version: z.string() }).strict().optional(),
+    // version is OPTIONAL: a Tier-2 author derives serverInfo.name from the
+    // mcp__<server>__ prefix and has no version; the catalog (Tier-1) fills both
+    // from `initialize`. name stays required — serverInfo without a name carries
+    // no identity.
+    serverInfo: z.object({ name: z.string(), version: z.string().optional() }).strict().optional(),
     toolInfo: z
       .object({
         inputSchema: jsonSchemaSchema,

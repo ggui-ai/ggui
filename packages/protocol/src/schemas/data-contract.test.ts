@@ -16,6 +16,7 @@ import {
   appPublicEnvSchema,
   bundleHostScheme,
   clientCapabilitiesSpecSchema,
+  dataContractSchema,
   gadgetDescriptorSchema,
   gadgetExportSchema,
   gadgetExportUseSchema,
@@ -924,5 +925,35 @@ describe('strictGadgetExportSchema — grammar + mutual-exclusion rejects (F6)',
         example: { call: 'useFoo()' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('dataContractSchema — agentCapabilities serverInfo identity', () => {
+  it('accepts a serverInfo with name but no version (prefix-derived Tier-2 authoring)', () => {
+    const result = dataContractSchema.safeParse({
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { name: 'todo' },
+            toolInfo: { inputSchema: { type: 'object', properties: {} } },
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('still rejects a serverInfo with no name', () => {
+    const result = dataContractSchema.safeParse({
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { version: '1.0.0' },
+            toolInfo: { inputSchema: { type: 'object', properties: {} } },
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(false);
   });
 });

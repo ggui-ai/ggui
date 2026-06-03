@@ -553,11 +553,12 @@ export const EMPTY_REFRESH_INPUT: RefreshInput = Object.freeze(
  * identically to what the agent's MCP client sees.
  */
 export interface AgentToolEntry {
-  /** Owning MCP server identity (from the `initialize` handshake). OPTIONAL:
-   *  populated by the agent-server catalog-builder or a host that exposes it;
-   *  absent for hand-authored/library-less contracts. (server,toolName) is the
-   *  canonical cross-framework identity; version is metadata, not identity. */
-  serverInfo?: { name: string; version: string };
+  /** Owning MCP server identity. OPTIONAL: populated by the agent-server
+   *  catalog-builder (Tier 1) or derived by the LLM from the mcp__<server>__
+   *  prefix (Tier 2). (serverInfo.name, toolName) is the canonical identity;
+   *  `version` is OPTIONAL metadata (catalog fills it; prefix-authoring omits it)
+   *  and is stripped from the canonical hash. */
+  serverInfo?: { name: string; version?: string };
   /** MCP tool descriptor, echoed from `tools/list` (minus name = the catalog key). */
   toolInfo: {
     /** JSON Schema for the tool input. REQUIRED — every MCP tool has one. */
