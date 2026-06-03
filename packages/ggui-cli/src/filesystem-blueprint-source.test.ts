@@ -15,7 +15,6 @@ describe('FileSystemBlueprintSource', () => {
     const rec = toPortableBlueprint({
       contract: { propsSpec: { properties: {} } },
       componentCode: 'export default () => null;',
-      generator: 'g',
       variance: {},
     });
     await writePoolArtifact(dir, [rec]);
@@ -30,7 +29,6 @@ describe('FileSystemBlueprintSource', () => {
     const rec = toPortableBlueprint({
       contract: { propsSpec: { properties: {} } },
       componentCode: 'export default () => null;',
-      generator: 'g',
       variance: {},
     });
     await writePoolArtifact(dir, [rec]);

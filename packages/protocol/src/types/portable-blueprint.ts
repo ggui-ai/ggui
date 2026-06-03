@@ -16,7 +16,6 @@ export interface PortableBlueprint {
   readonly schemaVersion: 1;
   readonly contract: DataContract;
   readonly componentCode: string;
-  readonly generator: string;
   readonly variance: BlueprintVariance;
   readonly contractHash: string;
   readonly variantKey: string;

@@ -10,7 +10,7 @@ const contract: DataContract = {
   propsSpec: { properties: { title: { schema: { type: 'string' } } } },
 };
 const record: PortableBlueprint = toPortableBlueprint({
-  contract, componentCode: 'export default () => null;', generator: 'g', variance: {},
+  contract, componentCode: 'export default () => null;', variance: {},
 });
 const source: BlueprintSource = { label: 'test', loadAll: async () => [record] };
 
@@ -59,7 +59,7 @@ describe('buildSeedPool', () => {
   it('dedups two records with the same (contract, variance) without throwing', async () => {
     // Two distinct record objects, identical contract + variance — first-write-wins.
     const dup = toPortableBlueprint({
-      contract, componentCode: 'export default () => null;', generator: 'g', variance: {},
+      contract, componentCode: 'export default () => null;', variance: {},
     });
     const poolP = await buildSeedPool(
       { label: 'dup', loadAll: async () => [record, dup] },
@@ -76,7 +76,6 @@ describe('buildSeedPool', () => {
     const emptyPrompt = toPortableBlueprint({
       contract,
       componentCode: 'export default () => null;',
-      generator: 'g',
       variance: { seedPrompt: '' },
     });
     const poolP = await buildSeedPool(

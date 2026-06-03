@@ -14,7 +14,6 @@ const contract: DataContract = {
 const src: PortableBlueprintSource = {
   contract,
   componentCode: 'export default function C(){return null}',
-  generator: 'ui-gen-default-haiku-4-5',
   variance: { persona: 'minimal' },
 };
 

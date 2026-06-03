@@ -8,6 +8,7 @@ import { resolveStorageFromConfig, DEFAULT_BUILDER_APP_ID } from '@ggui-ai/mcp-s
 import {
   findGguiJson,
   safeLoadGguiJson,
+  type GguiJsonV1,
 } from '@ggui-ai/project-config/node';
 import { writePoolArtifact } from './pool-artifact.js';
 
@@ -48,13 +49,19 @@ export async function runExportPoolCommand(args: readonly string[]): Promise<num
   if (flags.error) { process.stderr.write(`ggui export-pool: ${flags.error}\n`); return 1; }
 
   // Resolve the SAME storage stack `ggui serve` uses, from ggui.json in cwd.
+  // A missing manifest is fine (MCP-only / default storage); a manifest that
+  // exists but fails schema validation is a hard error — surface it rather
+  // than silently falling through to the generic "no vectors store" message.
   const gguiJsonPath = findGguiJson(process.cwd());
-  const manifest = gguiJsonPath
-    ? (() => {
-        const loaded = safeLoadGguiJson(gguiJsonPath);
-        return loaded.success ? loaded.data : undefined;
-      })()
-    : undefined;
+  let manifest: GguiJsonV1 | undefined;
+  if (gguiJsonPath) {
+    const loaded = safeLoadGguiJson(gguiJsonPath);
+    if (!loaded.success) {
+      process.stderr.write(`ggui export-pool: ${loaded.error.message}\n`);
+      return 1;
+    }
+    manifest = loaded.data;
+  }
   const projectRoot = gguiJsonPath ? dirname(gguiJsonPath) : process.cwd();
   const storage = await resolveStorageFromConfig(manifest?.storage, { baseDir: projectRoot });
   if (!storage.vectors) {

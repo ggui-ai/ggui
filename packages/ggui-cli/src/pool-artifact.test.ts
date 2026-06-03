@@ -12,14 +12,12 @@ afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 const rec = toPortableBlueprint({
   contract: { propsSpec: { properties: { x: { schema: { type: 'string' } } } } },
   componentCode: 'export default () => null;',
-  generator: 'g',
   variance: {},
 });
 
 const rec2 = toPortableBlueprint({
   contract: { propsSpec: { properties: { y: { schema: { type: 'number' } } } } },
   componentCode: 'export default () => 42;',
-  generator: 'g',
   variance: {},
 });
 
@@ -90,7 +88,6 @@ describe('pool artifact codec', () => {
     const utfRec = toPortableBlueprint({
       contract: { propsSpec: { properties: { z: { schema: { type: 'string' } } } } },
       componentCode: tricky,
-      generator: 'g',
       variance: {},
     });
     await writePoolArtifact(dir, [utfRec]);

@@ -9,7 +9,6 @@ export type { PortableBlueprint };
 export interface PortableBlueprintSource {
   readonly contract: DataContract;
   readonly componentCode: string;
-  readonly generator: string;
   readonly variance: BlueprintVariance;
 }
 
@@ -25,7 +24,6 @@ export function toPortableBlueprint(src: PortableBlueprintSource): PortableBluep
     schemaVersion: 1,
     contract: src.contract,
     componentCode: src.componentCode,
-    generator: src.generator,
     variance: src.variance,
     contractHash: blueprintKey(src.contract),
     variantKey: variantKey(src.variance),
@@ -42,7 +40,6 @@ export function fromPortableBlueprint(record: PortableBlueprint): PortableBluepr
     input: {
       contract: record.contract,
       componentCode: record.componentCode,
-      generator: record.generator,
       variance: record.variance,
     },
     keyMismatch,
