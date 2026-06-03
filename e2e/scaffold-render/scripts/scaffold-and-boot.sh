@@ -77,6 +77,67 @@ EOF
   echo "GGUI_CACHE_TRACE_STDERR=1"
 } > "$APP_DIR/.env.local"
 
+# ── Cross-deployment seed-pool e2e wiring (env-gated) ─────────────────────────
+# Both blocks are no-ops unless the harness set the env var, so the existing
+# render.spec / cache-hit.spec scaffolds are byte-for-byte unaffected. Edits are
+# applied to the SCAFFOLDED COPY only — never committed to the template.
+GGUI_DIR="$APP_DIR/servers/ggui"
+
+# (1) Persistent sqlite vectors store (Phase A: export-pool reads it back).
+# Merge storage.vectors into ggui.json AND add better-sqlite3 to the ggui
+# server's deps so `pnpm install` pulls the native binding the sqlite driver
+# dynamically imports. Done via `node -e` so existing JSON fields are preserved.
+if [ -n "${GGUI_STORAGE_SQLITE:-}" ]; then
+  echo "[boot] GGUI_STORAGE_SQLITE=1 — sqlite vectors store + better-sqlite3 ($GGUI_DIR)"
+  node -e '
+    const { readFileSync, writeFileSync } = require("node:fs");
+    const cfgPath = process.argv[1];
+    const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+    cfg.storage = { ...(cfg.storage ?? {}), vectors: { driver: "sqlite", path: "./ggui-vectors.sqlite" } };
+    writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n");
+  ' "$GGUI_DIR/ggui.json"
+  node -e '
+    const { readFileSync, writeFileSync } = require("node:fs");
+    const pkgPath = process.argv[1];
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    pkg.dependencies = { ...(pkg.dependencies ?? {}), "better-sqlite3": "^12.9.0" };
+    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  ' "$GGUI_DIR/package.json"
+  # pnpm 11 will NOT run better-sqlite3's prebuild-install/node-gyp postinstall
+  # (so the native .node binding never lands → `ggui serve` crashes loading the
+  # sqlite vectors driver) unless the dep is in the workspace `allowBuilds`
+  # allowlist. `strictDepBuilds:false` only downgrades the error to a warning;
+  # it does NOT approve the build. Mirror the monorepo root's allowlist form.
+  # Idempotent: only append if not already present.
+  WS_YAML="$APP_DIR/pnpm-workspace.yaml"
+  if ! grep -q "better-sqlite3: true" "$WS_YAML" 2>/dev/null; then
+    printf '\nallowBuilds:\n  better-sqlite3: true\n' >> "$WS_YAML"
+  fi
+fi
+
+# (2) Shared seed pool (Phase B: reuse a blueprint from another deployment).
+# Append `--seed-pool <dir>` to the ggui `start` script ONLY when the env var is
+# present at boot (the `${GGUI_SEED_POOL:+…}` guard means an unset var leaves the
+# script unchanged). Also export it into .env.local so it reaches `ggui serve`
+# whether the start runs under dotenv or plain env inheritance.
+if [ -n "${GGUI_SEED_POOL:-}" ]; then
+  echo "[boot] GGUI_SEED_POOL set — appending --seed-pool to ggui start ($GGUI_SEED_POOL)"
+  node -e '
+    const { readFileSync, writeFileSync } = require("node:fs");
+    const pkgPath = process.argv[1];
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    const start = pkg.scripts && pkg.scripts.start;
+    if (typeof start !== "string") {
+      throw new Error("ggui server package.json has no string scripts.start to extend");
+    }
+    if (!start.includes("--seed-pool")) {
+      pkg.scripts.start = start + " ${GGUI_SEED_POOL:+--seed-pool \"$GGUI_SEED_POOL\"}";
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+    }
+  ' "$GGUI_DIR/package.json"
+  echo "GGUI_SEED_POOL=$GGUI_SEED_POOL" >> "$APP_DIR/.env.local"
+fi
+
 echo "[boot] pnpm install ($SDK, Verdaccio-pinned)"
 ( cd "$APP_DIR" && pnpm install )
 

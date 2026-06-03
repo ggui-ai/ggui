@@ -114,7 +114,22 @@ async function assertPortsFree(): Promise<void> {
   }
 }
 
-export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<ScaffoldAppHandle> {
+export async function spawnScaffoldedApp(opts: {
+  sdk: SdkId;
+  /**
+   * When true, the scaffolded ggui server is configured with a persistent
+   * `storage.vectors = { driver:'sqlite', … }` store (and `better-sqlite3`
+   * added to its deps) by `scaffold-and-boot.sh`. Enables `ggui export-pool`
+   * to read the generated blueprints back off disk. Default: in-memory.
+   */
+  sqliteVectors?: boolean;
+  /**
+   * Absolute path to a read-only shared blueprint-pool artifact directory.
+   * When set, the scaffolded ggui server boots with `--seed-pool <dir>` so
+   * its blueprints are reused by exact contract match. Default: no shared pool.
+   */
+  seedPoolDir?: string;
+}): Promise<ScaffoldAppHandle> {
   await assertPortsFree();
   const tpl = await ensureSetup();
   const bootStart = Date.now();
@@ -130,6 +145,12 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
       REGISTRY,
       // Slice-1 measurement: emit [ggui:agentcaps] lines so render.spec can classify per-SDK serverInfo authoring.
       GGUI_AGENTCAPS_STDERR: '1',
+      // Cross-deployment seed-pool e2e (env-gated; unset → identical behavior
+      // for existing callers). scaffold-and-boot.sh reads these to (a) wire a
+      // persistent sqlite vectors store + better-sqlite3, and (b) append
+      // `--seed-pool <dir>` to the ggui start script.
+      ...(opts.sqliteVectors ? { GGUI_STORAGE_SQLITE: '1' } : {}),
+      ...(opts.seedPoolDir !== undefined ? { GGUI_SEED_POOL: opts.seedPoolDir } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
