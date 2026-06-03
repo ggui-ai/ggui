@@ -108,8 +108,11 @@ export interface AgentAppDeps {
    * map to ggui via `ggui_runtime_declare_tool_catalog` — ONCE, on the
    * agent's own ggui connection (`mcpServers.ggui`, same URL + bearer ⇒
    * same `appId`). Co-located with the memoized catalog so it fires once
-   * per process, not per request. Default `false`; the declaration is a
-   * Tier-2 enhancement (non-fatal on failure).
+   * per process, not per request. At THIS low-level builder it defaults to
+   * `false` when unset (explicit opt-in for direct `createAgentApp` callers);
+   * the public `startAgentServer` entry point defaults it to `true`, so apps
+   * booted the normal way get cross-framework canonicalization out of the box.
+   * The declaration is non-fatal on failure (Tier-2 fallback).
    */
   readonly crossFramework?: boolean;
   /**
