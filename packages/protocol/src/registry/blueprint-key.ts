@@ -34,3 +34,10 @@ export function blueprintKey(contract: DataContract | undefined): string {
 // re-exported here to be importable at that subpath alongside
 // `blueprintKey`. See `variant-key.ts` for the implementation.
 export { variantKey } from './variant-key.js';
+
+export {
+  toPortableBlueprint,
+  fromPortableBlueprint,
+  type PortableBlueprintSource,
+  type PortableBlueprintImport,
+} from './portable-blueprint.js';
