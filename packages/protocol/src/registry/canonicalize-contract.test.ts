@@ -223,17 +223,44 @@ describe('canonicalizeContracts', () => {
     expect(result).toEqual({ keep: 1 });
   });
 
-  it('serverInfo does not affect the canonical hash (metadata, not identity)', () => {
-    const base: DataContract = {
+  it('serverInfo.name IS identity — different server names → different hash (kills the bare-name collision)', () => {
+    const todoist: DataContract = {
       agentCapabilities: {
-        tools: { todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} } } } },
-      },
-      actionSpec: {
-        addTodo: { label: 'Add', nextStep: 'todo_add', schema: { type: 'object', properties: {} } },
+        tools: {
+          todo_add: {
+            serverInfo: { name: '@todoist/mcp', version: '1.0.0' },
+            toolInfo: { inputSchema: { type: 'object', properties: { text: { type: 'string' } } } },
+          },
+        },
       },
     };
-    const withServer: DataContract = {
-      ...base,
+    const googleTasks: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { name: '@google/tasks-mcp', version: '1.0.0' },
+            toolInfo: { inputSchema: { type: 'object', properties: { text: { type: 'string' } } } },
+          },
+        },
+      },
+    };
+    // Byte-identical bare name + inputSchema, DIFFERENT owning server → MUST NOT
+    // collide onto one blueprint cache key.
+    expect(blueprintKey(todoist)).not.toBe(blueprintKey(googleTasks));
+  });
+
+  it('serverInfo.version does NOT affect the canonical hash (metadata, not identity)', () => {
+    const v1: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { name: '@x/todo', version: '1.0.0' },
+            toolInfo: { inputSchema: { type: 'object', properties: {} } },
+          },
+        },
+      },
+    };
+    const v2: DataContract = {
       agentCapabilities: {
         tools: {
           todo_add: {
@@ -243,7 +270,46 @@ describe('canonicalizeContracts', () => {
         },
       },
     };
-    expect(blueprintKey(base)).toBe(blueprintKey(withServer));
+    // A version bump alone must not invalidate a registered blueprint.
+    expect(blueprintKey(v1)).toBe(blueprintKey(v2));
+  });
+
+  it('an authored serverInfo.name is a DISTINCT identity from an omitted serverInfo', () => {
+    const bare: DataContract = {
+      agentCapabilities: {
+        tools: { todo_add: { toolInfo: { inputSchema: { type: 'object', properties: {} } } } },
+      },
+    };
+    const named: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: {
+            serverInfo: { name: '@x/todo', version: '1.0.0' },
+            toolInfo: { inputSchema: { type: 'object', properties: {} } },
+          },
+        },
+      },
+    };
+    // Naming the server is more specific than omitting it → different key.
+    expect(blueprintKey(bare)).not.toBe(blueprintKey(named));
+  });
+
+  it('serverInfo.name survives the strip while version is removed (combined)', () => {
+    const a: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: { serverInfo: { name: '@x/todo', version: '1.0.0' }, toolInfo: { inputSchema: { type: 'object', properties: {} } } },
+        },
+      },
+    };
+    const b: DataContract = {
+      agentCapabilities: {
+        tools: {
+          todo_add: { serverInfo: { name: '@y/todo', version: '1.0.0' }, toolInfo: { inputSchema: { type: 'object', properties: {} } } },
+        },
+      },
+    };
+    expect(blueprintKey(a)).not.toBe(blueprintKey(b));
   });
 
   it('tool-name set change DOES change the canonical hash', () => {

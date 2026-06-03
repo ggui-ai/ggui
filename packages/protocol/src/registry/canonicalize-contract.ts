@@ -57,16 +57,17 @@
  *     outer keys, export names as the inner `exports` map keys; no
  *     `version`, no transport metadata on the wire).
  *
- * # Domain rule: `agentCapabilities.tools[*].serverInfo` is stripped
+ * # Domain rule: `agentCapabilities.tools[*].serverInfo.version` is stripped
  *
- * `serverInfo` ({name, version}) records the owning MCP server identity.
- * `(server, toolName)` is the canonical cross-framework identity, but
- * `serverInfo.version` is METADATA, not identity — a server version bump
- * MUST NOT invalidate a registered blueprint, and the same tool reached
- * via two framework registrations MUST reuse the same UI. The entire
- * `serverInfo` sub-object is removed (structurally, context-scoped to the
- * tool-catalog recursion) BEFORE the JCS pass. `toolInfo.inputSchema` /
- * `toolInfo.outputSchema` stay — they ARE identity (they shape the data).
+ * `serverInfo` ({name, version?}) records the owning MCP server identity.
+ * `(serverInfo.name, toolName)` is the canonical cross-framework identity and
+ * stays in the hash — it disambiguates two servers that expose a byte-identical
+ * bare tool name (Todoist's `todo_add` vs Google-Tasks' `todo_add` must NOT
+ * reuse one another's UI). `serverInfo.version` is METADATA, not identity — a
+ * server version bump MUST NOT invalidate a registered blueprint — so ONLY the
+ * `version` field is removed (structurally, context-scoped to the tool-catalog
+ * recursion) BEFORE the JCS pass. `toolInfo.inputSchema` / `toolInfo.outputSchema`
+ * stay — they ARE identity (they shape the data).
  *   - Inner JSON Schema fields under every `schema:` wrapper (`type`,
  *     `enum`, `properties`, `required`, `items`, `additionalProperties`,
  *     `nullable`, `format`, …).
@@ -175,24 +176,43 @@ export function canonicalizeValue(
 }
 
 /**
- * Structurally remove `agentCapabilities.tools[*].serverInfo` before the
- * generic JCS walk. Context-scoped to the tool catalog (NOT a global
- * value-guard) so a spec slot / gadget package / tool literally named
- * `serverInfo` elsewhere can never be collateral-stripped. Pure — returns
- * a shallow-cloned contract; the input is never mutated. Returns the
- * input unchanged when there is no `agentCapabilities.tools` to walk.
+ * Canonicalization-internal projection of an {@link AgentToolEntry} whose
+ * `serverInfo` is reduced to its identity-bearing `name`; the metadata
+ * `version` is removed. NOT a wire type — only fed to {@link canonicalizeValue}.
  */
-function stripToolServerInfo(
-  contract: DataContract,
-): DataContract {
+type IdentityToolEntry = Omit<AgentToolEntry, 'serverInfo'> & {
+  serverInfo?: { name: string };
+};
+
+/** A {@link DataContract} projection with version-stripped tool `serverInfo`. */
+type IdentityContract = Omit<DataContract, 'agentCapabilities'> & {
+  agentCapabilities?: { tools: Record<string, IdentityToolEntry> };
+};
+
+/**
+ * Structurally reduce `agentCapabilities.tools[*].serverInfo` to its
+ * identity-bearing `name` before the generic JCS walk — `serverInfo.name`
+ * is load-bearing identity (it disambiguates two servers that expose a
+ * byte-identical bare tool name, e.g. Todoist vs Google-Tasks `todo_add`),
+ * while `serverInfo.version` is metadata that MUST NOT bust the cache key.
+ * Context-scoped to the tool catalog (NOT a global value-guard) so a spec
+ * slot / gadget package / tool literally named `serverInfo` elsewhere can
+ * never be collateral-stripped. Pure — returns a shallow-cloned projection;
+ * the input is never mutated. Returns the input unchanged when there is no
+ * `agentCapabilities.tools` to walk.
+ */
+function stripToolServerInfo(contract: DataContract): IdentityContract {
   const tools = contract.agentCapabilities?.tools;
   if (!tools) return contract;
-  const cleanedTools: Record<string, AgentToolEntry> = {};
+  const cleanedTools: Record<string, IdentityToolEntry> = {};
   for (const [name, entry] of Object.entries(tools)) {
-    // `serverInfo` is optional on AgentToolEntry, so the rest object is
-    // still a well-typed AgentToolEntry with that field omitted.
-    const { serverInfo: _serverInfo, ...rest } = entry;
-    cleanedTools[name] = rest;
+    if (entry.serverInfo === undefined) {
+      cleanedTools[name] = entry;
+      continue;
+    }
+    // Keep serverInfo.name (identity); drop serverInfo.version (metadata).
+    const { version: _version, ...nameOnly } = entry.serverInfo;
+    cleanedTools[name] = { ...entry, serverInfo: nameOnly };
   }
   return {
     ...contract,
@@ -204,7 +224,8 @@ function stripToolServerInfo(
  * Produce the canonical bytes for a `DataContract` value, suitable
  * for hashing or external content-address lookups. Stable across
  * paraphrase, key order, whitespace, description-only edits, and
- * `serverInfo` (server-version metadata, not identity).
+ * `serverInfo.version` (server-version metadata; `serverInfo.name` is
+ * identity and is preserved).
  *
  * Empty / undefined / `{}` all collapse to the same canonical bytes,
  * which produces a stable `blueprintKey` for the "no-contract" case.
