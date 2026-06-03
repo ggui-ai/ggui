@@ -148,13 +148,11 @@ export function checkContractSchemasValid(
 
   if (contract.agentCapabilities?.tools) {
     for (const [name, entry] of Object.entries(contract.agentCapabilities.tools)) {
-      if (entry.toolInfo.inputSchema) {
-        tryCompile(
-          `agentCapabilities.tools.${name}.inputSchema`,
-          entry.toolInfo.inputSchema,
-          violations,
-        );
-      }
+      tryCompile(
+        `agentCapabilities.tools.${name}.inputSchema`,
+        entry.toolInfo.inputSchema,
+        violations,
+      );
       if (entry.toolInfo.outputSchema) {
         tryCompile(
           `agentCapabilities.tools.${name}.outputSchema`,

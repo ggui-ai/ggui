@@ -192,7 +192,7 @@ export function checkStreamSchemaCompat(
 
     const tool = tools.get(toolName);
     if (!tool) continue; // CTR_REF_STREAM_SOURCE covers this
-    const toolOutput = tool.toolInfo?.outputSchema;
+    const toolOutput = tool.toolInfo.outputSchema;
     if (!toolOutput) continue;
 
     const channelSchema = (entry as StreamChannelEntry).schema;
