@@ -72,6 +72,7 @@ import {
   type HandshakeNegotiatorResult,
 } from './handshake.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
+import { emitAgentCaps } from './agentcaps-measurement.js';
 
 /**
  * One blueprint pool to search for a reusable match. A pool is a
@@ -428,6 +429,15 @@ export async function decideHandshake(
       normalizeDraft(draftContract),
     );
     if (normalizedParse.success) parsedDraft = normalizedParse;
+  }
+
+  // Measurement (dev/CI only; default off). Record what the agent authored for
+  // each tool's serverInfo.name — the empirical read on whether the config-key
+  // nudge stops fabrication. Pure side-effect; never affects the decision.
+  if (parsedDraft.success) {
+    emitAgentCaps(parsedDraft.data, {
+      enabled: process.env['GGUI_AGENTCAPS_STDERR'] === '1',
+    });
   }
 
   // Tier 0 — deployment-specific pre-match (cloud curated blueprint).
