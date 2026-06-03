@@ -73,6 +73,7 @@ import {
   createInstalledBlueprintsProvider,
   createStderrCacheTraceSink,
   setCacheTraceSink,
+  type BlueprintPool,
   type CreateInstalledBlueprintsProviderOptions,
   type InstalledBlueprintCacheIssue,
   type InstalledBlueprintCompileResult,
@@ -207,6 +208,13 @@ export interface BuildMcpServerBackendOptions {
    * setting, a test double, etc.).
    */
   readonly generation?: GenerationDeps;
+
+  /**
+   * Read-only shared/seed blueprint pools for cross-deployment reuse.
+   * Threaded into the handshake negotiator's `seedPools`. Built by the
+   * CLI from `--seed-pool` artifacts; absent ⇒ no shared pool.
+   */
+  readonly seedPools?: readonly BlueprintPool[];
 
   /**
    * Marketplace-install bridge data. When set, the backend
@@ -992,6 +1000,10 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // boot and only supplies this opt on a hit. See
     // `./generation-probe.ts`.
     ...(generationWithInstalled ? { generation: generationWithInstalled } : {}),
+    // Seed pools from `--seed-pool` artifacts. Threaded into the
+    // handshake negotiator so cross-deployment blueprints are
+    // accessible without being in the local cache.
+    ...(opts.seedPools && opts.seedPools.length > 0 ? { seedPools: opts.seedPools } : {}),
     // Mount aggregation. External SharedHandler bundles appended onto
     // `/mcp` alongside ggui-native tools. No CLI config loader yet —
     // programmatic hosts + integration tests compose mounts through

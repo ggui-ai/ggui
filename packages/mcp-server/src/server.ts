@@ -225,6 +225,7 @@ import {
   type GenerationCacheEntry,
   type GenerationCredentials,
   type GenerationDeps,
+  type BlueprintPool,
   type HandshakeNegotiator,
   type PropsUpdateNotifier,
   type ProvisionalPreviewConfig,
@@ -2852,6 +2853,13 @@ export interface CreateGguiServerOptions {
   readonly generation?: GenerationDeps;
 
   /**
+   * Read-only shared/seed blueprint pools for cross-deployment reuse.
+   * Threaded into the handshake negotiator's `seedPools`. Built by the
+   * CLI from `--seed-pool` artifacts; absent ⇒ no shared pool.
+   */
+  readonly seedPools?: readonly BlueprintPool[];
+
+  /**
    * Optional multi-generator registry. When present, exposes named
    * generators (e.g. `ui-gen-default-haiku-4-5`,
    * `ui-gen-advanced-opus-4-7`) for consumers such as the blueprint
@@ -3624,6 +3632,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ...(generationWithCache.installedBlueprints
               ? { installedBlueprints: generationWithCache.installedBlueprints }
               : {}),
+            // Seed pools threaded from the top-level server options.
+            // Built by the CLI from `--seed-pool` artifacts; absent ⇒
+            // no shared pool fed to the negotiator.
+            ...(opts.seedPools && opts.seedPools.length > 0 ? { seedPools: opts.seedPools } : {}),
             // READ side of tool-identity canonicalization — the SAME
             // store the `ggui_runtime_declare_tool_catalog` handler
             // writes. The shared core runs `canonicalizeToolIdentity`
