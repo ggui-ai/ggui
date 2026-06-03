@@ -42,18 +42,40 @@ export function classifyServerName(
   return 'fabricated';
 }
 
+/**
+ * Which point in the handshake a measurement line captures.
+ *   - `'authored'` (default) — the AUTHORED serverInfo, measured BEFORE
+ *     canonicalization. This is the fabrication-detection read (does the
+ *     model guess a server name, and what kind).
+ *   - `'effective'` — the EFFECTIVE serverInfo, measured AFTER the Slice-2
+ *     canonicalization step rewrote it to the catalog's canonical identity.
+ *     Emitting this second line is how canonicalization becomes OBSERVABLE in
+ *     the container: an `effective` line whose name is the canonical
+ *     `initialize` value proves the canonicalization fired.
+ */
+export type AgentCapsPhase = 'authored' | 'effective';
+
 /** Options for {@link emitAgentCaps}. `write` defaults to stderr; injectable for tests. */
 export interface EmitAgentCapsOpts {
   /** Gate — caller passes `process.env.GGUI_AGENTCAPS_STDERR === '1'`. */
   readonly enabled: boolean;
+  /**
+   * Measurement phase — prefixes the greppable line so the authored read and
+   * the post-canonicalization effective read are distinguishable downstream.
+   * Defaults to `'authored'` (the pre-canonicalization fabrication read).
+   */
+  readonly phase?: AgentCapsPhase;
   /** Sink. Defaults to a `process.stderr.write` wrapper. */
   readonly write?: (line: string) => void;
 }
 
 /**
  * Emit one `[ggui:agentcaps]` line per declared agent tool when `enabled`.
- * Records the AUTHORED `serverInfo.name`/`version` verbatim (classification is
- * done downstream by the journey, which knows ground truth). No-op when
+ * Records the `serverInfo.name`/`version` verbatim (classification is done
+ * downstream by the journey, which knows ground truth). When `phase` is
+ * `'effective'` the line tag becomes `[ggui:agentcaps:effective]` so the
+ * post-canonicalization read is distinguishable from the authored read; the
+ * default `'authored'` keeps the bare `[ggui:agentcaps]` tag. No-op when
  * disabled or when the contract declares no agent tools.
  */
 export function emitAgentCaps(contract: DataContract, opts: EmitAgentCapsOpts): void {
@@ -61,9 +83,10 @@ export function emitAgentCaps(contract: DataContract, opts: EmitAgentCapsOpts): 
   const tools = contract.agentCapabilities?.tools;
   if (!tools) return;
   const write = opts.write ?? ((line: string) => void process.stderr.write(`${line}\n`));
+  const tag = opts.phase === 'effective' ? '[ggui:agentcaps:effective]' : '[ggui:agentcaps]';
   for (const [toolName, entry] of Object.entries(tools)) {
     const name = entry.serverInfo?.name ?? '-';
     const version = entry.serverInfo?.version ?? '-';
-    write(`[ggui:agentcaps] tool=${toolName} serverInfo.name=${name} serverInfo.version=${version}`);
+    write(`${tag} tool=${toolName} serverInfo.name=${name} serverInfo.version=${version}`);
   }
 }

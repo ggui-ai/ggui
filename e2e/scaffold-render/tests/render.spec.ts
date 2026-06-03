@@ -116,12 +116,23 @@ for (const c of SDK_CASES) {
         timeout: 60_000,
       });
 
-      // --- Slice 1 measurement (best-effort; LOG ONLY, never gates) ---
-      // What did this SDK author for each tool's serverInfo.name? canonical =
-      // the real initialize name; config-key = the mcp__<server>__ prefix handle
-      // (the nudge's intended output); fabricated = neither (what we want gone);
-      // omitted = no name. Propagation of the ggui server's stderr to stdout() is
-      // unverified — absence is logged, not asserted.
+      // --- Slice 1+2 measurement (best-effort; LOG ONLY, never gates) ---
+      // Two reads per run, both env-gated greppable stderr lines:
+      //   [ggui:agentcaps]           — the AUTHORED serverInfo.name, measured
+      //                                BEFORE canonicalization (Slice 1 read).
+      //   [ggui:agentcaps:effective] — the EFFECTIVE serverInfo.name, measured
+      //                                AFTER the Slice-2 canonicalization step.
+      // Classification: canonical = the real initialize name; config-key = the
+      // mcp__<server>__ prefix handle (Slice-1 nudge's intended output);
+      // fabricated = neither (what Slice 2 fixes); omitted = no name.
+      //
+      // The CONFORMANCE gate is the deterministic handler-level test
+      // (cross-framework-conformance.test.ts); this container read is
+      // OBSERVATIONAL. Propagation of the ggui server's stderr to stdout() and
+      // the timing of the catalog declaration are best-effort — absence is
+      // logged, never asserted. The signal we hope to see: with crossFramework
+      // ON by default, the `effective` lines classify `canonical` even when the
+      // `authored` lines were `config-key` / `omitted` / `fabricated`.
       const AGENTCAPS_TRUTH = { realName: '@ggui-samples/mcp-todo', configKey: 'todo' };
       const classifyAgentCap = (name: string | undefined): string =>
         name === undefined
@@ -131,26 +142,36 @@ for (const c of SDK_CASES) {
             : name === AGENTCAPS_TRUTH.configKey
               ? 'config-key'
               : 'fabricated';
-      const agentcapsLines = app
-        .stdout()
-        .split('\n')
-        .filter((l) => l.includes('[ggui:agentcaps]'));
-      if (agentcapsLines.length === 0) {
-        // eslint-disable-next-line no-console -- measurement output for the run log.
-        console.warn(
-          `[agentcaps:${c.sdk}] no measurement lines captured (dev.mjs stderr forwarding gap?) — skipping classification`,
-        );
-      } else {
-        for (const line of agentcapsLines) {
+      const allLines = app.stdout().split('\n');
+      // Classify by line tag. The effective tag (`[ggui:agentcaps:effective]`)
+      // is a superstring of the authored tag, so split on the more specific
+      // tag first, then treat the remainder as authored.
+      const effectiveLines = allLines.filter((l) =>
+        l.includes('[ggui:agentcaps:effective]'),
+      );
+      const authoredLines = allLines.filter(
+        (l) => l.includes('[ggui:agentcaps]') && !l.includes('[ggui:agentcaps:effective]'),
+      );
+      const logPhase = (phase: 'authored' | 'effective', lines: string[]): void => {
+        if (lines.length === 0) {
+          // eslint-disable-next-line no-console -- measurement output for the run log.
+          console.warn(
+            `[agentcaps:${c.sdk}:${phase}] no measurement lines captured (stderr forwarding gap or canonicalization did not run) — skipping classification`,
+          );
+          return;
+        }
+        for (const line of lines) {
           const m = /tool=(\S+) serverInfo\.name=(\S+)/.exec(line);
           if (!m) continue;
           const authored = m[2] === '-' ? undefined : m[2];
           // eslint-disable-next-line no-console -- measurement output for the run log.
           console.log(
-            `[agentcaps:${c.sdk}] tool=${m[1]} authored=${m[2]} class=${classifyAgentCap(authored)}`,
+            `[agentcaps:${c.sdk}:${phase}] tool=${m[1]} serverInfo.name=${m[2]} class=${classifyAgentCap(authored)}`,
           );
         }
-      }
+      };
+      logPhase('authored', authoredLines);
+      logPhase('effective', effectiveLines);
     });
   });
 }

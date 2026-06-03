@@ -469,6 +469,19 @@ export async function decideHandshake(
       // match probe reads.
       parsedDraft = dataContractSchema.safeParse(canonical);
       draftContract = canonical;
+      // EFFECTIVE measurement (dev/CI only; default off). The authored line
+      // above measured the PRE-canonicalization serverInfo (fabrication read);
+      // this SECOND line measures the EFFECTIVE serverInfo AFTER the rewrite —
+      // making canonicalization observable in the container. Only emitted when
+      // canonicalization actually ran (a catalog resolved), so an effective
+      // line whose name is the canonical `initialize` value is direct evidence
+      // the step fired. Pure side-effect; never affects the decision.
+      if (parsedDraft.success) {
+        emitAgentCaps(parsedDraft.data, {
+          enabled: process.env['GGUI_AGENTCAPS_STDERR'] === '1',
+          phase: 'effective',
+        });
+      }
     }
   }
 

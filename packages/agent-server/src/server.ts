@@ -80,8 +80,11 @@ export interface AgentServerOptions {
    * canonicalizes a reused blueprint's tool references at handshake
    * time, making blueprint reuse identity-stable across runtimes.
    *
-   * Default `false`. The declaration is a Tier-2 enhancement: a failure
-   * is non-fatal (the agent still works without canonicalization).
+   * Default `true` — the scaffolded app runs Tier-1 (framework-invariant
+   * blueprint reuse) out of the box. Pass `false` to opt OUT (the Tier-2
+   * path: blueprints key on the agent's authored serverInfo, no
+   * canonicalization). The declaration is a Tier-2 enhancement either way:
+   * a failure is non-fatal (the agent still works without canonicalization).
    */
   readonly crossFramework?: boolean;
   /**
@@ -153,7 +156,7 @@ export async function startAgentServer(
     sandboxProxyUrl: sandboxProxyPublicUrl
       ? new URL('/sandbox.html', sandboxProxyPublicUrl).href
       : sandboxProxy.url,
-    crossFramework: opts.crossFramework ?? false,
+    crossFramework: opts.crossFramework ?? true,
     log,
   });
 

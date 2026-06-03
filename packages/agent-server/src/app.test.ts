@@ -667,7 +667,10 @@ describe('POST /agent — crossFramework tool-catalog declaration', () => {
     expect(declareToolCatalogMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT declare when crossFramework is false', async () => {
+  it('does NOT declare when crossFramework is false (explicit Tier-2 opt-out)', async () => {
+    // The explicit-`false` path: the operator opts OUT of canonicalization and
+    // blueprints key on the agent's authored serverInfo. Kept distinct from the
+    // public `startAgentServer` default, which flipped to `true` (Tier 1).
     const app = buildAppWith(false);
     const { guestToken } = await mintGuestBearer(app);
 
@@ -676,7 +679,12 @@ describe('POST /agent — crossFramework tool-catalog declaration', () => {
     expect(declareToolCatalogMock).not.toHaveBeenCalled();
   });
 
-  it('does NOT declare when crossFramework is unset (default off)', async () => {
+  it('createAgentApp (the internal builder) defaults crossFramework off when unset', async () => {
+    // NOTE: this pins the LOW-LEVEL builder default. The PUBLIC default lives
+    // in `startAgentServer` (server.ts), which passes `opts.crossFramework ??
+    // true` — so a scaffolded app runs Tier-1 by default. `createAgentApp`
+    // itself is the brand-agnostic Hono builder and stays opt-in; callers that
+    // skip `startAgentServer` declare crossFramework explicitly.
     const app = buildAppWith(undefined);
     const { guestToken } = await mintGuestBearer(app);
 

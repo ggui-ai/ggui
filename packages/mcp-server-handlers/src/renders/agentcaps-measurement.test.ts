@@ -38,6 +38,37 @@ describe('emitAgentCaps', () => {
     expect(lines.some((l) => l.includes('tool=todo_list') && l.includes('serverInfo.name=-'))).toBe(true);
   });
 
+  it("defaults to the authored phase — bare [ggui:agentcaps] tag (no :effective)", () => {
+    const write = vi.fn();
+    emitAgentCaps(contract, { enabled: true, write });
+    const lines = write.mock.calls.map((c) => String(c[0]));
+    expect(lines.every((l) => l.startsWith('[ggui:agentcaps]'))).toBe(true);
+    expect(lines.some((l) => l.includes('[ggui:agentcaps:effective]'))).toBe(false);
+  });
+
+  it("phase:'effective' prefixes each line with [ggui:agentcaps:effective]", () => {
+    const write = vi.fn();
+    emitAgentCaps(contract, { enabled: true, phase: 'effective', write });
+    expect(write).toHaveBeenCalledTimes(2);
+    const lines = write.mock.calls.map((c) => String(c[0]));
+    // Every line carries the effective tag (NOT the bare authored tag).
+    expect(lines.every((l) => l.startsWith('[ggui:agentcaps:effective]'))).toBe(true);
+    // The per-tool measurement payload is unchanged from the authored shape.
+    expect(
+      lines.some(
+        (l) => l.includes('tool=todo_add') && l.includes('serverInfo.name=todo'),
+      ),
+    ).toBe(true);
+  });
+
+  it("phase:'authored' is explicitly equivalent to the default tag", () => {
+    const write = vi.fn();
+    emitAgentCaps(contract, { enabled: true, phase: 'authored', write });
+    const lines = write.mock.calls.map((c) => String(c[0]));
+    expect(lines.every((l) => l.startsWith('[ggui:agentcaps]'))).toBe(true);
+    expect(lines.some((l) => l.includes('[ggui:agentcaps:effective]'))).toBe(false);
+  });
+
   it('emits nothing when disabled (default)', () => {
     const write = vi.fn();
     emitAgentCaps(contract, { enabled: false, write });
