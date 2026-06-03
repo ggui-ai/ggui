@@ -803,6 +803,141 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     expect(render?.componentCode).not.toBe(COLD_CODE);
   });
 
+  it('seed-pool ACCEPT reuse preserves agentCapabilities on the committed render (tool-bearing blueprint)', async () => {
+    // This test guards the "capability-agnostic reuse" seam for blueprints
+    // that live ONLY in a seed pool. Historically the §6 cache-hit
+    // projection dropped `agentCapabilities` from the `cacheHit` arg passed
+    // to `commitCachedRender`, leaving the committed ComponentRender without
+    // a capability catalog. Downstream consumers (schema-compat escape hatch,
+    // iframe bootstrap-meta derivation) reading `agentCapabilities` from the
+    // committed render would see an empty set, silently breaking cross-MCP
+    // nextStep resolution and tool-list projection.
+    //
+    // The fix (render.ts, the `...(blueprintHit.contract.agentCapabilities …)`
+    // spread) projects the seed blueprint's capability catalog into cacheHit
+    // before it reaches `commitCachedRender`. `commitCachedRender` then
+    // projects `cacheHit.agentCapabilities` onto the ComponentRender it
+    // passes to `checkRenderContracts`. We capture what the hook receives
+    // (the OUTPUT of the reuse projection) and assert the catalog is intact.
+    //
+    // Non-tautological confirmation: if the projection spread were removed,
+    // `capturedCaps` would be `undefined` and the `toEqual` assertion below
+    // would fail. The capture is on the hook's INBOUND shape, not the
+    // input contract — the assertion only passes if the projection chain
+    // carried the field all the way to the commit call.
+    const uuid = 'bp_77777777-7777-4777-8777-777777777777';
+
+    // A contract carrying a tool with serverInfo (canonical cross-MCP tool).
+    const SEED_CONTRACT: DataContract = {
+      propsSpec: { properties: {} },
+      agentCapabilities: {
+        tools: {
+          table_order_place: {
+            serverInfo: { name: 'table-order-mcp' },
+            toolInfo: {
+              inputSchema: { type: 'object', properties: {} },
+              description: 'place a table order',
+            },
+          },
+        },
+      },
+      actionSpec: {
+        placeOrder: {
+          label: 'Place Order',
+          nextStep: 'table_order_place',
+          schema: { type: 'object', properties: {} },
+        },
+      },
+    };
+
+    // Capture hook — mirrors makeSchemaCompatStub's typed parameter shape.
+    // `checkRenderContracts` receives the committed ComponentRender (the
+    // reuse OUTPUT), and `shape.agentCapabilities` is the projected value.
+    let capturedCaps: Parameters<
+      NonNullable<GguiRenderHandlerDeps['checkRenderContracts']>
+    >[0]['agentCapabilities'];
+    const capturingHook: NonNullable<GguiRenderHandlerDeps['checkRenderContracts']> =
+      (shape) => {
+        capturedCaps = shape.agentCapabilities;
+      };
+
+    const pool = await buildSeedPool({
+      uuid,
+      contract: SEED_CONTRACT,
+      componentCode: SEED_CODE,
+      scope: SHARED_SCOPE,
+    });
+
+    // Build the handler directly (mirrors buildSeedPoolHarness but adds the
+    // capture hook). EMPTY per-app cache — blueprint lives ONLY in the pool.
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryRenderStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const handshakeId = 'hs-seed-agentcaps-1';
+    const seedRecord: HandshakeRecord = {
+      handshakeId,
+      action: 'reuse',
+      reason: 'test',
+      input: {
+        intent: 'a test card',
+        blueprintDraft: { contract: SEED_CONTRACT },
+      },
+      target: {},
+      suggestion: {
+        origin: 'cache',
+        rationale: 'test',
+        blueprintMeta: {
+          contractHash: blueprintKey(SEED_CONTRACT),
+          generator: 'fake',
+          variance: {},
+        },
+      },
+      effectiveContract: SEED_CONTRACT,
+      matchedBlueprint: {
+        id: uuid,
+        contractKey: blueprintKey(SEED_CONTRACT),
+        variantKey: variantKey(undefined),
+      },
+      appId: APP_ID,
+      createdAt: new Date().toISOString(),
+    };
+    await seedHandshake(handshakeStore, handshakeId, seedRecord);
+
+    const handler = createGguiRenderHandler({
+      handshakeStore,
+      renderStore,
+      checkRenderContracts: capturingHook,
+      generation: {
+        uiGenerator: {
+          slug: 'ui-gen-default-fake',
+          tier: 'default',
+          model: 'fake',
+          generate: fakeGenerator(COLD_CODE),
+        },
+        resolveLlm: () => null,
+        blueprints: { get: async () => null, list: async () => [] },
+        cache: { embedding: fakeEmbedding, vectorStore, index },
+        seedPools: [pool],
+      },
+      generator: fakeGenerator(COLD_CODE),
+    });
+
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+
+    // Reuse MUST have come from the seed pool.
+    expect(out.cache.hit).toBe(true);
+    expect(out.cache.cachedBlueprintId).toBe(uuid);
+
+    // `capturedCaps` was set by the capture hook when `commitCachedRender`
+    // called `checkRenderContracts` with the committed ComponentRender.
+    // This is the OUTPUT of the projection — not the input contract.
+    // Deep equality covers serverInfo.name verbatim (the narrowest sanity
+    // we need; the hook's type uses Record<string,unknown> for tools values,
+    // so member-level assertions belong in the toEqual comparison).
+    expect(capturedCaps).toEqual(SEED_CONTRACT.agentCapabilities);
+  });
+
   it('per-app store WINS over a seed pool with the same id (per-app-first ordering)', async () => {
     const uuid = 'bp_66666666-6666-4666-8666-666666666666';
     // Seed pool carries SEED_CODE under the same uuid…
