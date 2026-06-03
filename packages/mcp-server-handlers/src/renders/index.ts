@@ -289,3 +289,4 @@ export {
 } from "./slice-meta-derivation.js";
 export type { BlueprintSource } from "./blueprint-source.js";
 export { buildSeedPool, type BuildSeedPoolOptions } from "./build-seed-pool.js";
+export { listRegistryBlueprintsForExport, type ExportableBlueprint } from './export-registry.js';

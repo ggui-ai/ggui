@@ -86,6 +86,7 @@ import { runKeysCommand } from './auth-keys.js';
 import { runGadgetCommand } from './gadget-command.js';
 import { runBlueprintCommand } from './blueprint-command.js';
 import { runThemeCommand } from './theme-command.js';
+import { runExportPoolCommand } from './export-pool-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -139,6 +140,12 @@ Commands:
                  theme validate <path>  Validate a JSON theme file against
                                         the ThemeDocumentV1 schema.
 
+  export-pool  Export this deployment's reusable blueprints as a shareable
+               pool directory (manifest.json + codes/). The pool can be
+               loaded by another deployment via \`ggui serve --seed-pool <dir>\`.
+
+                 --out <dir>  Output directory (default: ./ggui-pool).
+
 Global options:
   --help, -h   Show this help.
   --version    Show installed version.
@@ -182,6 +189,8 @@ async function main(argv: string[]): Promise<number> {
       return runBlueprintCommand(rest);
     case 'theme':
       return runThemeCommand(rest);
+    case 'export-pool':
+      return runExportPoolCommand(rest);
     default:
       process.stderr.write(`ggui: unknown command "${command}"\n\n`);
       process.stderr.write(HELP);
