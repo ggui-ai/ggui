@@ -13,7 +13,7 @@
  *      (`{description?, usage?, inputSchema?, outputSchema?, example?}`)
  *      is restructured to separate MCP-native descriptor from ggui
  *      authoring metadata:
- *        - NEW `serverInfo?: {name, version}` — owning MCP server
+ *        - NEW `serverInfo?: {name, version?}` — owning MCP server
  *          identity from the `initialize` handshake. OPTIONAL: populated
  *          by the agent-server catalog-builder / a host that exposes it;
  *          absent for hand-authored contracts. `(server, toolName)` is
@@ -28,9 +28,13 @@
  *          layer, not MCP).
  *      Entries remain keyed by bare `toolName` in
  *      `agentCapabilities.tools` (unchanged). The canonical contract
- *      hash strips `serverInfo` entirely (version = metadata, not
- *      identity) while preserving `toolInfo.inputSchema` /
- *      `toolInfo.outputSchema` as identity.
+ *      hash strips ONLY `serverInfo.version` (metadata, not identity);
+ *      `serverInfo.name` IS identity — it disambiguates two servers that
+ *      expose a byte-identical bare tool name (e.g. Todoist vs Google-Tasks
+ *      `todo_add`) — and remains in the hash, alongside
+ *      `toolInfo.inputSchema` / `toolInfo.outputSchema`. (Refined
+ *      2026-06-03: name promoted to identity; `serverInfo.version`
+ *      relaxed to optional.)
  *      Pre-launch no-backcompat: every contract author / catalog-builder
  *      that emitted the flat shape MUST migrate to the nested
  *      `toolInfo`. `agentToolEntrySchema` is `.strict()` on both the
