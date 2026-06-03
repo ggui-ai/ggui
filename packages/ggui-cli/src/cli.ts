@@ -64,6 +64,9 @@ import {
   type GenerationBinding,
 } from './generation-probe.js';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
+import { FileSystemBlueprintSource } from './filesystem-blueprint-source.js';
+import { buildSeedPool } from '@ggui-ai/mcp-server-handlers';
+import type { BlueprintPool } from '@ggui-ai/mcp-server-handlers';
 import { createThemeWriter } from './theme-writer.js';
 import { createThemeFileUploader } from './theme-file-uploader.js';
 import { getPersistentDir } from './paths.js';
@@ -652,6 +655,22 @@ async function runServeCommand(args: string[]): Promise<number> {
   }
   process.stdout.write(`${describeGenerationBinding(generationBinding)}\n`);
 
+  // Build seed pools from --seed-pool flags BEFORE composing the backend
+  // factory. `buildSeedPool` is async (reads + indexes the directory
+  // artifact) so it must run here in the async outer scope rather than
+  // inside the synchronous `backendFactory` closure below.
+  const seedPools: BlueprintPool[] = [];
+  for (const dir of parsed.seedPools) {
+    try {
+      seedPools.push(await buildSeedPool(new FileSystemBlueprintSource(dir), { scope: 'shared' }));
+    } catch (err) {
+      process.stderr.write(
+        `ggui serve: --seed-pool "${dir}": ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      return 1;
+    }
+  }
+
   try {
     return await runServe({
       flags: {
@@ -669,6 +688,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         ...(parsed.adminToken !== undefined
           ? { adminToken: parsed.adminToken }
           : {}),
+        seedPools: parsed.seedPools,
       },
       backendFactory: () =>
         buildMcpServerBackend({
@@ -785,6 +805,7 @@ async function runServeCommand(args: string[]): Promise<number> {
             : {}),
           generation: generationBinding.generation,
           ...(mcpMounts.length > 0 ? { mcpMounts } : {}),
+          ...(seedPools.length > 0 ? { seedPools } : {}),
           // Marketplace-install bridge. Pass the projectRoot +
           // filtered installed-blueprint subset so `buildMcpServerBackend`
           // can construct an `InstalledBlueprintsProvider` rooted on the

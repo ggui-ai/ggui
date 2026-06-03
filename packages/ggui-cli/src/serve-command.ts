@@ -224,6 +224,19 @@ export interface ParsedServeFlags {
    * Surface = `--admin-token <token>`.
    */
   adminToken?: string;
+  /**
+   * Paths to read-only shared blueprint pool directories. Each entry
+   * was supplied via a `--seed-pool <dir>` flag (repeatable). At boot,
+   * each path is loaded as a `FileSystemBlueprintSource` and passed to
+   * `buildSeedPool` so its blueprints are available for exact-contract
+   * reuse behind the operator's own discovered set.
+   *
+   * Defaults to `[]` (no shared pools). Shared pools are checked
+   * AFTER the operator's own blueprints — local declarations always win.
+   *
+   * Surface = `--seed-pool <dir>` (repeatable).
+   */
+  seedPools: string[];
   /** Populated when parsing failed; caller renders + bails with exit code 1. */
   error?: string;
 }
@@ -247,6 +260,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     publicDemo: false,
     multiTenant: false,
     oauth: false,
+    seedPools: [],
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -359,6 +373,12 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     }
     if (arg === '--ephemeral') {
       out.ephemeral = true;
+      continue;
+    }
+    if (arg === '--seed-pool') {
+      const value = args[++i];
+      if (value === undefined) return { ...out, error: '--seed-pool requires a path' };
+      out.seedPools.push(value);
       continue;
     }
     if (arg === '--all') {
@@ -1058,6 +1078,9 @@ Options:
                          survive a server restart. Pass this flag to
                          keep restarts ephemeral (tests / CI / nuclear-
                          revoke). Override the dir via GGUI_PERSISTENT_DIR.
+  --seed-pool <dir>      Load a read-only shared blueprint pool from a
+                         directory artifact (repeatable). Blueprints in it
+                         are reused by exact contract match, after your own.
   --help, -h             Show this help.
 
 Agent runtime:

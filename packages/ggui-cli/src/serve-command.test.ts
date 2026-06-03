@@ -24,6 +24,17 @@ import {
   type ServeBackend,
 } from './serve-command.js';
 
+describe('parseServeFlags --seed-pool', () => {
+  it('collects repeated --seed-pool paths into an array', () => {
+    const f = parseServeFlags(['--seed-pool', './a', '--seed-pool', './b']);
+    expect(f.error).toBeUndefined();
+    expect(f.seedPools).toEqual(['./a', './b']);
+  });
+  it('defaults seedPools to an empty array', () => {
+    expect(parseServeFlags([]).seedPools).toEqual([]);
+  });
+});
+
 describe('parseServeFlags', () => {
   it('uses defaults when no flags are supplied', () => {
     // `publicBaseUrl` is intentionally absent on the default object —
@@ -36,6 +47,7 @@ describe('parseServeFlags', () => {
       publicDemo: false,
       multiTenant: false,
       oauth: false,
+      seedPools: [],
     });
   });
 
@@ -394,6 +406,7 @@ describe('runServe', () => {
     port: 6781,
     host: '127.0.0.1',
     mcpOnly: true,
+    seedPools: [] as string[],
   };
 
   /**
@@ -542,7 +555,7 @@ describe('runServe', () => {
 
 describe('runServe — agent supervision', () => {
   /** Full-mode flags (not --mcp-only). Agent will be supervised. */
-  const FULL_FLAGS = { port: 6781, host: '127.0.0.1', mcpOnly: false };
+  const FULL_FLAGS = { port: 6781, host: '127.0.0.1', mcpOnly: false, seedPools: [] as string[] };
   const AGENT_RUNNING: AgentStatus = {
     kind: 'running',
     entry: './agent.ts',
