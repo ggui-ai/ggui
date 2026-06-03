@@ -798,8 +798,13 @@ export interface ServeShutdownSignal {
 }
 
 export interface RunServeOptions {
-  /** Parsed flags. The `error` field must already be handled upstream. */
-  readonly flags: Readonly<Omit<ParsedServeFlags, 'error'>>;
+  /**
+   * Parsed flags. The `error` field must already be handled upstream.
+   * `seedPools` is omitted too — it's parse output the CLI consumes to
+   * build the shared `BlueprintPool[]` (fed straight into the backend
+   * factory), NOT a `runServe` lifecycle input.
+   */
+  readonly flags: Readonly<Omit<ParsedServeFlags, 'error' | 'seedPools'>>;
   /** Build the backend. Called once, after flag parsing. */
   readonly backendFactory: ServeBackendFactory;
   /**

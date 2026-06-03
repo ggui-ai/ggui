@@ -33,6 +33,11 @@ describe('parseServeFlags --seed-pool', () => {
   it('defaults seedPools to an empty array', () => {
     expect(parseServeFlags([]).seedPools).toEqual([]);
   });
+  it('errors when --seed-pool has no value', () => {
+    expect(parseServeFlags(['--seed-pool']).error).toBe(
+      '--seed-pool requires a path',
+    );
+  });
 });
 
 describe('parseServeFlags', () => {
@@ -406,7 +411,6 @@ describe('runServe', () => {
     port: 6781,
     host: '127.0.0.1',
     mcpOnly: true,
-    seedPools: [] as string[],
   };
 
   /**
@@ -555,7 +559,7 @@ describe('runServe', () => {
 
 describe('runServe — agent supervision', () => {
   /** Full-mode flags (not --mcp-only). Agent will be supervised. */
-  const FULL_FLAGS = { port: 6781, host: '127.0.0.1', mcpOnly: false, seedPools: [] as string[] };
+  const FULL_FLAGS = { port: 6781, host: '127.0.0.1', mcpOnly: false };
   const AGENT_RUNNING: AgentStatus = {
     kind: 'running',
     entry: './agent.ts',

@@ -688,7 +688,6 @@ async function runServeCommand(args: string[]): Promise<number> {
         ...(parsed.adminToken !== undefined
           ? { adminToken: parsed.adminToken }
           : {}),
-        seedPools: parsed.seedPools,
       },
       backendFactory: () =>
         buildMcpServerBackend({
