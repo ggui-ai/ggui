@@ -71,6 +71,20 @@ export interface AgentServerOptions {
    */
   readonly chatStore?: ChatStore;
   /**
+   * Opt into cross-framework tool-identity canonicalization. When
+   * `true`, after the canonical agent-tool catalog resolves (the real
+   * MCP `initialize` per server), the library declares the derived
+   * `{ bareToolName -> canonical serverInfo }` map to ggui via
+   * `ggui_runtime_declare_tool_catalog` — ONCE, on the agent's own ggui
+   * connection (same URL + bearer ⇒ same `appId`). ggui then
+   * canonicalizes a reused blueprint's tool references at handshake
+   * time, making blueprint reuse identity-stable across runtimes.
+   *
+   * Default `false`. The declaration is a Tier-2 enhancement: a failure
+   * is non-fatal (the agent still works without canonicalization).
+   */
+  readonly crossFramework?: boolean;
+  /**
    * Optional logger. Defaults to a `console.log` writer prefixed
    * `[agent-server]`.
    */
@@ -139,6 +153,7 @@ export async function startAgentServer(
     sandboxProxyUrl: sandboxProxyPublicUrl
       ? new URL('/sandbox.html', sandboxProxyPublicUrl).href
       : sandboxProxy.url,
+    crossFramework: opts.crossFramework ?? false,
     log,
   });
 

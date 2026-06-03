@@ -17,6 +17,7 @@ import { createAgentApp } from './app.js';
 import { createGuestTokenAuth } from './auth.js';
 import { createInMemoryChatStore } from './chat-store.js';
 import { buildAgentCatalog } from './mcp-client.js';
+import { declareToolCatalog } from './declare-tool-catalog.js';
 import type {
   AgentAdapter,
   AgentInput,
@@ -29,6 +30,15 @@ import type {
 vi.mock('./mcp-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./mcp-client.js')>();
   return { ...actual, buildAgentCatalog: vi.fn() };
+});
+
+// Mock the declaration helper so the cross-framework gate can be
+// asserted without a live ggui MCP. The pure derivation + non-fatal
+// transport handling are covered in `declare-tool-catalog.test.ts`.
+vi.mock('./declare-tool-catalog.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./declare-tool-catalog.js')>();
+  return { ...actual, declareToolCatalog: vi.fn().mockResolvedValue(undefined) };
 });
 
 const SECRET = 'app-integration-test-secret-32b-ok';
@@ -575,6 +585,104 @@ describe('POST /agent — agentCapabilities catalog threading', () => {
     await postChat(app, guestToken);
     expect(await cap.nthCapture(2)).toEqual(CATALOG);
     expect(buildAgentCatalogMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('POST /agent — crossFramework tool-catalog declaration', () => {
+  const CATALOG: Record<string, AgentToolEntry> = {
+    todo_add: {
+      serverInfo: { name: '@x/todo', version: '0.0.1' },
+      toolInfo: { inputSchema: { type: 'object', properties: {} }, description: 'add' },
+    },
+  };
+
+  const buildAgentCatalogMock = vi.mocked(buildAgentCatalog);
+  const declareToolCatalogMock = vi.mocked(declareToolCatalog);
+
+  beforeEach(() => {
+    buildAgentCatalogMock.mockReset();
+    buildAgentCatalogMock.mockResolvedValue(CATALOG);
+    declareToolCatalogMock.mockReset();
+    declareToolCatalogMock.mockResolvedValue(undefined);
+  });
+
+  const ADAPTER: AgentAdapter = {
+    name: 'noop',
+    async *run(_input: AgentInput): AsyncIterable<NormalizedMessage> {
+      yield { type: 'result', subtype: 'ok' };
+    },
+  };
+
+  function buildAppWith(
+    crossFramework: boolean | undefined,
+  ): ReturnType<typeof createAgentApp> {
+    return createAgentApp({
+      adapter: ADAPTER,
+      auth: createGuestTokenAuth({ signingSecret: SECRET }),
+      chatStore: createInMemoryChatStore(),
+      mcpServers: MCP_SERVERS,
+      systemPrompt: null,
+      sandboxProxyUrl: 'http://localhost:7790',
+      ...(crossFramework !== undefined ? { crossFramework } : {}),
+    });
+  }
+
+  async function postChat(
+    app: ReturnType<typeof createAgentApp>,
+    guestToken: string,
+  ): Promise<void> {
+    const res = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi' }),
+    });
+    await res.text();
+  }
+
+  it('declares the catalog to ggui ONCE when crossFramework:true', async () => {
+    const app = buildAppWith(true);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+
+    expect(declareToolCatalogMock).toHaveBeenCalledTimes(1);
+    expect(declareToolCatalogMock).toHaveBeenCalledWith({
+      ggui: MCP_SERVERS.ggui,
+      catalog: CATALOG,
+      log: expect.any(Function),
+    });
+  });
+
+  it('declares ONCE across multiple requests (co-located with the memoized catalog)', async () => {
+    const app = buildAppWith(true);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+    await postChat(app, guestToken);
+
+    expect(buildAgentCatalogMock).toHaveBeenCalledTimes(1);
+    expect(declareToolCatalogMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT declare when crossFramework is false', async () => {
+    const app = buildAppWith(false);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+
+    expect(declareToolCatalogMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT declare when crossFramework is unset (default off)', async () => {
+    const app = buildAppWith(undefined);
+    const { guestToken } = await mintGuestBearer(app);
+
+    await postChat(app, guestToken);
+
+    expect(declareToolCatalogMock).not.toHaveBeenCalled();
   });
 });
 

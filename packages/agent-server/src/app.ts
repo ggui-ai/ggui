@@ -63,6 +63,7 @@ import {
   type Principal,
 } from './auth.js';
 import { buildAgentCatalog, callMcpToolsCall } from './mcp-client.js';
+import { declareToolCatalog } from './declare-tool-catalog.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import { mintChatId, type ChatStore } from './chat-store.js';
 import type { AgentAdapter, McpServerConfig } from './types.js';
@@ -102,6 +103,16 @@ export interface AgentAppDeps {
    */
   readonly sandboxProxyUrl: string;
   /**
+   * When `true`, after the canonical agent-tool catalog resolves the
+   * library declares the derived `{ bareToolName -> canonical serverInfo }`
+   * map to ggui via `ggui_runtime_declare_tool_catalog` — ONCE, on the
+   * agent's own ggui connection (`mcpServers.ggui`, same URL + bearer ⇒
+   * same `appId`). Co-located with the memoized catalog so it fires once
+   * per process, not per request. Default `false`; the declaration is a
+   * Tier-2 enhancement (non-fatal on failure).
+   */
+  readonly crossFramework?: boolean;
+  /**
    * Optional logger — receives one line per significant event
    * (request received, interceptor outcome, errors). Defaults to a
    * no-op fallback when omitted at server boot.
@@ -125,6 +136,7 @@ export function createAgentApp(
   deps: AgentAppDeps,
 ): Hono<{ Variables: AgentAppVariables }> {
   const { adapter, chatStore, mcpServers, sandboxProxyUrl, auth } = deps;
+  const crossFramework = deps.crossFramework ?? false;
   const log = deps.log ?? ((): void => {});
 
   // Canonical agent-tool catalog, built ONCE from the live MCP
@@ -151,6 +163,34 @@ export function createAgentApp(
       built.catch(() => {
         if (catalogPromise === built) catalogPromise = undefined;
       });
+      // Cross-framework: declare the canonical tool catalog to ggui
+      // ONCE, chained off this first successful build (not per request).
+      // Because it hangs off the memoized `built` promise — created only
+      // on the first call — it fires at most once per process for a
+      // successful catalog. A failed build resets the memo (above) so a
+      // later retry can still declare; `declareToolCatalog` is itself
+      // non-fatal, so a declaration failure never breaks the run.
+      if (crossFramework) {
+        const ggui = mcpServers.ggui;
+        if (ggui) {
+          void built.then(
+            (catalog) =>
+              declareToolCatalog({
+                ggui: { url: ggui.url, bearer: ggui.bearer },
+                catalog,
+                log,
+              }),
+            () => {
+              // Build rejected — the memo was reset above; nothing to
+              // declare. The next request retries the build.
+            },
+          );
+        } else {
+          log(
+            "[agent-server] crossFramework:true but no 'ggui' MCP server configured — skipping tool-catalog declaration.",
+          );
+        }
+      }
     }
     return catalogPromise;
   };
