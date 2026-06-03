@@ -115,6 +115,42 @@ for (const c of SDK_CASES) {
       await expect(findTodoCheckedIndicator(restoredFrame, /buy milk/i)).toBeVisible({
         timeout: 60_000,
       });
+
+      // --- Slice 1 measurement (best-effort; LOG ONLY, never gates) ---
+      // What did this SDK author for each tool's serverInfo.name? canonical =
+      // the real initialize name; config-key = the mcp__<server>__ prefix handle
+      // (the nudge's intended output); fabricated = neither (what we want gone);
+      // omitted = no name. Propagation of the ggui server's stderr to stdout() is
+      // unverified — absence is logged, not asserted.
+      const AGENTCAPS_TRUTH = { realName: '@ggui-samples/mcp-todo', configKey: 'todo' };
+      const classifyAgentCap = (name: string | undefined): string =>
+        name === undefined
+          ? 'omitted'
+          : name === AGENTCAPS_TRUTH.realName
+            ? 'canonical'
+            : name === AGENTCAPS_TRUTH.configKey
+              ? 'config-key'
+              : 'fabricated';
+      const agentcapsLines = app
+        .stdout()
+        .split('\n')
+        .filter((l) => l.includes('[ggui:agentcaps]'));
+      if (agentcapsLines.length === 0) {
+        // eslint-disable-next-line no-console -- measurement output for the run log.
+        console.warn(
+          `[agentcaps:${c.sdk}] no measurement lines captured (dev.mjs stderr forwarding gap?) — skipping classification`,
+        );
+      } else {
+        for (const line of agentcapsLines) {
+          const m = /tool=(\S+) serverInfo\.name=(\S+)/.exec(line);
+          if (!m) continue;
+          const authored = m[2] === '-' ? undefined : m[2];
+          // eslint-disable-next-line no-console -- measurement output for the run log.
+          console.log(
+            `[agentcaps:${c.sdk}] tool=${m[1]} authored=${m[2]} class=${classifyAgentCap(authored)}`,
+          );
+        }
+      }
     });
   });
 }

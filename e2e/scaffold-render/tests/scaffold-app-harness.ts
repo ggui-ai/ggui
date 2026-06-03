@@ -122,7 +122,15 @@ export async function spawnScaffoldedApp(opts: { sdk: SdkId }): Promise<Scaffold
   const appDir = join(appBase, 'app');
   let buf = '';
   const child: ChildProcess = spawn('bash', [BOOT], {
-    env: { ...process.env, SDK: opts.sdk, APP_DIR: appDir, TEMPLATES_SRC: tpl, REGISTRY },
+    env: {
+      ...process.env,
+      SDK: opts.sdk,
+      APP_DIR: appDir,
+      TEMPLATES_SRC: tpl,
+      REGISTRY,
+      // Slice-1 measurement: emit [ggui:agentcaps] lines so render.spec can classify per-SDK serverInfo authoring.
+      GGUI_AGENTCAPS_STDERR: '1',
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
