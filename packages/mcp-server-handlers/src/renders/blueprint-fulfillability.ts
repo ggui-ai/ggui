@@ -77,6 +77,24 @@ export function isFulfillable(
       missingTools.push(tool);
       continue;
     }
+    // Server-identity gate: a shared bare tool name owned by a DIFFERENT MCP
+    // server is NOT the same tool. `(serverInfo.name, toolName)` is the
+    // canonical cross-framework identity — the exact-key reuse path already
+    // hashes on it (Slice 1); here we close the same collision on the
+    // semantic (RAG+judge) reuse path. GRACEFUL: only when BOTH sides declare
+    // `serverInfo.name` and they differ do we decline; if either side omits
+    // it (Tier-2 / pre-canonicalization blueprints), fall back to bare-name
+    // matching so existing reuse still holds.
+    const blueprintServer = contract.agentCapabilities?.tools?.[tool]?.serverInfo?.name;
+    const agentServer = agentEntry.serverInfo?.name;
+    if (
+      blueprintServer !== undefined &&
+      agentServer !== undefined &&
+      blueprintServer !== agentServer
+    ) {
+      schemaConflicts.push(tool);
+      continue;
+    }
     const recorded = contract.agentCapabilities?.tools?.[tool]?.toolInfo?.inputSchema;
     const current = agentEntry.toolInfo.inputSchema;
     if (recorded && !inputSchemaSatisfies(current, recorded)) {

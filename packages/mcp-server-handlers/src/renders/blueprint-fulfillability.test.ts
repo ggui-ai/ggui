@@ -130,4 +130,74 @@ describe('isFulfillable', () => {
     expect(result.ok).toBe(true);
     expect(result.schemaConflicts).toEqual([]);
   });
+
+  // --- Server-identity gate: same bare tool name from a DIFFERENT owning
+  // server is NOT the same tool. The exact-key reuse path is already
+  // disambiguated by the Slice-1 hash; this closes the collision on the
+  // SEMANTIC (RAG+judge) reuse path, where bare-name matching alone would
+  // falsely "fulfill" a blueprint's `todo_add@A` with the agent's `todo_add@B`.
+
+  /** Blueprint requiring `todo_add` owned by `@a/server`. */
+  const REQUIRES_TODO_ADD_FROM_A: DataContract = {
+    actionSpec: { add: { label: 'Add', nextStep: 'todo_add' } },
+    agentCapabilities: {
+      tools: {
+        todo_add: {
+          serverInfo: { name: '@a/server' },
+          toolInfo: { inputSchema: { type: 'object', properties: {} } },
+        },
+      },
+    },
+  };
+
+  it('declines (schemaConflicts) when the same-named tool resolves to a DIFFERENT owning server', () => {
+    const result = isFulfillable(REQUIRES_TODO_ADD_FROM_A, {
+      todo_add: {
+        serverInfo: { name: '@b/server' },
+        toolInfo: { inputSchema: { type: 'object', properties: {} } },
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.missingTools).toEqual([]);
+    expect(result.schemaConflicts).toEqual(['todo_add']);
+  });
+
+  it('ok when the same-named tool resolves to the SAME owning server', () => {
+    const result = isFulfillable(REQUIRES_TODO_ADD_FROM_A, {
+      todo_add: {
+        serverInfo: { name: '@a/server' },
+        toolInfo: { inputSchema: { type: 'object', properties: {} } },
+      },
+    });
+    expect(result).toEqual({ ok: true, missingTools: [], schemaConflicts: [] });
+  });
+
+  it('graceful fallback: bare-name match when the BLUEPRINT tool omits serverInfo', () => {
+    // Pre-canonicalization / Tier-2 blueprint with no serverInfo on the
+    // recorded tool — must still reuse against any same-named agent tool.
+    const result = isFulfillable(REQUIRES_TODO_ADD, {
+      todo_add: {
+        serverInfo: { name: '@b/server' },
+        toolInfo: {
+          inputSchema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+          },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true, missingTools: [], schemaConflicts: [] });
+  });
+
+  it('graceful fallback: bare-name match when the AGENT tool omits serverInfo', () => {
+    // Blueprint declares serverInfo but the agent's same-named tool does not
+    // (pre-canonicalization agent caps) — must still reuse.
+    const result = isFulfillable(REQUIRES_TODO_ADD_FROM_A, {
+      todo_add: {
+        toolInfo: { inputSchema: { type: 'object', properties: {} } },
+      },
+    });
+    expect(result).toEqual({ ok: true, missingTools: [], schemaConflicts: [] });
+  });
 });
