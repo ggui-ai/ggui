@@ -542,11 +542,13 @@ export const EMPTY_REFRESH_INPUT: RefreshInput = Object.freeze(
  * Documents an MCP tool the contract references — by `actionSpec[*].nextStep`,
  * by `streamSpec[*].source.tool`, or simply for the LLM-authoring catalog.
  *
- * Shape: `serverInfo` (OPTIONAL) carries the owning MCP server identity
- * from the `initialize` handshake; `(server, toolName)` is the canonical
- * cross-framework identity — `serverInfo.version` is metadata, NOT
- * identity (so it never enters the canonical contract hash). `toolInfo`
- * echoes the MCP `tools/list` descriptor (minus `name`, which is the
+ * Shape: `serverInfo` (OPTIONAL) carries the owning MCP server identity;
+ * `(serverInfo.name, toolName)` is the canonical cross-framework identity and
+ * enters the contract hash. In Tier 2 the LLM derives `serverInfo.name` from
+ * the `mcp__<server>__` tool prefix (omit when there is no prefix — never
+ * invent); in Tier 1 the agent-server catalog fills it from `initialize`.
+ * `serverInfo.version` is OPTIONAL metadata, NOT identity (never enters the
+ * hash). `toolInfo` echoes the MCP `tools/list` descriptor (minus `name`, which is the
  * catalog key). The ggui authoring layer adds `usage` + `example` on top
  * of the MCP-native descriptor. The `example` field's `input`/`output`
  * keys align with MCP's tool envelope naming so the contract reads

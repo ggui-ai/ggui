@@ -140,10 +140,11 @@ interface AgentCapabilitiesSpec {
 }
 
 interface AgentToolEntry {
-  // Owning MCP server identity (optional — from the 'initialize'
-  // handshake). (server, toolName) is the canonical identity;
-  // version is metadata, not identity.
-  serverInfo?: { name: string; version: string };
+  // Owning MCP server identity. OPTIONAL — Tier-2: derive name from the
+  // mcp__<server>__ prefix (omit when absent, never invent); Tier-1:
+  // agent-server fills from 'initialize'. (server, toolName) is the
+  // canonical identity; version is metadata, not identity.
+  serverInfo?: { name: string; version?: string };
   // MCP tool descriptor, echoed from 'tools/list' (minus name = the key).
   toolInfo: {
     inputSchema: JsonSchema; // REQUIRED — every MCP tool has one.
@@ -169,12 +170,14 @@ conversations or other agents):
   \`mcp__<server>__\` prefix a host prepends on its connection. Key by
   the bare name (e.g. \`todo_add\`), NOT the host's connection label or
   prefix.
-- \`serverInfo\` is the server's self-declared \`name\` + \`version\` from
-  the MCP \`initialize\` handshake. Provide it WHEN your host exposes it —
-  it lets a UI built against the same \`(server, toolName)\` be reused
-  across conversations and agents. OMIT it (do NOT guess) if you don't
-  have it. \`version\` is metadata, not identity, so a version bump alone
-  never blocks reuse.
+- \`serverInfo.name\` identifies the owning MCP server so a UI built against
+  the same \`(server, toolName)\` is reused across conversations and agents.
+  Set it to the server handle from your tool's \`mcp__<server>__\` prefix —
+  the SAME \`<server>\` you stripped to get the bare key (e.g.
+  \`mcp__todo__todo_add\` → \`serverInfo.name: 'todo'\`). If a tool has no
+  such prefix, OMIT \`serverInfo\` — never invent a name. \`version\` is
+  OPTIONAL metadata (include it only if your host surfaces it); a version
+  difference alone never blocks reuse.
 - \`toolInfo.inputSchema\` is echoed verbatim from the tool's \`tools/list\`
   descriptor.
 
