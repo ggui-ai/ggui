@@ -9,6 +9,8 @@ import type {
   renderOutputSchema,
   updateInputSchema,
   updateOutputSchema,
+  declareToolCatalogInputSchema,
+  declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
 
 export type { RenderStatus } from './session';
@@ -591,6 +593,15 @@ export type RenderCacheMarker = z.infer<typeof renderCacheMarkerSchema>;
 
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
+
+/**
+ * `ggui_runtime_declare_tool_catalog` input/output. Derived from
+ * {@link declareToolCatalogInputSchema} / {@link declareToolCatalogOutputSchema}
+ * — the schemas are the source of truth. See those for the
+ * canonical-tool-identity rationale.
+ */
+export type DeclareToolCatalogInput = z.infer<typeof declareToolCatalogInputSchema>;
+export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSchema>;
 
 // =============================================================================
 // MCP Error Codes

@@ -464,3 +464,47 @@ export const updateOutputSchema = z.object({
   renderId: z.string(),
   updated: z.boolean(),
 });
+
+/**
+ * `ggui_runtime_declare_tool_catalog` — the host runtime declares its
+ * per-app canonical tool-identity catalog (one row per app).
+ *
+ * The map is `bare tool name → the canonical serverInfo` that the tool's
+ * MCP server announced in its `initialize` reply. ggui folds this into
+ * the handshake step (`canonicalizeToolIdentity`) so a reused blueprint's
+ * `agentCapabilities.tools[*].serverInfo` is rewritten to the canonical
+ * value regardless of whether the inbound contract authored a config-key
+ * name, fabricated one, or omitted it. That makes blueprint reuse
+ * identity-stable across runtimes.
+ *
+ * Keyed by the BARE tool name — the same key the canonicalization step
+ * matches on. `version` is OPTIONAL: it rides along as metadata; tool
+ * identity is `(name)` matched by bare name, never `(name, version)`.
+ *
+ * `appId` is NOT on the input — the handler reads it off `ctx.appId`
+ * resolved by the upstream auth adapter, so a declaration can only ever
+ * write its own app's row. The output echoes the resolved `appId` so the
+ * caller can confirm which app row it wrote.
+ *
+ * REPLACE semantics: each declaration overwrites the app's prior catalog
+ * wholesale (the host re-declares its full current toolset on connect).
+ */
+export const declareToolCatalogInputSchema = z
+  .object({
+    toolCatalog: z
+      .record(
+        z.string(),
+        z.object({ name: z.string(), version: z.string().optional() }).strict(),
+      )
+      .describe(
+        "Per-app canonical tool identities: bare tool name -> its server's initialize-declared serverInfo. Host/library-supplied; not an agent action.",
+      ),
+  })
+  .strict();
+
+export const declareToolCatalogOutputSchema = z
+  .object({
+    saved: z.boolean(),
+    appId: z.string(),
+  })
+  .strict();

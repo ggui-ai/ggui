@@ -81,6 +81,18 @@ export {
   type GguiConsumeHandlerDeps,
   type ObserverNotifier,
 } from "./consume.js";
+export {
+  canonicalizeToolIdentity,
+  type ToolIdentityCatalog,
+} from "./canonicalize-tool-identity.js";
+export {
+  createGguiDeclareToolCatalogHandler,
+  type GguiDeclareToolCatalogDeps,
+} from "./declare-tool-catalog.js";
+export {
+  InMemoryToolIdentityCatalogStore,
+  type ToolIdentityCatalogStore,
+} from "./tool-identity-catalog-store.js";
 export { ChannelNotDeclaredError, InvalidCompleteError, RenderNotFoundError } from "./errors.js";
 export {
   clearGenerationCache,
