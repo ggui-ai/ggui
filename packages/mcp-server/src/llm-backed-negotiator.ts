@@ -49,6 +49,7 @@ import type {
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
 import {
   decideHandshake,
+  type BlueprintPool,
   type HandshakeDecisionAdapter,
   type HandshakeNegotiator,
   type InstalledBlueprintsProvider,
@@ -263,6 +264,30 @@ export interface LlmBackedHandshakeNegotiatorDeps {
    * no-op (Tier 2). The SAME instance the declaration handler writes.
    */
   catalogStore?: ToolIdentityCatalogStore;
+  /**
+   * Read-only shared/seed pools (cross-deployment reuse). Appended to
+   * adapter.pools AFTER the per-app pool, so a deployment's own
+   * blueprints win on exact-key first-match. Each is typically built by
+   * `buildSeedPool` from a distributable artifact. Absent ⇒ no shared pool.
+   */
+  readonly seedPools?: readonly BlueprintPool[];
+}
+
+/**
+ * Build the handshake pool list: the per-app pool (from `cache`) first —
+ * so a deployment's own blueprints win on exact-key first-match — then
+ * any read-only seed pools.
+ */
+export function assembleHandshakePools(
+  deps: Pick<LlmBackedHandshakeNegotiatorDeps, 'cache' | 'installedBlueprints' | 'seedPools'>,
+): BlueprintPool[] {
+  const perAppPool: BlueprintPool | undefined = deps.cache
+    ? {
+        registry: deps.cache,
+        ...(deps.installedBlueprints ? { installedBlueprints: deps.installedBlueprints } : {}),
+      }
+    : undefined;
+  return [...(perAppPool ? [perAppPool] : []), ...(deps.seedPools ?? [])];
 }
 
 /**
@@ -286,6 +311,7 @@ export function createLlmBackedHandshakeNegotiator(
   // value (no `?.` chain inside the hot path; the spread below already
   // gates on presence).
   const catalogStore = deps.catalogStore;
+  const pools = assembleHandshakePools(deps);
   const adapter: HandshakeDecisionAdapter = {
     // BYOK seam: resolve per-ctx creds + wrap into an LLMCaller. No
     // creds ⇒ undefined ⇒ the core returns a no-LLM create fallback.
@@ -295,20 +321,9 @@ export function createLlmBackedHandshakeNegotiator(
         ? buildLlmCaller(creds.selection, creds.providerKey)
         : undefined;
     },
-    // OSS searches a single per-app pool (scope defaults to ctx.appId).
-    // No cache wired ⇒ no pools ⇒ the core takes the synth-only path.
-    ...(deps.cache
-      ? {
-          pools: [
-            {
-              registry: deps.cache,
-              ...(deps.installedBlueprints
-                ? { installedBlueprints: deps.installedBlueprints }
-                : {}),
-            },
-          ],
-        }
-      : {}),
+    // Per-app pool first, then seed pools. No pools ⇒ the core takes
+    // the synth-only path.
+    ...(pools.length > 0 ? { pools } : {}),
     warn: (message) => {
       // eslint-disable-next-line no-console -- operator-visible signal
       console.warn(message);
