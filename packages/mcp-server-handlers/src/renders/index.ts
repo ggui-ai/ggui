@@ -287,3 +287,4 @@ export {
   resolveGadgetUrls,
   type RenderMetaView,
 } from "./slice-meta-derivation.js";
+export type { BlueprintSource } from "./blueprint-source.js";
