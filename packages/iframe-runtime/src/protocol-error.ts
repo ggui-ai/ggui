@@ -112,7 +112,7 @@ export type ProtocolError =
   | { readonly kind: 'auth'; readonly code: 'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'; readonly message?: string }
   | {
       readonly kind: 'protocol';
-      readonly code: 'SESSION_MISMATCH' | 'APP_MISMATCH' | 'MALFORMED_ENVELOPE' | (string & {});
+      readonly code: 'RENDER_MISMATCH' | 'APP_MISMATCH' | 'MALFORMED_ENVELOPE' | (string & {});
       readonly message?: string;
       readonly details?: unknown;
     }

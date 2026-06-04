@@ -452,7 +452,7 @@ export type ContractErrorCode =
   | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
-  | 'SESSION_NOT_FOUND'
+  | 'RENDER_NOT_FOUND'
   | 'AUTH_REJECTED'
   | (string & {});
 
@@ -474,7 +474,7 @@ export type BootstrapFailureReason =
   | 'UPGRADE_REQUIRED'
   | 'BUNDLE_FETCH_FAILED'
   | 'CSP_VIOLATION'
-  | 'SESSION_NOT_FOUND'
+  | 'RENDER_NOT_FOUND'
   | 'AUTH_REJECTED'
   | (string & {});
 
@@ -496,13 +496,13 @@ export type ProtocolError =
     }
   | {
       readonly kind: 'auth';
-      readonly code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED';
+      readonly code: 'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED';
       readonly message?: string;
     }
   | {
       readonly kind: 'protocol';
       readonly code:
-        | 'SESSION_MISMATCH'
+        | 'RENDER_MISMATCH'
         | 'APP_MISMATCH'
         | 'MALFORMED_ENVELOPE'
         | (string & {});

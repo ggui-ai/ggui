@@ -1584,7 +1584,13 @@
  *      `GGUI_SESSION_UI_META` → `GGUI_RENDER_UI_META`. Error codes
  *      renamed too: `SESSION_NOT_FOUND` → `RENDER_NOT_FOUND`;
  *      `STACK_ITEM_NOT_FOUND` → `RENDER_NOT_FOUND`;
- *      `CONCURRENT_SESSION_LIMIT` → `CONCURRENT_RENDER_LIMIT`.
+ *      `CONCURRENT_SESSION_LIMIT` → `CONCURRENT_RENDER_LIMIT`. The
+ *      live-channel wire-error codes were renamed in the same arc:
+ *      `SESSION_MISMATCH` → `RENDER_MISMATCH`;
+ *      `BOOTSTRAP_SESSION_MISMATCH` → `BOOTSTRAP_RENDER_MISMATCH`;
+ *      `DEVTOOL_COOKIE_SESSION_MISMATCH` →
+ *      `DEVTOOL_COOKIE_RENDER_MISMATCH`;
+ *      `SESSION_CREATE_FAILED` → `RENDER_CREATE_FAILED`.
  *
  *   b6. **Retired wire-side payloads deleted (no shims).** `PushPayload`,
  *      `PopPayload`, `GetStackPayload`, `SessionPayload`,

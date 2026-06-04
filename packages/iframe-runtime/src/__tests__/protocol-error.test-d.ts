@@ -43,7 +43,7 @@ function exhaust(err: ProtocolError): string {
       // foreign strings without losing autocomplete.
       const okCanonical: ProtocolError & { kind: 'protocol' } = {
         kind: 'protocol',
-        code: 'SESSION_MISMATCH',
+        code: 'RENDER_MISMATCH',
       };
       const okForeign: ProtocolError & { kind: 'protocol' } = {
         kind: 'protocol',

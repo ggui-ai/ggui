@@ -620,7 +620,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     });
 
     expect(outcome.type).toBe('error');
-    expect(outcome.code).toBe('BOOTSTRAP_SESSION_MISMATCH');
+    expect(outcome.code).toBe('BOOTSTRAP_RENDER_MISMATCH');
     ws.close();
   });
 });

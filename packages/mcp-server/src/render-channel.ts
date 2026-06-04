@@ -490,7 +490,7 @@ export interface RenderChannelOptions {
    * request. A valid cookie binds the identity as a `builder` and
    * scopes the subscriber to the cookie's `renderId` — any
    * `subscribe.renderId` mismatch is rejected with
-   * `DEVTOOL_COOKIE_SESSION_MISMATCH`.
+   * `DEVTOOL_COOKIE_RENDER_MISMATCH`.
    *
    * Absent = cookie auth disabled on this channel. Cookies are never
    * auto-enabled; the server's console composition decides.
@@ -1049,7 +1049,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
    *
    *   - the socket has no bound subscriber (NOT_SUBSCRIBED)
    *   - payload.renderId doesn't match the subscriber binding
-   *     (SESSION_MISMATCH)
+   *     (RENDER_MISMATCH)
    *
    * Subscriber binding is the authoritative tenancy scope. The wire
    * payload's renderId is belt-and-suspenders so the error message
@@ -1074,7 +1074,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     if (payload.renderId !== sub.renderId) {
       sendError(
         ws,
-        "SESSION_MISMATCH",
+        "RENDER_MISMATCH",
         `${messageType} payload id '${payload.renderId ?? "<missing>"}' does not match subscriber render '${sub.renderId}'`,
         requestId
       );
@@ -1928,12 +1928,12 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     const envelope: ActionEnvelope = message.payload;
 
     // Spoof guard — envelope.renderId is REQUIRED on the wire and
-    // MUST match the subscriber's bound session.
+    // MUST match the subscriber's bound render.
     if (envelope.renderId !== sub.renderId) {
       sendError(
         ws,
-        "SESSION_MISMATCH",
-        `Action targets session '${envelope.renderId}' but this socket is subscribed to '${sub.renderId}'`,
+        "RENDER_MISMATCH",
+        `Action targets render '${envelope.renderId}' but this socket is subscribed to '${sub.renderId}'`,
         message.requestId
       );
       return;
@@ -2167,8 +2167,8 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       if (bound.renderId !== payload.renderId) {
         sendError(
           ws,
-          "BOOTSTRAP_SESSION_MISMATCH",
-          `Bootstrap token is bound to session '${bound.renderId}' but subscribe targets '${payload.renderId}'`,
+          "BOOTSTRAP_RENDER_MISMATCH",
+          `Bootstrap token is bound to render '${bound.renderId}' but subscribe targets '${payload.renderId}'`,
           message.requestId
         );
         return;
@@ -2231,7 +2231,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       } catch (err) {
         sendError(
           ws,
-          "SESSION_CREATE_FAILED",
+          "RENDER_CREATE_FAILED",
           err instanceof Error ? err.message : String(err),
           message.requestId
         );
@@ -2426,8 +2426,8 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           if (message.payload.renderId !== cookieBound.renderId) {
             sendError(
               ws,
-              "DEVTOOL_COOKIE_SESSION_MISMATCH",
-              `Embedded-ui cookie is bound to session '${cookieBound.renderId}' but subscribe targets '${message.payload.renderId}'`,
+              "DEVTOOL_COOKIE_RENDER_MISMATCH",
+              `Embedded-ui cookie is bound to render '${cookieBound.renderId}' but subscribe targets '${message.payload.renderId}'`,
               message.requestId
             );
             return;

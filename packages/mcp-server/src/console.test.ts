@@ -599,7 +599,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     });
     ws.close();
     expect(msg.type).toBe('error');
-    expect(msg.payload?.code).toBe('DEVTOOL_COOKIE_SESSION_MISMATCH');
+    expect(msg.payload?.code).toBe('DEVTOOL_COOKIE_RENDER_MISMATCH');
   });
 
   it('invalid cookie on /ws upgrade rejects the handshake (401)', async () => {
@@ -1011,7 +1011,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     });
     expect(firstMessage.type).toBe('error');
     expect(firstMessage.payload?.code).toBe(
-      'DEVTOOL_COOKIE_SESSION_MISMATCH',
+      'DEVTOOL_COOKIE_RENDER_MISMATCH',
     );
 
     // Even a server-side fan-out to the LEGITIMATE session the
