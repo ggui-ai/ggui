@@ -39,7 +39,7 @@
  * Reserved channels bypass the author-side streamSpec declaration
  * gate (see `validateStreamData`'s `isKnownReservedChannel` closed-set
  * short-circuit + the BUILTIN `ContractErrorPayload` structural
- * validator per Item 4 injection pattern + `SessionStreamBuffer.
+ * validator per Item 4 injection pattern + `RenderStreamBuffer.
  * record()` forcing `replay:'all'` for `_ggui:*`), so
  * `useStream('_ggui:contract-error')` just works — no need to author
  * it into `streamSpec`.
@@ -89,7 +89,7 @@ export default function ContractProbe(): JSX.Element {
   // `render-channel.ts::emitContractError`), so `all` accumulates in
   // arrival order — what the spec needs to count + identify codes.
   //
-  // Reserved-channel replay: `SessionStreamBuffer.record()` forces
+  // Reserved-channel replay: `RenderStreamBuffer.record()` forces
   // `replay:'all'` for `_ggui:*` channels, so a subscriber that
   // attaches after an envelope landed still sees the history on
   // subscribe — no cold-boot race for the spec to work around.
