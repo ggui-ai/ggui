@@ -1908,7 +1908,7 @@ export interface CreateGguiServerOptions {
    * preserves the default.
    *
    * Use case: hosted closed-runtime deployments throw domain errors from
-   * tool handlers (e.g. `SessionAccessError` "this session doesn't belong
+   * tool handlers (e.g. `RenderAccessError` "this render doesn't belong
    * to you") that should map to HTTP 404 so callers can distinguish
    * tenancy violations from real server bugs. OSS deployments don't
    * need this seam — every domain error is a 500 unless they say
