@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
+import type { JsonObject, JsonSchema, JsonValue } from './data-contract';
 import type { Render, RenderStatus } from './render';
 import type {
   handshakeInputSchema,
@@ -166,40 +166,6 @@ export interface GguiGetRenderInput {
  * Output from ggui_get_render tool — full render snapshot.
  */
 export type GguiGetRenderOutput = Render;
-
-// =============================================================================
-// Negotiator Types (V3)
-// =============================================================================
-
-/** Negotiator's decision on what UI to show. */
-export interface NegotiatorDecision {
-  /** What to do with the render. */
-  action: 'create' | 'update' | 'compose' | 'replace';
-  /** Why — visible to the agent. */
-  reasoning: string;
-  /** Matched blueprint (if any). */
-  blueprintId?: string;
-  /** The agreed data contract. */
-  contract: DataContract;
-  /** For update/compose/replace — which render to target. */
-  targetRenderId?: string;
-  /** UI adaptations based on user context. */
-  adaptations?: {
-    fontSize?: 'compact' | 'default' | 'large';
-    density?: 'dense' | 'default' | 'spacious';
-    complexity?: 'simplified' | 'default' | 'detailed';
-  };
-}
-
-/** Alternative option (shown in suggestive/passive modes). */
-export interface NegotiatorAlternative {
-  id: string;
-  type: 'blueprint' | 'brainstorm';
-  description: string;
-  blueprintId?: string;
-  contract?: DataContract;
-  renderTime: 'instant' | 'standard';
-}
 
 // =============================================================================
 // MCP Tool Output Types

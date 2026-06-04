@@ -5,7 +5,7 @@
  *   - `@ggui-ai/mcp-server` — binds SQLite / in-memory / file adapters
  *   - `@ggui-ai/ui-gen` — the generation harness, which implements `UiGenerator`
  *   - Community adapters (Postgres/pgvector, Redis, Neo4j, etc.) against
- *     the negotiator / embedding / vector / kv seams.
+ *     the embedding / vector / kv seams.
  *
  * Each seam is a narrow interface so storage backends and hosting
  * environments can be swapped independently. The cross-cutting seams
@@ -60,8 +60,7 @@ export * from './pairing.js';
 // protocol-layer portability primitive, not a server-side interface,
 // so it belongs on the protocol barrel rather than here.
 
-// Negotiator / embedding / vector / kv seams.
-export * from './negotiator.js';
+// Embedding / vector / kv seams.
 export * from './embedding-provider.js';
 export * from './vector-store.js';
 // (scope, exactKey) → blueprint UUID. Sibling of `VectorStore`: the

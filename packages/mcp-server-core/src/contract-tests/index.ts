@@ -1,5 +1,5 @@
 /**
- * Contract tests for the four §6.8-6.10 seams.
+ * Contract tests for the §6.8-6.10 seams.
  *
  * Consume these from adapter-package test suites to prove conformance:
  *
@@ -8,7 +8,6 @@
  *   vectorStoreContract,
  *   kvStoreContract,
  *   embeddingProviderContract,
- *   negotiatorContract,
  * } from '@ggui-ai/mcp-server-core/contract-tests';
  * ```
  *
@@ -30,7 +29,6 @@ export type { BlueprintIndexConformanceFactory } from './blueprint-index.js';
 export { kvStoreContract } from './kv-store.js';
 export type { KvContractClock, KvContractOptions } from './kv-store.js';
 export { embeddingProviderContract } from './embedding-provider.js';
-export { negotiatorContract } from './negotiator.js';
 export { renderStoreContract } from './render-store.js';
 export type {
   RenderStoreContractClock,
