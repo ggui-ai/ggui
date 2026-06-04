@@ -1,6 +1,6 @@
 /**
  * Live payload trace sink — devtools introspection of every MCP tool
- * payload that flows through the ggui session-mutation handlers.
+ * payload that flows through the ggui render-mutation handlers.
  *
  * **Distinct from {@link TelemetrySink}, {@link AuditSink}, and
  * {@link LlmTraceSink}.**

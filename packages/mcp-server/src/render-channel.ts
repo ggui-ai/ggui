@@ -785,8 +785,8 @@ export interface RenderChannelServer {
    * envelopes flow on `data` frames and have a `seq` cursor; props
    * updates are ephemeral and follow `notifyRenderPush`'s pattern
    * (live-only, no replay-buffer stamping). A new subscriber that
-   * connects mid-session reads current `props` from the stack
-   * snapshot delivered in `ack.stack`.
+   * connects mid-render reads current `props` from the render
+   * snapshot delivered in `ack.render`.
    *
    * Schema validation against `propsSpec`: NOT enforced server-side
    * here. The renderer validates inbound props via

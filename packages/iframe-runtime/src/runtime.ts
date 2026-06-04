@@ -817,7 +817,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     rendererHooks !== undefined
       ? rendererHooks.setup({
           meta,
-          renderInto: refs.stack,
+          renderInto: refs.renderRoot,
           statusRefs: refs,
           ...(onObserve !== undefined ? { onObserve } : {}),
         })

@@ -1,20 +1,14 @@
 /**
  * AdminLlmKeys route — `/admin/llm-keys` (admin-cookie-gated).
  *
- * Operator-side LLM provider keys plane. Distinct from `/settings`
- * (the end-user, cookie-paired surface that shares the same
- * `/ggui/console/llm-keys` endpoint but bounces 401s to `/login`).
- * The split lets the two-zone IA stay clean — end-user "manage MY
- * keys" lives in the user nav, operator "manage server-default keys"
- * lives in the admin sub-shell.
+ * Operator-side LLM provider keys plane — "manage server-default
+ * keys", living in the admin sub-shell. Bounces 401s to
+ * `/admin-login`.
  *
  * Mirrors the `Keys.tsx` (connector-keys) shape: focused list +
- * paste form + clear button. Skips the end-user-flavored extras
- * (`ConnectAssistantCard`, `SessionCard`, the probe button) — those
- * belong on `/settings` where the paired user is figuring out their
- * own setup.
+ * paste form + clear button.
  *
- * Wire shape (unchanged — same endpoint as `/settings`):
+ * Wire shape:
  *
  *   GET /ggui/console/llm-keys
  *     → 200 { providers: [...], scope }

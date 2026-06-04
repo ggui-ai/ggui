@@ -51,13 +51,13 @@ export type StatusKind =
  * Refs handed back from {@link ensureStatusDom}. `status` is a detached
  * element kept for backward compatibility with channel handlers that
  * still pass `refs.status` through; it is NEVER appended to the
- * document, so production iframes carry no diagnostic banner. `stack`
- * is the React mount target — appended to `document.body` so renderer
- * wiring has a container.
+ * document, so production iframes carry no diagnostic banner.
+ * `renderRoot` is the React mount target — appended to `document.body`
+ * so renderer wiring has a container.
  */
 export interface StatusRefs {
   readonly status: HTMLElement;
-  readonly stack: HTMLElement;
+  readonly renderRoot: HTMLElement;
 }
 
 /**
@@ -73,9 +73,9 @@ export interface StatusRefs {
  * subtree post-stack-removal.
  */
 export function ensureStatusDom(doc: Document): StatusRefs {
-  const existingStack = doc.querySelector<HTMLElement>('[data-ggui-stack]');
-  const stack =
-    existingStack ??
+  const existingRoot = doc.querySelector<HTMLElement>('[data-ggui-stack]');
+  const renderRoot =
+    existingRoot ??
     (() => {
       const el = doc.createElement('ul');
       el.setAttribute('data-ggui-stack', '');
@@ -88,7 +88,7 @@ export function ensureStatusDom(doc: Document): StatusRefs {
   const status = doc.createElement('div');
   status.setAttribute('data-ggui-status', 'idle');
   status.setAttribute('aria-hidden', 'true');
-  return { status, stack };
+  return { status, renderRoot };
 }
 
 /**

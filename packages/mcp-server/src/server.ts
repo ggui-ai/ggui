@@ -5761,18 +5761,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // callers without a translation layer.
     if (opts.uiRegistry) {
       const uiRegistryForEndpoint = opts.uiRegistry;
-      // POST /ggui/console/blueprint/:id/try — create a session,
-      // compile the blueprint's componentCode, push a StackItem with
+      // POST /ggui/console/blueprint/:id/try — create a render,
+      // compile the blueprint's componentCode, commit a render with
       // its full contract (actionSpec/streamSpec/propsSpec from the
-      // manifest), mint a shortCode, and return `{sessionId, shortCode,
+      // manifest), mint a shortCode, and return `{renderId, shortCode,
       // url}`. The returned `/s/<shortCode>` lands on the console's
-      // session viewer + subscribes to the session over `/ws`, so the
-      // just-appended StackItem arrives via `ack.stack` on subscribe.
+      // render viewer + subscribes to the render over `/ws`, so the
+      // just-committed render arrives via `ack.render` on subscribe.
       //
       // Gates (all three required):
       //   - `opts.uiRegistry`     — blueprint resolution
-      //   - `renderStore`        — session persistence
-      //   - `opts.shortCodeIndex` — shortCode → session binding
+      //   - `renderStore`        — render persistence
+      //   - `opts.shortCodeIndex` — shortCode → render binding
       //
       // Partial gate (uiRegistry alone) → 503 with a remediation hint.
       // Same-origin console surface — no bearer auth; viewer inherits
@@ -5811,7 +5811,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               });
               return;
             }
-            // Materialize streamed bundles to a string — StackItem
+            // Materialize streamed bundles to a string — the render
             // stores componentCode inline. Same rule the sibling GET
             // endpoint applies.
             let code: string;
@@ -6829,25 +6829,25 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //
     // Routes the message through `ggui_render` whenever the server was
     // composed with a real generator — turning the chat surface into
-    // the cohesive agent experience: every user message becomes a push
-    // against a thread-scoped session; the push handler owns
+    // the cohesive agent experience: every user message commits a
+    // render against a thread-scoped render; the render handler owns
     // generation, cache, and provisional preview; the client renders
     // the resulting render inline using `RenderRenderer`.
     //
-    // Shape: `{ text, threadId?, sessionId? }` →
+    // Shape: `{ text, threadId?, renderId? }` →
     // `{ threadId, userMessage, agentMessage, ui? }`.
-    //   - `ui` is populated only when the push handler is wired AND
-    //     the call succeeded. `ui.stackItemId` is the stack item id the
-    //     client looks up in `SessionApi.stack` to render the agent's
-    //     generated component inline.
-    //   - When the push handler is NOT wired (no `mcpApps`, placeholder
+    //   - `ui` is populated only when the render handler is wired AND
+    //     the call succeeded. `ui.renderId` is the render id the client
+    //     subscribes to over `/ws`; the committed render arrives via
+    //     the subscribe ack's single `render` field, which the client
+    //     mounts inline to show the agent's generated component.
+    //   - When the render handler is NOT wired (no `mcpApps`, placeholder
     //     mode, or no BYOK), `ui` is absent and `agentMessage.text`
     //     carries an honest text-only acknowledgment. This preserves
     //     the text-only round-trip path so operators without a key can
     //     still exercise the chat UI end-to-end.
-    //   - `sessionId` is echoed on every response and should be passed
-    //     back on subsequent messages so the thread reuses one session
-    //     (stack entries accumulate; `GguiSession` stays subscribed).
+    //   - `renderId` is echoed on every response and should be passed
+    //     back on subsequent messages so the thread reuses one render.
     //
     // Same-origin only — no bearer auth. The console surface is
     // always the operator's own browser pointing at their own `ggui
@@ -6859,8 +6859,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // in OSS single-user mode. Matches blueprint + vector scoping
     // applied by the generator / cache seams.
     //
-    // Gate on `generationWithCache`: without a generator wired, a push
-    // call would allocate a session + shortCode + empty stack item
+    // Gate on `generationWithCache`: without a generator wired, a render
+    // call would allocate a render + shortCode with empty componentCode
     // (codeReady:false) per turn without any visible UI — honest
     // behavior but useless. Falling through to the canned-text path
     // keeps the chat surface usable without a BYOK key AND preserves

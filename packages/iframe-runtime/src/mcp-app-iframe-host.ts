@@ -15,10 +15,10 @@
  *
  * Adapter-boundary rule (ENFORCED):
  *   - MCP Apps lifecycle messages from the embedded iframe do NOT
- *     mutate the outer ggui session state / contracts — the host
- *     never forwards them to ggui-server as session-level events.
+ *     mutate the outer ggui render state / contracts — the host
+ *     never forwards them to ggui-server as render-level events.
  *   - `ui/initialize` intentionally DOES NOT forward outer ggui
- *     session state (stack, actionSpec, streamSpec) to the iframe.
+ *     render state (actionSpec, streamSpec) to the iframe.
  *
  * On detach, a host-initiated `ui/resource-teardown` notification
  * is posted to the iframe BEFORE the element leaves the DOM so the
