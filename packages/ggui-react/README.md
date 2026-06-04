@@ -18,37 +18,27 @@ use the `@ggui-ai/react/query` entry point.
 
 ## Quick start
 
-Mount a ggui render with `<GguiApp>` — it wraps the provider and
-renders a prebuilt shell:
+A ggui render is an MCP Apps-conformant UI. Mount one in your React
+tree with `<GguiProvider>` + `<GguiRender>`:
 
 ```tsx
-import { GguiApp } from "@ggui-ai/react";
+import { GguiProvider, GguiRender, RenderRenderer } from "@ggui-ai/react";
 
-export function App() {
-  return <GguiApp appId="my-app" shell="chat" />;
+export function App({ renderId }: { renderId: string }) {
+  return (
+    <GguiProvider appId="my-app">
+      <GguiRender renderId={renderId}>
+        {(api) => api.render && <RenderRenderer render={api.render} />}
+      </GguiRender>
+    </GguiProvider>
+  );
 }
 ```
 
-The `shell` prop accepts a string shorthand (`"agent"`, `"chat"`,
-`"fullscreen"`), a component reference, or a render function:
-
-```tsx
-import { GguiApp, ChatShell } from "@ggui-ai/react";
-
-<GguiApp appId="my-app" shell={ChatShell} />;
-```
-
-## Lower-level building blocks
-
-For full control, compose the pieces yourself:
-
-```tsx
-import { GguiProvider, GguiRender } from "@ggui-ai/react";
-
-<GguiProvider appId="my-app">
-  <GguiRender renderId="render-123">{/* render state */}</GguiRender>
-</GguiProvider>;
-```
+For a full agent chat loop (prompt → render → action → re-render), use
+the `useMcpAppsChat` hook with `<AppRenderer>` — see the
+[`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample for a
+complete example.
 
 The package also exports hooks (`useWebSocket`, `useInvoke`,
 `useGenerate`), a client-side data-binding tools
@@ -59,7 +49,7 @@ for hosting any MCP Apps-conformant UI in an iframe.
 
 | Import path                   | Contents                             |
 | ----------------------------- | ------------------------------------ |
-| `@ggui-ai/react`              | Components, hooks, tools, shells     |
+| `@ggui-ai/react`              | Components, hooks, tools             |
 | `@ggui-ai/react/query`        | TanStack Query integration           |
 | `@ggui-ai/react/testing`      | Test helpers and mock tools          |
 | `@ggui-ai/react/chat-helpers` | Message-grouping and render helpers  |

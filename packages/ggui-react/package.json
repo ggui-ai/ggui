@@ -44,11 +44,6 @@
       "import": "./dist/testing/index.mjs",
       "require": "./dist/testing/index.js"
     },
-    "./shells": {
-      "types": "./dist/shells/index.d.ts",
-      "import": "./dist/shells/index.mjs",
-      "require": "./dist/shells/index.js"
-    },
     "./chat-helpers": {
       "types": "./dist/chat-helpers/index.d.ts",
       "import": "./dist/chat-helpers/index.mjs",

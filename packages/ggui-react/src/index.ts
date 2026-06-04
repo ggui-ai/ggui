@@ -4,7 +4,7 @@
  * Provides React components, hooks, and utilities for embedding ggui agent
  * interfaces in web applications. Includes WebSocket session management,
  * dynamic component rendering in the React tree with wire hook support,
- * client-side data tools, and prebuilt shell UIs (ChatShell, FullscreenShell).
+ * and client-side data tools.
  *
  * @packageDocumentation
  */
@@ -123,10 +123,6 @@ export type {
   AgentListingStatus,
 } from '@ggui-ai/shared';
 
-// App (top-level entry point)
-export { GguiApp } from './components/GguiApp';
-export type { GguiAppProps, ShellProp } from './components/GguiApp';
-
 // Provider
 export { GguiProvider, useGguiContext, useAdapter } from './components/GguiProvider';
 export type { GguiProviderProps } from './components/GguiProvider';
@@ -135,12 +131,6 @@ export type { AdapterRegistry } from './context/GguiContext';
 // Theme Provider — root-surface parity with RN SDK
 export { ThemeProvider } from './components/ThemeProvider';
 export type { ThemeProviderProps } from './components/ThemeProvider';
-
-// Shell types — the only type surviving an earlier shell rewrite.
-// Everything else (ShellContext, ShellProps, ActiveSession, Session
-// handles, BaseShell props, InboundHandlers, OutboundHandlers) lived
-// around the retired `<BaseShell>` WebSocket pattern.
-export type { AgentState } from './types/shell';
 
 // Render
 export { GguiRender } from './components/GguiRender';
@@ -273,17 +263,6 @@ export type {
   UseBindingsOptions,
   ToolResult,
 } from './tools/index';
-
-// Shells — prebuilt UI shells for agent interactions
-export { AgentShell } from './shells/AgentShell';
-export type { AgentShellProps } from './shells/agent-shell/types';
-export { ChatShell } from './shells/ChatShell';
-export type { ChatShellProps } from './shells/ChatShell';
-export { FullscreenShell } from './shells/FullscreenShell';
-export type { FullscreenShellProps } from './shells/FullscreenShell';
-export { WelcomePage } from './shells/WelcomePage';
-export type { WelcomePageProps } from './shells/WelcomePage';
-export { hexToRgb, darkenRgb, buildDarkCssOverrides, buildPrimaryCssOverrides, buildShellTheme } from './shells/theme';
 
 // TanStack Query integration — import from '@ggui-ai/react/query' instead.
 // Kept as a separate subpath to avoid forcing @tanstack/react-query on all consumers.
