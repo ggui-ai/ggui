@@ -13,7 +13,7 @@
 // shares a bug report with that data, the credential leaks externally.
 //
 // This module's default posture is "sanitize before emission": the
-// session-channel router pipes every `err.stack` through
+// renderChannel router pipes every `err.stack` through
 // {@link sanitizeCausedBy} before populating `causedBy`. Operators who
 // need stricter sanitization can inject their own function via
 // `createRenderChannelServer({ sanitizeCausedBy })`.

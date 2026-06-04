@@ -30,7 +30,7 @@
  * iframe can in turn render a `ui://ggui/render` resource via its
  * own host implementation. That recursion stays bounded because
  * each nested iframe runs the same adapter-boundary rule — outer
- * ggui state never leaks into the inner renderer's session through
+ * ggui state never leaks into the inner renderer's render through
  * this host path. Host-to-host sandboxing is browser-enforced by
  * the iframe's `sandbox="allow-scripts"` attribute.
  */

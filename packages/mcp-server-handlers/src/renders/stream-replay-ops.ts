@@ -3,7 +3,7 @@
  * `SessionStreamBuffer` contract.
  *
  * These helpers drive both OSS (in-memory ring) and hosted (DDB-backed
- * Session row) implementations from a single set of rules. They take
+ * Render row) implementations from a single set of rules. They take
  * the current buffer state as input and return the next state + the
  * stamped envelope — no IO, no allocation of storage adapters.
  *
@@ -76,7 +76,7 @@ export interface BufferedReplayEnvelope {
  * a FIFO ring capped by `maxPerRender`.
  */
 export interface BufferState {
-  /** Latest assigned seq for the session. 0 when never recorded. */
+  /** Latest assigned seq for the render. 0 when never recorded. */
   readonly streamSeq: number;
   /** FIFO ring of envelopes for channels with `replay: 'all'`. */
   readonly ring: readonly BufferedReplayEnvelope[];
@@ -116,7 +116,7 @@ export interface ReplayResult {
 }
 
 /**
- * Empty state — the starting point for a never-recorded session.
+ * Empty state — the starting point for a never-recorded render.
  * Stores that hydrate from a persisted row project missing fields onto
  * this shape via {@link normalizeBufferState}.
  */
@@ -242,7 +242,7 @@ export function applyRecordOp(
  *     truncation is meaningless.
  *   - Absent spec → default policy (`'none'`) applies to every
  *     channel; empty result. The buffer does not second-guess the
- *     spec — if the live stack item says `'none'` but historical
+ *     spec — if the live render says `'none'` but historical
  *     records exist, replay yields nothing.
  *
  * Output is stable-sorted by `seq` ASC across channels.
@@ -305,7 +305,7 @@ export function replayFromBufferOp(
  * fields are absent.
  *
  * Does NOT validate array/map entry shapes — callers that read from
- * trusted server-owned storage (hosted Session row) can rely on them
+ * trusted server-owned storage (hosted Render row) can rely on them
  * being well-formed by construction.
  */
 export function normalizeBufferState(partial: {
@@ -326,7 +326,7 @@ export function normalizeBufferState(partial: {
 //
 // Hosted adapters (Lambda connector fan-out + MCP pod `ggui_emit`)
 // share a read-apply-write flow. Without a seq fence, concurrent
-// writers to the same session can both read `streamSeq=N`, both
+// writers to the same render can both read `streamSeq=N`, both
 // compute `N+1`, and both persist — last-writer-wins overwrites a
 // retained envelope and duplicates `seq` on the wire.
 //

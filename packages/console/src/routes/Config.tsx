@@ -85,7 +85,7 @@ const SECTION_CROSS_LINKS: Record<string, CrossLink> = {
   storage: {
     path: '/admin/status',
     label: 'open Status →',
-    mute: 'The Status dashboard shows session + vector-store backends as live wiring.',
+    mute: 'The Status dashboard shows render + vector-store backends as live wiring.',
   },
   agent: {
     path: '/admin/status',

@@ -2,7 +2,7 @@
  * `data` channel handler — validates inbound stream-envelope payloads
  * against the active render's `streamSpec`, then fans the validated
  * envelope out via `streamBus`. Invalid payloads drop silently
- * (matching `GguiSession.handleServerMessage`'s surfacing policy —
+ * (matching `GguiRender.handleServerMessage`'s surfacing policy —
  * the violation is already logged by the validator).
  *
  * Also fires `contract-error-emitted` on the optional observability
@@ -82,7 +82,7 @@ export function createDataHandler(
       }
 
       // Active render carries the streamSpec — mirrors
-      // `GguiSession.handleServerMessage`.
+      // `GguiRender.handleServerMessage`.
       const activeRender = deps.getCurrentRender();
       const streamSpec =
         activeRender !== null &&

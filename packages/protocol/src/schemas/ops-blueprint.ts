@@ -91,7 +91,7 @@ export const opsGenerateBlueprintInputSchema = z
 /**
  * `ggui_ops_generate_blueprint` output. Metadata-only — the code body
  * lives in S3 (cloud) or the in-memory code map (OSS) and is fetched
- * via the existing push fast-path on cache hit.
+ * via the existing render fast-path on cache hit.
  */
 export const opsGenerateBlueprintOutputSchema = z
   .object({

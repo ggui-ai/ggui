@@ -4,8 +4,8 @@
  * hand-roll for live-channel inbound action validation.
  *
  * Contract:
- *   - `spec === undefined` → no-op (no actionSpec declared on the stack
- *     item = no contract to enforce; legacy pushes without actionSpec
+ *   - `spec === undefined` → no-op (no actionSpec declared on the
+ *     render = no contract to enforce; legacy renders without actionSpec
  *     keep flowing).
  *   - Otherwise validate the full ActionEventValue shape
  *     (`{ action, data?, tool? }`); on failure throw

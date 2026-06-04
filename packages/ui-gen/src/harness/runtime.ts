@@ -101,7 +101,7 @@ export interface SingleComponentParams {
  * catalog. When provided, the prompt renders the registered catalog
  * (Leaflet, Mapbox, …) in the `clientCapabilities — registered catalog`
  * table; when omitted, it defaults to `STDLIB_GADGETS`. Production
- * callers (push, ops-generate) thread the resolved catalog from the
+ * callers (render, ops-generate) thread the resolved catalog from the
  * bound `AppMetadataStore`; benchmark / direct callers may omit it.
  */
 export function buildSystemPrompt(

@@ -114,18 +114,18 @@ export interface GenerationDispatchParams {
    * Operator-registered gadget catalog forwarded to the
    * code-gen system prompt's `clientCapabilities — registered
    * catalog` section (see `buildSystemPrompt`/`SystemPromptInputs`
-   * in `@ggui-ai/ui-gen/boilerplate`). Threaded by the push handler
+   * in `@ggui-ai/ui-gen/boilerplate`). Threaded by the render handler
    * from the bound `AppMetadataStore` so the code-gen LLM sees the
    * same gadget set as the synth + decision LLMs.
    *
    * When omitted, the system prompt defaults to `STDLIB_GADGETS`.
-   * Production callers (push, ops-generate) pass the resolved catalog;
+   * Production callers (render, ops-generate) pass the resolved catalog;
    * benchmark / direct callers may omit it.
    */
   appGadgets?: readonly GadgetDescriptor[];
   /**
    * A `package -> .d.ts content` map for third-party gadget wrappers.
-   * The push handler parallel-fetches each non-stdlib
+   * The render handler parallel-fetches each non-stdlib
    * gadget's `.d.ts` (via `GadgetDescriptor.typesUrl` + SRI verify)
    * and threads the result here (`UiGenerateInput.gadgetTypes`). It
    * flows two ways:

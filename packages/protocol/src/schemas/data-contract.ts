@@ -45,7 +45,7 @@
  * deliberately do NOT enforce JSON Schema's full grammar at this
  * layer — that work belongs in
  * `@ggui-ai/protocol/validation/schema-subset` and runs at
- * push-time + blueprint-registration-time as the F4 schema
+ * render-time + blueprint-registration-time as the F4 schema
  * compatibility checker. Agents authoring malformed schemas surface
  * at that pass with a named violation reason; this layer's job is
  * just to accept the contract and pass it to the generator.
@@ -85,7 +85,7 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
  * fields the TS interface enumerates. `additionalProperties` and
  * `items` are recursive — kept loose (`z.unknown()`) to avoid
  * deep `z.lazy` chains; the F4 schema-subset checker validates
- * full structural correctness at push time.
+ * full structural correctness at render time.
  */
 export const jsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
   z
@@ -122,7 +122,7 @@ export const jsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
  * Shape: `{schema: {type:'string', ...}, required?, default?, ...}`.
  * The JSON Schema NEVER sits flat at the entry level — every entry's
  * schema lives in `.schema`. Authors writing `{type:'string'}` instead
- * of `{schema: {type:'string'}}` will hit a shape error at push time.
+ * of `{schema: {type:'string'}}` will hit a shape error at render time.
  */
 export const propEntrySchema = z
   .object({
@@ -239,7 +239,7 @@ export const agentCapabilitiesSpecSchema = z
  * Each key in `App.publicEnv` MUST match this pattern. The prefix is
  * the **security boundary** — operators can't accidentally stash
  * sensitive credentials under arbitrary names, and downstream consumers
- * (push gate, bootstrap projection, iframe shim) can rely on the
+ * (render gate, bootstrap projection, iframe shim) can rely on the
  * naming convention to mean "public-by-design".
  *
  * Rule: `GGUI_PUBLIC_APP_` prefix, then uppercase letters / digits /
@@ -265,7 +265,7 @@ export const PUBLIC_ENV_APP_KEY_RE = /^GGUI_PUBLIC_APP_[A-Z0-9_]+$/;
  *
  * Entries are App.publicEnv key names — `GGUI_PUBLIC_APP_*`. Wrappers
  * that declare a `requires` key must have a corresponding App-side
- * publicEnv value at push time (gate: `assertPublicEnvSatisfied`).
+ * publicEnv value at render time (gate: `assertPublicEnvSatisfied`).
  */
 export const gadgetRequiresSchema = z
   .array(z.string().regex(PUBLIC_ENV_APP_KEY_RE))
@@ -335,7 +335,7 @@ export const SEMVER_PIN_RE = /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/;
  * Hostname-only regex for `bundleHost` — the registry hostname (no
  * scheme, no path) that the server prepends `https://` to and
  * appends the canonical `/bundles/<scope>/<name>/<version>/{bundle.js,style.css}`
- * suffix to when resolving a gadget's URLs at push time.
+ * suffix to when resolving a gadget's URLs at render time.
  *
  * Examples that pass:
  *   - `registry.ggui.ai` (spec default)
@@ -370,7 +370,7 @@ export const DEFAULT_BUNDLE_HOST = 'registry.ggui.ai';
  * Used symmetrically by:
  *   - `buildInstallCommand` (publish CLI) to emit `http://localhost:PORT`
  *     in the printed `ggui gadget install ...` line.
- *   - `resolveGadgetUrls` (push-time bootstrap derivation) to compute
+ *   - `resolveGadgetUrls` (render-time bootstrap derivation) to compute
  *     `http://localhost:PORT/bundles/...` so iframe fetches a reachable
  *     URL during local-dev / sandbox-registry workflows.
  *
@@ -463,7 +463,7 @@ const basePackageFieldsShape = {
   // Shared `gadgetRequiresSchema`.
   requires: gadgetRequiresSchema.optional(),
   // HTTPS URL of the package's `.d.ts`. The handler fetches it at
-  // push time, SRI-verifies against `typesSri`, and loads it into the
+  // render time, SRI-verifies against `typesSri`, and loads it into the
   // code-gen sandbox VFS. Optional at the base shape;
   // `registeredGadgetDescriptorSchema` refines it to REQUIRED for
   // non-stdlib packages.
@@ -602,7 +602,7 @@ export const registeredGadgetDescriptorSchema =
  * The only wire-authored payload is optional intent-specific prose:
  *
  *   - `description?` / `usage?` — when present the agent's prose wins
- *     over the registered export's text; when omitted, push-time
+ *     over the registered export's text; when omitted, render-time
  *     resolution inherits the registered text verbatim.
  *
  * Everything else — `version`, transport metadata, `permission`,
@@ -653,7 +653,7 @@ export const gadgetPackageUseSchema = z
  * the UI uses. The wire carries identity only — `(package, export
  * name)` — never `version` or transport metadata: the ggui server
  * resolves the full {@link GadgetDescriptor} from the `App.gadgets`
- * catalog at push time onto the `ComponentRender.gadgetDescriptors`
+ * catalog at render time onto the `ComponentRender.gadgetDescriptors`
  * sidecar (the `gadgetDescriptors` field of the `Render` union member).
  *
  * `.strict()` (not `.passthrough()`): the retired `libraries` field

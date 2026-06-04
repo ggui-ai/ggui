@@ -82,7 +82,7 @@
  *     Operators correlate synth-ok's `outputContractKey` with later
  *     `match-exact` events to measure synth-output reuse rate.
  *
- *   - `push-classify` — paired-push classification event. Fires on
+ *   - `render-classify` — paired-render classification event. Fires on
  *     every `ggui_render` consume. The `agentClassification` field
  *     carries `'confirm'` (decision.kind === 'accept' — agent reused
  *     the suggestion's provisional blueprintId) or `'override'`
@@ -90,7 +90,7 @@
  *     new draft). Operators read confirm-vs-override rate to measure
  *     how often agents accept the negotiator's suggestion vs author
  *     their own. Decoupled from matcher events because the
- *     classification happens at push-time, not at handshake-time.
+ *     classification happens at render-time, not at handshake-time.
  *
  * **Legacy (cache-backed-negotiator fallback — `generation-cache.ts`)** —
  * intent-keyed matcher kept around for the LLM-less fallback path.
@@ -112,7 +112,7 @@ export type CacheTraceDecision =
   | 'no-match-empty-intent'
   | 'synth-ok'
   | 'synth-fail'
-  | 'push-classify'
+  | 'render-classify'
   | 'hit'
   | 'miss-empty-intent'
   | 'miss-empty-scope'
@@ -257,7 +257,7 @@ export interface CacheTraceEvent {
    */
   readonly cosineNoveltyDistance?: number;
   /**
-   * Set on `push-classify` events: did the agent's `decision.kind`
+   * Set on `render-classify` events: did the agent's `decision.kind`
    * accept the handshake suggestion (`'confirm'`) or override with a
    * fresh draft (`'override'`)? The field exists for telemetry only.
    * Absent on matcher / synth events.
@@ -267,7 +267,7 @@ export interface CacheTraceEvent {
    * Human-readable explanation. Mirrors the `reason` strings the
    * cache-backed handshake negotiator surfaces, so operators see one
    * consistent vocabulary across `/devtools/cache` and
-   * `/console/sessions`.
+   * `/ggui/console/renders`.
    */
   readonly reason: string;
 }

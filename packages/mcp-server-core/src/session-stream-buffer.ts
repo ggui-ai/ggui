@@ -186,7 +186,7 @@ export interface SessionStreamBuffer {
    *
    * When `spec` is absent, `DEFAULT_STREAM_REPLAY_POLICY` applies to
    * every channel — i.e., nothing is replayed. The buffer does NOT
-   * second-guess the spec; if a spec says `'all'` but the live stack
+   * second-guess the spec; if a spec says `'all'` but the live render
    * spec at replay time says `'none'`, the replay is empty.
    *
    * `truncated` is true ONLY when at least one `'all'` channel has

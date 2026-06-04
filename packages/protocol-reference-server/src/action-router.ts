@@ -22,12 +22,6 @@
  * `{toolName, actionName}` so an iframe-host kit can match the same
  * tool invocation signal from either side. Pure WS kit currently
  * treats this as SKIP.
- *
- * Wire-field note: the inbound action frame names the render
- * identity `sessionId` on the wire (consumer field name from
- * `@ggui-ai/protocol-conformance`, which has not yet renamed to
- * `renderId`). The type-guard accepts both spellings and surfaces
- * the value as `renderId` for the rest of the dispatcher.
  */
 import { makeContractErrorPayload } from '@ggui-ai/protocol';
 
@@ -41,10 +35,8 @@ const TIMEOUT_MS = 500;
 /**
  * One inbound action frame shape. Matches the fixtures' authored
  * `inputEnvelope` for `wired-action-*` cases — the runner sends the
- * envelope verbatim. The wire spelling of the render-identity field
- * is normalized to `renderId` by {@link isActionFrame} (it accepts
- * either the canonical `renderId` or the kit's still-legacy
- * `sessionId`).
+ * envelope verbatim. The render-identity field is the canonical SPEC
+ * field `renderId`.
  */
 interface IncomingActionFrame {
   readonly type: 'action';
@@ -62,20 +54,13 @@ interface IncomingActionFrame {
  * `no-op` fixtures expects silence, so loud rejection would break
  * them).
  *
- * Accepts both `renderId` (canonical) and `sessionId` (the kit's
- * legacy spelling that has not yet been migrated); the returned
- * shape always surfaces the value as `renderId`.
+ * Reads the canonical SPEC render-identity field `renderId`.
  */
 export function parseActionFrame(frame: unknown): IncomingActionFrame | undefined {
   if (frame === null || typeof frame !== 'object') return undefined;
   const f = frame as Record<string, unknown>;
   if (f['type'] !== 'action') return undefined;
-  const renderId =
-    typeof f['renderId'] === 'string'
-      ? f['renderId']
-      : typeof f['sessionId'] === 'string'
-        ? f['sessionId']
-        : undefined;
+  const renderId = typeof f['renderId'] === 'string' ? f['renderId'] : undefined;
   if (renderId === undefined) return undefined;
   const action = f['action'];
   if (action === null || typeof action !== 'object') return undefined;

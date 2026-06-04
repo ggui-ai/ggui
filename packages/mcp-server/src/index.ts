@@ -76,7 +76,7 @@ export { validateMcpServices, validateServicePath } from './mcp-mounts.js';
 // `composePreviewReservedValidator` binds the A2UI adapter
 // for `_ggui:preview`; `mergeReservedValidators` layers caller-provided
 // extras on top. `createGguiServer` composes these automatically —
-// consumers that embed the session-channel server directly (via
+// consumers that embed the render-channel server directly (via
 // `createRenderChannelServer`) wire them up manually.
 export {
   composePreviewReservedValidator,
@@ -267,7 +267,7 @@ export type {
   ThreadTransportOptions,
 } from './thread-transport.js';
 
-// Zero-config in-memory reference for the console shortCode → session
+// Zero-config in-memory reference for the console shortCode → render
 // lookup. Re-exported here (alongside `createGguiServer`) so CLI hosts
 // composing the OSS first-run path can pass one without taking a direct
 // dep on `@ggui-ai/mcp-server-core`. For durable deployments the

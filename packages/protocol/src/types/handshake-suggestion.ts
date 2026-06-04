@@ -49,7 +49,7 @@ import type { DataContract, JsonValue } from './data-contract.js';
  *                paired `ggui_render({handshakeId, props})` (no `override`)
  *                short-circuits to cache delivery.
  *   - `agent`  — no cache hit, but the agent's draft validated cleanly.
- *                `codeHash` absent; gen runs on push against the
+ *                `codeHash` absent; gen runs on render against the
  *                agent's draft contract verbatim.
  *   - `synth`  — no cache hit AND validation failed. The synth
  *                amender produced a new contract; the diff vs the
@@ -60,7 +60,7 @@ export type SuggestionOrigin = 'cache' | 'agent' | 'synth';
 /**
  * Agent's draft on the handshake input — what the agent wants to
  * build. The contract is required; variance + generator are optional
- * hints. The server combines this with its own session/app context
+ * hints. The server combines this with its own render/app context
  * (cached blueprints, validator outcomes, operator pins) to produce
  * a {@link HandshakeSuggestion}.
  */
@@ -106,7 +106,7 @@ export interface BlueprintDraft {
  * override (mint a fresh id with its own new draft).
  *
  * `blueprintId` is PROVISIONAL — it becomes durable iff the paired
- * push sends `decision: 'accept'`. An override discards it.
+ * render sends `decision: 'accept'`. An override discards it.
  */
 export interface BlueprintMeta {
   /**
@@ -194,7 +194,7 @@ export type JsonPatchOp =
 /**
  * The full handshake suggestion. Produced by the server in step-2 of
  * the three-step handshake; the agent reads this in the response and
- * branches its push decision on `origin` (accept vs override).
+ * branches its render decision on `origin` (accept vs override).
  */
 export interface HandshakeSuggestion {
   /** Routing discriminator — see {@link SuggestionOrigin}. */
@@ -322,7 +322,7 @@ function encodeJsonPointerSegment(seg: string): string {
 
 /**
  * Top-N alternative blueprints surfaced on the handshake response.
- * Agents can override into one of these (push with `decision:
+ * Agents can override into one of these (render with `decision:
  * 'override'`) — the alternatives are full {@link Blueprint} rows so
  * the agent inspects everything it needs to decide.
  *

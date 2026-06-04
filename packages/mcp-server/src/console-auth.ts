@@ -36,7 +36,7 @@
  * Lifecycle. Cookie is minted at `POST /ggui/console/render-cookie`
  * (operator posts a shortCode → server resolves → sets Set-Cookie).
  * Cookie is consumed at `GET /ws` upgrade (if the server composition
- * wires `cookieAuth` to the session-channel). Never mutated in
+ * wires `cookieAuth` to the render-channel). Never mutated in
  * between.
  */
 import type { IncomingHttpHeaders } from 'node:http';
@@ -49,7 +49,7 @@ import {
 /**
  * Cookie name. Chosen deliberately to NOT conflict with common framework
  * cookies (Express session, CSRF, etc.). Change carries a compat
- * concern — the console SPA + the session-channel upgrade read by
+ * concern — the console SPA + the render-channel upgrade read by
  * this exact name. Keep this export as the single source of truth.
  */
 export const CONSOLE_COOKIE_NAME = 'ggui_console_session';
@@ -174,7 +174,7 @@ export function readDevtoolCookieFromHeaders(
 
 /**
  * Verified claims extracted from an console cookie. Scope is
- * deliberately narrow: just the binding the session-channel upgrade
+ * deliberately narrow: just the binding the render-channel upgrade
  * needs to enforce `subscribe.renderId === cookie.renderId`.
  */
 export interface DevtoolCookieClaims {

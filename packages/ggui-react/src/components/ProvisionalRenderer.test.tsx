@@ -4,7 +4,7 @@
  * teardown, catalog-miss fallbacks, and disabled-control rendering.
  *
  * Envelopes are injected by dispatching `BRIDGE_EVENTS.AGENT_DATA` on
- * `window` — exactly the shape `GguiSession` fans out — so the tests
+ * `window` — exactly the shape `GguiRender` fans out — so the tests
  * exercise the same contract as production.
  */
 import { describe, it, expect } from 'vitest';

@@ -34,7 +34,7 @@
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `{sessionId, stackItemId, …}` resolution + stack mutation to a single
  * `{renderId, …}` resolution + direct render commit. The slice meta on
- * `resultMeta` collapsed from `ai.ggui/render` + `ai.ggui/render`
+ * `resultMeta` collapsed from `ai.ggui/session` + `ai.ggui/stack-item`
  * to one `ai.ggui/render`.
  */
 import { z } from 'zod';

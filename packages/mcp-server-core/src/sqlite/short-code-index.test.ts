@@ -69,7 +69,7 @@ describe('SqliteShortCodeIndex', () => {
       idx.close();
     });
 
-    it('returns the latest shortCode (ORDER BY created_at DESC) for a render with multiple pushes', async () => {
+    it('returns the latest shortCode (ORDER BY created_at DESC) for a render with multiple renders', async () => {
       // The InMemory reference uses Map-insertion order; sqlite needs
       // an explicit `created_at` column to give the same answer
       // across restarts. Inject `now` so the ordering is deterministic

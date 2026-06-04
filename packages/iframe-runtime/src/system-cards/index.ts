@@ -144,8 +144,8 @@ export function renderSystemCard(
 }
 
 /**
- * Top-level mount component the runtime renders for system stack
- * items. Wraps the resolved card in a {@link ThemeProvider} so design
+ * Top-level mount component the runtime renders for system
+ * renders. Wraps the resolved card in a {@link ThemeProvider} so design
  * tokens (`var(--ggui-*)`) resolve at `:root` even though the host's
  * shell HTML doesn't pre-stamp them. Idempotent across remounts —
  * shares the `ggui-theme-vars` style id with the rest of the design

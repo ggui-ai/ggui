@@ -61,11 +61,11 @@ import type { StreamBus } from './wire-config.js';
 export interface RenderItemOptions {
   /** The render to mount. */
   readonly render: Render | RenderSeedInput;
-  /** Wire config for this render — caller pre-scopes via the runtime's
-   *  `buildScopedConfig(render)` (see
-   *  `wire-config.ts::RootWireConfigBundle`). `null` ⇒ the component
-   *  mounts without a wire provider (standalone — matches today's
-   *  DynamicComponent fallback when no GguiSession parent is present). */
+  /** Wire config for this render — caller builds it via the runtime's
+   *  `buildRootWireConfig(...)` (see `wire-config.ts`). `null` ⇒ the
+   *  component mounts without a wire provider (standalone — matches
+   *  today's DynamicComponent fallback when no GguiRender parent is
+   *  present). */
   readonly scopedWireConfig: WireConfig | null;
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this render. */
@@ -295,7 +295,7 @@ export async function mountRender(
    * Wrap the mounted component in `<GguiWireProvider
    * config={scopedConfig}>` when the caller supplied one. Without a
    * scoped config, the component renders standalone — matches
-   * today's DynamicComponent fallback when no GguiSession parent is
+   * today's DynamicComponent fallback when no GguiRender parent is
    * present.
    *
    * Composition order (outer → inner):

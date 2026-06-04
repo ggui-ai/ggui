@@ -3,7 +3,7 @@
  *
  * The original intent-keyed cache was superseded by the
  * contract-keyed `blueprint-registry.ts` + `blueprint-matcher.ts`.
- * `push.ts` routes the production cache lookup through
+ * `render.ts` routes the production cache lookup through
  * `matchBlueprint` now; this module's `lookupGenerationCache` and
  * `recordGenerationCache` functions have been retired.
  *
@@ -62,7 +62,7 @@ export interface GenerationCacheDeps {
 
 /** A cache hit the render handler can reconstruct a {@link ComponentRender} from. */
 export interface GenerationCacheHit {
-  /** Short-hash identifier the push handler echoes on the `cache` marker. */
+  /** Short-hash identifier the render handler echoes on the `cache` marker. */
   readonly cachedBlueprintId: string;
   /** Cosine similarity in `[0, 1]`. Always ≥ the configured threshold. */
   readonly similarity: number;

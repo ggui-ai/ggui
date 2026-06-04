@@ -85,7 +85,7 @@ export function getEmbeddingCacheDir(): string {
  * safe to return even when nothing has been written yet. Operators
  * who want to reset the cache can `rm -rf` this directory at any
  * time — every entry is content-addressable + immutable, so a
- * re-fetch repopulates from upstream code on next push.
+ * re-fetch repopulates from upstream code on next render.
  */
 export function getCodeCacheDir(): string {
   const override = process.env['GGUI_CODE_CACHE_DIR'];
@@ -94,18 +94,18 @@ export function getCodeCacheDir(): string {
 }
 
 /**
- * Directory backing the `--persistent` bundle (sessions.sqlite,
+ * Directory backing the `--persistent` bundle (renders.sqlite,
  * short-codes.sqlite, bootstrap-secret.hex, render-signer-secret.hex,
  * keys.json …). Survives `ggui serve` restarts so claude.ai chat-history
  * revisits can rehydrate the iframe instead of seeing four cascading
- * failures (HMAC + shortCode + session + pairing).
+ * failures (HMAC + shortCode + render + pairing).
  *
  * Resolution order:
  *   1. `GGUI_PERSISTENT_DIR` env — operator override (tests, clean-room,
  *      shared mount).
  *   2. `<projectRoot>/.ggui/persistent` — when the CLI resolved a
  *      ggui.json. Per-project isolation; different projects get
- *      separate sessions even on the same machine.
+ *      separate renders even on the same machine.
  *   3. `~/.ggui/persistent` — fallback when there's no manifest
  *      (`ggui serve` from a bare directory).
  *

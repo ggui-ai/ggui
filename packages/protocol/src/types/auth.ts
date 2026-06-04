@@ -48,7 +48,7 @@ export interface UserAuthConfig {
 
 /**
  * Authenticated end-user identity.
- * Attached to sessions and included in events consumed by agents.
+ * Attached to renders and included in events consumed by agents.
  *
  * Extends {@link JsonObject} for direct JSON serialization over WebSocket.
  */

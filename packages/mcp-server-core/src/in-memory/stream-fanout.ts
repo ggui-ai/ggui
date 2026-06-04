@@ -126,7 +126,7 @@ export class InProcessStreamFanout implements StreamFanout {
     this.subscribersByRender.delete(renderId);
   }
 
-  /** Debug / test-only — current subscriber count for this session. */
+  /** Debug / test-only — current subscriber count for this render. */
   subscriberCount(renderId: string): number {
     return this.subscribersByRender.get(renderId)?.size ?? 0;
   }

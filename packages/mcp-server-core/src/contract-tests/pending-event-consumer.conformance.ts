@@ -57,8 +57,8 @@ export function runPendingEventConsumerConformance(
     describe('consumeAndClear', () => {
       it('returns empty + active on a freshly-seeded render', async () => {
         await withConsumer(async ({ consumer, seed }) => {
-          await seed('stack-1');
-          const out = await consumer.consumeAndClear('stack-1', 1000);
+          await seed('render-1');
+          const out = await consumer.consumeAndClear('render-1', 1000);
           expect(out.events).toEqual([]);
           expect(out.status === 'active' || out.status === undefined).toBe(
             true,
@@ -87,11 +87,11 @@ export function runPendingEventConsumerConformance(
     describe('append + consumeAndClear (FIFO)', () => {
       it('surfaces appended events in FIFO order on next consume', async () => {
         await withConsumer(async ({ consumer, seed }) => {
-          await seed('stack-1');
-          await consumer.append('stack-1', { kind: 'first', n: 1 });
-          await consumer.append('stack-1', { kind: 'second', n: 2 });
-          await consumer.append('stack-1', { kind: 'third', n: 3 });
-          const out = await consumer.consumeAndClear('stack-1', 1000);
+          await seed('render-1');
+          await consumer.append('render-1', { kind: 'first', n: 1 });
+          await consumer.append('render-1', { kind: 'second', n: 2 });
+          await consumer.append('render-1', { kind: 'third', n: 3 });
+          const out = await consumer.consumeAndClear('render-1', 1000);
           expect(out.events.length).toBe(3);
           expect(out.events.map((e) => (e as { kind: string }).kind)).toEqual([
             'first',
@@ -103,11 +103,11 @@ export function runPendingEventConsumerConformance(
 
       it('clears the buffer — second consume returns empty', async () => {
         await withConsumer(async ({ consumer, seed }) => {
-          await seed('stack-1');
-          await consumer.append('stack-1', { kind: 'a' });
-          const first = await consumer.consumeAndClear('stack-1', 1000);
+          await seed('render-1');
+          await consumer.append('render-1', { kind: 'a' });
+          const first = await consumer.consumeAndClear('render-1', 1000);
           expect(first.events.length).toBe(1);
-          const second = await consumer.consumeAndClear('stack-1', 1000);
+          const second = await consumer.consumeAndClear('render-1', 1000);
           expect(second.events).toEqual([]);
         });
       });

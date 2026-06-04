@@ -20,7 +20,7 @@
  *     PRIMARY KEY (render_id, seq))`
  *   - `idx_renders_app_id` + `idx_renders_user_id` + `idx_renders_host` for list filters.
  *
- * The `closed` column + `'session.closed'` event type are absent by
+ * The `closed` column + `'render.closed'` event type are absent by
  * design — renders decay implicitly via `expires_at` (TTL), so there
  * is no second termination signal to persist.
  *

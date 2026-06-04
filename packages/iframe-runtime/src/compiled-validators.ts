@@ -16,7 +16,7 @@ import type { ValidateFunction } from '@ggui-ai/protocol';
 import { loadModule } from '@ggui-ai/design/module-loader';
 
 /**
- * Precompiled validators for the active stack item's contract, keyed to
+ * Precompiled validators for the active render's contract, keyed to
  * match the four runtime-validated surfaces. `props` is a single
  * validator (the synthesized props wrapper); the other three are keyed
  * by action name / channel name / slot name.
@@ -133,7 +133,7 @@ export async function loadCompiledValidators(
  * Response shape: an ES module whose `default` export is a
  * {@link CompiledContractValidators} object (produced server-side by
  * `bundleCompiledValidatorsAsModule`). `Cache-Control: immutable` so
- * repeat pushes with the same contract hit browser cache with no
+ * repeat renders with the same contract hit browser cache with no
  * round-trip.
  */
 export async function loadCompiledValidatorsFromUrl(

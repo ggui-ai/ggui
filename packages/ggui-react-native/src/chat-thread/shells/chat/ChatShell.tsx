@@ -3,10 +3,10 @@
  *
  * ─────────────────────────────────────────────────────────────────────
  * ONE ChatShell lives in @ggui-ai/react-native (this file).
- * The web package ships TWO: a legacy session-backed shell at
+ * The web package ships TWO: an invoke-SSE-backed shell at
  * `packages/ggui-react/src/shells/ChatShell.tsx` and the thread-backed
  * twin of this one at `packages/ggui-react/src/chat-thread/shells/chat/ChatShell.tsx`.
- * RN only ever got the thread-backed flavor — the legacy session shell
+ * RN only ever got the thread-backed flavor — the invoke-SSE shell
  * is web-only. Keep the naming parallel when cross-referencing docs.
  * ─────────────────────────────────────────────────────────────────────
  *

@@ -53,7 +53,7 @@ describe('InMemoryShortCodeIndex', () => {
   });
 
   describe('findByRenderId', () => {
-    // Reverse-lookup seam added for the console /sessions page —
+    // Reverse-lookup seam added for the console /renders page —
     // operator-facing list rows need to resolve "what's the current
     // shortCode for this render?" without iterating the whole index.
     it('returns null for an unknown renderId', async () => {
@@ -73,10 +73,10 @@ describe('InMemoryShortCodeIndex', () => {
     });
 
     it('returns the latest shortCode when a render gets rebound under a new one', async () => {
-      // Agents can push multiple blueprints on the same render; each
-      // push mints a new shortCode. The reverse side is last-writer-
-      // wins (the sessions page shows ONE current shortCode per row),
-      // while the forward side keeps old shortCodes valid.
+      // Agents can render multiple blueprints under the same renderId;
+      // each render mints a new shortCode. The reverse side is last-
+      // writer-wins (the renders page shows ONE current shortCode per
+      // row), while the forward side keeps old shortCodes valid.
       const idx = new InMemoryShortCodeIndex();
       await idx.put('first0000', { renderId: 'r1', appId: 'app' });
       await idx.put('secnd0000', { renderId: 'r1', appId: 'app' });
@@ -105,7 +105,7 @@ describe('InMemoryShortCodeIndex', () => {
     it('leaves r1 reverse entry alone when r1 also owns a different shortCode', async () => {
       // Edge case of rebind-hygiene: if r1 has TWO historical
       // shortCodes (A and B) and A gets rebound to r2, r1's reverse
-      // entry already points at B (the later push), so it must stay
+      // entry already points at B (the later render), so it must stay
       // intact.
       const idx = new InMemoryShortCodeIndex();
       await idx.put('aaaa1111', { renderId: 'r1', appId: 'app' });

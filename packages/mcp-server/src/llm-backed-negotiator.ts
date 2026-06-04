@@ -237,7 +237,7 @@ export interface LlmBackedHandshakeNegotiatorDeps {
    *
    * Optional so deployments without RAG infrastructure (no embedding
    * / vector store) continue to use the synth-only path. Mirrors the
-   * shape used by `push.ts:1539-1541` so a single
+   * shape used by the render handler (`render.ts`) so a single
    * `generationWithCache.cache` value threads into both seams.
    */
   cache?: {

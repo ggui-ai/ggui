@@ -13,7 +13,7 @@
  * own `agentCapabilities.tools` catalog — same-MCP and cross-MCP both
  * funnel through this single resolution path (the catalog is the
  * declarative source of truth for every referenced tool). Violations
- * are author-recoverable at push time.
+ * are author-recoverable at render time.
  */
 
 import type { DataContract, ActionSpec, StreamSpec, AgentCapabilitiesSpec } from '../types/data-contract';
@@ -155,7 +155,7 @@ export function checkCrossReferences(
 /**
  * Throwable form of {@link checkCrossReferences}. Use at protocol
  * boundaries where an unresolved cross-reference is a contract bug
- * the caller must fix (push handler, blueprint registration).
+ * the caller must fix (render handler, blueprint registration).
  *
  * Carries the full violation list so error renderers can show every
  * dangling reference in one pass instead of fix-and-retry per-field.
@@ -178,7 +178,7 @@ export class CrossReferenceError extends Error {
  * Throw-on-violation wrapper around {@link checkCrossReferences}.
  * No-op when the contract is internally consistent.
  *
- * Invoked at handshake AND push time: contract-internal mistakes
+ * Invoked at handshake AND render time: contract-internal mistakes
  * surface at the earliest possible boundary so the agent can fix and
  * retry on the SAME handshakeId.
  */

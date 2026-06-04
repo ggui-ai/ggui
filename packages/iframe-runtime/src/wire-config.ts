@@ -73,7 +73,7 @@ const RESERVED_CHANNEL_PREFIX = '_ggui:';
  * reserved channel emits in a hot loop.
  *
  * 256 is enough headroom for the deterministic A2UI emitter (one frame
- * per fragment, ~5–15 frames per push) plus several refresh cycles, and
+ * per fragment, ~5–15 frames per render) plus several refresh cycles, and
  * still fits comfortably in memory.
  */
 const RESERVED_CHANNEL_REPLAY_MAX = 256;
@@ -87,7 +87,7 @@ const RESERVED_CHANNEL_REPLAY_MAX = 256;
  * Late-subscriber replay for reserved channels:
  *
  *   The renderer iframe boots in a strict ordering:
- *   `subscribe()` → first `ack` → render stack items → mount
+ *   `subscribe()` → first `ack` → fold the render → mount
  *   `mountProvisional` → it then calls `streamBus.subscribe('_ggui:
  *   preview', …)`. Server-side replay frames for `_ggui:preview` (the
  *   provisional A2UI preamble fired during the agent's `ggui_render`
@@ -198,7 +198,7 @@ export interface BuildRootWireConfigOptions {
   /**
    * Optional sink for contract violations. Default: tagged
    * `console.warn`. Tests inject a recorder. Matches
-   * `GguiSession.onError` semantics on the client-contract path.
+   * `GguiRender.onError` semantics on the client-contract path.
    *
    * Prefer {@link onProtocolError} for new integrations — it receives
    * the widened {@link ProtocolError} union that covers every error
@@ -213,7 +213,7 @@ export interface BuildRootWireConfigOptions {
    * Optional sink for every typed {@link ProtocolError} the renderer
    * classifies. Default: {@link defaultProtocolErrorEmitter}
    * (`console.warn` with a grep-friendly tag). The `<McpAppIframe>`
-   * host wrapper wires this to its `onError` prop; session-bound
+   * host wrapper wires this to its `onError` prop; render-bound
    * variants are ALSO mirrored to the `_ggui:contract-error` WS
    * envelope.
    *
@@ -243,7 +243,7 @@ export interface BuildRootWireConfigOptions {
    * default WS-frame send (`manager.send({type:'action', payload})`).
    *
    * The WS live-channel exists for streamSpec subscriptions (inbound
-   * `ggui_emit` fanout + `props_update` + `push` + `data` + `feedback`
+   * `ggui_emit` fanout + `props_update` + `render` + `data` + `feedback`
    * + `drain_ack` + `channel_payload`). Outbound user actions belong
    * on a different pipe — per MCP-Apps spec §401, the iframe relays
    * `tools/call:ggui_runtime_submit_action` through the host (the
@@ -252,7 +252,7 @@ export interface BuildRootWireConfigOptions {
    * wakes the agent.
    *
    * The default `manager.send({type:'action'})` path writes to the
-   * session ledger only — it has no downstream consumer in OSS (no
+   * render ledger only — it has no downstream consumer in OSS (no
    * `wiredActionRouter`, no bridge to `pendingEventConsumer`).
    * Production callers MUST supply this option to reach the agent.
    *
@@ -305,7 +305,7 @@ export function buildRootWireConfig(
     } else if (opts.onProtocolError === undefined) {
       // No caller-supplied sink at all → operator-visible fallback so
       // dev consoles see the violation. Matches
-      // `GguiSession.surfaceContractViolation`'s console.warn posture.
+      // `GguiRender.surfaceContractViolation`'s console.warn posture.
       // eslint-disable-next-line no-console
       console.warn('[ggui:contract] ' + err.message, {
         direction: err.direction,
@@ -364,7 +364,7 @@ export function buildRootWireConfig(
       // Observability: a wired-tool dispatch is a `data:submit` whose
       // resolved action has a `tool` binding. Plain agent-routed actions
       // (no `tool` on the actionSpec) fire a `dispatch` activity row in
-      // the console via the session-side ring buffer; only wired tools
+      // the console via the render-side ring buffer; only wired tools
       // get this observability event. The server separately emits the
       // operational telemetry variant on its TelemetrySink.
       if (tool !== undefined) {
@@ -406,7 +406,7 @@ export function buildRootWireConfig(
  * Send a validated action envelope over the live channel. The WS frame shape
  * is `{type:'action', payload: envelope}` — matches today's
  * `useWebSocket.sendAction` exactly, so wire-emitted dispatches from
- * the renderer are byte-equivalent to `GguiSession`-emitted ones.
+ * the renderer are byte-equivalent to `GguiRender`-emitted ones.
  */
 function sendActionEnvelope(
   manager: RendererSendSurface,

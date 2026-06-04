@@ -108,7 +108,7 @@ function makeDeps(overrides: {
 
 describe('evaluateProvisionalPreviewGate', () => {
   const ctx = { appId: 'app-1', renderId: 'sess-1' };
-  const storyInput = { story: { intent: 'go' }, isMcpAppsPush: false };
+  const storyInput = { story: { intent: 'go' }, isMcpAppsRender: false };
 
   it('skips when deps undefined (preview not wired)', () => {
     expect(evaluateProvisionalPreviewGate(undefined, storyInput, ctx)).toEqual({
@@ -128,14 +128,14 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
   });
 
-  it('skips with reason mcp-apps-push when the push is MCP Apps delivery', () => {
+  it('skips with reason mcp-apps-render when the render is MCP Apps delivery', () => {
     const { deps } = makeDeps({ emitter: { run: async () => {} } });
     const result = evaluateProvisionalPreviewGate(
       deps,
-      { story: { intent: 'go' }, isMcpAppsPush: true },
+      { story: { intent: 'go' }, isMcpAppsRender: true },
       ctx,
     );
-    expect(result).toEqual({ kind: 'skip', reason: 'mcp-apps-push' });
+    expect(result).toEqual({ kind: 'skip', reason: 'mcp-apps-render' });
   });
 
   it('skips with reason no-story when story is absent', () => {
@@ -143,7 +143,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     expect(
       evaluateProvisionalPreviewGate(
         deps,
-        { story: undefined, isMcpAppsPush: false },
+        { story: undefined, isMcpAppsRender: false },
         ctx,
       ),
     ).toEqual({ kind: 'skip', reason: 'no-story' });
@@ -177,7 +177,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
   });
 
-  it('predicate receives the actual story + session identifiers', () => {
+  it('predicate receives the actual story + render identifiers', () => {
     const predicate = vi.fn(() => true);
     const { deps } = makeDeps({
       emitter: { run: async () => {} },
@@ -185,7 +185,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
     evaluateProvisionalPreviewGate(
       deps,
-      { story: { intent: 'specific' }, isMcpAppsPush: false },
+      { story: { intent: 'specific' }, isMcpAppsRender: false },
       ctx,
     );
     expect(predicate).toHaveBeenCalledWith({

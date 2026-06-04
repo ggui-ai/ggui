@@ -36,17 +36,17 @@
  *     without leaking the values themselves.
  *   - Pass `{ optional: true }` to get `undefined` for a missing key
  *     instead of throwing. Use when the wrapper has a sensible
- *     fallback (e.g., a default origin); the push gate enforces that
+ *     fallback (e.g., a default origin); the render gate enforces that
  *     declared `requires` keys are present, so the typical wrapper
  *     path uses the throwing default.
  *   - Empty-string values are returned verbatim (the operator may
  *     have intentionally configured a key with no value).
  *
- * The push gate (`assertPublicEnvSatisfied`) verifies the
+ * The render gate (`assertPublicEnvSatisfied`) verifies the
  * `App.publicEnv` satisfies every declared wrapper's `requires` BEFORE
  * the iframe boots. So in well-configured deployments, the only
  * `getPublicEnv` throws are gadget authoring bugs (typoed key, key
- * not declared in `requires`). In production, the push gate catches
+ * not declared in `requires`). In production, the render gate catches
  * the misconfiguration upstream.
  */
 
@@ -57,7 +57,7 @@ interface MinimalGguiRootForPublicEnv {
 export interface GetPublicEnvOptions {
   /**
    * When true, returns `undefined` for a missing key instead of
-   * throwing. Use sparingly — the push gate enforces declared
+   * throwing. Use sparingly — the render gate enforces declared
    * `requires`, so a missing key usually indicates a wrapper bug
    * (key not in `requires` array). The throwing default is the
    * right call for keys that ARE declared in `requires`.
@@ -96,6 +96,6 @@ export function getPublicEnv(
     `getPublicEnv('${key}'): not provided in App.publicEnv. ` +
       `Available: [${available.join(', ') || '(none)'}]. ` +
       `Operators set this on the App record; gadget authors declare ` +
-      `the key in 'requires' so the push gate verifies it before mount.`,
+      `the key in 'requires' so the render gate verifies it before mount.`,
   );
 }

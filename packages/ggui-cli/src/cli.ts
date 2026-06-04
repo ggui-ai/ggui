@@ -479,16 +479,16 @@ async function runServeCommand(args: string[]): Promise<number> {
 
   // Live-theme state cell. Shared between the console-theme route's
   // POST handler (mountDevtoolThemeRoutes' `onConfigChange` callback)
-  // and the push handler's `themeProvider` getter so a "Save to
-  // ggui.json" in the picker reaches the next push's bootstrap
-  // envelope without a server restart. Without the cell the push
+  // and the render handler's `themeProvider` getter so a "Save to
+  // ggui.json" in the picker reaches the next render's bootstrap
+  // envelope without a server restart. Without the cell the render
   // handler would capture `themeId` once at boot, and any subsequent
   // edit would be silently ignored until restart.
   //
   // Initial value derives from the boot-time LoadedTheme so the
-  // first push (before any save happens) embeds the manifest's
+  // first render (before any save happens) embeds the manifest's
   // declared theme. POST writes mutate `themeStateCell.current`;
-  // the closure below reads it on every push.
+  // the closure below reads it on every render.
   const themeStateCell: {
     current: { id?: string; mode?: 'light' | 'dark' } | null;
   } = {
@@ -737,9 +737,9 @@ async function runServeCommand(args: string[]): Promise<number> {
                   join(plan.projectRoot, 'ggui.json'),
                 ),
                 // Live-theme: closure reads `themeStateCell` on every
-                // push. `onThemeConfigChange` mutates the cell from
+                // render. `onThemeConfigChange` mutates the cell from
                 // the console-theme route's POST handler. Together:
-                // console save → cell update → next push's bootstrap
+                // console save → cell update → next render's bootstrap
                 // carries the new themeId. No restart required.
                 themeProvider,
                 onThemeConfigChange: (next) => {
@@ -752,7 +752,7 @@ async function runServeCommand(args: string[]): Promise<number> {
                   //  - { preset, mode?, overrides? }: explicit preset.
                   //  - { file, mode? }: custom DTCG document.
                   // For preset shapes, propagate id+mode to the live
-                  // cell so the next push's bootstrap envelope picks
+                  // cell so the next render's bootstrap envelope picks
                   // them up. For the file branch the bootstrap's
                   // `themeId` field has no useful value (the runtime
                   // bundles only registered presets), so we clear
@@ -802,7 +802,7 @@ async function runServeCommand(args: string[]): Promise<number> {
             : {}),
           // Pass through `app.publicEnv`. The server projects only keys
           // that some registered wrapper's `requires` lists onto
-          // `App.publicEnv` for the push-gate validator + the iframe
+          // `App.publicEnv` for the render-gate validator + the iframe
           // runtime's `getPublicEnv()`.
           ...(plan.manifest?.app?.publicEnv &&
           Object.keys(plan.manifest.app.publicEnv).length > 0

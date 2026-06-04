@@ -1,26 +1,25 @@
 /**
- * Per-stack-item slice-meta derivation helpers.
+ * Per-render slice-meta derivation helpers.
  *
  * # Why this file exists
  *
  * The protocol has more than one transport that ships the `ai.ggui/*`
  * slice meta to the iframe-runtime:
  *
- *   - **MCP Apps** — `_meta["ai.ggui/render"]` +
- *     `_meta["ai.ggui/render"]` on the `ggui_render` tool result,
- *     delivered via the host's tool-call → result postMessage path
- *     (Claude.ai, Claude Desktop).
+ *   - **MCP Apps** — `_meta["ai.ggui/render"]` on the `ggui_render`
+ *     tool result, delivered via the host's tool-call → result
+ *     postMessage path (Claude.ai, Claude Desktop).
  *   - **Public-render `/r/<shortCode>`** — inline
  *     `__GGUI_META__` global on the self-contained shell
  *     HTML (content-negotiated `application/json` returns the same
  *     slice envelope), served standalone for direct browser visits
  *     or non-MCP-Apps hosts.
  *   - **Future transports** — ChatShell embeds, WebSocket-only
- *     session boot, SSR-prerendered HTML, mobile native, etc.
+ *     render boot, SSR-prerendered HTML, mobile native, etc.
  *
  * Each transport composes the slice meta with its own envelope
- * concerns (sessionId / appId / runtimeUrl / wsUrl / theme / auth /
- * codeUrl), but the *projection of the active stack item itself* is
+ * concerns (renderId / appId / runtimeUrl / wsUrl / theme / auth /
+ * codeUrl), but the *projection of the active render itself* is
  * variant-agnostic. Without a single source of truth for that
  * projection, every transport re-implements it, and a field that
  * grows on one path silently drifts on another (the 2026-05-09
@@ -29,12 +28,12 @@
  * crashed accessing declared propsSpec fields).
  *
  * {@link deriveRenderMeta} is the single entry point.
- * Every transport SHOULD route stack-item-derived fields through it.
+ * Every transport SHOULD route render-derived fields through it.
  * The lower-level `derive*` helpers stay exported for callers that
  * only need a single field (e.g. legacy code paths during migration).
  *
  * Pure functions; no I/O, no mutation. The caller has already loaded
- * the session + picked the active stack item.
+ * the render.
  */
 import {
   bundleHostScheme,
@@ -94,7 +93,7 @@ export function resolveGadgetUrls(
 ): { readonly bundleUrl?: string; readonly styleUrl?: string } {
   // Memoize on entry identity. `deriveBundleOrigins` and
   // `deriveGadgetRegistrations` both walk the same gadget map during
-  // one push; this collapses 2N calls to N.
+  // one render; this collapses 2N calls to N.
   if (entry !== null && typeof entry === 'object') {
     const cached = resolvedGadgetUrlsCache.get(entry);
     if (cached !== undefined) return cached;
@@ -106,10 +105,10 @@ export function resolveGadgetUrls(
 }
 
 /**
- * Per-stack-item resolved-URL cache. The two downstream consumers
+ * Per-render resolved-URL cache. The two downstream consumers
  * (`deriveBundleOrigins`, `deriveGadgetRegistrations`) would
  * otherwise call `resolveGadgetUrls(entry)` independently — one call
- * per gadget per consumer = 2N resolves per push. WeakMap-keyed on
+ * per gadget per consumer = 2N resolves per render. WeakMap-keyed on
  * the entry object
  * collapses that to N: `deriveRenderMeta` is the only
  * site that mutates entries; subsequent consumers see the cached
@@ -171,7 +170,7 @@ function resolveGadgetUrlsImpl(
 }
 
 /**
- * Per-action nextStep-tool mapping for an active stack item, derived
+ * Per-action nextStep-tool mapping for an active render, derived
  * from its `actionSpec`. Returns `undefined` when there are no entries
  * (caller spreads `...(result !== undefined ? {actionNextSteps: result} : {})`
  * to keep legacy bootstrap envelopes byte-identical).
@@ -208,14 +207,14 @@ export function deriveWiredActionTools(
 }
 
 /**
- * Per-slot contextSpec data for an active stack item, derived to a
+ * Per-slot contextSpec data for an active render, derived to a
  * wire-friendly array. Returns `undefined` when no slots are declared.
  *
  * The runtime synthesizes one `React.createContext(default)` per
- * entry at boot. `default` is mandatory — push-time validation
+ * entry at boot. `default` is mandatory — render-time validation
  * rejects entries that resolve to `undefined`, so by construction
  * every projected slot here carries a derivable default. The
- * defensive `null` fallback below mirrors push.ts's posture: prefer a
+ * defensive `null` fallback below mirrors render.ts's posture: prefer a
  * literal null over silently emitting `undefined`, which would break
  * the runtime's typed Provider seed.
  *
@@ -284,7 +283,7 @@ export function deriveContextSlots(
 }
 
 /**
- * Permissions-Policy directive list for an active stack item, derived
+ * Permissions-Policy directive list for an active render, derived
  * from the contract's `clientCapabilities.gadgets[*].permission`
  * field. Returns `undefined` when no permissions are declared.
  *
@@ -301,7 +300,7 @@ export function deriveContextSlots(
  * An earlier design derived the per-app `Permissions-Policy` from a
  * deny-default `App.declaredAdapters` runtime check that required
  * operators to manually whitelist capabilities at boot. That
- * App-side runtime gate has been retired — every push now declares
+ * App-side runtime gate has been retired — every render now declares
  * its own permission set via the contract.
  *
  * Resolution rules:
@@ -346,7 +345,7 @@ export function derivePermissionsPolicy(
 }
 
 /**
- * Bundle/style/API origins derived from a stack item's
+ * Bundle/style/API origins derived from a render's
  * `gadgetDescriptors` sidecar. Sibling to
  * {@link derivePermissionsPolicy} — same iteration pattern over the
  * descriptor sidecar, different fields.
@@ -512,13 +511,13 @@ export function composeContentSecurityPolicy(
 }
 
 /**
- * JSON-stringify the active stack item's `props` field. Returns
+ * JSON-stringify the active render's `props` field. Returns
  * `undefined` when no props are present or when serialization fails
  * (circular references, non-serializable values). Variant-agnostic —
  * system cards, component renders, and any future render shape that
  * carries a `props` value all share this projection.
  *
- * Try/catch around `JSON.stringify` is defensive: the upstream push
+ * Try/catch around `JSON.stringify` is defensive: the upstream render
  * handler validates props against `propsSpec` before they land on the
  * Render, so a JSON-circularity here would mean an internal
  * mutation post-validation. Returning `undefined` keeps the renderer
@@ -534,7 +533,7 @@ export function derivePropsJson(item: Render): string | undefined {
 }
 
 /**
- * Wire-shape view of a stack item, surfaced verbatim into every
+ * Wire-shape view of a render, surfaced verbatim into every
  * bootstrap transport. Each field corresponds to a top-level entry
  * the iframe-runtime's bootstrap parser reads:
  *
@@ -542,14 +541,14 @@ export function derivePropsJson(item: Render): string | undefined {
  *     `codeUrl` (static-component delivery). 2026-05-13: the raw-ESM
  *     `componentCode` channel was retired; static components are always
  *     delivered via the content-addressable `codeUrl` channel composed
- *     by the push handler from its `codeStore` + `codeBaseUrl` deps.
+ *     by the render handler from its `codeStore` + `codeBaseUrl` deps.
  *   - `propsJson` — pre-serialized JSON string of the runtime props.
  *   - `actionNextSteps` — per-action tool mapping (Pattern α).
  *   - `contextSlots` — per-slot contextSpec data (one
  *     `React.createContext(default)` per entry).
  *
- * MCP Apps stack items (`item.type === 'mcpApps'`) project to an
- * empty view — those items have their own shell wiring and don't
+ * MCP Apps renders (`item.type === 'mcpApps'`) project to an
+ * empty view — those renders have their own shell wiring and don't
  * route through this helper.
  */
 export interface RenderMetaView {
@@ -598,9 +597,9 @@ export interface RenderMetaView {
    * Operator-registered gadget catalog the iframe-runtime
    * dynamically imports at boot. One entry per registered gadget
    * PACKAGE — `package` is the registry key, `bundleUrl` / `bundleSri`
-   * the load source. Projected from the stack item's
+   * the load source. Projected from the render's
    * `gadgetDescriptors` sidecar — the descriptor subset snapshotted
-   * from `App.gadgets` at push time.
+   * from `App.gadgets` at render time.
    *
    * STDLIB exports (`useGeolocation`, `useCamera`, …) are seeded
    * unconditionally by the iframe-runtime — `@ggui-ai/gadgets` need
@@ -639,11 +638,11 @@ export interface RenderMetaView {
  * `App.publicEnv`.
  *
  * Reads `item.gadgetDescriptors[*].requires` — the descriptor
- * sidecar. `push.ts` snapshots the descriptor subset from
+ * sidecar. `render.ts` snapshots the descriptor subset from
  * `App.gadgets` at commit time, so this projection sees the resolved
  * `requires` lists without re-resolving against the registry.
  *
- * The push gate (`assertPublicEnvSatisfied`) has already verified
+ * The render gate (`assertPublicEnvSatisfied`) has already verified
  * every required key is present in `appPublicEnv` by the
  * time this projection runs — so the filter is total (no missing
  * keys); the only filtering this does is dropping App.publicEnv keys
@@ -686,7 +685,7 @@ export function derivePublicEnvProjection(
 }
 
 /**
- * Project the stack item's `gadgetDescriptors` sidecar into the
+ * Project the render's `gadgetDescriptors` sidecar into the
  * bootstrap-emission shape — one entry per registered gadget PACKAGE.
  * `package` is the registry key the iframe-runtime stores the loaded
  * module namespace under; `bundleUrl` / `bundleSri` carry the load
@@ -755,14 +754,14 @@ export function deriveGadgetRegistrations(
 
 /**
  * Content-addressable bundle of precompiled, eval-free validator
- * modules for a stack item's runtime-validated contract specs —
+ * modules for a render's runtime-validated contract specs —
  * `propsSpec` / `actionSpec` / `streamSpec` / `contextSpec`. The bundle
  * is an ES module text whose `default` export is a
  * {@link CompiledContractValidators}; the hash is `sha256` over the
  * canonical-JSON serialization of the input specs (stable across
  * server processes and Ajv version bumps).
  *
- * The push handler writes `bundleSource` to its `CodeStore` at
+ * The render handler writes `bundleSource` to its `CodeStore` at
  * `contractHash`, then emits `contractHash` + `validatorsUrl` on the
  * `_meta["ai.ggui/render"]` slice — the iframe-runtime fetches the
  * URL + dynamic-imports to resolve validators.
@@ -795,11 +794,11 @@ export async function deriveContractBundle(
 }
 
 /**
- * Build the {@link RenderMetaView} for a stack item — the
+ * Build the {@link RenderMetaView} for a render — the
  * single-entry-point projection function every bootstrap transport
  * SHOULD call. Composing transports take the view, spread it into
- * their own envelope alongside session/auth/runtime concerns. The
- * static-component code body itself is delivered via the push
+ * their own envelope alongside render/auth/runtime concerns. The
+ * static-component code body itself is delivered via the render
  * handler's `codeUrl` channel (composed from `codeStore` + `codeBaseUrl`);
  * this projection only carries the wire-shape metadata.
  *
@@ -817,7 +816,7 @@ export function deriveRenderMeta(
   // Component variant: emits (optional) `propsJson` + (optional)
   // `actionNextSteps` + (optional) `contextSlots` + (optional)
   // `permissionsPolicy`. The compiled code body itself rides on the
-  // push handler's `codeUrl` channel (composed at push time from the
+  // render handler's `codeUrl` channel (composed at render time from the
   // handler's `codeStore` + `codeBaseUrl` deps) — it is NOT projected
   // here. The actionNextSteps / contextSlots derivations are tolerant
   // of system items (return undefined when actionSpec / contextSpec is

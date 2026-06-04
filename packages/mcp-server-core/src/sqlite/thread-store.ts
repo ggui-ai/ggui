@@ -96,7 +96,7 @@ export interface SqliteThreadStoreOptions {
   /**
    * Existing `better-sqlite3` instance. Useful when the host already
    * manages a shared file for multiple stores (e.g. colocating
-   * sessions + threads). Mutually exclusive with `filename`; if both
+   * renders + threads). Mutually exclusive with `filename`; if both
    * are passed, `database` wins.
    */
   database?: SqliteDatabase;

@@ -89,7 +89,6 @@ describe('useWebSocket', () => {
       renderId: 'render_123',
       type: 'data:submit' as const,
       payload: { action: 'submit', data: { text: 'hi' } },
-      stackIndex: 0,
       clientSeq: 1,
     };
 

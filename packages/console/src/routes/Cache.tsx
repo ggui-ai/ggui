@@ -59,7 +59,7 @@ type CacheTraceStrategy = "exact-key" | "semantic";
 /** Filter buckets surfaced as a chip row above the event list. */
 type StrategyFilter = "all" | CacheTraceStrategy | "no-strategy";
 
-/** Classification of agent's push-time `contract` against the
+/** Classification of agent's render-time `contract` against the
  *  handshake's `plan.contract` canonical key. */
 type AgentClassification = "confirm" | "override";
 
@@ -739,8 +739,8 @@ function CacheDetail({ event }: { readonly event: CacheTraceEvent }): ReactEleme
             <ClassificationChip classification={event.agentClassification} />
             <span className="ggui-muted">
               {event.agentClassification === "confirm"
-                ? "agent push contract canonicalizes to the handshake plan key"
-                : "agent push contract diverges from the handshake plan key"}
+                ? "agent render contract canonicalizes to the handshake plan key"
+                : "agent render contract diverges from the handshake plan key"}
             </span>
           </div>
         </Section>

@@ -20,7 +20,7 @@
  * `actionSpec` + `streamSpec`, resolves each declared `tool` ref
  * against a toolName → ZodRawShape registry, runs the appropriate
  * subset check, and reports a stable {@link SchemaCompatReport}. The
- * caller (console endpoint, push handler — later) decides whether
+ * caller (console endpoint, render handler — later) decides whether
  * a non-empty report should throw, warn, or be ignored per the
  * {@link SchemaCompatMode} policy flag.
  *
@@ -60,7 +60,7 @@ import {
  * Stance the host takes when a check surfaces violations.
  *
  *   - `'reject'` (default) — throw {@link SchemaCompatError} so the
- *     containing request fails before the stack item commits /
+ *     containing request fails before the render commits /
  *     before the blueprint registers. The canonical enforcement
  *     posture for launch.
  *   - `'warn'` — return the report without throwing. The caller is

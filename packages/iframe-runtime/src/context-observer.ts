@@ -467,7 +467,7 @@ export function createContextStateHost(deps: {
   readonly consoleWarn?: (...args: unknown[]) => void;
   /** Identity bundle for the server-mirror destination. Threaded
    *  unchanged into `createSingleSlotProvider` so every slot's debounced
-   *  post carries the same authoritative session binding. */
+   *  post carries the same authoritative render binding. */
   readonly identity?: ContextPostIdentity;
 }): (props: {
   readonly slots: ReadonlyArray<ResolvedContextSlot>;

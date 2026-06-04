@@ -80,7 +80,7 @@ export interface SystemPromptInputs {
   appGadgets?: readonly GadgetDescriptor[];
   /**
    * A `package -> .d.ts content` map for THIRD-PARTY gadget wrappers
-   * (the push handler parallel-fetches each non-stdlib gadget's
+   * (the render handler parallel-fetches each non-stdlib gadget's
    * `.d.ts`). When a gadget's `package` has an entry here,
    * `formatGadgetsSection` renders a `**Type**:` line carrying the
    * hook's extracted call signature — the LLM sees the real call shape
@@ -429,7 +429,7 @@ The following identifiers / shapes are RETIRED from the contract surface as of 2
 - \`clientTools\` / \`clientCapabilities.capabilities\` — retired catalog shapes. Use \`clientCapabilities.gadgets\` (entries declare hooks, not RPC).
 - \`@ggui-ai/client-tools\` — retired package name. Import gadget hooks from \`@ggui-ai/gadgets\`.
 - \`intendedTool\` — retired. Use \`nextStep\` (flat).
-- \`props: { properties: {...} }\` as a CONTRACT field — retired. The contract field is \`propsSpec\` (the wire \`props\` field on push / update still carries VALUES).
+- \`props: { properties: {...} }\` as a CONTRACT field — retired. The contract field is \`propsSpec\` (the wire \`props\` field on render / update still carries VALUES).
 
 ## Cross-reference rules
 

@@ -88,7 +88,7 @@ describe('resolveMcpInstructions', () => {
 
   it('always preset adds a worked invocation example beyond aggressive', () => {
     // The graduation aggressive → always is "concrete example so the
-    // LLM sees the handshake → push pattern at boot". The Example:
+    // LLM sees the handshake → render pattern at boot". The Example:
     // line is the load-bearing distinguishing feature.
     expect(MCP_INSTRUCTIONS_PRESETS.always).toContain('Example:');
     expect(MCP_INSTRUCTIONS_PRESETS.aggressive).not.toContain('Example:');

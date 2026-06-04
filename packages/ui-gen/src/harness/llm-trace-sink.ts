@@ -4,7 +4,7 @@
  *
  * **Distinct from {@link TelemetrySink} and {@link AuditSink}.**
  *   - **Telemetry** (mcp-server-core) = ops signals (`pair.completed`,
- *     `push.duration_ms`). Sink may be lossy and drops on backpressure.
+ *     `render.duration_ms`). Sink may be lossy and drops on backpressure.
  *     Attributes are flat scalars (`string | number | boolean`).
  *   - **Audit** (mcp-server-core) = compliance log of privileged
  *     mutations. Durable, async, may throw.

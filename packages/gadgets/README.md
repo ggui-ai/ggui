@@ -60,7 +60,7 @@ export const photoCaptureContract = defineContract({
     // { description?, usage? }>>`. The wire carries identity only —
     // `version`, transport fields, and per-export registry metadata
     // (`permission`, `example`, `gotchas`, `required`) are NOT on the
-    // wire; the server resolves them from `App.gadgets` at push time.
+    // wire; the server resolves them from `App.gadgets` at render time.
     gadgets: {
       "@ggui-ai/gadgets": {
         useCamera: {

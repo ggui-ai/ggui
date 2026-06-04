@@ -266,8 +266,8 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   // Fullscreen-mode bootstrap branch retired in the displayMode-unification
   // slice. The shell builder no longer has a `canvasMode` discriminator;
-  // every push routes through the same code path regardless of how the
+  // every render routes through the same code path regardless of how the
   // host presents the iframe. `_meta.ui.displayMode` (spec-native MCP-Apps
-  // SEP-1865) is the only per-push hint and is stamped from
-  // `App.defaultDisplayMode` by `push.resultMeta`, not by this builder.
+  // SEP-1865) is the only per-render hint and is stamped from
+  // `App.defaultDisplayMode` by the render handler's `resultMeta`, not by this builder.
 });

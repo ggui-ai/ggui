@@ -123,7 +123,7 @@ describe('derivePropsJson', () => {
   });
 
   it('returns undefined on serialization failure (defensive — circular ref)', () => {
-    // The propsSpec validator upstream of push won't admit a circular
+    // The propsSpec validator upstream of render won't admit a circular
     // value, but the serializer should still degrade gracefully if
     // one slips through (e.g. a mutation post-validation). Cast
     // forces the test off the JsonObject contract intentionally.
@@ -141,7 +141,7 @@ describe('derivePropsJson', () => {
 
 describe('deriveRenderMeta', () => {
   // T3-1 (2026-05-13) — the projection no longer carries componentCode.
-  // Static-component bytes ride on the push handler's `codeUrl` channel
+  // Static-component bytes ride on the render handler's `codeUrl` channel
   // composed from its `codeStore` + `codeBaseUrl` deps. The view now
   // emits only the wire-shape metadata fields (propsJson, actionNextSteps,
   // contextSlots, permissionsPolicy) plus the `kind` discriminator for
@@ -239,7 +239,7 @@ describe('deriveRenderMeta', () => {
           default: 0,
         },
       ],
-      // Validators are no longer projected onto the view — push.ts
+      // Validators are no longer projected onto the view — render.ts
       // calls deriveContractBundle directly + writes to the
       // content-addressable store. The view carries no contract bytes.
     });
@@ -957,7 +957,7 @@ describe('deriveRenderMeta — contentSecurityPolicy projection', () => {
 });
 
 // Slice 2.2 — projection helper for the public env channel. Takes
-// the stack item (for declared wrappers' `requires`) and the App's
+// the render (for declared wrappers' `requires`) and the App's
 // publicEnv map (for values); emits the union-filtered subset.
 describe('derivePublicEnvProjection', () => {
   function mapboxRef(): GadgetDescriptor {
@@ -1010,7 +1010,7 @@ describe('derivePublicEnvProjection', () => {
     ).toBeUndefined();
   });
 
-  it('returns undefined when appPublicEnv is undefined despite requires (push gate caught it upstream)', () => {
+  it('returns undefined when appPublicEnv is undefined despite requires (render gate caught it upstream)', () => {
     const item = componentWithCaps([mapboxRef()]);
     expect(derivePublicEnvProjection(item, undefined)).toBeUndefined();
   });
@@ -1065,7 +1065,7 @@ describe('derivePublicEnvProjection', () => {
   });
 
   it('returns undefined when filtered map is empty (requires unsatisfied by App)', () => {
-    // The push gate should reject this case upstream; if reached, the
+    // The render gate should reject this case upstream; if reached, the
     // projection emits nothing rather than risk a half-populated map.
     const item = componentWithCaps([mapboxRef()]);
     expect(

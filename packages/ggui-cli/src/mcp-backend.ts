@@ -11,7 +11,7 @@
  * responsibilities):
  *
  *   - `renderChannel: true` — live-channel `/ws` endpoint. Required for
- *     MCP Apps iframes AND the console session viewer.
+ *     MCP Apps iframes AND the console render viewer.
  *   - `pairing: true` — `POST /pair` + `POST /admin/pair/init` so
  *     remote clients (Portal, third-party) can pair with this server.
  *     The default `InMemoryAuthAdapter` registers pairing tokens
@@ -184,7 +184,7 @@ export interface BuildMcpServerBackendOptions {
    * Optional change notifier — fires from
    * `mountDevtoolThemeRoutes`'s POST handlers when the operator
    * saves a new theme via the picker. Pair with `themeProvider` so
-   * the push handler reads the live theme on every call.
+   * the render handler reads the live theme on every call.
    */
   readonly onThemeConfigChange?: (
     next:
@@ -409,7 +409,7 @@ export interface BuildMcpServerBackendOptions {
    * Per-app gadget catalog from `ggui.json#app.gadgets`.
    * Gadgets (Leaflet, Mapbox, …) declared
    * here populate `App.gadgets` so the
-   * `assertGadgetsRegistered` validator (push, ops_register,
+   * `assertGadgetsRegistered` validator (render, ops_register,
    * ops_generate) accepts contracts that reference them.
    *
    * Omitted ⇒ `STDLIB_GADGETS` defaults from
@@ -660,7 +660,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // themes don't have a registry id to surface here — agents pick from
   // `listThemes()` either way; the file-mode override only affects the
   // server's bound `theme` (rendered CSS variables), not the
-  // session/handler-side `themeId` chain.
+  // render/handler-side `themeId` chain.
   const manifestThemePreset = opts.theme?.source === "preset" ? opts.theme.preset : undefined;
   const appMetadataStore = new InMemoryAppMetadataStore({
     ...(manifestThemePreset !== undefined ? { defaultThemeId: manifestThemePreset } : {}),
@@ -673,13 +673,13 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       ? { defaultGadgets: opts.gadgets }
       : {}),
     // `ggui.json#app.publicEnv` operator-stamped values for wrapper
-    // hooks to read via `getPublicEnv()`. The push gate
+    // hooks to read via `getPublicEnv()`. The render gate
     // (`assertPublicEnvSatisfied`) verifies every declared wrapper's
     // `requires` keys are present in this map BEFORE the iframe boots.
     ...(opts.publicEnv !== undefined && Object.keys(opts.publicEnv).length > 0
       ? { defaultPublicEnv: opts.publicEnv }
       : {}),
-    // `ggui.json#app.defaultDisplayMode`. Stamped per-push as
+    // `ggui.json#app.defaultDisplayMode`. Stamped per-render as
     // `_meta.ui.displayMode`; controls only host-side presentation.
     ...(opts.defaultDisplayMode !== undefined
       ? { defaultDisplayMode: opts.defaultDisplayMode }
@@ -760,7 +760,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     installedBlueprintsProvider = createInstalledBlueprintsProvider(providerOptions);
   }
 
-  // Fold the bridge into the generation deps so the push handler +
+  // Fold the bridge into the generation deps so the render handler +
   // handshake negotiator both consume it via `MatchBlueprintDeps.
   // installedBlueprints`. Two-step pattern keeps the createGguiServer
   // call below unchanged when no provider is wired.
@@ -923,7 +923,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // `GGUI_CODE_CACHE_DIR`). Survives `ggui serve` restart so
     // claude.ai's iframe cache still resolves URLs minted before the
     // restart. Operators can `rm -rf` the cache at any time —
-    // immutable URLs guarantee a fresh push repopulates as needed.
+    // immutable URLs guarantee a fresh render repopulates as needed.
     codeStore: new FileSystemCodeStore({ root: getCodeCacheDir() }),
     // Manifest-declared blueprints. Only present when `ggui serve`
     // found UIs in `blueprints.include`; absent = the server's
@@ -950,7 +950,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     ...(opts.themeWriter ? { themeWriter: opts.themeWriter } : {}),
     // Live-theme wiring — `themeProvider` reads from a shared cell
     // that `onThemeConfigChange` writes to on every console save,
-    // so the picker's "Save to ggui.json" reaches the next push's
+    // so the picker's "Save to ggui.json" reaches the next render's
     // bootstrap envelope without a restart. Both threaded through
     // when present; absent = boot-baked behaviour (legacy).
     ...(opts.themeProvider ? { themeProvider: opts.themeProvider } : {}),
@@ -1021,7 +1021,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // hatch for scenarios that intentionally ship a blueprint with a
     // schema mismatch (e.g. contract-probe fixtures that test runtime
     // TOOL_THREW / SCHEMA_VIOLATION error paths — `'reject'` would
-    // otherwise block the stack item at push/try-live time before
+    // otherwise block the render at render/try-live time before
     // runtime gets to emit the envelope under test).
     //
     // Accepted values match `SchemaCompatMode`: `'reject' | 'warn' |
@@ -1036,7 +1036,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
         }
       : {}),
     // Wired-tool per-call timeout override (default 30 s in
-    // `session-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS`). Mirrors the
+    // `render-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS`). Mirrors the
     // `GGUI_SCHEMA_COMPAT_MODE` escape-hatch shape: env-only; absent or
     // unparseable falls through to the server's default. Test harnesses
     // exercising TOOL_TIMEOUT envelopes lower this to keep per-test

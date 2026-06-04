@@ -432,7 +432,7 @@ export interface CreateHarnessInput {
   readonly appGadgets?: readonly GadgetDescriptor[];
   /**
    * A `package -> .d.ts content` map for third-party gadget wrappers
-   * (the push handler parallel-fetches each non-stdlib gadget's `.d.ts`
+   * (the render handler parallel-fetches each non-stdlib gadget's `.d.ts`
    * via `GadgetDescriptor.typesUrl`). Threaded onto the `WhatLeg` so
    * coding-agent tool execution (autoCommit → runTier0Checks →
    * typecheck) overlays each `.d.ts` into the TypeScript sandbox VFS —

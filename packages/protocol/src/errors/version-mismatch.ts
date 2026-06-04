@@ -13,7 +13,7 @@
  *   - Client side: on ack receipt, `AckPayload.serverVersion` is
  *     present AND NOT in `CLIENT_SUPPORTED_VERSIONS`. The client
  *     instantiates this class and surfaces it to the caller via the
- *     session's `onError` hook.
+ *     render's `onError` hook.
  *
  * The class pins `.name === 'UpgradeRequiredError'` and `.code ===
  * UPGRADE_REQUIRED` so consumers can pattern-match without

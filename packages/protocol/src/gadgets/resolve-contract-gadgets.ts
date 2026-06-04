@@ -47,7 +47,7 @@ export function gadgetExportName(x: GadgetExport): string {
  * Canonical string key for a gadget EXPORT's identity —
  * `(name, package)`. Every site that decides "does this wire ref
  * resolve to that registered export?" MUST key through this helper so
- * the resolver and the push-time gates (`assertGadgetsRegistered`,
+ * the resolver and the render-time gates (`assertGadgetsRegistered`,
  * `assertPublicEnvSatisfied`) agree byte-for-byte on what "the same
  * gadget export" means.
  *
@@ -75,7 +75,7 @@ export function gadgetIdentityKey(use: {
 /**
  * Flatten the package-keyed `contract.clientCapabilities.gadgets` into
  * a list of `(package, name)` use records — one per export the
- * contract references. The single accessor every consumer (push
+ * contract references. The single accessor every consumer (render
  * gates, descriptor resolver, code-gen) iterates, so the nested wire
  * shape is walked in exactly one place.
  *
@@ -116,8 +116,8 @@ export function listContractGadgets(
  *
  * Ordering: descriptors appear in the order their package key first
  * appears on `clientCapabilities.gadgets`. A package absent from
- * `appGadgets` is dropped — the push-time `assertGadgetsRegistered`
- * gate rejects the push with a precise registration-mismatch code
+ * `appGadgets` is dropped — the render-time `assertGadgetsRegistered`
+ * gate rejects the render with a precise registration-mismatch code
  * BEFORE this helper runs, so silent drop here is safe in the happy
  * path.
  *

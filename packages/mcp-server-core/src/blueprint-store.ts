@@ -3,7 +3,7 @@
  *
  * An explicit multi-variant record store: it replaces the implicit
  * single-blueprint-per-contract assumption that previously lived
- * inside `BlueprintProvider` and the push-time cache.
+ * inside `BlueprintProvider` and the render-time cache.
  *
  * Multiple {@link Blueprint} rows MAY share `(appId, contractHash)`.
  * They differ on {@link Blueprint.generator} and/or

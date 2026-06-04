@@ -98,7 +98,7 @@ export async function loadComponent(input: LoadComponentInput): Promise<LoadComp
     // `moduleResolutions` (the (specifier, hooks) pairs the bench
     // commit declares in `commit.appGadgets`). If a wrapper is
     // referenced by source but not injected, fall through to the
-    // standard "import not allowed" message — the upstream push gate
+    // standard "import not allowed" message — the upstream render path
     // would have rejected this contract before generation, so reaching
     // here is a test-fixture misconfiguration.
     throw new Error(`Import not allowed in render-check sandbox: ${id}`);

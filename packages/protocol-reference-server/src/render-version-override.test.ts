@@ -14,10 +14,8 @@
  * driver — the per-render contract is package-internal and should
  * be testable without round-tripping through the kit.
  *
- * Wire-field note: the subscribe payload still spells the render
- * identity `sessionId` (the conformance kit's wire shape that the
- * reference server honors for backwards-compat). The reference
- * server reads it and binds it to a `renderId` internally.
+ * Wire-field note: the subscribe payload carries the canonical
+ * render-identity field `renderId`.
  */
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -45,7 +43,7 @@ describe('per-render versionOverride', () => {
     const frame = await firstFrame(server.baseUrl, {
       type: 'subscribe',
       payload: {
-        sessionId: renderId,
+        renderId,
         appId: 'conformance',
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION],
@@ -73,7 +71,7 @@ describe('per-render versionOverride', () => {
     const frame = await firstFrame(server.baseUrl, {
       type: 'subscribe',
       payload: {
-        sessionId: cleanId,
+        renderId: cleanId,
         appId: 'conformance',
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION],

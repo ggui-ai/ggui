@@ -1,6 +1,6 @@
 /**
  * Host Context — projected subset of `McpUiHostContext` ggui captures from
- * the MCP Apps `ui/initialize` response and echoes back to session state so
+ * the MCP Apps `ui/initialize` response and echoes back to render state so
  * the agent can reason about device/host capabilities on subsequent turns.
  *
  * The MCP Apps spec (`@modelcontextprotocol/ext-apps`) defines a rich
@@ -9,7 +9,7 @@
  * deviceCapabilities). ggui captures it iframe-side at `ui/initialize` and
  * echoes a TRIMMED projection back over the live channel (via the
  * `host_context_observed` outbound message) so the server can persist it on
- * `SessionRecord.hostContext` and surface it on `ggui_handshake` /
+ * `RenderRecord.hostContext` and surface it on `ggui_handshake` /
  * `ggui_consume` output for the agent.
  *
  * Why a projection rather than passthrough:
@@ -114,7 +114,7 @@ export interface HostContextDeviceCapabilities {
 
 /**
  * Trimmed projection of `McpUiHostContext` that ggui captures iframe-side
- * and echoes to session state for agent visibility.
+ * and echoes to render state for agent visibility.
  *
  * Every field is optional. Hosts that emit minimal context project to
  * mostly-empty objects; consumers MUST treat every field as possibly

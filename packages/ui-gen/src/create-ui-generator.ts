@@ -238,7 +238,7 @@ export function createUiGenerator(
         //   2. gadgetCatalog.list(input.appId) (factory wiring)
         //   3. undefined (no catalog)
         // Catalog errors propagate — a silent empty result would mask
-        // broken catalogs as "no gadgets registered" and let pushes
+        // broken catalogs as "no gadgets registered" and let renders
         // through with unresolved refs.
         const resolvedAppGadgets: readonly GadgetDescriptor[] | undefined =
           input.appGadgets !== undefined
@@ -267,7 +267,7 @@ export function createUiGenerator(
           ...(resolvedAppGadgets !== undefined
             ? { appGadgets: resolvedAppGadgets }
             : {}),
-          // Forward the third-party wrapper `.d.ts` map the push
+          // Forward the third-party wrapper `.d.ts` map the render
           // handler pre-fetched. Reaches both the code-gen prompt's
           // `Type:` lines and the coding-agent typecheck overlay via
           // `dispatchGeneration`.

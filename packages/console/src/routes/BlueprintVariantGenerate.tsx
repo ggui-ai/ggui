@@ -146,7 +146,7 @@ export function BlueprintVariantGenerate({
             </p>
             <p className="ggui-muted">
               The generate form needs an existing variant to fork the
-              contract from. Either trigger a push from an agent first
+              contract from. Either trigger a render from an agent first
               (which will mint the initial variant), or navigate back
               and pick a contract with at least one variant.
             </p>

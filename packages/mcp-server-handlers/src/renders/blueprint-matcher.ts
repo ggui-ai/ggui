@@ -24,7 +24,7 @@
  * The matcher is the single source of truth for the decision; both
  * `ggui_handshake` and `ggui_render` route through it. Without
  * unification the two surfaces would drift, leaving "did this hit
- * via handshake or push?" as a debug pain point.
+ * via handshake or render?" as a debug pain point.
  *
  * No I/O concerns leak to the caller — `BlueprintRegistryDeps`
  * captures the embedder + vector store, and an optional `LLMCaller`

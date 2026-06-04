@@ -420,7 +420,7 @@ describe('Render discriminator is the ONE place mcpApps enters core', () => {
       /import\s+type\s+\{\s*McpAppsRender\s*\}\s+from\s+['"]\.\.?\/integrations\/mcp-apps['"]/,
     );
     // But must NOT pull in any other MCP Apps symbol — those belong
-    // at the integrations subpath, not in core session typing.
+    // at the integrations subpath, not in core render typing.
     const BANNED_IN_RENDER = [
       'McpAppAiGguiRenderMeta',
       'MCP_APPS_UI_CAPABILITY',

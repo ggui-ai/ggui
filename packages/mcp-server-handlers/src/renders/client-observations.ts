@@ -1,7 +1,7 @@
 /**
  * Shared zod schema for the `client.*` output envelope every handler
  * with an "agent return value" attaches when client-side observations
- * exist on the session. Today carries only `hostContext`; future
+ * exist on the render. Today carries only `hostContext`; future
  * additions may layer further client signals (e.g. echoed
  * `InterfaceContext`, last-known navigation state) here.
  *

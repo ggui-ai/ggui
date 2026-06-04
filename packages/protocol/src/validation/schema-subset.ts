@@ -3,7 +3,7 @@
  * schema accepts also pass the `superset` schema?".
  *
  * **Why this lives in the protocol package.** The schema-alignment
- * contract is enforced at push-time + blueprint-registration; the
+ * contract is enforced at render-time + blueprint-registration; the
  * canonical failure is {@link ContractErrorCode}
  * `'SCHEMA_MISMATCH_ERROR'` — same envelope shape + channel as every
  * other named contract violation. See the schema-compat docstrings
@@ -77,7 +77,7 @@
  * expected).
  *
  * @see ./schema-compat-invariants.ts — the protocol-level invariants
- *      that call this algorithm at push-time.
+ *      that call this algorithm at render-time.
  */
 import type { JsonSchema, JsonValue } from '../types/data-contract.js';
 

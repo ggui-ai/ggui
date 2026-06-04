@@ -17,7 +17,7 @@
  * | Scope          | Prefix                            | Lifetime               |
  * | -------------- | --------------------------------- | ---------------------- |
  * | `app`          | `apps/<appId>/`                   | App lifecycle          |
- * | `session`      | `sessions/<sessionId>/`           | Session TTL            |
+ * | `render`       | `renders/<renderId>/`             | Render TTL             |
  * | `userApp`      | `users/<userId>/apps/<appId>/`    | User account / app     |
  * | `crossAppUser` | `users/<userId>/shared/`          | User account (opt-in)  |
  *
@@ -36,10 +36,10 @@
  *
  * **Parties:**
  * - Producer / writer: `DynamoRenderStore` offload (`render.componentCode`,
- *   `conversationHistory.jsonl`), agent code via `ctx.sessionStorage` /
+ *   `conversationHistory.jsonl`), agent code via `ctx.renderStorage` /
  *   `ctx.userStorage` / `ctx.appStorage` / `ctx.crossAppStorage`,
  *   blueprint asset uploaders.
- * - Consumer / reader: `session-resource/handler.ts` rendering pipeline,
+ * - Consumer / reader: `render-resource/handler.ts` rendering pipeline,
  *   agent code reading back its own writes, `RenderStore.observe`
  *   replay readers, future blueprint-asset CDN.
  *
@@ -91,10 +91,8 @@
  * - {@link RenderStore} (`render-store.ts`) — durable per-render
  *   metadata + event log. `DynamoRenderStore` offloads heavy
  *   `render.componentCode` and `conversationHistory` blobs into
- *   `ScopedFileStoreRegistry.session(renderId)` so the DDB row stays
- *   under the 400 KB limit. (The scope-method retains the `session`
- *   name because its key prefix `sessions/<id>/` is the on-disk
- *   contract that hosted stores must continue to honor.)
+ *   `ScopedFileStoreRegistry.render(renderId)` so the DDB row stays
+ *   under the 400 KB limit.
  * - {@link KeyValueStore} (`kv-store.ts`) — TTL'd ephemeral kv.
  *   Orthogonal: kv is small / hot / tokenish; ScopedFileStore is for
  *   blobs (kilobytes to megabytes).
@@ -235,7 +233,7 @@ export interface ScopedFileStore {
    * Atomicity is per-call only. Concurrent appends from multiple
    * writers MAY interleave at the byte level on backends that lack
    * atomic concat (S3). Producers that need ordering MUST serialize
-   * externally (e.g. session-scoped lock).
+   * externally (e.g. render-scoped lock).
    */
   append(key: string, value: string | Uint8Array): Promise<void>;
 
@@ -264,8 +262,8 @@ export interface ScopedFileStoreRegistry {
   /** App scope: `apps/<appId>/`. App lifecycle, no user identity. */
   app(appId: string): ScopedFileStore;
 
-  /** Session scope: `sessions/<sessionId>/`. Session TTL. */
-  session(sessionId: string): ScopedFileStore;
+  /** Render scope: `renders/<renderId>/`. Render TTL. */
+  render(renderId: string): ScopedFileStore;
 
   /**
    * Per-user-per-app scope: `users/<userId>/apps/<appId>/`. The

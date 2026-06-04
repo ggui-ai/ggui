@@ -5,7 +5,7 @@
  *
  * The hygiene linter already raises a soft warning for this case
  * (`LINT_GADGET_DUPLICATE_EXPORT`); this gate promotes it to a hard
- * push-time reject so the violation is observable rather than
+ * render-time reject so the violation is observable rather than
  * silently tolerated. A duplicate export name causes:
  *
  *   - Double-mount of the same export (the runtime imports the gadget

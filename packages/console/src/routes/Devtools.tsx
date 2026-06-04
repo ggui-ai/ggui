@@ -47,7 +47,7 @@ const SURFACES: Record<string, SurfaceMeta> = {
     answers: 'What was the UI state at each event?',
   },
   'devtools-payloads': {
-    title: 'Raw push/update payloads',
+    title: 'Raw render/update payloads',
     slice: '7e',
     answers: 'What did the agent actually send me?',
   },

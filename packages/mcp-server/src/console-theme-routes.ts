@@ -21,7 +21,7 @@
  * Authentication: piggy-backs on the same admin gate the LLM-keys
  * routes use — operator-only since the value persists to ggui.json,
  * which the OSS server treats as trusted manifest input. End-users
- * who paired into a session don't get to mutate the project's
+ * who paired into a render don't get to mutate the project's
  * theme. Multi-tenant deployments may relax this in a follow-up by
  * scoping overrides per user (overrides become server state, not
  * file state).
@@ -101,8 +101,8 @@ interface MountOptions {
    * Optional change notifier — fires every time the operator's
    * theme selection changes through `POST /ggui/console/theme` (or
    * the `/upload` variant). The CLI uses this to mirror writes into
-   * a shared mutable state cell that the push handler's
-   * `themeProvider` reads, so a save reaches the next push without
+   * a shared mutable state cell that the render handler's
+   * `themeProvider` reads, so a save reaches the next render without
    * a server restart.
    *
    * Fires AFTER the on-disk write succeeds and AFTER the route's

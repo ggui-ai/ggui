@@ -60,7 +60,7 @@ import type {
 // adapters, the in-memory subpath carries no optional peer dep cost
 // (no `better-sqlite3`, no N-API binding). `storage.threads.driver =
 // 'memory'` uses this to mount actual thread routes instead of being
-// a silent no-op like sessions/vectors (which createGguiServer
+// a silent no-op like renders/vectors (which createGguiServer
 // already defaults to in-memory internally).
 import { InMemoryThreadStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { StorageConfig } from '@ggui-ai/project-config';
@@ -207,7 +207,7 @@ export async function resolveStorageFromConfig(
 
 /**
  * Create the parent directory of a sqlite database file if it doesn't
- * already exist. Turns the declarative `path: './data/sessions.sqlite'`
+ * already exist. Turns the declarative `path: './data/renders.sqlite'`
  * into a working adapter without forcing the operator to mkdir by hand
  * — better-sqlite3 refuses to open a file whose parent doesn't exist,
  * and the parent is uninteresting bookkeeping the manifest already

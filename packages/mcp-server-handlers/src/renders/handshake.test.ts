@@ -52,7 +52,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       const handler = createGguiHandshakeHandler({ kvStore });
       const outKeys = Object.keys(handler.outputSchema).sort();
       // Post-2026-05-13 trim: reason/target/alternatives/contractHash/
-      // serverCapabilities echo fields retired (push.ts set the bar;
+      // serverCapabilities echo fields retired (render.ts set the bar;
       // handshake follows). These survive on the internal TS shape /
       // HandshakeRecord for telemetry + post-classify tracing — zod
       // strips them before structuredContent serialization.

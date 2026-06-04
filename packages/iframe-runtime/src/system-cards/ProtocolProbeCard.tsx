@@ -542,7 +542,7 @@ function ProbeButtonRow({
 
 export interface ProtocolProbeCardProps {
   /**
-   * Optional: the original prompt that triggered the probe push.
+   * Optional: the original prompt that triggered the probe render.
    * Surfaced as a footnote so the card matches the framing of other
    * system cards (`NoCredentialsCard`).
    */

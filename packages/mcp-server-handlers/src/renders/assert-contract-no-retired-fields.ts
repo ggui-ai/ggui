@@ -12,7 +12,7 @@
  *
  * The retired-field vocabulary lives in `@ggui-ai/protocol`'s
  * `RETIRED_CONTRACT_FIELDS`; this gate raises a fatal error at every
- * push + handshake seam so the same vocabulary cannot leak in two
+ * render + handshake seam so the same vocabulary cannot leak in two
  * different ways. `checkRetiredContractFields` in `hygiene-rules.ts`
  * is the AUTHOR-TIME warning surface; this gate is the SERVER-TIME
  * reject. Both consult the same map.

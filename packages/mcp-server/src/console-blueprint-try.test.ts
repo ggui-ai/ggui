@@ -3,17 +3,17 @@
  * try-live endpoint.
  *
  * What the endpoint ships:
- *   - Creates a session via the configured `RenderStore`.
+ *   - Creates a render via the configured `RenderStore`.
  *   - Resolves the blueprint via `UiRegistry.get` + `getBundle`.
  *   - Materializes the bundle code (string OR ReadableStream).
- *   - Pushes a `Render` with `componentCode` + manifest-backed
+ *   - Commits a `Render` with `componentCode` + manifest-backed
  *     `propsSpec` / `actionSpec` / `streamSpec`.
  *   - Mints a fresh shortCode, binds it via `ShortCodeIndex`, returns
  *     `{renderId, shortCode, url}`.
  *
  * Gate combinations covered:
  *   - Full wiring (uiRegistry + renderChannel + shortCodeIndex) →
- *     200 with full payload + real session state.
+ *     200 with full payload + real render state.
  *   - uiRegistry alone (no renderChannel/shortCodeIndex) → 503 with
  *     the "try_not_wired" remediation code.
  *   - No uiRegistry at all → 404 (sibling GET also absent; the route
@@ -183,7 +183,7 @@ async function bootFull(
     // Default the existing pre-F4 tests to `schemaCompatCheck: 'off'`
     // so their test-only fixtures referencing unregistered tool names
     // (`tasks_complete`, `tasks_list`) continue to exercise the
-    // bundle / stack-push / shortCode / renderChannel flow. A separate
+    // bundle / render-commit / shortCode / renderChannel flow. A separate
     // describe block below covers the F4 check firing end-to-end.
     schemaCompatCheck: overrides?.schemaCompatCheck ?? 'off',
     ...(overrides?.mcpMounts ? { mcpMounts: overrides.mcpMounts } : {}),
@@ -212,7 +212,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     }
   });
 
-  it('creates a session + pushes Render with full contract + mints shortCode', async () => {
+  it('creates a render + commits Render with full contract + mints shortCode', async () => {
     fx = await bootFull([
       {
         id: 'todo-list',
@@ -435,7 +435,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     // registers. `nextStep` is a documented HINT the agent owns and
     // ggui never dispatches, so an unresolved action `nextStep` is
     // tagged warn-severity — even under `reject` mode it does NOT
-    // block the render; the stack item commits.
+    // block the render; the render commits.
     fx = await bootFull(
       [
         {
@@ -462,7 +462,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(stored!.render.id).toBe(body.renderId);
   });
 
-  it('schemaCompatCheck=warn: lets the push through; no 422, stack commits', async () => {
+  it('schemaCompatCheck=warn: lets the render through; no 422, render commits', async () => {
     fx = await bootFull(
       [
         {

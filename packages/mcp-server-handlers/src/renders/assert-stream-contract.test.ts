@@ -52,7 +52,7 @@ describe('assertStreamContract', () => {
     // declaration side rejects agents who try to claim it, and the
     // client-side consumer re-runs the injected validators on receipt.
     // This handler-side throw-wrapper must match — otherwise a
-    // provisional preview emit into a session whose active stack item
+    // provisional preview emit into a render that
     // has ANY declared streamSpec would raise ContractViolationError
     // and abort the preview runner on its very first frame.
     it('does not throw on `_ggui:preview` when no validator is injected (fall-through)', () => {
@@ -100,7 +100,7 @@ describe('assertStreamContract', () => {
       // Protocol-owned validator for ContractErrorPayload fires from
       // BUILTIN_RESERVED_VALIDATORS regardless of caller-provided
       // extras. Reserved-channel branch inside `validateStreamData`
-      // runs before the declared-channel check, so a session with
+      // runs before the declared-channel check, so a render with
       // NO user streamSpec still rejects malformed contract-error
       // emissions.
       let err: unknown;

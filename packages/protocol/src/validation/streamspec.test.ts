@@ -144,11 +144,11 @@ describe('streamSpec — validateStreamData', () => {
     // them in streamSpec (enforced by `validateContractStructure`), but
     // the runtime emits on them (e.g. `_ggui:preview` for provisional
     // A2UI assembly). Without a bypass here, every such delivery into
-    // a session whose active stack item carries any user streamSpec
+    // a render whose active render carries any user streamSpec
     // would synthesize a false "Unknown stream channel" violation and
     // block the preview pipeline — this test pins the symmetry with
     // the declaration-side rejection + the client-side bypass in
-    // `GguiSession`.
+    // `GguiRender`.
     it('passes a reserved channel name even when spec declares unrelated channels', () => {
       const result = validateStreamData(
         '_ggui:preview',

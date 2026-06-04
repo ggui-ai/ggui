@@ -10,7 +10,7 @@
  * client-side; the cookie + admin-HTML gate handle it.
  *
  * Render shape: reverse-chronological list of cards. Each card shows:
- *   - timestamp + direction chip (inbound-push / outbound-update)
+ *   - timestamp + direction chip (inbound-render / outbound-update)
  *   - tool name (`ggui_render` / `ggui_update`)
  *   - renderId truncated to 8 chars
  *   - byte size of the payload
@@ -23,7 +23,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { SectionHead } from '../brand/SectionHead.js';
 
-type PayloadDirection = 'inbound-push' | 'outbound-update';
+type PayloadDirection = 'inbound-render' | 'outbound-update';
 
 interface PayloadEvent {
   readonly id: string;
@@ -47,7 +47,7 @@ export function Payloads(): ReactElement {
 
   // Initial fetch + SSE subscription. The SSE stream only delivers
   // future events; we backfill via /recent so the page isn't empty
-  // when an operator opens it after pushes have already happened.
+  // when an operator opens it after renders have already happened.
   useEffect(() => {
     let cancelled = false;
     let source: EventSource | null = null;
@@ -217,7 +217,7 @@ function PayloadCard({
       ? `${event.renderId.slice(0, 8)}…`
       : event.renderId;
   const directionLabel =
-    event.direction === 'inbound-push' ? 'inbound' : 'outbound';
+    event.direction === 'inbound-render' ? 'inbound' : 'outbound';
 
   return (
     <li

@@ -247,7 +247,7 @@ export function RenderViewer({
             <code className="ggui-code">/s/{shortCode}</code>
           </>
         }
-        intro="The short-code above resolved against this server's index. The iframe below renders exactly what the agent pushed — interactions inside the iframe dispatch through the same wsToken-gated WS channel the agent's own host uses."
+        intro="The short-code above resolved against this server's index. The iframe below renders exactly what the agent rendered — interactions inside the iframe dispatch through the same wsToken-gated WS channel the agent's own host uses."
       />
 
       {state.kind === 'minting' ? (

@@ -26,7 +26,7 @@
  *
  * Browser-side vs server-side compile: there are two ways to land
  * compiled code in the viewer — esbuild-wasm in the browser, OR
- * server-side compile + ship ESM down the session channel. ggui
+ * server-side compile + ship ESM down the render channel. ggui
  * compiles server-side: (a) the CLI already runs in Node, (b) shipping
  * esbuild-wasm into a frontend bundle is prohibitively large, (c) the
  * hosted surface also compiles server-side, so the viewer contract
@@ -86,8 +86,8 @@ async function loadEsbuild(): Promise<EsbuildModule> {
 /**
  * Thrown when `compileComponentCode` can't transform the generator's
  * raw source. Carries the underlying esbuild message so upstream
- * consumers can surface a readable failure on the session channel
- * instead of blowing up the whole push RPC.
+ * consumers can surface a readable failure on the render channel
+ * instead of blowing up the whole render RPC.
  */
 export class CompileComponentCodeError extends Error {
   constructor(

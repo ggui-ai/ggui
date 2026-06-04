@@ -426,9 +426,9 @@ function readVariance(
  * fresh registration would push the bucket past the cap,
  * {@link registerBlueprint} evicts the lowest-`hitCount` entry first;
  * ties broken by oldest `createdAt`. The number is calibrated for an
- * OSS single-tenant `ggui serve` workload — every push is one
+ * OSS single-tenant `ggui serve` workload — every render is one
  * `template` entry, so 100 templates per scope = ~100 distinct
- * UI shapes the agent has built in this session, well above any
+ * UI shapes the agent has built across its renders, well above any
  * realistic single-app surface and small enough to keep the
  * `InMemoryVectorStore` footprint bounded under abuse.
  */

@@ -5,7 +5,7 @@
  * gadget catalog. The wire-side `DataContract.clientCapabilities.gadgets`
  * is intentionally narrow — it is package-keyed and carries identity
  * only (`(package, export name)`, no `version`, no transport
- * metadata), so push-time resolution looks up the matching
+ * metadata), so render-time resolution looks up the matching
  * {@link GadgetDescriptor} descriptor by npm package name. This module
  * declares the pluggable "where do descriptors come from?" port + ships
  * two batteries-included implementations:
@@ -17,7 +17,7 @@
  *   - {@link CachingGadgetCatalog} — decorator over any other adapter
  *     with per-appId TTL caching + single-flight deduplication. Right
  *     for production cloud paths where descriptors live in DynamoDB /
- *     a registry service and re-fetching on every push would burn
+ *     a registry service and re-fetching on every render would burn
  *     network round-trips. Caches are scoped per-appId so two apps
  *     never see each other's catalogs.
  *
@@ -26,18 +26,18 @@
  *   - One method: `list(appId)`. Single batch read — never an N+1
  *     "fetch descriptor for one package at a time" pattern. The
  *     resolution caller indexes the returned array by `package`
- *     itself. Single network call per push (with cache, often zero).
+ *     itself. Single network call per render (with cache, often zero).
  *
  *   - Return type is `readonly GadgetDescriptor[]` — the same shape the
- *     wire push-time resolution + downstream consumers (boilerplate
+ *     wire render-time resolution + downstream consumers (boilerplate
  *     generator, CSP builder, Permissions-Policy deriver, system
  *     prompt builder) already speak.
  *
  *   - Errors propagate. Adapters MUST throw on retrieval failure
  *     rather than returning an empty array — silent "no gadgets"
- *     would let pushes through with broken gadget refs and surface
+ *     would let renders through with broken gadget refs and surface
  *     as render-time hook-resolution failures. The caller's job is
- *     to decide whether the push fails (gate fires) or proceeds
+ *     to decide whether the render fails (gate fires) or proceeds
  *     ungated.
  *
  * ## Deployment-specific adapters
@@ -54,7 +54,7 @@ import type { GadgetDescriptor } from '@ggui-ai/protocol';
 /**
  * Per-deployment source of registered gadget descriptors.
  *
- * Named parties: caller (push-time resolution / dev tools) ↔ adapter
+ * Named parties: caller (render-time resolution / dev tools) ↔ adapter
  * (deployment-specific descriptor backing store, e.g., JSON, DynamoDB,
  * in-memory).
  *
@@ -66,7 +66,7 @@ import type { GadgetDescriptor } from '@ggui-ai/protocol';
  *     returning `[]` is forbidden (it would mask broken catalogs).
  *
  * Failure mode: thrown error propagates to caller. Caller decides
- * whether to fail the push (strict) or fall back to a default set
+ * whether to fail the render (strict) or fall back to a default set
  * (lenient).
  *
  * Observable violation: caller observes a thrown error or a
@@ -142,7 +142,7 @@ class InMemoryGadgetCatalogWithFallback extends InMemoryGadgetCatalog {
  * Decorator adapter — wraps any {@link GadgetCatalogAdapter} with
  * per-appId TTL caching + single-flight deduplication. Right for
  * production paths where the inner adapter hits DynamoDB / a registry
- * service and per-push fetches would dominate latency.
+ * service and per-render fetches would dominate latency.
  *
  * Concurrent `list(appId)` calls during a cache miss share ONE
  * inflight Promise — no thundering herd against the inner adapter.

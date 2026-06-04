@@ -444,7 +444,7 @@ function resolveModuleName(
     if (resolvedPath) return resolved(resolvedPath);
   }
 
-  // Third-party gadget wrapper packages. The push handler fetches each
+  // Third-party gadget wrapper packages. The render handler fetches each
   // non-stdlib gadget's `.d.ts` and `typecheck` overlays it at
   // `node_modules/<package>/index.d.ts`. A generated direct import
   // `import { useX } from '<package>'` resolves through this
@@ -546,7 +546,7 @@ export async function typecheck(
   code: string,
   /**
    * A `package -> .d.ts content` map for third-party gadget wrappers.
-   * The push handler parallel-fetches each non-stdlib gadget's `.d.ts`
+   * The render handler parallel-fetches each non-stdlib gadget's `.d.ts`
    * (via `GadgetDescriptor.typesUrl` + SRI) and threads the result
    * here. Each entry is overlaid into the per-call VFS at
    * `node_modules/<package>/index.d.ts`. A generated direct import

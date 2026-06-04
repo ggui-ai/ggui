@@ -27,7 +27,7 @@
  *   - `initializing` — legacy alias for `idle`.
  *   - `connecting` — ui/initialize fired or WS handshake in flight.
  *   - `connected` — first ack landed + every subsequent successful
- *     push.
+ *     render.
  *   - `reconnecting` — WS dropped; reconnect ladder running.
  *   - `disconnected` — terminal close + ladder exhausted.
  *   - `upgrade-required` — version handshake failed.
@@ -61,24 +61,24 @@ export interface StatusRefs {
 }
 
 /**
- * Build the React mount target. Reuses pre-existing `[data-ggui-stack]`
- * if the shell already wrote one (cf. `buildSelfContainedShell`); else
- * creates a fresh `<ul data-ggui-stack>` and appends it to `<body>`.
- * The companion `status` element is created detached and never
- * appended — consumers that still pass it through `StatusRefs` see no
- * visible effect.
+ * Build the React mount target. Reuses a pre-existing
+ * `[data-ggui-render-root]` if one was already written; else creates a
+ * fresh `<ul data-ggui-render-root>` and appends it to `<body>`. The
+ * companion `status` element is created detached and never appended —
+ * consumers that still pass it through `StatusRefs` see no visible
+ * effect.
  *
  * The `<ul>` element name is preserved (legacy from the stack-of-N
  * placeholder render path) but only ever holds a single React mount
  * subtree post-stack-removal.
  */
 export function ensureStatusDom(doc: Document): StatusRefs {
-  const existingRoot = doc.querySelector<HTMLElement>('[data-ggui-stack]');
+  const existingRoot = doc.querySelector<HTMLElement>('[data-ggui-render-root]');
   const renderRoot =
     existingRoot ??
     (() => {
       const el = doc.createElement('ul');
-      el.setAttribute('data-ggui-stack', '');
+      el.setAttribute('data-ggui-render-root', '');
       doc.body.appendChild(el);
       return el;
     })();
@@ -111,7 +111,7 @@ export function setStatus(
  * Log the "connected" transition. Post-stack-removal the iframe always
  * holds exactly one item; the message stays bare ("Connected.") since
  * there's no count to surface. Consumers (devtools, e2e specs
- * intercepting `console.log`) get a stable string on every push.
+ * intercepting `console.log`) get a stable string on every render.
  */
 export function setConnectedStatus(refs: StatusRefs): void {
   setStatus(refs, 'Connected.', 'connected');

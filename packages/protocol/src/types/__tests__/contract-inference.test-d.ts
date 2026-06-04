@@ -493,7 +493,7 @@ type _CSS_NonKey = Expect<Equal<InferContextValue<CSS, 'nonexistent'>, never>>;
 
 // ── 10.3 Slot WITHOUT schema (defensive) → `unknown` value ──────────────────
 // `ContextEntry.schema` is required at the runtime contract layer
-// (push-time validator rejects schemaless slots). Pin the inference
+// (render-time validator rejects schemaless slots). Pin the inference
 // fallback against a hand-built shape to verify the conditional's
 // `S[N] extends { schema: ... }` branch falls through to `unknown`
 // rather than blowing up — defensive lock, not a real authoring path.

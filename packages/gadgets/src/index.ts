@@ -25,7 +25,7 @@
  * Also exports the wrapper-author SDK — `defineGadgetPackage` (general
  * builder for hook and/or component gadget packages) and
  * `createGguiGadget` (single-hook convenience) — plus the catalog
- * adapter port for push-time descriptor resolution.
+ * adapter port for render-time descriptor resolution.
  *
  * Re-exports the runtime types (`GadgetHook`,
  * `GadgetStatus`, `GadgetError`) so component code in the UI-generator

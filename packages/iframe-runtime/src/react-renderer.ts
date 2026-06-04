@@ -309,7 +309,7 @@ export interface ReactRootMountOptions {
   readonly renderWrapper?: (mountedComponent: ReactNode) => ReactNode;
   /**
    * Bare npm package names of the operator-registered 3rd-party gadget
-   * packages reachable in this session (GG.8.2). Forwarded to
+   * packages reachable in this render (GG.8.2). Forwarded to
    * `rewriteImports` so each direct gadget import resolves to its
    * per-package data-URL shim. Sourced from the bootstrap's `gadgets`
    * channel; `@ggui-ai/gadgets` (STDLIB) is always rewritten and need

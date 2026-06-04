@@ -8,13 +8,13 @@
  *   - Multi-subscriber fanout — every live subscriber sees every frame.
  *   - Publish-before-subscribe semantics — frames published before
  *     subscribe-return MAY be missed; frames published after MUST arrive.
- *   - Concurrent producers for the same session interleave without loss.
- *   - `close(sessionId)` drains all subscribers cleanly (iterator ends).
+ *   - Concurrent producers for the same render interleave without loss.
+ *   - `close(renderId)` drains all subscribers cleanly (iterator ends).
  *   - Consumer abandoning the iterator unregisters the subscriber
  *     (observable via `subscriberCount` when implementations expose it;
  *     the contract is enforced via a close-after-drop round-trip).
- *   - Session isolation — `publish({renderId: A})` never delivers to a
- *     subscriber of session B.
+ *   - Render isolation — `publish({renderId: A})` never delivers to a
+ *     subscriber of render B.
  */
 import { describe, expect, it } from 'vitest';
 import type { StreamFanout } from '../stream-fanout.js';
@@ -123,11 +123,11 @@ export function streamFanoutContract(
       await fanout.close('s1');
     });
 
-    it('session isolation — publish to A does not reach subscribers of B', async () => {
+    it('render isolation — publish to A does not reach subscribers of B', async () => {
       const fanout = await makeFanout();
       const iterB = fanout.subscribe('sB')[Symbol.asyncIterator]();
       const primed = iterB.next();
-      // Publish to a different session; iterB must still be pending.
+      // Publish to a different render; iterB must still be pending.
       await fanout.publish({
         renderId: 'sA',
         envelope: makeEnvelope('sA', 1),
@@ -145,7 +145,7 @@ export function streamFanoutContract(
       await fanout.close('sB');
     });
 
-    it('concurrent producers to one session — no frame loss, count matches', async () => {
+    it('concurrent producers to one render — no frame loss, count matches', async () => {
       const fanout = await makeFanout();
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
       // Prime with a sentinel seq=0 so we know the subscriber is live.
@@ -182,7 +182,7 @@ export function streamFanoutContract(
       await fanout.close('s1');
     });
 
-    it('close(sessionId) drains all subscribers — iterator ends cleanly', async () => {
+    it('close(renderId) drains all subscribers — iterator ends cleanly', async () => {
       const fanout = await makeFanout();
       const iterA = fanout.subscribe('s1')[Symbol.asyncIterator]();
       const iterB = fanout.subscribe('s1')[Symbol.asyncIterator]();
@@ -195,7 +195,7 @@ export function streamFanoutContract(
       expect(rb.done).toBe(true);
     });
 
-    it('close(sessionId) is idempotent', async () => {
+    it('close(renderId) is idempotent', async () => {
       const fanout = await makeFanout();
       await expect(fanout.close('never-subscribed')).resolves.toBeUndefined();
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
@@ -217,7 +217,7 @@ export function streamFanoutContract(
       // Abandon the iterator explicitly.
       await iter.return?.();
       // Subsequent publishes must not keep state pinned — the best
-      // observable proof here is that close() on a session with no live
+      // observable proof here is that close() on a render with no live
       // subscribers is still a no-op (and publishes after return don't
       // throw). This is a smoke-level check; impl-specific tests can go
       // deeper via e.g. subscriberCount().

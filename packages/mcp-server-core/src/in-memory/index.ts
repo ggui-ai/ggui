@@ -51,7 +51,7 @@ export type { InMemoryQuotaStoreOptions } from './quota-store.js';
 export { NoopRateLimiter, FixedWindowRateLimiter } from './rate-limiter.js';
 export type { FixedWindowRateLimiterOptions } from './rate-limiter.js';
 
-// shortCode → session lookup.
+// shortCode → render lookup.
 export { InMemoryShortCodeIndex } from './short-code-index.js';
 
 // Scoped blob storage seam reference.

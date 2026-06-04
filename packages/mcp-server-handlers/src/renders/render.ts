@@ -43,7 +43,7 @@
  * Post-Phase-B (flatten-render-identity): the prior
  * `{sessionId, stackItemId}` pair collapsed to a single `renderId`. The
  * outbound `_meta` collapsed from two slices
- * (`ai.ggui/render` + `ai.ggui/render`) to one (`ai.ggui/render`).
+ * (`ai.ggui/session` + `ai.ggui/stack-item`) to one (`ai.ggui/render`).
  */
 
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -628,7 +628,7 @@ export interface GguiRenderHandlerDeps {
   readonly channelNotifier?: ChannelNotifier;
 
   /**
-   * Canvas-mode lifecycle emitter. Fires `push_started` on the
+   * Canvas-mode lifecycle emitter. Fires `render_started` on the
    * `_ggui:lifecycle` channel right after renderId is minted so the
    * canvas animator transitions from `ready`/`handshake` to
    * `constructing` immediately — without waiting for the final commit
@@ -1084,18 +1084,18 @@ export function createGguiRenderHandler(
         intent: truncateCacheTraceIntent(storedInput.intent),
         expectedKey: handshakeRecord.suggestion.blueprintMeta.contractHash,
         threshold: 0,
-        decision: 'push-classify',
+        decision: 'render-classify',
         candidates: [],
         agentClassification:
           acceptanceClassification === 'accept' ? 'confirm' : 'override',
         reason:
           acceptanceClassification === 'accept'
-            ? `push-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}${
+            ? `render-classify: agent accepted handshake suggestion (origin=${handshakeRecord.suggestion.origin}${
                 handshakeRecord.suggestion.blueprintMeta.blueprintId
                   ? `, blueprintId=${handshakeRecord.suggestion.blueprintMeta.blueprintId}`
                   : ''
               })`
-            : `push-classify: agent overrode handshake suggestion with a fresh draft`,
+            : `render-classify: agent overrode handshake suggestion with a fresh draft`,
       });
 
       // Effective story for the rest of the handler.
@@ -1374,18 +1374,11 @@ export function createGguiRenderHandler(
       // flight; on success/failure we tear down preview via
       // `finalizeProvisionalPreview` and the authoritative render is
       // the final state.
-      // Provisional-preview's surface still uses `sessionId` +
-      // `stackItemId` as field names; post-Phase-B both positions
-      // carry the same `renderId` (every render IS the addressable
-      // row). Renaming the provisional-preview surface is sibling-
-      // owned (the file's pre-existing `HandleStreamEnvelope`
-      // mismatches at 440/576 show that rename is already in flight
-      // there).
       const previewGate = evaluateProvisionalPreviewGate(
         deps.provisionalPreview,
         {
           story,
-          isMcpAppsPush: false,
+          isMcpAppsRender: false,
         },
         { appId: ctx.appId, renderId },
       );
@@ -2229,7 +2222,7 @@ export function createGguiRenderHandler(
  * `Render.expiresAt` field of the wire shape (which the store may
  * overwrite at commit time anyway). 1 hour matches the InMemoryStore
  * default — anything longer would surprise tests that pin TTL
- * semantics; anything shorter would close active renders mid-session.
+ * semantics; anything shorter would close active renders mid-lifecycle.
  */
 const DEFAULT_RENDER_TTL_MS = 60 * 60 * 1000;
 

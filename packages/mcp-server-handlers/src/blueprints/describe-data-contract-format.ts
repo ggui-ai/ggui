@@ -215,7 +215,7 @@ version pin. Per-export registry metadata (\`permission\`, \`example\`)
 and transport fields (\`bundleUrl\`,
 \`bundleSri\`, …) likewise live on the operator-registered gadget
 package descriptor — NOT on the wire. The renderer resolves them
-server-side from the app's gadget catalog at push time (e.g. a hook's
+server-side from the app's gadget catalog at render time (e.g. a hook's
 browser \`permission\` flows into the iframe's Permissions-Policy
 directive set from there).
 

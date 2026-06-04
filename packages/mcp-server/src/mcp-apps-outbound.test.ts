@@ -230,7 +230,7 @@ describe('end-to-end outbound flow', () => {
   });
 
   it('ggui_render returns structuredContent without bootstrap fields, and ai.ggui/render slice meta with them', async () => {
-    const result = await handshakeAndRender(client, 'test push');
+    const result = await handshakeAndRender(client, 'test render');
 
     // structuredContent is model-facing — bootstrap fields must NOT appear.
     const sc = result.structuredContent as Record<string, unknown>;
@@ -266,10 +266,10 @@ describe('end-to-end outbound flow', () => {
 
   it('ggui_render declaration exposes _meta.ui.resourceUri on tools/list', async () => {
     const resp = await client.listTools();
-    const push = resp.tools.find((t) => t.name === 'ggui_render');
-    expect(push).toBeDefined();
-    expect(push?._meta).toBeDefined();
-    const meta = push?._meta as {
+    const renderTool = resp.tools.find((t) => t.name === 'ggui_render');
+    expect(renderTool).toBeDefined();
+    expect(renderTool?._meta).toBeDefined();
+    const meta = renderTool?._meta as {
       ui?: { resourceUri?: string; visibility?: string[] };
     };
     expect(meta.ui?.resourceUri).toBe(GGUI_RENDER_RESOURCE_URI);
@@ -589,7 +589,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     ws.close();
   });
 
-  it('rejects a bootstrap token bound to a different session', async () => {
+  it('rejects a bootstrap token bound to a different render', async () => {
     const bootstrap = await mintRenderBootstrap();
     const ws = new WebSocket(
       `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
@@ -611,7 +611,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
         JSON.stringify({
           type: 'subscribe',
           payload: {
-            renderId: 'different-session',
+            renderId: 'different-render',
             appId: bootstrap.appId,
             wsToken: bootstrap.token,
           },

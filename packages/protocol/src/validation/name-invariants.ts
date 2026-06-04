@@ -47,7 +47,7 @@ import {
  * Stable error code for collisions across the three inbound spec maps
  * (`actionSpec` / `streamSpec` / `contextSpec`). The boilerplate
  * generator emits identifiers from these keys; a collision is an
- * author bug that the protocol catches at push.
+ * author bug that the protocol catches at render.
  */
 export const CTR_DUP_NAME = 'CTR_DUP_NAME';
 
@@ -165,7 +165,7 @@ export function checkNameInvariants(
 /**
  * Throwable form of {@link checkNameInvariants}. Use at protocol
  * boundaries where a name collision or reserved-namespace use is a
- * contract bug the caller must fix (push handler, blueprint
+ * contract bug the caller must fix (render handler, blueprint
  * registration).
  *
  * Carries the full violation list so error renderers can show every
@@ -189,7 +189,7 @@ export class NameInvariantError extends Error {
  * Throw-on-violation wrapper around {@link checkNameInvariants}.
  * No-op when the contract's names are consistent.
  *
- * Designed to slot alongside `assertCrossReferences` at push time:
+ * Designed to slot alongside `assertCrossReferences` at render time:
  * cross-reference invariants catch dangling pointers between specs;
  * name invariants catch malformed name spaces within specs. Both
  * surface author-recoverable failures before any state mutation.

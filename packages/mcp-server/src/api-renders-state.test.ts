@@ -1,21 +1,21 @@
 /**
  * Tests for `GET /api/renders/:renderId/state?wsToken=<token>` — the
- * R6 wsToken-gated snapshot read of the current session state.
+ * R6 wsToken-gated snapshot read of the current render state.
  *
  * # Auth surface
  *
  * wsToken-gated (R5 retired the earlier `/r/<shortCode>` shortCode-gated
- * surface entirely; this is now the only HTTP read path for session
+ * surface entirely; this is now the only HTTP read path for render
  * state).
  *
  * # What this proves
  *
  *   - Happy path: 200 + slice envelope with `lastSequence` stamped on
- *     the session slice.
+ *     the render slice.
  *   - Auth gates: 401 on missing/invalid/wrong-scope wsToken, 410 on
- *     expired, 404 on missing session.
- *   - Slice projection: top renderable stack item flows through the
- *     same `deriveRenderMeta` helper push uses, so polling clients
+ *     expired, 404 on missing render.
+ *   - Slice projection: top renderable render flows through the
+ *     same `deriveRenderMeta` helper render uses, so polling clients
  *     see the same render shape regardless of entry point.
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser).
@@ -59,29 +59,29 @@ interface Fixture {
   validClaims: WsTokenClaims;
 }
 
-async function bootWithSession(opts?: {
+async function bootWithRender(opts?: {
   readonly withRender?: boolean;
   readonly componentCode?: string;
   readonly props?: JsonObject;
 }): Promise<Fixture> {
   const renderStore = new InMemoryRenderStore();
-  const session = await renderStore.create({ appId: 'app-state-test' });
+  const stored = await renderStore.create({ appId: 'app-state-test' });
   if (opts?.withRender) {
     const now = Date.now();
     await renderStore.commit({
       render: {
-        id: session.id,
-        appId: session.appId,
+        id: stored.id,
+        appId: stored.appId,
         type: 'component',
         componentCode:
           opts.componentCode ?? 'export default function X(){return null}',
         props: opts.props ?? { count: 0 },
-        eventSequence: session.eventSequence,
+        eventSequence: stored.eventSequence,
         createdAt: now,
         lastActivityAt: now,
         expiresAt: now + 60_000,
       },
-      appId: session.appId,
+      appId: stored.appId,
     });
   }
   const shortCodeIndex = new InMemoryShortCodeIndex();
@@ -102,15 +102,15 @@ async function bootWithSession(opts?: {
     throw new Error('server.address() did not return AddressInfo');
   }
   const { token, claims } = mintWsToken(
-    { renderId: session.id, appId: session.appId },
+    { renderId: stored.id, appId: stored.appId },
     SECRET,
   );
   return {
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    renderId: session.id,
-    appId: session.appId,
+    renderId: stored.id,
+    appId: stored.appId,
     validToken: token,
     validClaims: claims,
   };
@@ -126,7 +126,7 @@ describe('GET /api/renders/:renderId/state', () => {
   });
 
   it('returns 200 + slice envelope with lastSequence stamped on happy path', async () => {
-    fx = await bootWithSession({ withRender: true });
+    fx = await bootWithRender({ withRender: true });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
     );
@@ -150,13 +150,13 @@ describe('GET /api/renders/:renderId/state', () => {
   });
 
   it('returns 401 when wsToken query is absent', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const res = await fetch(`${fx.url}/api/renders/${fx.renderId}/state`);
     expect(res.status).toBe(401);
   });
 
   it('returns 401 when wsToken signature is invalid', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/state?wsToken=tampered.payload`,
     );
@@ -164,7 +164,7 @@ describe('GET /api/renders/:renderId/state', () => {
   });
 
   it('returns 410 Gone when wsToken is expired', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     // Mint with negative TTL to force expiry; the verify path bails on
     // `exp <= now` (line 314 of ws-tokens.ts).
     const { token: expiredToken } = mintWsToken(
@@ -182,21 +182,21 @@ describe('GET /api/renders/:renderId/state', () => {
   });
 
   it('returns 401 when wsToken renderId does not match URL renderId', async () => {
-    fx = await bootWithSession();
-    // Mint a token for a different session; the URL targets fx.renderId
+    fx = await bootWithRender();
+    // Mint a token for a different render; the URL targets fx.renderId
     // but the token claims a different renderId — tenancy gate trips.
-    const { token: otherSessionToken } = mintWsToken(
-      { renderId: 'other-session', appId: fx.appId },
+    const { token: otherRenderToken } = mintWsToken(
+      { renderId: 'other-render', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherSessionToken)}`,
+      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherRenderToken)}`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 401 when wsToken appId does not match session appId', async () => {
-    fx = await bootWithSession();
+  it('returns 401 when wsToken appId does not match render appId', async () => {
+    fx = await bootWithRender();
     const { token: otherAppToken } = mintWsToken(
       { renderId: fx.renderId, appId: 'other-app' },
       SECRET,
@@ -208,8 +208,8 @@ describe('GET /api/renders/:renderId/state', () => {
   });
 
   it('returns 404 when renderId does not resolve', async () => {
-    fx = await bootWithSession();
-    // Mint a token for a session that does not exist in the store.
+    fx = await bootWithRender();
+    // Mint a token for a render that does not exist in the store.
     const { token: ghostToken } = mintWsToken(
       { renderId: 'sess-ghost', appId: fx.appId },
       SECRET,

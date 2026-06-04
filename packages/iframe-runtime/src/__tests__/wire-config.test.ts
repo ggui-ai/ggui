@@ -121,7 +121,7 @@ describe('buildRootWireConfig — active actionSpec resolution', () => {
   it('reads the active render\'s actionSpec on every dispatch (not snapshotted)', () => {
     // Mutate the render reference returned by `getCurrentRender` to
     // simulate a props_update / re-mount that replaces actionSpec
-    // mid-session. The wire config MUST see the new spec without
+    // mid-render. The wire config MUST see the new spec without
     // being rebuilt.
     const { send, messages } = makeFakeManager();
     let activeRender: Render = makeRender('render_001', {

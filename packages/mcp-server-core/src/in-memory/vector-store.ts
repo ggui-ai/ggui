@@ -88,7 +88,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
   // Clamp to [-1, 1] to absorb floating-point drift. Identical
   // unit-norm vectors produce `dot/mag = 1 + ε` on some architectures
   // (observed with MockEmbeddingProvider's sine/cosine basis), and
-  // downstream consumers (e.g. `pushOutputSchema.cache.similarity`
+  // downstream consumers (e.g. `renderOutputSchema.cache.similarity`
   // and `handshakeOutputSchema.match.confidence`) enforce `.max(1)`
   // via zod. Without this clamp a legitimate identity match fails
   // wire validation. The mathematical contract for cosine is already

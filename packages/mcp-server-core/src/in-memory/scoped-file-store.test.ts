@@ -16,7 +16,7 @@ describe('InMemoryScopedFileStoreRegistry — impl-specific', () => {
     expect(reg.liveEntryCount()).toBe(0);
 
     await reg.app('A').put('a', '1');
-    await reg.session('s1').put('b', '2');
+    await reg.render('s1').put('b', '2');
     await reg.userApp('u1', 'A').put('c', '3');
     await reg.crossAppUser('u1').put('d', '4');
     expect(reg.liveEntryCount()).toBe(4);
@@ -29,7 +29,7 @@ describe('InMemoryScopedFileStoreRegistry — impl-specific', () => {
   it('TTL eviction is observed at read time (lazy)', async () => {
     let now = 0;
     const reg = new InMemoryScopedFileStoreRegistry(() => now);
-    const store = reg.session('s1');
+    const store = reg.render('s1');
 
     await store.put('ephemeral', 'v', { ttlSec: 10 });
     expect(await store.getString('ephemeral')).toBe('v');
@@ -52,7 +52,7 @@ describe('InMemoryScopedFileStoreRegistry — impl-specific', () => {
 
   it('getRange honors clamped end on a partial read', async () => {
     const reg = new InMemoryScopedFileStoreRegistry();
-    const store = reg.session('s1');
+    const store = reg.render('s1');
     await store.put('blob', 'abcdefghij'); // length 10
     const slice = await store.getRange('blob', 0, 100); // end past length
     expect(slice).not.toBeNull();

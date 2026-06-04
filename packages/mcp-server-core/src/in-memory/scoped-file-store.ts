@@ -240,10 +240,10 @@ export class InMemoryScopedFileStoreRegistry
     return new InMemoryScopedFileStoreImpl(this.storage, `apps/${appId}/`);
   }
 
-  session(sessionId: string): ScopedFileStore {
+  render(renderId: string): ScopedFileStore {
     return new InMemoryScopedFileStoreImpl(
       this.storage,
-      `sessions/${sessionId}/`,
+      `renders/${renderId}/`,
     );
   }
 

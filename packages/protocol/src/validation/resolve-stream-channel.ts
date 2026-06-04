@@ -23,7 +23,7 @@
  * Returns `undefined` for two distinct cases, both of which are
  * "nothing to enforce" at call sites:
  *
- *   - `spec === undefined` — the stack item has no stream contract.
+ *   - `spec === undefined` — the render has no stream contract.
  *   - `spec.channels[channelName]` is missing — the channel isn't
  *     declared. Callers MUST NOT assume this means "permissive";
  *     rejection is the downstream responsibility of
@@ -77,8 +77,8 @@ export interface ResolvedStreamChannel {
  * (`mode` / `replay` / `complete`) are filled with their locked
  * defaults.
  *
- * @param spec        The active stack item's stream contract, or undefined
- *                    when the item has no `streamSpec` at all.
+ * @param spec        The active render's stream contract, or undefined
+ *                    when the render has no `streamSpec` at all.
  * @param channelName The channel name to resolve — typically read
  *                    from the outbound envelope's `channel` field.
  * @returns `ResolvedStreamChannel` when the channel is declared;

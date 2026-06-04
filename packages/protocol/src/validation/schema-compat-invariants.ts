@@ -263,7 +263,7 @@ export class SchemaCompatInvariantError extends Error {
  * agentCapabilities catalog.
  *
  * Slots alongside `assertCrossReferences` + `assertNameInvariants`
- * at push time. Different scope from the server-level
+ * at render time. Different scope from the server-level
  * `SchemaCompatError` thrown by `checkRenderSchemaCompat` in
  * `@ggui-ai/mcp-server`: this check uses ONLY the contract's own
  * catalog; the server-level check uses the runtime tool registry.

@@ -13,14 +13,14 @@
  *   - READ-ONLY mount. No live-channel subscription, no actionSpec
  *     dispatch, no render mutation. A blueprint is the static
  *     artifact; the operator or agent wraps it in richer context
- *     elsewhere (the dev chat, a pushed render) when interactivity
+ *     elsewhere (the dev chat, a committed render) when interactivity
  *     is needed.
  *   - Error shapes mirror the RenderViewer's: 404 (id unknown),
  *     4xx/5xx (server error), network fail (raw message).
  *
  * Visual shell follows the brand kit (same as `RenderViewer`): one
  * section head, a pane-style header for blueprint identity + content
- * type, and the mount card stamping `data-ggui-stack-entry="component"`
+ * type, and the mount card stamping `data-ggui-render-entry="component"`
  * + `data-ggui-code-ready="true"` + `data-ggui-blueprint-id` — a
  * stable anchor contract browser specs target across console surfaces.
  */
@@ -131,7 +131,7 @@ export function BlueprintViewer({
 
 /**
  * Mount card — wraps `RenderRenderer` in the canonical
- * `data-ggui-stack-entry="component"` shell. Reusing this data-attr
+ * `data-ggui-render-entry="component"` shell. Reusing this data-attr
  * contract across console surfaces lets browser specs target one
  * selector against both in-process and blueprint mounts.
  *
@@ -153,7 +153,7 @@ function BlueprintMount({
 }): ReactElement {
   return (
     <section
-      data-ggui-stack-entry="component"
+      data-ggui-render-entry="component"
       data-ggui-code-ready="true"
       data-ggui-blueprint-id={blueprint.blueprintId}
       className="ggui-pane"

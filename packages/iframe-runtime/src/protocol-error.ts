@@ -1,14 +1,14 @@
 /**
  * `ProtocolError` typed union — canonical shape for every error the
  * renderer surfaces OUTWARD: to the host page via postMessage, to the
- * session via the `_ggui:contract-error` channel, and to the
+ * render via the `_ggui:contract-error` channel, and to the
  * in-iframe status DOM.
  *
  * The transport wiring around this union:
  *
  *   - `postMessage({type:'ggui:protocol-error', error})` for every
  *     boot-path failure; the `_ggui:contract-error` envelope on the
- *     live channel for session-bound failures.
+ *     live channel for render-bound failures.
  *   - `<McpAppIframe onError={(err: ProtocolError) => …}>` surfaces
  *     these to embedding apps.
  *
@@ -91,7 +91,7 @@ export type BootstrapFailureReason =
  *                    `RENDER_NOT_FOUND` / `TOKEN_EXPIRED` /
  *                    `AUTH_REJECTED` — all terminal; hosts typically
  *                    escalate to a login flow.
- *   - `protocol`   — envelope / session-mismatch failures post-handshake.
+ *   - `protocol`   — envelope / render-mismatch failures post-handshake.
  *                    Extensibly-closed on `code` because servers may
  *                    introduce new codes without a client bump.
  *                    `details` carries opaque structured context.
@@ -131,7 +131,7 @@ export type ProtocolError =
  * This is OPTIONAL on every emitter site — the default is a tagged
  * `console.warn` so operators see the error in dev. The
  * `<McpAppIframe>` host wrapper bridges this to its `onError` prop;
- * session-bound variants are ALSO routed to the
+ * render-bound variants are ALSO routed to the
  * `_ggui:contract-error` envelope over the WebSocket.
  *
  * Handlers MUST NOT throw — the emitter already fired the renderer's
@@ -143,7 +143,7 @@ export type ProtocolErrorEmitter = (err: ProtocolError) => void;
 
 /**
  * Default emitter — operator-visible `console.warn` with a grep-
- * friendly tag. Identical posture to `GguiSession.surfaceContractViolation`'s
+ * friendly tag. Identical posture to `GguiRender.surfaceContractViolation`'s
  * console.warn fallback. Callers override by injecting their own.
  */
 export function defaultProtocolErrorEmitter(err: ProtocolError): void {
@@ -164,7 +164,7 @@ export function defaultProtocolErrorEmitter(err: ProtocolError): void {
  *
  * Client-side violations do NOT ride the server-emitted
  * `_ggui:contract-error` envelope — that shape (`ContractErrorPayload`)
- * is tool-failure-scoped and authored by the session-channel router.
+ * is tool-failure-scoped and authored by the render-channel router.
  * A client-side violation is a DIFFERENT category: nothing reached the
  * tool. We surface it as `{kind: 'protocol'; code:
  * 'CLIENT_CONTRACT_VIOLATION'}` with structured `details` so hosts can

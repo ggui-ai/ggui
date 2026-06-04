@@ -371,11 +371,11 @@ describe('connectViaRegistry — onProtocolError', () => {
       type: 'error',
       payload: {
         code: 'RENDER_NOT_FOUND',
-        message: 'no session',
+        message: 'no render',
       },
     });
 
-    await expect(promise).rejects.toThrow('no session');
+    await expect(promise).rejects.toThrow('no render');
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (!authErr || authErr.kind !== 'auth') throw new Error('unreachable');

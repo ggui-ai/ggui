@@ -1,6 +1,6 @@
 /**
  * `fetchGadgetTypes` — handler-side parallel fetch of every
- * registered gadget's `.d.ts` declaration file. Runs at push time,
+ * registered gadget's `.d.ts` declaration file. Runs at render time,
  * after `filterDescriptorsToContract` has resolved the descriptor
  * sidecar.
  *
@@ -23,7 +23,7 @@
  *     with `bundleSri`.
  *   - Throws {@link GadgetTypesFetchError} on any fetch failure or SRI
  *     mismatch. No silent degradation — a missing `.d.ts` means the
- *     sandbox can't typecheck against the wrapper, so the push fails
+ *     sandbox can't typecheck against the wrapper, so the render fails
  *     loud and the agent retries.
  */
 
@@ -33,7 +33,7 @@ import { STDLIB_GADGETS_PACKAGE } from '@ggui-ai/protocol';
 
 /**
  * Thrown when a gadget `.d.ts` cannot be fetched or fails SRI
- * verification. Carries the offending package + reason so the push
+ * verification. Carries the offending package + reason so the render
  * handler can surface an actionable error to the agent.
  */
 export class GadgetTypesFetchError extends Error {

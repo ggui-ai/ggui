@@ -4,7 +4,7 @@
  *
  * **Why centralize.** The `schemaVersion` forward-compat stamp is
  * emitted from many producer sites (wire helper, React-SDK emit
- * paths, OSS in-memory stream buffer, session-channel contract-error
+ * paths, OSS in-memory stream buffer, renderChannel contract-error
  * router, hosted server paths). Spreading stamp logic across N sites
  * causes drift — producers silently skip the stamp. These builders
  * remove the drift surface by giving every producer a single function
@@ -200,7 +200,7 @@ export function makeErrorPayload(parts: MakeErrorPayloadInput): ErrorPayload {
  * to {@link PROTOCOL_SCHEMA_VERSION} unless the caller overrides.
  *
  * Filters `undefined` optional fields so the emitted payload keeps
- * byte-equivalence with the pre-refactor session-channel router
+ * byte-equivalence with the pre-refactor renderChannel router
  * code.
  */
 export function makeContractErrorPayload(

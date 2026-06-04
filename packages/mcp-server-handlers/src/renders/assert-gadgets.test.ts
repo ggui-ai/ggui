@@ -204,7 +204,7 @@ describe('assertGadgetsRegistered', () => {
     }
   });
 
-  // Slice GG.5 — when a push hits multiple miss categories at once,
+  // Slice GG.5 — when a render hits multiple miss categories at once,
   // the gate throws the most fundamental one first: an unknown hook
   // name can't be acted on as a "wrong package" message. The
   // lower-priority misses ride on `secondary` so the author fixes
@@ -366,7 +366,7 @@ describe('filterDescriptorsToContract', () => {
   });
 
   it('drops refs whose package has no matching descriptor', () => {
-    // The push-time `assertGadgetsRegistered` gate rejects this case
+    // The render-time `assertGadgetsRegistered` gate rejects this case
     // before the resolver runs, but a silent drop here keeps the
     // happy path total — see `resolve-contract-gadgets.ts`.
     const contract: DataContract = {

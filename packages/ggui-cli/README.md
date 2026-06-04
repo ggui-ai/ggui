@@ -32,7 +32,7 @@ To declare a project (blueprints, primitives, theme, agent entry), drop a `ggui.
 
 ### `ggui serve`
 
-Run the OSS self-hosted personal-mode server: MCP at `/mcp`, session viewer at `/s/<shortCode>`, pairing endpoints, and a live-channel WebSocket. Supervises the agent declared in `ggui.json#agent.entry`.
+Run the OSS self-hosted personal-mode server: MCP at `/mcp`, render viewer at `/s/<shortCode>`, pairing endpoints, and a live-channel WebSocket. Supervises the agent declared in `ggui.json#agent.entry`.
 
 ```bash
 ggui serve                          # default: http://127.0.0.1:6781
@@ -67,7 +67,7 @@ Start the local UI registry + compile-on-demand dev hub, optionally supervising 
 
 Set `protocol` to the value of `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version you install (or omit the field — the CLI will fall back to the installed protocol version).
 
-Optional blocks include `storage` (sessions / vectors / threads via `memory` or `sqlite`), `primitives`, `theme`, `adapters`, and `blueprints`. See [`@ggui-ai/project-config`](../project-config) for the full schema.
+Optional blocks include `storage` (renders / vectors / threads via `memory` or `sqlite`), `primitives`, `theme`, `adapters`, and `blueprints`. See [`@ggui-ai/project-config`](../project-config) for the full schema.
 
 ## MCP config for your agent runtime
 

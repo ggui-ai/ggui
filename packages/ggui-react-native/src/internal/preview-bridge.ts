@@ -39,7 +39,7 @@ const listeners = new Set<PreviewBridgeListener>();
  * Broadcast a delivery to every subscriber. Called from the
  * `GguiRender` data-message handler after any reserved-channel
  * bypass / streamSpec validation has run — subscribers see only
- * envelopes the session decided to forward.
+ * envelopes the render decided to forward.
  */
 export function emitPreviewBridge(envelope: StreamEnvelope): void {
   // Copy the listener set before iterating so a listener that

@@ -7,12 +7,12 @@
  * Exercises the routes end-to-end against a real mock MCP source server
  * (spun up with `@modelcontextprotocol/sdk/server` + Streamable HTTP
  * transport). The ggui server's `ConnectorRegistry` points at the mock;
- * stack items are seeded directly into the session store; and HTTP
+ * renders are seeded directly into the render store; and HTTP
  * requests go through the canonical proxy plumbing.
  *
  * What's covered:
  *   - resource proxy: happy path, 400/404/502 error paths, CSP composition,
- *     inline `resourceContent` bypass, unknown connector, wrong stack-item
+ *     inline `resourceContent` bypass, unknown connector, wrong render
  *     variant, MIME passthrough.
  *   - tools/call proxy: happy path, 400 missing-field, 404 item/tool-not-found,
  *     403 visibility denial for model-only tools, cross-connector rejection
@@ -191,7 +191,7 @@ async function bootMockSource(): Promise<MockSourceFixture> {
 
 /**
  * Small helper that mounts `/mcp-apps/*` on a fresh Express app, with
- * the session store + connector registry pre-seeded for the test.
+ * the render store + connector registry pre-seeded for the test.
  */
 interface InboundFixture {
   app: Express;
@@ -245,7 +245,7 @@ async function bootInbound(options?: {
 }
 
 /** Seeds an `McpAppsRender` row. */
-async function seedMcpAppsSession(
+async function seedMcpAppsRender(
   store: InMemoryRenderStore,
   overrides?: Partial<McpAppsRender>,
 ): Promise<{ renderId: string; item: McpAppsRender }> {
@@ -275,7 +275,7 @@ describe('GET /mcp-apps/resource', () => {
   });
 
   it('returns the source-resolved HTML on the happy path', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await fetch(
       `${fx.httpBase}/mcp-apps/resource?render=${renderId}&item=${item.id}`,
     );
@@ -287,8 +287,8 @@ describe('GET /mcp-apps/resource', () => {
     expect(body).toContain('data-mock-source');
   });
 
-  it('composes CSP header from the stack item csp metadata', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore, {
+  it('composes CSP header from the render csp metadata', async () => {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore, {
       csp: {
         connectDomains: ['https://api.mock.example'],
         resourceDomains: ['https://cdn.mock.example'],
@@ -307,8 +307,8 @@ describe('GET /mcp-apps/resource', () => {
     expect(csp).toContain("frame-src 'self' https://frame.mock.example");
   });
 
-  it('omits the CSP header when the stack item declares none', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+  it('omits the CSP header when the render declares none', async () => {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await fetch(
       `${fx.httpBase}/mcp-apps/resource?render=${renderId}&item=${item.id}`,
     );
@@ -319,7 +319,7 @@ describe('GET /mcp-apps/resource', () => {
   });
 
   it('serves inline resourceContent without hitting the source server', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore, {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore, {
       resourceContent: '<html><body data-inline>inline</body></html>',
     });
     const countBefore = fx.source.toolsListCount();
@@ -342,7 +342,7 @@ describe('GET /mcp-apps/resource', () => {
     expect(r1.status).toBe(400);
   });
 
-  it('returns 404 for an unknown session', async () => {
+  it('returns 404 for an unknown render', async () => {
     const res = await fetch(
       `${fx.httpBase}/mcp-apps/resource?render=nope&item=also-nope`,
     );
@@ -371,7 +371,7 @@ describe('GET /mcp-apps/resource', () => {
   });
 
   it('returns 404 when the connector is unregistered', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore, {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore, {
       source: {
         connectorId: 'unknown-connector',
         toolName: 'checkout',
@@ -386,7 +386,7 @@ describe('GET /mcp-apps/resource', () => {
   });
 
   it('returns 502 when the source resource is not a text resource', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore, {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore, {
       source: {
         connectorId: 'mock',
         toolName: 'checkout',
@@ -418,7 +418,7 @@ describe('POST /mcp-apps/tools-call', () => {
   }
 
   it('proxies an app-visible tool call on the happy path', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
       render: renderId,
       item: item.id,
@@ -435,7 +435,7 @@ describe('POST /mcp-apps/tools-call', () => {
   });
 
   it('rejects model-only tools with 403 visibility_denied', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
       render: renderId,
       item: item.id,
@@ -448,7 +448,7 @@ describe('POST /mcp-apps/tools-call', () => {
   });
 
   it('returns 404 tool_not_found for an unknown tool name', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
       render: renderId,
       item: item.id,
@@ -465,7 +465,7 @@ describe('POST /mcp-apps/tools-call', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 404 item_not_found when the stack item is unknown', async () => {
+  it('returns 404 item_not_found when the render is unknown', async () => {
     const renderId = `sess-${randomUUID()}`;
     await fx.renderStore.create({ id: renderId, appId: 'app-1' });
     const res = await callTool({
@@ -480,7 +480,7 @@ describe('POST /mcp-apps/tools-call', () => {
   });
 
   it('returns 404 unknown_connector when the item references an unknown connectorId', async () => {
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore, {
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore, {
       source: {
         connectorId: 'unknown-connector',
         toolName: 'checkout',
@@ -504,7 +504,7 @@ describe('POST /mcp-apps/tools-call', () => {
     // the full tool result faithfully so the iframe sees the tool's
     // own `isError: true` + error text. 502 is reserved for proxy/
     // transport-level failures (e.g. unreachable source).
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
       render: renderId,
       item: item.id,
@@ -521,12 +521,12 @@ describe('POST /mcp-apps/tools-call', () => {
   });
 
   it('structurally rejects cross-connector tool calls (forged tool name not in item.connector list)', async () => {
-    // The route resolves connector from the STACK ITEM's source.connectorId,
+    // The route resolves connector from the RENDER's source.connectorId,
     // so a forged `connectorId` in the request body has no effect. Any
     // attempt to invoke a tool that isn't on the item's own connector
     // lands as tool_not_found. This encodes the "iframe for connector A
     // cannot reach connector B" guarantee structurally.
-    const { renderId, item } = await seedMcpAppsSession(fx.renderStore);
+    const { renderId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
       render: renderId,
       item: item.id,

@@ -16,10 +16,8 @@
  *
  * Mirrors the test-helper pattern from `render-version-override.test.ts`.
  *
- * Wire-field note: subscribes still carry `sessionId` on the wire
- * (the conformance kit's spelling, not yet migrated to `renderId`);
- * the reference server reads either spelling and treats both as the
- * render identity.
+ * Wire-field note: subscribes carry the canonical render-identity
+ * field `renderId` on the wire.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
@@ -121,7 +119,7 @@ describe('emit-envelope ConformanceHost directive', () => {
 // =============================================================================
 
 /**
- * Open a WS, send a `subscribe` frame for `sessionId`, await the ack,
+ * Open a WS, send a `subscribe` frame for `renderId`, await the ack,
  * trigger `afterAck` (which is expected to cause a server-side
  * frame to fan out to this subscriber), then collect every subsequent
  * frame that lands within a short observation window. Close + return
@@ -157,13 +155,10 @@ async function captureFramesAfterAck(
     };
 
     ws.on('open', () => {
-      // Wire field name `sessionId` is the kit's spelling for what
-      // the protocol now calls `renderId`; the reference server reads
-      // either spelling.
       ws.send(
         JSON.stringify({
           type: 'subscribe',
-          payload: { sessionId: renderId, appId: 'conformance', role: 'user' },
+          payload: { renderId, appId: 'conformance', role: 'user' },
           requestId: 'capture-req',
         }),
       );

@@ -455,7 +455,7 @@ export interface BootSequenceOptions {
    *
    * Sequence the renderer guarantees when this is bound:
    *   1. `mounting` — before any IO, paired with `ggui:renderer-ready`.
-   *   2a. `code-ready` — after first ack folds the initial stack.
+   *   2a. `code-ready` — after first ack folds the initial render.
    *   2b. `error` — paired with every `ggui:bootstrap-failed` emission;
    *       `error.code` mirrors the legacy envelope's `reason`.
    *
@@ -465,8 +465,8 @@ export interface BootSequenceOptions {
   /**
    * Optional renderer hook. When present, the boot sequence:
    * (1) calls `renderer.setup()` after bootstrap parse;
-   * (2) mounts the single stack entry into the renderer's slot on
-   * first ack + re-applies on every subsequent push; (3) routes
+   * (2) mounts the single render into the renderer's slot on
+   * first ack + re-applies on every subsequent render; (3) routes
    * inbound `data` / `props_update` / `feedback` frames through the
    * supplied wire config + StreamBus.
    *
@@ -719,7 +719,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   //
   //   Tier 1  parseMetaFromGlobal — synchronous `__GGUI_META__` inline
   //           global. Self-contained shells (`buildSelfContainedHtml`,
-  //           per-session resource shells) populate this before this
+  //           per-render resource shells) populate this before this
   //           bundle's `<script type="module">` evaluates.
   //           Opportunistic — its absence (the common case for
   //           postMessage-delivered hosts) never surfaces as a parse
@@ -1110,7 +1110,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 /**
  * Build a minimal `ChannelRegistry` for boot paths without renderer
  * wiring (boot.test.ts + the C7a placeholder-only spec). The registry
- * carries just the `push` handler — which logs status but does not
+ * carries just the `render` handler — which logs status but does not
  * mount React — so consumers can observe bootstrap-orchestration
  * outcomes without paying React import cost. Every other frame type
  * silently drops. Production boots through `bootProduction` which
@@ -1468,10 +1468,10 @@ let postMountListenerInstalled = false;
  * Module-level handle to the active renderer's `applyRender`, published
  * by `bootProduction`'s `setup()` once the renderer is built. The
  * module-level {@link installPostMountListener} resolves this to re-mount
- * on a host-re-emitted tool-result WITHOUT a fresh boot — no second mount
- * stack, no second WS. This is the no-WS live-re-render channel for
+ * on a host-re-emitted tool-result WITHOUT a fresh boot — no second mount,
+ * no second WS. This is the no-WS live-re-render channel for
  * spec-compliant MCP-Apps hosts (claude.ai / ChatGPT / Claude Desktop)
- * that re-broadcast the tool-result instead of pushing a WS frame.
+ * that re-broadcast the tool-result instead of sending a WS render frame.
  *
  * `null` until a renderer is published (e.g. unit tests that drive
  * `bootSequence` with no renderer never set it → the listener no-ops).
@@ -2996,7 +2996,7 @@ async function bootProduction(opts: {
       // `/relay/tools-call` → ggui MCP server →
       // `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
       // → `ggui_consume` wakes the agent. The server's WS
-      // `handleInboundAction` writes to the session ledger only — no
+      // `handleInboundAction` writes to the render ledger only — no
       // downstream consumer — so the WS action path silently drops
       // clicks. `routeDispatch` is the same helper `bootSelfContained`
       // uses; threading it here aligns LIVE-mode with self-contained.

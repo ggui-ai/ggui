@@ -8,7 +8,7 @@
  *     payloads (system + user prompt, tools, completion, tokens).
  *     Answers "what did the LLM see / say?".
  *   - **Telemetry** (mcp-server-core) = ops signals (`pair.completed`,
- *     `push.duration_ms`). Lossy. Flat scalars.
+ *     `render.duration_ms`). Lossy. Flat scalars.
  *   - **Audit** (mcp-server-core) = compliance log of privileged
  *     mutations. Durable.
  *   - **Validator trace** (this) = devtools-only ring buffer of every

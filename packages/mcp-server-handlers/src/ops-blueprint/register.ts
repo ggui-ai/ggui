@@ -159,7 +159,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       // persistence so an operator-supplied row can't smuggle
       // deprecated vocabulary (`terminal`, `consumeSpec`,
       // `interaction`, `commandSpec`, `behaviorSpec`) into the
-      // registry. The same gate fires on the push + handshake seams
+      // registry. The same gate fires on the render + handshake seams
       // in `renders/`.
       assertContractNoRetiredFields(parsed.contract);
 
@@ -245,7 +245,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       }
 
       // 4.5 Mirror into the cache vectorStore so the agent-facing
-      // matchBlueprint exact-key probe (handshake + push) finds this
+      // matchBlueprint exact-key probe (handshake + render) finds this
       // operator-registered blueprint. Symmetric with ops_generate's
       // dual-write — see #358.
       if (deps.cacheRegistry) {

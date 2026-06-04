@@ -132,7 +132,7 @@ describe('appPublicEnvSchema', () => {
 // asking for a non-prefix key (typo or arbitrary string) is rejected
 // at wrapper-registration time so the misconfig surfaces in
 // `createGguiGadget` (or registry validation), not later at
-// push-gate validation when the missing key first matters.
+// render-gate validation when the missing key first matters.
 describe('gadgetDescriptorSchema — requires prefix enforcement (wire side)', () => {
   it('accepts a wrapper with well-formed requires', () => {
     expect(() =>
@@ -232,7 +232,7 @@ describe('strictGadgetDescriptorSchema — requires prefix enforcement (registry
 
 // Slice GG.7 — `typesUrl` + `typesSri` carry the wrapper's `.d.ts`
 // location + integrity hash. The handler fetches the `.d.ts` at
-// push time and loads it into the code-gen sandbox VFS. The
+// render time and loads it into the code-gen sandbox VFS. The
 // registry-strict schema REQUIRES `typesUrl` for non-stdlib
 // descriptors (decision #6); stdlib is exempt.
 describe('gadgetDescriptorSchema — typesUrl / typesSri (Slice GG.7)', () => {

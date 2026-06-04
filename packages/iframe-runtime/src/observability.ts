@@ -41,7 +41,7 @@ export type ObservabilityEvent =
 /**
  * Fired when a wired action successfully dispatched to a registered
  * MCP tool. Hosts surface this as a dispatch row in RenderInspector.
- * Emitted by the server-side router (session-channel.ts) via
+ * Emitted by the server-side router (render-channel.ts) via
  * postMessage relay through the renderer.
  *
  * @public
@@ -85,7 +85,7 @@ export interface SchemaVersionMismatchEvent {
 
 /**
  * Fired when subscribe fails for any reason the renderer classifies
- * as non-fatal to the session (e.g., transient network jitter that
+ * as non-fatal to the render (e.g., transient network jitter that
  * the reconnect ladder is handling). Terminal subscribe failures
  * still route through `ProtocolError`.
  *

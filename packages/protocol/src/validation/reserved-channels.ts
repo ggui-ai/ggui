@@ -63,13 +63,13 @@ export const PREVIEW_CHANNEL = '_ggui:preview';
 export const CONTRACT_ERROR_CHANNEL = '_ggui:contract-error';
 
 /**
- * Reserved channel for canvas-mode session
- * lifecycle envelopes — handshake / push / consume lifecycle signals
+ * Reserved channel for canvas-mode render
+ * lifecycle envelopes — handshake / render / consume lifecycle signals
  * that drive the ggui-animator's state machine.
  *
  * Body shape: `CanvasLifecyclePayload` (discriminated on `kind`). The
- * server emits; canvas iframes (subscribed session-wide) consume.
- * Inline iframes (pinned to a single stack item) do not receive
+ * server emits; canvas iframes (subscribed render-wide) consume.
+ * Inline iframes (pinned to a single render) do not receive
  * envelopes on this channel — delivery is gated by subscription scope.
  *
  * Agent-authored `streamSpec` MUST NOT declare this channel; the

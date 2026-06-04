@@ -175,7 +175,7 @@ textarea {
   margin-top: 2px;
 }
 
-/* ── top-nav live-session pill (Slice 10) ───────── */
+/* ── top-nav live-render pill (Slice 10) ───────── */
 .ggui-nav__pill {
   display: inline-flex;
   align-items: center;
@@ -1112,7 +1112,7 @@ textarea {
   }
 }
 
-/* ── status live-sessions hero (Slice 10) ───────── */
+/* ── status live-renders hero (Slice 10) ───────── */
 .ggui-status-hero {
   margin-bottom: 20px;
   padding: 20px 24px;

@@ -15,7 +15,7 @@
 //     props of `<Chart data={…} height={…} />`.
 //
 // Both take the wrapper's already-built `.d.ts` content AS A STRING —
-// the push handler fetches each non-stdlib gadget's `.d.ts` over HTTPS
+// the render handler fetches each non-stdlib gadget's `.d.ts` over HTTPS
 // and threads a `package -> dtsContent` map into the generator
 // (`UiGenerateInput.gadgetTypes`). The code-gen prompt builder calls
 // these helpers to render a `Type:` / `Props:` line per third-party

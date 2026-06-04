@@ -1,5 +1,5 @@
 /**
- * `assertPublicEnvSatisfied` — push-gate validation for public env
+ * `assertPublicEnvSatisfied` — render-gate validation for public env
  * key requirements.
  *
  * Wrapper authors declare which public env keys their hook consumes
@@ -9,11 +9,11 @@
  * — otherwise the wrapper would `getPublicEnv()` an undefined key at
  * hook-mount and throw with a confusing in-iframe error.
  *
- * The gate runs at PUSH time (not registration time):
+ * The gate runs at RENDER time (not registration time):
  *   - Only validates wrappers DECLARED in the current contract
  *     (`contract.clientCapabilities.gadgets[*].hook`). Wrappers
  *     registered on App.gadgets but unused by this contract
- *     don't fail the push — they don't affect this iframe's runtime.
+ *     don't fail the render — they don't affect this iframe's runtime.
  *   - Symmetric with `assertGadgetsRegistered`: both gates validate
  *     the contract against the operator's per-App surface at the
  *     same call site.
@@ -34,7 +34,7 @@
  *     gate's hook-name suggester).
  *
  * Call sites:
- *   - `push.ts` — author-time gate; throws before mutating state.
+ *   - `render.ts` — author-time gate; throws before mutating state.
  *
  * Distance threshold for "did you mean" — `< 3` Levenshtein on
  * lowercase keys. Catches the casing+single-typo pattern
@@ -106,7 +106,7 @@ export class GadgetPublicEnvMissingError extends Error {
  *
  * The validator pairs with {@link assertGadgetsRegistered} — that
  * gate verifies the hook NAME is registered; this gate verifies the
- * hook's REQUIRED env keys are satisfied. Both fire at push time
+ * hook's REQUIRED env keys are satisfied. Both fire at render time
  * before any state mutation.
  */
 export function assertPublicEnvSatisfied(

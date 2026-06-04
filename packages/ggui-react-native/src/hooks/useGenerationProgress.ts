@@ -1,6 +1,6 @@
 /**
  * Hook that listens for ggui:logs CustomEvents and maintains
- * a map of generation progress per stack item.
+ * a map of generation progress per render.
  *
  * Used by shell components to show real-time generation status
  * instead of static "Generating..." placeholders.
@@ -36,7 +36,7 @@ export const STEP_PROGRESS: Record<string, number> = {
 };
 
 /**
- * Represents the current generation progress for a single stack item.
+ * Represents the current generation progress for a single render.
  */
 export interface ProgressState {
   step: string;

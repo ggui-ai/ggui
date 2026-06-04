@@ -15,7 +15,7 @@
  *     start returns empty
  *   - putStream reassembles chunks atomically (never half-state)
  *   - prefix isolation: keys in app(A) are not visible from app(B),
- *     session(S), userApp(U,A), or crossAppUser(U)
+ *     render(R), userApp(U,A), or crossAppUser(U)
  *   - userApp(U,A1) and userApp(U,A2) are isolated from each other
  *     (privacy-default cornerstone)
  *   - userApp(U,A) and crossAppUser(U) share the user prefix root for
@@ -98,7 +98,7 @@ export function scopedFileStoreContract(
 
       it('put + getString round-trips UTF-8', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         await store.put('greet.txt', 'hello — 世界 🌍');
         const got = await store.getString('greet.txt');
         expect(got).toBe('hello — 世界 🌍');
@@ -242,7 +242,7 @@ export function scopedFileStoreContract(
     describe('append', () => {
       it('append creates the key if missing', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         await store.append('log.txt', 'hello\n');
         const got = await store.getString('log.txt');
         expect(got).toBe('hello\n');
@@ -250,7 +250,7 @@ export function scopedFileStoreContract(
 
       it('append concatenates onto existing value', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         await store.put('log.txt', 'line1\n');
         await store.append('log.txt', 'line2\n');
         await store.append('log.txt', 'line3\n');
@@ -260,7 +260,7 @@ export function scopedFileStoreContract(
 
       it('append works with binary chunks', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         await store.append('blob.bin', new Uint8Array([1, 2]));
         await store.append('blob.bin', new Uint8Array([3, 4]));
         const got = await store.get('blob.bin');
@@ -299,7 +299,7 @@ export function scopedFileStoreContract(
     describe('putStream', () => {
       it('reassembles chunked stream into one stored value', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         const chunks = [bytes('hello '), bytes('streamed '), bytes('world')];
         await store.putStream('streamed.txt', streamOf(chunks));
         const got = await store.getString('streamed.txt');
@@ -308,7 +308,7 @@ export function scopedFileStoreContract(
 
       it('overwrites prior put at same key (atomic-or-throw)', async () => {
         const reg = await makeRegistry();
-        const store = reg.session('s1');
+        const store = reg.render('s1');
         await store.put('k', 'first');
         await store.putStream('k', streamOf([bytes('second')]));
         const got = await store.getString('k');
@@ -325,12 +325,12 @@ export function scopedFileStoreContract(
         expect(await reg.app('B').getString('shared-name')).toBe('B-value');
       });
 
-      it('app(A) does not see session(s1) writes', async () => {
+      it('app(A) does not see render(s1) writes', async () => {
         const reg = await makeRegistry();
         await reg.app('A').put('k', 'app-value');
-        await reg.session('s1').put('k', 'session-value');
+        await reg.render('s1').put('k', 'render-value');
         expect(await reg.app('A').getString('k')).toBe('app-value');
-        expect(await reg.session('s1').getString('k')).toBe('session-value');
+        expect(await reg.render('s1').getString('k')).toBe('render-value');
       });
 
       it('userApp(U,A) does not see userApp(U,B) — privacy default', async () => {

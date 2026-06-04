@@ -29,7 +29,7 @@
  * The store grows unbounded. Operators who care can periodically
  * `rm -rf ~/.ggui/code-cache/` — every entry is content-addressable
  * and immutable, so a re-fetch will repopulate from upstream code on
- * next push. There is no eviction policy in the seam itself.
+ * next render. There is no eviction policy in the seam itself.
  *
  * ## Permissions
  *
@@ -86,7 +86,7 @@ export class FileSystemCodeStore implements CodeStore {
     const absPath = this.absPath(hash);
     // Idempotent: if the file already exists, skip rewrite. Cheap fast
     // path that avoids unnecessary disk churn when the same blueprint
-    // is pushed repeatedly.
+    // is rendered repeatedly.
     if (await fileExists(absPath)) return;
     await mkdir(dirname(absPath), { recursive: true });
     // Temp-file + rename for atomic-or-throw write; readers never see

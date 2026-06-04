@@ -215,9 +215,9 @@ export const renderWelcomeHtml = (
         <p class="eyebrow">Public surfaces</p>
         <div class="surfaces">
           <div class="surface">
-            <span class="surface-label">Session viewer</span>
+            <span class="surface-label">Render viewer</span>
             <code>/s/&lt;short-code&gt;</code>
-            <span class="desc">Open the live session your agent linked you to.</span>
+            <span class="desc">Open the live render your agent linked you to.</span>
           </div>
           <div class="surface">
             <span class="surface-label">Blueprint preview</span>

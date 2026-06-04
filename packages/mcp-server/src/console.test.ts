@@ -577,7 +577,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       payload?: { code?: string };
     }>((resolve, reject) => {
       ws.on('open', () => {
-        // Try to subscribe to a DIFFERENT session than the cookie
+        // Try to subscribe to a DIFFERENT render than the cookie
         // is bound to.
         ws.send(
           JSON.stringify({
@@ -816,7 +816,7 @@ describe('createGguiServer — console security headers', () => {
   // `import React from 'react'` is rewritten to
   // `import React from 'data:text/javascript,…'` by
   // `@ggui-ai/design/rendering/rewrite-imports.ts`. Without both, the
-  // browser rejects the imports and every stack entry renders as
+  // browser rejects the imports and every render renders as
   // "Failed to load component". These assertions pin both directives
   // so a future CSP tightening requires an explicit re-justification
   // instead of silently regressing the render path.
@@ -833,7 +833,7 @@ describe('createGguiServer — console security headers', () => {
  * cookie authenticates /ws, scope isolation, short-code lookup. This
  * block pins the FULL happy-path ceremony — the chain that the
  * console viewer actually walks from "operator opens
- * /s/<shortCode>" to "agent push appears on the browser":
+ * /s/<shortCode>" to "agent render appears on the browser":
  *
  *   1. shortCodeIndex.put (simulates the write ggui_render does).
  *   2. POST /ggui/console/render-cookie → 200 + Set-Cookie.
@@ -842,14 +842,14 @@ describe('createGguiServer — console security headers', () => {
  *   5. server-side sendToRender → subscriber receives the data frame.
  *
  * Tests the integration across packages (mcp-server-core short-code
- * index + mcp-server console routes + mcp-server session-channel
+ * index + mcp-server console routes + mcp-server render-channel
  * cookie-auth) that no single-seam test can catch.
  *
  * Reserved channel `_ggui:preview` is used for the test delivery
  * because reserved channels bypass streamSpec declaration (matching
  * the A2UI provisional-preview path that console actually
- * consumes). A non-reserved channel would require seeding a stack
- * item with a declared streamSpec — orthogonal plumbing that would
+ * consumes). A non-reserved channel would require seeding a render
+ * with a declared streamSpec — orthogonal plumbing that would
  * obscure what this test is pinning.
  */
 describe('createGguiServer — console full ceremony integration', () => {
@@ -958,8 +958,8 @@ describe('createGguiServer — console full ceremony integration', () => {
   });
 
   it('full ceremony — cookie-scoped subscribe rejects hostile renderId even after ack attempt', async () => {
-    // Belt-and-braces: the ceremony WITHOUT a cookie-session match
-    // must not leak frames into the wrong session. Pins that cookie
+    // Belt-and-braces: the ceremony WITHOUT a cookie-render match
+    // must not leak frames into the wrong render. Pins that cookie
     // binding is enforced at subscribe time, not just advisory.
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
@@ -994,7 +994,7 @@ describe('createGguiServer — console full ceremony integration', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { renderId: 'other-session', appId: 'app-42' },
+            payload: { renderId: 'other-render', appId: 'app-42' },
             requestId: 'r1',
           }),
         );
@@ -1014,7 +1014,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       'DEVTOOL_COOKIE_RENDER_MISMATCH',
     );
 
-    // Even a server-side fan-out to the LEGITIMATE session the
+    // Even a server-side fan-out to the LEGITIMATE render the
     // cookie is bound to must not reach this rejected subscriber —
     // the rejection terminated before the subscriber was registered.
     const frames: unknown[] = [];
@@ -1022,11 +1022,11 @@ describe('createGguiServer — console full ceremony integration', () => {
       frames.push(JSON.parse(String(raw)));
     });
     await fx.server.renderChannel!.sendToRender({
-      renderId: 'sess-42', // the cookie's real session
+      renderId: 'sess-42', // the cookie's real render
       channel: '_ggui:preview',
       mode: 'append',
       // Valid A2UI shape (payload passes the injected validator) — the
-      // rejection must come from the cookie-session mismatch path, not
+      // rejection must come from the cookie-render mismatch path, not
       // from a malformed-payload fluke.
       payload: { version: 'v0.9', deleteSurface: { surfaceId: 'surf-42' } },
     });

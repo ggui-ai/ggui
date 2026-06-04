@@ -68,7 +68,7 @@ export function BlueprintPreview({
             <StatusBadge tone="draft">pending</StatusBadge>
           </p>
           <p className="ggui-muted" style={{ margin: '8px 0 0' }}>
-            This variant has no code yet — the next push against the
+            This variant has no code yet — the next render against the
             same contract will gen against{' '}
             <code className="ggui-code">{blueprint.blueprintId}</code>.
           </p>

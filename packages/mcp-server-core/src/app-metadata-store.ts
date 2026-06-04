@@ -105,8 +105,8 @@ export interface App {
    * tools surface, NOT here.
    *
    * Wrapper authors declare which keys they consume via
-   * `GadgetDescriptor.requires`; the push gate
-   * (`assertPublicEnvSatisfied`) rejects a push when any declared
+   * `GadgetDescriptor.requires`; the render gate
+   * (`assertPublicEnvSatisfied`) rejects a render when any declared
    * wrapper's requires aren't satisfied by this map. Bootstrap
    * projection filters the map to the union of declared wrappers'
    * requires before emitting on the iframe envelope (minimum-

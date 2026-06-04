@@ -121,7 +121,7 @@ export const FATAL_CATALOG_LINT_CODES: ReadonlySet<string> = new Set([
  *   - `broadcast`     → `streamSpec[ch].source`
  *   - `capabilities`  → `agentCapabilities` + `clientCapabilities`
  *
- * Push-gate handlers re-use this list to hard-reject; surfacing it
+ * Render-gate handlers re-use this list to hard-reject; surfacing it
  * here keeps the wire vocabulary single-sourced.
  */
 export const RETIRED_CONTRACT_FIELDS: Readonly<Record<string, string>> = {
@@ -290,7 +290,7 @@ export function checkOrphanAgentTools(
  * is intentionally NOT linted here: `GadgetExportUse.usage` is an
  * OPTIONAL intent-OVERRIDE, and the SPEC-documented canonical wire
  * form is the bare identity reference `gadgets[<pkg>][<export>] = {}`.
- * Push-time resolution inherits the registered descriptor's `usage`,
+ * Render-time resolution inherits the registered descriptor's `usage`,
  * and the registry-side `lintGadgetCatalog` (via
  * `strictGadgetExportSchema`) already enforces real teaching text at
  * registration time. Flagging an empty wire-side use object would
@@ -352,7 +352,7 @@ export function checkMissingExample(
  *
  * Third-party packages (any `package !== DEFAULT_GADGET_PACKAGE`) are
  * NOT checked here — the lint can't know an operator's own hook
- * names. The registry-side {@link lintGadgetCatalog} + the push-time
+ * names. The registry-side {@link lintGadgetCatalog} + the render-time
  * {@link assertGadgetsRegistered} gate cover third-party resolution.
  *
  * Permission checks live on the registry-side `lintGadgetCatalog`
@@ -407,9 +407,9 @@ export function checkGadgetHookNames(
  * imports of the same name — from different packages — produce an
  * unresolvable identifier collision in the generated module scope.
  *
- * Keys on the export name alone, matching the push-time hard gate
+ * Keys on the export name alone, matching the render-time hard gate
  * `assertNoDuplicateGadgetHooks`. Soft mirror of that gate so
- * authoring tools surface the issue before a push round-trip.
+ * authoring tools surface the issue before a render round-trip.
  */
 export function checkDuplicateGadgetHooks(
   contract: DataContract,
@@ -587,10 +587,10 @@ export function lintGadgetCatalog(
  * Find top-level retired-field carriers on the contract. The schema
  * is `.passthrough()`, so a stray `libraries`/`dispatch`/`wiredTools`/
  * `clientTools`/`broadcast`/`capabilities` slips through silently. The
- * push-gate hard-rejects these (see
+ * render-gate hard-rejects these (see
  * `mcp-server-handlers/.../assert-contract-no-retired-fields.ts`); this
  * lint surface keeps authoring tools symmetric — show the warning before
- * the push call so the author can fix it without a server round-trip.
+ * the render call so the author can fix it without a server round-trip.
  */
 export function checkRetiredContractFields(
   contract: DataContract,
@@ -606,7 +606,7 @@ export function checkRetiredContractFields(
     warnings.push({
       code: LINT_CONTRACT_RETIRED_FIELD,
       path: retired,
-      message: `contract.${retired} is retired. Use ${replacement} instead — the field rides through .passthrough() but the push gate hard-rejects it as a structural error.`,
+      message: `contract.${retired} is retired. Use ${replacement} instead — the field rides through .passthrough() but the render gate hard-rejects it as a structural error.`,
       fixHint: `Delete contract.${retired}; move its data to ${replacement}.`,
     });
   }
@@ -620,11 +620,11 @@ export function checkRetiredContractFields(
  * checklist. Retired-field detection is NOT here — it is promoted to an
  * ERROR phase (`phaseRetired` in lint-contract.ts); the detector
  * `checkRetiredContractFields` stays exported for the author-time
- * surface and the push-gate assert.
+ * surface and the render-gate assert.
  *
  * Registry-side gadget lints (`lintGadgetCatalog`) are NOT run here:
  * they need an `App.gadgets` descriptor array, not a contract, and
- * fire at registration time rather than push time.
+ * fire at registration time rather than render time.
  * Call {@link lintGadgetCatalog} separately at the registration
  * boundary.
  */
@@ -640,6 +640,6 @@ export function checkHygiene(
     // Retired-field detection is promoted to an ERROR phase
     // (`phaseRetired` in lint-contract.ts) — not a hygiene warning.
     // `checkRetiredContractFields` stays exported for the author-time
-    // surface + the push-gate assert.
+    // surface + the render-gate assert.
   ];
 }

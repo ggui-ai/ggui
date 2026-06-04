@@ -77,7 +77,7 @@ describe('installToCache', () => {
     expect(hit?.componentCode).toBe('export default () => "installed";');
   });
 
-  it('rejects empty componentCode (cache hit would serve blank stack item)', async () => {
+  it('rejects empty componentCode (cache hit would serve blank render)', async () => {
     const deps = makeDeps();
     await expect(
       installToCache(deps, SCOPE, {
@@ -116,7 +116,7 @@ describe('installToCache', () => {
       intent: 'installed counter',
     });
     // Direct registerBlueprint with explicit 'synth' to simulate the
-    // push-side cold-gen path.
+    // render-side cold-gen path.
     const { registerBlueprint } = await import('./blueprint-registry.js');
     await registerBlueprint(deps, SCOPE, {
       kind: 'template',

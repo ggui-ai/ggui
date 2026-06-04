@@ -1,7 +1,7 @@
 /**
  * Unit tests for the zod → JsonSchema wrapper. Pins the expected
  * normalized shape for every zod construct the
- * {@link isSchemaSubset} algorithm needs to consume at the push-time
+ * {@link isSchemaSubset} algorithm needs to consume at the render-time
  * + blueprint-registration check points.
  *
  * Covers both the `ZodType` and `ZodRawShape` input modes — handlers

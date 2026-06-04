@@ -2,12 +2,12 @@
  * Blueprints route — `/blueprints`.
  *
  * Operator-facing answer to _"what can this server produce without
- * generating?"_, merged from two sources the push + handshake paths
+ * generating?"_, merged from two sources the render + handshake paths
  * already consult:
  *
  *   1. **Declared blueprints** from `ggui.json#blueprints.include`
  *      (read via `GET /ggui/console/registry`).
- *   2. **Cached generation entries** the push path has recorded via
+ *   2. **Cached generation entries** the render path has recorded via
  *      the blueprint registry (via `GET /ggui/console/blueprints/cached`).
  *      Contract-keyed; per-row invalidate + bulk clear via DELETE /
  *      POST endpoints.
@@ -213,7 +213,7 @@ export function Blueprints(): ReactElement {
           <>
             Two answers on one screen. <strong>Declared</strong> blueprints
             from <code className="ggui-code">ggui.json#blueprints.include</code>;{' '}
-            <strong>cached</strong> generations the push path has stored
+            <strong>cached</strong> generations the render path has stored
             (contract-keyed, written by the blueprint registry on every
             successful cold-gen).
           </>

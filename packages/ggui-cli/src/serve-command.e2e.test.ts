@@ -109,7 +109,7 @@ describe('runServe + createGguiServer (end-to-end)', () => {
       version: '0.0.1',
     });
     // Bare `ggui serve` (no `ggui.json` in cwd) registers the
-    // always-on subset: 2 blueprint-read handlers + the session-
+    // always-on subset: 2 blueprint-read handlers + the render-
     // lifecycle / handshake-first / runtime gesture tools. The exact
     // count grows over time as new lifecycle tools land — pin a
     // sanity floor instead of an exact match so additive growth

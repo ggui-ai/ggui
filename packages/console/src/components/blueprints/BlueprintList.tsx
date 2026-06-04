@@ -121,7 +121,7 @@ export function BlueprintList({
           </p>
           <p className="ggui-muted" style={{ margin: '8px 0 0' }}>
             Generate one via the per-contract page, or wait for an
-            agent to push a contract through{' '}
+            agent to render a contract through{' '}
             <code className="ggui-code">ggui_handshake</code>.
           </p>
         </div>

@@ -130,7 +130,7 @@ describe('assertPublicEnvSatisfied', () => {
 
     it('passes when an UNUSED registered wrapper has unsatisfied requires', () => {
       // Registry has Mapbox (needs token) AND Leaflet (no token needed).
-      // Contract only declares Leaflet. Push must not fail just because
+      // Contract only declares Leaflet. The render must not fail just because
       // Mapbox's token isn't configured — Mapbox isn't being used here.
       const contract = contractWithGadgets(LEAFLET_GADGETS);
       expect(() =>

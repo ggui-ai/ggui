@@ -2,7 +2,7 @@
  * Per-request context plumbing — AsyncLocalStorage backed.
  *
  * The capability-URL routes (`/r/<code>`, `/api/bootstrap/<code>`) and
- * the push/update tool result-meta builders all want to know the
+ * the render/update tool result-meta builders all want to know the
  * absolute public base URL of THIS server as seen by THIS client.
  * That can't come from a static config in two common dev/OSS scenarios:
  *
@@ -30,7 +30,7 @@
  *
  * Auto-derive applies ONLY to data the relevant route really should
  * derive from the request:
- *   - runtimeUrl on push/update bootstrap meta (this slice).
+ *   - runtimeUrl on render/update bootstrap meta (this slice).
  *
  * Auto-derive MUST NOT apply to:
  *   - OAuth callback URLs (operator-config'd one-time per provider;

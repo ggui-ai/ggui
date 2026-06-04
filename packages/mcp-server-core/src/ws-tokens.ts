@@ -373,7 +373,7 @@ export type RefreshWsTokenResult =
  * the envelope if its ORIGINAL `iat` is within the refresh window
  * (`now - iat <= refreshWindowSec`), and mints a fresh ws envelope
  * with new `iat` + `exp` + `jti`. The new envelope is bound to the SAME
- * `sessionId` + `appId` as the original (a refresh never re-scopes).
+ * `renderId` + `appId` as the original (a refresh never re-scopes).
  *
  * Failure semantics — the refresh path tolerates `'expired'` (that's its
  * whole purpose) but NOT `'invalid_signature'` / `'malformed_claims'`
@@ -448,7 +448,7 @@ export function refreshWsToken(
     return { ok: false, reason: 'refresh_window_closed' };
   }
 
-  // Mint a fresh ws token with the SAME sessionId + appId. New iat,
+  // Mint a fresh ws token with the SAME renderId + appId. New iat,
   // exp, jti — the new envelope's lifetime starts from `now`, but the
   // refresh window remains anchored to the ORIGINAL iat the caller
   // first received (callers that refresh repeatedly cannot extend the

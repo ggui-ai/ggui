@@ -15,7 +15,7 @@
  * `ggui blueprint install` under `.ggui/installed-blueprints/...`.
  * Without this bridge they would be a separate browsing surface the
  * matcher never sees — installing a blueprint would NOT accelerate
- * the next handshake/push. The bridge lands the install in the same
+ * the next handshake/render. The bridge lands the install in the same
  * `vectorStore` the matcher already reads, tagged
  * `provenance: 'install'` so operator surfaces stay debuggable.
  * Matcher logic is unchanged — it never inspects provenance.
@@ -111,7 +111,7 @@ export interface InstallToCacheInput {
  * `safelyRegisterBlueprint` add the swallow.
  *
  * Empty `componentCode` is rejected: an installed blueprint with no
- * code can't accelerate render and would serve a blank stack item on
+ * code can't accelerate render and would serve a blank render on
  * cache hit. Callers MUST compile before invoking the bridge.
  *
  * Returns the registered blueprint, carrying the synthetic id +
@@ -127,7 +127,7 @@ export async function installToCache(
     throw new Error(
       'installToCache: componentCode is empty. Compile the installed ' +
         'blueprint TSX before invoking the bridge — a cache hit on empty ' +
-        'code would serve a blank stack item.',
+        'code would serve a blank render.',
     );
   }
   return registerBlueprint(

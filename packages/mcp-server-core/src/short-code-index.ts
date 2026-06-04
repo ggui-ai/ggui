@@ -32,7 +32,7 @@
  *
  * NOT a persistence layer. The mapping is ephemeral + same-process;
  * restarts drop every entry and the shortCode becomes a 404 until the
- * agent re-pushes. Upgrading to durable storage is a post-MVP
+ * agent re-renders. Upgrading to durable storage is a post-MVP
  * concern — console's launch scenario is "ggui dev + browser in
  * the same session."
  */

@@ -11,11 +11,8 @@
  * resolve action-name → tool-name → handler.
  *
  * Wire-shape note: the conformance kit drives the reference server
- * over the SPEC §12.2 wire using the field name `sessionId` (its
- * fixture catalog has not yet been migrated to the canonical
- * `renderId`). The reference server READS that wire field and binds
- * it to a `renderId` internally — the value is a render identity
- * regardless of which spelling the consumer sends.
+ * over the SPEC §12.2 wire using the canonical render-identity field
+ * `renderId`.
  */
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Unit tests for the F4 schema compat checker wired at push-time
+ * Unit tests for the F4 schema compat checker wired at render-time
  * + blueprint-registration. Covers every policy-flag branch, both
  * directions (action → tool inputSchema; channel ← tool outputSchema),
  * and every finding-reason bucket (`tool-not-found`, `schema-mismatch`).

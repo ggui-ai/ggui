@@ -9,7 +9,7 @@
  *   - Adapter implementations can be written against a stable surface —
  *     every concrete adapter MUST pass
  *     {@link providerAdapterContract} or it isn't a `ProviderAdapter`.
- *   - Downstream callers (`createUiGenerator`, push handlers, retry /
+ *   - Downstream callers (`createUiGenerator`, render handlers, retry /
  *     backoff plumbing) build against ONE structured failure shape
  *     ({@link ProviderError}) instead of inventing per-provider error
  *     UX.

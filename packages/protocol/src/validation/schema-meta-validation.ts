@@ -44,7 +44,7 @@ export interface SchemaMetaViolation {
 /**
  * Typed error for contract schema meta-validation failures. Mirrors
  * the shape of `CrossReferenceError` / `ContractViolationError` for
- * symmetry — push/handshake catch and surface a structured
+ * symmetry — render/handshake catch and surface a structured
  * `contract_schema_invalid` error to the agent.
  */
 export class ContractSchemaMetaError extends Error {
@@ -109,7 +109,7 @@ function truncate(s: string, max: number): string {
  * This is the inner-schema validity check folded into the unified
  * `validateContract` gate (lint-contract.ts `phaseSchemaMeta`) — the
  * one check the strict linter was previously missing relative to the
- * push/handshake assert set.
+ * render/handshake assert set.
  */
 export function checkContractSchemasValid(
   contract: DataContract,

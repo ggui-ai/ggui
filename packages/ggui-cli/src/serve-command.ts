@@ -545,7 +545,7 @@ export interface ServeBannerInputs {
   /**
    * Embedding model id surfaced for the local RAG layer. When set,
    * the banner shows a `rag` line so operators see which model is
-   * wired (and that bge-small downloads lazily on first push). Absent
+   * wired (and that bge-small downloads lazily on first render). Absent
    * when no embedding is wired (e.g. tests, programmatic embeds that
    * fall back to MockEmbeddingProvider).
    */

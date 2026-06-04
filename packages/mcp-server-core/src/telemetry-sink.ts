@@ -8,7 +8,7 @@
  * rates — the kind of thing that flows into a metrics/time-series
  * system (OTLP, CloudWatch, Prometheus, Datadog). Telemetry is
  * **operational signal**: "request arrived", "pairing completed",
- * "push queued" — lossy delivery is acceptable; sampling is
+ * "render queued" — lossy delivery is acceptable; sampling is
  * acceptable; per-event durability is NOT the contract.
  *
  * **Deliberately distinct from {@link AuditSink}.** Audit entries are
@@ -56,7 +56,7 @@
 export interface TelemetryEvent {
   /**
    * Dotted, lowercase, versionless event name — e.g. `'pair.completed'`,
-   * `'thread.created'`, `'push.requested'`. The namespace convention
+   * `'thread.created'`, `'render.requested'`. The namespace convention
    * is `<subsystem>.<action>`; values flowing up to a metrics system
    * typically map to metric names 1:1.
    */

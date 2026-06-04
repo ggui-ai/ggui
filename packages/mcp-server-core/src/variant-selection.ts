@@ -164,7 +164,7 @@ export const DEFAULT_VARIANT_SELECTION_CONFIDENCE_THRESHOLD = 0.6;
 /**
  * Default per-entry TTL on the variant-selection cache. The decision
  * is sticky for ten minutes — matches the handshake record TTL so
- * a session that re-handshakes inside its own window doesn't have to
+ * a render that re-handshakes inside its own window doesn't have to
  * re-run the LLM pick.
  *
  * Operators tune via the impl's constructor or per-call `ttlSec`.

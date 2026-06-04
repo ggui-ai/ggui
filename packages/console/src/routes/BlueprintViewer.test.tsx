@@ -7,7 +7,7 @@
  *   - Load / error / not-found / ready states paint their respective
  *     DOM shells.
  *   - On a 200 response the mount card stamps the expected
- *     `data-ggui-stack-entry="component"` + `data-ggui-code-ready="true"`
+ *     `data-ggui-render-entry="component"` + `data-ggui-code-ready="true"`
  *     anchors + `data-ggui-blueprint-id` selector hook (the canonical
  *     data-attr contract shared across in-process renderer surfaces).
  *
@@ -103,7 +103,7 @@ describe('BlueprintViewer — render states', () => {
     expect(container.textContent).toContain('Loading blueprint…');
     // No mount card during loading.
     expect(
-      container.querySelector('[data-ggui-stack-entry="component"]'),
+      container.querySelector('[data-ggui-render-entry="component"]'),
     ).toBeNull();
   });
 
@@ -119,7 +119,7 @@ describe('BlueprintViewer — render states', () => {
     expect(container.textContent).toContain('missing');
     // No mount card for a missing blueprint.
     expect(
-      container.querySelector('[data-ggui-stack-entry="component"]'),
+      container.querySelector('[data-ggui-render-entry="component"]'),
     ).toBeNull();
   });
 
@@ -157,11 +157,11 @@ describe('BlueprintViewer — render states', () => {
     const { container } = render(
       <BlueprintViewer blueprintId="weather-card-fixture" />,
     );
-    // Wait for the mount card to appear — `data-ggui-stack-entry`
+    // Wait for the mount card to appear — `data-ggui-render-entry`
     // only renders after the fetch resolves.
     const card = await waitFor(() => {
       const el = container.querySelector(
-        '[data-ggui-stack-entry="component"]',
+        '[data-ggui-render-entry="component"]',
       );
       if (!el) throw new Error('mount card not yet rendered');
       return el;

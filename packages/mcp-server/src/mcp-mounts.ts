@@ -360,10 +360,10 @@ export function composeHandlersWithMounts(
  *
  * Context synthesis:
  *   - Each invocation gets a fresh {@link HandlerContext} with the
- *     caller-supplied `appId` (typically the session's appId) + a
+ *     caller-supplied `appId` (typically the render's appId) + a
  *     fresh request id. Mount handlers that read from storage scope
  *     to this appId, matching the `/mcp` ingress behavior.
- *   - The session-channel dispatcher additionally hands a
+ *   - The render-channel dispatcher additionally hands a
  *     {@link WiredActionContext}. The runtime ctx the mount handler
  *     sees is a structural superset
  *     ({@link WiredMountContext}) so a JS-authored mount can call
@@ -402,7 +402,7 @@ export function composeWiredActionRouterFromMounts(
     ): Promise<unknown> {
       const handler = byName.get(toolName);
       if (!handler) {
-        // Unreachable in normal use — the session channel has()-gates
+        // Unreachable in normal use — the render channel has()-gates
         // before calling invoke. Thrown errors surface as TOOL_THREW
         // envelopes, so the caller still gets a canonical shape.
         throw new Error(`wiredActionRouter(mounts): no handler registered for '${toolName}'`);

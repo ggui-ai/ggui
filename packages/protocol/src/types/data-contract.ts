@@ -182,7 +182,7 @@ export interface PropsSpec {
 // ── streamSpec design-lock ──────────────────────────────────────────────────
 //
 // `StreamSpec` declares the typed CHANNELS the component consumes on the
-// live session plane (the live channel in the three-channel topology). Each
+// live render plane (the live channel in the three-channel topology). Each
 // entry in `channels` is one named channel:
 //
 //   - `schema` (required) is the payload contract — the SAME field every
@@ -197,7 +197,7 @@ export interface PropsSpec {
 //     does not touch them.
 //
 // Channels are the unit of streaming. When a subscriber attaches to a
-// session, every channel declared in the active stack item's `streamSpec`
+// render, every channel declared in the active render's `streamSpec`
 // is a typed pipe it can observe. The `data.type` field on every inbound
 // delivery keys into this map.
 //
@@ -292,7 +292,7 @@ export interface StreamChannelEntry {
    * **F4 schema compat checker.** The compat relation — every value
    * the tool returns MUST be accepted by this channel schema — is
    * encoded as `isSchemaSubset(channelSchema, toolReturnSchema)` and
-   * is checked at push-time (before the stack item commits) and at
+   * is checked at render time (before the render commits) and at
    * blueprint-registration time (when the blueprint pre-declares
    * tool refs). Mismatches surface as `SCHEMA_MISMATCH_ERROR` on
    * the reserved `_ggui:contract-error` channel rather than showing
@@ -331,8 +331,8 @@ export interface StreamChannelEntry {
   /**
    * Optional MCP tool name this channel is refreshed from when a
    * wired action fires. Consumed by the server-side wiredActionRouter
-   * (see `@ggui-ai/mcp-server` session-channel) as a declarative hint:
-   * after a wired action on this stack item succeeds, the router
+   * (see `@ggui-ai/mcp-server` renderChannel) as a declarative hint:
+   * after a wired action on this render succeeds, the router
    * invokes the named tool and emits its return value on THIS channel.
    *
    * Name-scoping invariant:
@@ -390,7 +390,7 @@ export interface StreamChannelEntry {
 
 /**
  * Stream contract — describes the typed channels the component consumes
- * on the live session plane (the live channel in the three-channel doctrine).
+ * on the live render plane (the live channel in the three-channel doctrine).
  *
  * Shape: flat map keyed by channel name → entry.
  * `DataContract.streamSpec[channelName]` IS the entry.
@@ -431,7 +431,7 @@ export interface ActionEntry {
    * advisory — the agent owns the actual tool call on its next turn
    * and is responsible for shaping the payload as the tool expects.
    * For tools registered on THIS server, the F4 schema-compat checker
-   * surfaces a `SCHEMA_MISMATCH_ERROR` at push-time / blueprint-
+   * surfaces a `SCHEMA_MISMATCH_ERROR` at render-time / blueprint-
    * registration-time so authors get fail-loud feedback.
    *
    * The canonical algorithm lives in
@@ -475,7 +475,7 @@ export interface ActionEntry {
    * agent without rejection. If the named tool isn't in the agent's
    * toolbox at dispatch time, the agent surfaces the gap on its next
    * turn (typically as `TOOL_UNAVAILABLE`); the protocol does NOT
-   * fail at push.
+   * fail at render.
    */
   nextStep?: string;
 }
@@ -609,7 +609,7 @@ export interface AgentCapabilitiesSpec {
 export interface GadgetExportBase {
   /**
    * Human-readable description of what this export does. REQUIRED on
-   * the registry side; optional on the contract side (push-time merge
+   * the registry side; optional on the contract side (render-time merge
    * inherits the registry copy when absent).
    */
   description?: string;
@@ -705,13 +705,13 @@ export type GadgetExport = GadgetHookExport | GadgetComponentExport;
  * `requires`, `typesUrl`, …) or per-export registry metadata
  * (`permission`, `example`, `gotchas`). All of that belongs to the
  * registered {@link GadgetDescriptor} the ggui server resolves from
- * the app's `App.gadgets` catalog at push time — `version` is the
+ * the app's `App.gadgets` catalog at render time — `version` is the
  * operator's deployment pin, not the agent's to author.
  */
 export interface GadgetExportUse {
   /**
    * Intent-specific override of the registered export's description.
-   * When omitted, push-time resolution inherits the registered
+   * When omitted, render-time resolution inherits the registered
    * description verbatim; when present, the agent's prose wins.
    */
   description?: string;
@@ -740,7 +740,7 @@ export type GadgetPackageUse = Record<string, GadgetExportUse>;
  * `listContractGadgets` from the package-keyed
  * {@link ClientCapabilitiesSpec.gadgets}.
  *
- * NOT a wire type: an internal convenience so the push gates, the
+ * NOT a wire type: an internal convenience so the render gates, the
  * descriptor resolver, and code-gen can iterate `(package, name)`
  * pairs uniformly instead of re-walking the nested wire map.
  */
@@ -773,7 +773,7 @@ export interface GadgetUse {
  *     teaching text + an enum-tight `permission` per export;
  *     `registeredGadgetDescriptorSchema` additionally requires
  *     `typesUrl` for non-stdlib packages.
- *   - **Resolved sidecar side** — at push time
+ *   - **Resolved sidecar side** — at render time
  *     `filterDescriptorsToContract` snapshots the subset of
  *     `App.gadgets` the contract references onto
  *     `ComponentRender.gadgetDescriptors`. Wire-side authors NEVER
@@ -798,7 +798,7 @@ export interface GadgetDescriptor {
    * Exact semver pin (e.g., `'0.0.1'`, `'1.2.3-beta.1'`). REQUIRED.
    * Registry-side ONLY — the wire carries no version; the operator's
    * `App.gadgets` catalog is the sole version pin, resolved
-   * server-side at push time. `(package, version)` is the registry's
+   * server-side at render time. `(package, version)` is the registry's
    * frozen identity tuple. Bumping requires a new `bundleSri` /
    * `typesSri` (registry-immutability invariant enforced by
    * `lintGadgetCatalog`).
@@ -838,7 +838,7 @@ export interface GadgetDescriptor {
   bundleUrl?: string;
   /**
    * Registry hostname (no scheme, no path) the server uses to resolve
-   * `bundleUrl` + `styleUrl` at push time:
+   * `bundleUrl` + `styleUrl` at render time:
    *
    *   `https://<bundleHost>/bundles/<scope>/<name>/<version>/bundle.js`
    *   `https://<bundleHost>/bundles/<scope>/<name>/<version>/style.css`
@@ -915,7 +915,7 @@ export interface GadgetDescriptor {
    * `tsup --dts`) over the wrapper source and uploads the emitted
    * `.d.ts` alongside the bundle; the registry stamps the URL here.
    *
-   * The handler parallel-fetches every `typesUrl` at push time
+   * The handler parallel-fetches every `typesUrl` at render time
    * (`fetchGadgetTypes`), verifies the SHA-384 SRI against
    * {@link typesSri}, and loads the `.d.ts` content into the code-gen
    * sandbox's virtual file system at
@@ -1100,12 +1100,12 @@ export type ContextSpec = Record<string, ContextEntry>;
  *      - `null` → `null`
  *   3. `undefined` (caller validates / rejects)
  *
- * Push-time validators MUST reject contextSpec entries that resolve
+ * Render-time validators MUST reject contextSpec entries that resolve
  * to `undefined` here (e.g., schema is `oneOf` with no clear primitive
  * type — author MUST provide an explicit `default` for such schemas).
  *
  * Consumed by the boilerplate generator's useState emission and by
- * the push-time validator's default-derivability rule.
+ * the render-time validator's default-derivability rule.
  *
  * @public
  */
@@ -1277,10 +1277,10 @@ export interface DataContract {
  * `_ggui:contract-error` channel when a declared
  * `streamSpec[name].source.tool` (continuous feed),
  * `streamSpec[name].tool` (refresh-after-action hint, agent-less
- * deployments only), or a session-level boot failure happens. Emitted
+ * deployments only), or a render-level boot failure happens. Emitted
  * as the body of a stream envelope.
  *
- * v1 codes emitted by `@ggui-ai/mcp-server`'s session-channel router:
+ * v1 codes emitted by `@ggui-ai/mcp-server`'s renderChannel router:
  *
  * - `TOOL_NOT_FOUND` — declared tool not registered on the wired
  *   action router. Author wiring bug.
@@ -1311,8 +1311,8 @@ export interface DataContract {
  * `'SCHEMA_MISMATCH_ERROR'` — F4 schema compat checker. Emitted when
  * `actionSpec[name].schema` and its declared `tool`'s inputSchema
  * disagree, or when a `streamSpec[channel].schema` and its declared
- * `tool`'s return schema disagree. Fires at push-time (before the
- * stack item commits) and at blueprint-registration time. See
+ * `tool`'s return schema disagree. Fires at render time (before the
+ * render commits) and at blueprint-registration time. See
  * {@link ActionEntry.schema} and {@link StreamChannelEntry.schema}
  * for the author invariant, and `@ggui-ai/protocol/validation/
  * schema-subset` for the subset algorithm that produces the named
@@ -1326,7 +1326,7 @@ export interface DataContract {
  * them BOTH on the live-channel `_ggui:contract-error` envelope (with
  * `sourceAction.type === 'bootstrap-load'`) AND as a
  * `postMessage({type:'ggui:bootstrap-failed', reason, message})` to
- * the embedding host — the former for in-session observability, the
+ * the embedding host — the former for in-render observability, the
  * latter for host-level UX response. Pre-WS bootstrap failures
  * (`BUNDLE_FETCH_FAILED`, `CSP_VIOLATION`, `BOOTSTRAP_META_MISSING`)
  * are postMessage-only: they can't reach the live channel because the WS
@@ -1431,7 +1431,7 @@ export interface ContractErrorPayload {
    * wired-action invocation (directly in response to a dispatch) or
    * from the refresh-stream tool that followed a successful action.
    *
-   * v1 values emitted by `@ggui-ai/mcp-server`'s session-channel
+   * v1 values emitted by `@ggui-ai/mcp-server`'s renderChannel
    * router:
    *
    *   - `'wired-action'` — failure surfaced on the wired-action dispatch
@@ -1467,7 +1467,7 @@ export interface ContractErrorPayload {
      * landed here persists in the session ring buffer and surfaces in
      * operator tools. The default sanitizer redacts
      * Bearer tokens, query-param secrets, and common env-var dumps, and
-     * truncates at 2KB. `@ggui-ai/mcp-server`'s session-channel router
+     * truncates at 2KB. `@ggui-ai/mcp-server`'s renderChannel router
      * applies it by default; alternative producers MUST match that
      * posture. */
     readonly causedBy?: string;

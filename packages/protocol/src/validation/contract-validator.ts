@@ -46,7 +46,7 @@ export interface ValidationResult {
  * pre-injection wrapper.
  *
  * Shared by {@link validatePropsData} (server-side runtime check) and
- * {@link compileContractValidators} (push-time standalone emission) so
+ * {@link compileContractValidators} (render-time standalone emission) so
  * the precompiled in-iframe validator enforces byte-identical
  * semantics to the runtime validator — one synthesis, no drift.
  */
@@ -79,7 +79,7 @@ export function buildPropsWrapperSchema(spec: PropsSpec): JsonSchema {
  *
  * Load-bearing for `ggui_update kind:'merge'` (RFC 7396): a patch
  * adding a key absent from `propsSpec.properties` would silently
- * land on the stack item without this gate. Same rule applies to
+ * land on the render without this gate. Same rule applies to
  * the `done`-vs-declared-`completed` class of bug inside array
  * items — Ajv rejects with the exact path (`todos[0].done`).
  */
@@ -135,11 +135,11 @@ export function validatePropsData(
  *        compatibility for any future reserved channel the runtime
  *        adds before its validator is authored.
  *
- *   Without this structure, a `_ggui:preview` emission into a session
- *   whose active stack item carries ANY user streamSpec would
+ *   Without this structure, a `_ggui:preview` emission into a render
+ *   whose active render carries ANY user streamSpec would
  *   synthesize a false "Unknown channel" violation, blocking the
  *   provisional preview runtime. Symmetric with the client-side
- *   handling in `GguiSession`.
+ *   handling in `GguiRender`.
  *
  * Crucially narrow by design — the known-reserved path is a CLOSED
  * SET, not a prefix check. A typo inside the reserved namespace
@@ -256,7 +256,7 @@ export function validateContextData(
 }
 
 /**
- * Validate an inbound user-action payload against the session's ActionSpec.
+ * Validate an inbound user-action payload against the render's ActionSpec.
  *
  * Symmetric with {@link validatePropsData} / {@link validateStreamData}, but for
  * live-channel INBOUND user → core traffic. Enforces the action contract at the
@@ -341,8 +341,8 @@ function getJsonType(value: unknown): string {
 }
 
 /**
- * Validate an inbound {@link ActionEnvelope} against the target stack
- * item's {@link ActionSpec}. Payload-contract layer of live-channel
+ * Validate an inbound {@link ActionEnvelope} against the target
+ * render's {@link ActionSpec}. Payload-contract layer of live-channel
  * inbound enforcement — the allowlist gate (`assertEventAllowed` in
  * `@ggui-ai/mcp-server-handlers`) is a separate concern that runs
  * first.
@@ -352,13 +352,13 @@ function getJsonType(value: unknown): string {
  *     Only action submissions carry payload contract today; other
  *     event types (lifecycle, interaction, error) have no schema
  *     enforcement on this layer.
- *   - `spec === undefined` → `{valid: true, violations: []}`. Stack
- *     items without an actionSpec have no contract; legacy pushes keep
+ *   - `spec === undefined` → `{valid: true, violations: []}`. Renders
+ *     without an actionSpec have no contract; legacy renders keep
  *     flowing.
  *   - Otherwise `envelope.payload` is validated against `spec` via
  *     {@link validateActionData}. Same rules, same output shape.
  *
- * This helper does NOT enforce allowlist, session binding, or stack
+ * This helper does NOT enforce allowlist, render binding, or render
  * routing — those are ingress-plumbing concerns. Pure payload-shape
  * check; returns `ValidationResult` rather than throwing so callers
  * can decide whether to surface as a wire error, log, etc.
@@ -381,7 +381,7 @@ export function validateActionEnvelope(
  *
  * The renderer iframe runs under a strict CSP with no `'unsafe-eval'`,
  * so it cannot call `ajv.compile()` (which builds validators via
- * `new Function`). Compilation therefore happens server-side at push
+ * `new Function`). Compilation therefore happens server-side at render
  * time — where the contract schema is fixed and codegen is legal — and
  * the iframe loads each emitted module via a `blob:` dynamic import.
  *
@@ -466,7 +466,7 @@ export function compileContractValidators(specs: {
  * + Node — the producer's iteration order is preserved, so a given
  * contract always serializes to identical bytes. {@link computeContractBundle}
  * leans on that determinism so the resulting hash is stable across
- * pushes of the same contract.
+ * renders of the same contract.
  *
  * @public
  */
@@ -510,7 +510,7 @@ function canonicalJsonStringify(value: unknown): string {
 /**
  * Convenience over {@link compileContractValidators} +
  * {@link bundleCompiledValidatorsAsModule} + sha256 — produces the
- * `{contractHash, bundleSource, validators}` triple the emitter (push.ts
+ * `{contractHash, bundleSource, validators}` triple the emitter (render.ts
  * / update.ts in #109 C4) writes to the content-addressable store and
  * emits as `_meta["ai.ggui/contract"] = {contractHash, validatorsUrl}`.
  *
@@ -696,7 +696,7 @@ export function validateContractStructure(contract: DataContract): ValidationRes
  * Slot-key identifier check for contextSpec. Slot keys are surfaced
  * as React Context names by the boilerplate generator (`currentStep`
  * → `CurrentStepContext`); a non-identifier here would break the
- * generation step at runtime, so we reject at push-time instead.
+ * generation step at runtime, so we reject at render-time instead.
  */
 const CONTEXT_SLOT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -706,7 +706,7 @@ const CONTEXT_SLOT_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
  * context map (e.g., `obj['__proto__'] = …` in pre-frozen
  * environments would mutate the prototype chain rather than set a
  * slot). Defensive — the runtime uses a frozen spec lookup, but the
- * push-time gate keeps the invariant load-bearing for any future
+ * render-time gate keeps the invariant load-bearing for any future
  * implementation that materializes the spec into a plain object.
  */
 const CONTEXT_RESERVED_KEYS: ReadonlySet<string> = new Set([

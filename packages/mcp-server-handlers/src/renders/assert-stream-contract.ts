@@ -10,7 +10,7 @@
  *     of whether a user streamSpec is declared. The reserved-channel
  *     payload check runs through `validateStreamData`'s two-tier
  *     lookup (extras + builtins per Item 4 injection pattern), so a
- *     session without any user streamSpec still rejects malformed
+ *     render without any user streamSpec still rejects malformed
  *     `_ggui:contract-error` / `_ggui:preview` emissions.
  *   - User channels: `spec === undefined` → no-op (missing streamSpec
  *     is permissive; nothing to enforce at this boundary). Otherwise

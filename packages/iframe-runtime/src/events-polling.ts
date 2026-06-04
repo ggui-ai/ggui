@@ -27,7 +27,7 @@
  * Iframes mounted inside the Anthropic SDK lose `__GGUI_META__` because
  * the SDK strips `_meta` from `tools/call` responses before forwarding
  * the structured-content shell to the iframe. R5's documented gap was
- * that the first push's payload never reached the iframe.
+ * that the first render's payload never reached the iframe.
  *
  * R7's principled fix: the same /events endpoint that powers polling
  * ALSO serves the cold-mount path. An iframe booting without inline

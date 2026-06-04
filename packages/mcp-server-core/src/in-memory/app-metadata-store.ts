@@ -35,7 +35,7 @@ import {
  *
  * Re-parsing here turns the boundary into the "observable violation"
  * point so a malformed gadget surfaces as a Zod throw at registration
- * time instead of silently riding through to push.
+ * time instead of silently riding through to render.
  *
  * Returns the list verbatim (parse is identity-shape when valid) so
  * the caller can keep its existing typing. `source` is woven into the
@@ -99,7 +99,7 @@ export interface InMemoryAppRegisterInput {
   readonly defaultThemeId?: string;
   readonly availableThemeIds?: readonly string[];
   /**
-   * Default display-mode hint stamped on every push from this app.
+   * Default display-mode hint stamped on every render from this app.
    * See `App.defaultDisplayMode` for semantics.
    */
   readonly defaultDisplayMode?: McpUiDisplayMode;
@@ -138,7 +138,7 @@ export interface InMemoryAppMetadataStoreDefaults {
    * Operator-declared display-mode hint from
    * `ggui.json#app.defaultDisplayMode`. Apps the store hasn't seen
    * inherit this value on `App.defaultDisplayMode`. Omitted ⇒ field
-   * absent (no per-push hint stamped; host picks its own default).
+   * absent (no per-render hint stamped; host picks its own default).
    */
   readonly defaultDisplayMode?: McpUiDisplayMode;
 }

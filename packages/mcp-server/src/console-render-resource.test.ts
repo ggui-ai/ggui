@@ -46,8 +46,8 @@ interface Fixture {
 
 /**
  * Boot a server with the full console + mcpApps + renderChannel
- * stack, create a session, mint a short-code for it, POST to
- * `/session-cookie` to get a real cookie, and return the header pair
+ * stack, create a render, mint a short-code for it, POST to
+ * `/ggui/console/render-cookie` to get a real cookie, and return the header pair
  * so callers can ride it on subsequent requests.
  */
 async function bootAndMintCookie(): Promise<Fixture> {
@@ -258,7 +258,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
   });
 
   it('returns 503 when mcpApps is disabled (no mintBootstrap)', async () => {
-    // Same console + session-channel wiring but WITHOUT mcpApps —
+    // Same console + render-channel wiring but WITHOUT mcpApps —
     // the meta route must honestly 503 instead of minting a token the
     // subscribe path would reject at handshake.
     const renderStore = new InMemoryRenderStore();

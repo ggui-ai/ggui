@@ -271,8 +271,8 @@ export function RenderRenderer({
     );
   }
 
-  // Neither descriptor nor compiled code has arrived yet — the stack
-  // item is mid-generation. Route through the `ProvisionalRenderer`
+  // Neither descriptor nor compiled code has arrived yet — the render
+  // is mid-generation. Route through the `ProvisionalRenderer`
   // so `_ggui:preview` envelopes (when emitted by the server preamble)
   // paint the assembling A2UI surface in place of the raw
   // "no component to render" state. When the preamble isn't live,

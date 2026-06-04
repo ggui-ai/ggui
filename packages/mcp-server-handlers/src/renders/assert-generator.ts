@@ -22,7 +22,7 @@
  * default, user sees stale-cache code).
  *
  * Hoisted out of the duplicated inline checks in `handshake.ts` +
- * `push.ts` so the two seams cannot drift in their error format or
+ * `render.ts` so the two seams cannot drift in their error format or
  * whitelist semantics.
  *
  * @param requested — the slug from `blueprintDraft.generator` (may be

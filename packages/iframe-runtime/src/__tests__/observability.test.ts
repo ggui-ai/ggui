@@ -325,7 +325,6 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
       data: JSON.stringify({
         type: 'ack',
         payload: {
-          stack: [],
           renderToken: 't',
           serverVersion: '999.0.0',
         },
@@ -351,8 +350,8 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
 describe('data handler — contract-error-emitted emission', () => {
   it('emits contract-error-emitted when a _ggui:contract-error envelope arrives', () => {
     const observed: ObservabilityEvent[] = [];
-    // No mounted item — the validator won't enforce because there's
-    // no active streamSpec. Behaviour matches a session whose item
+    // No mounted render — the validator won't enforce because there's
+    // no active streamSpec. Behaviour matches a render that
     // hasn't declared a streamSpec entry for the inbound channel.
     const handler = createDataHandler({
       getCurrentRender: () => null,

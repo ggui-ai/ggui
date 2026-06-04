@@ -98,7 +98,7 @@ import { createHash } from "node:crypto";
  *   - `BUNDLE_FETCH_FAILED` - `<script src>` errored (network failure,
  *     404, CSP reject with an observable `error` event).
  *
- * Post-renderer failures (WS handshake / auth / session-mismatch) are
+ * Post-renderer failures (WS handshake / auth / render-mismatch) are
  * the renderer bundle's responsibility - `runtime.ts::postBootFailure`
  * emits the same `ggui:bootstrap-failed` envelope AND, for post-WS-open
  * failures, a `_ggui:contract-error` envelope on the live channel per
@@ -108,7 +108,7 @@ import { createHash } from "node:crypto";
  * routes ONLY responses to its own pending JSON-RPC ids. MCP Apps
  * lifecycle notifications from the host (`ui/notifications/message`,
  * `ui/update-model-context`) are dropped. This mirrors the pre-C8
- * posture - the shell still MUST NOT mutate session state from
+ * posture - the shell still MUST NOT mutate render state from
  * arbitrary host messages. ADAPTER BOUNDARY enforced by the
  * `pending[m.id]` route-by-id check.
  *
@@ -126,9 +126,9 @@ import { createHash } from "node:crypto";
 /**
  * Inline body of the thin shell's bootstrap `<script>` block.
  *
- * Split from {@link GGUI_SESSION_SHELL_HTML} so the exact bytes the
+ * Split from {@link GGUI_RENDER_SHELL_HTML} so the exact bytes the
  * browser sees inside the `<script>...</script>` tag are addressable
- * for CSP-hash purposes — see {@link GGUI_SESSION_SHELL_SCRIPT_HASH}.
+ * for CSP-hash purposes — see {@link GGUI_RENDER_SHELL_SCRIPT_HASH}.
  *
  * The browser's CSP `'sha256-...'` source-expression is computed over
  * the literal text content of the `<script>` element (everything
@@ -137,7 +137,7 @@ import { createHash } from "node:crypto";
  * shell HTML means the runtime hash and the constant-time hash agree.
  *
  * NEVER mutate this constant without also bumping
- * {@link GGUI_SESSION_SHELL_SCRIPT_HASH} — the
+ * {@link GGUI_RENDER_SHELL_SCRIPT_HASH} — the
  * `mcp-apps-outbound.test.ts` drift test recomputes the hash and fails
  * loudly if they diverge.
  */
@@ -319,7 +319,7 @@ var initTimer=setTimeout(function(){
 },3000);
 postRpc('ui/initialize',{
   appCapabilities:{},
-  appInfo:{name:'ggui-session',version:'1.0.0'},
+  appInfo:{name:'ggui-render',version:'1.0.0'},
   protocolVersion:'2026-01-26'
 }).then(function(result){
   clearTimeout(initTimer);
@@ -415,7 +415,7 @@ export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
  * # Where it gets used
  *
  * `console-headers.ts::DEVTOOL_CSP` appends this expression to its
- * `script-src` directive. Hosted closed-runtime session-resource
+ * `script-src` directive. Hosted closed-runtime render-resource
  * endpoints have their own CSP and serve the same shell — that path
  * needs the same expression added; tracked separately.
  *
@@ -434,7 +434,7 @@ export const GGUI_RENDER_SHELL_SCRIPT_HASH: string = `'sha256-${createHash("sha2
  * Register `ui://ggui/render` as a readable resource on an `McpServer`.
  *
  * The resource is STATIC - `resources/read` always returns the same
- * body. Per-session state lives on the live channel, not in the resource.
+ * body. Per-render state lives on the live channel, not in the resource.
  *
  * When `publicBaseUrl` is supplied, the resource content carries
  * `_meta.ui.csp.{connectDomains,resourceDomains}` per the MCP Apps spec
@@ -666,7 +666,7 @@ export interface SelfContainedShellInputs {
    * Hex-encoded sha256 of the bytes served at {@link codeUrl}. Paired
    * with codeUrl (present together, absent together) — surfaces the
    * integrity signal alongside the URL so consumers can dedup across
-   * pushes without re-parsing.
+   * renders without re-parsing.
    */
   readonly codeHash?: string;
   /**
@@ -778,10 +778,10 @@ export interface SelfContainedShellInputs {
   readonly publicEnv?: McpAppAiGguiRenderMeta["publicEnv"];
   /**
    * Live-mode WebSocket URL the iframe-runtime opens to receive
-   * `props_update` / `stack_*` frames. When set alongside `token` +
+   * `props_update` / `render` frames. When set alongside `token` +
    * `expiresAt`, the parser admits the bootstrap as live-mode; when
-   * absent, the shell renders the static stack item but receives no
-   * push updates after mount (the bug `/r/<shortCode>` exhibited before
+   * absent, the shell renders the static render but receives no
+   * live updates after mount (the bug `/r/<shortCode>` exhibited before
    * we threaded the bootstrap minter through this route).
    */
   readonly wsUrl?: string;
@@ -824,10 +824,10 @@ export interface SelfContainedShellInputs {
 }
 
 /**
- * Build the self-contained shell HTML for a given session.
+ * Build the self-contained shell HTML for a given render.
  *
  * The returned HTML is a complete, standalone document: it inlines the
- * compiled component (base64) + session ids in a `window.__GGUI_META__`
+ * compiled component (base64) + the render id in a `window.__GGUI_META__`
  * global, then loads the iframe-runtime bundle via `<script type="module"
  * src={runtimeUrl}>`. The runtime takes over synchronously on import,
  * mounts the component, and the iframe paints WITHOUT any further server
@@ -1057,7 +1057,7 @@ export interface GguiRenderResourceTemplateOptions {
    * Per-app metadata store the resource handler reads to resolve
    * `App.publicEnv` for the bootstrap projection.
    * Symmetric with `/r/<shortCode>`'s lookup; wraps the same store
-   * the push gate reads. Absent ⇒ publicEnv stays empty on the
+   * the render gate reads. Absent ⇒ publicEnv stays empty on the
    * resource-served bootstrap (wrappers calling `getPublicEnv` throw
    * at hook-mount with a clear "not provided" message).
    */
@@ -1084,12 +1084,12 @@ export interface GguiRenderResourceTemplateOptions {
    */
   readonly index?: BlueprintIndex;
   /**
-   * App-id used for blueprint-registry scoping when the session has
-   * been evicted. The registry is per-`appId`, but a missing session
+   * App-id used for blueprint-registry scoping when the render has
+   * been evicted. The registry is per-`appId`, but a missing render
    * has no way to derive its tenant — multi-tenant deployments leave
    * this undefined to fail-safe back to the loading shell. Single-
    * tenant OSS sets `'builder'` (the universal-MCP default identity)
-   * and rehydrate works across session expiry / process restart.
+   * and rehydrate works across render expiry / process restart.
    */
   readonly defaultAppIdFallback?: string;
   /**
@@ -1268,7 +1268,7 @@ export function registerGguiRenderResourceTemplate(
    * Merge gadget-declared origins from
    * {@link deriveBundleOrigins} into the base `templateCspMeta`. The
    * base only carries the publicBaseUrl origin (HTTPS + WSS); without
-   * the per-stack-item augmentation, gadget bundle / style / API
+   * the per-render augmentation, gadget bundle / style / API
    * origins (Leaflet tiles, Mapbox API, Stripe SDK, …) are blocked by
    * claude.ai's iframe CSP and the component fails to render. Returns
    * `undefined` when there's no base CSP at all (publicBaseUrl
@@ -1523,7 +1523,7 @@ export function registerGguiRenderResourceTemplate(
   );
 
   server.registerResource(
-    "ggui-session-self-contained-resume",
+    "ggui-render-self-contained-resume",
     resumeTemplate,
     {
       title: "ggui render (self-contained, resume URI)",

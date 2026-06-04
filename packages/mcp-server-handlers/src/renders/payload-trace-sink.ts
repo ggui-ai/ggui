@@ -16,7 +16,7 @@
  *     me?" — invaluable when debugging contract drift.
  *
  * **Why module-level registry instead of constructor injection.** The
- * push + update handlers are constructed once per server boot via
+ * render + update handlers are constructed once per server boot via
  * `createGguiRenderHandler` / `createGguiUpdateHandler` factories.
  * Threading a sink through every handler dep struct + every test that
  * builds them would touch ~30 callsites for a devtools-only surface.
@@ -29,21 +29,21 @@
  * immediately without copying or stringifying the payload — zero hot-
  * path cost. Passing `null` removes a previously registered sink.
  *
- * **Direction labelling.** `inbound-push` for `ggui_render` invocations,
+ * **Direction labelling.** `inbound-render` for `ggui_render` invocations,
  * `outbound-update` for `ggui_update` invocations. From the agent's
  * perspective both are inbound MCP tool calls, but viewed from the
- * end-user UI: a push delivers a new surface (in to the UI), and an
+ * end-user UI: a render delivers a new surface (in to the UI), and an
  * update mutates a delivered surface (out to the UI as a `props_update`
  * frame on the live-channel wire). The label aliases the *intent* of the
  * payload, not its transport direction.
  */
 
 /** Direction of the payload from the agent → end-user UI perspective. */
-export type PayloadTraceDirection = 'inbound-push' | 'outbound-update';
+export type PayloadTraceDirection = 'inbound-render' | 'outbound-update';
 
 /**
  * One payload trace entry. Emitted **after** the handler successfully
- * parses input and resolves the session — so `renderId` and `appId`
+ * parses input and resolves the render — so `renderId` and `appId`
  * are always populated and the payload is the post-validation shape
  * the handler is about to act on. Pre-validation rejections (schema
  * shape, missing handshakeStore, etc.) never reach this sink.

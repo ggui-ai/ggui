@@ -5,7 +5,7 @@
  *
  *   - {@link validateContract} — strict; runs phased validation and
  *     throws {@link ContractValidationError} on the FIRST phase that
- *     produces errors. Used at every protocol boundary (push handler,
+ *     produces errors. Used at every protocol boundary (render handler,
  *     blueprint registration, future synth output gate).
  *
  *   - {@link lintContract} — graded; runs ALL phases unconditionally
@@ -192,7 +192,7 @@ function zodIssueCode(zodCode: string): string {
  * (an LLM correctly re-nests `wiredTools` → `agentCapabilities.tools`),
  * and `ggui_render`'s override path rejects it. Shares the one detector
  * (`checkRetiredContractFields`) with the author-time surface + the
- * push-gate assert, so the retired vocabulary can't drift across sites.
+ * render-gate assert, so the retired vocabulary can't drift across sites.
  */
 function phaseRetired(contract: DataContract): ContractIssue[] {
   return checkRetiredContractFields(contract).map((w): ContractIssue => ({
@@ -214,7 +214,7 @@ function phaseRetired(contract: DataContract): ContractIssue[] {
  * under Ajv strict mode. Distinct from phase-1 shape: zod validates the
  * WRAPPER shape, but the wrapped JSON Schema rides through
  * `.passthrough()` unvalidated. Runs before references / schema-compat,
- * which read these schemas. This is the check the push/handshake assert
+ * which read these schemas. This is the check the render/handshake assert
  * set had that `validateContract` was previously missing — folding it in
  * here is what makes the strict gate complete (and therefore safe to use
  * as the single boundary gate).

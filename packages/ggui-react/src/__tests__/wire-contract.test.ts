@@ -140,7 +140,7 @@ describe('validateInboundStreamPayload', () => {
     it('falls through to valid on _ggui:preview when no injection provided', () => {
       // No protocol-shipped validator for PREVIEW_CHANNEL — consumers
       // that want A2UI enforcement compose the validator via
-      // `GguiSession.extraReservedValidators` (default) or pass
+      // `GguiRender.extraReservedValidators` (default) or pass
       // their own map here.
       const r = validateInboundStreamPayload(
         STREAM,

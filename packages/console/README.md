@@ -1,6 +1,6 @@
 # @ggui-ai/console
 
-Server-served operator landing page + minimal session viewer for a
+Server-served operator landing page + minimal render viewer for a
 self-hosted `@ggui-ai/mcp-server` instance. Single-origin, static
 bundle, Vite + React 19.
 
@@ -10,9 +10,9 @@ bundle, Vite + React 19.
   `http://localhost:<port>/` against the server they just started.
   Shows the server's name / version + the currently pending pair-code
   (if any), and — when opened at `/s/<shortCode>` — a minimal live
-  view of the session bound to that short-code.
+  view of the render bound to that short-code.
 - **IS NOT:** a multi-origin hosted product dashboard, the MCP Apps
-  iframe thin shell (`GGUI_SESSION_SHELL_HTML`), or any cross-origin
+  iframe thin shell (`GGUI_RENDER_SHELL_HTML`), or any cross-origin
   control surface. No server switcher, no cross-origin anything.
 
 ## Surface
@@ -48,7 +48,7 @@ await server.listen(4567);
 // → http://127.0.0.1:4567/ serves the landing page.
 ```
 
-With the session viewer (requires `sessionChannel` + a
+With the render viewer (requires `renderChannel` + a
 `shortCodeIndex`):
 
 ```ts
@@ -59,7 +59,7 @@ const shortCodeIndex = new InMemoryShortCodeIndex();
 
 const server = createGguiServer({
   pairing: true,
-  sessionChannel: true,
+  renderChannel: true,
   shortCodeIndex,
   console: { sessionCookie: true },
   // bootstrapSecret: process.env.GGUI_SECRET — use a deterministic
@@ -67,7 +67,7 @@ const server = createGguiServer({
 });
 await server.listen(4567);
 // → http://127.0.0.1:4567/           landing page
-// → http://127.0.0.1:4567/s/<code>   session viewer
+// → http://127.0.0.1:4567/s/<code>   render viewer
 ```
 
 Path override:

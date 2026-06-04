@@ -19,7 +19,7 @@ describe('ContractErrorCode', () => {
   it('pins the v1 named codes', () => {
     // Each of the four v1 literals MUST remain assignable to
     // ContractErrorCode. If a literal drops out of the union, the
-    // producer (mcp-server session-channel router) loses its
+    // producer (mcp-server renderChannel router) loses its
     // narrow code selector and the protocol version actually
     // regressed.
     expectTypeOf<'TOOL_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
@@ -30,7 +30,7 @@ describe('ContractErrorCode', () => {
 
   it('pins the 2026-04-23 additions (F4 + C8)', () => {
     // `SCHEMA_MISMATCH_ERROR` joined at F4 (Phase 1 Item 5); the
-    // producer is the schema-compat checker's push-time hook.
+    // producer is the schema-compat checker's render-time hook.
     expectTypeOf<'SCHEMA_MISMATCH_ERROR'>().toMatchTypeOf<ContractErrorCode>();
     // `RENDER_NOT_FOUND` + `AUTH_REJECTED` joined at C8 — post-WS-open
     // bootstrap failures surfaced on live-channel `_ggui:contract-error`

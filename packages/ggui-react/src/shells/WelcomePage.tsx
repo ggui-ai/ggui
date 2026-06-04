@@ -1,13 +1,13 @@
 /**
  * WelcomePage — Built-in onboarding ramp for FullscreenShell.
  *
- * Shows when the stack is empty and no custom initial screen is configured.
+ * Shows when no render has arrived yet and no custom initial screen is configured.
  * Three state-aware views based on connection status:
  * 1. NotConfigured — no wsEndpoint, shows MCP setup instructions
  * 2. AgentOffline — wsEndpoint set but not connected, shows troubleshooting
- * 3. AgentReady — connected but stack empty after grace period, shows onboarding
+ * 3. AgentReady — connected but no render after grace period, shows onboarding
  *
- * Self-destructs: once the agent pushes UI, FullscreenShell replaces this with the real stack.
+ * Self-destructs: once the agent renders UI, FullscreenShell replaces this with the real render.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -180,7 +180,7 @@ export function WelcomePage({ connectionStatus }: WelcomePageProps) {
   // State detection from connectionStatus only:
   // - 'disconnected' → could be not configured or agent offline, show offline state
   // - 'connecting' → agent offline / trying to connect
-  // - 'connected' → agent is live but stack is empty, show onboarding
+  // - 'connected' → agent is live but no render yet, show onboarding
   if (connectionStatus === 'connected') {
     return <div style={styles.container}><AgentReady /></div>;
   }

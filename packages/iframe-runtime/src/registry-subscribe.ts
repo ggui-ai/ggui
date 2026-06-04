@@ -6,7 +6,7 @@
  * Replaces the pre-B3b `subscribe()` helper + the `RendererWebSocketManager`
  * lifecycle class. The two retired modules paired a hand-rolled WS
  * manager with a separate handshake helper; B3b unifies both behind
- * the `@ggui-ai/live-channel` library so every WS frame type (push,
+ * the `@ggui-ai/live-channel` library so every WS frame type (render,
  * data, props_update, drain_ack, channel_payload, channel_error,
  * system, feedback) flows through one registry-owned transport.
  *
@@ -242,7 +242,7 @@ function classifyPreAckError(payload: {
  * error.
  *
  * Once the promise settles, subsequent server frames flow through the
- * registered channel handlers (props_update, drain_ack, push, data,
+ * registered channel handlers (props_update, drain_ack, render, data,
  * etc.) — there is no longer a separate `onMessage` callback fanning
  * frames across multiple handler chains.
  */
@@ -282,9 +282,9 @@ export function connectViaRegistry(
       onMessage: (payload) => {
         const ack = payload as AckPayload;
         // Post-handshake ack — the WS reconnected and the server
-        // re-sent the subscribe ack with a fresh `stack` snapshot.
+        // re-sent the subscribe ack with a fresh `render` snapshot.
         // Fan it onto the caller's resubscribe callback so the
-        // runtime can reapply the authoritative stack (a push or
+        // runtime can reapply the authoritative render (a render or
         // update that landed during the WS dropout window now
         // restores). Skip the version handshake / settle bookkeeping
         // — that already fired on the original ack.
@@ -421,7 +421,7 @@ export function connectViaRegistry(
 
     // `bind()` selects the transport (WS for wsUrl+wsToken sessions;
     // the live-channel narrows on its `bootstrap` shape) and starts
-    // it. We override `session.wsUrl` with the composed URL so the
+    // it. We override `bootstrap.wsUrl` with the composed URL so the
     // registry's WS transport gets the wsToken-threaded variant. The
     // live-channel's `bootstrap` arg is its internal name; the field
     // on the wire is `wsToken`.

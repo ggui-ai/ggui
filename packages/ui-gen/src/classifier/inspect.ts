@@ -423,7 +423,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     });
   }
 
-  // Streams — each declared channel on the live session plane. Flat
+  // Streams — each declared channel on the live render plane. Flat
   // `Record<name, StreamChannelEntry>`. Uses the real protocol type
   // (not `Record<string, unknown>`) so the iteration walks typed
   // entries.

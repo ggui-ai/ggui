@@ -20,20 +20,20 @@ describe('SqlitePendingEventConsumer', () => {
   });
 
   describe('lifecycle hooks', () => {
-    it('markCreated registers a session — subsequent appends + consumes work', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'evt-1', type: 'foo' });
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
+    it('markCreated registers a render — subsequent appends + consumes work', async () => {
+      consumer.markCreated('render-1');
+      await consumer.append('render-1', { id: 'evt-1', type: 'foo' });
+      const result = await consumer.consumeAndClear('render-1', 60_000);
       expect(result.events).toHaveLength(1);
       expect(result.events[0].id).toBe('evt-1');
       expect(result.status).toBe('active');
     });
 
     it('markCreated is idempotent — calling twice does NOT reset', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'evt-1' });
-      consumer.markCreated('stack-1'); // no-op
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
+      consumer.markCreated('render-1');
+      await consumer.append('render-1', { id: 'evt-1' });
+      consumer.markCreated('render-1'); // no-op
+      const result = await consumer.consumeAndClear('render-1', 60_000);
       expect(result.events).toHaveLength(1);
     });
 
@@ -41,42 +41,42 @@ describe('SqlitePendingEventConsumer', () => {
 
   describe('consumeAndClear', () => {
     it('returns events present at clear time, then leaves the buffer empty', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'a' });
-      await consumer.append('stack-1', { id: 'b' });
-      const first = await consumer.consumeAndClear('stack-1', 60_000);
+      consumer.markCreated('render-1');
+      await consumer.append('render-1', { id: 'a' });
+      await consumer.append('render-1', { id: 'b' });
+      const first = await consumer.consumeAndClear('render-1', 60_000);
       expect(first.events.map((e) => e.id)).toEqual(['a', 'b']);
-      const second = await consumer.consumeAndClear('stack-1', 60_000);
+      const second = await consumer.consumeAndClear('render-1', 60_000);
       expect(second.events).toEqual([]);
     });
 
-    it('throws PendingPipeNotFoundError when the session never existed', async () => {
+    it('throws PendingPipeNotFoundError when the render never existed', async () => {
       await expect(
         consumer.consumeAndClear('never-created', 60_000),
       ).rejects.toBeInstanceOf(PendingPipeNotFoundError);
     });
 
     it('returns empty array + active status when buffer is empty', async () => {
-      consumer.markCreated('stack-1');
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
+      consumer.markCreated('render-1');
+      const result = await consumer.consumeAndClear('render-1', 60_000);
       expect(result.events).toEqual([]);
       expect(result.status).toBe('active');
     });
   });
 
   describe('append', () => {
-    it('throws PendingPipeNotFoundError when session never registered', async () => {
+    it('throws PendingPipeNotFoundError when render never registered', async () => {
       await expect(
         consumer.append('never', { id: 'evt-1' }),
       ).rejects.toBeInstanceOf(PendingPipeNotFoundError);
     });
 
     it('FIFO ordering — sequential appends preserve order on consume', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'first' });
-      await consumer.append('stack-1', { id: 'second' });
-      await consumer.append('stack-1', { id: 'third' });
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
+      consumer.markCreated('render-1');
+      await consumer.append('render-1', { id: 'first' });
+      await consumer.append('render-1', { id: 'second' });
+      await consumer.append('render-1', { id: 'third' });
+      const result = await consumer.consumeAndClear('render-1', 60_000);
       expect(result.events.map((e) => e.id)).toEqual([
         'first',
         'second',
@@ -85,12 +85,12 @@ describe('SqlitePendingEventConsumer', () => {
     });
 
     it('seq resets after consume — next append starts at 1 again', async () => {
-      consumer.markCreated('stack-1');
-      await consumer.append('stack-1', { id: 'a' });
-      await consumer.consumeAndClear('stack-1', 60_000);
+      consumer.markCreated('render-1');
+      await consumer.append('render-1', { id: 'a' });
+      await consumer.consumeAndClear('render-1', 60_000);
       // Drained. Next append should land cleanly.
-      await consumer.append('stack-1', { id: 'b' });
-      const result = await consumer.consumeAndClear('stack-1', 60_000);
+      await consumer.append('render-1', { id: 'b' });
+      const result = await consumer.consumeAndClear('render-1', 60_000);
       expect(result.events).toHaveLength(1);
       expect(result.events[0].id).toBe('b');
     });
@@ -102,12 +102,12 @@ describe('SqlitePendingEventConsumer', () => {
       // to demonstrate persistence semantics.
       const tmpPath = `/tmp/ggui-pending-events-test-${Date.now()}-${Math.random()}.sqlite`;
       const a = new SqlitePendingEventConsumer({ filename: tmpPath });
-      a.markCreated('stack-1');
-      await a.append('stack-1', { id: 'persistent' });
+      a.markCreated('render-1');
+      await a.append('render-1', { id: 'persistent' });
       a.close();
 
       const b = new SqlitePendingEventConsumer({ filename: tmpPath });
-      const result = await b.consumeAndClear('stack-1', 60_000);
+      const result = await b.consumeAndClear('render-1', 60_000);
       expect(result.events).toHaveLength(1);
       expect(result.events[0].id).toBe('persistent');
       b.close();
@@ -116,15 +116,15 @@ describe('SqlitePendingEventConsumer', () => {
 
   describe('inspector helpers', () => {
     it('pendingCount reports buffer size without consuming', async () => {
-      consumer.markCreated('stack-1');
-      expect(consumer.pendingCount('stack-1')).toBe(0);
-      await consumer.append('stack-1', { id: 'a' });
-      await consumer.append('stack-1', { id: 'b' });
-      expect(consumer.pendingCount('stack-1')).toBe(2);
-      expect(consumer.pendingCount('stack-1')).toBe(2);
+      consumer.markCreated('render-1');
+      expect(consumer.pendingCount('render-1')).toBe(0);
+      await consumer.append('render-1', { id: 'a' });
+      await consumer.append('render-1', { id: 'b' });
+      expect(consumer.pendingCount('render-1')).toBe(2);
+      expect(consumer.pendingCount('render-1')).toBe(2);
     });
 
-    it('pendingCount returns 0 for a session that doesn\'t exist (no throw)', () => {
+    it('pendingCount returns 0 for a render that doesn\'t exist (no throw)', () => {
       expect(consumer.pendingCount('does-not-exist')).toBe(0);
     });
   });

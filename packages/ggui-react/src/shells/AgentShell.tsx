@@ -256,7 +256,7 @@ export function AgentShell({
 
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Top-of-stack UI moment — the generated UI the character is
+  // Latest UI moment — the generated UI the character is
   // currently presenting. Latest moment wins; AgentShell shows one at
   // a time (unlike ChatShell's inline timeline).
   const topMoment = uiMoments.length > 0 ? uiMoments[uiMoments.length - 1] : null;

@@ -14,7 +14,7 @@ describe('InProcessStreamFanout — impl-specific', () => {
 
     const iterable = fanout.subscribe('s1');
     // Eager registration — subscribe() returns WITH the subscriber
-    // already in the session's live set. This is what makes
+    // already in the render's live set. This is what makes
     // "publish-after-subscribe-returns is delivered" keepable.
     expect(fanout.subscriberCount('s1')).toBe(1);
 

@@ -45,7 +45,7 @@
  * Stateless on the server side: validation is HMAC + claim arithmetic
  * only, no per-envelope state lookup. The cloud pod's
  * `runtime-refresh-ws-token.ts` composes this with the same
- * `MCP_BOOTSTRAP_SECRET` the push handler signs against.
+ * `MCP_BOOTSTRAP_SECRET` the render handler signs against.
  */
 
 import { z } from 'zod';
@@ -115,7 +115,7 @@ type RefreshOutput = RefreshAccepted | RefreshRejected;
  * Refresh seam — implementations receive the inbound envelope and
  * return either the freshly-minted envelope or a discriminated failure.
  * The OSS server wires this against `refreshWsToken` from
- * `@ggui-ai/mcp-server-core` (same HMAC secret as the push minter).
+ * `@ggui-ai/mcp-server-core` (same HMAC secret as the render minter).
  *
  * Defined here (not imported from `mcp-server-core`) to keep the
  * handler package free of an extra dep — the cloud pod composes the
@@ -130,7 +130,7 @@ export interface WsTokenRefreshSeam {
 export interface GguiRefreshWsTokenHandlerDeps {
   /**
    * The refresh seam — typically the same `channelWsToken.refresh`
-   * the session-channel server wires for WS upgrade validation, so
+   * the render-channel server wires for WS upgrade validation, so
    * both code paths share one HMAC secret and one refresh-window
    * policy. Absence is tolerated (`BOOTSTRAP_NOT_SUPPORTED` on every
    * call); same fail-closed posture as the other ws-token-aware
@@ -143,7 +143,7 @@ export interface GguiRefreshWsTokenHandlerDeps {
  * Build the `ggui_runtime_refresh_ws_token` handler.
  *
  * The handler IS the contract: stateless, single I/O envelope, no DB,
- * no session-state lookup, no log spam on per-call success. The only
+ * no render-state lookup, no log spam on per-call success. The only
  * server-side state it touches is the HMAC secret captured by the
  * refresh seam at construction time.
  */

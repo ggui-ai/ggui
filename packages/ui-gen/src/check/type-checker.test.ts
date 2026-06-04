@@ -271,7 +271,7 @@ describe('typecheck', () => {
     });
 
     // Third-party-wrapper STRICT typing via direct imports.
-    // The push handler fetches each non-stdlib gadget's `.d.ts` and
+    // The render handler fetches each non-stdlib gadget's `.d.ts` and
     // threads it through `typecheck`'s `dtsMap` param. The `.d.ts` is
     // overlaid at `node_modules/<package>/index.d.ts`, so a generated
     // `import { useLeafletMap } from '@ggui-samples/gadget-leaflet'`

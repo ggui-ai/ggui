@@ -26,8 +26,8 @@
  *     actor (or explicitly-marked system actor) and a concrete
  *     resource.
  *   - **Telemetry** ({@link TelemetrySink}): aggregate counts,
- *     durations, rates. Examples: `pair.completed` counter, push
- *     duration histogram, session-channel-subscriber gauge.
+ *     durations, rates. Examples: `pair.completed` counter, render
+ *     duration histogram, render-channel-subscriber gauge.
  *   - **Structured log** (`Logger`): developer-facing narrative
  *     details — request ids, stack traces, verbose context. Not
  *     audit-worthy on its own; often accompanies audit entries but

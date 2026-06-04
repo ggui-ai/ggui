@@ -10,17 +10,15 @@
  *
  * ## Storage layout (renderId-keyed)
  *
- * Two tables. The on-disk column is `stack_item_id` for back-compat
- * with already-deployed sqlite databases; semantically it stores a
- * `renderId`.
+ * Two tables. The on-disk column is `render_id`, storing a `renderId`.
  *
- *   - `pending_event_pipes(stack_item_id PK, status, last_activity_at,
+ *   - `pending_event_pipes(render_id PK, status, last_activity_at,
  *     expires_at)` — per-pipe lifecycle row. Created via
  *     {@link markCreated}; read on every `consumeAndClear` so the
  *     result carries the current status. No explicit close — pipes
  *     decay via TTL.
- *   - `pending_events(stack_item_id, seq, event_json, enqueued_at,
- *     PRIMARY KEY (stack_item_id, seq))` — FIFO buffer. `seq` is
+ *   - `pending_events(render_id, seq, event_json, enqueued_at,
+ *     PRIMARY KEY (render_id, seq))` — FIFO buffer. `seq` is
  *     monotonic + gap-free per pipe; consumeAndClear drains then
  *     resets it back to 0 (the pipe can keep appending).
  *
@@ -78,14 +76,14 @@ export interface SqlitePendingEventConsumerOptions {
 }
 
 interface PipeRow {
-  stack_item_id: string;
+  render_id: string;
   status: RenderStatus;
   last_activity_at: number;
   expires_at: number;
 }
 
 interface EventRow {
-  stack_item_id: string;
+  render_id: string;
   seq: number;
   event_json: string;
   enqueued_at: number;
@@ -127,32 +125,32 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     this.db.exec(SCHEMA_SQL);
     this.stmts = {
       getPipe: this.db.prepare<unknown[], PipeRow>(
-        `SELECT * FROM pending_event_pipes WHERE stack_item_id = ?`,
+        `SELECT * FROM pending_event_pipes WHERE render_id = ?`,
       ),
       insertPipe: this.db.prepare<unknown[]>(
         `INSERT OR IGNORE INTO pending_event_pipes
-          (stack_item_id, status, last_activity_at, expires_at)
+          (render_id, status, last_activity_at, expires_at)
          VALUES (?, ?, ?, ?)`,
       ),
       updateActivity: this.db.prepare<unknown[]>(
         `UPDATE pending_event_pipes
          SET last_activity_at = ?, expires_at = ?
-         WHERE stack_item_id = ?`,
+         WHERE render_id = ?`,
       ),
       deleteEventsForPipe: this.db.prepare<unknown[]>(
-        `DELETE FROM pending_events WHERE stack_item_id = ?`,
+        `DELETE FROM pending_events WHERE render_id = ?`,
       ),
       selectEventsForPipe: this.db.prepare<unknown[], EventRow>(
-        `SELECT * FROM pending_events WHERE stack_item_id = ? ORDER BY seq ASC`,
+        `SELECT * FROM pending_events WHERE render_id = ? ORDER BY seq ASC`,
       ),
       insertEvent: this.db.prepare<unknown[]>(
         `INSERT INTO pending_events
-          (stack_item_id, seq, event_json, enqueued_at)
+          (render_id, seq, event_json, enqueued_at)
          VALUES (?, ?, ?, ?)`,
       ),
       nextSeq: this.db.prepare<unknown[], { next_seq: number }>(
         `SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
-         FROM pending_events WHERE stack_item_id = ?`,
+         FROM pending_events WHERE render_id = ?`,
       ),
     };
   }
@@ -234,22 +232,22 @@ function parseEventJson(json: string): Record<string, unknown> {
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS pending_event_pipes (
-  stack_item_id TEXT PRIMARY KEY,
+  render_id TEXT PRIMARY KEY,
   status TEXT NOT NULL DEFAULT 'active',
   last_activity_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS pending_events (
-  stack_item_id TEXT NOT NULL,
+  render_id TEXT NOT NULL,
   seq INTEGER NOT NULL,
   event_json TEXT NOT NULL,
   enqueued_at INTEGER NOT NULL,
-  PRIMARY KEY (stack_item_id, seq),
-  FOREIGN KEY (stack_item_id) REFERENCES pending_event_pipes(stack_item_id)
+  PRIMARY KEY (render_id, seq),
+  FOREIGN KEY (render_id) REFERENCES pending_event_pipes(render_id)
     ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_pending_events_pipe
-  ON pending_events(stack_item_id, enqueued_at);
+  ON pending_events(render_id, enqueued_at);
 `;

@@ -64,7 +64,7 @@ import type { StreamBus } from './wire-config.js';
  * Default polling cadence for the iframe-polling transport (ms).
  * Mirrors the server-side default on
  * {@link DEFAULT_CHANNEL_POLL_DEFAULT_MS} in
- * `packages/mcp-server/src/session-channel.ts`. Conservative: 10s
+ * `packages/mcp-server/src/render-channel.ts`. Conservative: 10s
  * matches a "data is fresh enough" bar without burning the parent
  * host's `tools/call` quota.
  */
@@ -94,7 +94,7 @@ interface ChannelState {
   readonly preferWs: boolean;
   /**
    * Active poll-loop timer, if any. Cleared when:
-   *   - the channel is removed (stack pop / new push),
+   *   - the channel is removed (a new render replaces the old),
    *   - the WS reconnects + we receive the first `channel_payload`
    *     for this channel.
    */
@@ -559,8 +559,8 @@ export function createChannelTransportRouter(
         (prevStatus === 'disconnected' || prevStatus === 'reconnecting')
       ) {
         // Reconnected. Re-send `channel_subscribe` for every
-        // WS-preferring channel. Server is idempotent on the (session,
-        // render, channel) tuple, so duplicates are safe. We
+        // WS-preferring channel. Server is idempotent on the
+        // (render, channel) tuple, so duplicates are safe. We
         // intentionally LEAVE the polling fallback running until the
         // first `channel_payload` lands — bridges the gap where the
         // server's first post-reconnect poll cycle hasn't fired yet.

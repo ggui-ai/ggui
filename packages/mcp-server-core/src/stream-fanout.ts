@@ -1,6 +1,6 @@
 /**
  * StreamFanout — pub/sub seam for live-channel stream delivery across
- * publisher→subscriber boundaries. It lets the `session-channel`
+ * publisher→subscriber boundaries. It lets the `render-channel`
  * server delegate fanout to an injectable implementation: in-process
  * for OSS, Redis pub/sub for hosted deployments (where publisher and
  * subscriber may live on different pods).
@@ -19,9 +19,9 @@
  *   pod pumps Redis pub/sub messages into API-Gateway WS connections.
  *
  * **Obligations:**
- * - Producer MUST call `publish()` at most once per envelope per session.
+ * - Producer MUST call `publish()` at most once per envelope per render.
  *   The envelope MUST carry a `renderId` that matches the routing key
- *   and a `seq` that is strictly increasing for the session (gap-free
+ *   and a `seq` that is strictly increasing for the render (gap-free
  *   for a single writer; gaps across concurrent writers surface as
  *   sequence conflicts upstream at the `SessionStreamBuffer.record`
  *   layer, not here).
@@ -31,7 +31,7 @@
  *   only; gap-recovery for reconnecting subscribers is the
  *   {@link SessionStreamBuffer.replay} path's responsibility.
  * - Implementations MUST NOT coalesce, drop, or reorder publishes
- *   within a session. Multi-subscriber fanout within a single session
+ *   within a render. Multi-subscriber fanout within a single render
  *   MUST see all frames in the same sequence order.
  * - Implementations MUST tolerate subscriber iterator abandonment
  *   without leaking: dropping the iterator (or calling its `return()`)
@@ -39,7 +39,7 @@
  *
  * **Failure mode:**
  * - `publish()` failure (network, backpressure, internal error) MUST
- *   throw. Producers decide retry policy; session-channel treats a
+ *   throw. Producers decide retry policy; render-channel treats a
  *   thrown publish as a log-and-continue event because the envelope
  *   has already been persisted to the {@link SessionStreamBuffer} and
  *   will be recovered on the next subscriber reconnect.
@@ -48,7 +48,7 @@
  *   `{done: true}`). Consumers detect termination and reconnect via
  *   replay.
  * - `close(renderId)` MUST cause all in-flight subscribers for that
- *   session to terminate cleanly. It is idempotent.
+ *   render to terminate cleanly. It is idempotent.
  *
  * **Observable violation:**
  * - Contract test `streamFanoutContract(impl)` covers: single publish
@@ -98,7 +98,7 @@ export interface StreamFanoutPublishInput {
  */
 export interface StreamFanout {
   /**
-   * Publish one envelope to this session's live subscribers. Delivery
+   * Publish one envelope to this render's live subscribers. Delivery
    * is fire-and-forget from the producer's perspective: the returned
    * promise resolves when the publish has been committed to the
    * underlying pub/sub layer, NOT when every subscriber has received
@@ -109,14 +109,14 @@ export interface StreamFanout {
   publish(input: StreamFanoutPublishInput): Promise<void>;
 
   /**
-   * Subscribe to this session's live frames. The returned async
+   * Subscribe to this render's live frames. The returned async
    * iterator yields every envelope that `publish()` completes strictly
    * AFTER this call returns.
    *
    * Iterator termination is driven by:
    *   - Consumer abandoning the iterator (or calling its `return()`) —
    *     subscriber is unregistered within bounded time.
-   *   - Upstream calling {@link StreamFanout.close} for the session —
+   *   - Upstream calling {@link StreamFanout.close} for the render —
    *     iterator ends with `{done: true}`.
    *   - Implementation-detected error (Redis disconnect, etc.) —
    *     iterator throws; consumer reconnects via `SessionStreamBuffer.replay`.

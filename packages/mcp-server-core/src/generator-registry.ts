@@ -95,7 +95,7 @@ export function formatGeneratorSlug(parts: GeneratorSlugParts): string {
  *
  * Lookup is by slug. The default-generator pointer is the v1 fallback
  * for callers that don't specify which generator to run (e.g. an
- * agent-side push that doesn't carry a blueprint-level generator hint).
+ * agent-side render that doesn't carry a blueprint-level generator hint).
  * The blueprint matcher reads {@link defaultGenerator} when no
  * blueprint candidate matches at handshake time; the
  * `ggui_ops_generate_blueprint` tool uses it when the caller omits

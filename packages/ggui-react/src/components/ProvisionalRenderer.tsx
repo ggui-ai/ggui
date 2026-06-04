@@ -66,7 +66,7 @@ export interface ProvisionalRendererProps {
   /**
    * When `true`, the preview surface is hidden — even if envelopes are
    * still arriving. Consumers set this once the authoritative render
-   * takes over (e.g. `componentCode` lands on the stack item and the
+   * takes over (e.g. `componentCode` lands on the render and the
    * renderer has swapped in the final component). Does NOT tear down
    * internal state; envelopes keep accumulating in case the consumer
    * toggles back.
@@ -100,7 +100,7 @@ const EMPTY_STATE: ProvisionalState = {
 function reduce(state: ProvisionalState, msg: ServerMessage): ProvisionalState {
   if ('createSurface' in msg) {
     // Start a fresh surface. Any in-flight fragments from a previous
-    // surface (e.g. an aborted earlier preamble on the same session)
+    // surface (e.g. an aborted earlier preamble on the same render)
     // are dropped deliberately — A2UI semantics scope components to
     // the surface that declared them.
     return {

@@ -12,11 +12,11 @@
  *
  *   1. `installContextRegistry` populates `globalThis.__ggui__.contexts`
  *      with one entry per declared slot.
- *   2. The `getOuterWrapper(item)` callback (the seam bootProduction
- *      passes through `StackRenderContext`) wraps mounted trees in a
+ *   2. The `buildOuterWrapper(render)` callback (the seam bootProduction
+ *      threads through `wrapOuter`) wraps mounted trees in a
  *      `<ContextStateHost>` whose `slots` prop carries the resolved
  *      slot list.
- *   3. mcpApps / system stack items skip the wrap (their renderers
+ *   3. mcpApps / system renders skip the wrap (their renderers
  *      don't run user-component code that reads contexts).
  *   4. A `setValue` call inside the user component propagates as a
  *      `ui/update-model-context` post.

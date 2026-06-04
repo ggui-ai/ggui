@@ -242,7 +242,7 @@ describe('InMemoryAppMetadataStore', () => {
   // Schema-hardening (Bucket A, 2026-05-18): store-write boundary
   // re-validates every gadget against `strictGadgetDescriptorSchema`.
   // Programmatic callers that hand a malformed entry now fail loudly
-  // instead of silently riding through to push.
+  // instead of silently riding through to render.
   describe('gadget validation at store boundary', () => {
     it('throws when register() input.gadgets is missing required teaching fields', () => {
       const store = new InMemoryAppMetadataStore();

@@ -6,7 +6,7 @@
  * both OSS and hosted implementations from a single source of truth.
  *
  * The pure ops are the contract; any storage adapter (in-memory ring,
- * DDB-backed Session row) MUST produce the same outcomes when threaded
+ * DDB-backed Render row) MUST produce the same outcomes when threaded
  * through `applyRecordOp` + `replayFromBufferOp`.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -469,7 +469,7 @@ describe('normalizeBufferState', () => {
 // times then succeeded" without real DDB. The retry loop's contract is:
 //   - on first-attempt success, no retries.
 //   - on conflict, re-fetch fresh state + re-apply + re-persist.
-//   - on missing session (fetchState returns null), throw immediately.
+//   - on missing render (fetchState returns null), throw immediately.
 //   - on exhausted budget, throw with the attempt count.
 // Seq monotonicity is the cross-cutting invariant: two concurrent
 // sequenced records MUST observe distinct seqs.

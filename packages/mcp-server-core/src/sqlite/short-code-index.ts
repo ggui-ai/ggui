@@ -63,7 +63,7 @@ export interface SqliteShortCodeIndexOptions {
   filename?: string;
   /**
    * Existing `better-sqlite3` instance to reuse. Useful when the host
-   * colocates multiple stores on one DB file (e.g. sessions +
+   * colocates multiple stores on one DB file (e.g. renders +
    * short-codes in `ggui-state.sqlite`). Mutually exclusive with
    * `filename` — if both are passed, `database` wins, and `close()`
    * becomes a no-op so the caller still controls the handle.

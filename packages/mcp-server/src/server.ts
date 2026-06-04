@@ -334,7 +334,7 @@ function hasUiVisibilityArray(meta: Record<string, unknown> | undefined): meta i
 
 /**
  * Scan a handler list and return the names of those whose
- * `_meta.ui.visibility` array includes `"app"`. Used by the push
+ * `_meta.ui.visibility` array includes `"app"`. Used by the render
  * handler's `appCallableTools` provider to populate the bootstrap
  * field the iframe-runtime consults for Pattern α / Pattern β
  * dispatch routing.
@@ -375,7 +375,7 @@ function collectAppCallableToolNames(
  * lose the defaults unless they copy-paste them. Keeping `defaultHandlers`
  * named means the default set stays discoverable + testable in one place.
  *
- * `push` is opt-in via `deps.push` — it's only useful when the server
+ * `render` is opt-in via `deps.render` — it's only useful when the server
  * was booted with `mcpApps: true` (so `ui://ggui/render` is served)
  * and pairs a real RenderStore. Callers get the choice explicitly.
  */
@@ -402,9 +402,9 @@ function buildOpsBlueprintDeps(input: {
    * Cache-registry bundle for the ops dual-write mirror. When bound,
    * `ggui_ops_generate_blueprint` also writes the produced blueprint
    * into the cache vectorStore via `registerBlueprint` so the
-   * agent-facing matchBlueprint exact-key probe (handshake + push)
+   * agent-facing matchBlueprint exact-key probe (handshake + render)
    * finds operator-authored blueprints. Same bundle the handshake
-   * negotiator + push handler already consume — single source of
+   * negotiator + render handler already consume — single source of
    * truth for the cache identity.
    */
   readonly cacheRegistry?: {
@@ -536,7 +536,7 @@ export function defaultHandlers(deps: {
      */
     readonly serverCapabilities?: () => import("@ggui-ai/protocol").ServerCapabilities | undefined;
   };
-  readonly push?: {
+  readonly render?: {
     readonly renderStore: RenderStore;
     /**
      * Optional bootstrap-credential minter. When present, `ggui_render`
@@ -575,12 +575,12 @@ export function defaultHandlers(deps: {
     /** Theme color mode resolved from `ggui.json#theme.mode`. */
     readonly themeMode?: "light" | "dark";
     /**
-     * Live theme getter — resolved per-push. When set, supersedes
-     * the static `themeId` / `themeMode` for every push's bootstrap.
+     * Live theme getter — resolved per-render. When set, supersedes
+     * the static `themeId` / `themeMode` for every render's bootstrap.
      * Pair with the same getter passed into `createGguiServer({
      * themeProvider })` and a closure that reads from the shared
      * mutable cell `mountDevtoolThemeRoutes`'s POST handler updates.
-     * Forwarded onto `deps.push.themeProvider` so the handler reads
+     * Forwarded onto `deps.render.themeProvider` so the handler reads
      * the live theme each call.
      */
     readonly themeProvider?: () =>
@@ -591,7 +591,7 @@ export function defaultHandlers(deps: {
       | undefined;
     /**
      * Optional connector registry — required for accepting
-     * `shortcuts.mcpApps` push payloads (inbound MCP Apps hosting).
+     * `shortcuts.mcpApps` render payloads (inbound MCP Apps hosting).
      * Omitted = inbound path is rejected with a clear error.
      */
     readonly connectors?: ConnectorRegistry;
@@ -604,19 +604,19 @@ export function defaultHandlers(deps: {
      */
     readonly rateLimiter?: RateLimiter;
     /**
-     * Optional shortCode → session binding index. When present,
+     * Optional shortCode → render binding index. When present,
      * `ggui_render` records every minted `shortCode` so console's
-     * `/s/<shortCode>` viewer (via the session-cookie endpoint) can
-     * resolve it back to the right session. Absent = hosted cloud
+     * `/s/<shortCode>` viewer (via the render-cookie endpoint) can
+     * resolve it back to the right render. Absent = hosted cloud
      * flow (DynamoDB side-table owns lookups), or console not
      * enabled.
      */
     readonly shortCodeIndex?: ShortCodeIndex;
     /**
      * Optional provisional-preview wiring. When present, `ggui_render`
-     * kicks off the configured emitter on every qualifying push (the
+     * kicks off the configured emitter on every qualifying render (the
      * `evaluateProvisionalPreviewGate` predicate filters MCP Apps
-     * pushes + storyless calls automatically). Absent = no preview
+     * renders + storyless calls automatically). Absent = no preview
      * channel traffic.
      *
      * Constructed by `createGguiServer` from `opts.provisionalPreview`
@@ -630,7 +630,7 @@ export function defaultHandlers(deps: {
      * Optional generation wiring. When present, `ggui_render` invokes
      * the supplied {@link UiGenerator} on every story-path call and
      * commits the generated `Render` before returning `codeReady:
-     * true`. Absent = push stays in placeholder mode (render +
+     * true`. Absent = render stays in placeholder mode (render +
      * shortCode + preview still work, but no componentCode is
      * produced).
      *
@@ -665,7 +665,7 @@ export function defaultHandlers(deps: {
      *
      * `createGguiServer` binds this closure against the composed
      * `handlers` list + `opts.schemaCompatCheck` (default `'reject'`)
-     * automatically; callers composing their own push handler via
+     * automatically; callers composing their own render handler via
      * `defaultHandlers` wire the hook themselves.
      */
     readonly checkRenderContracts?: (shape: {
@@ -681,7 +681,7 @@ export function defaultHandlers(deps: {
      * post-T3-1 (2026-05-13).
      *
      * Absent: `ggui_render.resultMeta` omits `codeUrl`. The iframe boots
-     * via live-mode (wsUrl+token) and receives the stack item via the
+     * via live-mode (wsUrl+token) and receives the render via the
      * live-channel WS subscribe. `/r/<shortCode>` (HTML default; JSON branch on `Accept: application/json`)
      * routes ALSO mint `codeUrl` when `codeStore` is set — they derive
      * the base URL from `req.protocol + req.host` when `codeBaseUrl`
@@ -718,7 +718,7 @@ export function defaultHandlers(deps: {
      * supplied, the tool registers and validates each refresh request
      * via this seam's HMAC check + refresh-window arithmetic. Typically
      * wired against the SAME `channelBootstrap.refresh` the
-     * session-channel server uses for WS upgrade validation, so both
+     * render-channel server uses for WS upgrade validation, so both
      * paths share one HMAC secret and one refresh-window policy.
      *
      * Absent: the tool is NOT registered on this deployment. iframes
@@ -768,7 +768,7 @@ export function defaultHandlers(deps: {
     ) => { wsUrl: string; token: string; expiresAt: string };
     /** Iframe-runtime bundle URL forwarded onto the
      *  `ai.ggui/render.runtimeUrl` slice field.
-     *  Function form mirrors push deps — see {@link BuildMcpDeps.push}. */
+     *  Function form mirrors the `render` deps' `runtimeUrl`. */
     readonly runtimeUrl?: string | (() => string | undefined);
     /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
     readonly themeId?: string;
@@ -787,7 +787,7 @@ export function defaultHandlers(deps: {
     readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
   };
   /**
-   * Pending-events consumer wiring for `ggui_consume`. When `push`
+   * Pending-events consumer wiring for `ggui_consume`. When `render`
    * is bound, the handler registers automatically with an in-memory
    * default; pass `consume.pendingEventConsumer` to override (e.g.,
    * SQLite-backed for persistent dev or a Dynamo adapter on cloud).
@@ -801,7 +801,7 @@ export function defaultHandlers(deps: {
     readonly defaultRenderTtlSeconds?: number;
   };
   /**
-   * Stream channel wiring for `ggui_emit`. When `push` is bound, the
+   * Stream channel wiring for `ggui_emit`. When `render` is bound, the
    * handler registers automatically; its `sendEnvelope` closes over
    * `stream.channelProvider`, a lazy getter that resolves the
    * `RenderChannelServer` at emit time (the channel is constructed
@@ -870,7 +870,7 @@ export function defaultHandlers(deps: {
    * blueprint tools on `/ops`:
    *
    *   - `ggui_ops_generate_blueprint` (requires `resolveLlm` +
-   *     `blueprints` too — same deps the push generation path
+   *     `blueprints` too — same deps the render generation path
    *     reads).
    *   - `ggui_ops_list_blueprints`
    *   - `ggui_ops_update_blueprint`
@@ -903,7 +903,7 @@ export function defaultHandlers(deps: {
     readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
     /**
      * Resolver for LLM credentials on the generate path. Same shape
-     * as `push.generation.resolveLlm` — typically wired to the same
+     * as `render.generation.resolveLlm` — typically wired to the same
      * closure. When absent, the generate handler is NOT registered
      * (list/update/delete still register).
      */
@@ -921,8 +921,8 @@ export function defaultHandlers(deps: {
      * Cache-registry mirror for `ggui_ops_generate_blueprint`. When
      * bound, operator-authored blueprints are dual-written to the
      * cache vectorStore via `registerBlueprint` so the agent-facing
-     * matchBlueprint exact-key probe (handshake + push) finds them.
-     * Same bundle the push handler reads/writes.
+     * matchBlueprint exact-key probe (handshake + render) finds them.
+     * Same bundle the render handler reads/writes.
      */
     readonly cacheRegistry?: {
       readonly embedding: EmbeddingProvider;
@@ -958,9 +958,9 @@ export function defaultHandlers(deps: {
   };
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
   // Single shared pending-events pipe (Model C, renderId-keyed).
-  // push opens (`markCreated`), submit_action appends, consume drains,
+  // render opens (`markCreated`), submit_action appends, consume drains,
   // pop/close clean up. Every handler that touches the pipe MUST get
-  // the same instance — separate instances would mean the pipe push
+  // the same instance — separate instances would mean the pipe render
   // opened is invisible to consume's drain. Operators override via
   // `deps.consume.pendingEventConsumer` (e.g. SqlitePendingEventConsumer
   // for persistence).
@@ -1005,12 +1005,12 @@ export function defaultHandlers(deps: {
     // (audit ledger for RenderInspector + cross-process replay) —
     // restores the audit visibility the pre-spec-mig WS handler
     // (`handleInboundAction`) used to provide. `renderStore` is
-    // optional — passed through from `deps.push.renderStore` when
+    // optional — passed through from `deps.render.renderStore` when
     // bound; absent → ledger write is skipped, queue still fires.
     createGguiSubmitActionHandler({
       pendingEventConsumer,
       activeConsumerRegistry,
-      ...(deps.push?.renderStore ? { renderStore: deps.push.renderStore } : {}),
+      ...(deps.render?.renderStore ? { renderStore: deps.render.renderStore } : {}),
       ...(deps.logger ? { logger: deps.logger } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
     // `ggui_list_gadgets` — per-app discovery. Returns the registered
@@ -1053,14 +1053,14 @@ export function defaultHandlers(deps: {
   // ggui_runtime_sync_context — runtime → server contextSpec snapshot mirror.
   // Same `_meta.ui.visibility: ['app']` channel as ggui_runtime_submit_action;
   // claude.ai (and any MCP Apps host) routes iframe-issued
-  // `tools/call` here. Wired only when a renderStore is bound (push
+  // `tools/call` here. Wired only when a renderStore is bound (render
   // is on) — the handler's whole job is upserting the snapshot onto
-  // the active Render, which requires the same store push writes
-  // to. Without push, there's no render to mutate.
-  if (deps.push) {
+  // the active Render, which requires the same store render writes
+  // to. Without render, there's no render to mutate.
+  if (deps.render) {
     handlers.push(
       createGguiSyncContextHandler({
-        renderStore: deps.push.renderStore,
+        renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_runtime_refresh_bootstrap` — G14 (2026-05-23) signed-
@@ -1069,10 +1069,10 @@ export function defaultHandlers(deps: {
     // mcpAppsEnabled branch). Without the seam, the tool would always
     // return BOOTSTRAP_NOT_SUPPORTED, which is honest but useless on
     // tools/list — skip registration entirely.
-    if (deps.push.bootstrapRefresh) {
+    if (deps.render.bootstrapRefresh) {
       handlers.push(
         createGguiRefreshWsTokenHandler({
-          refreshSeam: deps.push.bootstrapRefresh,
+          refreshSeam: deps.render.bootstrapRefresh,
         }) as SharedHandler<ZodRawShape, ZodRawShape>
       );
     }
@@ -1094,7 +1094,7 @@ export function defaultHandlers(deps: {
       >
     );
   }
-  // Canvas-mode lifecycle emitter — shared by handshake/push/consume so
+  // Canvas-mode lifecycle emitter — shared by handshake/render/consume so
   // the three handlers publish to the reserved `_ggui:lifecycle`
   // channel through one binding. Lazy-resolves the channel provider
   // because `createRenderChannelServer` runs after `defaultHandlers`;
@@ -1148,7 +1148,7 @@ export function defaultHandlers(deps: {
         ...(deps.update.propsUpdateNotifier
           ? { propsUpdateNotifier: deps.update.propsUpdateNotifier }
           : {}),
-        // Bootstrap-emission deps mirror push so MCP Apps hosts that
+        // Bootstrap-emission deps mirror render so MCP Apps hosts that
         // forward `ui/notifications/tool-result` via postMessage can
         // re-apply patched props on the live mount without a WS round-trip.
         ...(deps.update.mintBootstrap ? { mintWsToken: deps.update.mintBootstrap } : {}),
@@ -1167,13 +1167,13 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
-  // ggui_consume registers whenever push is bound (it shares the
+  // ggui_consume registers whenever render is bound (it shares the
   // RenderStore for renderId resolution + tenancy checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
-  // every push response carries would resolve to a not-found tool.
-  if (deps.push) {
+  // every render response carries would resolve to a not-found tool.
+  if (deps.render) {
     // Drain-ack fan-out + telemetry. Both consume and
     // claim-pending share the same channelProvider seam: consume
     // emits drain_ack frames after each pop; claim-pending emits
@@ -1209,7 +1209,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiConsumeHandler({
         pendingEventConsumer,
-        renderStore: deps.push.renderStore,
+        renderStore: deps.render.renderStore,
         activeConsumerRegistry,
         ...(deps.consume?.defaultRenderTtlSeconds !== undefined
           ? { defaultRenderTtlSeconds: deps.consume.defaultRenderTtlSeconds }
@@ -1235,25 +1235,25 @@ export function defaultHandlers(deps: {
     // decay implicitly via TTL, so there is no terminal write to make.)
     handlers.push(
       createGguiGetRenderHandler({
-        renderStore: deps.push.renderStore,
+        renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // ggui_list_renders — host-scoped render enumeration for resume.
     // Folds the ws-token mint into the same call so the host doesn't
     // round-trip twice (list, then mint-per-render). Reuses the
-    // already-wired `deps.push.mintBootstrap` seam so both code paths
+    // already-wired `deps.render.mintBootstrap` seam so both code paths
     // share one HMAC secret and one TTL policy. Absent seam (rare —
-    // every deployment that has push wired also has mintBootstrap)
+    // every deployment that has render wired also has mintBootstrap)
     // ⇒ summaries omit wsToken and the caller must mint elsewhere.
-    const pushMintBootstrap = deps.push.mintBootstrap;
+    const renderMintBootstrap = deps.render.mintBootstrap;
     handlers.push(
       createGguiListRendersHandler({
-        renderStore: deps.push.renderStore,
-        ...(pushMintBootstrap !== undefined
+        renderStore: deps.render.renderStore,
+        ...(renderMintBootstrap !== undefined
           ? {
               mintWsToken: {
                 mint: ({ renderId, appId }) => {
-                  const { token, expiresAt } = pushMintBootstrap(renderId, appId);
+                  const { token, expiresAt } = renderMintBootstrap(renderId, appId);
                   return { token, expiresAt };
                 },
               },
@@ -1275,7 +1275,7 @@ export function defaultHandlers(deps: {
     const channelProvider = deps.stream?.channelProvider;
     handlers.push(
       createGguiEmitHandler({
-        renderStore: deps.push.renderStore,
+        renderStore: deps.render.renderStore,
         async sendEnvelope(envelope) {
           const channel = channelProvider?.() ?? null;
           if (!channel) {
@@ -1302,20 +1302,20 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
-  if (deps.push) {
+  if (deps.render) {
     // Provider that scans the registered handler list for tools
     // whose `_meta.ui.visibility` includes
     // `"app"`, surfacing the names on `bootstrap.appCallableTools`.
-    // Closure defers the scan to push-time so handlers added AFTER
-    // push (e.g. mounted MCP server tools composed via
+    // Closure defers the scan to render-time so handlers added AFTER
+    // render (e.g. mounted MCP server tools composed via
     // `composeHandlersWithMounts`) are NOT included — same-server
     // app-visible tools live on the OSS handler list, mounted tools
     // are by definition cross-server.
     const appCallableToolsProvider = (): readonly string[] => collectAppCallableToolNames(handlers);
     handlers.push(
       createGguiRenderHandler({
-        renderStore: deps.push.renderStore,
-        // Plugin slice Commit 3 — push reads App.gadgets to
+        renderStore: deps.render.renderStore,
+        // Plugin slice Commit 3 — render reads App.gadgets to
         // gate `clientCapabilities.gadgets[*].hook` references via
         // `assertGadgetsRegistered`. Same instance the
         // handshake handler reads from so both seams enforce the
@@ -1323,51 +1323,51 @@ export function defaultHandlers(deps: {
         ...(deps.appMetadataStore ? { appMetadataStore: deps.appMetadataStore } : {}),
         pendingEventConsumer,
         appCallableTools: appCallableToolsProvider,
-        ...(deps.push.streamWebSocketLocalTools !== undefined
-          ? { streamWebSocketLocalTools: deps.push.streamWebSocketLocalTools }
+        ...(deps.render.streamWebSocketLocalTools !== undefined
+          ? { streamWebSocketLocalTools: deps.render.streamWebSocketLocalTools }
           : {}),
-        ...(deps.push.mintBootstrap ? { mintWsToken: deps.push.mintBootstrap } : {}),
-        ...(deps.push.runtimeUrl !== undefined ? { runtimeUrl: deps.push.runtimeUrl } : {}),
-        ...(deps.push.themeId !== undefined ? { themeId: deps.push.themeId } : {}),
-        ...(deps.push.themeMode !== undefined ? { themeMode: deps.push.themeMode } : {}),
-        ...(deps.push.themeProvider !== undefined
-          ? { themeProvider: deps.push.themeProvider }
+        ...(deps.render.mintBootstrap ? { mintWsToken: deps.render.mintBootstrap } : {}),
+        ...(deps.render.runtimeUrl !== undefined ? { runtimeUrl: deps.render.runtimeUrl } : {}),
+        ...(deps.render.themeId !== undefined ? { themeId: deps.render.themeId } : {}),
+        ...(deps.render.themeMode !== undefined ? { themeMode: deps.render.themeMode } : {}),
+        ...(deps.render.themeProvider !== undefined
+          ? { themeProvider: deps.render.themeProvider }
           : {}),
-        ...(deps.push.connectors ? { connectors: deps.push.connectors } : {}),
-        ...(deps.push.rateLimiter ? { rateLimiter: deps.push.rateLimiter } : {}),
-        ...(deps.push.shortCodeIndex ? { shortCodeIndex: deps.push.shortCodeIndex } : {}),
-        ...(deps.push.provisionalPreview
-          ? { provisionalPreview: deps.push.provisionalPreview }
+        ...(deps.render.connectors ? { connectors: deps.render.connectors } : {}),
+        ...(deps.render.rateLimiter ? { rateLimiter: deps.render.rateLimiter } : {}),
+        ...(deps.render.shortCodeIndex ? { shortCodeIndex: deps.render.shortCodeIndex } : {}),
+        ...(deps.render.provisionalPreview
+          ? { provisionalPreview: deps.render.provisionalPreview }
           : {}),
-        ...(deps.push.generation ? { generation: deps.push.generation } : {}),
+        ...(deps.render.generation ? { generation: deps.render.generation } : {}),
         // Live-subscriber render-commit notifier. Forwarded as-is
         // when present so the render handler can fan out
         // `renderStore.commit` deltas to already-subscribed
         // live-channel clients. Hosts without a render channel pass
         // nothing; the handler's own no-op-on-absent posture keeps
         // the path intact.
-        ...(deps.push.channelNotifier ? { channelNotifier: deps.push.channelNotifier } : {}),
-        // F4 schema compat hook. Forwarded as-is; the push handler
+        ...(deps.render.channelNotifier ? { channelNotifier: deps.render.channelNotifier } : {}),
+        // F4 schema compat hook. Forwarded as-is; the render handler
         // wraps it in try/catch
         // on the generation + cache-hit paths so a thrown
-        // SchemaCompatError converts to an error stack-item.
-        ...(deps.push.checkRenderContracts
-          ? { checkRenderContracts: deps.push.checkRenderContracts }
+        // SchemaCompatError converts to an error render.
+        ...(deps.render.checkRenderContracts
+          ? { checkRenderContracts: deps.render.checkRenderContracts }
           : {}),
         // Content-addressable code store. Both fields are forwarded
-        // together; the push handler
+        // together; the render handler
         // requires both to emit `codeUrl`. Absent or partial =
-        // inline-base64 fallback (see push.ts handler body).
-        ...(deps.push.codeStore && deps.push.codeBaseUrl
+        // inline-base64 fallback (see render.ts handler body).
+        ...(deps.render.codeStore && deps.render.codeBaseUrl
           ? {
-              codeStore: deps.push.codeStore,
-              codeBaseUrl: deps.push.codeBaseUrl,
+              codeStore: deps.render.codeStore,
+              codeBaseUrl: deps.render.codeBaseUrl,
             }
           : {}),
         // Share the handshake KV store between the two handlers so
         // the write (ggui_handshake) + read (ggui_render) sit on one
         // source of truth. The caller can also pass a different
-        // handshakeStore to push if they split minting + consuming
+        // handshakeStore to render if they split minting + consuming
         // across processes, but the defaults wire them to the same
         // instance.
         ...(deps.handshake ? { handshakeStore: deps.handshake.kvStore } : {}),
@@ -1379,7 +1379,7 @@ export function defaultHandlers(deps: {
   // on /ops via `audience: ['ops']`. Three read-mutating tools land
   // whenever the blueprint store + search seam is bound; the
   // `generate` tool additionally requires `resolveLlm` +
-  // `blueprints` (same deps the push generation path reads). Cloud
+  // `blueprints` (same deps the render generation path reads). Cloud
   // pods wire all four through their own composition layer.
   if (deps.opsBlueprint) {
     if (deps.opsBlueprint.resolveLlm && deps.opsBlueprint.blueprints) {
@@ -1563,7 +1563,7 @@ export interface CreateGguiServerOptions {
    *     `['user']`-only handlers without affecting the existing toolset
    *     (which is all `['app', 'builder']`).
    *   - end-user / Connector posture sets `['user']` — skips all
-   *     agent-builder writes (push / handshake / update) while keeping
+   *     agent-builder writes (render / handshake / update) while keeping
    *     the read-only blueprint surface visible.
    *   - OSS local omits this option — every handler registers; OSS
    *     callers resolve to `kind: 'builder'` and the filter never fires.
@@ -1788,7 +1788,7 @@ export interface CreateGguiServerOptions {
    * `mode` into the `ai.ggui/render` slice meta. Pair with
    * {@link onThemeConfigChange} so a console save updates the
    * shared state cell the closure reads from. The cell pattern
-   * closes the parallel-state-stores bug where the push handler
+   * closes the parallel-state-stores bug where the render handler
    * captured `themeId` at boot from the static `theme` opt and
    * silently ignored every subsequent ggui.json edit until restart.
    *
@@ -1809,7 +1809,7 @@ export interface CreateGguiServerOptions {
    * `/upload` variant). Forwarded onto
    * `mountDevtoolThemeRoutes({onConfigChange})`. Pair with a
    * `themeProvider` closure that reads from the same shared cell
-   * the callback writes to so a console save reaches the next push
+   * the callback writes to so a console save reaches the next render
    * without restarting the server.
    *
    * `next` matches `ThemeConfig` from `@ggui-ai/project-config` —
@@ -2013,13 +2013,13 @@ export interface CreateGguiServerOptions {
   readonly streamBuffer?: SessionStreamBuffer;
 
   /**
-   * Enable the OSS live-channel session endpoint at `/ws` (configurable).
+   * Enable the OSS live-channel render endpoint at `/ws` (configurable).
    *
-   *   - `false` (default): no session channel. `/mcp` is the only
+   *   - `false` (default): no render channel. `/mcp` is the only
    *     HTTP surface. Callers who only need the tool plane get the
    *     smallest shape.
    *   - `true`: mount the channel at the default path (`/ws`) with
-   *     the default session store.
+   *     the default render store.
    *   - `{ path?: string }`: override the mount path.
    *
    * The live channel is where the live-contract enforcement point
@@ -2036,7 +2036,7 @@ export interface CreateGguiServerOptions {
    * (falling back to `actionSpec[name].nextStep` when the client
    * omitted the hint) in-process after inbound validation, and emits
    * every declared `streamSpec[name].source.tool` refresh on the
-   * session. See {@link WiredActionRouter} + `session-channel.ts` for
+   * render. See {@link WiredActionRouter} + `render-channel.ts` for
    * the full router contract.
    *
    * Absent = agent-mediated behavior (canonical for MCP Apps hosts and
@@ -2060,7 +2060,7 @@ export interface CreateGguiServerOptions {
   /**
    * Opt-in plumbing for `channel_subscribe` polling — the WS fan-out
    * path for `streamSpec[*].source.tool`. When present, the
-   * session channel accepts `channel_subscribe` frames whose
+   * render channel accepts `channel_subscribe` frames whose
    * `source.tool` is in `allowlist` and begins polling. When absent
    * (the OSS first-run zero-config posture), every `channel_subscribe`
    * rejects with `CHANNEL_NOT_LOCAL` so the iframe falls back to
@@ -2109,7 +2109,7 @@ export interface CreateGguiServerOptions {
   /**
    * Extra reserved-channel payload validators merged with the
    * server's default A2UI preview validator before being passed to
-   * the session channel (Item 4 injection pattern). Caller-provided
+   * the render channel (Item 4 injection pattern). Caller-provided
    * entries WIN on key conflict — the pattern is "server supplies
    * defaults, operator may replace by key".
    *
@@ -2128,7 +2128,7 @@ export interface CreateGguiServerOptions {
   >;
 
   /**
-   * Protocol-version handshake policy for the session channel. Forwarded
+   * Protocol-version handshake policy for the render channel. Forwarded
    * verbatim to `createRenderChannelServer` (see
    * `RenderChannelOptions.versionPolicy`). Defaults to `'reject'` —
    * mismatched `SubscribePayload.supportedVersions` emits
@@ -2148,8 +2148,8 @@ export interface CreateGguiServerOptions {
    * `streamSpec[channel].tool` ref points at a tool whose return
    * schema fits inside the channel's declared `schema`.
    *
-   *   - `'reject'` (default) — violations throw before the stack
-   *     item commits (or before blueprint registration completes).
+   *   - `'reject'` (default) — violations throw before the render
+   *     commits (or before blueprint registration completes).
    *     Canonical enforcement posture for launch.
    *   - `'warn'` — violations log through the server's structured
    *     logger (`schema_compat_warn` event with the full report
@@ -2232,7 +2232,7 @@ export interface CreateGguiServerOptions {
    *   3. `io.modelcontextprotocol/ui` is advertised in the server's
    *      `initialize` capabilities (under `experimental`).
    *   4. Each `ggui_render` result carries the `ai.ggui/render` slice
-   *      with wsUrl + short-TTL token + expiresAt. The session-channel
+   *      with wsUrl + short-TTL token + expiresAt. The render-channel
    *      server accepts that token on `subscribe` and issues a
    *      longer-TTL `renderToken` in the ack for iframe reconnects.
    */
@@ -2286,7 +2286,7 @@ export interface CreateGguiServerOptions {
 
   /**
    * Connector registry for external MCP servers. Required to accept
-   * inbound MCP Apps push payloads (`shortcuts.mcpApps`) and for the
+   * inbound MCP Apps render payloads (`shortcuts.mcpApps`) and for the
    * `/mcp-apps/resource` proxy route to resolve source-server
    * endpoints. Absent = inbound MCP Apps hosting disabled.
    */
@@ -2584,7 +2584,7 @@ export interface CreateGguiServerOptions {
    *
    *   - Same-origin ONLY — not a Portal replacement, not an MCP Apps
    *     iframe shell.
-   *   - No same-origin cookie, no session viewer, no WebSocket
+   *   - No same-origin cookie, no render viewer, no WebSocket
    *     wiring yet.
    *
    * Options:
@@ -2616,7 +2616,7 @@ export interface CreateGguiServerOptions {
         readonly distDir?: string;
         /**
          * Enable the Slice-2 same-origin session-cookie flow
-         * (`POST /ggui/console/render-cookie` + session-channel
+         * (`POST /ggui/console/render-cookie` + render-channel
          * cookie-auth wiring). Defaults to OFF — the landing-page
          * static surface is useful on its own (pair-code display,
          * server identity); turning on the cookie flow is an
@@ -2628,11 +2628,11 @@ export interface CreateGguiServerOptions {
          * confusing. Throws at construction if that invariant fails.
          *
          * Enabling REQUIRES a configured {@link shortCodeIndex} — the
-         * cookie endpoint resolves shortCode → sessionId by reading
+         * cookie endpoint resolves shortCode → renderId by reading
          * it. Throws at construction if the index is absent.
          *
          * The cookie signing secret is the same {@link wsTokenSecret}
-         * used by the MCP Apps bootstrap/session tokens — different
+         * used by the MCP Apps bootstrap/render tokens — different
          * token `kind` claims make cross-kind confusion impossible
          * (see `console-auth.ts` isolation comment).
          */
@@ -2662,7 +2662,7 @@ export interface CreateGguiServerOptions {
          *
          * The gate accepts either an `Authorization: Bearer <token>`
          * header OR the `ggui_console_admin` cookie set by the
-         * admin-login route. Other console routes (registry, sessions,
+         * admin-login route. Other console routes (registry, renders,
          * cached blueprints, …) are NOT gated by this token — that's
          * a separate audit slice. The keys plane is the immediate
          * threat: plaintext bearer rendering + mint + revoke must not
@@ -2721,11 +2721,11 @@ export interface CreateGguiServerOptions {
   };
 
   /**
-   * Index for resolving `shortCode → { sessionId, appId }`. Required
+   * Index for resolving `shortCode → { renderId, appId }`. Required
    * when `console.sessionCookie` is enabled (the cookie endpoint
-   * looks up the posted shortCode to find the session to bind).
+   * looks up the posted shortCode to find the render to bind).
    *
-   * Pair this with a `push` handler so the agent's `ggui_render` writes
+   * Pair this with a `render` handler so the agent's `ggui_render` writes
    * the shortCode into the same index that console later reads.
    * See `defaultHandlers` for the wiring seam.
    */
@@ -2734,11 +2734,11 @@ export interface CreateGguiServerOptions {
   /**
    * Content-addressable code blob storage. When wired, this server
    * mounts `GET /code/<hash>.js` for the iframe runtime to fetch
-   * compiled componentCode by content hash. The push handler writes
+   * compiled componentCode by content hash. The render handler writes
    * to the store before emitting `codeUrl` on the `ai.ggui/render`
    * slice.
    *
-   * Defaults: when omitted the route is NOT mounted; the push
+   * Defaults: when omitted the route is NOT mounted; the render
    * handler falls back to inline base64 `componentCode` on the
    * `ai.ggui/render` slice (legacy delivery channel).
    *
@@ -2753,15 +2753,15 @@ export interface CreateGguiServerOptions {
 
   /**
    * Provisional A2UI preview wiring for `ggui_render`. When the config
-   * flag is on, every qualifying component push kicks off the
+   * flag is on, every qualifying component render kicks off the
    * supplied emitter; frames land on the reserved `_ggui:preview`
-   * channel of the push's session.
+   * channel of the render.
    *
    * The server owns the `sendEnvelope` + registry plumbing — only
    * the emitter + flag + optional observers are caller-facing.
    *
    * Requires `renderChannel: true` + `mcpApps` enabled (preview
-   * needs a channel to emit on AND a push handler to attach to).
+   * needs a channel to emit on AND a render handler to attach to).
    * When the flag is on without those, `createGguiServer` throws —
    * silent drop would make "I enabled preview and nothing fires"
    * look like a generation bug instead of a wiring bug.
@@ -2779,7 +2779,7 @@ export interface CreateGguiServerOptions {
      * explicit about the producer).
      */
     readonly emitter: ProvisionalPreviewEmitter;
-    /** Per-push predicate. See {@link ProvisionalPreviewConfig}. */
+    /** Per-render predicate. See {@link ProvisionalPreviewConfig}. */
     readonly isEnabledFor?: ProvisionalPreviewConfig["isEnabledFor"];
     /** Lifecycle observer. Fires sync — must not throw. */
     readonly onOutcome?: (outcome: ProvisionalPreviewOutcome) => void;
@@ -2801,7 +2801,7 @@ export interface CreateGguiServerOptions {
    *     shape.
    *   - `{kvStore, negotiator}` — wire a real negotiator (e.g. RAG
    *     in a hosted closed runtime) so handshake records carry a
-   *     decision the paired push echoes as `structuredContent.decision`.
+   *     decision the paired render echoes as `structuredContent.decision`.
    *   - `false` — explicitly disable: `ggui_handshake` is NOT
    *     registered and `ggui_render({handshakeId})` falls back to
    *     the rejection shape.
@@ -2833,7 +2833,7 @@ export interface CreateGguiServerOptions {
 
   /**
    * Generation wiring for the `ggui_render` story path. When present,
-   * every component push invokes the bound `UiGenerator` and commits
+   * every component render invokes the bound `UiGenerator` and commits
    * the result as a real `Render`. Absent = placeholder mode:
    * `ggui_render` on the story path returns `codeReady: false`
    * without writing componentCode.
@@ -2848,7 +2848,7 @@ export interface CreateGguiServerOptions {
    * runtime supplies its own generator binding through the same seam.
    * BYOK resolution (env → credentials file) is the CLI layer's
    * concern — at this boundary the caller hands in a closure that
-   * returns resolved credentials per push.
+   * returns resolved credentials per render.
    */
   readonly generation?: GenerationDeps;
 
@@ -2878,7 +2878,7 @@ export interface CreateGguiServerOptions {
   /**
    * Optional multi-variant blueprint store. When present, `Blueprint`
    * rows persist via this seam so `ggui_ops_generate_blueprint` and
-   * push-on-cache-miss can read + write through it. When omitted,
+   * render-on-cache-miss can read + write through it. When omitted,
    * `createGguiServer` auto-seeds an {@link InMemoryBlueprintStore}.
    */
   readonly blueprintStore?: BlueprintStore;
@@ -3237,7 +3237,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // SPA at `/devtools/payloads`. Bounded ring buffer (default 100
   // events; tighter than llm-trace because each `ggui_render` may carry
   // full componentCode + base64 blobs). Module-level registration via
-  // setPayloadTraceSink because the push + update factories are
+  // setPayloadTraceSink because the render + update factories are
   // constructed once per server boot and threading a sink for a
   // devtools-only surface isn't worth the churn (see payload-trace-
   // sink.ts). A hosted closed runtime may swap in a durable adapter;
@@ -3287,7 +3287,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       : RUNTIME_BUNDLE_FILE;
   const runtimeBootstrapUrl = runtimeConfig.url ?? runtimePath;
 
-  // Lazy resolver: each push/update handler invocation looks up the
+  // Lazy resolver: each render/update handler invocation looks up the
   // request-context-derived absolute base inside the request scope
   // (via AsyncLocalStorage). Static `publicBaseUrl` wins when set;
   // otherwise the tunnel/proxy's X-Forwarded-Host is honored only
@@ -3302,7 +3302,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
   // Render store is resolved here (not lazy-inside-renderChannel)
   // when mcpApps is on, because the render-commit handler needs it at
-  // handler-factory time, BEFORE the session-channel factory runs.
+  // handler-factory time, BEFORE the render-channel factory runs.
   const renderStore: RenderStore | undefined =
     opts.renderStore ??
     (mcpAppsEnabled || opts.renderChannel ? new InMemoryRenderStore() : undefined);
@@ -3405,16 +3405,16 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     };
   }
 
-  // Live-channel session endpoint reference. Declared here (not at the
+  // Live-channel render endpoint reference. Declared here (not at the
   // Express `app` block below) so the provisional-preview
   // `sendEnvelope` closure can late-bind to it. Assignment happens
-  // during the session-channel factory run further down. Safe because
+  // during the render-channel factory run further down. Safe because
   // `ggui_render` can only fire after `listen()` binds HTTP, which is
   // strictly after that factory runs.
   let channelForHealth: RenderChannelServer | null = null;
 
   // Provisional preview wiring. Must precede the default-handlers
-  // construction so `push.provisionalPreview` is threaded through at
+  // construction so `render.provisionalPreview` is threaded through at
   // that point.
   //
   // Preconditions:
@@ -3587,17 +3587,17 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //      generation when cache misses.
   //   3. LLM-backed (when `generation.resolveLlm` is wired but no
   //      cache) — calls the decision LLM with no RAG candidates;
-  //      returns a sensible create/update shape based on session
+  //      returns a sensible create/update shape based on render
   //      state + agent prompt. RAG infrastructure (embedding +
   //      vectors) is degraded gracefully.
   //   4. `undefined` — handshake records action:'create' with the
   //      no-negotiator-bound message.
   //
   // Convergence invariant for the cache-backed tier: the negotiator
-  // reads the SAME cache the push handler reads/writes — scope +
+  // reads the SAME cache the render handler reads/writes — scope +
   // embedding + threshold are all shared. A `reuse` decision at
-  // handshake time is the same outcome the paired push's cache
-  // lookup would converge on; a `create` decision matches the push
+  // handshake time is the same outcome the paired render's cache
+  // lookup would converge on; a `create` decision matches the render
   // missing the cache. No fabricated handshake signal.
   //
   // Operators preserve existing behavior: passing `handshake:
@@ -3624,9 +3624,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             resolveLlm: generationWithCache.resolveLlm,
             // Pass through the cache bundle so the negotiator can
             // run matchBlueprint exact-key BEFORE the synth LLM
-            // round-trip. Same bundle the paired push handler reads
+            // round-trip. Same bundle the paired render handler reads
             // / writes — handshake match decisions converge with
-            // what push would do on the same draft. Absent →
+            // what render would do on the same draft. Absent →
             // negotiator falls back to the synth-only path (same
             // posture as deployments without RAG infrastructure).
             ...(generationWithCache.cache ? { cache: generationWithCache.cache } : {}),
@@ -3636,8 +3636,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // compiles + caches each installed entry on first
             // ensureCached per scope, so the handshake hits the
             // cache directly without a synth round-trip. Same
-            // provider the paired push handler reads, so handshake
-            // + push converge on the same blueprint pool.
+            // provider the paired render handler reads, so handshake
+            // + render converge on the same blueprint pool.
             ...(generationWithCache.installedBlueprints
               ? { installedBlueprints: generationWithCache.installedBlueprints }
               : {}),
@@ -3721,7 +3721,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // rule). OSS CLI wires a `LocalUiRegistry` here so manifest
       // blueprints mount through their compiled bundles.
       ...(opts.uiRegistry ? { uiRegistry: opts.uiRegistry } : {}),
-      // Register `ggui_handshake` + wire the paired push consume
+      // Register `ggui_handshake` + wire the paired render consume
       // path. Both handlers share the same KV instance so the write
       // + read sit on one source of truth. Negotiator is optional;
       // absent, the handshake stamps honest no-negotiator-bound on
@@ -3731,11 +3731,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             handshake: {
               kvStore: handshakeKvStore,
               // renderStore validation is OPT-IN at the handshake
-              // layer. The OSS default trusts the wire sessionId and
-              // surfaces validation downstream — push consumes the
+              // layer. The OSS default trusts the wire renderId and
+              // surfaces validation downstream — render consumes the
               // record + create-if-missing semantics on
-              // `renderStore.create({id})` keep stack-growth-per-chat
-              // working without a pre-existing session. Operators that
+              // `renderStore.create({id})` keep render-per-chat
+              // working without a pre-existing render. Operators that
               // want strict pre-handshake validation pass an explicit
               // `handshake.renderStore` on `deps`.
               // Caller-supplied negotiator wins; absent, fall back
@@ -3775,7 +3775,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         : {}),
       ...(mcpAppsEnabled && renderStore
         ? {
-            push: {
+            render: {
               renderStore,
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
@@ -3788,7 +3788,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { bootstrapRefresh: { refresh: channelBootstrap.refresh } }
                 : {}),
               // Iframe-runtime bundle URL — padded onto the
-              // `ai.ggui/render.runtimeUrl` slice field by the push
+              // `ai.ggui/render.runtimeUrl` slice field by the render
               // handler's resultMeta. C8 made this required on
               // McpAppAiGguiRenderMeta; we always pass it so handlers
               // don't fall back to their hardcoded default.
@@ -3809,9 +3809,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { themeMode: opts.theme.mode }
                 : {}),
               // Live-theme getter — when present, overrides static
-              // `themeId` / `themeMode` per-push. Pair with the
+              // `themeId` / `themeMode` per-render. Pair with the
               // mountDevtoolThemeRoutes onConfigChange callback so a
-              // console "Save to ggui.json" reaches the next push
+              // console "Save to ggui.json" reaches the next render
               // without restarting the server. CLI owns the shared
               // state cell; this getter just reads it.
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
@@ -3832,7 +3832,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // an in-memory registry. Absent = no preview path.
               ...(provisionalPreviewDeps ? { provisionalPreview: provisionalPreviewDeps } : {}),
               // Wire the UI generator into `ggui_render`. When bound,
-              // every story-path push awaits
+              // every story-path render awaits
               // `uiGenerator.generate(...)`, commits the generated
               // Render, and returns `codeReady:true`. Absent =
               // placeholder mode (no componentCode produced).
@@ -3842,7 +3842,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // from the server's own already-resolved `embedding` +
               // `vectors` deps whenever `opts.generation.cache` is
               // undefined. The handler then runs a cache lookup on
-              // every story-path push + emits `cache.hit /
+              // every story-path render + emits `cache.hit /
               // similarity / cachedBlueprintId / llmCallsAvoided` on
               // structuredContent.
               ...(generationWithCache
@@ -3850,7 +3850,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                     generation: {
                       ...generationWithCache,
                       // Thread an LLMCaller resolver into
-                      // push so the registry-based three-tier matcher
+                      // render so the registry-based three-tier matcher
                       // can fire its rerank step. Per-call resolution
                       // because BYOK creds depend on ctx.
                       resolveLlmCaller: async (ctx) => {
@@ -3865,7 +3865,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // Live-subscriber notifier. Late-binds to the
               // RenderChannelServer created further down (`channel`
               // / `channelForHealth`) — the channel doesn't exist yet
-              // at handler-factory time, so we hand the push handler
+              // at handler-factory time, so we hand the render handler
               // a thin closure that forwards to whatever channel ends
               // up assigned to `channelForHealth`. Same late-bind
               // pattern as `provisionalPreviewDeps.sendEnvelope`.
@@ -3874,24 +3874,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // the floor, which is correct for hosts that didn't
               // enable `renderChannel` (no live subscribers to
               // notify in the first place). The handler's own
-              // `safelyNotifyStackPush` swallows on absent notifier
+              // `safelyNotifyRenderCommit` swallows on absent notifier
               // anyway, but providing the closure unconditionally
               // keeps the typecheck simple — no per-config branching.
               channelNotifier: {
                 notifyRenderCommit: (renderId, render, matchType) => {
                   if (!channelForHealth) return;
-                  channelForHealth.notifyRenderPush(renderId, render, matchType);
+                  channelForHealth.notifyRenderCommit(renderId, render, matchType);
                 },
               },
               // F4 schema compat check. Late-binds to the composed
               // `handlers` list + resolved schemaCompatMode — both
               // exist only after defaultHandlers returns, so we hand
-              // the push handler a thin closure that captures them
+              // the render handler a thin closure that captures them
               // by reference. Same late-bind pattern as
               // `channelNotifier` / `provisionalPreviewDeps.sendEnvelope`.
               //
               // Content-addressable code delivery. When the operator
-              // wired `opts.codeStore`, forward it to the push
+              // wired `opts.codeStore`, forward it to the render
               // handler along with the base
               // URL the code-blob route resolves to. We prefer the
               // explicit `--public-base-url` (so the URL is reachable
@@ -3919,7 +3919,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               },
               checkRenderContracts: (shape) => {
                 // Shape carries the optional actionSpec / streamSpec
-                // pair from either the authored DataContract (push
+                // pair from either the authored DataContract (render
                 // validation) or a Render (gen / cache-hit backstops).
                 // Both fit structurally; the helper handles missing
                 // fields as a compatible no-op.
@@ -3953,12 +3953,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             },
           }
         : {}),
-      // `ggui_update` handler. Registered alongside `push` because
+      // `ggui_update` handler. Registered alongside `render` because
       // both want the RenderStore and
       // benefit from live-channel fan-out. Same late-bind pattern as
       // `channelNotifier` / `provisionalPreviewDeps.sendEnvelope`:
       // the handler factory captures a closure, the closure forwards
-      // to `channelForHealth.sendPropsUpdate` once the session
+      // to `channelForHealth.sendPropsUpdate` once the render
       // channel is created further down.
       //
       // Absent channel → no-op closure: the props_update fan-out
@@ -3977,14 +3977,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                   await channelForHealth.sendPropsUpdate(renderId, props);
                 },
               },
-              // Bootstrap-emission deps. Mirror push so MCP Apps hosts
+              // Bootstrap-emission deps. Mirror render so MCP Apps hosts
               // that re-post `ui/notifications/tool-result` over postMessage
               // can re-apply patched props on the live mount without a WS
               // round-trip. Composing the same minter / runtimeUrl / theme
               // resolvers keeps the two transports byte-identical at the
               // bootstrap-projection boundary.
               ...(mintBootstrap ? { mintBootstrap } : {}),
-              // Function form: matches push so ggui_update emits the
+              // Function form: matches render so ggui_update emits the
               // same absolute URL when the server sits behind a tunnel
               // / reverse proxy.
               runtimeUrl: resolveRuntimeUrlForResultMeta,
@@ -4021,7 +4021,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // resolved blueprint store + search + generator registry into
       // defaultHandlers; the four `ggui_ops_*` tools land on /ops
       // via their `audience: ['ops']` tag. The `resolveLlm` +
-      // `blueprints` deps come from the same source push reads, so
+      // `blueprints` deps come from the same source render reads, so
       // generate dispatches through the same credential + catalog
       // path as live agent traffic. listAllForApp wires only when
       // the resolved store is the in-memory adapter (which exposes
@@ -4047,8 +4047,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 : {}),
             // Mirror operator-authored blueprints into the cache
             // vectorStore so the agent-facing matchBlueprint exact-
-            // key probe (handshake + push) finds them. Same bundle
-            // the push handler + handshake negotiator already
+            // key probe (handshake + render) finds them. Same bundle
+            // the render handler + handshake negotiator already
             // consume.
             ...(generationWithCache?.cache ? { cacheRegistry: generationWithCache.cache } : {}),
           })
@@ -4087,7 +4087,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const mcpServices = validateMcpServices(opts.mcpServices);
 
   // Schema compatibility check mode. Resolved once and
-  // threaded into the console blueprint-try endpoint + the push
+  // threaded into the console blueprint-try endpoint + the render
   // handler's `checkRenderContracts` closure above (which
   // late-binds to this constant via lexical capture).
   // See CreateGguiServerOptions.schemaCompatCheck.
@@ -4100,7 +4100,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const app = express();
   // Per-request context (ALS-backed) — captures forwarded host/proto
   // when the TCP peer is loopback, so deps that build absolute URLs
-  // (push/update resultMeta.runtimeUrl) can adapt to the tunnel host.
+  // (render/update resultMeta.runtimeUrl) can adapt to the tunnel host.
   // Trust gate lives inside the middleware — see request-context.ts.
   app.use(buildRequestContextMiddleware());
   app.use(express.json({ limit: bodyLimit }));
@@ -4272,10 +4272,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     });
   }
 
-  // Live-channel session endpoint reference is declared earlier (above
+  // Live-channel render endpoint reference is declared earlier (above
   // the provisional-preview wiring) so the preview `sendEnvelope`
   // closure can late-bind to it. /ggui/health reads the same ref to
-  // surface live subscriber / session counts.
+  // surface live subscriber / render counts.
 
   // 1s per-check timeout — a hung dependency must not block the K8s
   // liveness probe, which itself runs on a short period. A timeout is
@@ -4352,7 +4352,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         body.channel = {
           path: channelForHealth.path,
           subscribers: channelForHealth.subscriberCount,
-          sessions: channelForHealth.renderCount,
+          renders: channelForHealth.renderCount,
         };
       }
       // Thread-transport presence + durability claim. Absent when the
@@ -4378,7 +4378,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
    *
    * Identical auth semantics to `/mcp` (same AuthAdapter, same Bearer-
    * parsing) but with a flat 204 / 401 response shape, no body, no
-   * session state. Designed for clients that need to distinguish
+   * render state. Designed for clients that need to distinguish
    * "server is up but my token is stale" from "server is unreachable".
    *
    * A Settings → Servers probe in a host client is the canonical
@@ -4555,10 +4555,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // (`connect-src 'none'`) blocks the iframe from fetching the
         // runtime bundle and opening the WebSocket.
         ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
-        // Per-session self-contained shell registration. Only wired
-        // when MCP Apps is on AND the session store is resolved —
+        // Per-render self-contained shell registration. Only wired
+        // when MCP Apps is on AND the render store is resolved —
         // both preconditions for `ggui_render.resultMeta` stamping a
-        // per-call `ui://ggui/render/<sessionId>` URI a host can
+        // per-call `ui://ggui/render/<renderId>` URI a host can
         // resolve here. Absent either, we register only the legacy
         // static `ui://ggui/render` URI (postMessage shell).
         ...(mcpAppsEnabled && renderStore
@@ -4566,7 +4566,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               selfContained: {
                 renderStore,
                 runtimeUrl: runtimeBootstrapUrl,
-                // Forward operator-picked theme into the per-session
+                // Forward operator-picked theme into the per-render
                 // self-contained shell. Without this, MCP-Apps hosts
                 // (claude.ai, Claude Desktop) that fetch the resource
                 // via `resources/read` always get the runtime's baked
@@ -4581,14 +4581,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                   : {}),
                 // Resume contract — registry-only fallback. Wired
                 // when the blueprint vector store is available so the
-                // resource handler can render a session-evicted
+                // resource handler can render a render-evicted
                 // rehydrate from the registered blueprint instead of
                 // the dead loading shell. `defaultAppIdFallback`
                 // bounds the registry lookup to the OSS single-tenant
                 // identity; multi-tenant deployments leave this
                 // undefined to fail-safe back to the loading shell
                 // (no way to derive the right tenant from a missing
-                // session).
+                // render).
                 ...(vectors
                   ? {
                       vectorStore: vectors,
@@ -4873,7 +4873,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // there's no auth state on the renderer route to protect via a
         // narrower origin allowlist. This pairs with the production
         // `/ui://ggui/render` shell HTML setting `s.type='module'`
-        // (`mcp-apps-outbound.ts::GGUI_SESSION_SHELL_SCRIPT_BODY`).
+        // (`mcp-apps-outbound.ts::GGUI_RENDER_SHELL_SCRIPT_BODY`).
         res.setHeader("Access-Control-Allow-Origin", "*");
         // `dotfiles: 'allow'` — express@5's `res.sendFile` (send@1.x)
         // splits the FULL absolute path into segments and applies its
@@ -5151,11 +5151,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //   - 200 — `{events, lastSequence, hasMore}` (matches
   //     `EventsResponse` from @ggui-ai/protocol/integrations/mcp-apps).
   //   - 401 — wsToken missing / invalid / wrong-scope.
-  //   - 404 — sessionId does not resolve.
+  //   - 404 — renderId does not resolve.
   //   - 410 — `{reason: 'REPLAY_HORIZON_PASSED', currentSequence}` when
   //     `sinceSequence` is below the server's replay horizon OR strictly
   //     greater than `lastSequence` (cursor is from a stale deployment
-  //     or the session was reset). Clients re-mount from /state.
+  //     or the render was reset). Clients re-mount from /state.
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForEvents = renderStore;
     const eventsSecret = sharedTokenSecret;
@@ -5246,7 +5246,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //   (a) sinceSequence < horizonSeq — events evicted (cloud TTL,
       //       in-mem never).
       //   (b) sinceSequence > lastSequence — cursor from a different
-      //       deployment / reset session; the server has no events
+      //       deployment / reset render; the server has no events
       //       beyond what it knows, and we can't safely advance.
       if (sinceSequence > result.lastSequence) {
         res.status(410).type("application/json").json({
@@ -5292,7 +5292,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Cache posture: `Cache-Control: public, max-age=31536000, immutable` —
   // hash is content-derived, the bytes can NEVER change for a given URL,
   // so browsers + CDNs cache forever (immutable means "don't even
-  // revalidate"). A second push with the same componentCode / contract
+  // revalidate"). A second render with the same componentCode / contract
   // hits browser cache for free.
   //
   // CORS: same `*` posture as `/r/:shortCode` (JSON branch) — bytes are
@@ -5639,7 +5639,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // than "console wasn't built yet," which is a real debugging
   // trap for self-hosted operators.
   const consoleEnabled = opts.console !== undefined && opts.console !== false;
-  // Cookie-auth binding into the session-channel. Populated inside
+  // Cookie-auth binding into the render-channel. Populated inside
   // the console block below when `sessionCookie` is enabled, then
   // threaded into createRenderChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
@@ -5661,7 +5661,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Shared admin-auth check used by every operator-only console route.
   // Mirrors the Bearer-or-cookie pattern the keys/theme/llm-keys gates
   // use inline; lifting it here lets the read-side endpoints (/info,
-  // /sessions, /config) gate identically without redefining the logic.
+  // /renders, /config) gate identically without redefining the logic.
   // Returns `null` when no admin token is configured — caller treats
   // the absence as "no gating needed" (console disabled).
   const requestHasAdminAuthShared: ((req: Request) => boolean) | null =
@@ -5701,7 +5701,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // don't need to wire renderChannel + shortCodeIndex. The feature
     // requires `renderChannel: true` (the cookie only authenticates
     // the live channel) and `shortCodeIndex` (the cookie endpoint resolves
-    // shortCode → session through it). Fail fast at construction if
+    // shortCode → render through it). Fail fast at construction if
     // either is missing when the operator asked for the flow.
     const sessionCookieEnabled =
       consoleConfig.sessionCookie === true ||
@@ -5960,7 +5960,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
             // Mint the shortCode last — if earlier steps failed the
             // client never sees a dangling mapping. Best-effort bind
-            // to match push.ts's posture (a put failure shouldn't
+            // to match render.ts's posture (a put failure shouldn't
             // fail the whole try-live — a 500 here would leave the
             // render behind with no way to resolve from
             // `/s/<shortCode>`, but the operator can still hit the
@@ -6008,7 +6008,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           }
         });
       } else {
-        // Partial wiring — /try would attempt a session create that
+        // Partial wiring — /try would attempt a render create that
         // has nowhere to land. Surface with 503 + specific message
         // so the operator knows which seam to add (console cookie +
         // shortCodeIndex live on `console.sessionCookie: true`).
@@ -6193,7 +6193,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Four endpoints operator-facing from `/blueprints` (the merged
     // page that also hosts declared blueprints + primitives). All
     // scoped to `DEFAULT_BUILDER_APP_ID` because the OSS server is
-    // single-tenant by construction — same scope the push handler
+    // single-tenant by construction — same scope the render handler
     // writes to, so list/invalidate/clear see what the real cache
     // writes.
     //
@@ -6208,7 +6208,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Scope resolution: no auth-derived `appId` — the console is
     // same-origin operator-facing and every other console endpoint
     // uses the anchored `DEFAULT_BUILDER_APP_ID` scope too
-    // (matches push.ts:2624 and the chat playground flow).
+    // (matches the render.ts handler and the chat playground flow).
     // ─────────────────────────────────────────────────────────────────
 
     // GET /ggui/console/blueprints/cached — list cached generation
@@ -6391,7 +6391,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
     // ──────────────────────────────────────────────────────────────────
     // Admin gate for the operator-info read endpoints (`/info`,
-    // `/sessions`, `/config`). These surfaces sit under `/admin/*`
+    // `/renders`, `/config`). These surfaces sit under `/admin/*`
     // in the SPA. Same Bearer-or-cookie shape as `/keys`, `/theme`,
     // `/llm-keys`.
     //
@@ -6459,8 +6459,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // above; this mount only installs the handlers.
     mountConsolePayloadsRoutes(app, payloadTraceSink);
 
-    // Timeline surfaces — `/devtools/timeline` reads the session
-    // list and per-session RenderStore.observe replay. REST
+    // Timeline surfaces — `/devtools/timeline` reads the render
+    // list and per-render RenderStore.observe replay. REST
     // only — replay is a snapshot, not a live stream. Admin-gated by
     // the loop above. The hoisted `renderStore` + `streamBuffer` may
     // be undefined when neither `mcpApps` nor `renderChannel` is on;
@@ -6473,7 +6473,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // shortCode so rows can link through to `/s/<shortCode>` (the
     // existing render viewer).
     //
-    // Scope: active renders only. The `SessionFilter.status`
+    // Scope: active renders only. The `RenderFilter.status`
     // taxonomy ('active' | 'completed' | 'expired') requires the
     // store's private `closed` bucket flag to disambiguate completed
     // from expired — that flag isn't on the `Render` protocol type,
@@ -6733,10 +6733,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //     wired `uiRegistry.list()` — 0 when no registry is bound.
       //     Best-effort on read (same contract as `/ggui/console/registry`).
       //   - `primitiveCount`: sum across `primitiveCatalogs`.
-      //   - `agentWired`: whether the session-channel + mcpApps path is
+      //   - `agentWired`: whether the render-channel + mcpApps path is
       //     live (the server can accept `ggui_render` + live-channel joins).
       //   - `generationWired`: whether `opts.generation` was bound —
-      //     the `ggui_render` LLM path is active. Absent = push returns
+      //     the `ggui_render` LLM path is active. Absent = render returns
       //     `codeReady: false` honest placeholders.
       //
       // Provider/model specifics (`generation: { provider, model }`
@@ -6761,7 +6761,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         0
       );
       // Generation probe — `wired` reports dep binding; `hasCredentials`
-      // actually resolves BYOK credentials via the same seam the push
+      // actually resolves BYOK credentials via the same seam the render
       // handler uses, so the operator-facing pill can distinguish
       // three honest states: off / needs-key / ready. The split avoids
       // a green "wired" pill next to a "text-only" meta misleading
@@ -6854,7 +6854,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // serve` instance; adding bearer auth here would block the
     // dev-page-is-usable claim without meaningful security gain.
     //
-    // The push invocation uses `DEFAULT_BUILDER_APP_ID` for tenant
+    // The render invocation uses `DEFAULT_BUILDER_APP_ID` for tenant
     // scope — same well-known value the `/mcp` endpoint collapses to
     // in OSS single-user mode. Matches blueprint + vector scoping
     // applied by the generator / cache seams.
@@ -6866,12 +6866,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // keeps the chat surface usable without a BYOK key AND preserves
     // the exact Lane-1 chat-page spec assertion (`/OSS agent
     // generation/`) without a copy change.
-    const pushHandlerForChat =
+    const renderHandlerForChat =
       generationWithCache !== undefined
         ? handlers.find((h) => h.name === "ggui_render")
         : undefined;
     const handshakeHandlerForChat =
-      pushHandlerForChat !== undefined
+      renderHandlerForChat !== undefined
         ? handlers.find((h) => h.name === "ggui_handshake")
         : undefined;
     app.post("/ggui/console/chat/message", async (req, res) => {
@@ -6909,8 +6909,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       };
 
       // Attempt real generation through `ggui_render` when wired.
-      // `pushHandlerForChat` is undefined when mcpApps was disabled or
-      // the operator built a custom handler set without push. The
+      // `renderHandlerForChat` is undefined when mcpApps was disabled or
+      // the operator built a custom handler set without render. The
       // handler itself returns `codeReady:false` when generation deps
       // aren't wired (no BYOK) — we surface that honestly on the
       // agentMessage text without pretending a UI landed.
@@ -6923,7 +6923,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           }
         | undefined;
       let agentText: string | undefined;
-      if (pushHandlerForChat && handshakeHandlerForChat) {
+      if (renderHandlerForChat && handshakeHandlerForChat) {
         try {
           const requestId = randomUUID();
           const handshakeInput: Record<string, unknown> = {
@@ -6934,7 +6934,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             requestId,
           });
           const handshakeId = (hsRaw as { handshakeId: string }).handshakeId;
-          const raw = await pushHandlerForChat.handler(
+          const raw = await renderHandlerForChat.handler(
             { handshakeId, contract: {} },
             { appId: DEFAULT_BUILDER_APP_ID, requestId }
           );
@@ -6952,7 +6952,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           };
           // If console cookie auth is enabled, mint a session
           // cookie so the chat can open the /ws subscription without
-          // a separate POST to /session-cookie. Single round-trip
+          // a separate POST to /ggui/console/render-cookie. Single round-trip
           // per turn; cookie is same-origin HttpOnly.
           if (sessionCookieEnabled) {
             const secret = sharedTokenSecret as string;
@@ -6996,7 +6996,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ui = undefined;
           }
         } catch (err) {
-          logger.warn?.("console_chat_push_failed", {
+          logger.warn?.("console_chat_render_failed", {
             threadId,
             error: err instanceof Error ? err.message : String(err),
           });
@@ -7013,7 +7013,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         role: "agent" as const,
         text:
           agentText ??
-          // No push handler at all — text-only fallback. Keeps the
+          // No render handler at all — text-only fallback. Keeps the
           // Lane-1 chat-page spec green by preserving the exact copy
           // it asserts against.
           "Message received. OSS agent generation is not yet wired — " +
@@ -7036,7 +7036,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       });
     });
 
-    // Cookie-mint route + cookieAuth binding for the session channel.
+    // Cookie-mint route + cookieAuth binding for the render channel.
     // Both enabled only when `sessionCookie` is on (default when
     // `console` is otherwise enabled). The preconditions checked
     // earlier guarantee shortCodeIndex + renderChannel are present,
@@ -7073,7 +7073,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (!binding) {
           res.status(404).json({
             error: "unknown_short_code",
-            message: "Short-code does not resolve to any session on this server",
+            message: "Short-code does not resolve to any render on this server",
           });
           return;
         }
@@ -7251,7 +7251,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           res.status(503).json({
             error: "mcp_apps_disabled",
             message:
-              "sessions/:id/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
+              "renders/:renderId/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
           });
           return;
         }
@@ -7289,10 +7289,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           // we don't understand.
         }
         // Content-addressable contract-validator bundle (#109) for
-        // the active stack item. The renderer iframe's strict CSP
+        // the active render. The renderer iframe's strict CSP
         // forbids the `new Function` codegen `ajv.compile()` needs,
         // so the server compiles + writes the bundle to its
-        // CodeStore at push time and threads the URL here. The
+        // CodeStore at render time and threads the URL here. The
         // iframe fetches the URL + dynamic-imports to resolve
         // validators. Best-effort: a missing bundle degrades to no
         // client-side validation; server-side `assertActionContract`
@@ -7418,7 +7418,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // Bind cookieAuth into the session channel. Declared `let`
+      // Bind cookieAuth into the render channel. Declared `let`
       // above so createRenderChannelServer can reference it below.
       consoleCookieAuth = {
         readCookie: readDevtoolCookieFromHeaders,
@@ -7530,7 +7530,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //
     // Scope discipline: the gate covers `/ggui/console/keys*` +
     // `/ggui/console/admin-login` ONLY. Other console routes
-    // (registry, sessions, cached blueprints, oauth-clients) are not
+    // (registry, renders, cached blueprints, oauth-clients) are not
     // re-gated here — that's a separate audit slice. Adding a single-
     // path-prefix middleware avoids re-litigating the whole console
     // posture in one go.
@@ -8355,7 +8355,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //
       // The welcome page (`/`) is intentionally public — it's the
       // operator-identification surface, not an admin tool. Public
-      // deep-link surfaces stay reachable: a session viewer URL
+      // deep-link surfaces stay reachable: a render viewer URL
       // `/s/<shortCode>` and a blueprint preview URL `/preview/<id>`
       // are how end-users / blueprint authors land on the server.
       if (requestHasAdminAuthShared !== null) {
@@ -8409,7 +8409,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     }
   }
 
-  // Live-channel session endpoint. Defaults to disabled so consumers who
+  // Live-channel render endpoint. Defaults to disabled so consumers who
   // only want the tool plane get the smallest surface; CLIs (`ggui serve`,
   // hosted) enable it explicitly.
   //
@@ -8428,7 +8428,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ? createRenderChannelServer({
         renderStore: renderStore ?? new InMemoryRenderStore(),
         auth,
-        logger: logger.child({ component: "session-channel" }),
+        logger: logger.child({ component: "render-channel" }),
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:
           streamBuffer ??
@@ -8600,9 +8600,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
 /**
  * 18-char URL-safe shortCode for `POST /ggui/console/blueprint/:id/try`
- * — visually distinct from the 16-char push-minted shortCodes in
- * `@ggui-ai/mcp-server-handlers/renders/push.ts` so operators
- * reading logs can tell a try-live session from an agent-pushed one
+ * — visually distinct from the 16-char render-minted shortCodes in
+ * `@ggui-ai/mcp-server-handlers/renders/render.ts` so operators
+ * reading logs can tell a try-live render from an agent-rendered one
  * at a glance. Same confusable-free alphabet
  * (`[a-z0-9]` minus `1lI0Oo`) so the code stays hand-typable. Entropy
  * ≈ 18 × log₂(31) ≈ 89 bits.

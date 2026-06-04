@@ -144,7 +144,7 @@ describe('bootSequence — happy path', () => {
     // only — no React mount, no DOM mutation). The emitFrame helper
     // still confirms the render handler is registered and accepts the
     // frame without throwing.
-    const subsequent = makeRender('render_001', 'second push');
+    const subsequent = makeRender('render_001', 'second render');
     emitFrame('render', { render: subsequent, matchType: 'exact' });
 
     // No failure message was sent.

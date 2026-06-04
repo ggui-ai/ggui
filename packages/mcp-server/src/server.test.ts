@@ -1547,7 +1547,7 @@ describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () =>
 
 describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   // Scope: prove the handshake handler is auto-registered when
-  // `mcpApps` is on, the paired push consume succeeds over the real
+  // `mcpApps` is on, the paired render consume succeeds over the real
   // MCP wire, the store is shared between both handlers, and explicit
   // `handshake: false` opts out cleanly. Mirrors the mcpApps + adapter
   // integration shape above so the transport + auth round-trip is
@@ -1600,7 +1600,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
     }
   });
 
-  // Phase 2.3 wire — ggui_consume registers automatically when push
+  // Phase 2.3 wire — ggui_consume registers automatically when render
   // is bound (default in-memory PendingEventConsumer). Closes the FF
   // nextStep → consume hint chain end-to-end on `ggui serve`. Without
   // this registration, every render response emitted nextStep:ggui_consume

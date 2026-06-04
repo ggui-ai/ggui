@@ -94,7 +94,7 @@ async function seedCacheRow(
   input: {
     readonly intent: string;
     readonly componentCode: string;
-    readonly stackItemId: string;
+    readonly renderId: string;
     readonly createdAt: string;
   },
 ): Promise<void> {
@@ -111,7 +111,7 @@ async function seedCacheRow(
       contract: '{}',
       contractKey,
       kind,
-      stackItemId: input.stackItemId,
+      renderId: input.renderId,
       createdAt: input.createdAt,
     },
   });
@@ -140,7 +140,7 @@ describe('GET /ggui/console/blueprints/cached', () => {
     await seedCacheRow(f, DEFAULT_BUILDER_APP_ID, {
         intent: 'weather card for Tokyo',
         componentCode: 'export default () => null',
-        stackItemId: 'p',
+        renderId: 'p',
         createdAt: '2026-04-21T00:00:00Z',
       });
     const res = await fetch(`${f.url}/ggui/console/blueprints/cached`);
@@ -196,7 +196,7 @@ describe('DELETE /ggui/console/blueprints/cached/:id', () => {
     await seedCacheRow(f, DEFAULT_BUILDER_APP_ID, {
         intent: 'weather card',
         componentCode: 'export default () => null',
-        stackItemId: 'p',
+        renderId: 'p',
         createdAt: '2026-04-21T00:00:00Z',
       });
     const id = `template:${generationCacheKey('weather card')}`;
@@ -237,7 +237,7 @@ describe('POST /ggui/console/blueprints/cached/clear', () => {
       await seedCacheRow(f, DEFAULT_BUILDER_APP_ID, {
         intent,
         componentCode: 'export default () => null',
-        stackItemId: `p-${intent}`,
+        renderId: `p-${intent}`,
         createdAt: '2026-04-21T00:00:00Z',
       });
     }

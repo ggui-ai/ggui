@@ -16,7 +16,7 @@
  *     /events?sinceSequence=0&limit=1 to bootstrap from the first push).
  *   - limit truncation sets `hasMore: true`.
  *   - Auth gates: 401 missing/invalid/wrong-scope wsToken, 410 expired,
- *     404 missing session.
+ *     404 missing render.
  *   - REPLAY_HORIZON_PASSED: 410 + JSON envelope when sinceSequence is
  *     above lastSequence (cursor from stale deployment).
  *   - Empty events page: 200 + `events: []` when no events match.
@@ -58,16 +58,16 @@ interface BootOpts {
   readonly eventCount?: number;
 }
 
-async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
+async function bootWithRender(opts: BootOpts = {}): Promise<Fixture> {
   const renderStore = new InMemoryRenderStore();
-  const session = await renderStore.create({ appId: 'app-events-test' });
+  const stored = await renderStore.create({ appId: 'app-events-test' });
   // Seed N synthetic events so cursor / pagination scenarios have
   // something to walk. Type `'ui.created'` is one of the canonical
   // ledger types; the wire shape we project is opaque on payload.
   const seedCount = opts.eventCount ?? 0;
   for (let i = 0; i < seedCount; i += 1) {
     await renderStore.appendEvent({
-      renderId: session.id,
+      renderId: stored.id,
       type: 'ui.created',
       data: { i, label: `event-${i}` },
     });
@@ -90,15 +90,15 @@ async function bootWithSession(opts: BootOpts = {}): Promise<Fixture> {
     throw new Error('server.address() did not return AddressInfo');
   }
   const { token } = mintWsToken(
-    { renderId: session.id, appId: session.appId },
+    { renderId: stored.id, appId: stored.appId },
     SECRET,
   );
   return {
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    renderId: session.id,
-    appId: session.appId,
+    renderId: stored.id,
+    appId: stored.appId,
     validToken: token,
     store: renderStore,
   };
@@ -113,8 +113,8 @@ describe('GET /api/renders/:renderId/events', () => {
     }
   });
 
-  it('returns 200 + full backlog when sinceSequence=0 on a session with events', async () => {
-    fx = await bootWithSession({ eventCount: 3 });
+  it('returns 200 + full backlog when sinceSequence=0 on a render with events', async () => {
+    fx = await bootWithRender({ eventCount: 3 });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
     );
@@ -138,7 +138,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 200 + empty events page when sinceSequence equals lastSequence', async () => {
-    fx = await bootWithSession({ eventCount: 2 });
+    fx = await bootWithRender({ eventCount: 2 });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
     );
@@ -154,7 +154,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 200 + truncated page with hasMore=true when limit is hit', async () => {
-    fx = await bootWithSession({ eventCount: 5 });
+    fx = await bootWithRender({ eventCount: 5 });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=2`,
     );
@@ -171,8 +171,8 @@ describe('GET /api/renders/:renderId/events', () => {
     expect(body.hasMore).toBe(true);
   });
 
-  it('returns 200 + empty events on a session with no events (sinceSequence=0)', async () => {
-    fx = await bootWithSession();
+  it('returns 200 + empty events on a render with no events (sinceSequence=0)', async () => {
+    fx = await bootWithRender();
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0`,
     );
@@ -188,7 +188,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 401 when wsToken query is absent', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?sinceSequence=0`,
     );
@@ -196,7 +196,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 401 when wsToken signature is invalid', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=tampered.payload&sinceSequence=0`,
     );
@@ -204,7 +204,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 410 Gone when wsToken is expired', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const { token: expiredToken } = mintWsToken(
       {
         renderId: fx.renderId,
@@ -220,19 +220,19 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 401 when wsToken renderId does not match URL renderId', async () => {
-    fx = await bootWithSession();
-    const { token: otherSessionToken } = mintWsToken(
-      { renderId: 'other-session', appId: fx.appId },
+    fx = await bootWithRender();
+    const { token: otherRenderToken } = mintWsToken(
+      { renderId: 'other-render', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(otherSessionToken)}&sinceSequence=0`,
+      `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(otherRenderToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 401 when wsToken appId does not match session appId', async () => {
-    fx = await bootWithSession();
+  it('returns 401 when wsToken appId does not match render appId', async () => {
+    fx = await bootWithRender();
     const { token: otherAppToken } = mintWsToken(
       { renderId: fx.renderId, appId: 'other-app' },
       SECRET,
@@ -244,7 +244,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 404 when renderId does not resolve', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     const { token: ghostToken } = mintWsToken(
       { renderId: 'sess-ghost', appId: fx.appId },
       SECRET,
@@ -256,9 +256,9 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 410 REPLAY_HORIZON_PASSED when sinceSequence exceeds lastSequence', async () => {
-    // Session has 2 events (lastSequence=2). Cursor at 99 is a stale
-    // cursor from a different deployment / reset session.
-    fx = await bootWithSession({ eventCount: 2 });
+    // Render has 2 events (lastSequence=2). Cursor at 99 is a stale
+    // cursor from a different deployment / reset render.
+    fx = await bootWithRender({ eventCount: 2 });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=99`,
     );
@@ -273,7 +273,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 400 when sinceSequence is missing or non-integer', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     // Missing.
     let res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}`,
@@ -292,7 +292,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 400 when limit is out of range', async () => {
-    fx = await bootWithSession();
+    fx = await bootWithRender();
     // Above max.
     let res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=0&limit=501`,
@@ -306,7 +306,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('honors mid-cursor sinceSequence to return only newer events', async () => {
-    fx = await bootWithSession({ eventCount: 4 });
+    fx = await bootWithRender({ eventCount: 4 });
     const res = await fetch(
       `${fx.url}/api/renders/${fx.renderId}/events?wsToken=${encodeURIComponent(fx.validToken)}&sinceSequence=2`,
     );

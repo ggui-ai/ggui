@@ -127,7 +127,7 @@ describe("matchBlueprint — status filtering", () => {
 
 describe("matchBlueprint — plan-my-week vs sibling hypothetical", () => {
   it("prefers the 2-tool Plan My Week over a 1-tool fallback when both qualify", () => {
-    // Real scenario: push arrives with sourceTools: [get_tasks, calendar_list_events].
+    // Real scenario: render arrives with sourceTools: [get_tasks, calendar_list_events].
     // Two candidates — a composed Plan My Week and a solo tasks-list screen.
     // Composed wins by overlap.
     const candidates: MatchableBlueprint[] = [

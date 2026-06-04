@@ -34,7 +34,7 @@
  * an agent's intent-prose override on a gadget export-use entry (the
  * `description?` / `usage?` fields of each
  * `clientCapabilities.gadgets[<package>][<exportName>]`, agent-authored
- * at push time) does not pollute the cache key.
+ * at render time) does not pollute the cache key.
  *
  * The strip is keyed on `description`/`usage` as STRING-VALUED fields,
  * never as map keys. A gadget package, an `agentCapabilities.tools`

@@ -233,7 +233,7 @@ describe('validatePropsData — closed-shape (strict mode)', () => {
   // propsSpec is the contract; undeclared keys are a contract
   // violation. Load-bearing for `ggui_update kind:'merge'` (RFC 7396)
   // where a typo'd patch field would otherwise silently land on the
-  // stack item with no propsSpec coverage.
+  // render with no propsSpec coverage.
   const SHAPE_SPEC: PropsSpec = {
     properties: {
       title: { required: true, schema: { type: 'string' } },

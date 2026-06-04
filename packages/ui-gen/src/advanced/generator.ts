@@ -111,7 +111,7 @@ export interface CreateAdvancedUiGeneratorOptions
    * Playwright module. Required at GENERATE time — the factory itself
    * does not throw if absent, but every generate() call will. This is
    * deliberate: a deploy config that drops the field surfaces the gap
-   * via a clean PlaywrightNotAvailableError on the first push, rather
+   * via a clean PlaywrightNotAvailableError on the first render, rather
    * than at server boot when no caller can react.
    */
   readonly playwright: AdvancedGeneratorPlaywright | undefined;

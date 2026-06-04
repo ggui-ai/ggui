@@ -133,7 +133,7 @@ export interface Blueprint {
   readonly appId: string;
   /**
    * S3 URL (`s3://<bucket>/<key>`) of the generated code body when
-   * cached. Absent → blueprint is pending generation; push branches
+   * cached. Absent → blueprint is pending generation; render branches
    * on this to decide cache-hit vs gen-and-persist. OSS in-memory
    * adapters MAY use a non-S3 sentinel (or just leave this absent
    * and rely on `codeHash` to look up code body inline).
@@ -175,7 +175,7 @@ export interface Blueprint {
   /** ISO-8601 timestamp the row was first inserted. */
   readonly createdAt: string;
   /**
-   * `'agent'` when the standard handshake → push flow minted the
+   * `'agent'` when the standard handshake → render flow minted the
    * blueprint; `'operator'` when an explicit `ggui_ops_generate_blueprint`
    * call created it.
    */

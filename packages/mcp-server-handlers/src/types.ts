@@ -107,7 +107,7 @@ export interface HandlerContext {
    * transport layer threads it onto the context for handlers that
    * need to read host-channel slices (today: the
    * `ai.ggui/host-session` slice consumed by `ggui_render` to
-   * group sessions for end-user resume).
+   * group renders for end-user resume).
    *
    * `undefined` when the request carried no `_meta` (most calls) and
    * for in-process invocations (wired-action dispatch, console

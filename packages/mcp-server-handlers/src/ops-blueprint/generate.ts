@@ -107,7 +107,7 @@ export interface GguiOpsGenerateBlueprintDeps {
   /**
    * Generator registry — the dispatch table the handler reads to
    * resolve the operator's slug into a concrete `UiGenerator`. The
-   * same registry the push path consults.
+   * same registry the render path consults.
    */
   readonly registry: GeneratorRegistry;
   /**
@@ -135,7 +135,7 @@ export interface GguiOpsGenerateBlueprintDeps {
   readonly appMetadataStore?: AppMetadataStore;
   /**
    * Per-call credential lookup — typically the same `resolveLlm`
-   * that the push handler reads. Returns `null` when no key is
+   * that the render handler reads. Returns `null` when no key is
    * available; the handler maps that to
    * {@link MissingCredentialsError}.
    */
@@ -144,7 +144,7 @@ export interface GguiOpsGenerateBlueprintDeps {
   ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
   /**
    * Blueprint catalog handed to the generator. Same instance the
-   * push handler threads into `GenerationDeps.blueprints`; surfaced
+   * render handler threads into `GenerationDeps.blueprints`; surfaced
    * here so generate paths get the same blueprint context.
    */
   readonly blueprints: BlueprintProvider;
@@ -159,8 +159,8 @@ export interface GguiOpsGenerateBlueprintDeps {
   /**
    * Optional cache-registry deps for dual-write mirroring. When
    * bound, the handler ALSO calls `registerBlueprint` against the
-   * vectorStore-backed cache registry — the SAME registry the push
-   * handler reads from via `matchBlueprint` (push.ts:1544) and the
+   * vectorStore-backed cache registry — the SAME registry the render
+   * handler reads from via `matchBlueprint` (render.ts) and the
    * handshake negotiator's exact-key fast path
    * (llm-backed-negotiator.ts §matchBlueprint fast path).
    *
@@ -240,7 +240,7 @@ export function createGguiOpsGenerateBlueprintHandler(
     title: "Generate blueprint",
     audience: ["ops"],
     description:
-      "Author a new blueprint variant for the caller's app. Dispatches through the registry's selected generator (defaults to `registry.defaultGenerator()` when the slug is omitted) and persists the resulting code body + metadata against a fresh `blueprintId`. Optionally pins the new blueprint as the operator default for its `(appId, contractHash)` group. Persona tags are normalized (lowercase + trim); near-duplicates surface a warning via telemetry. Returns the new id + content-hash + validator score + resolved generator slug — code body lives in the bound store, fetched via push's fast-path on cache hit.",
+      "Author a new blueprint variant for the caller's app. Dispatches through the registry's selected generator (defaults to `registry.defaultGenerator()` when the slug is omitted) and persists the resulting code body + metadata against a fresh `blueprintId`. Optionally pins the new blueprint as the operator default for its `(appId, contractHash)` group. Persona tags are normalized (lowercase + trim); near-duplicates surface a warning via telemetry. Returns the new id + content-hash + validator score + resolved generator slug — code body lives in the bound store, fetched via render's fast-path on cache hit.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -256,7 +256,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       // persistence so an operator-supplied row can't smuggle
       // deprecated vocabulary (`terminal`, `consumeSpec`,
       // `interaction`, `commandSpec`, `behaviorSpec`) into the
-      // registry. The same gate fires on the push + handshake seams
+      // registry. The same gate fires on the render + handshake seams
       // in `renders/`.
       assertContractNoRetiredFields(parsed.contract);
 
@@ -389,7 +389,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       }
 
       // 6.5 Mirror into the cache vectorStore so the agent-facing
-      // matchBlueprint exact-key probe (handshake + push) finds this
+      // matchBlueprint exact-key probe (handshake + render) finds this
       // operator-authored blueprint. Without this write, the row sits
       // only in the MVB BlueprintStore and is invisible to the cache-
       // hit path (parallel registries — see task #358 in the project

@@ -50,7 +50,7 @@ import type { CompiledValidatorSet } from './compiled-validators.js';
 // =============================================================================
 
 /**
- * Boot-installed precompiled validators for the active stack item's
+ * Boot-installed precompiled validators for the active render's
  * contract. `undefined` until {@link setActiveValidatorSet} runs (and
  * in unit tests, which exercise the in-iframe compilation fallback).
  */
@@ -60,7 +60,7 @@ let activeValidatorSet: CompiledValidatorSet | undefined;
  * Install the precompiled validators loaded from the bootstrap. Called
  * once per boot (both `bootProduction` and `bootSelfContained`), after
  * the bootstrap is parsed. A single set per iframe document — one
- * session, one active contract.
+ * render, one active contract.
  */
 export function setActiveValidatorSet(
   set: CompiledValidatorSet | undefined,
@@ -180,8 +180,8 @@ export function validateInboundStreamPayload(
 }
 
 /**
- * Validate an inbound `props_update` payload before patching a stack
- * item's props. Server already runs `assertPropsContract` on the emit
+ * Validate an inbound `props_update` payload before patching a
+ * render's props. Server already runs `assertPropsContract` on the emit
  * path; this client-side revalidation is defense-in-depth for
  * spec-versioning drift (server snapshot ≠ client cached spec).
  */

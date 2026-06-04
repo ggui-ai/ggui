@@ -5,10 +5,10 @@
  *
  * Compiled componentCode historically rode three different channels —
  * base64 inlined under `_meta.ggui.bootstrap.componentCode` (now
- * retired), templated into the per-session shell HTML, and (briefly)
+ * retired), templated into the per-render shell HTML, and (briefly)
  * over the WebSocket. Each was misshapen for the data:
  * `_meta` bloated every tool-result envelope and depended on hosts that
- * may strip custom meta; templated shells precluded cross-session
+ * may strip custom meta; templated shells precluded cross-render
  * dedup; WS frames hit size limits and tied initial mount to the WS
  * handshake. As of T3-1, the inline base64 channel is gone; the
  * content-addressable URL channel below is the sole delivery surface.
@@ -16,9 +16,9 @@
  * componentCode has four properties that argue for one channel:
  *   1. Immutable per generation — never mutates after produced.
  *   2. Content-addressable — `sha256(code)` is a stable id that
- *      naturally dedups across sessions and users.
- *   3. Independent lifecycle from session state — code outlives the
- *      session that produced it.
+ *      naturally dedups across renders and users.
+ *   3. Independent lifecycle from render state — code outlives the
+ *      render that produced it.
  *   4. Variable size 100B–50KB — too big for `_meta` inlining, too small
  *      for streaming.
  *
@@ -33,7 +33,7 @@
  *
  * **Parties:**
  * - Producer / writer: `mcp-server-handlers/renders/render.ts` —
- *   after `runGenerationIntoSession` produces componentCode, the handler
+ *   after `runGenerationIntoRender` produces componentCode, the handler
  *   computes `sha256(code)` and `put`s the (hash, code) pair before
  *   minting the bootstrap envelope.
  * - Consumer / reader: the HTTP route `GET /code/<hash>.js` mounted by

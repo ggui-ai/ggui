@@ -15,7 +15,7 @@
  *     between props vs action vs stream vs context.
  *   - Compile-time meta-validation: `strict: true` rejects malformed
  *     JSON Schemas at `compile()` — agents discover bugs at
- *     handshake/push, not at first data flow.
+ *     handshake/render, not at first data flow.
  *
  * Closed-shape (load-bearing):
  *   JSON Schema's default is `additionalProperties: true` (extras
@@ -193,7 +193,7 @@ export function injectClosedShape(schema: JsonSchema): JsonSchema {
  * closed-shape injected at every object node. Throws if the schema
  * is malformed under Ajv strict mode — this is layer B meta-
  * validation as a free side effect. Dedicated meta-validation call
- * sites (handshake / push) wrap this in a structured error.
+ * sites (handshake / render) wrap this in a structured error.
  *
  * Not cached. Compilation is fast and contracts are small; caching
  * adds a memory cost without a measured win. Revisit if profiling
@@ -213,7 +213,7 @@ export function compileForValidation(schema: JsonSchema): ValidateFunction {
  * Why this exists: the renderer iframe runs under a strict CSP with no
  * `'unsafe-eval'`, so `ajv.compile()` (which builds the validator via
  * `new Function`) throws `EvalError` there. Codegen has to happen
- * where `eval` is legal — the server, at push time, where the contract
+ * where `eval` is legal — the server, at render time, where the contract
  * schema is already fixed. The iframe then loads this module source
  * via a `blob:` dynamic import (governed by `script-src`, not
  * `unsafe-eval`) and only ever *runs* the validator.
@@ -283,7 +283,7 @@ function inlineRuntimeHelpers(source: string): string {
   }
   // Survivor check: a remaining `ajv/dist/runtime/*` import means Ajv
   // emitted a helper we don't inline. Fail loud here (server-side,
-  // caught by tests / push) rather than shipping a module the iframe
+  // caught by tests / render) rather than shipping a module the iframe
   // cannot load. Scoped to the `ajv/dist/runtime/` prefix — the only
   // specifiers Ajv standalone emits — so an embedded contract-schema
   // string can't false-trip it.

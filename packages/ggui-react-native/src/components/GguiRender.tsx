@@ -505,7 +505,7 @@ export function GguiRender({
   // first and can transform/cancel the payload before validation +
   // send. Mirrors the web SDK's `action` semantics.
   //
-  // NOTE: no GguiWireProvider wrap here — RN's session emitter
+  // NOTE: no GguiWireProvider wrap here — RN's render emitter
   // doesn't go through a WireProvider's `useAction` path today (see
   // `project_rn_contract_symmetry.md`), so there's no actionSpec
   // round-trip from a scoped hook. Server still authoritative — any

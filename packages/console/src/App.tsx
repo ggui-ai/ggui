@@ -272,7 +272,7 @@ function NotFound({ pathname }: { readonly pathname: string }): ReactElement {
           <p className="ggui-muted">
             The <code className="ggui-code">/s/&lt;shortCode&gt;</code> and{' '}
             <code className="ggui-code">/preview/&lt;blueprintId&gt;</code>{' '}
-            routes require a real id — paste a session shortCode from
+            routes require a real id — paste a render shortCode from
             <code className="ggui-code">ggui_render</code> or a blueprint
             id registered in <code className="ggui-code">ggui.json</code>.
           </p>

@@ -18,11 +18,11 @@
  *     inject a Haiku-backed streaming emitter; an OSS dev build can
  *     inject a deterministic skeleton emitter; tests inject a fake.
  *     The handler knows none of them.
- *   - **Fire-and-forget at the push layer.** `ggui_render` returns
+ *   - **Fire-and-forget at the render layer.** `ggui_render` returns
  *     synchronously; the preview runs on a background task the
  *     runner owns. Gating decisions happen BEFORE the background
  *     task starts so no useless promise is allocated on skipped
- *     pushes.
+ *     renders.
  *   - **Outcomes are observable.** `onOutcome` receives every
  *     decision (skipped / started / completed / failed / cancelled)
  *     so hosts can surface timings to their metrics stack without
@@ -59,7 +59,7 @@ export type ProvisionalPreviewEmit = (
 /**
  * Minimal context handed to the emitter. Deliberately narrow:
  *
- *   - `emit` is the only I/O — no logger, no metrics, no session
+ *   - `emit` is the only I/O — no logger, no metrics, no render
  *     store. Emitters that need more pull from whatever DI they
  *     were constructed with.
  *   - `signal` fires on cancellation (handoff to final UI, render
@@ -86,7 +86,7 @@ export interface ProvisionalPreviewContext {
 }
 
 /**
- * Caller-supplied emitter. Invoked exactly once per push whose gate
+ * Caller-supplied emitter. Invoked exactly once per render whose gate
  * passes. Returns when the emitter has finished producing frames;
  * the orchestrator then finalizes (deleteSurface + complete
  * envelope — future commit) regardless of normal vs aborted exit.
@@ -97,20 +97,20 @@ export interface ProvisionalPreviewEmitter {
 
 /**
  * Feature-flag-shaped gate. `enabled` is the top switch;
- * `isEnabledFor` is an optional per-push predicate hosts wire to
+ * `isEnabledFor` is an optional per-render predicate hosts wire to
  * their traffic-slice / app-config / budget checks.
  */
 export interface ProvisionalPreviewConfig {
   /**
-   * Global kill-switch. When `false`, every push skips regardless
+   * Global kill-switch. When `false`, every render skips regardless
    * of predicate. Default: false (no surprises in new deployments).
    */
   readonly enabled: boolean;
   /**
-   * Per-push override. Receives `appId`, `renderId`, and the
+   * Per-render override. Receives `appId`, `renderId`, and the
    * resolved `story`. Returning `false` skips with reason
    * `'predicate'`. When omitted, gate passes as long as `enabled`
-   * is true and the push shape qualifies.
+   * is true and the render shape qualifies.
    */
   readonly isEnabledFor?: (ctx: {
     readonly appId: string;
@@ -122,7 +122,7 @@ export interface ProvisionalPreviewConfig {
 /**
  * Every observable outcome of the preview decision + run.
  *
- * Ordering for a qualifying push:
+ * Ordering for a qualifying render:
  *
  *   started → (first-frame)? → (completed | failed | cancelled)
  *
@@ -132,7 +132,7 @@ export interface ProvisionalPreviewConfig {
  * on the terminal outcome to derive the "cancelled before visible
  * output" case.
  *
- * Skipped pushes emit only the `skipped` variant — no other
+ * Skipped renders emit only the `skipped` variant — no other
  * lifecycle events.
  */
 export type ProvisionalPreviewOutcome =
@@ -195,7 +195,7 @@ export type ProvisionalPreviewOutcome =
       /**
        * `null` when the run was cancelled BEFORE any frame was
        * accepted — consumers read this as "cancelled before
-       * visible output", the strongest signal that the push was
+       * visible output", the strongest signal that the render was
        * aborted before the user saw anything.
        */
       readonly firstFrameAt: number | null;
@@ -203,13 +203,13 @@ export type ProvisionalPreviewOutcome =
     };
 
 /**
- * Reasons the gate skips a push. `'disabled'` covers the global
- * kill-switch. The other reasons are per-push structural
+ * Reasons the gate skips a render. `'disabled'` covers the global
+ * kill-switch. The other reasons are per-render structural
  * disqualifications.
  */
 export type ProvisionalPreviewSkipReason =
   | 'disabled'
-  | 'mcp-apps-push'
+  | 'mcp-apps-render'
   | 'no-story'
   | 'predicate';
 
@@ -232,9 +232,9 @@ export interface ProvisionalPreviewDeps {
   /** Clock override. Defaults to `Date.now` inside the runner. */
   readonly now?: () => number;
   /**
-   * Optional registry the push handler registers active handles
-   * into. External callsites (`apply-stack-item-patch` once
-   * `componentCode` lands, session teardown, shutdown) cancel by
+   * Optional registry the render handler registers active handles
+   * into. External callsites (`apply-render-patch` once
+   * `componentCode` lands, render teardown, shutdown) cancel by
    * `renderId` to hand off to the authoritative UI cleanly.
    *
    * Absent registry = no external cancellation site; the preamble
@@ -247,20 +247,20 @@ export interface ProvisionalPreviewDeps {
 
 /**
  * In-process registry of active preamble handles keyed by
- * {@link ProvisionalPreviewRunContext.renderId}. The push handler
+ * {@link ProvisionalPreviewRunContext.renderId}. The render handler
  * registers on kickoff; the runner clears the entry when its
  * terminal outcome fires. External cancellation points (handoff,
  * teardown) call {@link ProvisionalPreviewRegistry.cancel} by
  * `renderId`.
  *
  * One-instance scope. Distributed deployments (Redis-backed etc.)
- * implement the same surface with their own storage — the push
+ * implement the same surface with their own storage — the render
  * handler doesn't care which implementation it receives.
  */
 export interface ProvisionalPreviewRegistry {
   /**
    * Register a running preamble under a key. Typically the key is
-   * the `renderId` — one preamble per stack slot at a time.
+   * the `renderId` — one preamble per render at a time.
    * Registering a second handle under the same key cancels the
    * previous one (fire-and-forget) so a duplicate kickoff doesn't
    * leak.
@@ -301,21 +301,21 @@ export type ProvisionalPreviewGate =
     };
 
 /**
- * Arguments the gate reads from the push shape. The handler
+ * Arguments the gate reads from the render shape. The handler
  * computes these synchronously before calling the gate; passing
  * them in as a small struct keeps this function pure + testable
- * without reaching into the push input parser.
+ * without reaching into the render input parser.
  */
 export interface ProvisionalPreviewGateInput {
   readonly story: { readonly intent: string } | undefined;
-  /** `true` when the push is an MCP Apps delivery. */
-  readonly isMcpAppsPush: boolean;
+  /** `true` when the render is an MCP Apps delivery. */
+  readonly isMcpAppsRender: boolean;
 }
 
 /**
- * Evaluate whether a push qualifies for provisional preview. Pure
+ * Evaluate whether a render qualifies for provisional preview. Pure
  * function — no side effects, no clock, no transport. The handler
- * calls this with a synchronously-computed view of the push's shape
+ * calls this with a synchronously-computed view of the render's shape
  * and routes to the runner accordingly.
  *
  * When `deps` is `undefined`, the result is always `{kind: 'skip',
@@ -331,8 +331,8 @@ export function evaluateProvisionalPreviewGate(
   if (!deps || !deps.config.enabled) {
     return { kind: 'skip', reason: 'disabled' };
   }
-  if (input.isMcpAppsPush) {
-    return { kind: 'skip', reason: 'mcp-apps-push' };
+  if (input.isMcpAppsRender) {
+    return { kind: 'skip', reason: 'mcp-apps-render' };
   }
   if (!input.story) {
     return { kind: 'skip', reason: 'no-story' };
@@ -358,7 +358,7 @@ export function evaluateProvisionalPreviewGate(
 export const PROVISIONAL_PREVIEW_CHANNEL = '_ggui:preview';
 
 /**
- * Run-time context the runner computes synchronously from the push
+ * Run-time context the runner computes synchronously from the render
  * handler's resolved state. Structurally distinct from
  * {@link ProvisionalPreviewGateInput} because the runner needs the
  * resolved `renderId` + `appId` the gate doesn't know about.
@@ -371,7 +371,7 @@ export interface ProvisionalPreviewRunContext {
 
 /**
  * Handle a fire-and-forget kickoff returns. `controller` lets the
- * caller cancel externally (handoff, session teardown); `done`
+ * caller cancel externally (handoff, render teardown); `done`
  * resolves when the runner has fired its final outcome (so tests
  * can await the terminal state without racing the async runner).
  *
@@ -401,7 +401,7 @@ export interface ProvisionalPreviewHandle {
  *      emitter exited.
  *
  * The function NEVER throws. Every thrown path inside resolves via
- * `onOutcome`; that keeps fire-and-forget callers (the push handler)
+ * `onOutcome`; that keeps fire-and-forget callers (the render handler)
  * from having to install their own rejection handler.
  *
  * Channel-level teardown (`complete: true` terminal envelope) lands
@@ -575,7 +575,7 @@ async function finalizePreviewChannel(
 /**
  * Kick off {@link runProvisionalPreview} as a background task. Call
  * from within `ggui_render` after the gate passes; the caller can
- * then return the push response without awaiting the preview.
+ * then return the render response without awaiting the preview.
  *
  * Returns a {@link ProvisionalPreviewHandle} carrying the
  * `AbortController` (for external cancellation) and a `done`
@@ -632,12 +632,12 @@ function abortReason(signal: AbortSignal): string {
  *     awaits settle, so this helper resolves only once the
  *     `cancelled` outcome has fired with the supplied reason.
  *   - No-op when no preview is registered (e.g., preview was off
- *     for this push, or the preamble already completed naturally
+ *     for this render, or the preamble already completed naturally
  *     before the final code arrived).
  *   - Default `reason` is `'handoff'` so consumers reading the
  *     `cancelled.reason` field can distinguish authoritative
- *     handoff from session teardown (`'cancel-all'` / shutdown) or
- *     duplicate-push supersession (`'superseded'`).
+ *     handoff from render teardown (`'cancel-all'` / shutdown) or
+ *     duplicate-render supersession (`'superseded'`).
  *
  * This is deliberately a thin wrapper. Future work (metrics on
  * handoff, structured logging, observer notifications) lands here
@@ -676,7 +676,7 @@ export function createInMemoryProvisionalPreviewRegistry(): ProvisionalPreviewRe
       const previous = active.get(key);
       if (previous && previous !== handle) {
         // Duplicate kickoff. Cancel the old one but don't await —
-        // register() must return synchronously for push.ts's
+        // register() must return synchronously for render.ts's
         // fire-and-forget path.
         previous.controller.abort('superseded');
       }

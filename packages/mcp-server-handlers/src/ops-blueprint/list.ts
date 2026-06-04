@@ -98,7 +98,7 @@ export function createGguiOpsListBlueprintsHandler(
     title: 'List blueprints',
     audience: ['ops'],
     description:
-      "Enumerate blueprint metadata under the caller's `appId`. Filters AND-compose: `contractHash` narrows to one group via the indexed lookup; `generator` post-filters; `persona` filters on normalized variance; `intentKeywords` activates semantic search via `BlueprintSearch`. Empty filter set returns every blueprint under the app, sorted by `createdAt desc`. Returns metadata only — code bodies live in the bound store, fetched via push on cache hit.",
+      "Enumerate blueprint metadata under the caller's `appId`. Filters AND-compose: `contractHash` narrows to one group via the indexed lookup; `generator` post-filters; `persona` filters on normalized variance; `intentKeywords` activates semantic search via `BlueprintSearch`. Empty filter set returns every blueprint under the app, sorted by `createdAt desc`. Returns metadata only — code bodies live in the bound store, fetched via render on cache hit.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

@@ -94,7 +94,7 @@ describe('getPublicEnv', () => {
 
     it('throw message guides toward `requires` declaration', () => {
       // Wrapper authors should add the key to their `requires` list
-      // so the push gate validates upstream. The error message hints
+      // so the render gate validates upstream. The error message hints
       // at this corrective action.
       const target = makeTarget({});
       expect(() =>

@@ -25,7 +25,7 @@
  *     on emit; client revalidation is defense-in-depth on receipt)
  *
  * `ClientContractViolationError` is the single error class the client
- * surfaces via the session `onError` callback. The `direction` field
+ * surfaces via the render `onError` callback. The `direction` field
  * disambiguates send-side vs receive-side violations for debugging.
  */
 import {
@@ -107,7 +107,7 @@ export function validateOutboundActionPayload(
  * Signature matches {@link StreamEnvelope} — channel name + payload
  * are the explicit wire fields. If the server's defense-in-depth
  * fires, the payload already shouldn't reach the client; this check
- * fires when client-known state drifts (e.g. the server's session
+ * fires when client-known state drifts (e.g. the server's render
  * snapshot of streamSpec differs from what the client negotiated).
  *
  * Reserved-channel handling (Item 4 injection pattern):
@@ -141,8 +141,8 @@ export function validateInboundStreamPayload(
  * (matches the protocol's "absent field = default" convention).
  *
  * This is the canonical construction helper used by the repo-local
- * session emitters (`@ggui-ai/react` and `@ggui-ai/react-native`).
- * Both `GguiSession` implementations route every outbound action
+ * render emitters (`@ggui-ai/react` and `@ggui-ai/react-native`).
+ * Both `GguiRender` implementations route every outbound action
  * through `buildActionEnvelope` + {@link validateOutboundActionEnvelope}
  * + `sendAction`. Third-party live-channel clients should use the same
  * helper (or replicate its zero-undefined shape) so server-side

@@ -86,7 +86,7 @@ export const discoverInputSchema = z.object({}).strict();
 export const requestCredentialInputSchema = z.object({
   serviceId: z.string().describe('OAuth service ID (e.g., "bashdoor", "ubot")'),
   reason: z.string().optional().describe('Why the agent needs this credential (shown to user)'),
-  renderId: z.string().optional().describe('Existing render id to push consent UI into.'),
+  renderId: z.string().optional().describe('Existing render id to render consent UI into.'),
 }).strict();
 
 // ── Post-Phase-B — canonical tool triad ──

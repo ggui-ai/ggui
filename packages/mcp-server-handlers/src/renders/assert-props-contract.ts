@@ -10,7 +10,7 @@
  *     response envelope.
  *
  * This helper is the centralized enforcement point for props contracts —
- * every mutation path that applies new props to a stack item SHOULD go
+ * every mutation path that applies new props to a render SHOULD go
  * through it, so an added call site doesn't drift on error shape or
  * bypass validation entirely.
  */

@@ -74,7 +74,7 @@ export interface ProviderKeyRef {
  * Input envelope for a single UI generation.
  */
 export interface UiGenerateInput {
-  /** The agent's push request (prompt, schema, context, adapters). */
+  /** The agent's render request (prompt, schema, context, adapters). */
   request: UIGenerationRequest;
   /** Which LLM to use for this generation. */
   llm: LlmSelection;
@@ -201,7 +201,7 @@ export interface UiGenerateInput {
   infra?: {
     readonly model?: string;
   };
-  /** Abort cancellation — server may cancel on session close or timeout. */
+  /** Abort cancellation — server may cancel on render close or timeout. */
   signal?: AbortSignal;
 }
 

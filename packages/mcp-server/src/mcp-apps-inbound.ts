@@ -7,7 +7,7 @@
  * resource bytes:
  *
  *   browser iframe
- *        ↓  https://<ggui-server>/mcp-apps/resource?session=…&item=…
+ *        ↓  https://<ggui-server>/mcp-apps/resource?render=…&item=…
  *   ggui-server proxy route
  *        ↓  MCP resources/read  (via @modelcontextprotocol/sdk/client)
  *   source MCP server
@@ -160,15 +160,15 @@ async function resolveMcpAppsItem(
 /**
  * Register the MCP Apps inbound proxy routes on an Express app.
  *
- *   GET  /mcp-apps/resource?session=<id>&item=<id>
+ *   GET  /mcp-apps/resource?render=<id>&item=<id>
  *     Fetches the referenced McpAppsRender's `source.resourceUri`
  *     via resources/read on the source MCP server. Returns the HTML
  *     with the MIME declared by the source (typically
  *     `text/html;profile=mcp-app`) and spec-canonical CSP headers.
  *
  *   POST /mcp-apps/tools-call
- *     Body: { session, item, tool, arguments? }.
- *     Resolves the stack item → connector → cached tools/list, gates
+ *     Body: { render, item, tool, arguments? }.
+ *     Resolves the render → connector → cached tools/list, gates
  *     on `_meta.ui.visibility` (must include 'app'), and proxies the
  *     call via MCP client. Cross-connector / unknown tool / model-
  *     only tool are all rejected.

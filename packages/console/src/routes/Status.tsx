@@ -2,7 +2,7 @@
  * Status dashboard — `/status`.
  *
  * Internal debug view: "what's this ggui serve doing right now?"
- * (wiring, storage, capabilities, live sessions). Chat at `/` owns
+ * (wiring, storage, capabilities, live renders). Chat at `/` owns
  * the brand hero + wordmark; this page is utilitarian, so its
  * header is just the SectionHead carrying the page name — no
  * wordmark duplication.
@@ -368,7 +368,7 @@ function StorageCard({
     <Card num="STG / 01" title="storage">
       <dl className="ggui-kv">
         <div>
-          <dt>sessions</dt>
+          <dt>renders</dt>
           <dd>
             <StatusBadge tone={tone(s.renderStore)}>
               {s.renderStore}

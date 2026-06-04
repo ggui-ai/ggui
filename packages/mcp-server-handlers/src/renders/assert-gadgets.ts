@@ -1,5 +1,5 @@
 /**
- * `assertGadgetsRegistered` — push/ops registry-membership gate.
+ * `assertGadgetsRegistered` — render/ops registry-membership gate.
  *
  * Contracts declare `clientCapabilities.gadgets` package-keyed
  * two-level: `{ <package>: { <exportName>: {…} } }`. Each referenced
@@ -8,7 +8,7 @@
  *
  * Why a server-side gate: the contract schema is permissive enough
  * that an LLM-hallucinated `useDoorDashCheckout` export on an app that
- * never registered it would commit a stack item the boilerplate
+ * never registered it would commit a render the boilerplate
  * generator can't import — the iframe fails at runtime with an opaque
  * "Cannot find module" instead of a recoverable author-time error.
  *
@@ -35,17 +35,17 @@
  * Priority order matters: a contract that gets the export name wrong
  * can't meaningfully be told "wrong package" — the author needs the
  * most upstream cause. Same-category misses aggregate into one error.
- * When a single push spans BOTH categories, the thrown error is the
+ * When a single render spans BOTH categories, the thrown error is the
  * most-fundamental one but also carries (and lists) the lower-priority
  * misses via `secondary` — so the author fixes everything in one round
- * trip instead of discovering each category on a separate re-push.
+ * trip instead of discovering each category on a separate re-render.
  *
  * (`version` carried no third category here any more — it is resolved
  * from `App.gadgets`, never authored on the wire, so there is nothing
  * to mismatch.)
  *
  * Call sites:
- *   - `push.ts` — author-time gate; throws before mutating state.
+ *   - `render.ts` — author-time gate; throws before mutating state.
  *   - `ops-blueprint/register.ts` — pre-persist gate.
  *   - `ops-blueprint/generate.ts` — pre-LLM-dispatch gate.
  *
@@ -100,7 +100,7 @@ export interface PackageMismatchEntry {
 
 /**
  * Render the "also failing" message tail listing the lower-priority
- * package misses, so a multi-category push surfaces every violation in
+ * package misses, so a multi-category render surfaces every violation in
  * one rejection. Empty string when there is nothing else to report.
  */
 function renderSecondaryTail(packageMismatches: readonly PackageMismatchEntry[]): string {
@@ -109,7 +109,7 @@ function renderSecondaryTail(packageMismatches: readonly PackageMismatchEntry[])
     (m) =>
       `  - [gadget_package_mismatch] export \`${m.hook}\` requested under \`${m.requestedPackage}\``
   );
-  return `\n\nThis push ALSO has gadget refs failing other checks — fix these in the same pass to avoid a repeat rejection:\n${lines.join(
+  return `\n\nThis render ALSO has gadget refs failing other checks — fix these in the same pass to avoid a repeat rejection:\n${lines.join(
     "\n"
   )}`;
 }
@@ -123,9 +123,9 @@ function renderSecondaryTail(packageMismatches: readonly PackageMismatchEntry[])
  * unknown. The error message lists every unregistered export and
  * (when a close match exists) emits a "did you mean…?" suggestion.
  *
- * When the same push also carries package misses, they ride on
+ * When the same render also carries package misses, they ride on
  * {@link secondary} (and the message) so the author can fix everything
- * before re-pushing.
+ * before re-rendering.
  *
  * Recovery for the author: register the missing gadget in
  * `ggui.json#app.gadgets` (or via the operator's registration tool),
@@ -135,8 +135,8 @@ export class GadgetNotRegisteredError extends Error {
   readonly code = "gadget_not_registered" as const;
   readonly unregistered: readonly UnregisteredHookEntry[];
   /**
-   * Lower-priority misses on the same push. Present only when this
-   * push also has package mismatches.
+   * Lower-priority misses on the same render. Present only when this
+   * render also has package mismatches.
    */
   readonly secondary?: {
     readonly packageMismatches: readonly PackageMismatchEntry[];
@@ -206,11 +206,11 @@ export class GadgetPackageMismatchError extends Error {
 /**
  * Validate every `(package, exportName)` the contract references on
  * `clientCapabilities.gadgets` resolves to a registered descriptor by
- * the `(name, package)` identity. On the first push that references an
+ * the `(name, package)` identity. On the first render that references an
  * unregistered pair, classifies the failure and throws the most
  * fundamental category (see the module doc):
  * {@link GadgetNotRegisteredError} ▸ {@link GadgetPackageMismatchError}.
- * Package misses on the same push ride along on the thrown error's
+ * Package misses on the same render ride along on the thrown error's
  * `secondary`.
  *
  * No-op when:
@@ -290,7 +290,7 @@ export function assertGadgetsRegistered(
  * `candidate`, or `null` when no registered export is within
  * distance < 3. Pure helper.
  *
- * Exported so callers (push.ts, ops handlers) can surface
+ * Exported so callers (render.ts, ops handlers) can surface
  * suggestions in their own error envelopes if they wrap the
  * underlying error.
  */

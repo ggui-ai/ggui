@@ -9,12 +9,9 @@
  * server passes `@ggui-ai/protocol-conformance`, the protocol has
  * no implicit `@ggui-ai/mcp-server` coupling.
  *
- * Wire-field note: the consumer (`@ggui-ai/protocol-conformance`)
- * still names the render identity field `sessionId` on the wire (its
- * fixtures have not yet been renamed). The reference server honors
- * the consumer contract by reading that field name verbatim, then
- * binds the value to a `renderId` internally — see {@link Render}
- * for the canonical identity name used throughout this package.
+ * Wire-field note: the render identity field is the canonical SPEC
+ * field `renderId` — see {@link Render} for the identity name used
+ * throughout this package.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
 
@@ -235,16 +232,8 @@ export class ReferenceServer {
     const payload = frame['payload'];
     if (payload === null || typeof payload !== 'object') return;
     const p = payload as Record<string, unknown>;
-    // Wire-field acceptance: the conformance kit currently sends
-    // `sessionId`; the canonical SPEC field is `renderId`. Read both
-    // so the reference server is forward-compatible with the kit's
-    // eventual rename without breaking today's fixtures.
-    const renderId =
-      typeof p['renderId'] === 'string'
-        ? p['renderId']
-        : typeof p['sessionId'] === 'string'
-          ? p['sessionId']
-          : undefined;
+    // Render-identity field: the canonical SPEC field `renderId`.
+    const renderId = typeof p['renderId'] === 'string' ? p['renderId'] : undefined;
     if (renderId === undefined) return;
     const appId = typeof p['appId'] === 'string' ? p['appId'] : 'conformance';
     const requestId = typeof frame['requestId'] === 'string' ? frame['requestId'] : undefined;
