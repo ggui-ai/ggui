@@ -26,9 +26,6 @@
  */
 
 export { hashContract, buildVariant } from './contract-hash.js';
-export { computeIntentId, shouldSuppressSuggestion } from './intent.js';
-export { detectDataPatterns, buildSuggestion } from './suggestion.js';
-export type { NegotiatorSuggestion } from './suggestion.js';
 export { inferInteractionMode, inferJsonSchemaType } from './pure.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
 export { rerankCandidates } from './llm-rerank.js';

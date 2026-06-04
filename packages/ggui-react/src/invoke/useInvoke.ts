@@ -81,18 +81,11 @@ export interface UseInvokeOptions {
    * `https://mcp.<apex>/bridge`).
    *
    * When `devBridge` is set, `endpointUrl` is optional — the gateway is
-   * the transport.
-   *
-   * `connectionId` is legacy (pre-Path-B the Lambda needed it to target a
-   * specific WS connection). The pod routes by `appId` and ignores the
-   * `bridgeConnectionId` query param; the field stays for backward
-   * compatibility with callers that still plumb it through.
+   * the transport. The pod routes by `appId`.
    */
   devBridge?: {
     /** Base URL of the bridge gateway (trailing slash optional). */
     gatewayUrl: string;
-    /** @deprecated Ignored by the bridge-gateway pod — routes by appId. */
-    connectionId?: string;
   };
   /**
    * Optional callback fired once per `send()` when the response transport
@@ -216,11 +209,10 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
 
         // Dev-mode bridge: the pod expects POSTs at `{gatewayUrl}/{appId}` —
         // it looks up the `ggui dev` CLI's WS by appId and streams the SSE
-        // response from whatever replies. `connectionId` (if provided) is
-        // appended as a best-effort hint and ignored by the pod.
+        // response from whatever replies — the pod routes by appId.
         // Prod path is the standard `{endpointUrl}/invoke`.
         const targetUrl = options.devBridge
-          ? `${options.devBridge.gatewayUrl.replace(/\/$/, '')}/${encodeURIComponent(ctx.appId)}${options.devBridge.connectionId ? `?bridgeConnectionId=${encodeURIComponent(options.devBridge.connectionId)}` : ''}`
+          ? `${options.devBridge.gatewayUrl.replace(/\/$/, '')}/${encodeURIComponent(ctx.appId)}`
           : `${(endpointUrl as string).replace(/\/$/, '')}/invoke`;
         const response = await fetch(targetUrl, {
           method: 'POST',

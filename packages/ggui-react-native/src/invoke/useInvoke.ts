@@ -111,15 +111,13 @@ export interface UseInvokeOptions {
   /**
    * Dev-mode bridge routing — when set, `send()` POSTs to
    * `{gatewayUrl}/{appId}` instead of `{endpointUrl}/invoke`. The pod
-   * routes by `appId` and ignores `connectionId` (kept for compat).
-   * Mirrors the web hook; see that JSDoc for the full description.
-   * When set, `endpointUrl` is optional — the gateway is the transport.
+   * routes by `appId`. Mirrors the web hook; see that JSDoc for the
+   * full description. When set, `endpointUrl` is optional — the gateway
+   * is the transport.
    */
   devBridge?: {
     /** Base URL of the bridge gateway (trailing slash optional). */
     gatewayUrl: string;
-    /** @deprecated Ignored by the bridge-gateway pod — routes by appId. */
-    connectionId?: string;
   };
   /**
    * Fires once per `send()` with the streaming mode that was used.
@@ -251,10 +249,10 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
           reactNative: { textStreaming: true },
         };
 
-        // Dev-mode bridge: gateway receives `{gatewayUrl}/{appId}?bridgeConnectionId={connId}`
-        // POSTs and streams the SSE response from the local `ggui dev` CLI.
+        // Dev-mode bridge: gateway receives `{gatewayUrl}/{appId}` POSTs and
+        // streams the SSE response from the local `ggui dev` CLI (routes by appId).
         const targetUrl = options.devBridge
-          ? `${options.devBridge.gatewayUrl.replace(/\/$/, '')}/${encodeURIComponent(ctx.appId)}${options.devBridge.connectionId ? `?bridgeConnectionId=${encodeURIComponent(options.devBridge.connectionId)}` : ''}`
+          ? `${options.devBridge.gatewayUrl.replace(/\/$/, '')}/${encodeURIComponent(ctx.appId)}`
           : `${(endpointUrl as string).replace(/\/$/, '')}/invoke`;
         const response = await fetch(targetUrl, init);
 
