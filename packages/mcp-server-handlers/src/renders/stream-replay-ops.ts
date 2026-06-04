@@ -43,7 +43,7 @@ import {
  * cross-layer import (handlers must NOT depend on core).
  */
 export interface StreamReplayInput {
-  readonly sessionId: string;
+  readonly renderId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -54,9 +54,9 @@ export interface StreamReplayInput {
  * Stamped + persistable envelope. Carries the assigned seq. Peer of
  * `@ggui-ai/mcp-server-core.BufferedStreamEnvelope`.
  *
- * Does NOT carry `sessionId` on the storage shape — that's redundant
- * (every buffer state is per-session by construction). Callers that
- * need a full wire `StreamEnvelope` upcast with `{sessionId, ...}`.
+ * Does NOT carry `renderId` on the storage shape — that's redundant
+ * (every buffer state is per-render by construction). Callers that
+ * need a full wire `StreamEnvelope` upcast with `{renderId, ...}`.
  */
 export interface BufferedReplayEnvelope {
   readonly seq: number;

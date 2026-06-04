@@ -10,7 +10,7 @@
  * What gets wired by default — see OSS-split §2 (the five server
  * responsibilities):
  *
- *   - `sessionChannel: true` — live-channel `/ws` endpoint. Required for
+ *   - `renderChannel: true` — live-channel `/ws` endpoint. Required for
  *     MCP Apps iframes AND the console session viewer.
  *   - `pairing: true` — `POST /pair` + `POST /admin/pair/init` so
  *     remote clients (Portal, third-party) can pair with this server.
@@ -848,7 +848,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
           },
         }
       : {}),
-    sessionChannel: true,
+    renderChannel: true,
     pairing: opts.keysFile ? { persistencePath: opts.keysFile } : true,
     // Email magic-link login. OSS first-run default mirrors
     // `provisionalPreview` — wire a sender so magic links can be

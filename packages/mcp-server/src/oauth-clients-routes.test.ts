@@ -40,7 +40,7 @@ async function bootWithOAuth(opts: {
   const server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    sessionChannel: true,
+    renderChannel: true,
     renderStore: new InMemoryRenderStore(),
     shortCodeIndex: new InMemoryShortCodeIndex(),
     ...(opts.consoleEnabled !== false

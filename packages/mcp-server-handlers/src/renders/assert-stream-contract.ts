@@ -18,7 +18,7 @@
  *     throw `ContractViolationError` with tool=`'ggui_emit'`.
  *
  * Used on the hosted fan-out path (`handle-data.ts`), the OSS `/ws`
- * fan-out (`sendToSession`), and the `ggui_emit` tool handler.
+ * fan-out (`sendToRender`), and the `ggui_emit` tool handler.
  * Channel semantics (mode / replay / complete) are NOT validated here
  * — see `resolveStreamChannel` for semantics lookup.
  */

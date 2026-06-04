@@ -33,7 +33,7 @@ import type {
  * needs prior render outlines + conversation, not the full
  * `StoredRender`.
  */
-export interface NegotiatorSessionState {
+export interface NegotiatorRenderState {
   /**
    * Previously-committed renders for the same host conversation,
    * ordered oldest to newest. Most calls supply at most one (the
@@ -79,8 +79,8 @@ export interface NegotiatorInput {
    * Renamed from `wiredTools` 2026-05-11.
    */
   agentTools?: string[];
-  /** Current session state. */
-  sessionState: NegotiatorSessionState;
+  /** Current render state. */
+  renderState: NegotiatorRenderState;
   /** Tenant + RAG scope keys. */
   scope: {
     appId: string;

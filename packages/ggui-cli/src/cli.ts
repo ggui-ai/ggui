@@ -199,7 +199,7 @@ async function main(argv: string[]): Promise<number> {
 }
 
 // `buildMcpServerBackend` moved to `./mcp-backend.ts` so tests can
-// exercise the full opt-in bundle ({sessionChannel, pairing,
+// exercise the full opt-in bundle ({renderChannel, pairing,
 // console.sessionCookie, shortCodeIndex}) without triggering
 // `main()` at import. See module-level doc there for the bundle
 // rationale.

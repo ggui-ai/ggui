@@ -12,9 +12,9 @@
  *     `{renderId, shortCode, url}`.
  *
  * Gate combinations covered:
- *   - Full wiring (uiRegistry + sessionChannel + shortCodeIndex) →
+ *   - Full wiring (uiRegistry + renderChannel + shortCodeIndex) →
  *     200 with full payload + real session state.
- *   - uiRegistry alone (no sessionChannel/shortCodeIndex) → 503 with
+ *   - uiRegistry alone (no renderChannel/shortCodeIndex) → 503 with
  *     the "try_not_wired" remediation code.
  *   - No uiRegistry at all → 404 (sibling GET also absent; the route
  *     doesn't mount).
@@ -179,11 +179,11 @@ async function bootFull(
     uiRegistry: makeRegistry(seeds),
     renderStore,
     shortCodeIndex,
-    sessionChannel: true,
+    renderChannel: true,
     // Default the existing pre-F4 tests to `schemaCompatCheck: 'off'`
     // so their test-only fixtures referencing unregistered tool names
     // (`tasks_complete`, `tasks_list`) continue to exercise the
-    // bundle / stack-push / shortCode / sessionChannel flow. A separate
+    // bundle / stack-push / shortCode / renderChannel flow. A separate
     // describe block below covers the F4 check firing end-to-end.
     schemaCompatCheck: overrides?.schemaCompatCheck ?? 'off',
     ...(overrides?.mcpMounts ? { mcpMounts: overrides.mcpMounts } : {}),
@@ -386,7 +386,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(body.error).toBe('invalid_request');
   });
 
-  it('503s when uiRegistry is wired but sessionChannel + shortCodeIndex are absent', async () => {
+  it('503s when uiRegistry is wired but renderChannel + shortCodeIndex are absent', async () => {
     // Partial wiring — the route mounts (uiRegistry present) but the
     // try path has nowhere to land renders/shortCodes. Should
     // short-circuit with a specific error code so the operator knows
@@ -404,7 +404,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
           },
         },
       ]),
-      // sessionChannel omitted → renderStore also inferred absent
+      // renderChannel omitted → renderStore also inferred absent
       // shortCodeIndex omitted
     });
     const httpServer = await server.listen(0, '127.0.0.1');
@@ -625,7 +625,7 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       console: {},
       renderStore: new InMemoryRenderStore(),
       shortCodeIndex: new InMemoryShortCodeIndex(),
-      sessionChannel: true,
+      renderChannel: true,
     });
     const httpServer = await server.listen(0, '127.0.0.1');
     try {

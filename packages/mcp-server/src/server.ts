@@ -620,7 +620,7 @@ export function defaultHandlers(deps: {
      * channel traffic.
      *
      * Constructed by `createGguiServer` from `opts.provisionalPreview`
-     * plus the late-bound `RenderChannelServer.sendToSession`
+     * plus the late-bound `RenderChannelServer.sendToRender`
      * closure; callers threading their own handler set can build
      * `ProvisionalPreviewDeps` directly.
      */
@@ -1111,7 +1111,7 @@ export function defaultHandlers(deps: {
           const channel = lifecycleChannelProvider();
           if (!channel) return;
           void channel
-            .sendToSession({
+            .sendToRender({
               renderId,
               channel: LIFECYCLE_CHANNEL,
               mode: "append",
@@ -1262,7 +1262,7 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_emit` routes outbound stream envelopes through the active
-    // `RenderChannelServer.sendToSession`
+    // `RenderChannelServer.sendToRender`
     // (which records into the bound `SessionStreamBuffer` + fans out
     // to subscribers). When no channel is bound, the handler accepts
     // the envelope and returns silently — mirrors cloud's
@@ -1284,14 +1284,14 @@ export function defaultHandlers(deps: {
             // recorded the envelope.
             return {};
           }
-          const { seq } = await channel.sendToSession({
+          const { seq } = await channel.sendToRender({
             renderId: envelope.renderId,
             channel: envelope.channel,
             mode: envelope.mode,
             payload: envelope.payload,
             ...(envelope.complete === true ? { complete: true as const } : {}),
           });
-          // `sendToSession` plumbs the stamped seq out of fanOut so
+          // `sendToRender` plumbs the stamped seq out of fanOut so
           // ggui_emit's wire output carries ordering info — matches
           // cloud's `RedisSessionStreamBuffer.record` returning seq
           // and being threaded onto the response. Agents that want to
@@ -2008,7 +2008,7 @@ export interface CreateGguiServerOptions {
    * / dev. Operators who need durability layer a different
    * `SessionStreamBuffer` implementation behind this seam.
    *
-   * Only used when `sessionChannel` is enabled. Ignored otherwise.
+   * Only used when `renderChannel` is enabled. Ignored otherwise.
    */
   readonly streamBuffer?: SessionStreamBuffer;
 
@@ -2027,11 +2027,11 @@ export interface CreateGguiServerOptions {
    * of the shared `@ggui-ai/mcp-server-handlers/renders`
    * helpers.
    */
-  readonly sessionChannel?: boolean | { readonly path?: string };
+  readonly renderChannel?: boolean | { readonly path?: string };
 
   /**
    * Opt-in WS-direct action dispatcher for agent-less deployments.
-   * When present AND `sessionChannel: true`, the channel server
+   * When present AND `renderChannel: true`, the channel server
    * fires the tool named by an incoming action's `payload.tool` hint
    * (falling back to `actionSpec[name].nextStep` when the client
    * omitted the hint) in-process after inbound validation, and emits
@@ -2071,7 +2071,7 @@ export interface CreateGguiServerOptions {
    * `serverCapabilities.streamWebSocketLocalTools` so `@ggui-ai/wire`
    * agrees with the server on which channels use WS fan-out.
    *
-   * Only consulted when `sessionChannel` is enabled. Forwarded
+   * Only consulted when `renderChannel` is enabled. Forwarded
    * verbatim to `createRenderChannelServer` (see
    * `RenderChannelOptions.streamWebSocketLocalTools`).
    */
@@ -2082,7 +2082,7 @@ export interface CreateGguiServerOptions {
    * `createRenderChannelServer`. Used by cloud adapters for per-session
    * cross-pod pubsub channel scoping; OSS callers leave this undefined.
    *
-   * Only consulted when `sessionChannel` is enabled. See
+   * Only consulted when `renderChannel` is enabled. See
    * `RenderChannelOptions.onFirstSubscriber` for the full contract.
    */
   readonly onFirstSubscriber?: (sessionId: string) => void;
@@ -2091,7 +2091,7 @@ export interface CreateGguiServerOptions {
    * transitions 1 → 0 on the live channel. Forwarded verbatim to
    * `createRenderChannelServer`.
    *
-   * Only consulted when `sessionChannel` is enabled. See
+   * Only consulted when `renderChannel` is enabled. See
    * `RenderChannelOptions.onLastSubscriberGone` for the full contract.
    */
   readonly onLastSubscriberGone?: (sessionId: string) => void;
@@ -2136,7 +2136,7 @@ export interface CreateGguiServerOptions {
    * `'advisory'` keeps the connection open after the error frame for
    * controlled migration windows.
    *
-   * Only consulted when `sessionChannel` is enabled.
+   * Only consulted when `renderChannel` is enabled.
    */
   readonly versionPolicy?: "advisory" | "reject";
 
@@ -2219,7 +2219,7 @@ export interface CreateGguiServerOptions {
    *     is NOT advertised. Server looks identical to the pre-MCP-Apps
    *     surface.
    *   - `true`: enable with sensible defaults. Requires
-   *     `sessionChannel: true` so the iframe has a WebSocket to open;
+   *     `renderChannel: true` so the iframe has a WebSocket to open;
    *     throws at construction otherwise.
    *   - `{ shellHtml?, wsUrl? }`: explicit config.
    *
@@ -2622,7 +2622,7 @@ export interface CreateGguiServerOptions {
          * server identity); turning on the cookie flow is an
          * explicit step that pulls in additional deps.
          *
-         * Enabling REQUIRES `sessionChannel: true` — the cookie only
+         * Enabling REQUIRES `renderChannel: true` — the cookie only
          * authenticates the live-channel WebSocket upgrade, so a cookie
          * flow without a channel to use it on would be pointless +
          * confusing. Throws at construction if that invariant fails.
@@ -2760,7 +2760,7 @@ export interface CreateGguiServerOptions {
    * The server owns the `sendEnvelope` + registry plumbing — only
    * the emitter + flag + optional observers are caller-facing.
    *
-   * Requires `sessionChannel: true` + `mcpApps` enabled (preview
+   * Requires `renderChannel: true` + `mcpApps` enabled (preview
    * needs a channel to emit on AND a push handler to attach to).
    * When the flag is on without those, `createGguiServer` throws —
    * silent drop would make "I enabled preview and nothing fires"
@@ -3055,13 +3055,13 @@ export interface GguiServer {
    */
   readonly toolCount: number;
   /**
-   * The OSS live-channel session endpoint, when `sessionChannel` was
+   * The OSS live-channel render endpoint, when `renderChannel` was
    * enabled. `null` when disabled. Hosts can use this for
-   * introspection (`.sessionCount`, `.subscriberCount`) or for
+   * introspection (`.renderCount`, `.subscriberCount`) or for
    * composition with future mutation handlers that want to fan out
-   * via `sessionChannel.sendToSession(sessionId, data)`.
+   * via `renderChannel.sendToRender(renderId, data)`.
    */
-  readonly sessionChannel: RenderChannelServer | null;
+  readonly renderChannel: RenderChannelServer | null;
   /**
    * The pairing service bound to this server, when the `pairing` option
    * was enabled. `null` when pairing is disabled. In-process hosts
@@ -3250,12 +3250,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // When enabled, the server advertises the `io.modelcontextprotocol/ui`
   // capability, serves the `ui://ggui/render` resource, and registers
   // `ggui_render` in the default handler set with declaration-level
-  // `_meta.ui.*`. Requires `sessionChannel` so the iframe has a
+  // `_meta.ui.*`. Requires `renderChannel` so the iframe has a
   // live-channel endpoint to connect to; without it the path is pointless.
   const mcpAppsEnabled = opts.mcpApps !== undefined && opts.mcpApps !== false;
-  if (mcpAppsEnabled && !opts.sessionChannel) {
+  if (mcpAppsEnabled && !opts.renderChannel) {
     throw new Error(
-      "createGguiServer: `mcpApps` requires `sessionChannel: true`. The MCP Apps iframe has nowhere to connect to without a live-channel endpoint."
+      "createGguiServer: `mcpApps` requires `renderChannel: true`. The MCP Apps iframe has nowhere to connect to without a live-channel endpoint."
     );
   }
   const mcpAppsConfig =
@@ -3300,19 +3300,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       runtimeUrl: runtimeBootstrapUrl,
     }) ?? runtimeBootstrapUrl;
 
-  // Render store is resolved here (not lazy-inside-sessionChannel)
+  // Render store is resolved here (not lazy-inside-renderChannel)
   // when mcpApps is on, because the render-commit handler needs it at
   // handler-factory time, BEFORE the session-channel factory runs.
   const renderStore: RenderStore | undefined =
     opts.renderStore ??
-    (mcpAppsEnabled || opts.sessionChannel ? new InMemoryRenderStore() : undefined);
+    (mcpAppsEnabled || opts.renderChannel ? new InMemoryRenderStore() : undefined);
 
   // Outbound stream replay buffer is hoisted here so the
   // `/ggui/console/timeline/*` mount can read its cursor alongside
   // RenderStore events. Only constructed when the channel is
   // enabled; otherwise there's nothing to buffer and the timeline
   // routes report `streamSeq: 0` honestly.
-  const streamBuffer: SessionStreamBuffer | undefined = opts.sessionChannel
+  const streamBuffer: SessionStreamBuffer | undefined = opts.renderChannel
     ? (opts.streamBuffer ?? new InMemorySessionStreamBuffer())
     : undefined;
 
@@ -3380,7 +3380,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
         return { ok: false, reason: "invalid" };
       },
-      issueSessionToken: (renderId, appId) => {
+      issueRenderToken: (renderId, appId) => {
         const { token } = mintSessionToken({ renderId, appId }, secret);
         return token;
       },
@@ -3419,8 +3419,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //
   // Preconditions:
   //   - flag `enabled: true` requires `mcpApps` (ggui_render attached)
-  //     + `sessionChannel` (envelope transport). We already threw on
-  //     `mcpApps` without `sessionChannel` above, so this check only
+  //     + `renderChannel` (envelope transport). We already threw on
+  //     `mcpApps` without `renderChannel` above, so this check only
   //     needs to guard the mcpApps side.
   //   - flag `enabled: false` / absent: no deps constructed.
   // Generation wiring precondition. Same rule as provisional preview
@@ -3680,7 +3680,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           // but a silent no-op is strictly safer than a throw).
           return {};
         }
-        await channelForHealth.sendToSession({
+        await channelForHealth.sendToRender({
           renderId: envelope.renderId,
           channel: envelope.channel,
           mode: envelope.mode,
@@ -3751,7 +3751,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // value lets the same option flow through tests +
               // dev-mode reconfig without restarts. Returns the
               // shape iff:
-              //   - sessionChannel is enabled (something to subscribe
+              //   - renderChannel is enabled (something to subscribe
               //     against in the first place), AND
               //   - mcpApps was configured (so `wsUrl` resolves), AND
               //   - operator supplied `streamWebSocketLocalTools`
@@ -3762,7 +3762,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // iframe falls back to direct polling via the MCP
               // host proxy.
               serverCapabilities: () => {
-                if (!opts.sessionChannel) return undefined;
+                if (!opts.renderChannel) return undefined;
                 if (!mcpAppsEnabled) return undefined;
                 if (!opts.streamWebSocketLocalTools) return undefined;
                 return {
@@ -3872,7 +3872,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               //
               // Absent channel → no-op closure: the notify drops on
               // the floor, which is correct for hosts that didn't
-              // enable `sessionChannel` (no live subscribers to
+              // enable `renderChannel` (no live subscribers to
               // notify in the first place). The handler's own
               // `safelyNotifyStackPush` swallows on absent notifier
               // anyway, but providing the closure unconditionally
@@ -3907,12 +3907,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // Bootstrap-side mirror of the handshake's
               // `serverCapabilities.streamWebSocketLocalTools`. Same
               // gating rules as the handshake resolver (above):
-              // sessionChannel + mcpApps + allowlist must all be set
+              // renderChannel + mcpApps + allowlist must all be set
               // for the field to surface. Threading a closure (not a
               // static value) so dev-mode reconfig propagates without
               // a restart, symmetric with the handshake side.
               streamWebSocketLocalTools: () => {
-                if (!opts.sessionChannel) return undefined;
+                if (!opts.renderChannel) return undefined;
                 if (!mcpAppsEnabled) return undefined;
                 if (!opts.streamWebSocketLocalTools) return undefined;
                 return [...opts.streamWebSocketLocalTools.allowlist];
@@ -3963,7 +3963,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //
       // Absent channel → no-op closure: the props_update fan-out
       // drops on the floor, which is correct for hosts that didn't
-      // enable `sessionChannel` (no live subscribers to notify).
+      // enable `renderChannel` (no live subscribers to notify).
       // The handler's own try/catch swallows notifier rejections,
       // but providing the closure unconditionally keeps the
       // typecheck simple — no per-config branching.
@@ -4352,7 +4352,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         body.channel = {
           path: channelForHealth.path,
           subscribers: channelForHealth.subscriberCount,
-          sessions: channelForHealth.sessionCount,
+          sessions: channelForHealth.renderCount,
         };
       }
       // Thread-transport presence + durability claim. Absent when the
@@ -5621,7 +5621,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //     → render and mint the same-origin HTTP-only cookie the
   //     viewer authenticates to the live channel with. Enabled only when
   //     `console.sessionCookie` is on AND `shortCodeIndex` +
-  //     `sessionChannel` are wired.
+  //     `renderChannel` are wired.
   //   - `<path>/*` — express.static over the package's built `dist/`
   //     (landing HTML + JS + CSS). Default `path` is `/`.
   //
@@ -5698,8 +5698,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
     // Cookie flow preconditions. Opt-in via explicit `sessionCookie`
     // truthy value — operators enabling only the landing page surface
-    // don't need to wire sessionChannel + shortCodeIndex. The feature
-    // requires `sessionChannel: true` (the cookie only authenticates
+    // don't need to wire renderChannel + shortCodeIndex. The feature
+    // requires `renderChannel: true` (the cookie only authenticates
     // the live channel) and `shortCodeIndex` (the cookie endpoint resolves
     // shortCode → session through it). Fail fast at construction if
     // either is missing when the operator asked for the flow.
@@ -5707,9 +5707,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       consoleConfig.sessionCookie === true ||
       (typeof consoleConfig.sessionCookie === "object" && consoleConfig.sessionCookie !== null);
     if (sessionCookieEnabled) {
-      if (!opts.sessionChannel) {
+      if (!opts.renderChannel) {
         throw new Error(
-          "createGguiServer: `console.sessionCookie` requires `sessionChannel: true`. The cookie authenticates the live-channel WebSocket upgrade; without a channel it has no consumer."
+          "createGguiServer: `console.sessionCookie` requires `renderChannel: true`. The cookie authenticates the live-channel WebSocket upgrade; without a channel it has no consumer."
         );
       }
       if (!opts.shortCodeIndex) {
@@ -5939,7 +5939,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // hits its empty-state branch because `useStream('tasks').
             // latest` stays `undefined` — no one fires the refresh
             // tool. Await so the initial envelope is buffered via
-            // `sessionChannel`'s replay state before the shortCode
+            // `renderChannel`'s replay state before the shortCode
             // returns; the viewer subscribes moments later and its
             // `ack.initialReplay` carries the seeded frame.
             //
@@ -6017,7 +6017,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           res.status(503).json({
             error: "try_not_wired",
             message:
-              "POST /ggui/console/blueprint/:id/try requires `sessionChannel: true` + `shortCodeIndex` on createGguiServer. The CLI enables both by default via `console.sessionCookie: true`.",
+              "POST /ggui/console/blueprint/:id/try requires `renderChannel: true` + `shortCodeIndex` on createGguiServer. The CLI enables both by default via `console.sessionCookie: true`.",
           });
         });
       }
@@ -6463,7 +6463,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // list and per-session RenderStore.observe replay. REST
     // only — replay is a snapshot, not a live stream. Admin-gated by
     // the loop above. The hoisted `renderStore` + `streamBuffer` may
-    // be undefined when neither `mcpApps` nor `sessionChannel` is on;
+    // be undefined when neither `mcpApps` nor `renderChannel` is on;
     // the route handlers tolerate that and return empty bodies.
     mountConsoleTimelineRoutes(app, renderStore, streamBuffer);
 
@@ -6494,7 +6494,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //
     // Zero-config shape: `{ renders: [], total: 0 }` when no
     // renderStore is wired (e.g. pure-MCP dev boot with neither
-    // sessionChannel nor mcpApps enabled).
+    // renderChannel nor mcpApps enabled).
     app.get("/ggui/console/renders", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
       interface RenderSummary {
@@ -6879,7 +6879,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const body = (req.body ?? {}) as {
         text?: unknown;
         threadId?: unknown;
-        sessionId?: unknown;
+        renderId?: unknown;
       };
       const text = typeof body.text === "string" ? body.text.trim() : "";
       if (text.length === 0) {
@@ -6900,10 +6900,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         typeof body.threadId === "string" && body.threadId.length > 0
           ? body.threadId
           : `chat-${randomUUID()}`;
-      const requestedSessionId =
-        typeof body.sessionId === "string" && body.sessionId.length > 0
-          ? body.sessionId
-          : undefined;
       const now = Date.now();
       const userMessage = {
         id: `msg-${randomUUID()}`,
@@ -6920,9 +6916,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // agentMessage text without pretending a UI landed.
       let ui:
         | {
-            sessionId: string;
+            renderId: string;
             shortCode: string;
-            stackItemId: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
           }
@@ -6934,9 +6929,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           const handshakeInput: Record<string, unknown> = {
             story: { intent: text, contract: {} },
           };
-          if (requestedSessionId) {
-            handshakeInput.session = { id: requestedSessionId };
-          }
           const hsRaw = await handshakeHandlerForChat.handler(handshakeInput, {
             appId: DEFAULT_BUILDER_APP_ID,
             requestId,
@@ -6947,16 +6939,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             { appId: DEFAULT_BUILDER_APP_ID, requestId }
           );
           const result = raw as {
-            sessionId: string;
-            stackItemId: string;
+            renderId: string;
             shortCode: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
           };
           ui = {
-            sessionId: result.sessionId,
+            renderId: result.renderId,
             shortCode: result.shortCode,
-            stackItemId: result.stackItemId,
             codeReady: result.codeReady,
             ...(result.cache ? { cache: result.cache } : {}),
           };
@@ -6980,12 +6970,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               opts.console.sessionCookie !== null &&
               opts.console.sessionCookie.secure === true;
             const mint = mintDevtoolCookie({
-              // push handler dist still emits the pre-rename `sessionId`
-              // field on its output — sibling B.2d agent renames push.ts
-              // to surface `renderId` in the same Phase B slice; until
-              // then we route the same string through the new field
-              // name on the cookie mint input.
-              renderId: result.sessionId,
+              renderId: result.renderId,
               appId: DEFAULT_BUILDER_APP_ID,
               secret,
               ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
@@ -7040,7 +7025,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         threadId,
         userMessageId: userMessage.id,
         textLength: text.length,
-        uiStackItemId: ui?.stackItemId,
+        uiRenderId: ui?.renderId,
         uiCodeReady: ui?.codeReady,
       });
       res.status(200).json({
@@ -7054,7 +7039,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Cookie-mint route + cookieAuth binding for the session channel.
     // Both enabled only when `sessionCookie` is on (default when
     // `console` is otherwise enabled). The preconditions checked
-    // earlier guarantee shortCodeIndex + sessionChannel are present,
+    // earlier guarantee shortCodeIndex + renderChannel are present,
     // so the below references are safe.
     if (sessionCookieEnabled) {
       const secret = sharedTokenSecret as string; // verified set above
@@ -7403,7 +7388,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           res.status(503).json({
             error: "render_store_unavailable",
             message:
-              "Render observation requires sessionChannel: true on the server so the render store is wired. Enable `sessionChannel` on createGguiServer() and retry.",
+              "Render observation requires renderChannel: true on the server so the render store is wired. Enable `renderChannel` on createGguiServer() and retry.",
           });
           return;
         }
@@ -8439,15 +8424,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     composePreviewReservedValidator(),
     opts.extraReservedValidators
   );
-  const channel: RenderChannelServer | null = opts.sessionChannel
+  const channel: RenderChannelServer | null = opts.renderChannel
     ? createRenderChannelServer({
         renderStore: renderStore ?? new InMemoryRenderStore(),
         auth,
         logger: logger.child({ component: "session-channel" }),
-        path: typeof opts.sessionChannel === "object" ? opts.sessionChannel.path : undefined,
+        path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:
           streamBuffer ??
-          new InMemorySessionStreamBuffer() /* hoist guarantees non-null when opts.sessionChannel truthy; fallback only for TS narrowing */,
+          new InMemorySessionStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
         ...(channelBootstrap ? { bootstrap: channelBootstrap } : {}),
         ...(consoleCookieAuth ? { cookieAuth: consoleCookieAuth } : {}),
         ...(opts.wiredActionRouter ? { wiredActionRouter: opts.wiredActionRouter } : {}),
@@ -8484,7 +8469,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
   // Boot-time operational signal. Emitted once at the end of
   // composition so downstream metrics systems record "server
-  // composed N tools, pairing=…, threads=…, sessionChannel=…". Not
+  // composed N tools, pairing=…, threads=…, renderChannel=…". Not
   // an audit event — it's a lossy health beacon, not a privileged
   // action.
   telemetry.emit({
@@ -8495,7 +8480,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       toolCount: handlers.length,
       pairing: pairingEnabled,
       threads: opts.threads !== undefined,
-      sessionChannel: channel !== null,
+      renderChannel: channel !== null,
       mcpApps: mcpAppsEnabled,
       console: consoleEnabled,
       primitiveCatalogs: opts.primitiveCatalogs?.length ?? 0,
@@ -8556,7 +8541,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   return {
     app,
     toolCount: handlers.length,
-    sessionChannel: channel,
+    renderChannel: channel,
     pairingService,
     primitiveCatalogs,
     theme,
@@ -8574,7 +8559,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             host,
             port: boundPort,
             tools: handlers.length,
-            sessionChannel: channel ? channel.path : null,
+            renderChannel: channel ? channel.path : null,
             ...(resolvedAdminToken !== null
               ? {
                   adminTokenHint: "console /keys gate — see banner for token value",

@@ -1558,7 +1558,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   ): Promise<BootedFixture> {
     const server = createGguiServer({
       logger: silentLogger,
-      sessionChannel: true,
+      renderChannel: true,
       mcpApps: {
         wsUrl: 'ws://localhost/ws',
       },

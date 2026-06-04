@@ -61,7 +61,7 @@ interface ServerInfoResponse {
     };
   };
   readonly storage: {
-    readonly sessionStore: 'memory' | 'custom';
+    readonly renderStore: 'memory' | 'custom';
     readonly vectorStore: 'memory' | 'custom';
   };
 }
@@ -370,8 +370,8 @@ function StorageCard({
         <div>
           <dt>sessions</dt>
           <dd>
-            <StatusBadge tone={tone(s.sessionStore)}>
-              {s.sessionStore}
+            <StatusBadge tone={tone(s.renderStore)}>
+              {s.renderStore}
             </StatusBadge>
           </dd>
         </div>

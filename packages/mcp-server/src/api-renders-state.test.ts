@@ -89,7 +89,7 @@ async function bootWithSession(opts?: {
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
-    sessionChannel: true,
+    renderChannel: true,
     renderStore,
     shortCodeIndex,
     wsTokenSecret: SECRET,

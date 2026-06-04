@@ -65,7 +65,7 @@ describe('createGguiServer — server.composed telemetry beacon', () => {
       toolCount: expect.any(Number),
       pairing: false,
       threads: false,
-      sessionChannel: false,
+      renderChannel: false,
       mcpApps: false,
     });
   });
@@ -76,12 +76,12 @@ describe('createGguiServer — server.composed telemetry beacon', () => {
       telemetry: tel,
       audit: new NoopAuditSink(),
       pairing: true,
-      sessionChannel: true,
+      renderChannel: true,
     });
     const composed = tel.snapshot().find((e) => e.name === 'server.composed');
     expect(composed!.attributes).toMatchObject({
       pairing: true,
-      sessionChannel: true,
+      renderChannel: true,
     });
   });
 });

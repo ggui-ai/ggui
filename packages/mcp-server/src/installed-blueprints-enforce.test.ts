@@ -37,7 +37,7 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
 
     expect(() =>
       createGguiServer({
-        sessionChannel: true,
+        renderChannel: true,
         mcpApps: true,
         embedding,
         vectors: serverVectors,
@@ -76,7 +76,7 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
 
     expect(() =>
       createGguiServer({
-        sessionChannel: true,
+        renderChannel: true,
         mcpApps: true,
         embedding: serverEmbedding,
         vectors,
@@ -113,7 +113,7 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
 
     expect(() =>
       createGguiServer({
-        sessionChannel: true,
+        renderChannel: true,
         mcpApps: true,
         embedding,
         vectors,
@@ -149,7 +149,7 @@ describe("createGguiServer installedBlueprints shared-instance enforcement", () 
 
     expect(() =>
       createGguiServer({
-        sessionChannel: true,
+        renderChannel: true,
         mcpApps: true,
         embedding,
         vectors,

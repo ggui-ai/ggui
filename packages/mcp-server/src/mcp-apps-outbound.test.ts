@@ -45,7 +45,7 @@ interface Fixture {
 async function bootOutboundServer(): Promise<Fixture> {
   const server = createGguiServer({
     logger: silentLogger,
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: true,
     wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
   });
@@ -101,16 +101,16 @@ async function handshakeAndRender(
 }
 
 describe('createGguiServer({ mcpApps: true }) — construction', () => {
-  it('throws when sessionChannel is not also enabled', () => {
+  it('throws when renderChannel is not also enabled', () => {
     expect(() =>
       createGguiServer({ logger: silentLogger, mcpApps: true }),
-    ).toThrow(/sessionChannel: true/);
+    ).toThrow(/renderChannel: true/);
   });
 
-  it('boots when both mcpApps and sessionChannel are enabled', () => {
+  it('boots when both mcpApps and renderChannel are enabled', () => {
     const server = createGguiServer({
       logger: silentLogger,
-      sessionChannel: true,
+      renderChannel: true,
       mcpApps: true,
       wsTokenSecret: 'secret',
     });
@@ -387,7 +387,7 @@ async function bootOutboundServerWith(
 ): Promise<Fixture> {
   const server = createGguiServer({
     logger: silentLogger,
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: true,
     wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
     ...extra,

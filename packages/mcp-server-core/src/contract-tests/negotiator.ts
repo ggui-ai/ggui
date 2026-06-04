@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   Negotiator,
   NegotiatorInput,
-  NegotiatorSessionState,
+  NegotiatorRenderState,
 } from '../negotiator.js';
 
 export function negotiatorContract(
@@ -27,14 +27,14 @@ export function negotiatorContract(
   makeNegotiator: () => Promise<Negotiator> | Negotiator,
 ): void {
   describe(`Negotiator contract — ${label}`, () => {
-    const emptySession: NegotiatorSessionState = {
+    const emptyRender: NegotiatorRenderState = {
       stack: [],
       conversationHistory: [],
     };
 
     const baseInput: NegotiatorInput = {
       agentPrompt: 'Show current weather for Tokyo',
-      sessionState: emptySession,
+      renderState: emptyRender,
       scope: { appId: 'app-a', renderId: 'r1' },
     };
 
@@ -62,7 +62,7 @@ export function negotiatorContract(
       const n = await makeNegotiator();
       const input: NegotiatorInput = {
         agentPrompt: 'Show weather',
-        sessionState: { stack: [], conversationHistory: [] },
+        renderState: { stack: [], conversationHistory: [] },
         scope: { appId: 'app-a', renderId: 'r1' },
         agentTools: ['weather.lookup'],
       };

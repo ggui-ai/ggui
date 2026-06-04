@@ -6,7 +6,7 @@
  * `docs/plans/2026-04-22-console-page-construction.md` §3.3:
  *
  *   - zero-config empty shape when no renderStore is wired (pure
- *     MCP boot without sessionChannel / mcpApps)
+ *     MCP boot without renderChannel / mcpApps)
  *   - populated shape reads renderId / appId / lastActivityAt /
  *     createdAt from each `Render`
  *   - shortCode enrichment via `shortCodeIndex.findByRenderId(id)`,

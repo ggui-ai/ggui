@@ -159,7 +159,7 @@ export const WireContext = createContext<WireConfig | null>(null);
 export function useWireContext(): WireConfig {
   const ctx = useContext(WireContext);
   if (!ctx) {
-    throw new Error('useWireContext must be used within a WireProvider. Ensure the component is rendered inside a GguiSession.');
+    throw new Error('useWireContext must be used within a WireProvider. Ensure the component is rendered inside a GguiWireProvider.');
   }
   return ctx;
 }

@@ -12,7 +12,7 @@
  *     plain MCP without App-spec should boot `createGguiServer`
  *     directly — this fixture is opinionated for the host-simulator
  *     happy path.
- *   - `sessionChannel: true` so the WS endpoint is mounted (the host
+ *   - `renderChannel: true` so the WS endpoint is mounted (the host
  *     simulator's `subscribeWith` needs it).
  *   - silent logger so test output stays readable.
  */
@@ -67,7 +67,7 @@ export async function bootOssServer(
 
   const server = createGguiServer({
     logger: silentLogger,
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: {
       // Explicit `wsUrl` so bootstrap tokens carry a connectable URL —
       // without this, the OSS default emits `ws://localhost/ws`

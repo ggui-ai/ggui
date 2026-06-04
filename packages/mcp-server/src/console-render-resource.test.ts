@@ -45,7 +45,7 @@ interface Fixture {
 }
 
 /**
- * Boot a server with the full console + mcpApps + sessionChannel
+ * Boot a server with the full console + mcpApps + renderChannel
  * stack, create a session, mint a short-code for it, POST to
  * `/session-cookie` to get a real cookie, and return the header pair
  * so callers can ride it on subsequent requests.
@@ -63,7 +63,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     mcpApps: true,
-    sessionChannel: true,
+    renderChannel: true,
     renderStore,
     shortCodeIndex,
     console: { sessionCookie: true },
@@ -272,7 +272,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
       logger: silentLogger,
       auth: new InMemoryAuthAdapter({ devAllowAll: true }),
       // NOTE: no mcpApps — this is the gate we're asserting.
-      sessionChannel: true,
+      renderChannel: true,
       renderStore,
       shortCodeIndex,
       console: { sessionCookie: true },

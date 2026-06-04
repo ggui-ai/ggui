@@ -17,7 +17,7 @@
  *     RenderStore as a typed session event.
  *   - `ping`/`pong` → heartbeat parity with hosted.
  *   - `close`/socket-close → clean subscriber teardown.
- *   - `sendToSession(renderId, data)` → outbound fan-out API for
+ *   - `sendToRender(renderId, data)` → outbound fan-out API for
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
@@ -257,7 +257,7 @@ export interface RenderChannelLocalToolsOptions {
  *   2. The bound `renderId` MUST match the one on the subscribe
  *      payload. Mismatches are rejected with a clean error.
  *   3. On success, the server mints a reconnect credential via
- *      `issueSessionToken(renderId, appId)` and returns it in
+ *      `issueRenderToken(renderId, appId)` and returns it in
  *      `AckPayload.renderToken`. The iframe stores this for WS
  *      reconnects via the normal bearer path.
  *
@@ -293,7 +293,7 @@ export type RenderChannelBootstrapVerifyResult =
  *   - `ok: false`: caller MUST re-handshake (refresh window closed,
  *     tampered envelope, etc.).
  */
-export type SessionChannelBootstrapRefreshResult =
+export type RenderChannelBootstrapRefreshResult =
   | {
       readonly ok: true;
       readonly token: string;
@@ -317,7 +317,7 @@ export interface RenderChannelBootstrap {
    * `AckPayload.renderToken`. Called only after a successful
    * `verify()` on a bootstrap subscribe.
    */
-  issueSessionToken(renderId: string, appId: string): string;
+  issueRenderToken(renderId: string, appId: string): string;
   /**
    * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
    * into a new envelope with a fresh TTL. Used by the
@@ -332,7 +332,7 @@ export interface RenderChannelBootstrap {
    * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
    * 'invalid'}`.
    */
-  refresh(token: string): SessionChannelBootstrapRefreshResult;
+  refresh(token: string): RenderChannelBootstrapRefreshResult;
 }
 
 /**
@@ -701,7 +701,7 @@ export interface RenderChannelServer {
    * Throws `ContractViolationError` on payload mismatch; transport
    * errors are logged but not propagated (per-subscriber best-effort).
    */
-  sendToSession(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
+  sendToRender(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
   /**
    * Fan a `{type:'render', payload:{render, matchType?}}` wire frame
    * to every subscriber currently bound to `renderId`. Use this to
@@ -717,7 +717,7 @@ export interface RenderChannelServer {
    * subscriber never heard about the new entry, the inline UI slot
    * stayed in "Waiting for render channel replay…" indefinitely.
    * `notifyRenderPush` closes that gap. Best-effort: per-subscriber
-   * send failures are swallowed (same posture as `sendToSession`).
+   * send failures are swallowed (same posture as `sendToRender`).
    *
    * NOT durable. Frames are not stamped through the replay buffer —
    * fresh subscribers still get the current render via `ack.render` on
@@ -725,7 +725,7 @@ export interface RenderChannelServer {
    * from the snapshot; live tabs read the delta from this notify.
    *
    * Subscribers received via `register()` are tracked in
-   * `subscribersBySession`; this helper iterates the bound set and
+   * `subscribersByRender`; this helper iterates the bound set and
    * skips closed sockets via the `send()` helper's existing guard.
    * Callers ARE responsible for ordering — call after the underlying
    * `renderStore.commit` resolves so the snapshot a
@@ -753,7 +753,7 @@ export interface RenderChannelServer {
    * channel lacks a `.tool` hint.
    *
    * Ordering: callers should invoke AFTER the render is persisted
-   * so `sendToSession`'s active-render lookup resolves. The
+   * so `sendToRender`'s active-render lookup resolves. The
    * `try-live` endpoint awaits this before returning the shortCode so
    * the viewer SPA subscribes with the initial envelope already
    * buffered on the render's stream-buffer replay state.
@@ -770,12 +770,12 @@ export interface RenderChannelServer {
    * Validation posture (mirrors `notifyRenderPush`'s "best-effort orphan
    * no-op"):
    *   1. Look up the session via `renderStore.get`. Absent → log
-   *      `session_channel_props_update_orphan` and return — the wire
+   *      `render_channel_props_update_orphan` and return — the wire
    *      validator on the renderer side would reject a frame for an
    *      unknown session anyway.
    *   2. Look up the target stack entry by `renderId` in the loaded
    *      session's stack. Absent → log
-   *      `session_channel_props_update_pageid_unknown` and return.
+   *      `render_channel_props_update_pageid_unknown` and return.
    *   3. Iterate the flat WS-subscriber set, filter to subscribers
    *      whose `renderId` matches, and `send()` the frame. Closed
    *      sockets are skipped silently by `send()`.
@@ -842,8 +842,8 @@ export interface RenderChannelServer {
   externalBroadcast(renderId: string, frame: WebSocketMessage): void;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
-  /** Number of distinct sessions with at least one subscriber. */
-  readonly sessionCount: number;
+  /** Number of distinct renders with at least one subscriber. */
+  readonly renderCount: number;
   /**
    * Close every live subscriber + the underlying ws server. Idempotent.
    */
@@ -905,8 +905,8 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   const wss = new WebSocketServer({ noServer: true });
 
   /**
-   * Flat set of all live WS subscribers. Replaces the per-session
-   * `subscribersBySession` Map — routing is now StreamFanout's job;
+   * Flat set of all live WS subscribers. Replaces the per-render
+   * `subscribersByRender` Map — routing is now StreamFanout's job;
    * this set tracks WS-specific bookkeeping (stats, shutdown-broadcast)
    * that the seam can't see (and shouldn't).
    */
@@ -914,14 +914,14 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   /** ws → subscriber reverse index so socket-close can look up cheaply. */
   const subscribersByWs = new WeakMap<WebSocket, Subscriber>();
   /**
-   * Per-session local subscriber count. Drives the {@link
+   * Per-render local subscriber count. Drives the {@link
    * RenderChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
-   * 0↔1 transition hooks used by cloud adapters for per-session
+   * 0↔1 transition hooks used by cloud adapters for per-render
    * cross-pod pub/sub channel scoping. Distinct from the
-   * `sessionCount` getter — that walks `wsSubscribers` on demand;
+   * `renderCount` getter — that walks `wsSubscribers` on demand;
    * this map is the registration-time counter the hooks key off.
    */
-  const sessionCountById = new Map<string, number>();
+  const renderCountById = new Map<string, number>();
 
   /**
    * Pump live frames from the StreamFanout iterator out to this
@@ -951,7 +951,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         send(sub.ws, { type: "data", payload: value });
       }
     } catch (err) {
-      opts.logger.warn("session_channel_pump_failed", {
+      opts.logger.warn("render_channel_pump_failed", {
         renderId: sub.renderId,
         error: String(err),
       });
@@ -961,18 +961,18 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   function register(sub: Subscriber): void {
     wsSubscribers.add(sub);
     subscribersByWs.set(sub.ws, sub);
-    // Per-session count bookkeeping + 0→1 hook for cloud pubsub
+    // Per-render count bookkeeping + 0→1 hook for cloud pubsub
     // adapter scoping. Increment FIRST so the hook sees the up-to-date
     // state; hook fires only on the transition (prevCount === 0).
-    const prevCount = sessionCountById.get(sub.renderId) ?? 0;
-    sessionCountById.set(sub.renderId, prevCount + 1);
+    const prevCount = renderCountById.get(sub.renderId) ?? 0;
+    renderCountById.set(sub.renderId, prevCount + 1);
     if (prevCount === 0 && opts.onFirstSubscriber) {
       try {
         opts.onFirstSubscriber(sub.renderId);
       } catch (err) {
         // Best-effort: a thrown hook MUST NOT corrupt the
         // wsSubscribers set vs the real socket lifecycle.
-        opts.logger.warn("session_channel_on_first_subscriber_threw", {
+        opts.logger.warn("render_channel_on_first_subscriber_threw", {
           renderId: sub.renderId,
           error: String(err),
         });
@@ -988,22 +988,22 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     if (!sub) return;
     subscribersByWs.delete(ws);
     wsSubscribers.delete(sub);
-    // Per-session count bookkeeping + 1→0 hook (symmetric with register).
-    const prevCount = sessionCountById.get(sub.renderId) ?? 0;
+    // Per-render count bookkeeping + 1→0 hook (symmetric with register).
+    const prevCount = renderCountById.get(sub.renderId) ?? 0;
     if (prevCount <= 1) {
-      sessionCountById.delete(sub.renderId);
+      renderCountById.delete(sub.renderId);
       if (prevCount === 1 && opts.onLastSubscriberGone) {
         try {
           opts.onLastSubscriberGone(sub.renderId);
         } catch (err) {
-          opts.logger.warn("session_channel_on_last_subscriber_gone_threw", {
+          opts.logger.warn("render_channel_on_last_subscriber_gone_threw", {
             renderId: sub.renderId,
             error: String(err),
           });
         }
       }
     } else {
-      sessionCountById.set(sub.renderId, prevCount - 1);
+      renderCountById.set(sub.renderId, prevCount - 1);
     }
     // Ending the iter terminates pumpSubscriber AND unregisters this
     // subscriber from the StreamFanout. Idempotent on the seam side
@@ -1024,7 +1024,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     try {
       ws.send(JSON.stringify(msg));
     } catch (err) {
-      opts.logger.warn("session_channel_send_failed", { error: String(err) });
+      opts.logger.warn("render_channel_send_failed", { error: String(err) });
     }
   }
 
@@ -1084,14 +1084,14 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   }
 
   /**
-   * Persist an observation-message-driven session patch. Fire-and-
+   * Persist an observation-message-driven render patch. Fire-and-
    * forget at the wire layer (no response frame); warn-logs persistence
    * errors so transient store failures stay observable without
    * disrupting the iframe. The iframe's local state is already in the
    * new shape; the next round-trip re-emits whatever the persistence
    * layer lost.
    */
-  async function applySessionPatch(
+  async function applyRenderPatch(
     renderId: string,
     appId: string,
     messageType: string,
@@ -1100,7 +1100,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     try {
       await opts.renderStore.update(renderId, patch);
     } catch (err) {
-      opts.logger.warn("session_channel_observation_persist_failed", {
+      opts.logger.warn("render_channel_observation_persist_failed", {
         messageType,
         renderId,
         appId,
@@ -1213,7 +1213,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         // posture as wired-tool's TOOL_THREW emission.
         sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err))
       );
-      opts.logger.warn("session_channel_channel_poll_failed", {
+      opts.logger.warn("render_channel_channel_poll_failed", {
         renderId: sub.renderId,
         appId: sub.appId,
         channelName: state.channelName,
@@ -1407,7 +1407,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   /**
    * Stamp a delivery through the replay buffer and fan it out to every
    * subscriber of the session, honoring the per-subscriber replay
-   * cursor. Shared by the public `sendToSession` entry point AND by
+   * cursor. Shared by the public `sendToRender` entry point AND by
    * the wiredActionRouter's refresh/error emissions — extracting this
    * avoids duplicating the seq-stamp + subscriber-iteration logic in
    * two places.
@@ -1475,7 +1475,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         },
         activeStreamSpec
       ).catch((err) => {
-        opts.logger.error("session_channel_contract_error_emit_failed", {
+        opts.logger.error("render_channel_contract_error_emit_failed", {
           renderId,
           toolName: payload.toolName,
           code: payload.error.code,
@@ -1483,7 +1483,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         });
       });
     } catch (err) {
-      opts.logger.error("session_channel_contract_error_emit_failed", {
+      opts.logger.error("render_channel_contract_error_emit_failed", {
         renderId,
         toolName: payload.toolName,
         code: payload.error.code,
@@ -1639,7 +1639,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         },
         timestamp: new Date().toISOString(),
       });
-      opts.logger.warn("session_channel_wired_tool_not_found", {
+      opts.logger.warn("render_channel_wired_tool_not_found", {
         renderId: session.id,
         toolName: declaredTool,
         actionName,
@@ -1678,7 +1678,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         },
         timestamp: new Date().toISOString(),
       });
-      opts.logger.warn("session_channel_wired_tool_failed", {
+      opts.logger.warn("render_channel_wired_tool_failed", {
         renderId: session.id,
         toolName: declaredTool,
         actionName,
@@ -1754,7 +1754,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           },
           timestamp: new Date().toISOString(),
         });
-        opts.logger.warn("session_channel_refresh_tool_failed", {
+        opts.logger.warn("render_channel_refresh_tool_failed", {
           renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
@@ -1778,7 +1778,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
             },
             timestamp: new Date().toISOString(),
           });
-          opts.logger.warn("session_channel_refresh_schema_violation", {
+          opts.logger.warn("render_channel_refresh_schema_violation", {
             renderId: session.id,
             toolName: refreshTool,
             channel: channelName,
@@ -1804,7 +1804,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         // is buffer-internal (e.g., record() invariant violation). Log
         // but don't propagate — a single broken channel must not take
         // down the session.
-        opts.logger.error("session_channel_refresh_emit_failed", {
+        opts.logger.error("render_channel_refresh_emit_failed", {
           renderId: session.id,
           toolName: refreshTool,
           channel: channelName,
@@ -1986,7 +1986,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         assertActionContract(activeActionSpec, envelope.payload);
       } catch (err) {
         if (err instanceof ContractViolationError) {
-          opts.logger.warn("session_channel_contract_violation", {
+          opts.logger.warn("render_channel_contract_violation", {
             renderId: sub.renderId,
             violations: err.violations,
             envelope: "action",
@@ -2009,7 +2009,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         data: envelope,
       });
     } catch (err) {
-      opts.logger.error("session_channel_append_failed", {
+      opts.logger.error("render_channel_append_failed", {
         renderId: sub.renderId,
         error: String(err),
       });
@@ -2099,7 +2099,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           policy,
         }
       );
-      opts.logger.warn("session_channel_version_mismatch", {
+      opts.logger.warn("render_channel_version_mismatch", {
         renderId: payload.renderId,
         appId: payload.appId,
         serverVersion: PROTOCOL_SCHEMA_VERSION,
@@ -2135,7 +2135,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       }
       const verifyResult = opts.bootstrap.verify(payload.wsToken);
       if (!verifyResult.ok) {
-        opts.logger.warn("session_channel_bootstrap_rejected", {
+        opts.logger.warn("render_channel_bootstrap_rejected", {
           renderId: payload.renderId,
           appId: payload.appId,
           reason: verifyResult.reason,
@@ -2198,8 +2198,8 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       // Mint the reconnect credential now — before create/observe
       // work — so a downstream failure doesn't leave the client with
       // no way to resume.
-      mintedSessionToken = opts.bootstrap.issueSessionToken(bound.renderId, bound.appId);
-      opts.logger.info("session_channel_bootstrap_accepted", {
+      mintedSessionToken = opts.bootstrap.issueRenderToken(bound.renderId, bound.appId);
+      opts.logger.info("render_channel_bootstrap_accepted", {
         renderId: bound.renderId,
         appId: bound.appId,
       });
@@ -2240,7 +2240,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     }
 
     // Snapshot the outbound-stream cursor BEFORE registering the
-    // subscriber. Any concurrent producer that calls sendToSession
+    // subscriber. Any concurrent producer that calls sendToRender
     // between here and registration gets seq > snapshotSeq, so the
     // subscriber will receive it via live fan-out (not via replay).
     //
@@ -2502,7 +2502,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         if (!checkSubscriberTenancy(ws, sub, message.payload, message.type, message.requestId)) {
           return;
         }
-        await applySessionPatch(sub.renderId, sub.appId, message.type, {
+        await applyRenderPatch(sub.renderId, sub.appId, message.type, {
           hostContext: message.payload.hostContext,
           lastActivityAt: Date.now(),
         });
@@ -2573,7 +2573,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       // on frame type; normalize to string.
       const text = typeof raw === "string" ? raw : raw.toString("utf8");
       onMessage(ws, text).catch((err) => {
-        opts.logger.error("session_channel_message_failed", {
+        opts.logger.error("render_channel_message_failed", {
           error: String(err),
         });
       });
@@ -2585,7 +2585,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     });
 
     ws.on("error", (err) => {
-      opts.logger.warn("session_channel_socket_error", { error: String(err) });
+      opts.logger.warn("render_channel_socket_error", { error: String(err) });
     });
   });
 
@@ -2605,7 +2605,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         })
         .catch((err) => {
           if (err instanceof UnauthenticatedError) {
-            opts.logger.warn("session_channel_auth_failed", {
+            opts.logger.warn("render_channel_auth_failed", {
               reason: err.message,
             });
             socket.write(
@@ -2617,7 +2617,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
                 "\r\n"
             );
           } else {
-            opts.logger.error("session_channel_upgrade_failed", {
+            opts.logger.error("render_channel_upgrade_failed", {
               error: String(err),
             });
             socket.write("HTTP/1.1 500 Internal Server Error\r\n" + "Connection: close\r\n\r\n");
@@ -2625,7 +2625,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           socket.destroy();
         });
     },
-    async sendToSession(delivery) {
+    async sendToRender(delivery) {
       // Outbound fan-out enforcement (defense-in-depth parity with
       // hosted `handle-data.ts`). Re-validates the delivery's payload
       // against the render's streamSpec BEFORE delivery — so a future
@@ -2774,13 +2774,13 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     get subscriberCount() {
       return wsSubscribers.size;
     },
-    get sessionCount() {
-      // Distinct session count across live WS subscribers. With
-      // multi-tab sessions, two subscribers may share a renderId —
+    get renderCount() {
+      // Distinct render count across live WS subscribers. With
+      // multi-tab clients, two subscribers may share a renderId —
       // dedupe before counting.
-      const sessions = new Set<string>();
-      for (const sub of wsSubscribers) sessions.add(sub.renderId);
-      return sessions.size;
+      const renders = new Set<string>();
+      for (const sub of wsSubscribers) renders.add(sub.renderId);
+      return renders.size;
     },
     async close() {
       // Close every open socket + drain its StreamFanout subscription.

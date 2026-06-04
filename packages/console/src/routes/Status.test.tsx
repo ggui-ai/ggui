@@ -31,7 +31,7 @@ interface InfoBody {
     };
   };
   readonly storage: {
-    readonly sessionStore: 'memory';
+    readonly renderStore: 'memory';
     readonly vectorStore: 'memory';
   };
 }
@@ -48,7 +48,7 @@ function makeInfo(): InfoBody {
       agentWired: false,
       generation: { wired: false, hasCredentials: false },
     },
-    storage: { sessionStore: 'memory', vectorStore: 'memory' },
+    storage: { renderStore: 'memory', vectorStore: 'memory' },
   };
 }
 

@@ -287,7 +287,7 @@ describe('buildMcpServerBackend', () => {
       channel?: { path: string };
     };
     expect(body.status).toBe('ok');
-    // `sessionChannel: true` in the bundle → /ggui/health reports
+    // `renderChannel: true` in the bundle → /ggui/health reports
     // the channel block. Absent = channel wire regressed.
     expect(body.channel).toBeDefined();
     expect(body.channel?.path).toBe('/ws');
