@@ -45,7 +45,7 @@ import type { SendEnvelopeFn } from './handle-stream.js';
  * Sink handed to the emitter. Writes one provisional-preview payload
  * as an outbound {@link StreamEnvelope} on the reserved preview
  * channel. The inner `sendEnvelope` lives at the caller's transport
- * boundary — OSS wraps `SessionStreamBuffer.record`, hosted wraps
+ * boundary — OSS wraps `RenderStreamBuffer.record`, hosted wraps
  * the DDB writer.
  *
  * Return value mirrors `SendEnvelopeFn` — `{seq?}` is propagated so

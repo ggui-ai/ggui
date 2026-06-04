@@ -101,7 +101,7 @@ const RESERVED_CHANNEL_REPLAY_MAX = 256;
  *   capped at {@link RESERVED_CHANNEL_REPLAY_MAX}. New subscribers
  *   receive the buffered envelopes synchronously before the unsubscribe
  *   handle returns — same mental model as the server-side
- *   `SessionStreamBuffer.replay(...)` walk over reserved channels at
+ *   `RenderStreamBuffer.replay(...)` walk over reserved channels at
  *   ack time, but mirrored at the inner bus boundary so the host
  *   transport stays portable (Claude Desktop / ChatGPT / Cursor /
  *   `<McpAppIframe>` all behave the same).

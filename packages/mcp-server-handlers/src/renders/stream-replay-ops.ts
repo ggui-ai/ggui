@@ -1,13 +1,13 @@
 /**
  * Pure replay-policy operations — the stateless core of the
- * `SessionStreamBuffer` contract.
+ * `RenderStreamBuffer` contract.
  *
  * These helpers drive both OSS (in-memory ring) and hosted (DDB-backed
  * Render row) implementations from a single set of rules. They take
  * the current buffer state as input and return the next state + the
  * stamped envelope — no IO, no allocation of storage adapters.
  *
- * Shape mirrors `@ggui-ai/mcp-server-core`'s `InMemorySessionStreamBuffer`
+ * Shape mirrors `@ggui-ai/mcp-server-core`'s `InMemoryRenderStreamBuffer`
  * semantics one-for-one:
  *
  *   - `'none'`: seq is still assigned (so fan-out has a stable cursor),
@@ -23,7 +23,7 @@
  *
  * Why this lives in `@ggui-ai/mcp-server-handlers` (below core in the
  * layering): pure logic with no storage shape assumption, callable by
- * both the OSS `SessionStreamBuffer` adapter and the hosted Lambda/pod
+ * both the OSS `RenderStreamBuffer` adapter and the hosted Lambda/pod
  * DDB adapter. Keeps the replay contract single-source, independent
  * of where the buffer physically sits.
  *
@@ -226,7 +226,7 @@ export function applyRecordOp(
 /**
  * Return the envelopes a reconnecting subscriber should receive.
  *
- * Rules — mirror the OSS `SessionStreamBuffer.replay` contract:
+ * Rules — mirror the OSS `RenderStreamBuffer.replay` contract:
  *
  *   - `fromSeq === undefined` (fresh subscribe) → empty envelopes;
  *     caller transitions straight to the live tail.
@@ -332,7 +332,7 @@ export function normalizeBufferState(partial: {
 //
 // `runSequencedRecord` centralizes the OCC loop: read → apply →
 // conditional-write (expected-old-seq); on conflict, re-read + retry.
-// Matching OSS `InMemorySessionStreamBuffer`'s single-writer property
+// Matching OSS `InMemoryRenderStreamBuffer`'s single-writer property
 // at the DDB layer — the conditional check is the fence.
 //
 // Errors are typed so adapters can surface the right thing to callers:

@@ -1,6 +1,6 @@
 /**
- * InMemorySessionStreamBuffer — reference implementation of
- * {@link SessionStreamBuffer}.
+ * InMemoryRenderStreamBuffer — reference implementation of
+ * {@link RenderStreamBuffer}.
  *
  * Intended for the OSS `@ggui-ai/mcp-server` in its zero-config mode
  * and for tests. Bounded per-session ring that applies replay policy
@@ -11,7 +11,7 @@
  * Not persistent. Server restart drops all buffered envelopes — this
  * is documented on the interface, not worked around. Adapters that
  * need durability ship as separate packages against the same
- * {@link SessionStreamBuffer} interface.
+ * {@link RenderStreamBuffer} interface.
  */
 import { DEFAULT_STREAM_REPLAY_POLICY } from '@ggui-ai/protocol';
 import { resolveStreamChannel } from '@ggui-ai/protocol';
@@ -23,12 +23,12 @@ import {
   type BufferedStreamEnvelope,
   type RecordResult,
   type ReplayResult,
-  type SessionStreamBuffer,
-  type SessionStreamBufferOptions,
+  type RenderStreamBuffer,
+  type RenderStreamBufferOptions,
   type StreamEnvelopeInput,
-} from '../session-stream-buffer.js';
+} from '../render-stream-buffer.js';
 
-interface SessionBucket {
+interface RenderBucket {
   /** Latest assigned seq for the session. 0 when never recorded. */
   seq: number;
   /**
@@ -51,15 +51,15 @@ interface SessionBucket {
   latestByChannel: Map<string, BufferedStreamEnvelope>;
 }
 
-export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
-  private readonly buckets = new Map<string, SessionBucket>();
+export class InMemoryRenderStreamBuffer implements RenderStreamBuffer {
+  private readonly buckets = new Map<string, RenderBucket>();
   private readonly maxPerSession: number;
 
-  constructor(opts: SessionStreamBufferOptions = {}) {
+  constructor(opts: RenderStreamBufferOptions = {}) {
     this.maxPerSession = opts.maxPerSession ?? DEFAULT_SESSION_STREAM_BUFFER_MAX;
     if (this.maxPerSession < 1) {
       throw new Error(
-        `InMemorySessionStreamBuffer: maxPerSession must be >= 1, got ${this.maxPerSession}`,
+        `InMemoryRenderStreamBuffer: maxPerSession must be >= 1, got ${this.maxPerSession}`,
       );
     }
   }
@@ -241,7 +241,7 @@ export class InMemorySessionStreamBuffer implements SessionStreamBuffer {
     return n;
   }
 
-  private bucketFor(renderId: string): SessionBucket {
+  private bucketFor(renderId: string): RenderBucket {
     let bucket = this.buckets.get(renderId);
     if (!bucket) {
       bucket = {

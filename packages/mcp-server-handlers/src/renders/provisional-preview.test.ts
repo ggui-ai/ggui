@@ -15,7 +15,7 @@
  *
  * Tests are transport-agnostic — the fake `sendEnvelope` records
  * envelopes in-memory. Real transport plumbing (OSS
- * `SessionStreamBuffer`, hosted DDB writer) is exercised separately
+ * `RenderStreamBuffer`, hosted DDB writer) is exercised separately
  * in their own suites; these tests pin the orchestrator's contract.
  */
 import { describe, it, expect, vi } from 'vitest';

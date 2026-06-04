@@ -1,5 +1,5 @@
 /**
- * SessionStreamBuffer — per-session bounded replay ring for live-channel
+ * RenderStreamBuffer — per-session bounded replay ring for live-channel
  * outbound stream envelopes.
  *
  * Scope (2026-04-19). Lands the server-side primitive that makes
@@ -17,7 +17,7 @@
  *     model and is OUT of scope for this slice.
  *   - Bounded, NOT persistent. Server restart drops all buffered
  *     envelopes — documented on the interface. Consumers that need
- *     persistence layer a different `SessionStreamBuffer`
+ *     persistence layer a different `RenderStreamBuffer`
  *     implementation behind this interface.
  *   - Replay policy applied at RECORD time (memory-optimal). `'none'`
  *     channels don't store; `'latest'` channels keep a single slot;
@@ -30,7 +30,7 @@
  *     of `clear(renderId)`.
  *   - NOT a replacement for RenderStore's inbound-event log.
  *     RenderStore tracks user actions + UI mutations for
- *     observation/audit. SessionStreamBuffer tracks outbound
+ *     observation/audit. RenderStreamBuffer tracks outbound
  *     live-channel deliveries for the narrower purpose of reconnect
  *     replay. Different seq spaces, different retention policies,
  *     different consumers.
@@ -131,7 +131,7 @@ export interface ReplayResult {
 }
 
 /**
- * `SessionStreamBuffer` — server-side durability primitive for channel
+ * `RenderStreamBuffer` — server-side durability primitive for channel
  * 3's outbound stream. Every field is documented on the individual
  * methods.
  *
@@ -144,7 +144,7 @@ export interface ReplayResult {
  * still guaranteed by atomic `INCR`-based seq assignment, so the
  * recorded order matches seq order even under concurrent writers.
  */
-export interface SessionStreamBuffer {
+export interface RenderStreamBuffer {
   /**
    * Assign the next seq for `input.renderId` and (conditionally)
    * store the stamped envelope per the channel's replay policy.
@@ -228,12 +228,12 @@ export interface SessionStreamBuffer {
 }
 
 /**
- * Config for {@link SessionStreamBuffer} implementations. Implementers
+ * Config for {@link RenderStreamBuffer} implementations. Implementers
  * are NOT required to honor every field — in-memory uses all of them;
  * a persistent adapter might ignore `maxPerSession` and use a
  * different retention model.
  */
-export interface SessionStreamBufferOptions {
+export interface RenderStreamBufferOptions {
   /**
    * Per-session cap on buffered envelopes across ALL `'all'` channels.
    * Does not cap `'latest'` channels (they're always single-slot

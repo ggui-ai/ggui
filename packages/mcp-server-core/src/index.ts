@@ -40,7 +40,7 @@ export * from './blueprint-search.js';
 export * from './variant-selection.js';
 export * from './variant-selector-with-llm.js';
 export * from './render-store.js';
-export * from './session-stream-buffer.js';
+export * from './render-stream-buffer.js';
 export * from './stream-fanout.js';
 export * from './pending-event-consumer.js';
 // Optional active-consumer awareness seam. Tracks which renders

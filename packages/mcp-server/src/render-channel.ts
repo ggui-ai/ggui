@@ -43,13 +43,13 @@ import type {
   BufferedStreamEnvelope,
   RenderPatch,
   RenderStore,
-  SessionStreamBuffer,
+  RenderStreamBuffer,
   StreamEnvelopeInput,
   StreamFanout,
   TelemetrySink,
 } from "@ggui-ai/mcp-server-core";
 import {
-  InMemorySessionStreamBuffer,
+  InMemoryRenderStreamBuffer,
   InProcessStreamFanout,
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
@@ -456,15 +456,15 @@ export interface RenderChannelOptions {
   readonly path?: string;
   /**
    * Outbound stream replay buffer. Defaults to a fresh
-   * `InMemorySessionStreamBuffer` when omitted — fine for OSS
+   * `InMemoryRenderStreamBuffer` when omitted — fine for OSS
    * zero-config / dev. Persistent adapters bind via the same
-   * `SessionStreamBuffer` interface when they land.
+   * `RenderStreamBuffer` interface when they land.
    *
    * Each channel instance owns its own seq cursor space; sharing a
    * buffer across two channels in the same process would couple their
    * sequences in confusing ways.
    */
-  readonly streamBuffer?: SessionStreamBuffer;
+  readonly streamBuffer?: RenderStreamBuffer;
   /**
    * Live-tail pub/sub for outbound live-channel frames. Defaults to a
    * fresh `InProcessStreamFanout` (in-memory, single-process). Hosted
@@ -872,7 +872,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   const path = opts.path ?? DEFAULT_RENDER_CHANNEL_PATH;
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
-  const streamBuffer: SessionStreamBuffer = opts.streamBuffer ?? new InMemorySessionStreamBuffer();
+  const streamBuffer: RenderStreamBuffer = opts.streamBuffer ?? new InMemoryRenderStreamBuffer();
   // Live-tail pub/sub. Default in-process; hosted binds RedisPubSubFanout.
   const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
   // `causedBy` sanitizer applied to every contract-error emission.
@@ -1426,7 +1426,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // per-sub replay-cursor filter, and sends to the WS. Fire-and-forget
     // because publish() never throws on the in-process impl, and a hosted
     // RedisPubSubFanout failure here would already be persisted to the
-    // SessionStreamBuffer for replay-recovery on reconnect.
+    // RenderStreamBuffer for replay-recovery on reconnect.
     void streamFanout.publish({ renderId: envelope.renderId, envelope });
     return { seq: envelope.seq };
   }

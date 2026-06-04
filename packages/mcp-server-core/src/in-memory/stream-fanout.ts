@@ -14,7 +14,7 @@ import type {
   StreamFanout,
   StreamFanoutPublishInput,
 } from '../stream-fanout.js';
-import type { BufferedStreamEnvelope } from '../session-stream-buffer.js';
+import type { BufferedStreamEnvelope } from '../render-stream-buffer.js';
 
 /** One live subscription. */
 interface Subscriber {

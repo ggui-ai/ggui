@@ -61,7 +61,7 @@ import type {
   ProviderKeyStore,
   RateLimiter,
   RenderStore,
-  SessionStreamBuffer,
+  RenderStreamBuffer,
   ShortCodeIndex,
   TelemetrySink,
   ThreadStore,
@@ -91,7 +91,7 @@ import {
   InMemoryPendingEventConsumer,
   InMemoryQuotaStore,
   InMemoryRenderStore,
-  InMemorySessionStreamBuffer,
+  InMemoryRenderStreamBuffer,
   InMemoryVectorStore,
   MockEmbeddingProvider,
   NoopAuditSink,
@@ -1263,7 +1263,7 @@ export function defaultHandlers(deps: {
     );
     // `ggui_emit` routes outbound stream envelopes through the active
     // `RenderChannelServer.sendToRender`
-    // (which records into the bound `SessionStreamBuffer` + fans out
+    // (which records into the bound `RenderStreamBuffer` + fans out
     // to subscribers). When no channel is bound, the handler accepts
     // the envelope and returns silently — mirrors cloud's
     // `ggui_emit_accepted_no_receiver` posture.
@@ -1293,7 +1293,7 @@ export function defaultHandlers(deps: {
           });
           // `sendToRender` plumbs the stamped seq out of fanOut so
           // ggui_emit's wire output carries ordering info — matches
-          // cloud's `RedisSessionStreamBuffer.record` returning seq
+          // cloud's `RedisRenderStreamBuffer.record` returning seq
           // and being threaded onto the response. Agents that want to
           // correlate "I just emitted on channel X" with a specific
           // wire frame have a stable handle.
@@ -2004,13 +2004,13 @@ export interface CreateGguiServerOptions {
 
   /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
-   * to a fresh `InMemorySessionStreamBuffer` — fine for OSS zero-config
+   * to a fresh `InMemoryRenderStreamBuffer` — fine for OSS zero-config
    * / dev. Operators who need durability layer a different
-   * `SessionStreamBuffer` implementation behind this seam.
+   * `RenderStreamBuffer` implementation behind this seam.
    *
    * Only used when `renderChannel` is enabled. Ignored otherwise.
    */
-  readonly streamBuffer?: SessionStreamBuffer;
+  readonly streamBuffer?: RenderStreamBuffer;
 
   /**
    * Enable the OSS live-channel render endpoint at `/ws` (configurable).
@@ -3312,8 +3312,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // RenderStore events. Only constructed when the channel is
   // enabled; otherwise there's nothing to buffer and the timeline
   // routes report `streamSeq: 0` honestly.
-  const streamBuffer: SessionStreamBuffer | undefined = opts.renderChannel
-    ? (opts.streamBuffer ?? new InMemorySessionStreamBuffer())
+  const streamBuffer: RenderStreamBuffer | undefined = opts.renderChannel
+    ? (opts.streamBuffer ?? new InMemoryRenderStreamBuffer())
     : undefined;
 
   // Bootstrap-credential plumbing. Secret is process-local unless the
@@ -8432,7 +8432,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:
           streamBuffer ??
-          new InMemorySessionStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
+          new InMemoryRenderStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
         ...(channelBootstrap ? { bootstrap: channelBootstrap } : {}),
         ...(consoleCookieAuth ? { cookieAuth: consoleCookieAuth } : {}),
         ...(opts.wiredActionRouter ? { wiredActionRouter: opts.wiredActionRouter } : {}),

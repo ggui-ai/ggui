@@ -19,7 +19,7 @@ export { InMemoryPendingEventConsumer } from './pending-event-consumer.js';
 export { InMemoryActiveConsumerRegistry } from './active-consumer-registry.js';
 export { InMemoryThreadStore } from './thread-store.js';
 export type { InMemoryThreadStoreOptions } from './thread-store.js';
-export { InMemorySessionStreamBuffer } from './session-stream-buffer.js';
+export { InMemoryRenderStreamBuffer } from './render-stream-buffer.js';
 export { InProcessStreamFanout } from './stream-fanout.js';
 export { InMemoryAuthAdapter } from './auth-adapter.js';
 export type { InMemoryAuthAdapterOptions } from './auth-adapter.js';

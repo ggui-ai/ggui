@@ -1,7 +1,7 @@
 /**
  * Pure replay-ops — every policy branch + every replay rule.
  *
- * Mirrors the coverage of `InMemorySessionStreamBuffer`'s suite in
+ * Mirrors the coverage of `InMemoryRenderStreamBuffer`'s suite in
  * `@ggui-ai/mcp-server-core`, just on the stateless functions that drive
  * both OSS and hosted implementations from a single source of truth.
  *

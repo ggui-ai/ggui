@@ -19,7 +19,7 @@ import type { Request, Response, Express } from 'express';
 import type {
   RenderEvent,
   RenderStore,
-  SessionStreamBuffer,
+  RenderStreamBuffer,
 } from '@ggui-ai/mcp-server-core';
 import { applyDevtoolSecurityHeaders } from './console-headers.js';
 import { singleParam } from './route-param.js';
@@ -95,7 +95,7 @@ async function drainRenderEvents(
 export function mountConsoleTimelineRoutes(
   app: Express,
   renderStore: RenderStore | undefined,
-  streamBuffer: SessionStreamBuffer | undefined,
+  streamBuffer: RenderStreamBuffer | undefined,
 ): void {
   // GET /ggui/console/timeline/renders?limit=<n>
   app.get(

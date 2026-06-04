@@ -23,13 +23,13 @@
  *   The envelope MUST carry a `renderId` that matches the routing key
  *   and a `seq` that is strictly increasing for the render (gap-free
  *   for a single writer; gaps across concurrent writers surface as
- *   sequence conflicts upstream at the `SessionStreamBuffer.record`
+ *   sequence conflicts upstream at the `RenderStreamBuffer.record`
  *   layer, not here).
  * - Consumer `subscribe()` MUST deliver every frame that `publish()`
  *   completes AFTER the subscribe call returns. Frames published
  *   BEFORE subscribe-return MAY be missed — this seam is live-tail
  *   only; gap-recovery for reconnecting subscribers is the
- *   {@link SessionStreamBuffer.replay} path's responsibility.
+ *   {@link RenderStreamBuffer.replay} path's responsibility.
  * - Implementations MUST NOT coalesce, drop, or reorder publishes
  *   within a render. Multi-subscriber fanout within a single render
  *   MUST see all frames in the same sequence order.
@@ -41,7 +41,7 @@
  * - `publish()` failure (network, backpressure, internal error) MUST
  *   throw. Producers decide retry policy; render-channel treats a
  *   thrown publish as a log-and-continue event because the envelope
- *   has already been persisted to the {@link SessionStreamBuffer} and
+ *   has already been persisted to the {@link RenderStreamBuffer} and
  *   will be recovered on the next subscriber reconnect.
  * - `subscribe()` iterator termination (consumer drop, network drop,
  *   upstream `close()`) MUST end the async iterator cleanly (return
@@ -59,7 +59,7 @@
  *
  * ## Relationship to other seams
  *
- * - {@link SessionStreamBuffer} — stores envelopes for replay on reconnect.
+ * - {@link RenderStreamBuffer} — stores envelopes for replay on reconnect.
  *   StreamFanout is the LIVE channel; replay is the HISTORY channel.
  *   A typical emitter path: `buffer.record(delivery)` → get
  *   BufferedStreamEnvelope → `fanout.publish({renderId, envelope})`.
@@ -75,7 +75,7 @@
  * the JSON-encoded {@link BufferedStreamEnvelope}; close fires a
  * close-marker record that subscribers recognize and unwind.
  */
-import type { BufferedStreamEnvelope } from './session-stream-buffer.js';
+import type { BufferedStreamEnvelope } from './render-stream-buffer.js';
 
 /**
  * Input to {@link StreamFanout.publish}. Flat-object shape for easy
@@ -86,7 +86,7 @@ export interface StreamFanoutPublishInput {
   readonly renderId: string;
   /**
    * The buffered envelope — already seq-stamped and schemaVersion-tagged
-   * by {@link SessionStreamBuffer.record}. StreamFanout does NOT stamp or
+   * by {@link RenderStreamBuffer.record}. StreamFanout does NOT stamp or
    * mutate; it routes exactly what was handed in.
    */
   readonly envelope: BufferedStreamEnvelope;
@@ -119,7 +119,7 @@ export interface StreamFanout {
    *   - Upstream calling {@link StreamFanout.close} for the render —
    *     iterator ends with `{done: true}`.
    *   - Implementation-detected error (Redis disconnect, etc.) —
-   *     iterator throws; consumer reconnects via `SessionStreamBuffer.replay`.
+   *     iterator throws; consumer reconnects via `RenderStreamBuffer.replay`.
    */
   subscribe(renderId: string): AsyncIterable<BufferedStreamEnvelope>;
 

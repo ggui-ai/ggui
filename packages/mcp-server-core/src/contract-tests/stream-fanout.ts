@@ -18,7 +18,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { StreamFanout } from '../stream-fanout.js';
-import type { BufferedStreamEnvelope } from '../session-stream-buffer.js';
+import type { BufferedStreamEnvelope } from '../render-stream-buffer.js';
 
 function makeEnvelope(
   renderId: string,
