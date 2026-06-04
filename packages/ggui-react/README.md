@@ -45,8 +45,9 @@ runnable reference — including auth — is the
 
 The package also exports hooks (`useWebSocket`, `useInvoke`,
 `useGenerate`), a client-side data-binding tools
-system (`defineTool`, `useTool`, `useBindings`), and `<McpAppIframe>`
-for hosting any MCP Apps-conformant UI in an iframe.
+system (`defineTool`, `useTool`, `useBindings`), and `<AppRenderer>`
+(re-exported from `@mcp-ui/client`) for hosting an MCP Apps render in a
+sandboxed iframe. (React Native's equivalent host is `<McpAppIframe>`.)
 
 ## Entry points
 
