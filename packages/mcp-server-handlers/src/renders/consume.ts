@@ -455,13 +455,10 @@ async function fetchAndClearSafe(
     if (
       err instanceof Error &&
       (err.name === 'PendingPipeNotFoundError' ||
-        err.name === 'RenderNotFoundError' ||
-        err.name === 'SessionNotFoundError')
+        err.name === 'RenderNotFoundError')
     ) {
       // Treat mid-long-poll disappearance as 'expired' to unblock
       // callers without forcing them to handle yet another error.
-      // (`SessionNotFoundError` retained for older cloud adapters that
-      // still throw the legacy name.)
       return { events: [], status: 'expired' };
     }
     throw err;

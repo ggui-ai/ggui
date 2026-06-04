@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
-import type { Render, RenderStatus } from './session';
+import type { Render, RenderStatus } from './render';
 import type {
   handshakeInputSchema,
   handshakeOutputSchema,
@@ -13,7 +13,7 @@ import type {
   declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
 
-export type { RenderStatus } from './session';
+export type { RenderStatus } from './render';
 // Zod schemas in ../schemas/mcp.ts are the runtime validation source of truth.
 // These TypeScript types are the compile-time API surface with precise domain types
 // (DataContract, InterfaceContext, etc.) that Zod can't express.

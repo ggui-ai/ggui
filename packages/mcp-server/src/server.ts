@@ -6832,7 +6832,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // the cohesive agent experience: every user message becomes a push
     // against a thread-scoped session; the push handler owns
     // generation, cache, and provisional preview; the client renders
-    // the resulting stack entry inline using `StackItemRenderer`.
+    // the resulting render inline using `RenderRenderer`.
     //
     // Shape: `{ text, threadId?, sessionId? }` →
     // `{ threadId, userMessage, agentMessage, ui? }`.

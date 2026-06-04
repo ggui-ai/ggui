@@ -8,7 +8,7 @@
  * Handles both JSON and SSE streaming responses using stream-parser.
  */
 import type { InterfaceContext } from '../types/interface-context';
-import type { ConversationTurn } from '../types/session';
+import type { ConversationTurn } from '../types/render';
 import { z } from 'zod';
 import { isStreamingContentType } from '../stream/stream-parser';
 

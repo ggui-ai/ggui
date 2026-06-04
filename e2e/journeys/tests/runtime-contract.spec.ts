@@ -85,9 +85,9 @@ const TEST_TIMEOUT_MS = 60_000;
 /**
  * Navigate the page to `/preview/<blueprintId>`, click "Try live →",
  * and wait for the SPA to land on `/s/<shortCode>` with the blueprint
- * mounted inside the session viewer.
+ * mounted inside the render viewer.
  *
- * The console SessionViewer mounts the rendered session inside a
+ * The console RenderViewer mounts the render inside a
  * plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
  * it no longer carries the `<McpAppIframe>` lifecycle-mirror
  * attribute). The inner stack-item attributes
@@ -131,7 +131,7 @@ async function openLiveSession(
   }
   const shortCode = match[1]!;
 
-  // Wait for the SessionViewer iframe to be visible. Inner-DOM
+  // Wait for the RenderViewer iframe to be visible. Inner-DOM
   // assertions further down the test body (probe buttons, error
   // panels) carry their own timeouts and serve as the de-facto
   // readiness gate now that the lifecycle mirror is gone.
@@ -211,7 +211,7 @@ test.describe.serial(
       gate = await installNetworkGate(page);
 
       await openLiveSession(page, handle.baseUrl, 'todo-list');
-      // Renderer DOM is inside the SessionViewer iframe child;
+      // Renderer DOM is inside the RenderViewer iframe child;
       // outer-iframe visibility gating happened in `openLiveSession`.
       // Interactions below scope through frameLocator.
       const frame = rendererFrame(page);

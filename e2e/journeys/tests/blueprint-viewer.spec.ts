@@ -125,7 +125,7 @@ test.describe.serial(
       });
 
       // 4. Mount card paints with the canonical data-ggui-* anchors
-      //    (same contract SessionViewer's StackSurface uses). Scoping
+      //    (same contract the RenderViewer's render surface uses). Scoping
       //    by `data-ggui-blueprint-id` so a future multi-blueprint
       //    route can land without churning this spec.
       const mountCard = page.locator(
@@ -136,7 +136,7 @@ test.describe.serial(
 
       // 5. The React-component renderer produces a `ggui-rcr-*`
       //    scoped class on the outer host node — same signal the
-      //    session viewer's stack cards emit. Waiting for it is the
+      //    render viewer's render cards emit. Waiting for it is the
       //    visible proof that compile → import → mount actually
       //    completed in the browser.
       const rcrScope = mountCard.locator('[class^="ggui-rcr-"]');

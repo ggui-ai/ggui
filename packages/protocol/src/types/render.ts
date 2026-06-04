@@ -28,8 +28,8 @@ import type { McpAppsRender } from '../integrations/mcp-apps';
 // weight; Phase B deletes the vessel and promotes the entries to a flat
 // `Render` shape.
 //
-// The file name is unchanged (rename is a follow-up); the EXPORTS have
-// been reworked end-to-end:
+// Renamed `session.ts`→`render.ts` in the render-identity cleanup; the
+// EXPORTS were reworked end-to-end during Phase B:
 //
 //   Was                       →  Now
 //   ──────────────────────────────────────────────────────

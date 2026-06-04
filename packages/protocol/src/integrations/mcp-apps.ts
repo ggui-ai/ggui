@@ -3,7 +3,7 @@
  *
  * This module is the **boundary** for MCP Apps outbound delivery. Anything
  * MCP-Apps-specific that ggui exposes to the rest of the codebase lives
- * here — never in `types/live-channel.ts`, `types/mcp.ts`, `types/session.ts`,
+ * here — never in `types/live-channel.ts`, `types/mcp.ts`, `types/render.ts`,
  * or any other core module. Consumers opt in via the subpath import:
  *
  * ```ts

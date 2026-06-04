@@ -1,6 +1,6 @@
 # contract-kit
 
-Protocol-conformance fixture catalog for the SessionViewer iframe + renderer bundle surface (originally the `<McpAppIframe>` host path; the console host was migrated to a plain read-only iframe in C1-fix).
+Protocol-conformance fixture catalog for the RenderViewer iframe + renderer bundle surface (originally the `<McpAppIframe>` host path; the console host was migrated to a plain read-only iframe in C1-fix).
 
 **This directory is the authoring surface of the Phase 3.1 conformance kit.** The JSON cases under `./cases/` and the TypeScript loader + types in this directory get **repackaged verbatim** into `@ggui-ai/protocol-conformance` when Phase 3.1 ships. Any change here is a breaking change to a published npm surface — treat the on-disk format the way you'd treat a `@ggui-ai/protocol` type declaration: additive, extensibly-closed, backwards-compatible.
 
@@ -97,7 +97,7 @@ Pure — the loader reads from disk every call; no caching. Phase 3.1 may add LR
 
 ## Where fixtures run today vs tomorrow
 
-Phase 2 (this slice) drives fixtures end-to-end through `ggui serve` + the `playground/` fixture + the existing `contract-probe` / `todo-list` blueprints in the live session viewer. The C10 spec can prove the happy-path `wired-action` dispatch + `TOOL_THREW` + `SCHEMA_VIOLATION` rows today. Fixtures in this catalog whose setup directives exceed what the Phase-2 harness can execute (e.g. arbitrary `register-tool` + `emit-envelope` without corresponding playground primitives) are authored with a non-null `skipReason` explaining the Phase-3.1 dependency.
+Phase 2 (this slice) drives fixtures end-to-end through `ggui serve` + the `playground/` fixture + the existing `contract-probe` / `todo-list` blueprints in the live render viewer. The C10 spec can prove the happy-path `wired-action` dispatch + `TOOL_THREW` + `SCHEMA_VIOLATION` rows today. Fixtures in this catalog whose setup directives exceed what the Phase-2 harness can execute (e.g. arbitrary `register-tool` + `emit-envelope` without corresponding playground primitives) are authored with a non-null `skipReason` explaining the Phase-3.1 dependency.
 
 **Phase 3.1** ships `@ggui-ai/protocol-conformance` — a packaged runner that implements a `ConformanceHost` interface. The `ConformanceHost` is the seam that interprets every `setup` / `teardown` directive against a real transport. When Phase 3.1 lands, authored-with-skip-reason fixtures un-skip.
 

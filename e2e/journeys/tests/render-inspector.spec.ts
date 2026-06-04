@@ -5,16 +5,16 @@
  * `docs/plans/2026-04-22-session-contract-activity-panel.md` Slice 9b
  * panels: drive a real `ggui_render` against the manifest-capabilities
  * fixture, navigate `/s/<shortCode>`, and assert the contract /
- * activity / test-action panels mount inline under the rendered
- * stack entry — and that each disclosure actually expands.
+ * activity / test-action panels mount inline under the committed
+ * render — and that each disclosure actually expands.
  *
  * ## Why BYOK / Lane 2
  *
- * The inspector lives inside `StackEntryCard`, which only renders for
- * non-empty stacks. Driving a real stack entry requires `ggui_render`
- * to complete a generation — which needs a provider key. The
- * deterministic preview emitter only paints provisional frames into
- * the empty-stack placeholder; it does not commit a render.
+ * The inspector renders inline under a committed render, which only
+ * appears once a real generation has completed — which needs a
+ * provider key. The deterministic preview emitter only paints
+ * provisional frames into the empty placeholder; it does not commit a
+ * render.
  *
  * Mirrors `cache-reuse.spec.ts`'s gating envelope:
  *   1. `ANTHROPIC_API_KEY` unset → skip (clean CI).
@@ -27,13 +27,13 @@
  * ## What this spec proves
  *
  *   1. After a real `ggui_render`, navigating `/s/<shortCode>` mounts
- *      the inspector container under the rendered stack entry.
+ *      the inspector container under the committed render.
  *   2. All three disclosures (`contract`, `activity`, `test action`)
  *      expand on click.
  *   3. The activity panel populates with at least one event from the
  *      render warming up (subscribe ack / render handshake / etc.).
  *   4. The painted UI itself is live (the renderer mounted under the
- *      stack entry; same-origin WS connected).
+ *      render; same-origin WS connected).
  *   5. Network gate — viewer is local-only; no hosted / AWS / Cognito
  *      browser hits.
  *
@@ -69,7 +69,7 @@ interface RenderArtifacts {
 }
 
 function shouldSkip(): { skip: boolean; reason?: string } {
-  return shouldSkipLane2Advisory({ specLabel: 'session inspector spec' });
+  return shouldSkipLane2Advisory({ specLabel: 'render inspector spec' });
 }
 
 test.describe.serial(
@@ -91,7 +91,7 @@ test.describe.serial(
         forwardEnv: ['ANTHROPIC_API_KEY'],
       });
 
-      const { token } = await mintPairToken(handle, 'session-inspector-spec');
+      const { token } = await mintPairToken(handle, 'render-inspector-spec');
 
       // Post-Phase-B render is handshake-first: handshake → render
       // ({handshakeId, props, override?}). Direct story-shaped render is
@@ -168,14 +168,14 @@ test.describe.serial(
     });
 
     // Slice J (2026-04-26) wired `<RenderInspector>` into production
-    // `<RenderViewer>` via a new `<StackInspectorList>` pane that
-    // renders one inspector per stack entry. Post Phase-B stack
-    // collapse the data source is now `GET /ggui/console/render?render=<id>`
-    // (single Render row instead of a stack array; auth-gated by the
-    // same cookie path the resource + meta routes use). Both spec
-    // branches below now run for real — `test.fixme` lifted.
+    // `<RenderViewer>` so an inspector renders under the committed
+    // render. Post Phase-B stack collapse the data source is now
+    // `GET /ggui/console/render?render=<id>` (single Render row instead
+    // of a stack array; auth-gated by the same cookie path the resource
+    // + meta routes use). Both spec branches below now run for real —
+    // `test.fixme` lifted.
     test(
-      'viewer mounts the inspector under the rendered stack entry',
+      'viewer mounts the inspector under the committed render',
       async ({ page }) => {
         if (skipped || !render || !handle) return;
         test.setTimeout(TEST_TIMEOUT_MS);
@@ -186,8 +186,8 @@ test.describe.serial(
         });
 
         // Anchor on the inspector data-attr — only renders once the
-        // StackSurface has a real stack entry to render under (post-
-        // subscribe-ack, post-push-commit).
+        // render surface has a committed render to render under (post-
+        // subscribe-ack, post-render-commit).
         const inspector = page.locator('[data-ggui-inspect]').first();
         await expect(inspector).toBeVisible({ timeout: 30_000 });
 

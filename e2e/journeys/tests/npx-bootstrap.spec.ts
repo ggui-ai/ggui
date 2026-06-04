@@ -131,7 +131,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     // trying to load one.
     // Hero-path identity: "no account, no cloud, no BYOK". The spec
     // deliberately proves `codeReady:false` + the truthful empty-state
-    // in the SessionViewer. We strip BYOK provider keys from the
+    // in the RenderViewer. We strip BYOK provider keys from the
     // forwarded env because Playwright's `.env.local` loader injects
     // them into `process.env` for the live-generation specs — without
     // this, the CLI would detect BYOK, run the real generator, and
@@ -405,7 +405,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     expect(landing.headers.get("x-frame-options")).toBe("DENY");
     expect(landing.headers.get("x-content-type-options")).toBe("nosniff");
 
-    // ── 6. Live session viewer ────────────────────────────────────
+    // ── 6. Live render viewer ─────────────────────────────────────
     //
     // POST-R5 (fix-A 2026-05-26): the `/r/<shortCode>` SPA route was
     // deleted; the cookie-mint-by-shortCode flow that depended on

@@ -15,7 +15,7 @@
  * The corresponding inbound user-action envelope ({@link ActionEnvelope})
  * lives in `types/events.ts` alongside the event-type enum.
  */
-import type { Render } from './session';
+import type { Render } from './render';
 import type {
   JsonObject,
   JsonValue,

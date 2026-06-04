@@ -361,7 +361,7 @@ const FORBIDDEN_TOKENS = [
   'toMcpAppEnvelope',
 ];
 
-// `types/session.ts` is the ONE core module that legitimately imports
+// `types/render.ts` is the ONE core module that legitimately imports
 // `McpAppsRender` — it owns the `Render` discriminated union. That
 // import is the locked design concession (see the dedicated describe
 // block below). Every OTHER core module must stay free of MCP Apps
@@ -389,7 +389,7 @@ describe('MCP Apps identifiers do NOT leak into core protocol modules', () => {
     });
   }
 
-  it('core modules (excluding session.ts) never import from the integrations/mcp-apps subpath', () => {
+  it('core modules (excluding render.ts) never import from the integrations/mcp-apps subpath', () => {
     for (const mod of CORE_MODULES) {
       const src = readSource(mod);
       expect(
@@ -411,17 +411,17 @@ describe('MCP Apps identifiers do NOT leak into core protocol modules', () => {
 describe('Render discriminator is the ONE place mcpApps enters core', () => {
   // The ONE concession core protocol made for MCP Apps is
   // `Render = ComponentRender | SystemRender | McpAppsRender` — a
-  // discriminated union at the session.ts boundary. This test locks
+  // discriminated union at the render.ts boundary. This test locks
   // that concession so accidental deletion or broadening gets caught.
-  it('session.ts imports exactly the narrow McpAppsRender type (and no other MCP Apps surface)', () => {
-    const src = readSource('types/session.ts');
+  it('render.ts imports exactly the narrow McpAppsRender type (and no other MCP Apps surface)', () => {
+    const src = readSource('types/render.ts');
     // Must import the type — that's the locked concession.
     expect(src).toMatch(
       /import\s+type\s+\{\s*McpAppsRender\s*\}\s+from\s+['"]\.\.?\/integrations\/mcp-apps['"]/,
     );
     // But must NOT pull in any other MCP Apps symbol — those belong
     // at the integrations subpath, not in core session typing.
-    const BANNED_IN_SESSION = [
+    const BANNED_IN_RENDER = [
       'McpAppAiGguiRenderMeta',
       'MCP_APPS_UI_CAPABILITY',
       'GGUI_RENDER_RESOURCE_URI',
@@ -433,16 +433,16 @@ describe('Render discriminator is the ONE place mcpApps enters core', () => {
       'McpAppsPermissions',
       'McpAppsContainerDimensions',
     ];
-    for (const tok of BANNED_IN_SESSION) {
+    for (const tok of BANNED_IN_RENDER) {
       expect(
         src.includes(tok),
-        `session.ts must not reference "${tok}" — only McpAppsRender is the locked crossover`,
+        `render.ts must not reference "${tok}" — only McpAppsRender is the locked crossover`,
       ).toBe(false);
     }
   });
 
-  it('session.ts defines the Render two-variant union', () => {
-    const src = readSource('types/session.ts');
+  it('render.ts defines the Render two-variant union', () => {
+    const src = readSource('types/render.ts');
     expect(src).toMatch(/Render/);
     // The union must reference McpAppsRender as a member.
     expect(src).toMatch(/McpAppsRender/);
