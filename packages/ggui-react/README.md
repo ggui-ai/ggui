@@ -18,27 +18,30 @@ use the `@ggui-ai/react/query` entry point.
 
 ## Quick start
 
-A ggui render is an MCP Apps-conformant UI. Mount one in your React
-tree with `<GguiProvider>` + `<GguiRender>`:
+An agent emits UI as MCP Apps-conformant renders. In a React app you
+drive the conversation with the `useMcpAppsChat` hook and host each
+render's sandboxed iframe with `<AppRenderer>`:
 
 ```tsx
-import { GguiProvider, GguiRender, RenderRenderer } from "@ggui-ai/react";
+import { AppRenderer } from "@ggui-ai/react";
+import { useMcpAppsChat } from "@ggui-ai/react/chat-helpers";
 
-export function App({ renderId }: { renderId: string }) {
-  return (
-    <GguiProvider appId="my-app">
-      <GguiRender renderId={renderId}>
-        {(api) => api.render && <RenderRenderer render={api.render} />}
-      </GguiRender>
-    </GguiProvider>
-  );
+function Chat({ agentUrl }: { agentUrl: string }) {
+  const { entries, renders, send, handleAppMessage } = useMcpAppsChat({
+    chatEndpoint: `${agentUrl}/agent`,
+    snapshotEndpoint: `${agentUrl}/agent`,
+  });
+
+  // - render `entries` as chat bubbles; call `send(prompt)` to talk to the agent
+  // - mount the latest `renders` entry with <AppRenderer> — it needs the
+  //   sandbox-proxy origin + onReadResource / onCallTool relay + onMessage={handleAppMessage}
 }
 ```
 
-For a full agent chat loop (prompt → render → action → re-render), use
-the `useMcpAppsChat` hook with `<AppRenderer>` — see the
-[`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample for a
-complete example.
+`<AppRenderer>`'s sandbox + resource-read + tool-call relay wiring is
+non-trivial (it implements the MCP Apps host contract). The complete,
+runnable reference — including auth — is the
+[`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample. **Start there.**
 
 The package also exports hooks (`useWebSocket`, `useInvoke`,
 `useGenerate`), a client-side data-binding tools
