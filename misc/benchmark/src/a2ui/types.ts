@@ -7,7 +7,7 @@
  * intercepted frame we run `parseServerMessage` so parse
  * pass/fail accounting is real, not synthetic.
  *
- * Scope narrower than the push SLO (`../slo/`):
+ * Scope narrower than the render SLO (`../slo/`):
  *   - no final-compile checkpoint (that's SLO's job)
  *   - no DOM-visible checkpoint (reserved for v0.5 renderer harness)
  *   - no LLM — the deterministic emitter is the only producer today
@@ -51,7 +51,7 @@ export interface A2uiCheckpoints {
    * Reserved for v0.5. Always null in v0. Observable only when the
    * hosted post-compile handler calls `finalizeProvisionalPreview`
    * AND we can also observe the matching "final UI code ready"
-   * moment from the push path — neither exists on OSS today. The
+   * moment from the render path — neither exists on OSS today. The
    * schema slot is pre-allocated so v0.5 doesn't require a report
    * migration.
    */

@@ -8,7 +8,7 @@
  *          on every payload → counts pass/fail + captures samples
  *        - `onOutcome` sink that records firstFrame + terminal timing
  *        - injectable clock + `{enabled: true}` gate
- *   2. Fire `kickoffProvisionalPreview` (same entry point the push
+ *   2. Fire `kickoffProvisionalPreview` (same entry point the render
  *      handler uses in production) and await `handle.done`.
  *   3. Materialize the `A2uiRunResult`. Honest null population on
  *      every absence path.

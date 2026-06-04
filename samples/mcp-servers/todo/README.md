@@ -4,11 +4,11 @@ Reference sample: a minimal standalone MCP server exposing a todo-list CRUD surf
 
 Used by `e2e/scenarios/` to give the conformance suite real backing state to mutate + assert against. Pair with `@ggui-samples/ggui-default` (the ggui MCP server) and `@ggui-samples/agent-claude-sdk` (the sample agent) to exercise the full data round trip:
 
-- Agent push: a UI listing todos + an add-todo form
+- Agent render: a UI listing todos + an add-todo form
 - User click: `submit_action` pipe-appends a `{intent:'addTodo', data:{text:...}}` event
 - Agent next turn: drains the pipe via `ggui_consume`, calls `todo_add` here
 - Server state mutates
-- Agent re-pushes: UI shows the new todo
+- Agent re-renders: UI shows the new todo
 
 ## Run
 

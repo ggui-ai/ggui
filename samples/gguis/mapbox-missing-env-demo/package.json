@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/ggui-mapbox-missing-env-demo",
   "version": "0.0.1",
-  "description": "Negative-path fixture for the public env channel. Mirrors @ggui-samples/ggui-mapbox-demo (registers the Mapbox wrapper) but DELIBERATELY omits `ggui.json#app.publicEnv` — operator forgot to stamp the required key. Exercises the push gate's `gadget_public_env_missing` rejection path.",
+  "description": "Negative-path fixture for the public env channel. Mirrors @ggui-samples/ggui-mapbox-demo (registers the Mapbox wrapper) but DELIBERATELY omits `ggui.json#app.publicEnv` — operator forgot to stamp the required key. Exercises the render gate's `gadget_public_env_missing` rejection path.",
   "private": true,
   "type": "module",
   "scripts": {

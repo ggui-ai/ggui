@@ -177,7 +177,7 @@ export async function runSloCase(
     previewExpected: kase.emitterPlan !== null && kase.emitterPlan.frames > 0,
     previewObserved: firstPreviewAt !== null,
     // The open-source build always defers compile on story-path
-    // pushes. Flag flips true when real compile instrumentation lands.
+    // renders. Flag flips true when real compile instrumentation lands.
     finalCompiledReliable: false,
   };
 

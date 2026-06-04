@@ -17,9 +17,9 @@
  * produce no preview or only a minimal one."
  *
  * When a truly-no-preview path exists (e.g., a case that routes
- * through the gate's `mcp-apps-push` or `no-story` skip), add it
+ * through the gate's `mcp-apps-render` or `no-story` skip), add it
  * to the corpus with `emitterEnabled: false` and the runner will
- * wire the push WITHOUT provisional-preview deps.
+ * wire the render WITHOUT provisional-preview deps.
  */
 
 import type { A2uiIntentShape } from './types.js';

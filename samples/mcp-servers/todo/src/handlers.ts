@@ -9,7 +9,7 @@
  *
  * Every handler is fully synchronous over the in-memory store; no
  * persistence, no fan-out. Designed for e2e scenarios that assert
- * "the click really changed real state" — push a UI, click Add, then
+ * "the click really changed real state" — render a UI, click Add, then
  * call todo_list and see the new row.
  */
 import { z } from 'zod';

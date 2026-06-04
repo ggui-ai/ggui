@@ -5,7 +5,7 @@ A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-mapb
 - `ggui.json#app.gadgets` declares the Mapbox wrapper, including `requires: ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]`.
 - `ggui.json#app.publicEnv` carries the operator's value for that key.
 - The CLI seeds the app-metadata store with both.
-- Push-time validation refuses to push a contract using `useMapbox` unless the key is present in `App.publicEnv`.
+- Render-time validation refuses to render a contract using `useMapbox` unless the key is present in `App.publicEnv`.
 - The server projects the union of every declared wrapper's `requires` and inlines that subset into the render-meta slice (`_meta["ai.ggui/render"].publicEnv`).
 - The iframe runtime installs the subset on `globalThis.__ggui__.publicEnv`.
 - Inside the wrapper's hook body, `getPublicEnv('GGUI_PUBLIC_APP_MAPBOX_TOKEN')` reads the value at first render — never at module top (the runtime hasn't booted yet).
@@ -14,7 +14,7 @@ A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-mapb
 
 The committed `ggui.json` carries the placeholder `"<set-me-before-running>"`. Before starting the server, replace it with a real Mapbox access token (or pass it through whatever your local config-injection workflow is).
 
-Never commit a real token to this file. The placeholder string is intentionally chosen so the push gate's "missing key" error doesn't fire on misconfig (the key is present, just unusable) — and the Mapbox SDK will surface "Invalid token" on first request, which is the right error to surface.
+Never commit a real token to this file. The placeholder string is intentionally chosen so the render gate's "missing key" error doesn't fire on misconfig (the key is present, just unusable) — and the Mapbox SDK will surface "Invalid token" on first request, which is the right error to surface.
 
 ## Running standalone
 

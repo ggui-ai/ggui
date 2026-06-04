@@ -28,7 +28,7 @@
                 "value": { "containerRef": "<DOM ref callback>" }
               }
             },
-            "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` (opposite of Leaflet's `[lat, lng]`). Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can push."
+            "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` (opposite of Leaflet's `[lat, lng]`). Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can render."
           }
         ]
       }

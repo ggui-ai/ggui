@@ -8,7 +8,7 @@ parse pass/fail per intent shape.
 
 **This is not the full preview bench.** It's the skeleton that
 surfaces preview health distinct from ui-gen quality. Pair it with
-the push SLO (`../slo/`) for the end-to-end picture.
+the render SLO (`../slo/`) for the end-to-end picture.
 
 ---
 
@@ -54,7 +54,7 @@ require a re-run with verbose logging.
 
 ## Why preview timestamps are nullable
 
-Same discipline as the push SLO: **absence is signal**. Coalescing
+Same discipline as the render SLO: **absence is signal**. Coalescing
 null preview timestamps to any fallback (e.g., to `startedAt` or to
 `finalizeObserved` moment) would hide the regression shape we exist
 to catch:
@@ -102,7 +102,7 @@ then, min/median/max + `nullCount` is the honest read.
 - **Haiku producer** — not wired yet. Deterministic is today's only
   producer.
 - **Handoff gap** — see above.
-- **End-to-end push timing** — that's the push SLO's job (`../slo/`).
+- **End-to-end render timing** — that's the render SLO's job (`../slo/`).
 
 ---
 

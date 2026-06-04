@@ -6,7 +6,7 @@
  * env channel:
  *
  *   1. The wrapper declares `requires: ['GGUI_PUBLIC_APP_MAPBOX_TOKEN']`
- *      on its descriptor. The push gate refuses to push any contract
+ *      on its descriptor. The render gate refuses to render any contract
  *      using `useMapbox` unless the operator stamped that key on
  *      `App.publicEnv` first.
  *
@@ -111,8 +111,8 @@ const useMapboxImpl: GadgetHook<MapboxValue, MapboxOptions> = () => {
  * `App.gadgets` (or via `ggui.json#app.gadgets`).
  *
  * The `requires: ['GGUI_PUBLIC_APP_MAPBOX_TOKEN']` line is what wires
- * the push gate: the operator MUST set this key on `App.publicEnv`
- * before any contract using `useMapbox` can push.
+ * the render gate: the operator MUST set this key on `App.publicEnv`
+ * before any contract using `useMapbox` can render.
  */
 export const useMapbox = createGguiGadget<MapboxValue, MapboxOptions>({
   hook: 'useMapbox',
@@ -130,7 +130,7 @@ export const useMapbox = createGguiGadget<MapboxValue, MapboxOptions>({
       'function MapView() { const map = useMapbox({ center: [-122.4194, 37.7749], zoom: 12 }); return <div ref={map.value?.containerRef} style={{ height: 400 }} />; }',
   },
   gotchas:
-    "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` in Mapbox (opposite of Leaflet's `[lat, lng]`). The container ref MUST be stable across renders — don't recreate the callback or Mapbox will re-initialize on every render. Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can push (the push gate enforces this).",
+    "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` in Mapbox (opposite of Leaflet's `[lat, lng]`). The container ref MUST be stable across renders — don't recreate the callback or Mapbox will re-initialize on every render. Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can render (the render gate enforces this).",
   version: '0.0.1',
   requires: ['GGUI_PUBLIC_APP_MAPBOX_TOKEN'],
   package: '@ggui-samples/gadget-mapbox',

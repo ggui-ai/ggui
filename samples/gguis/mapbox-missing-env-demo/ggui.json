@@ -25,7 +25,7 @@
                 "value": { "containerRef": "<DOM ref callback>" }
               }
             },
-            "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` (opposite of Leaflet's `[lat, lng]`). This negative-path fixture deliberately omits `App.publicEnv`, so any push using this hook is rejected with `gadget_public_env_missing`."
+            "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` (opposite of Leaflet's `[lat, lng]`). This negative-path fixture deliberately omits `App.publicEnv`, so any render using this hook is rejected with `gadget_public_env_missing`."
           }
         ]
       }

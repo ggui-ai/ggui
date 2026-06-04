@@ -598,7 +598,7 @@ form button:disabled {
   height: 100%;
 }
 
-/* ── Stack item card ────────────────────────────────────── */
+/* ── Render card ────────────────────────────────────────── */
 
 .render {
   background: var(--bg-card);

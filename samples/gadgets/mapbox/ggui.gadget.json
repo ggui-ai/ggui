@@ -16,7 +16,7 @@
         "returns": { "status": "completed", "value": { "containerRef": "<DOM ref callback>" } },
         "componentSnippet": "function MapView() { const map = useMapbox({ center: [-122.4194, 37.7749], zoom: 12 }); return <div ref={map.value?.containerRef} style={{ height: 400 }} />; }"
       },
-      "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` in Mapbox (opposite of Leaflet's `[lat, lng]`). The container ref MUST be stable across renders — don't recreate the callback or Mapbox will re-initialize on every render. Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can push (the push gate enforces this)."
+      "gotchas": "Mapbox requires the container <div> to have a non-zero height before the map mounts — apply `style={{ height: 400 }}` (or similar) directly. `center` is `[longitude, latitude]` in Mapbox (opposite of Leaflet's `[lat, lng]`). The container ref MUST be stable across renders — don't recreate the callback or Mapbox will re-initialize on every render. Operators must stamp `GGUI_PUBLIC_APP_MAPBOX_TOKEN` on App.publicEnv before any contract using this hook can render (the render gate enforces this)."
     }
   ],
   "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"],

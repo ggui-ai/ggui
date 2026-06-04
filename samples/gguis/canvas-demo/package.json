@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/ggui-canvas-demo",
   "version": "0.0.1",
-  "description": "Reference sample: ggui serve with `defaultDisplayMode: 'fullscreen'`. Every push carries `_meta.ui.displayMode: 'fullscreen'` so the host renders the iframe as a main view rather than stacking it in the chat log; the wire mechanism is identical to inline mode.",
+  "description": "Reference sample: ggui serve with `defaultDisplayMode: 'fullscreen'`. Every render carries `_meta.ui.displayMode: 'fullscreen'` so the host renders the iframe as a main view rather than stacking it in the chat log; the wire mechanism is identical to inline mode.",
   "private": true,
   "type": "module",
   "scripts": {

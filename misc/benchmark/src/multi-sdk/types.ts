@@ -187,7 +187,7 @@ export interface BenchmarkCommit {
 
   /**
    * Per-package `.d.ts` content for the gadgets in {@link appGadgets},
-   * keyed by npm package name. Mirrors what the production push
+   * keyed by npm package name. Mirrors what the production render
    * handler parallel-fetches from each gadget's `typesUrl` — the
    * runner threads it into `dispatchGeneration` so the coding agent's
    * typecheck overlays the real wrapper types (a mistyped gadget call

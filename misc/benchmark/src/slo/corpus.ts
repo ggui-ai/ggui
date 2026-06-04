@@ -6,7 +6,7 @@
  *   - the {@link SloBranchPath} the case drives
  *   - an `emitterPlan` — timing shape the harness uses to simulate
  *     the branch (see ./README.md "emitter-simulated" caveat)
- *   - the push input shape (intent wording)
+ *   - the render input shape (intent wording)
  *
  * **Why simulated plans, not real blueprint/generator wiring?**
  * The open-source `ggui_render` handler doesn't branch on
@@ -61,8 +61,8 @@ export interface SloCase {
   readonly intent: string;
   /**
    * When `null`, the harness wires no emitter and the branch
-   * behaves as an OSS-only push with provisional preview absent.
-   * The push still succeeds; preview stamps are null.
+   * behaves as an OSS-only render with provisional preview absent.
+   * The render still succeeds; preview stamps are null.
    */
   readonly emitterPlan: SloEmitterPlan | null;
   /**

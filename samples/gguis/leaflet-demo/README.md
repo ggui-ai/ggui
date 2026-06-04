@@ -5,7 +5,7 @@ A ggui server pre-configured with a 3rd-party gadget (`@ggui-samples/gadget-leaf
 - `ggui.json#app.gadgets` declares the Leaflet gadget package.
 - The CLI seeds the app-metadata store with that catalog.
 - Agents may declare the package-keyed ref `clientCapabilities.gadgets['@ggui-samples/gadget-leaflet'] = { LeafletMap: {} }` on contracts — `LeafletMap` is a component export.
-- Push-time validation accepts those references.
+- Render-time validation accepts those references.
 - The boilerplate generator emits `import { LeafletMap } from '@ggui-samples/gadget-leaflet';` and the component renders it as JSX.
 - The renderer route attaches a `Content-Security-Policy` header allowlisting the gadget bundle origins (script + style) and `tile.openstreetmap.org` (connect).
 
