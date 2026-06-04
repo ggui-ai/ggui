@@ -150,7 +150,6 @@ export type { GguiRenderProps, RenderApi, RenderInfo } from './components/GguiRe
 export {
   DynamicComponent,
   RenderRenderer,
-  clearModuleCache,
 } from './components/DynamicComponent';
 export type {
   DynamicComponentProps,

@@ -191,10 +191,3 @@ function useWireContextOrNull(): WireConfig | null {
     return null;
   }
 }
-
-/**
- * Clear the module cache (no-op — kept for API compatibility)
- */
-export function clearModuleCache(): void {
-  // No-op: kept for API compatibility.
-}

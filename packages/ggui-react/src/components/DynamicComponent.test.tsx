@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import { DynamicComponent, RenderRenderer, clearModuleCache } from './DynamicComponent';
+import { DynamicComponent, RenderRenderer } from './DynamicComponent';
 
 // Mock URL.createObjectURL/revokeObjectURL
 const mockUrls = new Map<string, string>();
@@ -9,7 +9,6 @@ let urlCounter = 0;
 beforeEach(() => {
   urlCounter = 0;
   mockUrls.clear();
-  clearModuleCache();
 
   vi.stubGlobal('URL', {
     ...URL,
@@ -152,13 +151,6 @@ describe('DynamicComponent', () => {
     });
   });
 
-  describe('module caching', () => {
-    it('clearModuleCache resets the cache', () => {
-      // Just verify the function doesn't throw
-      clearModuleCache();
-      expect(true).toBe(true);
-    });
-  });
 });
 
 describe('RenderRenderer', () => {
