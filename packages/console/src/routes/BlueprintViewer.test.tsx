@@ -243,7 +243,7 @@ describe('BlueprintViewer — render states', () => {
           return new Response(
             JSON.stringify({
               error: 'try_not_wired',
-              message: 'POST /try requires sessionChannel + shortCodeIndex.',
+              message: 'POST /try requires renderChannel + shortCodeIndex.',
             }),
             { status: 503 },
           );
@@ -278,7 +278,7 @@ describe('BlueprintViewer — render states', () => {
     await waitFor(() => {
       const marker = container.querySelector('[data-ggui-try-live="error"]');
       if (!marker) throw new Error('error marker not rendered');
-      expect(marker.getAttribute('title')).toContain('sessionChannel');
+      expect(marker.getAttribute('title')).toContain('renderChannel');
     });
     // Navigation did NOT fire — the blueprint mount stays put.
     expect(pushStateSpy).not.toHaveBeenCalled();

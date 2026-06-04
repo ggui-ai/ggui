@@ -77,7 +77,7 @@ export { validateMcpServices, validateServicePath } from './mcp-mounts.js';
 // for `_ggui:preview`; `mergeReservedValidators` layers caller-provided
 // extras on top. `createGguiServer` composes these automatically —
 // consumers that embed the session-channel server directly (via
-// `createSessionChannelServer`) wire them up manually.
+// `createRenderChannelServer`) wire them up manually.
 export {
   composePreviewReservedValidator,
   mergeReservedValidators,

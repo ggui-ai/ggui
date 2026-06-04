@@ -332,7 +332,7 @@ export function checkRenderSchemaCompat(
  * source of truth for the throw gate, shared by the internal
  * `'reject'`-mode gate above AND any external host that runs the
  * check in `'warn'` mode and owns its own enforcement (e.g. the
- * cloud pod's `ggui_push`). Keeping ONE predicate guarantees the
+ * cloud pod's `ggui_render`). Keeping ONE predicate guarantees the
  * OSS and pod gates can never silently diverge.
  */
 export function hasErrorFinding(report: SchemaCompatReport): boolean {
