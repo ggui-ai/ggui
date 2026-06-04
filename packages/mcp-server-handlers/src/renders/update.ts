@@ -105,12 +105,12 @@ export { RenderNotFoundError, ContractViolationError };
 /**
  * Pre-mutation gate. The handler invokes `preCheck` before any state
  * change. Throwing aborts the call with the error verbatim — the gate
- * implementor owns the typed error shape (cloud's `PushForbiddenError`
+ * implementor owns the typed error shape (cloud's `RenderForbiddenError`
  * carrying a structured envelope; OSS deployments leave the gate
  * unbound and skip the check entirely).
  *
  * Cloud's traffic-class gate (kind=user vs kind=app vs playground vs
- * PUSH_ALLOW_NON_PLAYGROUND env override) plugs in here instead of
+ * RENDER_ALLOW_NON_PLAYGROUND env override) plugs in here instead of
  * cloud's update.ts owning its own gate. The same interface is used
  * for kind-aware billing pre-checks (BYOK + credit pool) on render.
  */
