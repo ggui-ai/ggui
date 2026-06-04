@@ -32,7 +32,7 @@
  * console SessionViewer was migrated off `<McpAppIframe>` to a plain
  * read-only iframe (no MCP client relay, no IframeErrorPane, no
  * lifecycle-mirror attribute) — see
- * `oss/packages/console/src/routes/SessionViewer.tsx`. The
+ * `oss/packages/console/src/routes/RenderViewer.tsx`. The
  * fixture-catalog dispatch paths that depended on `<McpAppIframe>`
  * surfaces (bootstrap-failure → IframeErrorPane) are now PENDING
  * a new driver and skip honestly. The wired-action + contract-error
@@ -511,7 +511,7 @@ async function runFixtureViaKit(
 // The Playwright `page.route()`-based bootstrap-failure driver was deleted
 // when the console SessionViewer was migrated off `<McpAppIframe>` to a
 // plain read-only `<iframe srcDoc>` (see
-// `oss/packages/console/src/routes/SessionViewer.tsx`). The driver
+// `oss/packages/console/src/routes/RenderViewer.tsx`). The driver
 // targeted the `<IframeErrorPane>` outer-DOM marker
 // (`data-ggui-console-iframe-error`) which the new SessionViewer no
 // longer surfaces. The two fixtures it dispatched —
@@ -649,7 +649,7 @@ test.describe.serial("Slice 11.5 C10 — MCP Apps iframe conformance fixtures", 
     // See runtime-contract.spec.ts for the full rationale.
     process.env["GGUI_SCHEMA_COMPAT_MODE"] = "warn";
     // Wired-tool timeout override. Default in
-    // `session-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS` is 30 s —
+    // `render-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS` is 30 s —
     // dropping to 1500 ms keeps the TOOL_TIMEOUT fixture's per-test
     // budget short. The companion `hanging_tool` handler in
     // `tasks-mount.mjs` sleeps 30 s, so it is comfortably above any

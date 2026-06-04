@@ -1,7 +1,7 @@
 /**
  * Tasks MCP — OSS mount integration proof (Slice 6).
  *
- * Boots a real `createGguiServer({ mcpApps, sessionChannel, ...,
+ * Boots a real `createGguiServer({ mcpApps, renderChannel, ...,
  * mcpMounts: [{ name: 'tasks', handlers: <Tasks bundle> }] })` on an
  * ephemeral port, then drives its `/mcp` endpoint via the
  * `@modelcontextprotocol/sdk` Client over HTTP — the same transport
@@ -62,7 +62,7 @@ async function boot(): Promise<BootedFixture> {
   const server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: {
       wsUrl: 'ws://127.0.0.1/ws',
     },

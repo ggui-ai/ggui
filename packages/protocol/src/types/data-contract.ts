@@ -776,7 +776,7 @@ export interface GadgetUse {
  *   - **Resolved sidecar side** — at push time
  *     `filterDescriptorsToContract` snapshots the subset of
  *     `App.gadgets` the contract references onto
- *     `SessionStackEntry.gadgetDescriptors`. Wire-side authors NEVER
+ *     `ComponentRender.gadgetDescriptors`. Wire-side authors NEVER
  *     see this shape; they author the package-keyed
  *     {@link ClientCapabilitiesSpec} map of {@link GadgetPackageUse}.
  *
@@ -960,7 +960,7 @@ export interface GadgetDescriptor {
  * Non-generic — the wire surface carries package-keyed
  * {@link GadgetPackageUse} values. The post-resolution view (full
  * descriptors for hygiene + transport metadata derivation) lives on
- * `SessionStackEntry.gadgetDescriptors` as a sidecar, NOT as an
+ * `ComponentRender.gadgetDescriptors` as a sidecar, NOT as an
  * enrichment overlay on this type.
  */
 export interface ClientCapabilitiesSpec {
@@ -1263,7 +1263,7 @@ export interface DataContract {
    * Wire-side only. Package-keyed — values are {@link GadgetPackageUse}
    * (per-package export-use maps keyed by export name). The
    * post-resolution descriptor view lives on
-   * `SessionStackEntry.gadgetDescriptors` as a sidecar.
+   * `ComponentRender.gadgetDescriptors` as a sidecar.
    */
   clientCapabilities?: ClientCapabilitiesSpec;
 }

@@ -2077,24 +2077,24 @@ export interface CreateGguiServerOptions {
    */
   readonly streamWebSocketLocalTools?: import("./render-channel.js").RenderChannelLocalToolsOptions;
   /**
-   * Hook fired when the local subscriber count for `sessionId`
+   * Hook fired when the local subscriber count for `renderId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
-   * `createRenderChannelServer`. Used by cloud adapters for per-session
+   * `createRenderChannelServer`. Used by cloud adapters for per-render
    * cross-pod pubsub channel scoping; OSS callers leave this undefined.
    *
    * Only consulted when `renderChannel` is enabled. See
    * `RenderChannelOptions.onFirstSubscriber` for the full contract.
    */
-  readonly onFirstSubscriber?: (sessionId: string) => void;
+  readonly onFirstSubscriber?: (renderId: string) => void;
   /**
-   * Hook fired when the local subscriber count for `sessionId`
+   * Hook fired when the local subscriber count for `renderId`
    * transitions 1 → 0 on the live channel. Forwarded verbatim to
    * `createRenderChannelServer`.
    *
    * Only consulted when `renderChannel` is enabled. See
    * `RenderChannelOptions.onLastSubscriberGone` for the full contract.
    */
-  readonly onLastSubscriberGone?: (sessionId: string) => void;
+  readonly onLastSubscriberGone?: (renderId: string) => void;
   /**
    * Override the sanitizer applied to the stringified original error
    * written into `ContractErrorPayload.error.causedBy`. Defaults to

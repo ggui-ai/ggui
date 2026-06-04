@@ -294,7 +294,7 @@ export function GguiRender({
         if (message.payload.code === 'UPGRADE_REQUIRED') {
           // Lift `details.serverVersion` into the typed error when
           // the server populated it (first-party servers do — see
-          // SessionChannelOptions). Defensive: treat the details
+          // RenderChannelOptions). Defensive: treat the details
           // bag as unknown and only lift the string field.
           const details = message.payload.details;
           const serverVersion =

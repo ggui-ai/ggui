@@ -86,7 +86,7 @@ export default function ContractProbe(): JSX.Element {
 
   // useStream folds deliveries into `{latest, all}`. Contract-error
   // envelopes emit with `mode: 'append'` (see
-  // `session-channel.ts::emitContractError`), so `all` accumulates in
+  // `render-channel.ts::emitContractError`), so `all` accumulates in
   // arrival order — what the spec needs to count + identify codes.
   //
   // Reserved-channel replay: `SessionStreamBuffer.record()` forces

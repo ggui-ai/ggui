@@ -194,7 +194,7 @@ export function createGguiMcpMount() {
         //
         // The router does NOT cancel the underlying promise (handlers
         // are trusted to clean up their own resources per
-        // `session-channel.ts::invokeWithTimeout`), so leaving the
+        // `render-channel.ts::invokeWithTimeout`), so leaving the
         // setTimeout reference unattached is correct for a fixture —
         // process tear-down clears it.
         name: 'hanging_tool',

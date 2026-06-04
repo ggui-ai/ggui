@@ -133,7 +133,7 @@ async function main(): Promise<void> {
 
   const server = createGguiServer({
     auth: new InMemoryAuthAdapter({ devAllowAll: false }),
-    sessionChannel: true,
+    renderChannel: true,
     pairing: true,
     shortCodeIndex: new InMemoryShortCodeIndex(),
     // Console mount owns the `/s/<shortCode>` SPA route the spec

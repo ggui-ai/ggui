@@ -18,7 +18,7 @@
  *
  * WHAT THIS SPEC PROVES END-TO-END:
  *   1. `ggui serve` starts the OSS server with the recommended dev
- *      wiring (sessionChannel + pairing + console.sessionCookie +
+ *      wiring (renderChannel + pairing + console.sessionCookie +
  *      shortCodeIndex + mcpApps). See
  *      `packages/ggui-cli/src/mcp-backend.ts` for the composition.
  *   2. `GET /ggui/health` reports 4 tools (3 blueprint-read + ggui_render)

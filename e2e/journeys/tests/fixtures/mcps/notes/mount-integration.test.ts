@@ -2,7 +2,7 @@
  * Notes MCP — OSS mount integration proof (Slice 6.2).
  *
  * Shape-parallel to `../tasks/mount-integration.test.ts`: boots a real
- * `createGguiServer({ mcpApps, sessionChannel, ..., mcpMounts: [{
+ * `createGguiServer({ mcpApps, renderChannel, ..., mcpMounts: [{
  * name: 'notes', handlers: <Notes bundle> }] })` on an ephemeral port,
  * then drives its `/mcp` endpoint via the `@modelcontextprotocol/sdk`
  * Client over HTTP — the same transport a real agent uses.
@@ -61,7 +61,7 @@ async function boot(): Promise<BootedFixture> {
   const server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: {
       wsUrl: 'ws://127.0.0.1/ws',
     },

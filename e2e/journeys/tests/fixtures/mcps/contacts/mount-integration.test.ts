@@ -3,7 +3,7 @@
  *
  * Shape-parallel to `../notes/mount-integration.test.ts` +
  * `../tasks/mount-integration.test.ts`: boots a real
- * `createGguiServer({ mcpApps, sessionChannel, ..., mcpMounts: [{
+ * `createGguiServer({ mcpApps, renderChannel, ..., mcpMounts: [{
  * name: 'contacts', handlers: <Contacts bundle> }] })` on an
  * ephemeral port, then drives its `/mcp` endpoint via the
  * `@modelcontextprotocol/sdk` Client over HTTP — the same transport a
@@ -64,7 +64,7 @@ async function boot(): Promise<BootedFixture> {
   const server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    sessionChannel: true,
+    renderChannel: true,
     mcpApps: {
       wsUrl: 'ws://127.0.0.1/ws',
     },
