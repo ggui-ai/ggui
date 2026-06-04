@@ -86,7 +86,7 @@ import {
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Push-wait budget — the RPC blocks on real generation. */
+/** Render-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 const MUTATION_TITLE = 'Ship Slice 6 Tasks-backed product proof';
@@ -210,7 +210,7 @@ test.describe.serial(
       //  the browser.
       //
       //  `story.context.tasks` carries the current list verbatim.
-      //  `push.ts` forwards it (`isJsonObject(story.context)` →
+      //  `render.ts` forwards it (`isJsonObject(story.context)` →
       //  generator's `request.context`), and `buildUserPrompt` JSON-
       //  injects it into the LLM prompt. Anchoring intent on a seeded
       //  title nudges the generator toward a deterministic reference

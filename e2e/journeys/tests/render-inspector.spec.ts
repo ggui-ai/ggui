@@ -55,7 +55,7 @@ import {
 
 const TEST_TIMEOUT_MS = 180_000;
 const GENERATION_BUDGET_MS = 120_000;
-const PUSH_INTENT = 'A small greeting card with a title "Hello"';
+const RENDER_INTENT = 'A small greeting card with a title "Hello"';
 
 /**
  * Captured render artifacts for this spec — the post-Phase-B
@@ -100,7 +100,7 @@ test.describe.serial(
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_handshake',
         arguments: {
-          intent: PUSH_INTENT,
+          intent: RENDER_INTENT,
           blueprintDraft: { contract: {} },
         },
       });

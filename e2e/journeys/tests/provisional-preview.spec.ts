@@ -51,7 +51,7 @@ import {
 import { existsSync } from 'node:fs';
 
 const TEST_TIMEOUT_MS = 60_000;
-const PUSH_INTENT = 'Show me a sign-up form for my app';
+const RENDER_INTENT = 'Show me a sign-up form for my app';
 
 test.describe.serial(
   'Slice 1 — deterministic A2UI provisional preview on /s/<shortCode>',
@@ -117,7 +117,7 @@ test.describe.serial(
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_handshake',
         arguments: {
-          intent: PUSH_INTENT,
+          intent: RENDER_INTENT,
           blueprintDraft: { contract: {} },
         },
       });
@@ -184,7 +184,7 @@ test.describe.serial(
       //    sentence boundary, so the input "Show me a sign-up form
       //    for my app" emits the same string back as a level-2
       //    heading inside the surface.
-      await expect(previewSurface).toContainText(PUSH_INTENT);
+      await expect(previewSurface).toContainText(RENDER_INTENT);
 
       // 7. Form-shell fragments — proves the keyword heuristic
       //    fired (and proves the renderer mapped the A2UI Catalog

@@ -140,7 +140,7 @@ test.describe.serial(
       //    blueprint-viewer spec asserts, scoped by data-ggui-blueprint-id
       //    so this spec doesn't regress if other fixtures land.
       const mountCard = page.locator(
-        `[data-ggui-stack-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
+        `[data-ggui-render-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
       );
       await expect(mountCard).toBeVisible({ timeout: 15_000 });
 
@@ -204,7 +204,7 @@ test.describe.serial(
       });
       const cached = page.locator('[data-ggui-cached-list]');
       await expect(cached).toBeVisible({ timeout: 10_000 });
-      // Fresh server, no push has fired — empty-state copy explains
+      // Fresh server, no render has fired — empty-state copy explains
       // how to populate the cache.
       await expect(cached).toContainText(/no cached generations yet/i);
     });

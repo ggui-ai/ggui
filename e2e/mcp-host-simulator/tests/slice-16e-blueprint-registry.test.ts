@@ -139,7 +139,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
   it('paraphrase resilience: same contract under different intent prose hits Tier 1', async () => {
     await boot();
 
-    // Case 1 — cold push with a contract → Tier 3 cold, generator runs.
+    // Case 1 — cold render with a contract → Tier 3 cold, generator runs.
     const first = await renderOnce({
       intent: 'live notepad for capturing thoughts',
       contract: NOTEPAD_CONTRACT,
@@ -148,7 +148,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     expect(first.cache?.hit).toBe(false);
     expect(first.cache?.kind).toBe('cold');
     expect(first.cache?.llmCallsAvoided).toBe(0);
-    expect(calls.count, 'cold push must invoke generator').toBe(1);
+    expect(calls.count, 'cold render must invoke generator').toBe(1);
 
     // Case 2 — same intent + same contract → Tier 1 hit, generator
     // does NOT run again. Similarity is 1 because the contract-key is
@@ -162,7 +162,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     expect(second.cache?.similarity).toBe(1);
     expect(second.cache?.cachedBlueprintId).toBeTruthy();
     expect(second.cache?.llmCallsAvoided).toBe(1);
-    expect(calls.count, 'exact-match repush must short-circuit generator').toBe(1);
+    expect(calls.count, 'exact-match re-render must short-circuit generator').toBe(1);
 
     // Case 3 — paraphrased intent + same contract → Tier 1 hit. This
     // is THE proof that the cache is keyed on canonical contract
@@ -189,13 +189,13 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     });
     expect(calls.count).toBe(1);
 
-    // Push a STRUCTURALLY different contract — even with prose that
+    // Render a STRUCTURALLY different contract — even with prose that
     // sounds related, the contract-key is different so Tier 1 misses.
     // Tier 2 has only one candidate (notepad), and the mock embedder
     // path won't pull that on a wholly disparate context shape — so
     // the matcher falls through to Tier 3 cold and the generator runs.
     //
-    // Weather contract uses propsSpec → must supply props on push or
+    // Weather contract uses propsSpec → must supply props on render or
     // the contract-violation check fails before the cache lookup.
     const weatherProps = { city: 'Tokyo', temp: 22 };
     const second = await renderOnce({
@@ -207,7 +207,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     expect(second.cache?.kind).toBe('cold');
     expect(calls.count, 'cold gen must run for a new contract shape').toBe(2);
 
-    // And on second push of the weather contract, Tier 1 hits — proving
+    // And on second render of the weather contract, Tier 1 hits — proving
     // each contract has its own bucket and registry isolation is bidirectional.
     const third = await renderOnce({
       intent: 'show me Tokyo weather',
@@ -216,17 +216,17 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     });
     expect(third.cache?.hit).toBe(true);
     expect(third.cache?.kind).toBe('full-template');
-    expect(calls.count, 'second weather push must hit, no regen').toBe(2);
+    expect(calls.count, 'second weather render must hit, no regen').toBe(2);
   });
 
-  // §2.H "contract-less push isolation" was authored before the
+  // §2.H "contract-less render isolation" was authored before the
   // three-step (D10) handshake locked. Today render REQUIRES a
   // handshake-sourced proposal (accept it as-is by omitting `override`,
   // or supply `override: {contract}` to STRICT-regen), so genuinely
-  // contract-less pushes cannot reach the registry — the relevant
+  // contract-less renders cannot reach the registry — the relevant
   // isolation now lives at the handshake input layer and is covered by
   // the negotiator-side tests in @ggui-ai/negotiator.
-  it.skip('§2.H: pushes WITHOUT contract are not registered (no Tier 1 hits possible)', async () => {
+  it.skip('§2.H: renders WITHOUT contract are not registered (no Tier 1 hits possible)', async () => {
     await boot();
 
     const first = await renderOnce({ intent: 'render a hello world card' });
@@ -237,9 +237,9 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     const second = await renderOnce({ intent: 'render a hello world card' });
     expect(
       second.cache?.hit,
-      'contract-less push MUST NOT be registered, so MUST NOT hit',
+      'contract-less render MUST NOT be registered, so MUST NOT hit',
     ).toBe(false);
     expect(second.cache?.kind).toBe('cold');
-    expect(calls.count, 'contract-less re-push must regen').toBe(2);
+    expect(calls.count, 'contract-less re-render must regen').toBe(2);
   });
 });

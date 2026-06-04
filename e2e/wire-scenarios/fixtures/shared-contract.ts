@@ -8,7 +8,7 @@
  * those assertions: a Save button that emits `save` on click.
  *
  * Sharing the contract means the OSS server's in-memory blueprint
- * registry exact-key-matches across the three. First scenario to push
+ * registry exact-key-matches across the three. First scenario to render
  * cold-gens (real Anthropic, 10–60s). Scenarios 2 + 3 hit the
  * registry cache and complete in sub-second. Saves 2 cold-gens per
  * run; contains LLM flakiness to one cold path.

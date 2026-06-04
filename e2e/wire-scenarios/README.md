@@ -34,19 +34,19 @@ The suite has 25+ scenarios pinning the wire's behavioral contract. The flagship
 
 | #   | Scenario                                     | Needs LLM | Notes                                                                                                             |
 | --- | -------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1   | submit_action happy path                     | ✅        | push contract with actionSpec → click → consume drains event                                                      |
+| 1   | submit_action happy path                     | ✅        | render contract with actionSpec → click → consume drains event                                                    |
 | 2   | PIPE_NOT_FOUND is terminal                   | ❌        | dispatch to a never-minted renderId → asserts `{ok:false, code:PIPE_NOT_FOUND}` (no doorbell, no inline fallback) |
-| 3   | contextSnapshot bundle                       | ✅        | push w/contextSpec → sync_context → click → consume returns the snapshot                                          |
+| 3   | contextSnapshot bundle                       | ✅        | render w/contextSpec → sync_context → click → consume returns the snapshot                                        |
 | 4   | CONTEXT_TOO_LARGE rejection                  | ❌        | sync_context with oversize snapshot → asserts CONTEXT_TOO_LARGE                                                   |
-| 5   | pure-display push (no actionSpec)            | ✅        | push w/o actionSpec → asserts no nextStep                                                                         |
-| 6   | sample-agent + todo MCP real-data round trip | ✅        | full-stack: prompt → todo_add → state mutates → re-push                                                           |
+| 5   | pure-display render (no actionSpec)          | ✅        | render w/o actionSpec → asserts no nextStep                                                                       |
+| 6   | sample-agent + todo MCP real-data round trip | ✅        | full-stack: prompt → todo_add → state mutates → re-render                                                         |
 
 ### Provider matrix
 
 LLM scenarios fan out across two **orthogonal** axes:
 
 - **Agent-framework axis** (scenario 6 only) — one row per reference sample agent: `claude-agent-sdk` (Anthropic), `openai-agents-sdk` (OpenAI), `google-adk` (Gemini). Each row spawns its own sample on its own port (6790 / 6791 / 6792) and natural-pairs with the matching ggui-default instance below.
-- **Model-provider axis** (scenarios 03 / 09 / 11 / 12 / 15) — one row per ggui-default instance (`anthropic` / `openai` / `google`). No agent in the loop; the test drives `push-contract` directly against the matching MCP endpoint.
+- **Model-provider axis** (scenarios 03 / 09 / 11 / 12 / 15) — one row per ggui-default instance (`anthropic` / `openai` / `google`). No agent in the loop; the test drives `render-contract` directly against the matching MCP endpoint.
 
 Each row uses `describe.skipIf(...)` to drop out cleanly when its API key is missing. Set `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` to flip skip → hard-fail (the label-gated CI path).
 
@@ -101,6 +101,6 @@ Sample agents (`@ggui-samples/agent-claude-sdk` / `agent-openai-sdk` / `agent-go
 ## Fixtures
 
 - `fixtures/mcp-client.ts` — JSON-RPC tools/call helper with SSE/JSON normalization
-- `fixtures/push-contract.ts` — drives the new_session → handshake → push chain with a verbatim contract
+- `fixtures/render-contract.ts` — drives the handshake → render chain with a verbatim contract
 - `fixtures/browser.ts` — tiny wrapper over `playwright-core` chromium
 - `fixtures/global-setup.ts` — service boot + teardown

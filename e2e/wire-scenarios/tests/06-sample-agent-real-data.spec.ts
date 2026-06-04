@@ -4,7 +4,7 @@
  * The flagship integration test. Exercises the full agent loop:
  *   1. User prompts: "add a todo: buy milk"
  *   2. Agent calls `todo_add` on the todo MCP → state mutates
- *   3. Agent calls ggui handshake + push → renders a todo UI
+ *   3. Agent calls ggui handshake + render → a todo UI mounts
  *
  * Real backing state assertion: read `/admin/state` on the todo MCP
  * AFTER the flow completes and confirm the new todo is present.

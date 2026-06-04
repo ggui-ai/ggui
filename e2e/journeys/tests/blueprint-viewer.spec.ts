@@ -129,7 +129,7 @@ test.describe.serial(
       //    by `data-ggui-blueprint-id` so a future multi-blueprint
       //    route can land without churning this spec.
       const mountCard = page.locator(
-        `[data-ggui-stack-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
+        `[data-ggui-render-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
       );
       await expect(mountCard).toBeVisible({ timeout: 15_000 });
       await expect(mountCard).toHaveAttribute('data-ggui-code-ready', 'true');
@@ -175,7 +175,7 @@ test.describe.serial(
       ).toBeVisible({ timeout: 10_000 });
       // No mount card for an unknown id.
       await expect(
-        page.locator('[data-ggui-stack-entry="component"]'),
+        page.locator('[data-ggui-render-entry="component"]'),
       ).toHaveCount(0);
     });
 
@@ -197,7 +197,7 @@ test.describe.serial(
       // No mount card — if the route had silently aliased, the
       // fixture's mount would still paint.
       await expect(
-        page.locator('[data-ggui-stack-entry="component"]'),
+        page.locator('[data-ggui-render-entry="component"]'),
       ).toHaveCount(0);
     });
   },

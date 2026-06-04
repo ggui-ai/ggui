@@ -33,7 +33,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 
@@ -55,7 +55,7 @@ describe.skipIf(!HAS_KEY)(
     test(
       'click without active consumer → pure-doorbell user-action → consume drains the event',
       async () => {
-        const ref = await pushKnownContract({
+        const ref = await renderKnownContract({
           mcpUrl: MCP_URL,
           intent: SHARED_INTENT,
           seed: 'scenario-10-no-consumer-nudge',

@@ -6,7 +6,7 @@
  * for BOTH wire modes:
  *
  *   - `kind: 'replace'` — full props replacement (parity with the
- *     pre-2026-05-14 wire). Single-push baseline.
+ *     pre-2026-05-14 wire). Single-render baseline.
  *   - `kind: 'merge'` — RFC 7396 JSON Merge Patch. Three sub-cases:
  *       (a) top-level shallow merge (replaces one key, preserves others)
  *       (b) nested deep merge (sibling fields preserved across depths)
@@ -16,7 +16,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool } from '../fixtures/mcp-client.js';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
@@ -105,8 +105,8 @@ for (const provider of PROVIDERS) {
       test(
         'replace, merge shallow, merge nested-deep, and merge null-delete all reach the iframe DOM',
         async () => {
-          // 1. Push the initial contract.
-          const ref = await pushKnownContract({
+          // 1. Render the initial contract.
+          const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: INTENT,
             seed: `scenario-15-replace-merge-${provider.name}`,

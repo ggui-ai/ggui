@@ -6,17 +6,17 @@
  * appends `ActionEnvelope` onto the render-keyed pending-events
  * pipe → agent's `ggui_consume` long-poll drains it mid-turn.
  *
- * In this scenario the "agent" is the test runner: push a contract
+ * In this scenario the "agent" is the test runner: render a contract
  * with `actionSpec.save` (from the SHARED_CONTRACT fixture), open
  * the renderer URL, click the Save button, then call `ggui_consume`
  * and assert the action arrived.
  *
- * Gated on `ANTHROPIC_API_KEY` because push triggers component
+ * Gated on `ANTHROPIC_API_KEY` because render triggers component
  * generation.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 
@@ -46,7 +46,7 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
       //    perspective but it's harmless (the button click still
       //    fires `save` exactly the same), and it's load-bearing
       //    for scenario 03's contextSnapshot assertion.
-      const ref = await pushKnownContract({
+      const ref = await renderKnownContract({
         mcpUrl: MCP_URL,
         intent: SHARED_INTENT,
         seed: 'scenario-1-happy-path',

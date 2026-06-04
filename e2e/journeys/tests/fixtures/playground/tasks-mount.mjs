@@ -150,7 +150,7 @@ export function createGguiMcpMount() {
         name: 'tasks_broken',
         title: 'Broken tool (test-only)',
         description:
-          'Always throws. Used to prove `_ggui:contract-error` TOOL_THREW emission + session survival.',
+          'Always throws. Used to prove `_ggui:contract-error` TOOL_THREW emission + render survival.',
         inputSchema: {},
         outputSchema: { ok: z.literal(true) },
         async handler() {
@@ -200,7 +200,7 @@ export function createGguiMcpMount() {
         name: 'hanging_tool',
         title: 'Hanging tool (test-only)',
         description:
-          'Sleeps past the wiredActionRouter timeout. Used to prove TOOL_TIMEOUT envelope emission + session survival.',
+          'Sleeps past the wiredActionRouter timeout. Used to prove TOOL_TIMEOUT envelope emission + render survival.',
         inputSchema: {},
         outputSchema: { ok: z.literal(true) },
         async handler() {

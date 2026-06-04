@@ -5,14 +5,14 @@
  * `count` prop into the DOM (stamped on `data-ggui-prop-count` for the
  * Lane-1 spec to assert) and exposes a `bump` button that fires the
  * `bump_count` wired action. The companion mount tool in
- * `tasks-mount.mjs` (extended in this slice) increments per-session
+ * `tasks-mount.mjs` (extended in this slice) increments per-render
  * state and calls `ctx.sendPropsUpdate(ctx.pageId, {count: newValue})`,
  * which fans a `{type:'props_update', payload:{pageId, props}}` frame
  * to the live subscriber. The renderer's iframe-runtime applies the
  * new props in-place via its existing `props_update` branch, and the
  * DOM stamps the new value.
  *
- * Default `count = 0` covers the cold-start path: the stack item is
+ * Default `count = 0` covers the cold-start path: the render is
  * appended without seeded `props`, so the renderer passes `props ??
  * {}` to the component on initial mount; we guard with
  * `count ?? 0` so the first render asserts the baseline value
@@ -65,7 +65,7 @@ export default function PropsEcho(props: PropsEchoProps): JSX.Element {
         data-testid="bump"
         onClick={() => {
           // Fires `data:submit` with `action: 'bump'` → `bump_count` via
-          // the wiredActionRouter. The mount tool mutates per-session
+          // the wiredActionRouter. The mount tool mutates per-render
           // counter state and calls `ctx.sendPropsUpdate(ctx.pageId,
           // {count: newValue})`. The renderer applies the patch
           // in-place, the DOM re-stamps `data-ggui-prop-count`, and

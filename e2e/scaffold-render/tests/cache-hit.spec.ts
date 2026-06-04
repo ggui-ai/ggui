@@ -1,6 +1,6 @@
 /**
  * Sub-tier B — cache-hit scenario. Talks DIRECTLY to the scaffolded app's ggui
- * MCP server (no browser) and proves cross-session blueprint reuse via the
+ * MCP server (no browser) and proves cross-render blueprint reuse via the
  * RENDER OUTPUT.
  *
  * PRIMARY observable (D1): blueprint IDENTITY equality. Turn-1 is a real cold
@@ -39,7 +39,7 @@
  * Auth: the scaffolded ggui runs `ggui serve --mcp-only --dev-allow-all`, which
  * accepts ANY non-empty bearer as `builder` — no pairing/handshake-token needed.
  *
- * LIVE regression gate: cross-session blueprint reuse is wired on this base. If
+ * LIVE regression gate: cross-render blueprint reuse is wired on this base. If
  * a change breaks reuse, turn-2 mints a NEW blueprintId (and latency climbs),
  * failing the identity assertion.
  */
@@ -318,7 +318,7 @@ async function renderOnce(
   return { ...render, ms, suggestion: handshake?.suggestion };
 }
 
-test.describe('scaffold-render: blueprint cache hit across sessions (published app)', () => {
+test.describe('scaffold-render: blueprint cache hit across renders (published app)', () => {
   let app: ScaffoldAppHandle | undefined;
 
   test.beforeAll(() => {
@@ -333,7 +333,7 @@ test.describe('scaffold-render: blueprint cache hit across sessions (published a
   });
 
   test(
-    'identical contract: session 1 cold-generates, session 2 accept-reuses the same blueprintId',
+    'identical contract: render 1 cold-generates, render 2 accept-reuses the same blueprintId',
     async () => {
       test.setTimeout(1_500_000);
       app = await spawnScaffoldedApp({ sdk: 'claude-agent-sdk' });

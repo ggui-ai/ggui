@@ -89,7 +89,7 @@ interface BootstrapJson {
 
 function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
   if (typeof renderUrl !== 'string') {
-    throw new Error(`push output missing url: ${String(renderUrl)}`);
+    throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
   const parsed = new URL(renderUrl);
   const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);

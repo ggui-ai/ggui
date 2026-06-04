@@ -6,7 +6,7 @@
  * Scope for Lane 1 coverage:
  *
  *   1. Boot `ggui serve` against the `manifest-capabilities` fixture.
- *      The fixture has no pushed renders at boot — perfect for the
+ *      The fixture has no committed renders at boot — perfect for the
  *      empty-state path the `/admin/renders` page surfaces.
  *   2. Navigate to `/admin/renders`. The SPA fetches
  *      `GET /ggui/console/renders` (200, shape `{renders:[],total:0}`)

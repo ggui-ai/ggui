@@ -3,8 +3,8 @@
  *
  * OSS `ggui serve` wires a deterministic provisional-preview emitter
  * (`createDeterministicPreviewEmitter`) on `provisionalPreview.emitter`.
- * The handler kicks off the emitter at push time, BEFORE
- * `runGenerationIntoSession` calls the real LLM. Frames stream over
+ * The handler kicks off the emitter at render time, BEFORE
+ * `runGenerationIntoRender` calls the real LLM. Frames stream over
  * the reserved `_ggui:preview` channel, and the iframe-runtime's
  * `mountProvisional` renders the A2UI surface visibly while cold-gen
  * runs in the background. When the authoritative componentCode lands,
@@ -12,8 +12,8 @@
  *
  * Wire-contract this scenario locks:
  *
- *   1. `push` returns FAST (before LLM completes), with a placeholder
- *      stack item appended.
+ *   1. `render` returns FAST (before LLM completes), with a placeholder
+ *      render appended.
  *   2. Iframe shows visible content within a few seconds of `goto`
  *      (the A2UI provisional surface) — the user is NEVER staring at
  *      a blank screen during cold-gen.
@@ -23,7 +23,7 @@
  * Parametric over the model-provider axis. See provider-matrix.ts.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
@@ -56,7 +56,7 @@ for (const provider of PROVIDERS) {
           // Unique seed so this scenario never hits the in-memory
           // generation cache from prior tests in the same run.
           const seed = `a2ui-stream-${provider.name}-${Date.now()}`;
-          const ref = await pushKnownContract({
+          const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent:
               'one form with a single text input labeled Email and a Submit button',

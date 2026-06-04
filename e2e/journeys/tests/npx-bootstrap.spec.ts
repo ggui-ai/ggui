@@ -35,10 +35,10 @@
  *   7. Browser navigation to `/s/<shortCode>` mints the same-origin
  *      HTTP-only console cookie (via `POST /ggui/console/render-cookie`),
  *      opens a cookie-authenticated live-channel WebSocket, reaches the
- *      live `connected` state, and shows the real renderId + "no stack
- *      items yet" empty-state — the truthful current OSS state because
+ *      live `connected` state, and shows the real renderId + "no renders
+ *      yet" empty-state — the truthful current OSS state because
  *      component-code generation is deferred on OSS (see the `codeReady:
- *      false` note in `packages/mcp-server-handlers/src/renders/push.ts`).
+ *      false` note in `packages/mcp-server-handlers/src/renders/render.ts`).
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
  *   - Real component-code generation. The OSS `ggui_render` deliberately
@@ -51,7 +51,7 @@
  *     rendered component.
  *   - User-action roundtrip through `ggui_consume`. Without a rendered
  *     UI there's nothing to act on; deferred to the same slice.
- *   - BYOK credential wiring. The OSS push path performs zero LLM calls
+ *   - BYOK credential wiring. The OSS render path performs zero LLM calls
  *     on this journey today, so there's no meaningful place to plumb
  *     `ANTHROPIC_API_KEY`. Deferred to the same slice.
  *   - Literal `npx @ggui-ai/cli serve` over the npm registry — the
@@ -411,11 +411,11 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     // deleted; the cookie-mint-by-shortCode flow that depended on
     // `out.url` is no longer reachable from this surface. The cookie
     // → /ws subscribe → ack invariants moved to direct unit coverage
-    // (`mcp-server/src/console-cookie.test.ts`, `session-channel.test.ts`)
+    // (`mcp-server/src/console-cookie.test.ts`, `render-channel.test.ts`)
     // since the spec-level driver no longer has a shortCode in hand.
     //
     // Restoring an end-to-end equivalent — `<McpAppIframe>` driving
-    // the session-resource endpoint (`/ggui/session-resource/item/...`)
+    // the render-resource endpoint (`/ggui/console/render-resource?render=...`)
     // and a Playwright shell rendering the inner iframe — is queued
     // for the post-R5 e2e refresh slice. This block is intentionally
     // empty: the typecheck/lint surface stays clean, the spec still

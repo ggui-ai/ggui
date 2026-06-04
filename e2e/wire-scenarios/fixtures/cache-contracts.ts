@@ -48,7 +48,7 @@
  */
 
 /**
- * Scenario 8 — cross-session same-contract cache hit (override path).
+ * Scenario 8 — cross-render same-contract cache hit (override path).
  */
 export const BANNER_CONTRACT = {
   propsSpec: {
@@ -91,7 +91,7 @@ export const CACHE_ADMIN_INTENT = 'banner with a configurable message prop';
  * Scenario 18 — warm path: pre-register via `ggui_ops_generate_blueprint`,
  * then handshake with the same contract under a PARAPHRASED intent
  * must return `origin: 'cache'` and the matched blueprint's codeHash.
- * Pure-display (no required props) so the push.accept path doesn't
+ * Pure-display (no required props) so the render.accept path doesn't
  * need a `props` payload.
  */
 export const WARM_PATH_CONTRACT = {
@@ -115,7 +115,7 @@ export const WARM_PATH_INTENT_PARAPHRASED =
 
 /**
  * Scenario 17 — cold path then cache: a first handshake misses
- * (cold), a push.override registers the blueprint under the literal
+ * (cold), a render.override registers the blueprint under the literal
  * draft, then a second handshake with the same contract (different
  * intent prose) matches via the registry. Tests the full
  * handshake-time exact-key fast path end-to-end.

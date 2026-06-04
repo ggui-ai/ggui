@@ -13,7 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
@@ -46,7 +46,7 @@ for (const provider of PROVIDERS) {
       test(
         'consume returns events + per-event uiContext',
         async () => {
-          const ref = await pushKnownContract({
+          const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: SHARED_INTENT,
             seed: `scenario-3-context-snapshot-${provider.name}`,
@@ -59,7 +59,7 @@ for (const provider of PROVIDERS) {
           const buttons = page.getByRole('button', { name: /save/i });
           // 90s: cold-gen first time the cache is fresh; warm hit (sub-
           // second) once the canonical contract is in the OSS in-memory
-          // blueprint registry (01/02 push the same shape so this often
+          // blueprint registry (01/02 render the same shape so this often
           // gets a cache hit when they ran first in the same run).
           await buttons.first().waitFor({ state: 'visible', timeout: 90_000 });
           for (let i = 0; i < 3; i++) {

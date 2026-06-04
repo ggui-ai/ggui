@@ -17,7 +17,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool } from '../fixtures/mcp-client.js';
-import { pushKnownContract } from '../fixtures/push-contract.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
@@ -62,7 +62,7 @@ for (const provider of PROVIDERS) {
         'initial props render; ggui_update with new props triggers re-render',
         async () => {
           // 1. Render a contract with propsSpec.count + initial count=0.
-          const ref = await pushKnownContract({
+          const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: PROPS_INTENT,
             seed: `scenario-12-props-update-${provider.name}`,

@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/e2e-wire-scenarios",
   "version": "0.0.0",
-  "description": "Canonical e2e scenario suite for the ggui protocol. Vitest-driven full-stack journeys against @ggui-samples/ggui-default + @ggui-samples/mcp-todo (+ optional sample agent). Browser scenarios drive playwright-core directly (matches the ui-visual-tester pattern) — avoids the @playwright/test runner's hoist-vs-pnpm singleton issues across our hoisted workspace. Pins the wire's behavioral contract: submit_action happy path, terminal PIPE_NOT_FOUND, contextSnapshot bundle, CONTEXT_TOO_LARGE rejection, pure-display push, and sample-agent real-data round trip with the todo MCP.",
+  "description": "Canonical e2e scenario suite for the ggui protocol. Vitest-driven full-stack journeys against @ggui-samples/ggui-default + @ggui-samples/mcp-todo (+ optional sample agent). Browser scenarios drive playwright-core directly (matches the ui-visual-tester pattern) — avoids the @playwright/test runner's hoist-vs-pnpm singleton issues across our hoisted workspace. Pins the wire's behavioral contract: submit_action happy path, terminal PIPE_NOT_FOUND, contextSnapshot bundle, CONTEXT_TOO_LARGE rejection, pure-display render, and sample-agent real-data round trip with the todo MCP.",
   "private": true,
   "type": "module",
   "scripts": {

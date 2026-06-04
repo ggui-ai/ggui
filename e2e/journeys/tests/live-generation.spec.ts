@@ -14,7 +14,7 @@
  *   - Slice 4 jsdom render-path tests — the DOM-level handoff
  *     contract (`data-ggui-code-ready="false"` → `"true"`, preview
  *     path retires, renderer mounts). This is the handoff shape.
- *   - THIS spec — real componentCode flowing through the real push
+ *   - THIS spec — real componentCode flowing through the real render
  *     handler, compiled by `withBrowserCompile`, and MOUNTED in a
  *     real browser. This is the "final generated UI mounts" half,
  *     proving the Slice 3 + Slice 4 chain survives live LLM output.
@@ -51,10 +51,10 @@
  *   - Provisional preview VISIBILITY during the live path. By the
  *     time `ggui_render` returns (Slice 3 blocks on generation),
  *     preview emission has finished. The browser subscribes AFTER
- *     push completes and sees the final stack directly. Preview
+ *     render completes and sees the final render directly. Preview
  *     visibility on the browser surface is proven by the sibling
  *     `provisional-preview.spec.ts` under the deterministic
- *     emitter. Re-proving it here would require racing push
+ *     emitter. Re-proving it here would require racing render
  *     with a second RPC to extract a shortCode before generation
  *     finishes — invented infrastructure, out of scope.
  *
@@ -89,13 +89,13 @@ import { createPerfRecorder, type PerfRecorder } from './perf-recorder';
 
 /**
  * Generous — real Anthropic call + session-cookie mint + WebSocket
- * subscribe + stack replay + component mount. On a warm Anthropic
+ * subscribe + render replay + component mount. On a warm Anthropic
  * endpoint + a tiny prompt this completes in 5-15s; the headroom
  * absorbs provider tail latency without flapping the CI worker.
  */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Push-wait budget — the RPC blocks on generation before responding. */
+/** Render-wait budget — the RPC blocks on generation before responding. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /**
@@ -105,7 +105,7 @@ const GENERATION_BUDGET_MS = 120_000;
  * The assertions don't depend on WHAT the UI says, only that a
  * component mounted.
  */
-const PUSH_INTENT = 'Show a small greeting card with a title "Hello"';
+const RENDER_INTENT = 'Show a small greeting card with a title "Hello"';
 
 test.describe.serial(
   'Slice 4 — live-BYOK generation success path (Anthropic, advisory)',
@@ -183,7 +183,7 @@ test.describe.serial(
       const hsEnv = await mcpCallAs(handle.baseUrl, token, 'tools/call', {
         name: 'ggui_handshake',
         arguments: {
-          intent: PUSH_INTENT,
+          intent: RENDER_INTENT,
           blueprintDraft: { contract: {} },
           // The OSS `ggui serve` ships a built-in blueprint catalog;
           // a generic intent exact-key-matches it and render would
@@ -264,9 +264,9 @@ test.describe.serial(
 
       // 4. Navigate to the viewer. The session cookie mint + /ws
       //    subscribe happen automatically on render; the subscribe
-      //    ack returns the current stack (with real componentCode),
-      //    and `StackSurface` mounts `ReactComponentRenderer` for
-      //    the component entry.
+      //    ack returns the current render (with real componentCode),
+      //    and the iframe-runtime mounts `ReactComponentRenderer` for
+      //    the render entry.
       await page.goto(`${handle.baseUrl}/s/${shortCode}`, {
         waitUntil: 'networkidle',
       });

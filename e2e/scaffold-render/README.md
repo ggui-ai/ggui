@@ -13,10 +13,10 @@ build @ggui-ai/* → Verdaccio (cohort) → npx create-agentic-app → pnpm inst
 
 ## What it proves
 
-| Scenario      | Target                      | Asserts                                                                                                                                                            |
-| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **render**    | web SPA (`localhost:6890`)  | a real prompt → agent → `ggui_render` → UI mounts; the requested item is visible through the double-iframe.                                                        |
-| **cache-hit** | ggui MCP (`localhost:6781`) | cross-session blueprint reuse via the **latency channel** (turn-1 cold `>1s`, turn-2 hit `<10s`). `/r/<short>` is off the wire, so latency is the only observable. |
+| Scenario      | Target                      | Asserts                                                                                                                                                           |
+| ------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **render**    | web SPA (`localhost:6890`)  | a real prompt → agent → `ggui_render` → UI mounts; the requested item is visible through the double-iframe.                                                       |
+| **cache-hit** | ggui MCP (`localhost:6781`) | cross-render blueprint reuse via the **latency channel** (turn-1 cold `>1s`, turn-2 hit `<10s`). `/r/<short>` is off the wire, so latency is the only observable. |
 
 Sub-tier A (`../scaffold-resolution/`) already proves the scaffold **installs**
 from the published cohort (keyless, deterministic). Sub-tier B proves it
@@ -76,7 +76,7 @@ gates — CI runs the container on a schedule + `workflow_dispatch` only, never 
   query param (App.tsx priority-1) because `dev:web` runs plain vite, which
   never reads the app-root `.env.local`. A missing key skips that SDK.
 - **cache-hit is live** — proven: turn-1 cold ≈ 11.6s vs turn-2 ≈ 6ms (~1900×),
-  so cross-session blueprint reuse is wired on this base. It's a real regression
+  so cross-render blueprint reuse is wired on this base. It's a real regression
   gate: if a change breaks reuse, turn-2 falls back to a cold gen and fails the
   `< 10s` budget. (The harness waits for ggui to be listening before the test
   fires its first MCP call, or the direct `:6781` hit would race the boot.)

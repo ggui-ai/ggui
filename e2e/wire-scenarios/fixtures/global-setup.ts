@@ -115,8 +115,8 @@ const SERVICES: readonly ServiceSpec[] = [
   // Slice 2.6 — `ggui-mapbox-demo` is the Slice 2 public-env channel
   // demonstrator. `ggui.json#app.publicEnv` carries the operator-
   // stamped Mapbox token (placeholder `<set-me-before-running>` value
-  // for the committed sample; the push gate only checks key presence,
-  // not value validity). Scenario 20 exercises the publicEnv push gate
+  // for the committed sample; the render gate only checks key presence,
+  // not value validity). Scenario 20 exercises the publicEnv render gate
   // + bootstrap projection against this server.
   {
     name: 'ggui-mapbox-demo',
@@ -127,7 +127,7 @@ const SERVICES: readonly ServiceSpec[] = [
   // Slice 2.6 — negative-path fixture. Mirrors `ggui-mapbox-demo`'s
   // `app.gadgets` (registers `useMapbox` with `requires:
   // ['GGUI_PUBLIC_APP_MAPBOX_TOKEN']`) but DELIBERATELY omits
-  // `app.publicEnv` so the push gate's `assertPublicEnvSatisfied`
+  // `app.publicEnv` so the render gate's `assertPublicEnvSatisfied`
   // rejects with `gadget_public_env_missing`. Single
   // load-bearing assertion for scenario 20's negative path.
   {
@@ -150,7 +150,7 @@ const SERVICES: readonly ServiceSpec[] = [
     healthPath: '/healthz',
   },
   // Fullscreen-mode sample — `ggui.json#app.defaultDisplayMode:
-  // 'fullscreen'`. Every push stamps `_meta.ui.displayMode:
+  // 'fullscreen'`. Every render stamps `_meta.ui.displayMode:
   // 'fullscreen'` so MCP-Apps-spec-compliant hosts arrange the
   // resulting iframes as a primary panel rather than stacking in
   // the chat log; the wire mechanism is identical to inline mode.
@@ -204,7 +204,7 @@ const children: ChildProcess[] = [];
  * beforeAll guarantees a fresh start every time.
  *
  * Cache persists for the LIFETIME OF ONE RUN — within-run cache
- * hits still work (e.g. scenario 08 pushes twice; second hits
+ * hits still work (e.g. scenario 08 renders twice; second hits
  * cache).
  */
 const CACHE_DIR = join(tmpdir(), 'ggui-e2e-cache');

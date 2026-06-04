@@ -23,12 +23,12 @@ Full lane semantics (artifacts-on-fail, assertion shape, retry policy, blocking 
 
 Strategy doc §4.2 locks the blocking LLM subset to **four** scenarios. Memory had previously recorded "5-scenario blocking subset" — that was incorrect; this doc supersedes it.
 
-| Scenario                                          | Strategy name | Spec                                       | Status                                                         |
-| ------------------------------------------------- | ------------- | ------------------------------------------ | -------------------------------------------------------------- |
-| Tasks happy path (push → UI from Tasks MCP)       | **T1**        | `tasks-backed-generation.spec.ts`          | ✅ Shipped                                                     |
-| Notes happy path (push → UI from Notes MCP)       | **N1**        | `notes-backed-generation.spec.ts`          | ✅ Shipped (advisory-gated; blocking flip is CI config change) |
-| Contacts happy path (push → UI from Contacts MCP) | **C1**        | `contacts-backed-generation.spec.ts`       | ✅ Shipped (advisory-gated; blocking flip is CI config change) |
-| Tasks + Contacts composition (assignee ↔ task)    | **P1**        | `tasks-contacts-backed-generation.spec.ts` | ✅ Shipped                                                     |
+| Scenario                                            | Strategy name | Spec                                       | Status                                                         |
+| --------------------------------------------------- | ------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| Tasks happy path (render → UI from Tasks MCP)       | **T1**        | `tasks-backed-generation.spec.ts`          | ✅ Shipped                                                     |
+| Notes happy path (render → UI from Notes MCP)       | **N1**        | `notes-backed-generation.spec.ts`          | ✅ Shipped (advisory-gated; blocking flip is CI config change) |
+| Contacts happy path (render → UI from Contacts MCP) | **C1**        | `contacts-backed-generation.spec.ts`       | ✅ Shipped (advisory-gated; blocking flip is CI config change) |
+| Tasks + Contacts composition (assignee ↔ task)      | **P1**        | `tasks-contacts-backed-generation.spec.ts` | ✅ Shipped                                                     |
 
 ### Additional Lane 2 specs beyond the strategy's blocking four
 
@@ -37,7 +37,7 @@ Two Lane 2 specs ship today that aren't in the blocking-four lock. They cover or
 | Spec                      | User-story                                          | Lane 2 sub-shape                                            |
 | ------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
 | `chat-generation.spec.ts` | Q2 — chat on dev page (ChatShell-with-UI, Slice 8b) | Blocking on presence of `ANTHROPIC_API_KEY`; skip otherwise |
-| `live-generation.spec.ts` | Q3 — weather / generic push (Slice 4 follow-on)     | Blocking on presence of key; skip otherwise                 |
+| `live-generation.spec.ts` | Q3 — weather / generic render (Slice 4 follow-on)   | Blocking on presence of key; skip otherwise                 |
 
 ### Advisory / nightly scope (not blocking, not shipped as standalone)
 
@@ -72,9 +72,9 @@ Per strategy §4.2 + CLAUDE.md "Testing LLM-Generated UI":
 
 Specs that MUST pass every PR with no LLM call. Every one of these boots `ggui serve` in a clean-room subprocess and asserts a product claim end-to-end:
 
-`blueprint-viewer` · `blueprints-page` · `chat-page` · `config-page` · `contacts-mount-via-serve` · `create-ggui-server` · `manifest-capabilities` · `mcp-app-iframe` · `mcp-inspector` · `notes-mount-via-serve` · `npx-bootstrap` · `pair-flow` · `provisional-preview` · `revoke-flow` · `runtime-contract` · `session-inspector` · `sessions-page` · `sqlite-storage` · `tarball-smoke` · `tasks-contacts-compose-via-serve` · `tasks-mount-via-serve`
+`blueprint-viewer` · `blueprints-page` · `chat-page` · `config-page` · `contacts-mount-via-serve` · `create-ggui-server` · `manifest-capabilities` · `mcp-app-iframe` · `mcp-inspector` · `notes-mount-via-serve` · `npx-bootstrap` · `pair-flow` · `provisional-preview` · `render-inspector` · `renders-page` · `revoke-flow` · `runtime-contract` · `sqlite-storage` · `tarball-smoke` · `tasks-contacts-compose-via-serve` · `tasks-mount-via-serve`
 
-Several Lane 1 specs reference `ANTHROPIC_API_KEY` for _describe-block-internal_ Lane 2 sub-cases but keep their default blocking assertions free of any LLM call (e.g., `npx-bootstrap` + `session-inspector` run Lane 1 by default; their gated sub-blocks are Lane 2 advisory). Mixed-lane files are acceptable when the gating is clean; the surface-level lane assignment is driven by the default (un-gated) tests.
+Several Lane 1 specs reference `ANTHROPIC_API_KEY` for _describe-block-internal_ Lane 2 sub-cases but keep their default blocking assertions free of any LLM call (e.g., `npx-bootstrap` + `render-inspector` run Lane 1 by default; their gated sub-blocks are Lane 2 advisory). Mixed-lane files are acceptable when the gating is clean; the surface-level lane assignment is driven by the default (un-gated) tests.
 
 ## Lane 3 inventory (reference, abbreviated)
 

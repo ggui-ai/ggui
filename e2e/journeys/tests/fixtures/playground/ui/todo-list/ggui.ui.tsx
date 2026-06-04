@@ -3,7 +3,7 @@
  *
  * Two render paths, one component:
  *
- * 1. **Live wire** (session-backed mount) — `useStream('tasks')` binds
+ * 1. **Live wire** (render-backed mount) — `useStream('tasks')` binds
  *    to the `tasks` channel the Slice-11.5 wiredActionRouter refreshes
  *    on every action; `useAction('createTask')` + `useAction('toggleTask')`
  *    fire `data:submit` envelopes the router dispatches to the Tasks
@@ -17,7 +17,7 @@
  *    null, all: [], isComplete: false}`; `useAction` returns a no-op
  *    dispatcher. The component detects the empty-stream state and
  *    paints the "no tasks yet" copy, so the blueprint renders
- *    standalone without a live session.
+ *    standalone without a live render.
  *
  * The declared contract (see sibling ggui.ui.json):
  *
@@ -42,16 +42,16 @@ interface TasksPayload {
 export default function TodoList(): JSX.Element {
   const [draft, setDraft] = useState('');
 
-  // Session-bound subscription. The refresh tool (tasks_list) returns
+  // Render-bound subscription. The refresh tool (tasks_list) returns
   // `{items: Task[]}` on every wired-action completion — the channel
   // is declared mode:'append', so `.latest` gives the most-recent
   // snapshot and `.all` carries the history. We read `.latest?.items`
-  // and fall back to an empty array when no session is bound OR no
+  // and fall back to an empty array when no render is bound OR no
   // refresh has fired yet (fresh subscriber / cold blueprint preview).
   const stream = useStream<TasksPayload>('tasks');
   const tasks: readonly Task[] = stream.latest?.items ?? [];
 
-  // useAction returns a fire-and-forget dispatcher in both session
+  // useAction returns a fire-and-forget dispatcher in both render
   // and standalone modes. Standalone mode is a no-op — the blueprint
   // preview renders without error even when the operator tries to
   // interact.
@@ -128,8 +128,8 @@ export default function TodoList(): JSX.Element {
               fontStyle: 'italic',
             }}
           >
-            No tasks yet. Static preview renders without a session —
-            mount via <code>Try live →</code> (or push from an agent)
+            No tasks yet. Static preview renders without a live render —
+            mount via <code>Try live →</code> (or render from an agent)
             to see tasks stream in from the Tasks MCP.
           </li>
         ) : (

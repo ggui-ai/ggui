@@ -19,7 +19,7 @@
  *
  *   3. Tool-throws path — a broken action surfaces a canonical
  *      `_ggui:contract-error` envelope with code `TOOL_THREW`.
- *      The session survives (button still clickable; previous stream
+ *      The render survives (button still clickable; previous stream
  *      state intact).
  *
  *   4. Schema-violation path — a valid action whose channel refresh
@@ -90,8 +90,8 @@ const TEST_TIMEOUT_MS = 60_000;
  * The console RenderViewer mounts the render inside a
  * plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
  * it no longer carries the `<McpAppIframe>` lifecycle-mirror
- * attribute). The inner stack-item attributes
- * (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE the
+ * attribute). The inner render attributes
+ * (`data-ggui-render-entry`, `data-ggui-code-ready`) live INSIDE the
  * iframe child and are reachable only via Playwright's
  * `frameLocator`. Readiness is gated by waiting for the iframe
  * itself to be visible + by inner-DOM assertions further down the
@@ -104,7 +104,7 @@ const TEST_TIMEOUT_MS = 60_000;
  * Returns the resolved `shortCode` for any follow-up assertions the
  * caller wants to make on the URL.
  */
-async function openLiveSession(
+async function openLiveRender(
   page: Page,
   baseUrl: string,
   blueprintId: string,
@@ -122,7 +122,7 @@ async function openLiveSession(
 
   // SPA pushState-navigates to /s/<shortCode> once the POST resolves.
   // Length-agnostic — the short-code generator owns its width
-  // (`generateShortCode` in push.ts); the test pins the route shape,
+  // (`generateShortCode` in render.ts); the test pins the route shape,
   // not the alphabet count.
   await page.waitForURL(/\/s\/[a-z0-9]+$/, { timeout: 15_000 });
   const match = page.url().match(/\/s\/([a-z0-9]+)$/);
@@ -183,7 +183,7 @@ test.describe.serial(
       // `tasks` streamSpec requires `items` but its `.tool` (`tasks_malformed_list`)
       // returns `{wrong:'shape'}` — exactly so the runtime can emit the
       // SCHEMA_VIOLATION envelope under test here. Default F4 `'reject'`
-      // mode blocks the try-live stack-item commit at push time BEFORE
+      // mode blocks the try-live render commit at render time BEFORE
       // runtime gets to emit the envelope, making these specs
       // unreachable. `'warn'` mode logs the finding + lets the item
       // through so the test exercises the runtime error path it was
@@ -210,9 +210,9 @@ test.describe.serial(
       if (!handle) throw new Error('handle not ready — beforeAll failed');
       gate = await installNetworkGate(page);
 
-      await openLiveSession(page, handle.baseUrl, 'todo-list');
+      await openLiveRender(page, handle.baseUrl, 'todo-list');
       // Renderer DOM is inside the RenderViewer iframe child;
-      // outer-iframe visibility gating happened in `openLiveSession`.
+      // outer-iframe visibility gating happened in `openLiveRender`.
       // Interactions below scope through frameLocator.
       const frame = rendererFrame(page);
 
@@ -259,7 +259,7 @@ test.describe.serial(
       if (!handle) throw new Error('handle not ready');
       gate = await installNetworkGate(page);
 
-      await openLiveSession(page, handle.baseUrl, 'todo-list');
+      await openLiveRender(page, handle.baseUrl, 'todo-list');
       const frame = rendererFrame(page);
 
       // Same bootstrap pattern as the happy-path test — the refresh is
@@ -308,14 +308,14 @@ test.describe.serial(
       expect(gate.attempts).toEqual([]);
     });
 
-    test('tool-throws emits a canonical TOOL_THREW envelope on _ggui:contract-error, session survives', async ({
+    test('tool-throws emits a canonical TOOL_THREW envelope on _ggui:contract-error, render survives', async ({
       page,
     }) => {
       test.setTimeout(TEST_TIMEOUT_MS);
       if (!handle) throw new Error('handle not ready');
       gate = await installNetworkGate(page);
 
-      await openLiveSession(page, handle.baseUrl, 'contract-probe');
+      await openLiveRender(page, handle.baseUrl, 'contract-probe');
       const frame = rendererFrame(page);
 
       // Probe blueprint renders an empty error list on mount.
@@ -349,7 +349,7 @@ test.describe.serial(
       await expect(row).toHaveAttribute('data-tool', 'tasks_broken');
       await expect(row).toHaveAttribute('data-source', 'wired-action');
 
-      // Session survives: the probe button is still clickable + the
+      // Render survives: the probe button is still clickable + the
       // panel is still rendered. A React error boundary firing would
       // unmount either.
       await expect(breakBtn).toBeVisible();
@@ -365,7 +365,7 @@ test.describe.serial(
       if (!handle) throw new Error('handle not ready');
       gate = await installNetworkGate(page);
 
-      await openLiveSession(page, handle.baseUrl, 'contract-probe');
+      await openLiveRender(page, handle.baseUrl, 'contract-probe');
       const frame = rendererFrame(page);
 
       const panel = frame.locator('[data-ggui-contract-error-count]').first();
@@ -408,7 +408,7 @@ test.describe.serial(
         'refresh-stream',
       );
 
-      // Session survives + the probe UI stays interactive.
+      // Render survives + the probe UI stays interactive.
       await expect(malformedBtn).toBeVisible();
       await expect(malformedBtn).toBeEnabled();
 

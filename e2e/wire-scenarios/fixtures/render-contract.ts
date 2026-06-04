@@ -13,14 +13,14 @@
  */
 import { callTool, unwrapStructured } from './mcp-client.js';
 
-export interface PushedContractRef {
+export interface RenderedContractRef {
   readonly handshakeId: string;
   readonly renderId: string;
   /** Absolute URL the renderer is served at. */
   readonly url: string;
 }
 
-export interface PushContractOptions {
+export interface RenderContractOptions {
   /** Full URL to the ggui MCP endpoint (e.g. `http://localhost:6781/mcp`). */
   readonly mcpUrl: string;
   /** Free text intent passed to handshake. */
@@ -29,7 +29,7 @@ export interface PushContractOptions {
   readonly contract: Record<string, unknown>;
   /** Optional props (required when the contract declares propsSpec). */
   readonly props?: Record<string, unknown>;
-  /** Optional deterministic seed (currently unused after session deletion; reserved). */
+  /** Optional deterministic seed (currently unused after render-noun deletion; reserved). */
   readonly seed?: string;
 }
 
@@ -38,9 +38,9 @@ export interface PushContractOptions {
  * Returns enough to (a) open the renderer URL in a browser AND
  * (b) call `ggui_consume({renderId})` to drain the pending-events pipe.
  */
-export async function pushKnownContract(
-  opts: PushContractOptions,
-): Promise<PushedContractRef> {
+export async function renderKnownContract(
+  opts: RenderContractOptions,
+): Promise<RenderedContractRef> {
   const handshake = unwrapStructured<{ handshakeId: string }>(
     await callTool(opts.mcpUrl, 'ggui_handshake', {
       intent: opts.intent,

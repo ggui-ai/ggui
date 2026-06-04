@@ -63,7 +63,7 @@ const FIXTURE_CWD = resolve(__dirname, 'fixtures/contacts-mount-via-serve');
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Push-wait budget — the RPC blocks on real generation. */
+/** Render-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /** Must match `contacts-mount.mjs` seed exactly — copied as literals (spec can't import ESM fixtures). */

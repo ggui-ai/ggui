@@ -102,8 +102,8 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
   "wired-action-tool-timeout": "contract-probe",
   "stream-schema-violation": "contract-probe",
   // `bootstrap-success` asserts the happy-path boot landed — any
-  // blueprint satisfies that, since `openLiveSession` already waits
-  // for `data-ggui-code-ready="true"` on the first stack entry (which
+  // blueprint satisfies that, since `openLiveRender` already waits
+  // for `data-ggui-code-ready="true"` on the first render entry (which
   // is itself proof the bootstrap-failed envelope did NOT fire).
   // `todo-list` is the cheapest (no synthetic probe traffic).
   "bootstrap-success": "todo-list",
@@ -129,19 +129,19 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * The console RenderViewer mounts a plain `<iframe srcDoc>` with
  * `data-testid="render-viewer-iframe"` (read-only / visual-only —
  * post C1-fix it no longer carries the `<McpAppIframe>`
- * lifecycle-mirror attribute). Inner stack-item attributes
- * (`data-ggui-stack-entry`, `data-ggui-code-ready`) live INSIDE the
+ * lifecycle-mirror attribute). Inner render attributes
+ * (`data-ggui-render-entry`, `data-ggui-code-ready`) live INSIDE the
  * iframe child and are reachable only via Playwright's
  * `frameLocator`. Readiness is gated by waiting for the iframe to be
  * visible + by inner-DOM assertions further down the fixture
  * dispatcher (e.g. `[data-ggui-contract-error-count]`).
  *
- * Mirrors the pattern in `runtime-contract.spec.ts::openLiveSession`
+ * Mirrors the pattern in `runtime-contract.spec.ts::openLiveRender`
  * — intentionally duplicated here so this spec stays self-contained
  * against its path-scope (the helper is not exported from the
  * harness).
  */
-async function openLiveSession(page: Page, baseUrl: string, blueprintId: string): Promise<string> {
+async function openLiveRender(page: Page, baseUrl: string, blueprintId: string): Promise<string> {
   await page.goto(`${baseUrl}/preview/${blueprintId}`, {
     waitUntil: "networkidle",
   });
@@ -152,7 +152,7 @@ async function openLiveSession(page: Page, baseUrl: string, blueprintId: string)
   await tryBtn.click();
   // Short code is the URL-safe lowercase alphabet from
   // `generateShortCode()` in `packages/mcp-server-handlers/src/
-  // renders/push.ts`. Length is not pinned here — the
+  // renders/render.ts`. Length is not pinned here — the
   // generator's length has drifted across slices.
   await page.waitForURL(/\/s\/[a-z0-9]+$/, { timeout: 15_000 });
   const match = page.url().match(/\/s\/([a-z0-9]+)$/);
@@ -191,7 +191,7 @@ function rendererFrame(page: Page) {
 async function driveWiredActionSuccess(page: Page): Promise<void> {
   // The rendered todo-list lives inside the renderer iframe (post C9.5
   // pivot). Outer-DOM lifecycle gating already happened in
-  // `openLiveSession`; below we interact with rendered DOM through
+  // `openLiveRender`; below we interact with rendered DOM through
   // Playwright's frameLocator, which transparently descends into the
   // iframe's contentDocument.
   const frame = rendererFrame(page);
@@ -236,7 +236,7 @@ async function driveContractErrorFixture(page: Page, fixture: TestCase): Promise
 
   // Contract-probe DOM lives inside the renderer iframe; pin all locators
   // through the frameLocator (outer-DOM lifecycle gating already happened
-  // in `openLiveSession`).
+  // in `openLiveRender`).
   const frame = rendererFrame(page);
   const panel = frame.locator("[data-ggui-contract-error-count]").first();
   const button = frame.locator(probeSelector);
@@ -259,7 +259,7 @@ async function driveContractErrorFixture(page: Page, fixture: TestCase): Promise
     await expect(row).toHaveAttribute("data-source", behavior.sourceAction);
   }
 
-  // Session-alive invariant: the probe button stays interactive after
+  // Render-alive invariant: the probe button stays interactive after
   // the error row lands. A React error boundary firing would unmount
   // either the button or the panel.
   await expect(button).toBeVisible();
@@ -278,7 +278,7 @@ async function runFixture(page: Page, handle: GguiServeHandle, fixture: TestCase
       `contract-kit: fixture '${fixture.name}' has skipReason=null but no blueprint mapping — either add it to FIXTURE_BLUEPRINTS, or (if no consumer harness can drive it) author a fixture-level skipReason.`
     );
   }
-  await openLiveSession(page, handle.baseUrl, blueprintId);
+  await openLiveRender(page, handle.baseUrl, blueprintId);
 
   switch (fixture.expectedBehavior.kind) {
     case "contract-error":
@@ -295,8 +295,8 @@ async function runFixture(page: Page, handle: GguiServeHandle, fixture: TestCase
       );
     }
     case "bootstrap-success":
-      // `openLiveSession` above already waited for
-      // `data-ggui-code-ready="true"` on the first stack entry, which
+      // `openLiveRender` above already waited for
+      // `data-ggui-code-ready="true"` on the first render entry, which
       // is the renderer's "ready to accept actions" signal — i.e.,
       // bootstrap succeeded end-to-end (thin shell loaded the bundle,
       // WS handshake completed, `ui/initialize` returned valid
@@ -391,7 +391,7 @@ const KIT_DRIVEN_FIXTURES: ReadonlySet<string> = new Set([
  *
  * Currently empty: Slice I added refresh-stream dispatch via
  * `register-streamspec` (closing the historical
- * `stream-refresh-success` gap), Slice K added the per-session
+ * `stream-refresh-success` gap), Slice K added the per-render
  * `server-version-override` directive, Slice L grounded the
  * `observability-event` matcher, and Slice M's Path-B Playwright
  * dispatch covers the bootstrap-failure browser-only directives.
@@ -411,7 +411,7 @@ const KIT_DRIVEN_KNOWN_GAPS: Readonly<Record<string, string>> = {};
  * spec skips them honestly with a pointer to the freezing rationale.
  *
  *   - `canvas-mode-wire-shapes` (4) — need `set-app-mode` +
- *     `assert-session-field` + `assert-channel-envelope` host
+ *     `assert-render-field` + `assert-channel-envelope` host
  *     directives (see that sub-module's `index.ts`).
  *   - `bootstrap-bundle-fetch-failed` + `bootstrap-meta-missing` —
  *     pre-C1-fix these ran through a Playwright `page.route()`-based
@@ -555,14 +555,14 @@ const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
 /**
  * Drive the `props-update-roundtrip` fixture through the live `ggui
  * serve` SPA + `props-echo` blueprint:
- *   1. `openLiveSession` lands on `/s/<shortCode>` with the
+ *   1. `openLiveRender` lands on `/s/<shortCode>` with the
  *      RenderViewer iframe visible.
  *   2. Inside the iframe, assert the cold-start render stamps
  *      `data-ggui-prop-count="0"` (the component's `count ?? 0`
  *      fallback — no `props_update` has fired yet).
  *   3. Click the `[data-testid="bump"]` button. Fires `data:submit`
  *      with `action: 'bump'` → `bump_count` via the wired-action
- *      router → mount handler increments the per-session counter
+ *      router → mount handler increments the per-render counter
  *      and calls `ctx.sendPropsUpdate(ctx.pageId, {count: 1})`.
  *   4. Assert `data-ggui-prop-count` flips to `"1"` within a small
  *      budget — evidence the channel server fanned out the props_update
@@ -587,7 +587,7 @@ async function runBrowserDrivenPropsUpdateFixture(
       `runBrowserDrivenPropsUpdateFixture: unknown fixture '${fixture.name}' — registered in BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES by mistake?`
     );
   }
-  await openLiveSession(page, handle.baseUrl, "props-echo");
+  await openLiveRender(page, handle.baseUrl, "props-echo");
 
   const frame = rendererFrame(page);
   const counter = frame.locator("[data-ggui-prop-count]");
@@ -610,7 +610,7 @@ async function runBrowserDrivenPropsUpdateFixture(
     timeout: 5_000,
   });
 
-  // Session-alive invariant: the bump button stays interactive after
+  // Render-alive invariant: the bump button stays interactive after
   // the props_update lands. A renderer-side error or a React error
   // boundary firing would unmount either the button or the counter
   // (mirrors the contract-probe assertion shape).

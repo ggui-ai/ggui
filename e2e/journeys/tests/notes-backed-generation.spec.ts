@@ -68,7 +68,7 @@ const FIXTURE_CWD = resolve(__dirname, 'fixtures/notes-mount-via-serve');
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Push-wait budget — the RPC blocks on real generation. */
+/** Render-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /** Must match the `notes-mount.mjs` seed exactly — copied as literals (spec can't import ESM fixtures). */
@@ -174,7 +174,7 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     // Claim 3: generation over Notes-backed state renders in browser.
     //
     // `story.context.notes` carries the current list verbatim.
-    // `push.ts` forwards context into the generator prompt, anchoring
+    // `render.ts` forwards context into the generator prompt, anchoring
     // on a seeded title nudges the output toward the real data. The
     // BROWSER assertions stay shape-only because LLM output is
     // non-deterministic (CLAUDE.md).

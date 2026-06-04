@@ -30,7 +30,7 @@
  *   [
  *     { "name": "pair-mint", "elapsedMs": 11, "lane": "blocking",
  *       "budgetMs": 2000 },
- *     { "name": "push-cold-llm", "elapsedMs": 8421, "lane": "advisory",
+ *     { "name": "render-cold-llm", "elapsedMs": 8421, "lane": "advisory",
  *       "notes": "anthropic cold path" }
  *   ]
  *
@@ -63,7 +63,7 @@ export interface PerfRecord {
   /**
    * Stable identifier for the path. Use kebab-case + the critical
    * vocabulary (e.g., `cold-boot`, `pair-mint`, `tools-list`,
-   * `push-cold-llm`, `chat-message-llm`).
+   * `render-cold-llm`, `chat-message-llm`).
    * Consistency matters more than cleverness — future aggregators
    * group on this.
    */

@@ -58,7 +58,7 @@
  *     generation; by the time it returns, preview emission has
  *     finished. `provisional-preview.spec.ts` covers the preview
  *     surface under the deterministic emitter; re-proving it here
- *     would require racing push with a second RPC, which is
+ *     would require racing render with a second RPC, which is
  *     invented infrastructure.
  *   - `ggui_handshake` (out of scope for Slice 6.4).
  */
@@ -83,7 +83,7 @@ const FIXTURE_CWD = resolve(
 /** Generous — real Anthropic call + two MCP reads + browser mount. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Push-wait budget — RPC blocks on real generation. */
+/** Render-wait budget — RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /** Shape-only facets of the mount's output. Load-bearing for passing

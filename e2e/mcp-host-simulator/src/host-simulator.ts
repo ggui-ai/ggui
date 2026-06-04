@@ -393,7 +393,7 @@ export class HostSimulator {
    * {@link subscribeWith} to open the WS without parsing meta itself.
    *
    * `options.timeoutMs` overrides the MCP SDK's default per-request
-   * timeout (`DEFAULT_REQUEST_TIMEOUT_MSEC = 60_000`). Cold-gen pushes
+   * timeout (`DEFAULT_REQUEST_TIMEOUT_MSEC = 60_000`). Cold-gen renders
    * on cold pods can exceed 60s in cloud e2e scenarios; cold-call
    * tests pass an explicit longer budget (e.g. 180s) to keep MCP-layer
    * timeouts from masking the assertion they want to make. Without
