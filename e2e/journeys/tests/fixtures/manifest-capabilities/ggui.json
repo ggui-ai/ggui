@@ -1,6 +1,7 @@
 {
   "schema": "1",
   "protocol": "1.1",
+  "generation": { "model": "anthropic:claude-haiku-4-5-20251001" },
   "app": {
     "slug": "manifest-capabilities-fixture",
     "name": "Manifest Capabilities Fixture"
