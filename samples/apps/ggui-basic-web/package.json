@@ -14,6 +14,7 @@
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/react": "workspace:*",
+    "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

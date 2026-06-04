@@ -9,10 +9,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import {
-  AppRenderer,
-  type RequestHandlerExtra,
-} from '@ggui-ai/react';
+import { AppRenderer, type RequestHandlerExtra } from '@mcp-ui/client';
 import {
   useMcpAppsChat,
   type ChatEntry,

@@ -23,7 +23,7 @@ drive the conversation with the `useMcpAppsChat` hook and host each
 render's sandboxed iframe with `<AppRenderer>`:
 
 ```tsx
-import { AppRenderer } from "@ggui-ai/react";
+import { AppRenderer } from "@mcp-ui/client";
 import { useMcpAppsChat } from "@ggui-ai/react/chat-helpers";
 
 function Chat({ agentUrl }: { agentUrl: string }) {
@@ -46,7 +46,7 @@ runnable reference — including auth — is the
 The package also exports hooks (`useWebSocket`, `useInvoke`,
 `useGenerate`), a client-side data-binding tools
 system (`defineTool`, `useTool`, `useBindings`), and `<AppRenderer>`
-(re-exported from `@mcp-ui/client`) for hosting an MCP Apps render in a
+(from `@mcp-ui/client`, a direct dependency) for hosting an MCP Apps render in a
 sandboxed iframe. (React Native's equivalent host is `<McpAppIframe>`.)
 
 ## Entry points

@@ -77,7 +77,7 @@ export type {
 
 // ProtocolError typed union — the canonical shape for every failure
 // the renderer classifies outward. `<AppRenderer onError>` (from
-// `@mcp-ui/client`, re-exported below) surfaces it; embedding apps
+// `@mcp-ui/client`, imported directly) surfaces it; embedding apps
 // pattern-match on `err.kind`. The sibling package
 // `@ggui-ai/iframe-runtime` owns the declaration; `@ggui-ai/react`
 // re-exports it so consumers pulling from the React SDK don't need a
@@ -146,53 +146,35 @@ export type {
   RenderRendererProps,
 } from './components/DynamicComponent';
 
-// Spec-canonical MCP Apps iframe host — re-exported from `@mcp-ui/client`.
+// Spec-canonical MCP Apps iframe host — import DIRECTLY from `@mcp-ui/client`.
 //
-// **Why a re-export, not our own component.** The MCP Apps spec mandates a
-// two-iframe sandbox-proxy pattern on different origins (sandbox.html on a
-// different origin from the host) + spec-canonical `AppBridge` over
-// postMessage. `@mcp-ui/client` is the de-facto reference React host
-// (Apache-2.0, used by Claude / VSCode / Postman / Goose / LibreChat) and
-// implements the pattern correctly. Per ggui's first principle — protocol
-// MUST work with standard spec MCP, no extensions out of spec — we adopt
-// the canonical implementation directly rather than wrap it.
+// ggui does NOT re-export `@mcp-ui/client`. Add it as a direct dependency and
+// import the host components/types from it:
 //
-// **Where ggui's bootstrap envelope flows.** `_meta["ai.ggui/bootstrap"]`
-// on `ggui_render` / `ggui_handshake` tool results uses the spec-canonical
-// `_meta` extension grammar (SEP-2133: `{reverse-dns-prefix}/{name}`); a
-// spec-compliant host (including `<AppRenderer>`) MUST forward
-// `_meta` from tool results to the view via `ui/notifications/tool-result`.
-// The view's iframe-runtime reads the key directly. See
-// `docs/protocol/extensions/ai.ggui-bootstrap.md`.
+//   import { AppRenderer, AppFrame, AppBridge, PostMessageTransport } from "@mcp-ui/client";
+//   import type { AppRendererProps, RequestHandlerExtra, SandboxConfig } from "@mcp-ui/client";
 //
-// Sandbox-proxy hosting: consumers MUST mount a `sandbox.html` on a
-// different origin and pass that URL via `<AppRenderer sandbox={{url, ...}}>`.
-// `@ggui-ai/dev-stack`'s `startSandboxProxyServer` provides a dev-ready
-// implementation on a different port.
-export {
-  AppRenderer,
-  AppFrame,
-  AppBridge,
-  PostMessageTransport,
-  getUIResourceMetadata,
-  getResourceMetadata,
-  isUIResource,
-  UI_EXTENSION_NAME,
-  UI_EXTENSION_CONFIG,
-  UI_EXTENSION_CAPABILITIES,
-} from '@mcp-ui/client';
-export type {
-  AppRendererProps,
-  AppRendererHandle,
-  AppFrameProps,
-  SandboxConfig,
-  AppInfo,
-  RequestHandlerExtra,
-  UIResourceMetadata,
-  ClientCapabilitiesWithExtensions,
-  McpUiHostContext,
-  McpUiHostCapabilities,
-} from '@mcp-ui/client';
+// **Why @mcp-ui/client (not a ggui wrapper).** The MCP Apps spec mandates a
+// two-iframe sandbox-proxy pattern (sandbox.html on a different origin) +
+// spec-canonical `AppBridge` over postMessage. `@mcp-ui/client` is the de-facto
+// reference React host (Apache-2.0; used by Claude / VSCode / Postman / Goose /
+// LibreChat). Per ggui's first principle — work with standard spec MCP, no
+// out-of-spec extensions — ggui uses the canonical implementation directly
+// rather than wrapping OR re-exporting it.
+//
+// **Where ggui's bootstrap envelope flows.** `_meta["ai.ggui/bootstrap"]` on
+// `ggui_render` / `ggui_handshake` tool results uses the spec-canonical `_meta`
+// extension grammar (SEP-2133); a spec-compliant host (including `<AppRenderer>`)
+// MUST forward `_meta` from tool results to the view via
+// `ui/notifications/tool-result`. The view's iframe-runtime reads the key
+// directly. See `docs/protocol/extensions/ai.ggui-bootstrap.md`.
+//
+// Sandbox-proxy hosting: consumers MUST mount a `sandbox.html` on a different
+// origin and pass that URL via `<AppRenderer sandbox={{url, ...}}>`.
+// `@ggui-ai/dev-stack`'s `startSandboxProxyServer` provides a dev-ready impl.
+//
+// ggui's own helper for the AppRenderer toolResult envelope is
+// `buildAppRendererToolResult` (exported below).
 
 // Provisional A2UI preview renderer (consumes `_ggui:preview` channel)
 export { ProvisionalRenderer } from './components/ProvisionalRenderer';
