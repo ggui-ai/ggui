@@ -14,12 +14,12 @@ ggui_handshake → ggui_render → … user interacts … → ggui_consume → g
 | Tool | What it does |
 | ---- | ------------ |
 | `ggui_handshake` | Negotiate the contract/blueprint for a surface before rendering. |
-| `ggui_render` | Materialize **one** render from a natural-language UI description (+ data). The core call. (Replaced the old `ggui_push`.) |
+| `ggui_render` | Materialize **one** render from a natural-language UI description (+ data). The core call. |
 | `ggui_update` | Mutate the current render's **props** in place (no full re-render). |
 | `ggui_emit` | Push **live/streaming** data into the current render (e.g. status ticks). |
 | `ggui_consume` | **Long-poll** for the next user action (a click/submit). The agent awaits this, then reasons on the next turn. |
 | `ggui_get_render` | Read the current render, including the latest **observed UI state** (form drafts, selections). |
-| `ggui_list_renders` | List the renders in the session. |
+| `ggui_list_renders` | List the renders in the current host session (conversation grouping). |
 
 (Runtime-only tools like `ggui_runtime_submit_action` / `ggui_runtime_sync_context`
 are the iframe→host plumbing — the model never calls them.)
