@@ -67,7 +67,7 @@ function buildHappyConnect(render: GguiSession): ConnectFn {
     ack: {
       sequence: 1,
       timestamp: Date.now(),
-      render,
+      session: render,
       serverVersion: undefined,
     },
   });

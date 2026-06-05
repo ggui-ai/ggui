@@ -858,9 +858,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
    * idempotent on the (sessionId, channelName) tuple.
    */
   const applyAck = async (ackPayload: {
-    readonly render?: GguiSession;
+    readonly session?: GguiSession;
   }): Promise<void> => {
-    const target = ackPayload.render;
+    const target = ackPayload.session;
     if (target === undefined) return;
     if (target.id !== pinnedSessionId) {
       // Server's snapshot is for a different render — likely a stale

@@ -80,7 +80,7 @@ const renderSummaryWireSchema = z
   .passthrough();
 
 const outputSchema = {
-  renders: z.array(renderSummaryWireSchema),
+  sessions: z.array(renderSummaryWireSchema),
 } as const;
 
 // `GguiSessionSummaryWire` is re-exported below from
@@ -91,7 +91,7 @@ const outputSchema = {
 export type { GguiSessionSummaryWire };
 
 interface ListSessionsOutput {
-  readonly renders: readonly GguiSessionSummaryWire[];
+  readonly sessions: readonly GguiSessionSummaryWire[];
 }
 
 /**
@@ -151,7 +151,7 @@ export function createGguiListSessionsHandler(
         limit: parsed.limit ?? DEFAULT_LIMIT,
       });
       return {
-        renders: renders.map((stored) =>
+        sessions: renders.map((stored) =>
           projectSummary(stored, deps.mintWsToken),
         ),
       };

@@ -489,10 +489,10 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     expect(typeof ack.sessionToken).toBe('string');
     expect((ack.sessionToken as string).length).toBeGreaterThan(10);
     // Phase B replaced the prior `stack: GguiSession[]` ack slot with a
-    // single `render: GguiSession` (a render IS the addressable unit).
-    expect(ack.render).toBeDefined();
-    expect(ack.render?.id).toBe(bootstrap.sessionId);
-    expect(ack.render?.appId).toBe(bootstrap.appId);
+    // single `session: GguiSession` (a render IS the addressable unit).
+    expect(ack.session).toBeDefined();
+    expect(ack.session?.id).toBe(bootstrap.sessionId);
+    expect(ack.session?.appId).toBe(bootstrap.appId);
     ws.close();
   });
 

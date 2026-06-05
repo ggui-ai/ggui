@@ -2299,7 +2299,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     const ackPayload: AckPayload = {
       sequence: stored.eventSequence,
       timestamp: Date.now(),
-      render: stored.render,
+      session: stored.render,
       streamSeq: snapshotSeq,
       // Advertise the server's protocol version on every successful
       // subscribe ack (SPEC §11.2.2). Clients whose
@@ -2645,7 +2645,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // NOT routed through StreamFanout either — `type: 'render'` is a
       // distinct WebSocket message type. Filter the flat WS-subscriber
       // set by sessionId; N is typically 1-2 (multi-tab render sharing).
-      const payload = matchType !== undefined ? { render, matchType } : { render };
+      const payload = matchType !== undefined ? { session: render, matchType } : { session: render };
       for (const sub of wsSubscribers) {
         if (sub.sessionId !== sessionId) continue;
         send(sub.ws, { type: "render", payload });

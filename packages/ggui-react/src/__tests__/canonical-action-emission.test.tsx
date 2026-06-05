@@ -136,7 +136,7 @@ async function bootRender(sessionId = 'render-0'): Promise<{
       payload: {
         sequence: 0,
         timestamp: Date.now(),
-        render: makeRender(sessionId),
+        session: makeRender(sessionId),
       },
     });
   });

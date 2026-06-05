@@ -108,6 +108,6 @@ export type ChatEntry =
   | { readonly id: string; readonly kind: 'user'; readonly text: string }
   | { readonly id: string; readonly kind: 'assistant'; readonly text: string }
   | ToolCallEntry
-  | { readonly id: string; readonly kind: 'render'; readonly render: GguiSessionRef }
+  | { readonly id: string; readonly kind: 'session'; readonly session: GguiSessionRef }
   | { readonly id: string; readonly kind: 'error'; readonly text: string }
   | { readonly id: string; readonly kind: 'end'; readonly subtype: string };

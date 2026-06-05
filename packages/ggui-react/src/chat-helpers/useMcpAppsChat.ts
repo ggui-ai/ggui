@@ -128,7 +128,7 @@ export interface UseMcpAppsChatOptions {
  */
 export interface UseMcpAppsChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
-  readonly renders: ReadonlyArray<GguiSessionRef>;
+  readonly sessions: ReadonlyArray<GguiSessionRef>;
   /**
    * Most-recent host-side presentation hint stamped on a render, or
    * `undefined` when no render has yet carried one. Drives apps that
@@ -530,7 +530,7 @@ export function useMcpAppsChat(
         // replay above already mounts every iframe whose tool_result
         // carried `_meta.ui.resourceUri`). Dedupes by resourceUri via
         // addRender.
-        for (const entry of body.renders ?? []) {
+        for (const entry of body.sessions ?? []) {
           if (cancelled) return;
           if (typeof entry.resourceUri !== 'string' || entry.resourceUri.length === 0) {
             continue;
@@ -558,7 +558,7 @@ export function useMcpAppsChat(
 
   return {
     entries,
-    renders,
+    sessions: renders,
     hostDisplayMode,
     sending,
     send,
@@ -795,8 +795,8 @@ export function handleEvent(
       addRender(item);
       append({
         id: `${baseId}.s${i}`,
-        kind: 'render',
-        render: item,
+        kind: 'session',
+        session: item,
       });
     }
     return;
@@ -825,7 +825,7 @@ export function handleEvent(
 interface ChatSnapshotResponse {
   readonly chatId: string;
   readonly messages?: ReadonlyArray<unknown>;
-  readonly renders?: ReadonlyArray<RestoredGguiSession>;
+  readonly sessions?: ReadonlyArray<RestoredGguiSession>;
 }
 
 interface RestoredGguiSession {

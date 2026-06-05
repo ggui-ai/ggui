@@ -59,7 +59,7 @@ export function createRenderHandler(
   return {
     type: 'render',
     onMessage: async (payload) => {
-      const render = payload.render;
+      const render = payload.session;
 
       if (deps.pinnedSessionId !== undefined && render.id !== deps.pinnedSessionId) {
         // Out-of-spec: each iframe is pinned to exactly one render id

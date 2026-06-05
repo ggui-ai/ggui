@@ -89,7 +89,7 @@ describe('createGguiListSessionsHandler', () => {
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders.map((r) => r.sessionId)).toEqual(['a']);
+      expect(out.sessions.map((r) => r.sessionId)).toEqual(['a']);
     });
 
     it('returns only renders for the caller userId when ctx.userId is set', async () => {
@@ -108,7 +108,7 @@ describe('createGguiListSessionsHandler', () => {
         {},
         { appId: 'app-1', requestId: 'r1', userId: 'u1' },
       );
-      expect(out.renders.map((r) => r.sessionId)).toEqual(['mine']);
+      expect(out.sessions.map((r) => r.sessionId)).toEqual(['mine']);
     });
   });
 
@@ -135,7 +135,7 @@ describe('createGguiListSessionsHandler', () => {
         { hostName: 'claude.ai', hostSessionId: 'thread-abc' },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders.map((r) => r.sessionId)).toEqual(['claude-1']);
+      expect(out.sessions.map((r) => r.sessionId)).toEqual(['claude-1']);
     });
 
     it('renders without a host slice never match a host-scoped query (opt-out posture)', async () => {
@@ -145,7 +145,7 @@ describe('createGguiListSessionsHandler', () => {
         { hostName: 'claude.ai', hostSessionId: 'thread-abc' },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders).toEqual([]);
+      expect(out.sessions).toEqual([]);
     });
   });
 
@@ -160,8 +160,8 @@ describe('createGguiListSessionsHandler', () => {
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders).toHaveLength(1);
-      const summary = out.renders[0]!;
+      expect(out.sessions).toHaveLength(1);
+      const summary = out.sessions[0]!;
       expect(summary.sessionId).toBe(sessionId);
       expect(summary.hostName).toBe('sample');
       expect(summary.hostSessionId).toBe('chat-1');
@@ -190,8 +190,8 @@ describe('createGguiListSessionsHandler', () => {
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders[0]?.wsToken).toBe(`tok-${sessionId}`);
-      expect(out.renders[0]?.wsTokenExpiresAt).toBe(
+      expect(out.sessions[0]?.wsToken).toBe(`tok-${sessionId}`);
+      expect(out.sessions[0]?.wsTokenExpiresAt).toBe(
         '2099-01-01T00:00:00.000Z',
       );
       expect(minted).toEqual([{ sessionId, appId: 'app-1' }]);

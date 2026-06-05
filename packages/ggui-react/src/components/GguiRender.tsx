@@ -335,13 +335,13 @@ export function GguiRender({
           );
         }
         // Subscribe response — populate initial render snapshot
-        if (message.payload.render) {
-          setRender(message.payload.render);
-          onRenderReceivedRef.current?.(message.payload.render);
+        if (message.payload.session) {
+          setRender(message.payload.session);
+          onRenderReceivedRef.current?.(message.payload.session);
         }
       }
       if (message.type === 'render') {
-        const { render: nextRender, matchType } = message.payload;
+        const { session: nextRender, matchType } = message.payload;
         if (nextRender) {
           setRender(nextRender);
           onRenderReceivedRef.current?.(nextRender);

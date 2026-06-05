@@ -153,9 +153,9 @@ export interface SubscribePayload {
 export interface AckPayload {
   sequence: number;
   timestamp: number;
-  /** Current render snapshot (returned on subscribe). Single item,
+  /** Current session snapshot (returned on subscribe). Single item,
    *  not an array — Phase B collapsed the vessel. */
-  render?: GguiSession;
+  session?: GguiSession;
   /**
    * Current outbound-stream cursor snapshot at the moment the ack is
    * sent. Distinct from `sequence` (which counts INBOUND events like
@@ -224,7 +224,7 @@ export interface AckPayload {
  * component variant or an embedded MCP Apps iframe variant.
  */
 export interface RenderPayload {
-  render: GguiSession;
+  session: GguiSession;
   matchType?: string;
 }
 

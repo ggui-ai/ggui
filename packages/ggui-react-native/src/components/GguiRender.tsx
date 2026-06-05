@@ -269,21 +269,21 @@ export function GguiRender({
             }),
           );
         }
-        if (payload.render) {
-          setRender(payload.render);
-          onRenderReceivedRef.current?.(payload.render);
+        if (payload.session) {
+          setRender(payload.session);
+          onRenderReceivedRef.current?.(payload.session);
         }
       }
       if (message.type === 'render') {
-        const payload = message.payload as { render: GguiSession; matchType?: string };
-        if (payload.render) {
-          setRender(payload.render);
-          onRenderReceivedRef.current?.(payload.render);
+        const payload = message.payload as { session: GguiSession; matchType?: string };
+        if (payload.session) {
+          setRender(payload.session);
+          onRenderReceivedRef.current?.(payload.session);
           // Forward matchType info as a synthetic progress event.
           if (payload.matchType) {
             const isHit = payload.matchType === 'cached' || payload.matchType === 'predefined' || payload.matchType === 'exact';
             onProgressRef.current?.({
-              sessionId: payload.render.id,
+              sessionId: payload.session.id,
               step: 'compiling',
               message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
             });

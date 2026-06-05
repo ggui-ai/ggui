@@ -172,7 +172,7 @@ async function bootRender(opts: { onError?: (err: Error) => void } = {}): Promis
       payload: {
         sequence: 0,
         timestamp: Date.now(),
-        render: makeRender(RENDER_ID),
+        session: makeRender(RENDER_ID),
       },
     });
   });

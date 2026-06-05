@@ -85,7 +85,7 @@ function buildMockConnect(render: GguiSession | undefined): {
       ack: {
         sequence: 1,
         timestamp: Date.now(),
-        ...(render !== undefined ? { render } : {}),
+        ...(render !== undefined ? { session: render } : {}),
         serverVersion: undefined,
       },
     };
@@ -145,7 +145,7 @@ describe('bootSequence — happy path', () => {
     // still confirms the render handler is registered and accepts the
     // frame without throwing.
     const subsequent = makeRender('render_001', 'second render');
-    emitFrame('render', { render: subsequent, matchType: 'exact' });
+    emitFrame('render', { session: subsequent, matchType: 'exact' });
 
     // No failure message was sent.
     const failures = notifyParent.mock.calls

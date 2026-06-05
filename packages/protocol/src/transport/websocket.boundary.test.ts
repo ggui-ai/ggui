@@ -128,7 +128,7 @@ describe('websocket transport boundary — type narrowing', () => {
 
   it('narrows to RenderPayload on type:render', () => {
     const render: RenderPayload = {
-      render: {
+      session: {
         id: 'render-1',
         appId: 'app-1',
         eventSequence: 0,
@@ -140,7 +140,7 @@ describe('websocket transport boundary — type narrowing', () => {
     };
     const msg: WebSocketMessage = { type: 'render', payload: render };
     if (msg.type !== 'render') throw new Error('narrowing');
-    expect(msg.payload.render.id).toBe('render-1');
+    expect(msg.payload.session.id).toBe('render-1');
   });
 
   it('narrows to ChannelSubscribePayload on type:channel_subscribe (EE+ 1b)', () => {
